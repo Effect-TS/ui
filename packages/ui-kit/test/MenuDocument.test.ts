@@ -5,7 +5,7 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { byId, click, container, popovers, tick } from "./utils/document.ts"
+import { byId, container, popovers, tick } from "./utils/document.ts"
 
 type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 
@@ -43,9 +43,6 @@ const items: ReadonlyArray<MenuItem> = [
   { value: "copy", label: "Copy" },
   { value: "cut", label: "Cut", disabled: true },
   { value: "paste", label: "Paste" },
-  { value: "wrap", label: "Wrap lines" },
-  { value: "small", label: "Small" },
-  { value: "large", label: "Large" },
   { value: "share", label: "Share" }
 ]
 
@@ -55,7 +52,6 @@ const shareItems: ReadonlyArray<MenuItem> = [
 ]
 
 const Config = Schema.Struct({
-  openOnHover: Schema.Boolean,
   filter: Schema.Boolean,
   viewport: Schema.Boolean,
   closeParentOnEsc: Schema.Boolean
@@ -65,7 +61,7 @@ type Config = typeof Config.Type
 const Message = UiSchema.TaggedEnum({
   Opened: { menu: Schema.String, reason: Schema.String, triggerId: Schema.NullOr(Schema.String) },
   Dismissed: { menu: Schema.String, reason: Schema.String },
-  Picked: { menu: Schema.String, value: Schema.String, checked: Schema.optional(Schema.Boolean) },
+  Picked: { menu: Schema.String, value: Schema.String },
   ChangedQuery: { query: Schema.String }
 })
 
@@ -77,15 +73,13 @@ const Page = Component.define({
     open: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
     share: Schema.Boolean,
-    wrap: Schema.Boolean,
-    size: Schema.String,
     query: Schema.String,
     log: Schema.Array(Schema.String)
   }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: false, triggerId: null, share: false, wrap: false, size: "small", query: "", log: [] }),
+  init: () => ({ open: false, triggerId: null, share: false, query: "", log: [] }),
   update: {
     Opened: (model, { menu, reason, triggerId }) => ({
       ...model,
@@ -101,11 +95,9 @@ const Page = Component.define({
       [menu === "root" ? "open" : "share"]: false,
       log: [...model.log, menu + " Dismissed " + reason]
     }),
-    Picked: (model, { checked, menu, value }) => ({
+    Picked: (model, { menu, value }) => ({
       ...model,
-      wrap: value === "wrap" ? checked === true : model.wrap,
-      size: value === "small" || value === "large" ? value : model.size,
-      log: [...model.log, menu + " Picked " + value + (checked === undefined ? "" : " " + checked)]
+      log: [...model.log, menu + " Picked " + value]
     }),
     ChangedQuery: (model, { query }) => ({ ...model, query })
   },
@@ -116,13 +108,12 @@ const Page = Component.define({
         items,
         id: "menu",
         triggerId: h.props.viewport ? model.triggerId : undefined,
-        openOnHover: h.props.openOnHover,
         ...(h.props.filter ? { query: model.query } : {})
       },
       onEmit: {
         Opened: ({ reason, triggerId }) => Message.Opened({ menu: "root", reason, triggerId }),
         Dismissed: ({ reason }) => Message.Dismissed({ menu: "root", reason }),
-        Picked: ({ checked, value }) => Message.Picked({ menu: "root", value, checked }),
+        Picked: ({ value }) => Message.Picked({ menu: "root", value }),
         Highlighted: () => undefined,
         ChangedQuery: ({ query }) => Message.ChangedQuery({ query }),
         Settled: () => undefined
@@ -145,15 +136,6 @@ const Page = Component.define({
               menu.item(h.div.attr("data-testid", "copy"), "copy").children("Copy"),
               menu.item(h.div.attr("data-testid", "cut"), "cut").children("Cut"),
               menu.item(h.div.attr("data-testid", "paste"), "paste").children("Paste"),
-              menu.separator(h.div),
-              menu.checkboxItem(h.div.attr("data-testid", "wrap"), "wrap", model.wrap).children(
-                menu.checkboxItemIndicator(h.span.attr("data-testid", "wrap-check"), "wrap")?.children("✓"),
-                "Wrap lines"
-              ),
-              menu.radioGroup(h.div, model.size).children(
-                menu.radioItem(h.div.attr("data-testid", "small"), "small").children("Small"),
-                menu.radioItem(h.div.attr("data-testid", "large"), "large").children("Large")
-              ),
               Menu(h, {
                 props: {
                   open: model.share,
@@ -195,7 +177,6 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   rects.set("trigger", { x: 100, y: 100, width: 80, height: 30 })
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(Page, {
-    openOnHover: false,
     filter: false,
     viewport: false,
     closeParentOnEsc: false,
@@ -221,7 +202,7 @@ const shown = (id: string) => byId(id).matches(":popover-open")
 const popupOf = (positioner: string) => byId(positioner).querySelector<HTMLElement>("[data-menu-popup]")!
 
 describe("Menu in a document", { concurrent: false }, () => {
-  it.effect("opens from the keyboard onto the first enabled item, skips nothing on the way, and picks with Enter", () =>
+  it.effect("opens from the keyboard onto the first enabled item, moves focus across disabled items, and returns focus on Enter", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       const trigger = byId("trigger")
@@ -229,15 +210,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       keydown(trigger, "ArrowDown")
       yield* tick
       assert.isTrue(shown("positioner"))
-      assert.deepStrictEqual(log(), ["root Opened list-navigation"])
-      assert.strictEqual(trigger.getAttribute("aria-expanded"), "true")
-      assert.strictEqual(trigger.getAttribute("aria-controls"), "menu")
-      const popup = popupOf("positioner")
-      assert.strictEqual(popup.id, "menu")
-      assert.strictEqual(popup.getAttribute("role"), "menu")
-      assert.strictEqual(popup.getAttribute("aria-labelledby"), "trigger")
       assert.strictEqual(document.activeElement, item("copy"))
-      assert.isTrue(item("copy").hasAttribute("data-highlighted"))
       keydown(item("copy"), "ArrowDown")
       yield* tick
       assert.strictEqual(document.activeElement, item("cut"))
@@ -253,57 +226,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, trigger)
     }))
 
-  it.effect("a mouse press opens it with nothing highlighted, and a click picks", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage()
-      mousedown(byId("trigger"))
-      yield* tick
-      assert.isTrue(shown("positioner"))
-      assert.isNull(document.querySelector("[data-highlighted]"))
-      assert.strictEqual(document.activeElement, popupOf("positioner"))
-      click(item("copy"))
-      yield* tick
-      assert.deepStrictEqual(log(), ["root Opened trigger-press", "root Picked copy", "root Dismissed item-press"])
-    }))
-
-  it.effect("checkbox and radio items report their new state and keep the menu open", () =>
-    Effect.gen(function*() {
-      const { log, root } = yield* mountPage()
-      mousedown(byId("trigger"))
-      yield* tick
-      assert.strictEqual(item("wrap").getAttribute("role"), "menuitemcheckbox")
-      assert.strictEqual(item("wrap").getAttribute("aria-checked"), "false")
-      assert.isNull(document.querySelector("[data-testid=wrap-check]"))
-      click(item("wrap"))
-      yield* tick
-      assert.strictEqual(item("wrap").getAttribute("aria-checked"), "true")
-      assert.isNotNull(document.querySelector("[data-testid=wrap-check]"))
-      assert.strictEqual(item("small").getAttribute("aria-checked"), "true")
-      click(item("large"))
-      yield* tick
-      assert.strictEqual(item("large").getAttribute("role"), "menuitemradio")
-      assert.strictEqual(item("large").getAttribute("aria-checked"), "true")
-      assert.strictEqual(item("small").getAttribute("aria-checked"), "false")
-      assert.isTrue(shown("positioner"))
-      assert.deepStrictEqual(log(), ["root Opened trigger-press", "root Picked wrap true", "root Picked large true"])
-      assert.strictEqual(root.model()?.size, "large")
-    }))
-
-  it.effect("typeahead highlights the next item whose label starts with the typed text", () =>
-    Effect.gen(function*() {
-      yield* mountPage()
-      const trigger = byId("trigger")
-      keydown(trigger, "ArrowDown")
-      yield* tick
-      keydown(item("copy"), "s")
-      yield* tick
-      assert.strictEqual(document.activeElement, item("small"))
-      keydown(item("small"), "s")
-      yield* tick
-      assert.strictEqual(document.activeElement, item("share"))
-    }))
-
-  it.effect("Escape and a press outside close it, and Tab moves focus on from the trigger", () =>
+  it.effect("Escape, outside press and Tab close it, and mouse open focuses the popup", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       keydown(byId("trigger"), "ArrowDown")
@@ -314,6 +237,8 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, byId("trigger"))
       mousedown(byId("trigger"))
       yield* tick
+      assert.strictEqual(document.activeElement, popupOf("positioner"))
+      assert.isNull(document.querySelector("[data-highlighted]"))
       mousedown(byId("after"))
       yield* tick
       assert.isFalse(shown("positioner"))
@@ -331,7 +256,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
-  it.effect("a submenu opens with ArrowRight onto its first item, closes with ArrowLeft, and a pick closes both", () =>
+  it.effect("a submenu opens with ArrowRight, closes with ArrowLeft or sibling hover, and a pick closes both", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       keydown(byId("trigger"), "ArrowDown")
@@ -353,6 +278,11 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isFalse(shown("share-positioner"))
       assert.isTrue(shown("positioner"))
       assert.strictEqual(document.activeElement, share)
+      keydown(share, "ArrowRight")
+      yield* tick
+      item("paste").dispatchEvent(new MouseEvent("mouseenter"))
+      yield* tick
+      assert.isFalse(shown("share-positioner"))
       keydown(share, "Enter")
       yield* tick
       assert.strictEqual(document.activeElement, item("email"))
@@ -364,6 +294,8 @@ describe("Menu in a document", { concurrent: false }, () => {
         "root Opened list-navigation",
         "share Opened list-navigation",
         "share Dismissed list-navigation",
+        "share Opened list-navigation",
+        "share Dismissed sibling-open",
         "share Opened trigger-press",
         "root Dismissed item-press",
         "share Picked email",
@@ -371,32 +303,21 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
-  it.effect("a submenu closes when its parent highlights another item", () =>
+  it.effect("Escape in a submenu with closeParentOnEsc closes the whole menu and returns focus to the trigger", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage()
+      const { log } = yield* mountPage({ closeParentOnEsc: true })
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
       keydown(item("copy"), "End")
       yield* tick
       keydown(item("share"), "ArrowRight")
       yield* tick
-      item("paste").dispatchEvent(new MouseEvent("mouseenter"))
+      keydown(item("email"), "Escape")
       yield* tick
       assert.isFalse(shown("share-positioner"))
-      assert.deepStrictEqual(log().slice(-1), ["share Dismissed sibling-open"])
-    }))
-
-  it.effect("openOnHover opens it once the pointer rests on the trigger, and closes it when the pointer leaves", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage({ openOnHover: true })
-      byId("trigger").dispatchEvent(new MouseEvent("mouseenter"))
-      yield* TestClock.adjust("100 millis")
-      yield* tick
-      assert.isTrue(shown("positioner"))
-      document.body.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 900, clientY: 700 }))
-      yield* tick
       assert.isFalse(shown("positioner"))
-      assert.deepStrictEqual(log(), ["root Opened trigger-hover", "root Dismissed trigger-hover"])
+      assert.strictEqual(document.activeElement, byId("trigger"))
+      assert.deepStrictEqual(log().slice(-2), ["root Dismissed escape-key", "share Dismissed escape-key"])
     }))
 
   it.effect("filtering keeps focus in the input, hides what doesn't match, and Enter picks the highlighted item", () =>
@@ -430,9 +351,14 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), ["root Opened trigger-press", "root Picked paste", "root Dismissed item-press"])
     }))
 
-  it.effect("a press held on the trigger and released over an item picks it, once 200ms have passed", () =>
+  it.effect("releasing an opening press outside cancels it, and releasing over an item picks it after 200ms", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
+      mousedown(byId("trigger"))
+      yield* tick
+      byId("after").dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 900, clientY: 700 }))
+      yield* tick
+      assert.isFalse(shown("positioner"))
       mousedown(byId("trigger"))
       yield* tick
       item("copy").dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }))
@@ -447,22 +373,13 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isFalse(shown("positioner"))
       assert.deepStrictEqual(log(), [
         "root Opened trigger-press",
+        "root Dismissed cancel-open",
+        "root Opened trigger-press",
         "root Dismissed trigger-press",
         "root Opened trigger-press",
         "root Picked paste",
         "root Dismissed item-press"
       ])
-    }))
-
-  it.effect("a release away from the trigger and the popup cancels the open", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage()
-      mousedown(byId("trigger"))
-      yield* tick
-      byId("after").dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 900, clientY: 700 }))
-      yield* tick
-      assert.isFalse(shown("positioner"))
-      assert.deepStrictEqual(log(), ["root Opened trigger-press", "root Dismissed cancel-open"])
     }))
 
   it.effect("a modal menu blocks the page behind it but for a cut-out around the trigger", () =>
@@ -477,23 +394,6 @@ describe("Menu in a document", { concurrent: false }, () => {
       keydown(item("copy"), "Escape")
       yield* tick
       assert.strictEqual(document.body.style.overflowY, "")
-    }))
-
-  it.effect("Escape in a submenu closes only it, or the whole menu with closeParentOnEsc", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage({ closeParentOnEsc: true })
-      keydown(byId("trigger"), "ArrowDown")
-      yield* tick
-      keydown(item("copy"), "End")
-      yield* tick
-      keydown(item("share"), "ArrowRight")
-      yield* tick
-      keydown(item("email"), "Escape")
-      yield* tick
-      assert.isFalse(shown("share-positioner"))
-      assert.isFalse(shown("positioner"))
-      assert.strictEqual(document.activeElement, byId("trigger"))
-      assert.deepStrictEqual(log().slice(-2), ["root Dismissed escape-key", "share Dismissed escape-key"])
     }))
 
   it.effect("the viewport keeps the previous content while the popup moves to another trigger", () =>

@@ -247,7 +247,6 @@ describe("$.send", () => {
 const NestMessage = UiSchema.TaggedEnum({ Pick: {}, Picked: {}, Closed: {} })
 type NestMessage = typeof NestMessage.Type
 
-// Reads the nearest Nest above it, and receives Picked.
 const NestDef = Component.define({
   name: "Nest",
   scoped: false,
@@ -258,7 +257,6 @@ const NestDef = Component.define({
   shared: { parent: { owner: "self", optional: true } }
 })
 
-// Receives Picked and shares, but doesn't read its own kind.
 const FlatDef = Component.define({
   name: "Flat",
   scoped: false,

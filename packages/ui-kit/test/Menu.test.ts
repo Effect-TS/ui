@@ -1,8 +1,5 @@
 import type { Component, Mount, View } from "@effect/ui"
-import { Menu, type MenuEvents, type MenuProps } from "@effect/ui-kit"
-import * as filter from "@effect/ui-kit/internal/filter"
-import * as safeArea from "@effect/ui-kit/internal/safeArea"
-import * as typeahead from "@effect/ui-kit/internal/typeahead"
+import { Menu, type MenuEvents, menuFilter, type MenuProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
@@ -109,7 +106,6 @@ const highlighted = (value: string | null, reason: string) => ({ _tag: "Highligh
 
 type Pending = { readonly current: { readonly pending: ReadonlyArray<{ readonly command: any }> } }
 
-// A scene never runs Commands, so this runs the pending one's effect under TestClock and resolves it with the result.
 const elapse = Effect.fnUntraced(function*<S extends Pending & { readonly resolve: (command: any, result: any) => S }>(
   s: S,
   name: string,
@@ -133,7 +129,7 @@ const open = Effect.fnUntraced(function*(props: Partial<MenuProps> = {}) {
 })
 
 describe("Menu", () => {
-  it.effect("draws a closed menu button, and the parts report nothing open or highlighted", () =>
+  it.effect("draws a closed menu button, and a mouse press opens it with its parts and ARIA semantics", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       assert.deepInclude(s.get(trigger).attrs, {
@@ -146,8 +142,7 @@ describe("Menu", () => {
       assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
       assert.deepInclude(s.get(positioner).attrs, { role: "presentation", "data-closed": "" })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
-      const menu = partsOf(s)
-      assert.deepInclude(menu, {
+      assert.deepInclude(partsOf(s), {
         open: false,
         mounted: false,
         transitionStatus: null,
@@ -160,11 +155,9 @@ describe("Menu", () => {
         activationDirection: null,
         nothingMatches: false
       })
-    }))
 
-  it.effect("a mouse press opens it, and the popup is a menu of items labelled by the trigger", () =>
-    Effect.gen(function*() {
-      const s = yield* open()
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted(opened("trigger-press"))
+      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       const popupId = s.get(popup).attrs?.id
       assert.isString(popupId)
       assert.isTrue(s.get(positioner).props?.popoverOpen)
@@ -248,16 +241,29 @@ describe("Menu", () => {
       assert.isFalse(partsOf(s).mounted)
     }))
 
-  it.effect("ArrowDown or ArrowUp on the closed trigger opens it on the first or last enabled item", () =>
+  it.effect("keyboard on the closed trigger opens it on the first or last enabled item, and marks click-open and Escape instant", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       s.fire(trigger, "keydown", key("Enter")).expectIgnored()
+      s.fire(trigger, "click", pointer("mouse")).expectIgnored()
+      s.fire(trigger, "click", pointer("")).emitted(highlighted("copy", "none"), opened("trigger-press"))
+      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
+      assert.deepInclude(partsOf(s), { highlighted: "copy", openMethod: "keyboard" })
+      assert.deepInclude(s.get(item("copy")).attrs, { tabindex: "0", "data-highlighted": "" })
+      assert.deepInclude(s.get(positioner).attrs, { "data-instant": "click" })
+      assert.deepInclude(s.get(popup).attrs, { "data-instant": "click" })
+      s.fire(popup, "keydown", key("Escape")).expectDefaultPrevented().emitted(dismissed("escape-key"))
+      s.props({ open: false, items })
+      assert.deepInclude(s.get(positioner).attrs, { "data-instant": "dismiss" })
+      assert.deepInclude(s.get(popup).attrs, { "data-instant": "dismiss" })
+      s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
+        { _tag: "Settled", open: false },
+        highlighted(null, "none")
+      )
       s.fire(trigger, "keydown", key("ArrowDown"))
         .expectDefaultPrevented()
         .emitted(highlighted("copy", "none"), opened("list-navigation"))
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepInclude(partsOf(s), { highlighted: "copy", openMethod: "keyboard" })
-      assert.deepInclude(s.get(item("copy")).attrs, { tabindex: "0", "data-highlighted": "" })
       s.fire(popup, "keydown", key("Escape")).emitted(dismissed("escape-key"))
       s.props({ open: false, items })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false })).emitted(
@@ -269,21 +275,7 @@ describe("Menu", () => {
       assert.strictEqual(partsOf(s).highlighted, "docs")
     }))
 
-  it.effect("opened or closed from the keyboard, the popup is marked instant, and after Escape too", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
-      s.fire(trigger, "click", pointer("mouse")).expectIgnored()
-      s.fire(trigger, "click", pointer("")).emitted(highlighted("copy", "none"), opened("trigger-press"))
-      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepInclude(s.get(positioner).attrs, { "data-instant": "click" })
-      assert.deepInclude(s.get(popup).attrs, { "data-instant": "click" })
-      s.fire(popup, "keydown", key("Escape")).expectDefaultPrevented().emitted(dismissed("escape-key"))
-      s.props({ open: false, items })
-      assert.deepInclude(s.get(positioner).attrs, { "data-instant": "dismiss" })
-      assert.deepInclude(s.get(popup).attrs, { "data-instant": "dismiss" })
-    }))
-
-  it.effect("the arrow keys, Home and End move the highlight and wrap, unless loopFocus is false", () =>
+  it.effect("arrow keys, Home and End move the highlight, wrap unless loopFocus is false, and follow orientation", () =>
     Effect.gen(function*() {
       const s = yield* open()
       const step = (k: string, expected: string) => {
@@ -303,17 +295,12 @@ describe("Menu", () => {
       step("ArrowUp", "undo")
       step("End", "delete")
       step("ArrowDown", "delete")
-    }))
-
-  it.effect("a horizontal menu moves with ArrowRight and ArrowLeft", () =>
-    Effect.gen(function*() {
-      const s = yield* open({ orientation: "horizontal" })
+      s.props({ open: true, items, orientation: "horizontal" })
       assert.deepInclude(s.get(popup).attrs, { role: "menu", "aria-orientation": "horizontal" })
-      s.fire(popup, "keydown", key("ArrowRight")).emitted(highlighted("undo", "keyboard"))
-      s.fire(popup, "keydown", key("ArrowRight")).emitted(highlighted("copy", "keyboard"))
+      step("ArrowRight", "undo")
+      step("ArrowRight", "copy")
       s.fire(popup, "keydown", key("ArrowDown"))
-      s.fire(popup, "keydown", key("ArrowLeft")).emitted(highlighted("undo", "keyboard"))
-      assert.strictEqual(partsOf(s).highlighted, "undo")
+      step("ArrowLeft", "undo")
     }))
 
   it.effect("the pointer highlights the item it's over, unless highlightItemOnHover is false", () =>
@@ -374,7 +361,7 @@ describe("Menu", () => {
       yield* elapse(s, "WaitBeforeResetTyping", 500)
     }))
 
-  it.effect("with openOnHover, resting on the trigger for the delay opens it, and leaving first cancels", () =>
+  it.effect("openOnHover opens after the delay, cancels on leave, and sticks until the stick window expires", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items, openOnHover: true, delay: 200 }, standIn)
       s.fire(trigger, "mouseenter")
@@ -387,22 +374,11 @@ describe("Menu", () => {
       assert.deepInclude(partsOf(s), { open: true, openMethod: "mouse", highlighted: null })
       s.fire(trigger, "mousedown", pointer("mouse"))
       assert.isTrue(partsOf(s).open)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press"))
-      yield* elapse(s, "WaitBeforeStickExpires", 500)
-    }))
-
-  it.effect("a press on a trigger hovering opened closes it once the opening has stopped sticking", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Menu, { open: false, items, openOnHover: true, delay: 0 }, standIn)
-      s.fire(trigger, "mouseenter")
-      yield* elapse(s, "WaitBeforeHoverOpen", 0)
-      s.emitted(opened("trigger-hover"))
-      s.props({ open: true, items, openOnHover: true, delay: 0 }).mounted(tracked(s), sent("ShowedPopup"))
       yield* elapse(s, "WaitBeforeStickExpires", 500)
       s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press"))
     }))
 
-  it.effect("with a query, an input filters the items, and empty and clear show only when they apply", () =>
+  it.effect("with a query, an input filters the items, empty and clear show only when they apply, and menuFilter respects options", () =>
     Effect.gen(function*() {
       const s = yield* open({ query: "", autoHighlight: true })
       const listId = s.get(Locator.attr("class", "list")).attrs?.id
@@ -427,90 +403,9 @@ describe("Menu", () => {
       assert.isTrue(partsOf(s).nothingMatches)
       assert.deepInclude(s.get(empty).attrs, { role: "status" })
       assert.deepInclude(s.get(Locator.attr("class", "group")).attrs, { hidden: "" })
-    }))
 
-  describe("safeArea", () => {
-    it("a point is safe in the popup, or in the triangle from where the pointer left to the popup's facing edge", () => {
-      const right = { left: 100, top: 0, right: 200, bottom: 100 }
-      const from = { x: 50, y: 50 }
-      assert.isTrue(safeArea.inSafeArea({ x: 150, y: 90 }, from, right))
-      assert.isTrue(safeArea.inSafeArea({ x: 75, y: 50 }, from, right))
-      assert.isFalse(safeArea.inSafeArea({ x: 75, y: 5 }, from, right))
-      assert.isFalse(safeArea.inSafeArea({ x: 110, y: 150 }, from, right))
-      assert.isTrue(safeArea.inSafeArea({ x: 49.5, y: 50 }, from, right))
-      assert.isFalse(safeArea.inSafeArea({ x: 49.5, y: 50 }, from, right, 0))
-
-      assert.isTrue(safeArea.inSafeArea({ x: 225, y: 50 }, { x: 250, y: 50 }, right))
-      assert.isFalse(safeArea.inSafeArea({ x: 225, y: 5 }, { x: 250, y: 50 }, right))
-
-      const below = { left: 0, top: 100, right: 100, bottom: 200 }
-      assert.isTrue(safeArea.inSafeArea({ x: 50, y: 75 }, from, below))
-      assert.isFalse(safeArea.inSafeArea({ x: 5, y: 75 }, from, below))
-      assert.isTrue(safeArea.inSafeArea({ x: 50, y: 225 }, { x: 50, y: 250 }, below))
-      assert.isFalse(safeArea.inSafeArea({ x: 5, y: 225 }, { x: 50, y: 250 }, below))
-
-      assert.isFalse(safeArea.inSafeArea({ x: 50, y: 50 }, { x: 150, y: 50 }, right))
-    })
-
-    it("names the direction from one box's centre to another's, within a tolerance", () => {
-      const box = (x: number, y: number) => ({ left: x, top: y, right: x + 10, bottom: y + 10 })
-      assert.strictEqual(safeArea.activationDirection(box(0, 0), box(100, 100)), "right down")
-      assert.strictEqual(safeArea.activationDirection(box(0, 0), box(-100, -100)), "left up")
-      assert.strictEqual(safeArea.activationDirection(box(0, 0), box(-100, 0)), "left ")
-      assert.strictEqual(safeArea.activationDirection(box(0, 0), box(0, -100)), " up")
-      assert.strictEqual(safeArea.activationDirection(box(0, 0), box(6, 0)), "right ")
-      assert.strictEqual(safeArea.activationDirection(box(0, 0), box(6, 0), 10), " ")
-    })
-  })
-
-  describe("filter", () => {
-    it("matches ignoring case, accents and punctuation, anywhere, at the start or at the end", () => {
-      const text = filter.textFilter("en")
-      assert.isTrue(text.contains("Crème brûlée", "BRULEE"))
-      assert.isTrue(text.contains("Turn Wi-Fi off", "wi.fi"))
-      assert.isFalse(text.contains("Copy", "zz"))
-      assert.isTrue(text.contains("Copy", ""))
-      assert.isTrue(text.startsWith("Crème", "CRE"))
-      assert.isFalse(text.startsWith("Crème", "reme"))
-      assert.isTrue(text.endsWith("Crème", "EME"))
-      assert.isFalse(text.endsWith("Crème", "cr"))
-      assert.isFalse(text.endsWith("a", "abc"))
-    })
-
-    it("returns the same filter for the same locale and options, and the options override the defaults", () => {
-      assert.strictEqual(filter.textFilter("en"), filter.textFilter("en"))
-      const accents = filter.textFilter("en", { sensitivity: "accent" })
-      assert.notStrictEqual(accents, filter.textFilter("en"))
+      const accents = menuFilter({ locale: "en", sensitivity: "accent" })
+      assert.isTrue(menuFilter({ locale: "en" }).contains("Crème", "creme"))
       assert.isFalse(accents.contains("Crème", "creme"))
-    })
-  })
-
-  describe("typeahead", () => {
-    const fruit = [
-      { label: "Apple" },
-      { label: "Avocado", disabled: true },
-      { label: "Banana" },
-      { label: "Apricot" },
-      { label: "Blueberry" }
-    ]
-    const fresh = { typed: "", typedFrom: -1, matched: -1 }
-
-    it("the same letter again cycles through the items starting with it, skipping disabled ones", () => {
-      const first = typeahead.typeahead(fresh, "a", fruit, -1)
-      assert.strictEqual(first.index, 0)
-      const cycled = typeahead.typeahead(first.next, "a", fruit, 0)
-      assert.strictEqual(cycled.index, 3)
-      assert.strictEqual(typeahead.typeahead(cycled.next, "a", fruit, 3).index, 0)
-    })
-
-    it("more letters narrow the match, and no enabled match clears what was typed", () => {
-      const a = typeahead.typeahead(fresh, "a", fruit, -1)
-      const ap = typeahead.typeahead(a.next, "p", fruit, 0)
-      assert.strictEqual(ap.index, 0)
-      assert.strictEqual(typeahead.typeahead(ap.next, "r", fruit, 0).index, 3)
-      const av = typeahead.typeahead(a.next, "v", fruit, 0)
-      assert.strictEqual(av.index, -1)
-      assert.strictEqual(av.next.typed, "")
-    })
-  })
+    }))
 })

@@ -742,7 +742,6 @@ describe("a component that reads its own kind", () => {
     }).pipe(Effect.scoped))
 
   const MenuMessage = UiSchema.TaggedEnum({ Pick: {}, Picked: {} })
-  /** Counts the picks below it, and passes each one up to the menu it's in. */
   const Menu = Component.define({
     name: "Menu",
     scoped: false,
