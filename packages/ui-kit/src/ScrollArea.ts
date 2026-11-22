@@ -112,6 +112,7 @@
  * @stability experimental
  * @since 0.1.0
  */
+
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
@@ -121,8 +122,12 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { attrSelector, flag, noSelect, withStyle } from "./internal/attributes.ts"
+import { type Attributed, attrSelector, flag, noSelect, ownStyle } from "./internal/attributes.ts"
+import { override } from "./internal/dom.ts"
 import { isWebKit } from "./internal/platform.ts"
+import { clamp } from "./internal/range.ts"
+import type { WithRequirements } from "./internal/requirements.ts"
+import { finite } from "./internal/transition.ts"
 
 const SCROLL_TIMEOUT = 500
 const SCROLL_END_DEBOUNCE = 100
@@ -131,10 +136,6 @@ const SCROLL_EDGE_TOLERANCE_PX = 1
 
 const viewportAttr = "data-scroll-area-viewport"
 const contentAttr = "data-scroll-area-content"
-const scrollbarYAttr = "data-scroll-area-scrollbar-y"
-const scrollbarXAttr = "data-scroll-area-scrollbar-x"
-const thumbYAttr = "data-scroll-area-thumb-y"
-const thumbXAttr = "data-scroll-area-thumb-x"
 const cornerAttr = "data-scroll-area-corner"
 
 const cornerWidthVar = "--scroll-area-corner-width"
@@ -165,6 +166,12 @@ export const ScrollAreaOrientation = Schema.Literals(["vertical", "horizontal"])
  * @since 0.1.0
  */
 export type ScrollAreaOrientation = typeof ScrollAreaOrientation.Type
+
+const scrollbarAttr = (orientation: ScrollAreaOrientation): string =>
+  orientation === "vertical" ? "data-scroll-area-scrollbar-y" : "data-scroll-area-scrollbar-x"
+
+const thumbAttr = (orientation: ScrollAreaOrientation): string =>
+  orientation === "vertical" ? "data-scroll-area-thumb-y" : "data-scroll-area-thumb-x"
 
 /**
  * The threshold in pixels that must be passed before the overflow edge
@@ -215,11 +222,7 @@ export const ScrollAreaProps = Schema.Struct({
  */
 export type ScrollAreaProps = typeof ScrollAreaProps.Type
 
-const Model = Schema.Struct({
-  measured: Schema.Boolean,
-  hovering: Schema.Boolean,
-  scrollingX: Schema.Boolean,
-  scrollingY: Schema.Boolean,
+const Overflow = Schema.Struct({
   hasOverflowX: Schema.Boolean,
   hasOverflowY: Schema.Boolean,
   overflowXStart: Schema.Boolean,
@@ -228,15 +231,31 @@ const Model = Schema.Struct({
   overflowYEnd: Schema.Boolean
 })
 
+type Overflow = typeof Overflow.Type
+
+const sameOverflow = Schema.toEquivalence(Overflow)
+
+const noOverflow: Overflow = {
+  hasOverflowX: false,
+  hasOverflowY: false,
+  overflowXStart: false,
+  overflowXEnd: false,
+  overflowYStart: false,
+  overflowYEnd: false
+}
+
+const Model = Schema.Struct({
+  measured: Schema.Boolean,
+  hovering: Schema.Boolean,
+  scrollingX: Schema.Boolean,
+  scrollingY: Schema.Boolean,
+  ...Overflow.fields
+})
+
+type Model = typeof Model.Type
+
 const Message = UiSchema.TaggedEnum({
-  MeasuredOverflow: {
-    hasOverflowX: Schema.Boolean,
-    hasOverflowY: Schema.Boolean,
-    overflowXStart: Schema.Boolean,
-    overflowXEnd: Schema.Boolean,
-    overflowYStart: Schema.Boolean,
-    overflowYEnd: Schema.Boolean
-  },
+  MeasuredOverflow: Overflow.fields,
   StartedScrolling: { orientation: ScrollAreaOrientation },
   StoppedScrolling: { orientation: ScrollAreaOrientation },
   EnteredPointer: {},
@@ -245,36 +264,24 @@ const Message = UiSchema.TaggedEnum({
 
 type Message = typeof Message.Type
 
-interface Thresholds {
-  readonly xStart: number
-  readonly xEnd: number
-  readonly yStart: number
-  readonly yEnd: number
-}
-
-const normalizeThreshold = (threshold: ScrollAreaOverflowEdgeThreshold | undefined): Thresholds => {
-  if (typeof threshold === "number") {
-    const value = Math.max(0, threshold || 0)
-    return { xStart: value, xEnd: value, yStart: value, yEnd: value }
-  }
+const thresholdsOf = (threshold: ScrollAreaOverflowEdgeThreshold | undefined) => {
+  const t = typeof threshold === "number"
+    ? { xStart: threshold, xEnd: threshold, yStart: threshold, yEnd: threshold }
+    : threshold
   return {
-    xStart: Math.max(0, threshold?.xStart || 0),
-    xEnd: Math.max(0, threshold?.xEnd || 0),
-    yStart: Math.max(0, threshold?.yStart || 0),
-    yEnd: Math.max(0, threshold?.yEnd || 0)
+    xStart: Math.max(0, t?.xStart || 0),
+    xEnd: Math.max(0, t?.xEnd || 0),
+    yStart: Math.max(0, t?.yStart || 0),
+    yEnd: Math.max(0, t?.yEnd || 0)
   }
 }
-
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
 const normalizeScrollOffset = (value: number, max: number): number => {
   if (max <= 0) return 0
   const clamped = clamp(value, 0, max)
-  const startDistance = clamped
-  const endDistance = max - clamped
-  const nearStart = startDistance <= SCROLL_EDGE_TOLERANCE_PX
-  const nearEnd = endDistance <= SCROLL_EDGE_TOLERANCE_PX
-  if (nearStart && nearEnd) return startDistance <= endDistance ? 0 : max
+  const nearStart = clamped <= SCROLL_EDGE_TOLERANCE_PX
+  const nearEnd = max - clamped <= SCROLL_EDGE_TOLERANCE_PX
+  if (nearStart && nearEnd) return clamped <= max - clamped ? 0 : max
   if (nearStart) return 0
   if (nearEnd) return max
   return clamped
@@ -298,14 +305,14 @@ const applyOverscrollThumb = (
   return offset + (overscroll > 0 ? size - nextSize : 0)
 }
 
-const getOffset = (element: HTMLElement | null, prop: "margin" | "padding", axis: "x" | "y"): number => {
+const getOffset = (element: HTMLElement | null, prop: "margin" | "padding", vertical: boolean): number => {
   if (element === null) return 0
   const styles = element.ownerDocument.defaultView?.getComputedStyle(element)
   if (styles === undefined) return 0
-  const key = `${prop}${axis === "x" ? "Inline" : "Block"}` as const
+  const key = `${prop}${vertical ? "Block" : "Inline"}` as const
   const start = Number.parseFloat(styles[`${key}Start`]) || 0
   // Safari misreports `marginInlineEnd` in RTL; assume symmetrical horizontal margins.
-  if (axis === "x" && prop === "margin") return start * 2
+  if (!vertical && prop === "margin") return start * 2
   return start + (Number.parseFloat(styles[`${key}End`]) || 0)
 }
 
@@ -328,9 +335,6 @@ const registerOverflowVars = (view: Window | null): void => {
   }
 }
 
-const find = (root: HTMLElement, attr: string, id: string): HTMLElement | null =>
-  root.querySelector<HTMLElement>(attrSelector(attr, id))
-
 const TrackScrollAreaArgs = {
   id: Schema.String,
   hasOverflowX: Schema.Boolean,
@@ -343,23 +347,58 @@ const TrackScrollAreaArgs = {
 
 type TrackScrollAreaArgs = Schema.Struct<typeof TrackScrollAreaArgs>["Type"]
 
-interface OverflowReport {
-  readonly hasOverflowX: boolean
-  readonly hasOverflowY: boolean
-  readonly overflowXStart: boolean
-  readonly overflowXEnd: boolean
-  readonly overflowYStart: boolean
-  readonly overflowYEnd: boolean
+interface Axis {
+  readonly orientation: ScrollAreaOrientation
+  readonly vertical: boolean
+  scrollbar: HTMLElement | null
+  thumb: HTMLElement | null
+  scrolling: boolean
+  timer: ReturnType<typeof setTimeout> | undefined
+  listening: AbortController | undefined
 }
 
-const sameReport = (a: OverflowReport | null, b: OverflowReport): boolean =>
-  a !== null &&
-  a.hasOverflowX === b.hasOverflowX &&
-  a.hasOverflowY === b.hasOverflowY &&
-  a.overflowXStart === b.overflowXStart &&
-  a.overflowXEnd === b.overflowXEnd &&
-  a.overflowYStart === b.overflowYStart &&
-  a.overflowYEnd === b.overflowYEnd
+const axisOf = (orientation: ScrollAreaOrientation): Axis => ({
+  orientation,
+  vertical: orientation === "vertical",
+  scrollbar: null,
+  thumb: null,
+  scrolling: false,
+  timer: undefined,
+  listening: undefined
+})
+
+const scrollOf = (axis: Axis, viewport: HTMLElement): number => axis.vertical ? viewport.scrollTop : viewport.scrollLeft
+
+const setScroll = (axis: Axis, viewport: HTMLElement, value: number): void => {
+  if (axis.vertical) viewport.scrollTop = value
+  else viewport.scrollLeft = value
+}
+
+const maxScrollOf = (axis: Axis, viewport: HTMLElement): number =>
+  axis.vertical ? viewport.scrollHeight - viewport.clientHeight : viewport.scrollWidth - viewport.clientWidth
+
+const along = (axis: Axis, event: PointerEvent): number => axis.vertical ? event.clientY : event.clientX
+
+const insetsOf = (axis: Axis, scrollbar: HTMLElement) => {
+  const scrollbarOffset = getOffset(scrollbar, "padding", axis.vertical)
+  const thumbOffset = getOffset(axis.thumb, "margin", axis.vertical)
+  return {
+    scrollbarOffset,
+    thumbOffset,
+    inset: scrollbarOffset + thumbOffset,
+    track: axis.vertical ? scrollbar.offsetHeight : scrollbar.offsetWidth
+  }
+}
+
+interface Track {
+  readonly viewport: HTMLElement
+  readonly scrollbar: HTMLElement
+  readonly thumbOffset: number
+  readonly scrollbarOffset: number
+  readonly thumbSize: number
+  readonly maxThumbOffset: number
+  readonly maxScroll: number
+}
 
 const TrackScrollArea = Mount.makeStream(
   "TrackScrollArea",
@@ -367,43 +406,38 @@ const TrackScrollArea = Mount.makeStream(
   (root: HTMLElement, initial, changes) =>
     Stream.callback<Message>((queue) =>
       Effect.gen(function*() {
-        const view = root.ownerDocument.defaultView
-        registerOverflowVars(view)
+        registerOverflowVars(root.ownerDocument.defaultView)
 
         let args: TrackScrollAreaArgs = initial
         const send = (message: Message) => Queue.offerUnsafe(queue, message)
+        const find = (attr: string) => root.querySelector<HTMLElement>(attrSelector(attr, args.id))
+
+        const y = axisOf("vertical")
+        const x = axisOf("horizontal")
+        let viewport: HTMLElement | null = null
+        let content: HTMLElement | null = null
+        let corner: HTMLElement | null = null
+        let viewportListening: AbortController | undefined
+        const rootListening = new AbortController()
 
         let hovering = false
         let touchModality = false
         let programmaticScroll = true
-        let scrollingX = false
-        let scrollingY = false
-        let scrollPosX = 0
-        let scrollPosY = 0
+        let lastLeft = 0
+        let lastTop = 0
         let cornerWidth = 0
         let cornerHeight = 0
-        let lastReport: OverflowReport | null = null
-        let lastMetrics: [number, number, number, number] = [NaN, NaN, NaN, NaN]
-
-        let timerX: ReturnType<typeof setTimeout> | null = null
-        let timerY: ReturnType<typeof setTimeout> | null = null
-        let scrollEndTimer: ReturnType<typeof setTimeout> | null = null
-        let animTimer: ReturnType<typeof setTimeout> | null = null
-
-        let activePointerId: number | null = null
-        let dragVertical = true
-        let startX = 0
-        let startY = 0
-        let startScrollLeft = 0
-        let startScrollTop = 0
-        let savedSnapType: string | null = null
-
-        let boundViewport: HTMLElement | null = null
-        let boundContent: HTMLElement | null = null
-        let boundScrollbarY: HTMLElement | null = null
-        let boundScrollbarX: HTMLElement | null = null
-        let boundThumbY: HTMLElement | null = null
-        let boundThumbX: HTMLElement | null = null
+        let lastReport: Overflow | null = null
+        let scrollEndTimer: ReturnType<typeof setTimeout> | undefined
+        let animationTimer: ReturnType<typeof setTimeout> | undefined
+        let restoreSnap: (() => void) | undefined
+        let drag: {
+          readonly pointerId: number
+          readonly axis: Axis
+          readonly start: number
+          readonly startScroll: number
+          readonly track: Track | null
+        } | null = null
         let disposed = false
 
         const setHovering = (next: boolean) => {
@@ -412,267 +446,206 @@ const TrackScrollArea = Mount.makeStream(
           send(next ? Message.EnteredPointer() : Message.LeftPointer())
         }
 
-        const startScrolling = (vertical: boolean) => {
-          if (vertical) {
-            if (!scrollingY) {
-              scrollingY = true
-              send(Message.StartedScrolling({ orientation: "vertical" }))
-            }
-            if (timerY !== null) clearTimeout(timerY)
-            timerY = setTimeout(() => {
-              timerY = null
-              if (scrollingY) {
-                scrollingY = false
-                send(Message.StoppedScrolling({ orientation: "vertical" }))
-              }
-            }, SCROLL_TIMEOUT)
-          } else {
-            if (!scrollingX) {
-              scrollingX = true
-              send(Message.StartedScrolling({ orientation: "horizontal" }))
-            }
-            if (timerX !== null) clearTimeout(timerX)
-            timerX = setTimeout(() => {
-              timerX = null
-              if (scrollingX) {
-                scrollingX = false
-                send(Message.StoppedScrolling({ orientation: "horizontal" }))
-              }
-            }, SCROLL_TIMEOUT)
-          }
+        const stopScrolling = (axis: Axis) => {
+          clearTimeout(axis.timer)
+          axis.timer = undefined
+          if (!axis.scrolling) return
+          axis.scrolling = false
+          send(Message.StoppedScrolling({ orientation: axis.orientation }))
         }
 
-        const stopScrolling = (vertical: boolean) => {
-          if (vertical) {
-            if (timerY !== null) {
-              clearTimeout(timerY)
-              timerY = null
-            }
-            if (scrollingY) {
-              scrollingY = false
-              send(Message.StoppedScrolling({ orientation: "vertical" }))
-            }
-          } else {
-            if (timerX !== null) {
-              clearTimeout(timerX)
-              timerX = null
-            }
-            if (scrollingX) {
-              scrollingX = false
-              send(Message.StoppedScrolling({ orientation: "horizontal" }))
-            }
+        const startScrolling = (axis: Axis) => {
+          if (!axis.scrolling) {
+            axis.scrolling = true
+            send(Message.StartedScrolling({ orientation: axis.orientation }))
           }
+          clearTimeout(axis.timer)
+          axis.timer = setTimeout(() => stopScrolling(axis), SCROLL_TIMEOUT)
         }
 
-        const handleScroll = (x: number, y: number) => {
-          const dx = x - scrollPosX
-          const dy = y - scrollPosY
-          scrollPosX = x
-          scrollPosY = y
-          if (dy !== 0) startScrolling(true)
-          if (dx !== 0) startScrolling(false)
+        const reportScroll = () => {
+          if (viewport === null) return
+          const { scrollLeft, scrollTop } = viewport
+          if (scrollTop !== lastTop) startScrolling(y)
+          if (scrollLeft !== lastLeft) startScrolling(x)
+          lastLeft = scrollLeft
+          lastTop = scrollTop
         }
 
-        // Disable CSS scroll snap during thumb dragging so programmatic scroll
-        // assignments do not quantize back to snap points.
-        const disableViewportSnap = (viewport: HTMLElement | null) => {
-          if (viewport !== null && savedSnapType === null) {
-            savedSnapType = viewport.style.scrollSnapType
-            viewport.style.scrollSnapType = "none"
-          }
+        // Scroll snap would quantize the drag's scroll positions back to snap points.
+        const disableViewportSnap = () => {
+          if (viewport !== null) restoreSnap ??= override(viewport, { "scroll-snap-type": "none" })
         }
 
         const restoreViewportSnap = () => {
-          if (savedSnapType !== null) {
-            const viewport = find(root, viewportAttr, args.id)
-            if (viewport !== null) viewport.style.scrollSnapType = savedSnapType
-            savedSnapType = null
-          }
+          restoreSnap?.()
+          restoreSnap = undefined
         }
 
-        const startDrag = (event: PointerEvent, vertical: boolean) => {
-          if (event.button !== 0) return
-          if (activePointerId !== null) {
-            const activeThumb = dragVertical
-              ? find(root, thumbYAttr, args.id)
-              : find(root, thumbXAttr, args.id)
-            if (activeThumb !== null && typeof activeThumb.hasPointerCapture === "function") {
-              try {
-                if (activeThumb.hasPointerCapture(activePointerId)) return
-              } catch {}
+        const report = (overflow: Overflow) => {
+          if (lastReport !== null && sameOverflow(lastReport, overflow)) return
+          lastReport = overflow
+          send(Message.MeasuredOverflow(overflow))
+        }
+
+        const measure = () => {
+          if (disposed) return
+          sync()
+          if (viewport === null) return
+          const { clientHeight, clientWidth, scrollHeight, scrollLeft, scrollTop, scrollWidth } = viewport
+          if (scrollHeight === 0 || scrollWidth === 0) return report(noOverflow)
+
+          const rtl = isRtl(viewport)
+          const both = clientWidth < scrollWidth && clientHeight < scrollHeight
+          const nextCornerWidth = both ? y.scrollbar?.offsetWidth || 0 : 0
+          const nextCornerHeight = both ? x.scrollbar?.offsetHeight || 0 : 0
+          const cornerUnsized = cornerWidth === 0 && cornerHeight === 0
+
+          const edges = (axis: Axis) => {
+            const vertical = axis.vertical
+            const client = vertical ? clientHeight : clientWidth
+            const size = vertical ? scrollHeight : scrollWidth
+            const overflow = client < size
+            const maxScroll = Math.max(0, size - client)
+            const fromStart = vertical ? scrollTop : rtl ? -scrollLeft : scrollLeft
+            const start = overflow ? normalizeScrollOffset(fromStart, maxScroll) : 0
+            const { scrollbar, thumb } = axis
+            if (scrollbar !== null) {
+              const { inset, track } = insetsOf(axis, scrollbar)
+              const cornerOffset = cornerUnsized ? (vertical ? nextCornerHeight : nextCornerWidth) : 0
+              const length = Math.min(track - cornerOffset, (overflow ? client : 0) - inset)
+              const thumbSize = Math.max(MIN_THUMB_SIZE, (length * client) / size)
+              const sizeVar = vertical ? thumbHeightVar : thumbWidthVar
+              scrollbar.style.setProperty(sizeVar, `${thumbSize}px`)
+              if (thumb !== null) {
+                const maxThumbOffset = track - thumbSize - inset
+                const offset = applyOverscrollThumb(
+                  thumb,
+                  sizeVar,
+                  fromStart,
+                  maxScroll,
+                  size,
+                  thumbSize,
+                  maxThumbOffset
+                )
+                thumb.style.transform = vertical
+                  ? `translate3d(0,${offset}px,0)`
+                  : `translate3d(${rtl ? -offset : offset}px,0,0)`
+              }
             }
+            return { overflow, start, end: overflow ? maxScroll - start : 0 }
           }
-          activePointerId = event.pointerId
-          dragVertical = vertical
-          startX = event.clientX
-          startY = event.clientY
-          const viewport = find(root, viewportAttr, args.id)
-          if (viewport !== null) {
-            startScrollLeft = viewport.scrollLeft
-            startScrollTop = viewport.scrollTop
-            disableViewportSnap(viewport)
+
+          const edgesX = edges(x)
+          const edgesY = edges(y)
+          const metrics = [edgesX.start, edgesX.end, edgesY.start, edgesY.end]
+          overflowVars.forEach((name, i) => viewport!.style.setProperty(name, `${metrics[i]}px`))
+
+          if ((corner !== null || !both) && (nextCornerWidth !== cornerWidth || nextCornerHeight !== cornerHeight)) {
+            cornerWidth = nextCornerWidth
+            cornerHeight = nextCornerHeight
+            root.style.setProperty(cornerWidthVar, `${cornerWidth}px`)
+            root.style.setProperty(cornerHeightVar, `${cornerHeight}px`)
           }
-          const thumb = vertical ? find(root, thumbYAttr, args.id) : find(root, thumbXAttr, args.id)
-          if (thumb !== null && typeof thumb.setPointerCapture === "function") {
-            try {
-              thumb.setPointerCapture(event.pointerId)
-            } catch {}
+
+          report({
+            hasOverflowX: edgesX.overflow,
+            hasOverflowY: edgesY.overflow,
+            overflowXStart: edgesX.start > args.xStart,
+            overflowXEnd: edgesX.end > args.xEnd,
+            overflowYStart: edgesY.start > args.yStart,
+            overflowYEnd: edgesY.end > args.yEnd
+          })
+        }
+
+        const startDrag = (axis: Axis, event: PointerEvent) => {
+          // A live drag holds capture; without it, the release went missing and a new press takes over.
+          if (drag !== null && drag.axis.thumb?.hasPointerCapture?.(drag.pointerId) === true) return
+          drag = {
+            pointerId: event.pointerId,
+            axis,
+            start: along(axis, event),
+            startScroll: viewport === null ? 0 : scrollOf(axis, viewport),
+            track: trackOf(axis)
           }
+          disableViewportSnap()
+          try {
+            axis.thumb?.setPointerCapture?.(event.pointerId)
+          } catch {}
         }
 
         const endDrag = (event: PointerEvent) => {
-          if (event.pointerId !== activePointerId) return
-          activePointerId = null
-          stopScrolling(dragVertical)
+          if (drag === null || event.pointerId !== drag.pointerId) return
+          const { axis } = drag
+          drag = null
+          stopScrolling(axis)
           restoreViewportSnap()
-          const thumb = dragVertical ? find(root, thumbYAttr, args.id) : find(root, thumbXAttr, args.id)
-          if (thumb !== null && typeof thumb.hasPointerCapture === "function") {
-            try {
-              if (thumb.hasPointerCapture(event.pointerId)) thumb.releasePointerCapture(event.pointerId)
-            } catch {}
+          if (axis.thumb?.hasPointerCapture?.(event.pointerId) === true) {
+            axis.thumb.releasePointerCapture(event.pointerId)
           }
         }
 
-        const onThumbPointerMove = (event: PointerEvent) => {
-          if (event.pointerId !== activePointerId) return
-          // Missed-release fallback: if capture was silently dropped and the
-          // primary button is no longer held, clear the drag latch.
-          if (event.buttons % 2 === 0) {
-            endDrag(event)
-            return
+        const trackOf = (axis: Axis): Track | null => {
+          const { scrollbar, thumb } = axis
+          if (viewport === null || scrollbar === null || thumb === null) return null
+          const { inset, scrollbarOffset, thumbOffset, track } = insetsOf(axis, scrollbar)
+          const thumbSize = axis.vertical ? thumb.offsetHeight : thumb.offsetWidth
+          return {
+            viewport,
+            scrollbar,
+            thumbOffset,
+            scrollbarOffset,
+            thumbSize,
+            maxThumbOffset: track - thumbSize - inset,
+            maxScroll: maxScrollOf(axis, viewport)
           }
-          const viewport = find(root, viewportAttr, args.id)
-          if (viewport === null) return
-          const vertical = dragVertical
-          const thumb = vertical ? find(root, thumbYAttr, args.id) : find(root, thumbXAttr, args.id)
-          const scrollbar = vertical ? find(root, scrollbarYAttr, args.id) : find(root, scrollbarXAttr, args.id)
-          if (thumb === null || scrollbar === null) return
-
-          const axis = vertical ? "y" : "x"
-          const scrollbarOffset = getOffset(scrollbar, "padding", axis)
-          const thumbOffset = getOffset(thumb, "margin", axis)
-          const thumbSizePx = vertical ? thumb.offsetHeight : thumb.offsetWidth
-          const trackSize = vertical ? scrollbar.offsetHeight : scrollbar.offsetWidth
-          const maxThumbOffset = trackSize - thumbSizePx - scrollbarOffset - thumbOffset
-          const delta = vertical ? event.clientY - startY : event.clientX - startX
-          const scrollRatio = maxThumbOffset <= 0 ? 0 : delta / maxThumbOffset
-
-          const scrollableSize = vertical ? viewport.scrollHeight : viewport.scrollWidth
-          const viewportSize = vertical ? viewport.clientHeight : viewport.clientWidth
-          const startScroll = vertical ? startScrollTop : startScrollLeft
-          const nextScroll = startScroll + scrollRatio * (scrollableSize - viewportSize)
-
-          if (vertical) viewport.scrollTop = nextScroll
-          else viewport.scrollLeft = nextScroll
-          event.preventDefault()
-          startScrolling(vertical)
-          computeThumbPosition()
         }
 
-        const makeTrackPointerDown = (vertical: boolean) => (event: PointerEvent) => {
+        const onPointerDown = (axis: Axis) => (event: PointerEvent) => {
           if (event.button !== 0) return
-          const thumb = vertical ? find(root, thumbYAttr, args.id) : find(root, thumbXAttr, args.id)
-          if (thumb !== null && thumb.contains(event.target as Node | null)) return
-          const viewport = find(root, viewportAttr, args.id)
-          const scrollbar = vertical ? find(root, scrollbarYAttr, args.id) : find(root, scrollbarXAttr, args.id)
-          if (viewport === null || thumb === null || scrollbar === null) return
-
-          const axis = vertical ? "y" : "x"
-          const thumbOffset = getOffset(thumb, "margin", axis)
-          const scrollbarOffset = getOffset(scrollbar, "padding", axis)
-          const thumbSizePx = vertical ? thumb.offsetHeight : thumb.offsetWidth
-          const trackRect = scrollbar.getBoundingClientRect()
-          const clickPosition = vertical
-            ? event.clientY - trackRect.top - thumbSizePx / 2 - scrollbarOffset + thumbOffset / 2
-            : event.clientX - trackRect.left - thumbSizePx / 2 - scrollbarOffset + thumbOffset / 2
-
-          const scrollableSize = vertical ? viewport.scrollHeight : viewport.scrollWidth
-          const viewportSize = vertical ? viewport.clientHeight : viewport.clientWidth
-          const trackSize = vertical ? scrollbar.offsetHeight : scrollbar.offsetWidth
-          const maxThumbOffset = trackSize - thumbSizePx - scrollbarOffset - thumbOffset
-          if (maxThumbOffset <= 0) return
-
-          const scrollRatio = clickPosition / maxThumbOffset
-          const maxScrollDistance = scrollableSize - viewportSize
-
-          disableViewportSnap(viewport)
-          if (vertical) viewport.scrollTop = scrollRatio * maxScrollDistance
-          else if (isRtl(viewport)) viewport.scrollLeft = -(1 - scrollRatio) * maxScrollDistance
-          else viewport.scrollLeft = scrollRatio * maxScrollDistance
-
-          handleScroll(viewport.scrollLeft, viewport.scrollTop)
-          computeThumbPosition()
-          startDrag(event, vertical)
+          if (axis.thumb?.contains(event.target as Node | null) !== true) {
+            const track = trackOf(axis)
+            if (track === null || track.maxThumbOffset <= 0) return
+            const rect = track.scrollbar.getBoundingClientRect()
+            const at = along(axis, event) - (axis.vertical ? rect.top : rect.left) - track.thumbSize / 2 -
+              track.scrollbarOffset + track.thumbOffset / 2
+            const ratio = at / track.maxThumbOffset
+            disableViewportSnap()
+            setScroll(
+              axis,
+              track.viewport,
+              !axis.vertical && isRtl(track.viewport) ? -(1 - ratio) * track.maxScroll : ratio * track.maxScroll
+            )
+            reportScroll()
+          }
+          startDrag(axis, event)
         }
 
-        const makeWheel = (vertical: boolean) => (event: WheelEvent) => {
-          const viewport = find(root, viewportAttr, args.id)
+        const onPointerMove = (event: PointerEvent) => {
+          if (drag === null || event.pointerId !== drag.pointerId) return
+          // The primary button is up, so the release went missing.
+          if (event.buttons % 2 === 0) return endDrag(event)
+          const { track } = drag
+          if (track === null) return
+          const ratio = track.maxThumbOffset <= 0 ? 0 : (along(drag.axis, event) - drag.start) / track.maxThumbOffset
+          setScroll(drag.axis, track.viewport, drag.startScroll + ratio * track.maxScroll)
+          event.preventDefault()
+          startScrolling(drag.axis)
+        }
+
+        const onWheel = (axis: Axis) => (event: WheelEvent) => {
           if (viewport === null || event.ctrlKey) return
-          const horizontal = !vertical
-          const delta = horizontal ? event.deltaX : event.deltaY
+          const delta = axis.vertical ? event.deltaY : event.deltaX
           if (delta === 0) return
-
-          const maxScroll = horizontal
-            ? viewport.scrollWidth - viewport.clientWidth
-            : viewport.scrollHeight - viewport.clientHeight
-          const rtl = horizontal && isRtl(viewport)
-          const minScroll = rtl ? -maxScroll : 0
-          const maxScrollValue = rtl ? 0 : maxScroll
-          const scrollValue = horizontal ? viewport.scrollLeft : viewport.scrollTop
-
-          if ((scrollValue <= minScroll && delta < 0) || (scrollValue >= maxScrollValue && delta > 0)) return
-
+          const maxScroll = maxScrollOf(axis, viewport)
+          const rtl = !axis.vertical && isRtl(viewport)
+          const min = rtl ? -maxScroll : 0
+          const max = rtl ? 0 : maxScroll
+          const value = scrollOf(axis, viewport)
+          if ((value <= min && delta < 0) || (value >= max && delta > 0)) return
           event.preventDefault()
-          const next = clamp(scrollValue + delta, minScroll, maxScrollValue)
-          if (horizontal) viewport.scrollLeft = next
-          else viewport.scrollTop = next
-          handleScroll(viewport.scrollLeft, viewport.scrollTop)
-          computeThumbPosition()
-        }
-
-        const onScrollbarMouseDown = (event: MouseEvent) => {
-          event.preventDefault()
-        }
-
-        const onTrackYPointerDown = makeTrackPointerDown(true)
-        const onTrackXPointerDown = makeTrackPointerDown(false)
-        const onThumbYPointerDown = (event: PointerEvent) => startDrag(event, true)
-        const onThumbXPointerDown = (event: PointerEvent) => startDrag(event, false)
-        const onWheelY = makeWheel(true)
-        const onWheelX = makeWheel(false)
-
-        const unbindScrollbar = (el: HTMLElement | null, vertical: boolean) => {
-          if (el === null) return
-          el.removeEventListener("wheel", vertical ? onWheelY : onWheelX)
-          el.removeEventListener("pointerdown", vertical ? onTrackYPointerDown : onTrackXPointerDown)
-          el.removeEventListener("mousedown", onScrollbarMouseDown)
-          el.removeEventListener("pointerup", endDrag)
-          el.removeEventListener("pointercancel", endDrag)
-        }
-
-        const bindScrollbar = (el: HTMLElement | null, vertical: boolean) => {
-          if (el === null) return
-          el.addEventListener("wheel", vertical ? onWheelY : onWheelX, { passive: false })
-          el.addEventListener("pointerdown", vertical ? onTrackYPointerDown : onTrackXPointerDown)
-          el.addEventListener("mousedown", onScrollbarMouseDown)
-          el.addEventListener("pointerup", endDrag)
-          el.addEventListener("pointercancel", endDrag)
-        }
-
-        const unbindThumb = (el: HTMLElement | null, vertical: boolean) => {
-          if (el === null) return
-          el.removeEventListener("pointerdown", vertical ? onThumbYPointerDown : onThumbXPointerDown)
-          el.removeEventListener("pointermove", onThumbPointerMove)
-          el.removeEventListener("pointerup", endDrag)
-          el.removeEventListener("pointercancel", endDrag)
-        }
-
-        const bindThumb = (el: HTMLElement | null, vertical: boolean) => {
-          if (el === null) return
-          el.addEventListener("pointerdown", vertical ? onThumbYPointerDown : onThumbXPointerDown)
-          el.addEventListener("pointermove", onThumbPointerMove)
-          el.addEventListener("pointerup", endDrag)
-          el.addEventListener("pointercancel", endDrag)
+          setScroll(axis, viewport, clamp(value + delta, min, max))
+          reportScroll()
         }
 
         const onUserInteraction = () => {
@@ -680,276 +653,84 @@ const TrackScrollArea = Mount.makeStream(
         }
 
         const onViewportScroll = () => {
-          const viewport = find(root, viewportAttr, args.id)
-          if (viewport === null) return
-          computeThumbPosition()
-          if (touchModality || !programmaticScroll) {
-            handleScroll(viewport.scrollLeft, viewport.scrollTop)
-          }
-          if (scrollEndTimer !== null) clearTimeout(scrollEndTimer)
+          measure()
+          if (touchModality || !programmaticScroll) reportScroll()
+          clearTimeout(scrollEndTimer)
           scrollEndTimer = setTimeout(() => {
-            scrollEndTimer = null
             programmaticScroll = true
           }, SCROLL_END_DEBOUNCE)
         }
 
-        const unbindViewport = (el: HTMLElement | null) => {
-          if (el === null) return
-          el.removeEventListener("scroll", onViewportScroll)
-          el.removeEventListener("wheel", onUserInteraction)
-          el.removeEventListener("pointermove", onUserInteraction)
-          el.removeEventListener("pointerenter", onUserInteraction)
-          el.removeEventListener("keydown", onUserInteraction)
+        const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure)
+
+        const observe = (current: HTMLElement | null, next: HTMLElement | null) => {
+          if (current !== null) resizeObserver?.unobserve(current)
+          if (next !== null) resizeObserver?.observe(next)
+          return next
         }
 
-        const bindViewport = (el: HTMLElement | null) => {
-          if (el === null) return
-          el.addEventListener("scroll", onViewportScroll, { passive: true })
-          el.addEventListener("wheel", onUserInteraction, { passive: true })
-          el.addEventListener("pointermove", onUserInteraction)
-          el.addEventListener("pointerenter", onUserInteraction)
-          el.addEventListener("keydown", onUserInteraction)
-        }
-
-        const resizeObserver = typeof ResizeObserver === "undefined"
-          ? null
-          : new ResizeObserver((entries) => {
-            const viewport = find(root, viewportAttr, args.id)
-            if (viewport !== null && entries.length === 1 && entries[0]?.target === viewport) {
-              if (
-                lastMetrics[0] === viewport.clientHeight &&
-                lastMetrics[1] === viewport.scrollHeight &&
-                lastMetrics[2] === viewport.clientWidth &&
-                lastMetrics[3] === viewport.scrollWidth
-              ) return
+        const sync = () => {
+          const nextViewport = find(viewportAttr)
+          if (nextViewport !== viewport) {
+            viewportListening?.abort()
+            viewport = observe(viewport, nextViewport)
+            if (viewport !== null) {
+              viewportListening = new AbortController()
+              const options = { signal: viewportListening.signal, passive: true }
+              viewport.addEventListener("scroll", onViewportScroll, options)
+              for (const name of ["wheel", "pointermove", "pointerenter", "keydown"]) {
+                viewport.addEventListener(name, onUserInteraction, options)
+              }
             }
-            computeThumbPosition()
-          })
-
-        const syncElements = () => {
-          const nextViewport = find(root, viewportAttr, args.id)
-          if (nextViewport !== boundViewport) {
-            if (boundViewport !== null) resizeObserver?.unobserve(boundViewport)
-            unbindViewport(boundViewport)
-            boundViewport = nextViewport
-            bindViewport(boundViewport)
-            if (boundViewport !== null) resizeObserver?.observe(boundViewport)
           }
-
-          const nextContent = find(root, contentAttr, args.id)
-          if (nextContent !== boundContent) {
-            if (boundContent !== null) resizeObserver?.unobserve(boundContent)
-            boundContent = nextContent
-            if (boundContent !== null) resizeObserver?.observe(boundContent)
-          }
-
-          const nextScrollbarY = find(root, scrollbarYAttr, args.id)
-          if (nextScrollbarY !== boundScrollbarY) {
-            unbindScrollbar(boundScrollbarY, true)
-            boundScrollbarY = nextScrollbarY
-            bindScrollbar(boundScrollbarY, true)
-          }
-
-          const nextScrollbarX = find(root, scrollbarXAttr, args.id)
-          if (nextScrollbarX !== boundScrollbarX) {
-            unbindScrollbar(boundScrollbarX, false)
-            boundScrollbarX = nextScrollbarX
-            bindScrollbar(boundScrollbarX, false)
-          }
-
-          const nextThumbY = find(root, thumbYAttr, args.id)
-          if (nextThumbY !== boundThumbY) {
-            unbindThumb(boundThumbY, true)
-            boundThumbY = nextThumbY
-            bindThumb(boundThumbY, true)
-          }
-
-          const nextThumbX = find(root, thumbXAttr, args.id)
-          if (nextThumbX !== boundThumbX) {
-            unbindThumb(boundThumbX, false)
-            boundThumbX = nextThumbX
-            bindThumb(boundThumbX, false)
+          const nextContent = find(contentAttr)
+          if (nextContent !== content) content = observe(content, nextContent)
+          corner = find(cornerAttr)
+          for (const axis of [y, x]) {
+            axis.thumb = find(thumbAttr(axis.orientation))
+            const scrollbar = find(scrollbarAttr(axis.orientation))
+            if (scrollbar === axis.scrollbar) continue
+            axis.listening?.abort()
+            axis.scrollbar = scrollbar
+            if (scrollbar === null) continue
+            axis.listening = new AbortController()
+            const { signal } = axis.listening
+            scrollbar.addEventListener("wheel", onWheel(axis), { signal, passive: false })
+            scrollbar.addEventListener("pointerdown", onPointerDown(axis), { signal })
+            scrollbar.addEventListener("pointermove", onPointerMove, { signal })
+            scrollbar.addEventListener("pointerup", endDrag, { signal })
+            scrollbar.addEventListener("pointercancel", endDrag, { signal })
+            // A native scrollbar doesn't take focus when pressed.
+            scrollbar.addEventListener("mousedown", (event) => event.preventDefault(), { signal })
           }
         }
 
-        const computeThumbPosition = () => {
-          if (disposed) return
-          syncElements()
-          const viewport = boundViewport
-          if (viewport === null) return
-
-          const scrollHeight = viewport.scrollHeight
-          const scrollWidth = viewport.scrollWidth
-          const clientHeight = viewport.clientHeight
-          const clientWidth = viewport.clientWidth
-          const scrollTop = viewport.scrollTop
-          const scrollLeft = viewport.scrollLeft
-
-          lastMetrics = [clientHeight, scrollHeight, clientWidth, scrollWidth]
-
-          if (scrollHeight === 0 || scrollWidth === 0) {
-            const empty: OverflowReport = {
-              hasOverflowX: false,
-              hasOverflowY: false,
-              overflowXStart: false,
-              overflowXEnd: false,
-              overflowYStart: false,
-              overflowYEnd: false
-            }
-            if (!sameReport(lastReport, empty)) {
-              lastReport = empty
-              send(Message.MeasuredOverflow(empty))
-            }
-            return
-          }
-
-          const hasOverflowY = clientHeight < scrollHeight
-          const hasOverflowX = clientWidth < scrollWidth
-          const maxScrollLeft = Math.max(0, scrollWidth - clientWidth)
-          const maxScrollTop = Math.max(0, scrollHeight - clientHeight)
-          const rtl = isRtl(viewport)
-
-          const scrollLeftFromStart = hasOverflowX
-            ? normalizeScrollOffset(rtl ? -scrollLeft : scrollLeft, maxScrollLeft)
-            : 0
-          const scrollLeftFromEnd = hasOverflowX ? maxScrollLeft - scrollLeftFromStart : 0
-          const scrollTopFromStart = hasOverflowY ? normalizeScrollOffset(scrollTop, maxScrollTop) : 0
-          const scrollTopFromEnd = hasOverflowY ? maxScrollTop - scrollTopFromStart : 0
-
-          const scrollbarY = boundScrollbarY
-          const scrollbarX = boundScrollbarX
-          const thumbY = boundThumbY
-          const thumbX = boundThumbX
-          const corner = find(root, cornerAttr, args.id)
-
-          const nextCornerWidth = hasOverflowX && hasOverflowY ? (scrollbarY?.offsetWidth || 0) : 0
-          const nextCornerHeight = hasOverflowX && hasOverflowY ? (scrollbarX?.offsetHeight || 0) : 0
-
-          const cornerNotYetSized = cornerWidth === 0 && cornerHeight === 0
-          const cornerWidthOffset = cornerNotYetSized ? nextCornerWidth : 0
-          const cornerHeightOffset = cornerNotYetSized ? nextCornerHeight : 0
-
-          const ratioX = clientWidth / scrollWidth
-          const ratioY = clientHeight / scrollHeight
-          const scrollbarXOffset = getOffset(scrollbarX, "padding", "x")
-          const scrollbarYOffset = getOffset(scrollbarY, "padding", "y")
-          const thumbXOffset = getOffset(thumbX, "margin", "x")
-          const thumbYOffset = getOffset(thumbY, "margin", "y")
-
-          const idealWidth = (hasOverflowX ? clientWidth : 0) - scrollbarXOffset - thumbXOffset
-          const idealHeight = (hasOverflowY ? clientHeight : 0) - scrollbarYOffset - thumbYOffset
-          const maxWidth = scrollbarX !== null
-            ? Math.min(scrollbarX.offsetWidth - cornerWidthOffset, idealWidth)
-            : idealWidth
-          const maxHeight = scrollbarY !== null
-            ? Math.min(scrollbarY.offsetHeight - cornerHeightOffset, idealHeight)
-            : idealHeight
-
-          const thumbWidth = Math.max(MIN_THUMB_SIZE, maxWidth * ratioX)
-          const thumbHeight = Math.max(MIN_THUMB_SIZE, maxHeight * ratioY)
-
-          if (scrollbarY !== null) {
-            scrollbarY.style.setProperty(thumbHeightVar, `${thumbHeight}px`)
-            if (thumbY !== null) {
-              const maxThumbOffsetY = scrollbarY.offsetHeight - thumbHeight - scrollbarYOffset - thumbYOffset
-              const offsetY = applyOverscrollThumb(
-                thumbY,
-                thumbHeightVar,
-                scrollTop,
-                maxScrollTop,
-                scrollHeight,
-                thumbHeight,
-                maxThumbOffsetY
-              )
-              thumbY.style.transform = `translate3d(0,${offsetY}px,0)`
-            }
-          }
-
-          if (scrollbarX !== null) {
-            scrollbarX.style.setProperty(thumbWidthVar, `${thumbWidth}px`)
-            if (thumbX !== null) {
-              const maxThumbOffsetX = scrollbarX.offsetWidth - thumbWidth - scrollbarXOffset - thumbXOffset
-              const scrollFromStart = rtl ? -scrollLeft : scrollLeft
-              const offsetX = applyOverscrollThumb(
-                thumbX,
-                thumbWidthVar,
-                scrollFromStart,
-                maxScrollLeft,
-                scrollWidth,
-                thumbWidth,
-                maxThumbOffsetX
-              )
-              thumbX.style.transform = `translate3d(${rtl ? -offsetX : offsetX}px,0,0)`
-            }
-          }
-
-          const metrics = [scrollLeftFromStart, scrollLeftFromEnd, scrollTopFromStart, scrollTopFromEnd]
-          for (let i = 0; i < overflowVars.length; i++) {
-            viewport.style.setProperty(overflowVars[i]!, `${metrics[i]}px`)
-          }
-
-          if (corner !== null || !hasOverflowX || !hasOverflowY) {
-            cornerWidth = nextCornerWidth
-            cornerHeight = nextCornerHeight
-            root.style.setProperty(cornerWidthVar, `${cornerWidth}px`)
-            root.style.setProperty(cornerHeightVar, `${cornerHeight}px`)
-          }
-
-          const report: OverflowReport = {
-            hasOverflowX,
-            hasOverflowY,
-            overflowXStart: hasOverflowX && scrollLeftFromStart > args.xStart,
-            overflowXEnd: hasOverflowX && scrollLeftFromEnd > args.xEnd,
-            overflowYStart: hasOverflowY && scrollTopFromStart > args.yStart,
-            overflowYEnd: hasOverflowY && scrollTopFromEnd > args.yEnd
-          }
-
-          if (!sameReport(lastReport, report)) {
-            lastReport = report
-            send(Message.MeasuredOverflow(report))
-          }
-        }
-
-        const onRootPointerDown = (event: PointerEvent) => {
+        const onRootPointer = (event: PointerEvent) => {
           touchModality = event.pointerType === "touch"
+          if (event.type !== "pointerdown" && !touchModality) setHovering(root.contains(event.target as Node | null))
         }
 
-        const onRootPointerEnterOrMove = (event: PointerEvent) => {
-          touchModality = event.pointerType === "touch"
-          if (event.pointerType !== "touch") {
-            setHovering(root.contains(event.target as Node | null))
-          }
+        const { signal } = rootListening
+        for (const name of ["pointerdown", "pointerenter", "pointermove"] as const) {
+          root.addEventListener(name, onRootPointer, { signal })
         }
-
-        const onRootPointerLeave = () => {
-          setHovering(false)
-        }
-
+        root.addEventListener("pointerleave", () => setHovering(false), { signal })
         root.style.setProperty(cornerWidthVar, "0px")
         root.style.setProperty(cornerHeightVar, "0px")
-        root.addEventListener("pointerdown", onRootPointerDown)
-        root.addEventListener("pointerenter", onRootPointerEnterOrMove)
-        root.addEventListener("pointermove", onRootPointerEnterOrMove)
-        root.addEventListener("pointerleave", onRootPointerLeave)
 
-        computeThumbPosition()
+        measure()
 
-        const initialViewport = find(root, viewportAttr, args.id)
+        const initialViewport = viewport as HTMLElement | null
         if (initialViewport !== null) {
           try {
             if (initialViewport.matches(":hover")) setHovering(true)
           } catch {}
-
-          animTimer = setTimeout(() => {
-            animTimer = null
+          animationTimer = setTimeout(() => {
             if (disposed || typeof initialViewport.getAnimations !== "function") return
-            const animations = initialViewport.getAnimations({ subtree: true }).filter((animation) => {
-              const timing = animation.effect?.getTiming()
-              return timing?.duration !== Infinity && timing?.iterations !== Infinity
-            })
+            const animations = initialViewport.getAnimations({ subtree: true }).filter(finite)
             if (animations.length === 0) return
             Promise.allSettled(animations.map((animation) => animation.finished.then(() => undefined)))
-              .then(() => computeThumbPosition())
+              .then(measure)
               .catch(() => {})
           }, 0)
         }
@@ -958,47 +739,27 @@ const TrackScrollArea = Mount.makeStream(
           Effect.sync(() => {
             disposed = true
             resizeObserver?.disconnect()
-            if (timerX !== null) clearTimeout(timerX)
-            if (timerY !== null) clearTimeout(timerY)
-            if (scrollEndTimer !== null) clearTimeout(scrollEndTimer)
-            if (animTimer !== null) clearTimeout(animTimer)
+            for (const timer of [x.timer, y.timer, scrollEndTimer, animationTimer]) clearTimeout(timer)
             restoreViewportSnap()
-            root.removeEventListener("pointerdown", onRootPointerDown)
-            root.removeEventListener("pointerenter", onRootPointerEnterOrMove)
-            root.removeEventListener("pointermove", onRootPointerEnterOrMove)
-            root.removeEventListener("pointerleave", onRootPointerLeave)
-            unbindViewport(boundViewport)
-            unbindScrollbar(boundScrollbarY, true)
-            unbindScrollbar(boundScrollbarX, false)
-            unbindThumb(boundThumbY, true)
-            unbindThumb(boundThumbX, false)
+            for (const listening of [rootListening, viewportListening, x.listening, y.listening]) listening?.abort()
           })
         )
 
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             args = next
-            computeThumbPosition()
+            measure()
           })).pipe(Effect.forkScoped)
       })
     )
 )
-
-type WithRequirements<T, R2> = [R2] extends [never] ? T
-  : T extends Html.Element<infer Msg, infer R, infer E, infer N, infer Tag> ? Html.Element<Msg, R | R2, E, N, Tag>
-  : T extends View.ContainerBuilder<infer Msg, infer R, infer H, infer N, infer Tag> ?
-    View.ContainerBuilder<Msg, R | R2, H, N, Tag>
-  : T
 
 type ScrollbarOf<B extends View.PartTarget<"div">, T extends View.PartTarget<"div">> = WithRequirements<
   ReturnType<B["attr"]>,
   View.Requirements<T>
 >
 
-const overflowData = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(
-  builder: B,
-  model: typeof Model.Type
-): B =>
+const overflowData = <B extends Attributed<B>>(builder: B, model: Model): B =>
   builder
     .attr("data-has-overflow-x", flag(model.hasOverflowX))
     .attr("data-has-overflow-y", flag(model.hasOverflowY))
@@ -1043,18 +804,7 @@ export const ScrollArea = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({
-    measured: false,
-    hovering: false,
-    scrollingX: false,
-    scrollingY: false,
-    hasOverflowX: false,
-    hasOverflowY: false,
-    overflowXStart: false,
-    overflowXEnd: false,
-    overflowYStart: false,
-    overflowYEnd: false
-  }),
+  init: () => ({ measured: false, hovering: false, scrollingX: false, scrollingY: false, ...noOverflow }),
   update: {
     MeasuredOverflow: (model, overflow) => ({
       ...model,
@@ -1067,65 +817,55 @@ export const ScrollArea = Component.define({
       overflowYEnd: overflow.overflowYEnd
     }),
     StartedScrolling: (model, { orientation }) =>
-      orientation === "vertical"
-        ? { ...model, scrollingY: true }
-        : { ...model, scrollingX: true },
+      orientation === "vertical" ? { ...model, scrollingY: true } : { ...model, scrollingX: true },
     StoppedScrolling: (model, { orientation }) =>
-      orientation === "vertical"
-        ? { ...model, scrollingY: false }
-        : { ...model, scrollingX: false },
+      orientation === "vertical" ? { ...model, scrollingY: false } : { ...model, scrollingX: false },
     EnteredPointer: (model) => ({ ...model, hovering: true }),
     LeftPointer: (model) => ({ ...model, hovering: false })
   },
   parts: (model, p) => {
     const id = p.id("scroll-area")
-    const thresholds = normalizeThreshold(p.props.overflowEdgeThreshold)
     const scrolling = model.scrollingX || model.scrollingY
     const cornerHidden = !model.hasOverflowX || !model.hasOverflowY
+    const scrollingOn = (orientation: ScrollAreaOrientation) =>
+      flag(orientation === "vertical" ? model.scrollingY : model.scrollingX)
+    const areaState = <B extends Attributed<B>>(builder: B): B =>
+      overflowData(builder, model).attr("data-scrolling", flag(scrolling))
 
-    const thumbPart = p.part("div", (b, orientation: ScrollAreaOrientation) => {
-      const vertical = orientation === "vertical"
-      const ownStyle = (vertical ? `height:var(${thumbHeightVar})` : `width:var(${thumbWidthVar})`) +
-        (model.measured ? "" : ";visibility:hidden")
-      return b
+    const thumbPart = p.part("div", (b, orientation: ScrollAreaOrientation) =>
+      b
         .attr("data-orientation", orientation)
-        .attr("data-scrolling", flag(vertical ? model.scrollingY : model.scrollingX))
-        .attr(vertical ? thumbYAttr : thumbXAttr, id)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, ownStyle)))
-    })
+        .attr("data-scrolling", scrollingOn(orientation))
+        .attr(thumbAttr(orientation), id)
+        .forward(ownStyle(
+          (orientation === "vertical" ? `height:var(${thumbHeightVar})` : `width:var(${thumbWidthVar})`) +
+            (model.measured ? "" : ";visibility:hidden")
+        )))
 
     const scrollbarPart = p.part(
       "div",
-      (b, orientation: ScrollAreaOrientation, thumb: View.Content<unknown, any>) => {
-        const vertical = orientation === "vertical"
-        const placement = vertical
-          ? `top:0;bottom:var(${cornerHeightVar},0px);inset-inline-end:0`
-          : `inset-inline-start:0;inset-inline-end:var(${cornerWidthVar},0px);bottom:0`
-        const ownStyle = `position:absolute;touch-action:none;${noSelect};${placement}`
-        return overflowData(b, model)
+      (b, orientation: ScrollAreaOrientation, thumb: View.Content<unknown, any>) =>
+        overflowData(b, model)
           .attr("aria-hidden", "true")
           .attr("data-orientation", orientation)
           .attr("data-hovering", flag(model.hovering))
-          .attr("data-scrolling", flag(vertical ? model.scrollingY : model.scrollingX))
-          .attr(vertical ? scrollbarYAttr : scrollbarXAttr, id)
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, ownStyle)))
+          .attr("data-scrolling", scrollingOn(orientation))
+          .attr(scrollbarAttr(orientation), id)
+          .forward(ownStyle(
+            `position:absolute;touch-action:none;${noSelect};` + (orientation === "vertical"
+              ? `top:0;bottom:var(${cornerHeightVar},0px);inset-inline-end:0`
+              : `inset-inline-start:0;inset-inline-end:var(${cornerWidthVar},0px);bottom:0`)
+          ))
           .children(thumb as never)
-      }
     )
 
     const cornerPart = p.part("div", (b) =>
       b
         .attr("aria-hidden", "true")
         .attr(cornerAttr, id)
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(
-              node.attrs.style,
-              `position:absolute;bottom:0;inset-inline-end:0;width:var(${cornerWidthVar},0px);height:var(${cornerHeightVar},0px)`
-            )
-          )
-        ))
+        .forward(ownStyle(
+          `position:absolute;bottom:0;inset-inline-end:0;width:var(${cornerWidthVar},0px);height:var(${cornerHeightVar},0px)`
+        )))
 
     return {
       scrolling,
@@ -1140,30 +880,25 @@ export const ScrollArea = Component.define({
       overflowYEnd: model.overflowYEnd,
       cornerHidden,
       root: p.part("div", (b) =>
-        overflowData(b, model)
+        areaState(b)
           .attr("role", "presentation")
-          .attr("data-scrolling", flag(scrolling))
-          .onMount(
-            TrackScrollArea({
-              id,
-              hasOverflowX: model.hasOverflowX,
-              hasOverflowY: model.hasOverflowY,
-              ...thresholds
-            })
-          )
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, "position:relative")))),
+          .onMount(TrackScrollArea({
+            id,
+            hasOverflowX: model.hasOverflowX,
+            hasOverflowY: model.hasOverflowY,
+            ...thresholdsOf(p.props.overflowEdgeThreshold)
+          }))
+          .forward(ownStyle("position:relative"))),
       viewport: p.part("div", (b) =>
-        overflowData(b, model)
+        areaState(b)
           .attr("tabindex", model.hasOverflowX || model.hasOverflowY ? "0" : "-1")
-          .attr("data-scrolling", flag(scrolling))
           .attr(viewportAttr, id)
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, "overflow:scroll;scrollbar-width:none")))),
+          .forward(ownStyle("overflow:scroll;scrollbar-width:none"))),
       content: p.part("div", (b) =>
-        overflowData(b, model)
+        areaState(b)
           .attr("role", "presentation")
-          .attr("data-scrolling", flag(scrolling))
           .attr(contentAttr, id)
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, "min-width:fit-content")))),
+          .forward(ownStyle("min-width:fit-content"))),
       scrollbar: View.wrapPart(
         scrollbarPart,
         <B extends View.PartTarget<"div">, T extends View.PartTarget<"div">>(
@@ -1174,10 +909,10 @@ export const ScrollArea = Component.define({
             readonly keepMounted?: boolean | undefined
           }
         ): ScrollbarOf<B, T> | undefined => {
-          const builtThumb = thumbPart(thumb, orientation)
-          const built = scrollbarPart(element, orientation, builtThumb) as ScrollbarOf<B, T>
-          const visible = keepMounted || (orientation === "vertical" ? model.hasOverflowY : model.hasOverflowX)
-          return visible ? built : undefined
+          const built = scrollbarPart(element, orientation, thumbPart(thumb, orientation)) as ScrollbarOf<B, T>
+          return keepMounted || (orientation === "vertical" ? model.hasOverflowY : model.hasOverflowX)
+            ? built
+            : undefined
         }
       ),
       corner: View.wrapPart(

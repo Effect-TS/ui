@@ -1,6 +1,6 @@
 import { type Attributed, flag } from "./attributes.ts"
 
-const finite = (animation: Animation): boolean => {
+export const finite = (animation: Animation): boolean => {
   const end = animation.effect?.getComputedTiming().endTime
   return typeof end === "number" && Number.isFinite(end)
 }
