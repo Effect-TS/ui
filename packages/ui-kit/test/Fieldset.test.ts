@@ -58,7 +58,23 @@ const Billing = Component.define({
   }
 })
 
-describe("Fieldset", () => {
+// Chromium blurs the focused control as a fieldset around it is disabled, before the render that disables
+// it has finished, and the control matches `:disabled` by then. happy-dom does neither.
+const blurOnDisable = (fieldset: HTMLFieldSetElement) => {
+  const setAttribute = fieldset.setAttribute
+  fieldset.setAttribute = function(name, value) {
+    setAttribute.call(this, name, value)
+    const focused = document.activeElement as HTMLElement | null
+    if (name !== "disabled" || focused === null || !fieldset.contains(focused)) return
+    const matches = focused.matches
+    focused.matches =
+      ((selector: string) => selector === ":disabled" || matches.call(focused, selector)) as typeof matches
+    focused.blur()
+    focused.matches = matches
+  }
+}
+
+describe("Fieldset", { concurrent: false }, () => {
   it("the root is a fieldset named by the legend, and both parts follow disabled over the consumer's values", () => {
     const enabled = parts({})
     const legendId = attrsOf(enabled.legend(h.div.attr("id", "mine").attr("data-disabled", "stale"))).id
@@ -132,5 +148,33 @@ describe("Fieldset", () => {
       company.dispatchEvent(new FocusEvent("blur"))
       yield* toggleLock
       assert.deepStrictEqual(state("company"), [])
+    }).pipe(Effect.scoped))
+
+  it.effect("a blur sent while an outer fieldset is being disabled leaves a nested field's touched state alone", () =>
+    Effect.gen(function*() {
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Billing, {}, app)
+      yield* tick
+      const city = app.querySelector<HTMLInputElement>("input[name=city]")!
+      const field = app.querySelector(".city")!
+      const lockWhileFocused = Effect.gen(function*() {
+        city.focus()
+        yield* tick
+        app.querySelector<HTMLButtonElement>(".lock")!.click()
+        yield* tick
+        assert.notStrictEqual(document.activeElement, city)
+        app.querySelector<HTMLButtonElement>(".lock")!.click()
+        yield* tick
+        assert.isFalse(field.hasAttribute("data-focused"))
+      })
+      blurOnDisable(app.querySelector<HTMLFieldSetElement>(".billing")!)
+
+      yield* lockWhileFocused
+      assert.isFalse(field.hasAttribute("data-touched"))
+
+      city.focus()
+      city.blur()
+      yield* lockWhileFocused
+      assert.isTrue(field.hasAttribute("data-touched"))
     }).pipe(Effect.scoped))
 })

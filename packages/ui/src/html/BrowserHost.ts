@@ -326,6 +326,13 @@ const containsTarget = (element: globalThis.Element, target: EventTarget | null)
 }
 
 /**
+ * Whether `target`, what lost focus, is disabled, by its own attribute or a
+ * fieldset's. An event a script made can name a target that isn't an element.
+ */
+const isDisabled = (target: EventTarget | null): boolean =>
+  target !== null && "matches" in target && (target as globalThis.Element).matches(":disabled")
+
+/**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
  */
@@ -386,9 +393,16 @@ const payloadOf = (
       return { cancelable: event.cancelable }
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
+    case "blur":
+      // A window listener's `blur` has no element that lost focus.
+      return target === element ? { disabled: isDisabled(target) } : {}
     case "focusin":
-    case "focusout":
       return { within: containsTarget(element, (event as FocusEvent).relatedTarget) }
+    case "focusout":
+      return {
+        within: containsTarget(element, (event as FocusEvent).relatedTarget),
+        disabled: isDisabled(target)
+      }
     default:
       return {}
   }

@@ -1011,6 +1011,36 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it.effect("blur and focusout say whether the element that lost focus is disabled", () =>
+      Effect.gen(function*() {
+        const Left = UiSchema.TaggedEnum({ Left: { event: Schema.String, disabled: Schema.Boolean } })
+        const Leaving = Component.define({
+          name: "Leaving",
+          model: Schema.Array(Schema.String),
+          message: Left,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: (log, { disabled, event }) => [...log, `${event}${disabled ? " disabled" : ""}`],
+          view: (_, h) =>
+            h.div.on("focusout", ({ disabled }) => Left.Left({ event: "focusout", disabled })).children(
+              h.input.onBlur(({ disabled }) => Left.Left({ event: "blur", disabled }))
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Leaving, {}, app)
+        const input = app.querySelector("input")!
+        const leave = () => {
+          input.dispatchEvent(new FocusEvent("blur"))
+          input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+        }
+        leave()
+        input.disabled = true
+        leave()
+        yield* tick
+        expect(root.model()).toEqual(["blur", "focusout", "blur disabled", "focusout disabled"])
+      }).pipe(Effect.scoped))
+
     it.effect("payloads are plain data", () =>
       Effect.gen(function*() {
         const app = yield* container

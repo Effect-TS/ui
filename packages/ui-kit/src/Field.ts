@@ -214,17 +214,17 @@ export type FieldProps = typeof FieldProps.Type
 
 const Message = UiSchema.TaggedEnum({
   FocusedControl: {},
-  BlurredControl: {},
+  BlurredControl: { disabled: Schema.Boolean },
   ChangedFieldset: { disabled: Schema.Boolean }
 })
 
 const disabledBy = (props: FieldProps, fieldset: { readonly disabled: boolean } | undefined): boolean =>
   props.disabled === true || fieldset?.disabled === true
 
-// A control disabled while it has focus loses it without a blur event, so
-// the field reports the blur itself. Otherwise the focus would show again
-// once the field is enabled.
-const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredControl()))
+// A browser may send no blur event for a control disabled while it has
+// focus, so the field reports the blur itself. Otherwise the focus would
+// show again once the field is enabled.
+const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredControl({ disabled: true })))
 
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
@@ -273,7 +273,9 @@ const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredCont
  * `member` handles no focus event. A disabled field shows no focus, and
  * isn't touched until it is enabled and left. A field disabled while its
  * control has focus drops the focus, and shows it again only when the
- * control is focused again.
+ * control is focused again. A control that loses focus because something
+ * disabled it, such as a `<fieldset disabled>` the field doesn't read,
+ * doesn't touch the field either.
  *
  * The field reads the nearest `Fieldset` above it, if there is one, and is
  * disabled while that fieldset or its own `disabled` prop says so.
@@ -299,9 +301,13 @@ export const Field = Component.define({
   init: () => ({ focused: false, touched: false }),
   update: {
     FocusedControl: (model) => ({ ...model, focused: true }),
-    // Losing focus doesn't count as a visit while the field is disabled.
-    BlurredControl: (model, _message, $) =>
-      disabledBy($.props, $.shared.fieldset) ? { ...model, focused: false } : { focused: false, touched: true },
+    // Losing focus doesn't count as a visit while the field is disabled. A
+    // browser can send the blur of a control a fieldset disabled before the
+    // field hears of it, so the event says so too.
+    BlurredControl: (model, { disabled }, $) =>
+      disabled || disabledBy($.props, $.shared.fieldset)
+        ? { ...model, focused: false }
+        : { focused: false, touched: true },
     // `subscriptions` gets no shared value, so `lostFocus` can't report the
     // blur of a control its fieldset disabled.
     ChangedFieldset: (model, { disabled }) => (disabled ? { ...model, focused: false } : model)
@@ -345,14 +351,18 @@ export const Field = Component.define({
         .on("focusin", Message.FocusedControl())
         .on(
           "focusout",
-          (payload) => (payload as Html.FocusWithinPayload).within ? undefined : Message.BlurredControl()
+          (payload) => {
+            const { disabled, within } = payload as Html.FocusOutPayload
+            return within ? undefined : Message.BlurredControl({ disabled: disabled === true })
+          }
         )
     // `control`, with the id and the focus handlers, or `member`, with
     // neither.
     const formControl = (own: boolean) =>
       p.part(["input", "textarea", "select", "button"], (b) => {
         const control = (own
-          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl()).onBlur(Message.BlurredControl())
+          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl())
+            .onBlur(({ disabled }) => Message.BlurredControl({ disabled: disabled === true }))
           : flags(b))
           .attr("aria-invalid", showsError ? "true" : undefined)
           // A token list: added to the consumer's own.
