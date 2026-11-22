@@ -120,7 +120,8 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag } from "./internal/attributes.ts"
-import { stepped } from "./internal/list.ts"
+import { field } from "./internal/field.ts"
+import { available, keyed, stepped } from "./internal/list.ts"
 import { frameOf, whenFinished } from "./internal/transition.ts"
 
 /**
@@ -236,6 +237,8 @@ const Message = UiSchema.TaggedEnum({
 
 type Message = typeof Message.Type
 
+type Model = typeof Model.Type
+
 const Radio = Html.ref("RadioGroupRadio", "button")
 
 const focusRadio = (value: string) => DomCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
@@ -300,41 +303,38 @@ const TrackIndicator = Mount.makeStream(
     })
 )
 
-const itemState = <B extends Attributed<B>>(
-  builder: B,
-  checked: boolean,
-  disabled: boolean,
-  readOnly: boolean,
-  required: boolean
-): B =>
+interface ItemState {
+  readonly checked: boolean
+  readonly disabled: boolean
+  readonly readOnly: boolean
+}
+
+const itemState = <B extends Attributed<B>>(builder: B, state: ItemState, required: boolean): B =>
   builder
-    .attr("data-checked", flag(checked))
-    .attr("data-unchecked", flag(!checked))
-    .attr("data-disabled", flag(disabled))
-    .attr("data-readonly", flag(readOnly))
+    .attr("data-checked", flag(state.checked))
+    .attr("data-unchecked", flag(!state.checked))
+    .attr("data-disabled", flag(state.disabled))
+    .attr("data-readonly", flag(state.readOnly))
     .attr("data-required", flag(required))
 
 const itemOf = (items: ReadonlyArray<RadioGroupItem>, value: string): RadioGroupItem | undefined =>
   items.find((item) => item.value === value)
 
-const hiddenInput = (props: RadioGroupProps, checkedItem: RadioGroupItem | undefined): View.Node<never> | undefined => {
-  if (
-    props.name === undefined || props.disabled === true || checkedItem === undefined || checkedItem.disabled === true
-  ) {
-    return undefined
-  }
-  return View.toNode(
-    new Html.VoidElement<never>("input")
-      .attr("type", "hidden")
-      .attr("name", props.name)
-      .attr("value", checkedItem.value)
-      .attr("form", props.form)
-  )
+const highlight = (model: Model, value: string): Model =>
+  model.highlighted === value ? model : { ...model, highlighted: value }
+
+const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
+  props.readOnly !== true && item.readOnly !== true && props.value !== item.value
+
+const without = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
+  values.includes(value) ? values.filter((other) => other !== value) : values
+
+const unsettled = (model: Model, value: string, leaving: ReadonlyArray<string>): Model => {
+  const settled = model.settled === value ? null : model.settled
+  return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
 }
 
 type KeyedButton = View.PartTarget<"button"> & { readonly key: (key: string) => View.PartTarget<"button"> }
-type RadioOf<B extends KeyedButton> = ReturnType<B["attr"]>
-type IndicatorOf<B extends View.PartTarget<"span">> = ReturnType<B["attr"]>
 
 /**
  * A headless radio group. Call it with the consumer's `h`, the `props`,
@@ -387,47 +387,34 @@ export const RadioGroup = Component.define({
   update: {
     ClickedRadio: (model, { value }, $) => {
       const item = itemOf($.props.items, value)
-      if ($.props.disabled === true || item === undefined || item.disabled === true) return model
-      const next = model.highlighted === value ? model : { ...model, highlighted: value }
-      if ($.props.readOnly === true || item.readOnly === true || $.props.value === value) return next
-      return $.set(next).emit(RadioGroupEvents.Picked({ value }))
+      if ($.props.disabled === true || !available(item)) return model
+      const next = highlight(model, value)
+      return picks($.props, item) ? $.set(next).emit(RadioGroupEvents.Picked({ value })) : next
     },
-    FocusedRadio: (model, { value }, $) => {
-      const item = itemOf($.props.items, value)
-      if ($.props.disabled === true || item === undefined || item.disabled === true) return model
-      return model.highlighted === value ? model : { ...model, highlighted: value }
-    },
+    FocusedRadio: (model, { value }, $) =>
+      $.props.disabled === true || !available(itemOf($.props.items, value)) ? model : highlight(model, value),
     PressedArrow: (model, { direction, value }, $) => {
       if ($.props.disabled === true) return model
-      const enabled = $.props.items.filter((item) => item.disabled !== true)
-      if (enabled.length === 0) return model
+      const enabled = $.props.items.filter(available)
       const at = enabled.findIndex((item) => item.value === value)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
       if (target === undefined) return model
-      const next = model.highlighted === target.value ? model : { ...model, highlighted: target.value }
-      const moved = $.set(next).run(focusRadio(target.value))
-      if ($.props.readOnly === true || target.readOnly === true || $.props.value === target.value) return moved
-      return moved.emit(RadioGroupEvents.Picked({ value: target.value }))
+      const moved = $.set(highlight(model, target.value)).run(focusRadio(target.value))
+      return picks($.props, target) ? moved.emit(RadioGroupEvents.Picked({ value: target.value })) : moved
     },
     PressedEnter: (model) => model,
     SyncedValue: (model) => (model.highlighted === null ? model : { ...model, highlighted: null }),
     StartedIndicator: (model, { value }, $) => {
       if ($.props.value !== value) return model
-      const leaving = model.leaving.includes(value) ? model.leaving.filter((other) => other !== value) : model.leaving
+      const leaving = without(model.leaving, value)
       return model.settled === value && leaving === model.leaving ? model : { ...model, settled: value, leaving }
     },
-    LeftIndicator: (model, { value }, $) => {
-      if ($.props.value === value) return model
-      const leaving = model.leaving.includes(value) ? model.leaving : [...model.leaving, value]
-      const settled = model.settled === value ? null : model.settled
-      return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
-    },
-    EndedIndicator: (model, { value }, $) => {
-      if ($.props.value === value) return model
-      const leaving = model.leaving.includes(value) ? model.leaving.filter((other) => other !== value) : model.leaving
-      const settled = model.settled === value ? null : model.settled
-      return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
-    }
+    LeftIndicator: (model, { value }, $) =>
+      $.props.value === value
+        ? model
+        : unsettled(model, value, model.leaving.includes(value) ? model.leaving : [...model.leaving, value]),
+    EndedIndicator: (model, { value }, $) =>
+      $.props.value === value ? model : unsettled(model, value, without(model.leaving, value))
   },
   subscriptions: (_model, props) => [synced(props.value)],
   parts: (model, p) => {
@@ -438,35 +425,43 @@ export const RadioGroup = Component.define({
     const invalid = props.invalid === true
     const rtl = p.shared.provider?.direction === "rtl"
     const byValue = new Map(props.items.map((item) => [item.value, item]))
-    const requireItem = (value: string): RadioGroupItem => {
+    const stateOf = (value: string) => {
       const item = byValue.get(value)
       if (item === undefined) throw new Error("RadioGroup: no item with value " + JSON.stringify(value))
-      return item
-    }
-    const enabled = disabled ? [] : props.items.filter((item) => item.disabled !== true)
-    const tabStop = (model.highlighted !== null && enabled.some((item) => item.value === model.highlighted)
-      ? model.highlighted
-      : null) ??
-      (props.value !== null && enabled.some((item) => item.value === props.value) ? props.value : null) ??
-      enabled[0]?.value ??
-      null
-    const checkedItem = props.value === null ? undefined : byValue.get(props.value)
-    const hidden = hiddenInput(props, checkedItem)
-
-    const radioPart = p.part("button", (b, value: string) => {
-      const item = requireItem(value)
       const checked = props.value === value
-      const itemDisabled = disabled || item.disabled === true
-      const itemReadOnly = readOnly || item.readOnly === true
-      return itemState(b, checked, itemDisabled, itemReadOnly, required)
+      return {
+        checked,
+        disabled: disabled || item.disabled === true,
+        readOnly: readOnly || item.readOnly === true,
+        starting: checked && model.settled !== value,
+        ending: !checked && (model.leaving.includes(value) || model.settled === value)
+      }
+    }
+    const tabStop = disabled
+      ? null
+      : [model.highlighted, props.value].find((value) => value !== null && available(byValue.get(value))) ??
+        props.items.find(available)?.value ??
+        null
+    const checkedItem = props.value === null ? undefined : byValue.get(props.value)
+    const hidden = field({
+      checked: checkedItem !== undefined,
+      disabled: disabled || checkedItem?.disabled === true,
+      name: props.name,
+      value: checkedItem?.value,
+      form: props.form
+    })
+
+    const radioPart = keyed(p.part("button", (b, value: string) => {
+      const state = stateOf(value)
+      return itemState(b, state, required)
         .ref(Radio.at(value))
         .attr("type", "button")
         .attr("role", "radio")
-        .attr("aria-checked", String(checked))
+        .attr("aria-checked", String(state.checked))
         .attr("aria-disabled", undefined)
         .attr("aria-invalid", undefined)
         .attr("tabindex", value === tabStop ? "0" : "-1")
-        .disabled(itemDisabled)
+        .disabled(state.disabled)
         .onClick(Message.ClickedRadio({ value }))
         .onFocus(Message.FocusedRadio({ value }))
         .onKeyDown(
@@ -481,16 +476,11 @@ export const RadioGroup = Component.define({
           },
           { preventDefault: true }
         )
-    })
+    }))
 
     const indicatorPart = p.part("span", (b, value: string) => {
-      const item = requireItem(value)
-      const checked = props.value === value
-      const itemDisabled = disabled || item.disabled === true
-      const itemReadOnly = readOnly || item.readOnly === true
-      const starting = checked && model.settled !== value
-      const ending = !checked && (model.leaving.includes(value) || model.settled === value)
-      return itemState(b, checked, itemDisabled, itemReadOnly, required)
+      const { checked, ending, starting, ...state } = stateOf(value)
+      return itemState(b, { checked, ...state }, required)
         .attr("data-starting-style", flag(starting))
         .attr("data-ending-style", flag(ending))
         .onMount(TrackIndicator({ value, checked, starting, ending }))
@@ -515,12 +505,8 @@ export const RadioGroup = Component.define({
           .children(hidden)),
       radio: View.wrapPart(
         radioPart,
-        <B extends KeyedButton>(
-          { element, value }: { readonly element: B; readonly value: string }
-        ): RadioOf<B> => {
-          requireItem(value)
-          return radioPart(element.key(value), value) as RadioOf<B>
-        }
+        <B extends KeyedButton>({ element, value }: { readonly element: B; readonly value: string }) =>
+          radioPart(element, value)
       ),
       indicator: View.wrapPart(
         indicatorPart,
@@ -530,11 +516,9 @@ export const RadioGroup = Component.define({
             readonly value: string
             readonly keepMounted?: boolean | undefined
           }
-        ): IndicatorOf<B> | undefined => {
-          requireItem(value)
+        ): ReturnType<B["attr"]> | undefined => {
           const built = indicatorPart(element, value)
-          const checked = props.value === value
-          const ending = !checked && (model.leaving.includes(value) || model.settled === value)
+          const { checked, ending } = stateOf(value)
           return checked || ending || keepMounted === true ? built : undefined
         }
       )
