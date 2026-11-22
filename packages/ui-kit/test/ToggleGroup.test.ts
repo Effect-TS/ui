@@ -131,9 +131,13 @@ describe("ToggleGroup", () => {
       assert.deepStrictEqual(press("center", "ArrowRight"), focusOn("left"))
     }))
 
-  it.effect("inside a Toolbar, the items leave the tab stop and the arrow keys to it, and its disabled state disables the group", () =>
+  it.effect("inside a Toolbar, the items leave the tab stop and the arrow keys to it, and its disabled items and state disable them", () =>
     Effect.gen(function*() {
-      const s = (yield* scene({ value: ["left"] })).shared(Toolbar, { disabled: false, orientation: "horizontal" })
+      const s = (yield* scene({ value: ["left"] })).shared(Toolbar, {
+        disabled: false,
+        orientation: "horizontal",
+        disabledItems: []
+      })
       assert.deepStrictEqual(s.get(item("left")).attrs, {
         "aria-label": "left",
         type: "button",
@@ -143,7 +147,15 @@ describe("ToggleGroup", () => {
       assert.throws(() => s.keydown(item("left"), "ArrowRight"), /nothing handles "keydown"/)
       s.click(item("center")).emitted({ _tag: "Toggled", value: ["center"] })
 
-      s.shared(Toolbar, { disabled: true, orientation: "horizontal" })
+      s.shared(Toolbar, { disabled: false, orientation: "horizontal", disabledItems: ["center"] })
+      assert.isUndefined(s.get(root).attrs?.["data-disabled"])
+      assert.deepInclude(s.get(item("center")).attrs, { "data-disabled": "" })
+      assert.isUndefined(s.get(item("left")).attrs?.["data-disabled"])
+      s.fire(item("center"), "click")
+      assert.deepStrictEqual(s.current.emitted, [])
+      s.click(item("right")).emitted({ _tag: "Toggled", value: ["right"] })
+
+      s.shared(Toolbar, { disabled: true, orientation: "horizontal", disabledItems: [] })
       assert.deepInclude(s.get(root).attrs, { "data-disabled": "" })
       assert.deepInclude(s.get(item("left")).attrs, { disabled: "", "data-disabled": "" })
       s.fire(item("left"), "click")

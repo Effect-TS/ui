@@ -34,7 +34,9 @@
  * - `Button(h, { element: toolbar.button({ element: h.button, value }), onPress })`
  *
  * A `ToggleGroup` inside a toolbar leaves the tab stop and the arrow keys to
- * the toolbar, and is disabled with it.
+ * the toolbar, and each of its items is disabled with the toolbar item of
+ * the same value. In a vertical toolbar, a `Menu` or `Select` trigger
+ * leaves Down and Up to the toolbar, and opens with Enter or Space.
  *
  * **Data attributes**
  *
@@ -75,15 +77,12 @@
  * The `items` prop lists every item in the order they are drawn, so the
  * toolbar can move focus without reading the page. Draw one item part for
  * each entry. Left and Right also move the caret, so put at most one text
- * input in a horizontal toolbar, as its last item. In a vertical toolbar,
- * Down and Up on a `Menu` or `Select` trigger open its popup as well as
- * moving the tab stop on.
+ * input in a horizontal toolbar, as its last item.
  *
  * A disabled item cancels the clicks the consumer handles on it, and those of
  * a `Button` stacked outside the part. A component stacked inside, such as a
  * `Menu` trigger or a `Select`, handles clicks on its own layer: pass it
- * `disabled: toolbar.isDisabled(value)` too. A `ToggleGroup` reads the
- * toolbar's `disabled`, and not that of a group or an item.
+ * `disabled: toolbar.isDisabled(value)` too. A `ToggleGroup` needs nothing.
  *
  * **Example** (A formatting toolbar)
  *
@@ -121,7 +120,6 @@
  *     })
  * })
  *
- * // The toolbar has one tab stop: the first item.
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Editor, {}))
  * if (!/<div class="toolbar"[^>]* role="toolbar"/.test(html)) throw new Error("the root isn't a toolbar")
  * if (!/tabindex="0"[^>]*>Bold</.test(html) || !/tabindex="-1"[^>]*>Italic</.test(html)) {
@@ -368,8 +366,10 @@ const targetOf = (value: string, key: string, $: ToolbarUpdate): ToolbarItem | u
  * keys it moves focus with, and an input none. A disabled, focusable button
  * cancels its clicks, and replaces a click handler set outside its layer.
  *
- * The toolbar shares `{ disabled, orientation }` with the components in its
- * `view` closure, which is how a `ToggleGroup` inside reads it. It reads the
+ * The toolbar shares `{ disabled, orientation, disabledItems }` with the
+ * components in its `view` closure, `disabledItems` holding the values of
+ * the disabled items. A `ToggleGroup` inside reads all three, and a `Menu`
+ * or `Select` its `orientation`. It reads the
  * nearest `DirectionProvider` above it, if there is one, and swaps Left and
  * Right in a right-to-left layout.
  *
@@ -387,9 +387,14 @@ export const Toolbar = Component.define({
   shares: {
     value: (_model, props) => ({
       disabled: props.disabled === true,
-      orientation: props.orientation ?? "horizontal"
+      orientation: props.orientation ?? "horizontal",
+      disabledItems: props.items.filter((item) => disabledOf(props, item)).map((item) => item.value)
     }),
-    schema: Schema.Struct({ disabled: Schema.Boolean, orientation: ToolbarOrientation })
+    schema: Schema.Struct({
+      disabled: Schema.Boolean,
+      orientation: ToolbarOrientation,
+      disabledItems: Schema.Array(Schema.String)
+    })
   },
   shared: {
     provider: { owner: DirectionProvider, optional: true }

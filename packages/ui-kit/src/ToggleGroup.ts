@@ -58,7 +58,10 @@
  *
  * Inside a `Toolbar`, the group leaves the tab stop and the arrow keys to
  * the toolbar, and is disabled with it. Stack each item inside a toolbar
- * button: `toolbar.button({ element: toggleGroup.item({ element: h.button, value }), value })`.
+ * button with the same value:
+ * `toolbar.button({ element: toggleGroup.item({ element: h.button, value }), value })`.
+ * An item is disabled with its toolbar item, by the item's entry, its group
+ * or the toolbar.
  *
  * **Example** (Text alignment, one choice at a time)
  *
@@ -238,13 +241,17 @@ const Item = Html.ref("ToggleGroupItem", "button")
 
 interface InToolbar {
   readonly disabled: boolean
+  readonly disabledItems: ReadonlyArray<string>
 }
 
 const disabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): boolean =>
   props.disabled === true || toolbar?.disabled === true
 
+const offInToolbar = (toolbar: InToolbar | undefined, value: string): boolean =>
+  toolbar?.disabledItems.includes(value) === true
+
 const enabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): ReadonlyArray<ToggleGroupItem> =>
-  disabledOf(props, toolbar) ? [] : props.items.filter(available)
+  disabledOf(props, toolbar) ? [] : props.items.filter((item) => available(item) && !offInToolbar(toolbar, item.value))
 
 const enabled = (props: ToggleGroupProps, toolbar: InToolbar | undefined, value: string): boolean =>
   enabledOf(props, toolbar).some((item) => item.value === value)
@@ -289,7 +296,8 @@ const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps): string | n
  * The group reads the nearest `DirectionProvider` above it, if there is
  * one, and swaps Left and Right in a right-to-left layout. Inside a
  * `Toolbar`, an item writes no `tabindex` and handles no `focus` or
- * `keydown`, and the toolbar's `disabled` disables the group.
+ * `keydown`. The toolbar's `disabled` disables the group, and a disabled
+ * toolbar item disables the group's item with the same value.
  *
  * @stability experimental
  * @category components
@@ -349,7 +357,11 @@ export const ToggleGroup = Component.define({
     const item = p.part("button", (b, value: string) => {
       const entry = props.items.find((item) => item.value === value)
       if (entry === undefined) throw new Error("ToggleGroup: no item with value \"" + value + "\" in items")
-      const pressed = pressedAttrs(b, props.value.includes(value), disabled || entry.disabled === true)
+      const pressed = pressedAttrs(
+        b,
+        props.value.includes(value),
+        disabled || entry.disabled === true || offInToolbar(toolbar, value)
+      )
         .onClick(ToggleGroupMessage.ClickedItem({ value }))
       if (toolbar !== undefined) return pressed
       return pressed

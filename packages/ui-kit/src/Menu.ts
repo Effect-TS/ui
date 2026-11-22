@@ -104,7 +104,8 @@
  * **Keyboard**
  *
  * On the trigger, Enter and Space open the popup, and ArrowDown and
- * ArrowUp open it on the first or the last enabled item. In the popup the
+ * ArrowUp open it on the first or the last enabled item, except inside a
+ * vertical `Toolbar`, which moves focus with them. In the popup the
  * arrow keys of its `orientation`, Home and End move between items,
  * disabled ones included, and typing moves to the next item whose label
  * starts with what's typed. Enter and Space pick the highlighted item.
@@ -279,6 +280,7 @@ import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
+import { Toolbar } from "./Toolbar.ts"
 
 /**
  * One item of a `Menu`: the value it reports, the text typeahead and
@@ -1950,7 +1952,8 @@ export const Menu = Component.define({
       optional: true,
       report: (_model, props) => ({ item: props.parentItem ?? "", open: props.open }),
       onChange: (parent) => MenuMessage.ChangedParent({ parent })
-    }
+    },
+    toolbar: { owner: Toolbar, optional: true }
   },
   restore: false,
   elements: Html
@@ -2171,6 +2174,7 @@ export const Menu = Component.define({
     const shown = open || model.mounted
     const transitionStatus: MenuTransitionStatus = statusOf(model, props)
     const disabled = disabledOf(p)
+    const arrowsOpen = p.shared.toolbar?.orientation !== "vertical"
     const orientation = props.orientation ?? "vertical"
     const rtl = nested ? parent.rtl : model.rtl
     const hover = hoverOf(props, nested)
@@ -2257,7 +2261,7 @@ export const Menu = Component.define({
         .on("mouseup", MenuMessage.ReleasedTrigger())
         .onKeyDown(
           ({ composing, key: pressed }) =>
-            !composing && (pressed === "ArrowDown" || pressed === "ArrowUp")
+            !composing && arrowsOpen && (pressed === "ArrowDown" || pressed === "ArrowUp")
               ? MenuMessage.PressedTriggerKey({ key: pressed, trigger: key, triggerId })
               : undefined,
           { preventDefault: true }
