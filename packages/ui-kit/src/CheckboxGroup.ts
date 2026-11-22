@@ -168,14 +168,14 @@ export const CheckboxGroupEvents = UiSchema.TaggedEnum({
  */
 export type CheckboxGroupEvents = typeof CheckboxGroupEvents.Type
 
-const Model = Schema.Struct({
+const CheckboxGroupModel = Schema.Struct({
   remembered: Schema.Array(Schema.String),
   items: Schema.Array(CheckboxGroupItem)
 })
 
-type Model = typeof Model.Type
+type CheckboxGroupModel = typeof CheckboxGroupModel.Type
 
-const Shared = Schema.Struct({
+const CheckboxGroupShared = Schema.Struct({
   value: Schema.Array(Schema.String),
   disabled: Schema.Boolean,
   name: Schema.NullOr(Schema.String),
@@ -188,7 +188,7 @@ const Shared = Schema.Struct({
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
-const parentOf = (model: Model, props: CheckboxGroupProps): typeof Shared.Type["parent"] => {
+const parentOf = (model: CheckboxGroupModel, props: CheckboxGroupProps): typeof CheckboxGroupShared.Type["parent"] => {
   const all = props.allValues
   if (all === undefined) return null
   const value = new Set(props.value)
@@ -200,9 +200,7 @@ const parentOf = (model: Model, props: CheckboxGroupProps): typeof Shared.Type["
   }
 }
 
-// The parent's next selection. A disabled member keeps its state, so only
-// the others count towards all, some or none.
-const cycle = (model: Model, props: CheckboxGroupProps) => {
+const cycle = (model: CheckboxGroupModel, props: CheckboxGroupProps) => {
   const all = props.allValues ?? []
   const locked = new Set(model.items.filter((item) => item.disabled).map((item) => item.value))
   const free = all.filter((item) => !locked.has(item))
@@ -252,7 +250,7 @@ export const CheckboxGroup = Component.define({
   name: "CheckboxGroup",
   scoped: false,
   props: CheckboxGroupProps,
-  model: Model,
+  model: CheckboxGroupModel,
   message: CheckboxGroupMessage,
   events: CheckboxGroupEvents,
   shares: {
@@ -262,7 +260,7 @@ export const CheckboxGroup = Component.define({
       name: props.name ?? null,
       parent: parentOf(model, props)
     }),
-    schema: Shared,
+    schema: CheckboxGroupShared,
     receives: ["ToggledItem", "ToggledParent"],
     collects: {
       schema: Schema.NullOr(CheckboxGroupItem),
@@ -295,7 +293,7 @@ export const CheckboxGroup = Component.define({
     return {
       value: p.props.value,
       disabled,
-      root: p.part((b) => b.attr("role", "group").attr("data-disabled", flag(disabled)))
+      root: p.part((b) => b.attrs({ role: "group", "data-disabled": flag(disabled) }))
     }
   }
 })

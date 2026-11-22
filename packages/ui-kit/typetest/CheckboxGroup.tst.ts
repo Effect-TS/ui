@@ -43,14 +43,11 @@ describe("CheckboxGroup", () => {
     })
   })
 
-  it("the group needs no service, emits Updated, and requires value", () => {
+  it("the group and checkbox need no service, and the group emits Updated and requires value", () => {
     expect<Component.Headless.Requirements<typeof CheckboxGroup>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof Checkbox>>().type.toBe<never>()
     expect<CheckboxGroupEvents>().type.toBe<{ readonly _tag: "Updated"; readonly value: ReadonlyArray<string> }>()
     expect({ value: [] }).type.toBeAssignableTo<CheckboxGroupProps>()
     expect({ allValues: ["a"] }).type.not.toBeAssignableTo<CheckboxGroupProps>()
-  })
-
-  it("a checkbox needs no group above it", () => {
-    expect<Component.Headless.Requirements<typeof Checkbox>>().type.toBe<never>()
   })
 })

@@ -216,8 +216,6 @@ const isMember = (props: CheckboxProps): props is CheckboxProps & { readonly val
 
 const memberId = (props: CheckboxProps, id: (name: string) => string): string => props.id ?? id("root")
 
-// What the checkbox shows and submits: the group decides for its parent and
-// its members, and the props for any other checkbox.
 const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
   const disabled = props.disabled === true || group?.disabled === true
   const own = {
