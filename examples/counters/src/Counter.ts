@@ -23,7 +23,6 @@ export const Counter = Component.define({
   init: () => ({ count: 0 }),
   update: {
     ClickedDecrement: (_model, _message, $) => $.evolve({ count: (count) => count - 1 }),
-
     ClickedIncrement: (_model, _message, $) => $.evolve({ count: (count) => count + 1 })
   },
   view: (model, h) =>

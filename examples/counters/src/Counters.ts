@@ -26,7 +26,6 @@ export const Counters = Component.define({
         counterIds: Array.append(model.nextCounterId),
         nextCounterId: (id) => id + 1
       }),
-
     ClickedRemoveCounter: (_model, { id }, $) => $.evolve({ counterIds: Array.filter((counterId) => counterId !== id) })
   },
   head: (model) => [Head.title(`Counters (${model.counterIds.length})`)],
