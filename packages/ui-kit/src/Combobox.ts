@@ -640,13 +640,15 @@ const engine = Engine.make("Combobox", (props: ComboboxProps): Engine.Settings<C
  *   `aria-autocomplete`, `aria-readonly`, `aria-required`, `readonly`,
  *   `disabled`, `value`, and `autocomplete="off"`, `spellcheck`,
  *   `autocorrect` and `autocapitalize`. Its `id` is the one already on
- *   the builder, as from `field.control`, or the `id` prop.
+ *   the builder, as from `field.control`. Otherwise it's the `id` prop, or
+ *   a generated one with `inputInPopup`.
  * - `trigger`: `type="button"`, `aria-expanded`, `aria-haspopup`,
- *   `aria-controls` while open, `disabled` and `tabindex="-1"`. With
- *   `inputInPopup` it takes focus and is the combobox instead:
- *   `role="combobox"`, `aria-required`, `aria-readonly`, an `id`, the
- *   one on the builder or the `id` prop, and `aria-labelledby` pointing at
- *   `label` unless the builder has one.
+ *   `aria-controls` while open, `disabled`, and `tabindex="-1"` without
+ *   `inputInPopup`. With `inputInPopup` it takes focus and is a combobox
+ *   as well as the input: `role="combobox"`, `aria-required`,
+ *   `aria-readonly`, an `id`, the one on the builder or else the `id`
+ *   prop, and `aria-labelledby` pointing at `label` when the builder has
+ *   none.
  * - `inputGroup`: `role="group"`
  * - `clear`, `chipRemove`: `type="button"`, `tabindex="-1"`, `disabled`
  * - `chips`: `role="toolbar"` while a value is selected
@@ -671,8 +673,10 @@ const engine = Engine.make("Combobox", (props: ComboboxProps): Engine.Settings<C
  * - `empty`, `status`: `role="status"`, `aria-live="polite"`,
  *   `aria-atomic="true"`
  *
- * `aria-controls` and `aria-labelledby` are lists of ids, so a part adds
- * its id to the consumer's instead of replacing them. Except with `inline`,
+ * A part adds the ids it lists in `aria-controls`, and a group's
+ * `aria-labelledby`, to the consumer's. The `aria-labelledby` of the
+ * trigger and the popup is a fallback instead: it points at `label` only
+ * when the builder has none, and the consumer's wins. Except with `inline`,
  * or with `inputInPopup` and not `modal`, the positioner also holds a
  * visually hidden Dismiss button for screen readers.
  *

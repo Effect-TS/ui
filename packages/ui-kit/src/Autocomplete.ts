@@ -215,6 +215,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import * as Struct from "effect/Struct"
+import type { Combobox } from "./Combobox.ts"
 import * as Engine from "./internal/combobox.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import * as Positioning from "./Positioning.ts"
@@ -586,7 +587,7 @@ const engine = Engine.make("Autocomplete", (props: AutocompleteProps): Engine.Se
  * `listEmpty`.
  *
  * Each part writes the attributes and handles the events that the
- * `Combobox` part of the same name does, listed in the `Combobox` docs,
+ * `Combobox` part of the same name does, listed under {@link Combobox},
  * over the ones the consumer set on the builder before the part. As
  * nothing is selected, the items have no `aria-selected`. Without
  * `inputInPopup`, the input also takes `name`, `form` and `required`.

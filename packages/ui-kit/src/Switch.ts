@@ -237,10 +237,6 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
     readOnly: props.readOnly === true,
     required: props.required === true,
     root: (element) =>
-      // The field follows the children already on the builder, and the ones
-      // chained on the result come after it. The attributes and the handler
-      // wait for the finished button: they are written after whatever the
-      // consumer chains on the root.
       element.children(hidden).forward((node) => {
         // By `onToggle` alone, not by the state: a read-only switch sets no
         // handler now, but the clash would only show once it became editable.

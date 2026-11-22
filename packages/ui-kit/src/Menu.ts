@@ -1846,7 +1846,7 @@ export const menuFilter = (
  * - `submenuTrigger`: `aria-haspopup="menu"`, `aria-expanded`, and
  *   `aria-controls` while open
  * - `backdrop`, `positioner`: `role="presentation"` and
- *   `popover="manual"`, which a submenu's backdrop doesn't take
+ *   `popover="manual"`. A submenu's backdrop has it too, but never opens.
  * - `popup`: `id`, which the `id` prop sets, `tabindex="-1"`, and
  *   `role="menu"`, `aria-orientation` for a horizontal menu and
  *   `aria-labelledby` pointing at the trigger unless the builder has one,
