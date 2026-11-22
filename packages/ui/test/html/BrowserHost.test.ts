@@ -2156,16 +2156,15 @@ describe("BrowserHost", { concurrent: false }, () => {
           Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
           Sent: ({ code }) => [...log, `sent ${code}`]
         }),
-      view: (_, h) =>
+      view: (log, h) =>
         h.div(
           h.form.onSubmit(({ fields }) => EntryMessage.Sent({ code: fields.code ?? "" })).children(
-            // The value never changes: update keeps no text.
             h.input.attr("aria-label", "Code").attr("name", "code").ref(Code).value("7")
               .onInput(({ composing, value }) => composing ? undefined : EntryMessage.Typed({ value }))
               .onCompositionEnd(({ value }) => EntryMessage.Composed({ value }))
               .onPaste(({ text }) => EntryMessage.Pasted({ text }), { preventDefault: true })
           ),
-          h.input.attr("aria-label", "Loose").ref(Loose)
+          h.input.attr("aria-label", "Loose").ref(Loose).value(String(log.length))
         )
     })
 
@@ -2186,18 +2185,24 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(pasted.defaultPrevented).toBe(true)
         yield* tick
 
-        // The text an input method is composing stays in the field until the composition ends.
+        fire(new InputEvent("input", { bubbles: true }), "8")
         fire(new InputEvent("input", { bubbles: true, isComposing: true }), "k")
         yield* tick
         expect(code.value).toBe("k")
         fire(new CompositionEvent("compositionend", { bubbles: true, data: "か" }), "か")
         yield* tick
         expect(code.value).toBe("7")
-        fire(new InputEvent("input", { bubbles: true }), "8")
-        yield* tick
-        expect(code.value).toBe("7")
 
-        // Selecting writes the value the view gives first, so the selection isn't lost to the restore.
+        const loose = HtmlLocator.getByRole(app, "textbox", { name: "Loose" }) as HTMLInputElement
+        loose.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
+        loose.value = "k"
+        root.send(EntryMessage.Typed({ value: "9" }))
+        yield* tick
+        expect(loose.value).toBe("k")
+        loose.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+        yield* tick
+        expect(loose.value).toBe("4")
+
         code.value = "rejected"
         root.send(EntryMessage.Select())
         yield* tick
@@ -2208,8 +2213,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* tick
         expect(root.model()).toEqual([
           "pasted 12 34",
-          "composed か",
           "typed 8",
+          "composed か",
+          "typed 9",
           "selected true",
           "sent 7",
           "submitted true",

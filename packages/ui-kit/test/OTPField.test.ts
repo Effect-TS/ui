@@ -1,5 +1,5 @@
 import type { Component, Mount } from "@effect/ui"
-import { Subscription, View } from "@effect/ui"
+import { View } from "@effect/ui"
 import { DirectionProvider, OTPField, type OTPFieldEvents, type OTPFieldProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
@@ -32,37 +32,40 @@ const idle = {
   composing: null,
   composed: null,
   pending: null,
+  edits: 0,
+  label: null,
   android: false
 }
 const parts = (props: OTPFieldProps) => Story.parts(OTPField, { model: idle, props })
 
-type DetectAndroid = Mount.Issued<unknown, never, never, unknown>
+type Issued = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-// The root's mount is private, so a test reads it off the rendered element.
-const detect = (s: Rendered): DetectAndroid =>
-  (s.get(root) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
-    ?.mount as unknown as DetectAndroid
+const mountOf = (s: Rendered, locator: Locator.Locator): Issued =>
+  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
+    ?.mount as unknown as Issued
 const scene = (props: OTPFieldProps, android = false) =>
-  HtmlScene.make(OTPField, props, standIn).pipe(Effect.map((s) => s.mounted(detect(s), android)))
+  HtmlScene.make(OTPField, props, standIn).pipe(
+    Effect.map((s) => s.mounted(mountOf(s, root), android).mounted(mountOf(s, slot(0)), null))
+  )
 type Scene = Effect.Success<ReturnType<typeof scene>>
 
-// The consumer stores a code and passes it back, which the field hears of.
-const store = (s: Scene, value: string) =>
-  s.props((props) => ({ ...props, value })).subscription(Subscription.keyOf("changedValue", value), {
-    _tag: "ChangedValue"
-  })
+const settle = (s: Scene) =>
+  s.subscription(s.subscriptions.find((key) => key.startsWith("settled"))!, { _tag: "Settled" })
+const store = (s: Scene, value: string) => settle(s.props((props) => ({ ...props, value })))
 
-// The Commands a step issued, as `name ref`, each one settled.
 const commands = (s: Scene): ReadonlyArray<string> =>
   s.current.pending.map(({ command }) => {
     s.resolve(command as never, { found: true, submitted: true } as never)
     return command.name + " " + (command.args as { readonly ref: { readonly key: string } }).ref.key
   })
+const inFlight = (s: Scene) => s.keepPending(Html.Focus).keepPending(Html.Select)
 const focusOn = (index: number) => ["Html.focus OTPFieldSlot[" + index + "]", "Html.select OTPFieldSlot[" + index + "]"]
 const submitted = "Html.requestSubmit OTPFieldHiddenInput"
 
 const updated = (value: string, reason: OTPFieldEvents["reason"] = "input-change"): OTPFieldEvents =>
   ({ _tag: "Updated", value, reason }) as OTPFieldEvents
+const completed = (value: string, reason: OTPFieldEvents["reason"] = "input-change"): OTPFieldEvents =>
+  ({ _tag: "Completed", value, reason }) as OTPFieldEvents
 const quiet = (s: Scene) => assert.deepStrictEqual(s.current.emitted, [])
 
 describe("OTPField", () => {
@@ -144,28 +147,22 @@ describe("OTPField", () => {
       s.type(slot(0), "1").emitted(updated("1"))
       assert.deepStrictEqual(commands(s), focusOn(1))
       assert.deepStrictEqual(commands(store(s, "1")), [])
-      // The character the slot already holds changes nothing, and still moves on.
       s.type(slot(0), "1")
       quiet(s)
       assert.deepStrictEqual(commands(s), focusOn(1))
-      // A rejected character is reported, and the slot's own text is selected again.
       s.type(slot(1), "x").emitted({ _tag: "Rejected", value: "x", reason: "input-change" })
       assert.deepStrictEqual(commands(s), ["Html.select OTPFieldSlot[1]"])
-      // Several characters fill the slots that follow.
       s.type(slot(1), "23").emitted(updated("123"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       store(s, "123")
-      // The last slot completes the code once it is stored. Text longer than the field is rejected.
       s.type(slot(3), "45678").emitted({ _tag: "Rejected", value: "45678", reason: "input-change" }, updated("1234"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       quiet(s)
-      store(s, "1234").emitted({ _tag: "Completed", value: "1234", reason: "input-change" })
-      // Typing over a character of a complete code doesn't complete it again.
+      store(s, "1234").emitted(completed("1234"))
       s.type(slot(3), "5").emitted(updated("1235"))
       commands(s)
       store(s, "1235")
       quiet(s)
-      // Emptying a slot removes its character, and the later ones move back.
       s.type(slot(1), "").emitted(updated("135", "input-clear"))
       assert.deepStrictEqual(commands(s), [])
     }))
@@ -175,46 +172,55 @@ describe("OTPField", () => {
       const s = yield* scene({ value: "", length: 4 })
       s.focus(slot(0))
       commands(s)
-      s.type(slot(0), "1").emitted(updated("1")).keepPending(Html.Focus).keepPending(Html.Select)
+      inFlight(s.type(slot(0), "1").emitted(updated("1")))
       store(s, "1")
       // Focus is still on the first slot, which shows its own character and then the one typed.
-      s.type(slot(0), "12").emitted(updated("12")).keepPending(Html.Focus).keepPending(Html.Select)
+      inFlight(s.type(slot(0), "12").emitted(updated("12")))
       store(s, "12")
-      s.type(slot(0), "13").emitted(updated("123")).keepPending(Html.Focus).keepPending(Html.Select)
+      inFlight(s.type(slot(0), "13").emitted(updated("123")))
       store(s, "123")
-      // Backspace too: from the empty fourth slot, it removes the third character.
-      s.keydown(slot(0), "Backspace").emitted(updated("12", "keyboard")).keepPending(Html.Focus).keepPending(
-        Html.Select
-      )
+      inFlight(s.keydown(slot(0), "Backspace").emitted(updated("12", "keyboard")))
       store(s, "12")
-      assert.deepStrictEqual(commands(s), [...focusOn(1), ...focusOn(2), ...focusOn(3), ...focusOn(2)])
-      // Once focus and the selection have landed, a slot's text is what was typed into it.
-      s.type(slot(0), "13").emitted(updated("13"))
+      inFlight(s.fire(slot(0), "paste", { text: "34" }).emitted(updated("1234", "input-paste")))
+      store(s, "1234").emitted(completed("1234", "input-paste"))
+      assert.deepStrictEqual(commands(s), [1, 2, 3, 2, 3].flatMap(focusOn))
+      s.type(slot(0), "56").emitted(updated("5634"))
       assert.deepStrictEqual(commands(s), focusOn(2))
     }))
 
-  it.effect("the consumer may change what it stores: completion and focus follow the stored code", () =>
+  it.effect("an edit made before the consumer stores the last one carries on from the code that one asked for", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: "", length: 2, validationType: "none" })
-      s.type(slot(0), "a").emitted(updated("a"))
-      commands(s)
-      store(s, "A")
-      s.type(slot(1), "b").emitted(updated("Ab"))
-      commands(s)
-      store(s, "AB").emitted({ _tag: "Completed", value: "AB", reason: "input-change" })
-      // Stored shorter than typed: no completion, and focus that lands past the first empty slot goes back.
-      store(s, "A")
-      s.type(slot(1), "-").emitted(updated("A-"))
-      assert.deepStrictEqual(commands(s), focusOn(1))
-      store(s, "")
+      const s = yield* scene({ value: "1", length: 4 })
+      inFlight(s.type(slot(1), "2").emitted(updated("12")))
+      inFlight(s.keydown(slot(1), "Backspace").emitted(updated("1", "keyboard")))
+      inFlight(s.type(slot(1), "3").emitted(updated("13")))
+      inFlight(s.fire(slot(1), "paste", { text: "45" }).emitted(updated("1345", "input-paste")))
+      store(s, "1345").emitted(completed("1345", "input-paste"))
+      assert.deepStrictEqual(commands(s), [2, 1, 2, 3].flatMap(focusOn))
+    }))
+
+  it.effect("only the consumer's answer to an edit completes the code, whatever it stores", () =>
+    Effect.gen(function*() {
+      const s = yield* scene({ value: "", length: 4, autoSubmit: true })
+      inFlight(s.fire(slot(0), "paste", { text: "1234" }).emitted(updated("1234", "input-paste")))
+      assert.deepStrictEqual(commands(settle(s)), [...focusOn(3), ...focusOn(0)])
       quiet(s)
-      assert.deepStrictEqual(commands(s.focus(slot(1))), focusOn(0))
-      // Stored late: focus went back meanwhile, and moves on when the code arrives.
-      s.focus(slot(0))
+      assert.deepStrictEqual(commands(store(s, "9876")), [])
+      quiet(s)
+      s.fire(slot(0), "paste", { text: "5555" }).emitted(updated("5555", "input-paste"))
       commands(s)
-      s.type(slot(0), "a").emitted(updated("a"))
-      commands(s)
-      assert.deepStrictEqual(commands(store(s, "a")), focusOn(1))
+      assert.deepStrictEqual(commands(settle(s)), [])
+      quiet(s)
+
+      const upper = yield* scene({ value: "", length: 2, validationType: "none" })
+      upper.type(slot(0), "ß").emitted(updated("ß"))
+      commands(upper)
+      store(upper, "SS").emitted(completed("SS"))
+      store(upper, "S")
+      upper.type(slot(1), "-").emitted(updated("S-"))
+      commands(upper)
+      store(upper, "")
+      quiet(upper)
     }))
 
   it.effect("the keys move between slots and remove characters", () =>
@@ -224,7 +230,6 @@ describe("OTPField", () => {
         commands(s.keydown(slot(index), key, modifiers).expectDefaultPrevented())
       assert.deepStrictEqual(press(2, "ArrowLeft"), focusOn(1))
       assert.deepStrictEqual(press(2, "ArrowRight"), focusOn(3))
-      // Never past the first empty slot.
       assert.deepStrictEqual(press(3, "ArrowRight"), focusOn(3))
       assert.deepStrictEqual(press(0, "ArrowLeft"), focusOn(0))
       assert.deepStrictEqual(press(2, "ArrowLeft", { ctrl: true }), focusOn(0))
@@ -233,18 +238,14 @@ describe("OTPField", () => {
       assert.deepStrictEqual(press(2, "ArrowUp"), focusOn(0))
       assert.deepStrictEqual(press(0, "End"), focusOn(3))
       assert.deepStrictEqual(press(0, "ArrowDown"), focusOn(3))
-      // Other keys keep their default, so Tab moves focus and a digit is typed.
       s.keydown(slot(0), "Tab").expectIgnored().expectDefaultPrevented(false)
       s.keydown(slot(0), "7").expectIgnored().expectDefaultPrevented(false)
 
-      // Backspace removes the slot's character and moves back.
       s.keydown(slot(1), "Backspace").expectDefaultPrevented().emitted(updated("13", "keyboard"))
       assert.deepStrictEqual(commands(s), focusOn(0))
       store(s, "13")
-      // From an empty slot it removes the one before.
       s.keydown(slot(2), "Backspace").emitted(updated("1", "keyboard"))
       assert.deepStrictEqual(commands(s), focusOn(1))
-      // Delete removes in place.
       store(s, "123")
       s.keydown(slot(0), "Delete").expectDefaultPrevented().emitted(updated("23", "keyboard"))
       assert.deepStrictEqual(commands(s), focusOn(0))
@@ -252,11 +253,9 @@ describe("OTPField", () => {
       s.keydown(slot(1), "Backspace", { ctrl: true }).emitted(updated("", "keyboard"))
       assert.deepStrictEqual(commands(s), focusOn(0))
       store(s, "")
-      // Nothing left to remove.
       assert.deepStrictEqual(commands(s.keydown(slot(0), "Backspace").expectDefaultPrevented()), [])
       quiet(s)
 
-      // Right to left, the arrows swap.
       store(s, "123").shared(DirectionProvider, { direction: "rtl" })
       assert.deepStrictEqual(press(1, "ArrowLeft"), focusOn(2))
       assert.deepStrictEqual(press(1, "ArrowRight"), focusOn(0))
@@ -270,12 +269,10 @@ describe("OTPField", () => {
         updated("1234", "input-paste")
       )
       assert.deepStrictEqual(commands(s), focusOn(3))
-      store(s, "1234").emitted({ _tag: "Completed", value: "1234", reason: "input-paste" })
+      store(s, "1234").emitted(completed("1234", "input-paste"))
       assert.deepStrictEqual(commands(s), [submitted])
-      // The same complete code pasted again completes again.
-      s.fire(slot(0), "paste", { text: "1234" }).emitted({ _tag: "Completed", value: "1234", reason: "input-paste" })
+      s.fire(slot(0), "paste", { text: "1234" }).emitted(completed("1234", "input-paste"))
       assert.deepStrictEqual(commands(s), [...focusOn(3), submitted])
-      // Nothing usable changes nothing.
       s.fire(slot(0), "paste", { text: "ab" }).expectDefaultPrevented().emitted({
         _tag: "Rejected",
         value: "ab",
@@ -291,7 +288,6 @@ describe("OTPField", () => {
       composing("k")
       quiet(s)
       assert.strictEqual(s.get(slot(0)).props?.value, "k")
-      // The input method owns the keys until it is done.
       s.keydown(slot(0), "Backspace").expectIgnored().expectDefaultPrevented(false)
       composing("か")
       s.fire(slot(0), "compositionend", { value: "か" }).emitted(updated("か"))
@@ -316,9 +312,7 @@ describe("OTPField", () => {
       const s = yield* scene({ value: "12", length: 4 })
       assert.deepStrictEqual(commands(s.focus(slot(0))), ["Html.select OTPFieldSlot[0]"])
       for (const part of [root, slot(0), slot(3)]) assert.strictEqual(s.get(part).attrs?.["data-focused"], "")
-      // The focused slot is the one in the Tab order.
       assert.deepStrictEqual([0, 2].map((index) => s.get(slot(index)).attrs?.tabindex), ["0", "-1"])
-      // A press on the focused slot keeps its text selected. A press on another is the browser's, which focuses it.
       assert.deepStrictEqual(commands(s.fire(slot(0), "mousedown", {}).expectDefaultPrevented()), [
         "Html.select OTPFieldSlot[0]"
       ])
@@ -326,15 +320,11 @@ describe("OTPField", () => {
       s.blur(slot(0))
       assert.isUndefined(s.get(root).attrs?.["data-focused"])
       assert.deepStrictEqual([0, 2].map((index) => s.get(slot(index)).attrs?.tabindex), ["-1", "0"])
-      // Focus that lands past the first empty slot goes to it.
       assert.deepStrictEqual(commands(s.focus(slot(3))), focusOn(2))
-      // The browser focuses the hidden input to report it invalid.
       assert.deepStrictEqual(commands(s.focus(hidden)), focusOn(0))
-      // A code the consumer shortens while a later slot has focus pulls focus back.
       s.focus(slot(2))
       commands(s)
       assert.deepStrictEqual(commands(store(s, "")), focusOn(0))
-      // A field disabled while it has focus gets no blur, and reports it itself.
       s.props((props) => ({ ...props, disabled: true }))
       assert.isUndefined(s.get(root).attrs?.["data-focused"])
       assert.include(s.subscriptions, "disabledWhileFocused")
@@ -350,7 +340,7 @@ describe("OTPField", () => {
       const s = yield* scene({ value: "12", length: 4 })
       s.type(hidden, "98 76x").emitted({ _tag: "Rejected", value: "98 76x", reason: "input-change" }, updated("9876"))
       assert.deepStrictEqual(commands(s), focusOn(3))
-      store(s, "9876").emitted({ _tag: "Completed", value: "9876", reason: "input-change" })
+      store(s, "9876").emitted(completed("9876"))
     }))
 
   it.effect("a disabled field reports nothing, and a read-only one keeps only the navigation keys", () =>
@@ -441,8 +431,11 @@ describe("OTPField", () => {
     const otpField = parts({ value: "", length: 2 })
     assert.throws(() => otpField.input({ element: h.input, index: 2 }), /no slot at index 2 in a field of 2 slots/)
     assert.throws(() => otpField.input({ element: h.input, index: 0.5 }), /no slot at index 0.5/)
-    otpField.input({ element: h.input, index: 1 })
-    assert.throws(() => otpField.input({ element: h.input, index: 1 }), /the slot at index 1 was drawn twice/)
+    const twice = otpField.root(h.div).children(
+      otpField.input({ element: h.input, index: 1 }),
+      h.div(otpField.input({ element: h.input, index: 1 }))
+    )
+    assert.throws(() => View.build(twice, []), /the slot at index 1 was drawn twice/)
     assert.throws(() => otpField.input({ element: h.div as never, index: 0 }), /a part for <input> was given <div>/)
     assert.throws(() => parts({ value: "", length: 0 }), /length is the number of slots/)
     assert.throws(() => parts({ value: "", length: 2.5 }), /length is the number of slots/)

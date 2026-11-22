@@ -156,6 +156,12 @@ const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "composi
 /** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
 const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
+/**
+ * The fields an input method is composing in. Writing a value there would end the composition, so a
+ * field's `value` is left as it is until `compositionend`, which puts the Model's value back.
+ */
+const composing = new WeakSet<globalThis.Node>()
+
 const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected", "open", "popoverOpen"])
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
@@ -491,7 +497,6 @@ export const makeHost = (
   const eventsAlong = stored.along
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
-  // The last value the renderer set for each controlled property: what the element must show.
   const composing = new WeakSet<globalThis.Node>()
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.

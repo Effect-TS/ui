@@ -2,25 +2,29 @@
 import { Component, UiSchema } from "@effect/ui"
 import { DirectionProvider, Field, OTPField } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
+import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { container, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
   Updated: { value: Schema.String },
+  Stored: { value: Schema.String },
   Logged: { entry: Schema.String }
 })
 
 const Page = Component.define({
   name: "Page",
-  props: Schema.Struct({ autoSubmit: Schema.Boolean, upper: Schema.Boolean }),
+  props: Schema.Struct({ autoSubmit: Schema.Boolean, upper: Schema.Boolean, locked: Schema.Boolean }),
   model: Schema.Struct({ code: Schema.String, log: Schema.Array(Schema.String) }),
   message: Message,
   elements: Html
 }).make({
   init: () => ({ code: "", log: [] }),
   update: {
-    Updated: (model, { value }, $) => ({ ...model, code: $.props.upper ? value.toUpperCase() : value }),
+    Updated: (model, { value }, $) =>
+      $.props.locked ? model : { ...model, code: $.props.upper ? value.toUpperCase() : value },
+    Stored: (model, { value }) => ({ ...model, code: value }),
     Logged: (model, { entry }) => ({ ...model, log: [...model.log, entry] })
   },
   view: (model, h) =>
@@ -63,16 +67,60 @@ const Page = Component.define({
     )
 })
 
-const mountPage = Effect.fnUntraced(function*(props: { readonly autoSubmit?: boolean; readonly upper?: boolean } = {}) {
+const mountPage = Effect.fnUntraced(function*(
+  props: { readonly autoSubmit?: boolean; readonly upper?: boolean; readonly locked?: boolean } = {}
+) {
   const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, { autoSubmit: false, upper: false, ...props }, app)
+  const root = yield* BrowserHost.mountEffect(Page, { autoSubmit: false, upper: false, locked: false, ...props }, app)
   yield* tick
   const slots = Array.from(app.querySelectorAll<HTMLInputElement>(".slot"))
   const enter = (index: number, text: string) => {
     slots[index]!.value = text
     slots[index]!.dispatchEvent(new InputEvent("input", { bubbles: true }))
   }
-  return { app, slots, enter, log: () => root.model()?.log ?? [] }
+  return { app, root, slots, enter, log: () => root.model()?.log ?? [] }
+})
+
+const FrameMessage = UiSchema.TaggedEnum({ Pressed: {} })
+
+const Frame = Component.define({
+  name: "Frame",
+  model: Schema.Number,
+  message: FrameMessage,
+  elements: Html
+}).make({
+  init: () => 0,
+  update: { Pressed: (model) => model + 1 },
+  parts: (model, p) => ({
+    root: p.part((b) => b.attr("data-presses", String(model)).on("click", FrameMessage.Pressed()))
+  })
+})
+
+const Labelled = Component.define({
+  name: "Labelled",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_model, h) =>
+    h.div(
+      h.label.attr("for", "otp").children("Verification code"),
+      OTPField(h, {
+        props: { value: "", length: 4, id: "otp" },
+        onEmit: { Updated: () => undefined, Completed: () => undefined, Rejected: () => undefined },
+        view: (otpField) =>
+          otpField.root(h.div).children(
+            otpField.input({ element: h.input, index: 0 }),
+            otpField.input({ element: h.input.attr("aria-label", "Second digit"), index: 1 }),
+            otpField.input({ element: h.input, index: 2 }),
+            Frame(h, {
+              view: (frame) => frame.root(h.span).children(otpField.input({ element: h.input, index: 3 }))
+            })
+          )
+      })
+    )
 })
 
 const focusedSlot = (slots: ReadonlyArray<HTMLInputElement>) =>
@@ -102,7 +150,6 @@ describe("OTPField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["A", "B", "2", "C"])
       assert.strictEqual(hidden.value, "AB2C")
       assert.deepStrictEqual(log(), ["rejected !", "completed AB2C", "submitted AB2C"])
-      // Right to left, Right moves back a slot. The slot's text is selected, so the next key replaces it.
       slots[3]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }))
       yield* tick
       assert.strictEqual(focusedSlot(slots), 2)
@@ -130,7 +177,6 @@ describe("OTPField in a document", { concurrent: false }, () => {
         assert.isTrue(part.hasAttribute("data-focused"))
         assert.isFalse(part.hasAttribute("data-touched"))
       }
-      // The field as a whole is filled, and each slot says whether it holds a character.
       assert.deepStrictEqual(
         [field, group, ...slots].map((part) => part.hasAttribute("data-filled")),
         [true, true, true, false, false, false]
@@ -141,5 +187,33 @@ describe("OTPField in a document", { concurrent: false }, () => {
         assert.isFalse(part.hasAttribute("data-focused"))
         assert.isTrue(part.hasAttribute("data-touched"))
       }
+    }).pipe(Effect.scoped))
+
+  it.effect("a code the consumer stores after it declined an edit completes nothing", () =>
+    Effect.gen(function*() {
+      const { log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
+      slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+        clipboardData: { getData: () => "1234" }
+      }))
+      yield* tick
+      root.send(Message.Stored({ value: "9876" }))
+      yield* tick
+      assert.deepStrictEqual(slots.map((slot) => slot.value), ["9", "8", "7", "6"])
+      assert.deepStrictEqual(log(), [])
+    }).pipe(Effect.scoped))
+
+  it.effect("a label for the first slot names the group and every slot with no name of its own", () =>
+    Effect.gen(function*() {
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Labelled, {}, app)
+      yield* tick
+      const names = () => HtmlLocator.queryAllByRole(app, "textbox").map((slot) => HtmlLocator.nameOf(app, slot))
+      const expected = ["Verification code", "Second digit", "Verification code", "Verification code"]
+      assert.deepStrictEqual(names(), expected)
+      assert.strictEqual(HtmlLocator.nameOf(app, HtmlLocator.getByRole(app, "group")), "Verification code")
+      app.querySelector("span")!.click()
+      yield* tick
+      assert.strictEqual(app.querySelector("span")!.getAttribute("data-presses"), "1")
+      assert.deepStrictEqual(names(), expected)
     }).pipe(Effect.scoped))
 })
