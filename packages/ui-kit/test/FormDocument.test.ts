@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Command, Component, UiSchema, Validation } from "@effect/ui"
-import { Field, Form } from "@effect/ui-kit"
+import { Field, Form, RadioGroup } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
@@ -63,20 +63,23 @@ const Signup = Component.define({
             field.error(h.span)?.children("Invalid")
           )
       })
-    const radio = (value: string, tabbable: boolean) =>
-      h.button.attrs({
-        type: "button",
-        role: "radio",
-        tabindex: tabbable ? "0" : "-1",
-        "data-plan": value
-      })
-        .onClick(Message.UpdatedField({ name: "plan", value }))
+    const plans = [{ value: "free", disabled: true }, { value: "team" }]
     return Form(h, {
       onEmit: () => Message.SubmittedForm(),
       view: (form) =>
         form.root(h.form).children(
-          h.div.attrs({ role: "radiogroup", "aria-invalid": fields.plan._tag === "Invalid" ? "true" : undefined })
-            .children(radio("free", false), radio("team", true)),
+          RadioGroup(h, {
+            props: {
+              value: fields.plan.value === "" ? null : fields.plan.value,
+              items: plans,
+              invalid: fields.plan._tag === "Invalid"
+            },
+            onEmit: { Picked: ({ value }) => Message.UpdatedField({ name: "plan", value }) },
+            view: (radioGroup) =>
+              radioGroup.root(h.div).children(
+                ...plans.map(({ value }) => radioGroup.radio({ element: h.button.attr("data-plan", value), value }))
+              )
+          }),
           Field(h, {
             key: "billing",
             props: { invalid: fields.billing._tag === "Invalid" },

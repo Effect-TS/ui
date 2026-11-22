@@ -220,6 +220,7 @@ export type RadioGroupEvents = typeof RadioGroupEvents.Type
 
 const Model = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
+  current: Schema.NullOr(Schema.String),
   settled: Schema.NullOr(Schema.String),
   leaving: Schema.Array(Schema.String)
 })
@@ -229,9 +230,8 @@ const Message = UiSchema.TaggedEnum({
   FocusedRadio: { value: Schema.String },
   PressedArrow: { value: Schema.String, direction: Schema.Literals([1, -1]) },
   PressedEnter: {},
-  SyncedValue: {},
+  SyncedValue: { value: Schema.NullOr(Schema.String) },
   StartedIndicator: { value: Schema.String },
-  LeftIndicator: { value: Schema.String },
   EndedIndicator: { value: Schema.String }
 })
 
@@ -243,7 +243,8 @@ const Radio = Html.ref("RadioGroupRadio", "button")
 
 const focusRadio = (value: string) => DomCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
 
-const synced = (value: string | null) => Subscription.make("synced", [value], () => Stream.make(Message.SyncedValue()))
+const synced = (value: string | null) =>
+  Subscription.make("synced", [value], () => Stream.make(Message.SyncedValue({ value })))
 
 const TrackIndicatorArgs = Schema.Struct({
   value: Schema.String,
@@ -271,7 +272,6 @@ const TrackIndicator = Mount.makeStream(
       }
       const leave = () => {
         const mine = ++generation
-        send(Message.LeftIndicator({ value: current.value }))
         frame(() =>
           whenFinished(
             () => [node],
@@ -329,10 +329,8 @@ const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
 const without = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
   values.includes(value) ? values.filter((other) => other !== value) : values
 
-const unsettled = (model: Model, value: string, leaving: ReadonlyArray<string>): Model => {
-  const settled = model.settled === value ? null : model.settled
-  return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
-}
+const withValue = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
+  values.includes(value) ? values : [...values, value]
 
 type KeyedButton = View.PartTarget<"button"> & { readonly key: (key: string) => View.PartTarget<"button"> }
 
@@ -381,6 +379,7 @@ export const RadioGroup = Component.define({
 }).make({
   init: ({ props }) => ({
     highlighted: null,
+    current: props.value,
     settled: props.value,
     leaving: []
   }),
@@ -403,18 +402,25 @@ export const RadioGroup = Component.define({
       return picks($.props, target) ? moved.emit(RadioGroupEvents.Picked({ value: target.value })) : moved
     },
     PressedEnter: (model) => model,
-    SyncedValue: (model) => (model.highlighted === null ? model : { ...model, highlighted: null }),
+    SyncedValue: (model, { value }) => {
+      if (model.current === value) return model.highlighted === null ? model : { ...model, highlighted: null }
+      const prev = model.current
+      let leaving = prev !== null ? withValue(model.leaving, prev) : model.leaving
+      if (value !== null) leaving = without(leaving, value)
+      const settled = model.settled === value ? value : null
+      return { highlighted: null, current: value, settled, leaving }
+    },
     StartedIndicator: (model, { value }, $) => {
       if ($.props.value !== value) return model
       const leaving = without(model.leaving, value)
       return model.settled === value && leaving === model.leaving ? model : { ...model, settled: value, leaving }
     },
-    LeftIndicator: (model, { value }, $) =>
-      $.props.value === value
-        ? model
-        : unsettled(model, value, model.leaving.includes(value) ? model.leaving : [...model.leaving, value]),
-    EndedIndicator: (model, { value }, $) =>
-      $.props.value === value ? model : unsettled(model, value, without(model.leaving, value))
+    EndedIndicator: (model, { value }, $) => {
+      if ($.props.value === value) return model
+      const leaving = without(model.leaving, value)
+      const settled = model.settled === value ? null : model.settled
+      return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
+    }
   },
   subscriptions: (_model, props) => [synced(props.value)],
   parts: (model, p) => {
@@ -434,7 +440,7 @@ export const RadioGroup = Component.define({
         disabled: disabled || item.disabled === true,
         readOnly: readOnly || item.readOnly === true,
         starting: checked && model.settled !== value,
-        ending: !checked && (model.leaving.includes(value) || model.settled === value)
+        ending: !checked && (model.leaving.includes(value) || model.current === value || model.settled === value)
       }
     }
     const tabStop = disabled
