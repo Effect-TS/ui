@@ -1,7 +1,17 @@
+export const isElement = (node: unknown): node is Element => (node as Node | null)?.nodeType === 1
+
 export const isHTMLElement = (node: unknown): node is HTMLElement => {
-  if (node == null || typeof node !== "object") return false
-  const ctor = (node as Node).ownerDocument?.defaultView?.HTMLElement ?? globalThis.HTMLElement
+  const ctor = (node as Node | null)?.ownerDocument?.defaultView?.HTMLElement ?? globalThis.HTMLElement
   return ctor !== undefined && node instanceof ctor
+}
+
+export const perDocument = <A>(make: () => A): (document: Document) => A => {
+  const made = new WeakMap<Document, A>()
+  return (document) => {
+    let value = made.get(document)
+    if (value === undefined) made.set(document, value = make())
+    return value
+  }
 }
 
 export const focusVisible = (element: Element): boolean => {

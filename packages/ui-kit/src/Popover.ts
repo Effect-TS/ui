@@ -492,19 +492,14 @@ const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number, drawn: Schema.NullOr(Schema.String) }, mode: "switch" },
   ({ delay, drawn }) =>
-    Effect.sleep(Duration.millis(delay)).pipe(
-      Effect.andThen(
-        drawn === null
-          ? Effect.succeed(true)
-          : Effect.map(
-            Renderer.Refs.use((refs) => refs.lookup(Trigger.at(drawn))),
-            Option.exists((node) => !node.disabled)
-          )
-      ),
-      Effect.map((usable) =>
-        usable ? PopoverMessage.CompletedWaitBeforeOpening() : PopoverMessage.LostTrigger({ triggerId: drawn })
-      )
-    )
+    Effect.gen(function*() {
+      yield* Effect.sleep(Duration.millis(delay))
+      if (drawn === null) return PopoverMessage.CompletedWaitBeforeOpening()
+      const trigger = yield* Renderer.Refs.use((refs) => refs.lookup(Trigger.at(drawn)))
+      return Option.exists(trigger, (node) => !node.disabled)
+        ? PopoverMessage.CompletedWaitBeforeOpening()
+        : PopoverMessage.LostTrigger({ triggerId: drawn })
+    })
 )
 
 const WaitBeforeClosing = Command.make(
@@ -898,8 +893,8 @@ export const Popover = Component.define({
             "aria-disabled": undefined
           })
           .disabled(disabled)
-          .ref(Trigger.at(key))
         return hover === null ? button : button
+          .ref(Trigger.at(key))
           .on(
             "mouseenter",
             (payload: Partial<Html.HoverPayload>) =>

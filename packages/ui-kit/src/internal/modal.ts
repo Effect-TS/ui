@@ -1,4 +1,4 @@
-import { saved } from "./dom.ts"
+import { perDocument, saved } from "./dom.ts"
 
 interface Layer {
   readonly inside: Element
@@ -14,16 +14,13 @@ interface Stack {
   unlock: (() => void) | undefined
 }
 
-const stacks = new WeakMap<Document, Stack>()
-
-const stackOf = (document: Document): Stack => {
-  let stack = stacks.get(document)
-  if (stack === undefined) {
-    stack = { layers: [], marked: undefined, unmark: undefined, locks: 0, unlock: undefined }
-    stacks.set(document, stack)
-  }
-  return stack
-}
+const stackOf = perDocument((): Stack => ({
+  layers: [],
+  marked: undefined,
+  unmark: undefined,
+  locks: 0,
+  unlock: undefined
+}))
 
 const hide = ({ also, inside }: Layer): () => void => {
   const body = inside.ownerDocument.body

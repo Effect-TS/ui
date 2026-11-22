@@ -215,8 +215,8 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
-import { byAttribute, isHTMLElement, radioGroup } from "./internal/dom.ts"
+import { type Attributed, attrOf, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
+import { byAttribute, isElement, isHTMLElement, perDocument, radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
@@ -446,7 +446,7 @@ const tabbableSelector = [
 ].join(",")
 
 const closestOf = (target: Node, selector: string): Element | null | undefined =>
-  (target.nodeType === 1 ? target as Element : target.parentElement)?.closest(selector)
+  (isElement(target) ? target : target.parentElement)?.closest(selector)
 
 const inNested = (dialog: Element, element: Element): boolean => element.parentElement?.closest("dialog") !== dialog
 
@@ -502,15 +502,7 @@ interface Stack {
   readonly showing: Array<Showing>
   watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
 }
-const stacks = new WeakMap<Document, Stack>()
-const stackOf = (document: Document): Stack => {
-  let stack = stacks.get(document)
-  if (stack === undefined) {
-    stack = { showing: [], watched: undefined }
-    stacks.set(document, stack)
-  }
-  return stack
-}
+const stackOf = perDocument((): Stack => ({ showing: [], watched: undefined }))
 const rewatch = (stack: Stack) => {
   const top = stack.showing.find((entry) => entry.top())
   if (stack.watched?.entry === top) return
@@ -544,10 +536,6 @@ const inDialogAbove = (stack: Stack, node: HTMLDialogElement, target: Node): boo
   const index = orderOf(stack, other)
   return index === -1 || index > orderOf(stack, node)
 }
-
-const disabledOf = (builder: unknown): boolean =>
-  (builder as { readonly elementAttrs?: Readonly<Record<string, string>> | undefined }).elementAttrs?.disabled !==
-    undefined
 
 const inOtherLayer = (node: HTMLDialogElement, target: Node): boolean => {
   const other = closestOf(target, "[popover]")
@@ -692,8 +680,8 @@ const TrackDialog = Mount.makeStream(
         const root = popup()
         if (root.contains(target) || onTrigger(target)) return false
         if (current.modal === true) {
-          return target.nodeType === 1 && target !== node && (target as Element).closest("dialog") === node &&
-            ((target as Element).contains(root) || (target as Element).getAttribute("role") === "presentation")
+          return isElement(target) && target !== node && target.closest("dialog") === node &&
+            (target.contains(root) || target.getAttribute("role") === "presentation")
         }
         return node.contains(target) || inKept(target) || !addedSince(target)
       }
@@ -1174,7 +1162,7 @@ export const Dialog = Component.define({
       triggerPart,
       <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> => {
         const id = idOf(element)
-        return triggerPart(element, id, id ?? p.id("trigger", triggers++), disabledOf(element))
+        return triggerPart(element, id, id ?? p.id("trigger", triggers++), attrOf(element, "disabled") !== undefined)
       }
     )
 

@@ -1,4 +1,6 @@
+import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import type * as Html from "@effect/ui/html/Html"
+import type * as Subscription from "@effect/ui/Subscription"
 import * as Schema from "effect/Schema"
 
 export const Point = Schema.Struct({ x: Schema.Number, y: Schema.Number })
@@ -10,6 +12,13 @@ export const pointOf = ({ x, y }: Partial<Html.HoverPayload>): Point | null =>
 
 export const methodOf = (pointerType: string): "mouse" | "touch" | "pen" | "keyboard" =>
   pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
+
+export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
+  DomSubscription.onDocument(
+    "keydown",
+    ({ composing, defaultPrevented, key }) => key === "Escape" && !composing && !defaultPrevented ? message : undefined,
+    { preventDefault: true }
+  )
 
 export const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
   if (!(target instanceof HTMLElement)) return false

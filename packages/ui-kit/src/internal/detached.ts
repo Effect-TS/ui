@@ -12,16 +12,13 @@ export interface DetachedChannel<M> {
 // A trigger reaches only the popups of its own document, through an event dispatched there. The host
 // hands a listener the event's payload, not the event, so the message waits in `sending` meanwhile.
 export const detachedChannel = <M>(name: string): DetachedChannel<M> => {
-  const type = `effect-ui-kit:${name}`
-  let sending: { readonly popupId: string; readonly message: M } | undefined
+  const typeOf = (popupId: string) => `effect-ui-kit:${name}:${popupId}`
+  let sending: M | undefined
   return {
     send: (document, popupId, message) => {
-      sending = { popupId, message }
-      try {
-        document.dispatchEvent(new Event(type))
-      } finally {
-        sending = undefined
-      }
+      sending = message
+      document.dispatchEvent(new Event(typeOf(popupId)))
+      sending = undefined
     },
     subscription: (popupId) =>
       Subscription.make(
@@ -32,8 +29,8 @@ export const detachedChannel = <M>(name: string): DetachedChannel<M> => {
             DomSubscription.GlobalEvents.use((events) =>
               Effect.acquireRelease(
                 Effect.sync(() =>
-                  events.listen("document", type, { capture: false }, () => {
-                    if (sending !== undefined && sending.popupId === id) Queue.offerUnsafe(queue, sending.message)
+                  events.listen("document", typeOf(id), { capture: false }, () => {
+                    if (sending !== undefined) Queue.offerUnsafe(queue, sending)
                   })
                 ),
                 (close) => Effect.sync(close)

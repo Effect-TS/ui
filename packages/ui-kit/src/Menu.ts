@@ -242,7 +242,6 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -265,7 +264,7 @@ import {
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
-import { methodOf } from "./internal/interaction.ts"
+import { methodOf, onEscape } from "./internal/interaction.ts"
 import { arrowKeys, available, keyed, type Orientation, stepped } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
@@ -1621,16 +1620,7 @@ const MenuLongPress = Mount.makeStream(
 
 const blocker = blockers("data-menu-blocker")
 
-const escapes = [
-  DomSubscription.onDocument(
-    "keydown",
-    ({ composing, defaultPrevented, key }) =>
-      key === "Escape" && !composing && !defaultPrevented
-        ? MenuMessage.PressedKey({ key, action: null })
-        : undefined,
-    { preventDefault: true }
-  )
-]
+const escapes = [onEscape(MenuMessage.PressedKey({ key: "Escape", action: null }))]
 
 const hiddenBox = "display:none"
 

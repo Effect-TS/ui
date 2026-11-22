@@ -421,7 +421,7 @@ export const RadioGroup = Component.define({
       $.props.disabled === true || !available(itemOf($.props.items, value)) ? model : $.evolve({ highlighted: value }),
     PressedArrow: (model, { direction, value }, $) => {
       const source = itemOf($.props.items, value)
-      if ($.props.disabled === true || source === undefined || !available(source)) return model
+      if ($.props.disabled === true || !available(source)) return model
       const enabled = $.props.items.filter(available)
       const at = enabled.indexOf(source)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
