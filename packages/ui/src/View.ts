@@ -1060,15 +1060,15 @@ export const makePart = (
   }
   if (patch.elementKey !== undefined) throw new Error(owner.path + ": a part can't set an element's key")
   if (patch.owned.length > 0) throw new Error(owner.path + ": a part can't apply another part")
-  const elementAttrs: Record<string, string> = { ...builder.elementAttrs }
+  const attrs: Record<string, string> = { ...builder.elementAttrs }
   const tokens: Record<string, string> = {}
   for (const name of patch.removals ?? []) {
     // Token lists are additive: a part can omit its own tokens, not the consumer's.
-    if (!tokenListAttributes.has(name)) delete elementAttrs[name]
+    if (!tokenListAttributes.has(name)) delete attrs[name]
   }
   for (const name in patch.elementAttrs) {
     if (tokenListAttributes.has(name)) tokens[name] = patch.elementAttrs[name]!
-    else elementAttrs[name] = patch.elementAttrs[name]!
+    else attrs[name] = patch.elementAttrs[name]!
   }
   const layer: Owned = {
     owner,
@@ -1079,7 +1079,7 @@ export const makePart = (
     tokens
   }
   const out = withFields(builder, {
-    elementAttrs,
+    elementAttrs: attrs,
     props: { ...builder.props, ...patch.props },
     owned: [...builder.owned, layer]
   })
@@ -1362,12 +1362,12 @@ export class ElementBuilder<
     const out = copyBuilder(this) as Mutable<this>
     const removals = this.removals
     if (value === undefined && removals !== undefined) out.removals = [...removals, name]
-    const elementAttrs = this.elementAttrs
-    if (elementAttrs === noFields) {
-      if (value !== undefined) out.elementAttrs = assoc(elementAttrs, name, value)
+    const attrs = this.elementAttrs
+    if (attrs === noFields) {
+      if (value !== undefined) out.elementAttrs = assoc(attrs, name, value)
       // Removing an attribute that isn't set leaves the record as it is.
-    } else if (value !== undefined || Object.hasOwn(elementAttrs, name)) {
-      out.elementAttrs = withEntry(elementAttrs, name, value)
+    } else if (value !== undefined || Object.hasOwn(attrs, name)) {
+      out.elementAttrs = withEntry(attrs, name, value)
     }
     return out
   }
@@ -1379,8 +1379,7 @@ export class ElementBuilder<
   attrs(attributes: Readonly<Record<string, string | undefined>>): this {
     let out: this | undefined
     for (const name in attributes) {
-      if (!Object.hasOwn(attributes, name)) continue
-      out = (out ?? this).attr(name, attributes[name])
+      if (Object.hasOwn(attributes, name)) out = (out ?? this).attr(name, attributes[name])
     }
     return out ?? copyBuilder(this)
   }
