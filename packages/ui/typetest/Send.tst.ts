@@ -244,6 +244,66 @@ describe("$.send", () => {
   })
 })
 
+const NestMessage = UiSchema.TaggedEnum({ Pick: {}, Picked: {}, Closed: {} })
+type NestMessage = typeof NestMessage.Type
+
+// Reads the nearest Nest above it, and receives Picked.
+const NestDef = Component.define({
+  name: "Nest",
+  scoped: false,
+  model: Schema.Number,
+  message: NestMessage,
+  receives: ["Picked"],
+  shares: (picked) => picked,
+  shared: { parent: { owner: "self", optional: true } }
+})
+
+// Receives Picked and shares, but doesn't read its own kind.
+const FlatDef = Component.define({
+  name: "Flat",
+  scoped: false,
+  model: Schema.Number,
+  message: NestMessage,
+  receives: ["Picked"],
+  shares: (picked) => picked
+})
+
+describe("$.send to self", () => {
+  it("takes a message the component receives, and requires nothing", () => {
+    NestDef.update((model, _msg, $) => {
+      expect($.send("self", NestMessage.Picked())).type.toBe<Component.Step<number, NestMessage, never, never>>()
+      expect($.send("self", { _tag: "Picked" })).type.not.toRaiseError()
+      expect($.send).type.not.toBeCallableWith("self", NestMessage.Closed())
+      expect($.send).type.not.toBeCallableWith("self", { _tag: "Pick" })
+      return model
+    })
+  })
+
+  it("is rejected in a component that doesn't read its own kind", () => {
+    FlatDef.update((model, _msg, $) => {
+      expect($.send).type.not.toBeCallableWith("self", NestMessage.Picked())
+      return model
+    })
+  })
+
+  it("types in slices and combine, and in a scene as a send to the component", () => {
+    const picked = NestDef.update("Pick", (_, __, $) => $.send("self", NestMessage.Picked()))
+    const Nest = NestDef.make({
+      init: () => 0,
+      update: {
+        Pick: picked,
+        Picked: (_, __, $) => $.combine((n, __, $) => $.send("self", NestMessage.Picked()).set(n + 1)),
+        Closed: (model) => model
+      },
+      parts: (picked) => ({ picked })
+    })
+    expect<Component.Requirements<typeof Nest>>().type.toBe<never>()
+    const scene = Scene.start(Nest, {}, { view: (_, h) => h.el("p") }).shared(Nest, 0)
+    expect(scene.sent(Nest, NestMessage.Picked())).type.not.toRaiseError()
+    expect(scene.sent).type.not.toBeCallableWith(Nest, NestMessage.Closed())
+  })
+})
+
 describe("a component child with a ref", () => {
   it("takes a ref in place of a key, or neither, and rejects both", () => {
     ParentDef.view((_, h) => {

@@ -5,7 +5,7 @@
  * a tooltip provider that knows which tooltip is open, tooltips that read it
  * and tell it when they're focused, and a scene of one tooltip with no
  * provider mounted. Then an optional owner, the reports readers give it, a
- * reader's `onChange`, and a component that reads its own kind.
+ * reader's `onChange`, and a component that reads and sends to its own kind.
  */
 import { Component, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
@@ -272,12 +272,17 @@ export const panels = Effect.gen(function*() {
 // A component that reads its own kind
 // ---------------------------------------------------------------------------
 
-const MenuMessage = UiSchema.TaggedEnum({ ChangedOpenBelow: { count: Schema.Number } })
+const MenuMessage = UiSchema.TaggedEnum({
+  ChangedOpenBelow: { count: Schema.Number },
+  PickedItem: { item: Schema.String }
+})
+const MenuEvents = UiSchema.TaggedEnum({ Picked: { item: Schema.String } })
 
 // A menu reads the menu it's nested in, and tells it how many menus below it
 // are open. `owner: "self"` names the component being defined, which can't
 // name itself yet. The outermost menu has none above it, so the entry is
 // `optional: true`. `shares` comes first, so `report` is typed by `collects`.
+// `receives` lists the messages a menu takes from the one nested in it.
 export const Menu = Component.define({
   name: "Menu",
   scoped: false,
@@ -285,6 +290,8 @@ export const Menu = Component.define({
   // How many menus below this one are open.
   model: Schema.Number,
   message: MenuMessage,
+  events: MenuEvents,
+  receives: ["PickedItem"],
   shares: {
     value: (_, props) => ({ open: props.open }),
     collects: {
@@ -296,17 +303,38 @@ export const Menu = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (_, message) => MenuMessage.match(message, { ChangedOpenBelow: ({ count }) => count }),
-  parts: (below, p) => ({ nested: p.shared.parent !== undefined, openBelow: below })
+  update: (_, message, $) =>
+    MenuMessage.match(message, {
+      ChangedOpenBelow: ({ count }) => count,
+      // A pick goes up to the outermost menu, which tells its consumer.
+      // `$.send("self", message)` sends to the menu this one is nested in:
+      // the one `$.shared.parent` reads. It needs nothing above, as an
+      // optional owner doesn't: from the outermost menu the send would be
+      // dropped and logged as `SendDropped`, so that one emits instead.
+      PickedItem: ({ item }) =>
+        $.shared.parent === undefined
+          ? $.emit(MenuEvents.Picked({ item }))
+          : $.send("self", MenuMessage.PickedItem({ item }))
+    }),
+  parts: (below, p) => ({
+    nested: p.shared.parent !== undefined,
+    openBelow: below,
+    item: p.part("button", (b, item: string) => b.onClick(MenuMessage.PickedItem({ item })))
+  })
 })
 
-// In a scene, the component itself is the owner its `"self"` entry reads.
+// In a scene, the component itself is the owner its `"self"` entry reads,
+// and `sent(Menu, message)` acknowledges a send to it.
 export const nestedMenu = Effect.gen(function*() {
   const menu = yield* Scene.make(Menu, { open: true }, {
     elements: Html,
-    view: (menu, h) => h.p.children(menu.nested ? "nested" : "outermost")
+    view: (menu, h) => h.div(h.p.children(menu.nested ? "nested" : "outermost"), menu.item(h.button("Copy"), "copy"))
   })
   menu.expect(Locator.text("outermost")).toExist()
+  // The outermost menu tells its consumer.
+  menu.click("Copy").emitted(MenuEvents.Picked({ item: "copy" }))
   menu.shared(Menu, { open: true })
     .expect(Locator.text("nested")).toExist()
+  // A nested one sends the pick up.
+  menu.click("Copy").sent(Menu, MenuMessage.PickedItem({ item: "copy" }))
 })
