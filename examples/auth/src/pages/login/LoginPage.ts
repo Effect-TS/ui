@@ -1,38 +1,38 @@
 import { Session } from "#domain/Session"
 import { Command, Component, UiSchema, Validation, type View } from "@effect/ui"
-import { Button, Field, Input } from "@effect/ui-kit"
+import { Button, Field, fieldValidationProps, Input } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Duration, Effect, Option, Schema } from "effect"
+import { Duration, Effect, Option, Redacted, Schema } from "effect"
 import { AppRoute, LoggedOutRoute } from "../../routes.ts"
 
 const Rule = Validation.Rule
 
 export const LoginValidation = Validation.make({
   email: { required: "Email is required", rules: [Rule.email("Please enter a valid email")] },
-  password: { required: "Password is required" }
+  password: { value: Schema.Redacted(Schema.String), required: "Password is required" }
 }, { mode: "onChange" })
 
-export const LoginMessage = UiSchema.TaggedEnum({
+export const LoginPageMessage = UiSchema.TaggedEnum({
   ChangedEmail: { value: Schema.String },
-  ChangedPassword: { value: Schema.String },
+  ChangedPassword: { value: Schema.Redacted(Schema.String) },
   SubmittedForm: {},
   SucceededSimulateAuthRequest: { session: Session },
   FailedSimulateAuthRequest: { error: Schema.String }
 })
-export type LoginMessage = typeof LoginMessage.Type
+export type LoginPageMessage = typeof LoginPageMessage.Type
 
-export const LoginEvents = UiSchema.TaggedEnum({ SignedIn: { session: Session } })
+export const LoginPageEvents = UiSchema.TaggedEnum({ SignedIn: { session: Session } })
 
 const runSimulateAuthRequest = Effect.fn("auth/SimulateAuthRequest")(
   function*(
-    { email, password }: { readonly email: string; readonly password: string }
-  ): Effect.fn.Return<LoginMessage> {
+    { email, password }: { readonly email: string; readonly password: Redacted.Redacted<string> }
+  ): Effect.fn.Return<LoginPageMessage> {
     yield* Effect.sleep(Duration.seconds(1))
-    if (password !== "password") {
-      return LoginMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" })
+    if (Redacted.value(password) !== "password") {
+      return LoginPageMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" })
     }
     const [name] = email.split("@")
-    return LoginMessage.SucceededSimulateAuthRequest({
+    return LoginPageMessage.SucceededSimulateAuthRequest({
       session: { userId: "1", email, name: name === "" ? email : name }
     })
   }
@@ -40,28 +40,24 @@ const runSimulateAuthRequest = Effect.fn("auth/SimulateAuthRequest")(
 
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
-  { args: { email: Schema.String, password: Schema.String } },
+  { args: { email: Schema.String, password: Schema.Redacted(Schema.String) } },
   Effect.succeed((args) => runSimulateAuthRequest(args))
 ) {}
-
-type LoginField = Validation.Field<string>
-
-const invalidOf = (field: LoginField): boolean | undefined =>
-  field._tag === "Invalid" ? true : field._tag === "Valid" ? false : undefined
 
 const FormField = <M>(h: View.H<M>, options: {
   readonly key: string
   readonly label: string
   readonly type: "email" | "password"
   readonly placeholder: string
-  readonly state: LoginField
+  readonly state: Validation.Field<unknown>
+  readonly value: string
   readonly disabled: boolean
   readonly onUpdate: (value: string) => M
 }) => {
   const { state } = options
   return Field(h, {
     key: options.key,
-    props: { invalid: invalidOf(state), filled: state.value !== "", disabled: options.disabled },
+    props: { ...fieldValidationProps(state), disabled: options.disabled },
     view: (field) =>
       field.root(h.div).children(
         h.div.class("flex items-center gap-2 mb-1").children(
@@ -70,7 +66,7 @@ const FormField = <M>(h: View.H<M>, options: {
         ),
         Input(h, {
           element: field.control(h.input),
-          props: { value: state.value },
+          props: { value: options.value },
           onUpdate: ({ value }) => options.onUpdate(value)
         })
           .attr("type", options.type)
@@ -89,12 +85,13 @@ export const LoginPageNoDeps = Component.define({
   name: "LoginPage",
   scoped: false,
   model: Schema.Struct({ form: LoginValidation.State, submitting: Schema.Boolean }),
-  message: LoginMessage,
-  events: LoginEvents,
+  message: LoginPageMessage,
+  events: LoginPageEvents,
+  restore: false,
   elements: Html
 }).make({
   init: () => ({
-    form: LoginValidation.init({ email: "", password: "" }),
+    form: LoginValidation.init({ email: "", password: Redacted.make("") }),
     submitting: false
   }),
 
@@ -114,7 +111,7 @@ export const LoginPageNoDeps = Component.define({
       })
     },
 
-    SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginEvents.SignedIn({ session })),
+    SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginPageEvents.SignedIn({ session })),
 
     FailedSimulateAuthRequest: (_model, { error }, $) =>
       $.evolve({ submitting: false, form: (form) => LoginValidation.reject(form, { password: [error] }) })
@@ -130,15 +127,16 @@ export const LoginPageNoDeps = Component.define({
           h.p.class("text-sm text-blue-700").children("Hint: Use any email with password \"password\"")
         ),
         h.form.attr("aria-label", "Sign in").attr("novalidate", "").class("space-y-6")
-          .onSubmit(LoginMessage.SubmittedForm()).children(
+          .onSubmit(LoginPageMessage.SubmittedForm()).children(
             FormField(h, {
               key: "email",
               label: "Email",
               type: "email",
               placeholder: "you@example.com",
               state: validated.fields.email,
+              value: validated.fields.email.value,
               disabled: model.submitting,
-              onUpdate: (value) => LoginMessage.ChangedEmail({ value })
+              onUpdate: (value) => LoginPageMessage.ChangedEmail({ value })
             }),
             FormField(h, {
               key: "password",
@@ -146,8 +144,9 @@ export const LoginPageNoDeps = Component.define({
               type: "password",
               placeholder: "Enter your password",
               state: validated.fields.password,
+              value: Redacted.value(validated.fields.password.value),
               disabled: model.submitting,
-              onUpdate: (value) => LoginMessage.ChangedPassword({ value })
+              onUpdate: (value) => LoginPageMessage.ChangedPassword({ value: Redacted.make(value) })
             }),
             Button(h, { props: { type: "submit", disabled: !canSubmit } })
               .class(

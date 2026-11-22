@@ -5,7 +5,7 @@
  * that reads another field, a username check run by a debounced query, and
  * an error from the server. A story and a scene read each field's state.
  */
-import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
+import { Command, Component, Query, UiSchema, UiStruct, Validation } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Story } from "@effect/ui/testing"
@@ -178,21 +178,21 @@ export const SignupForm = Component.define({
     // edit that still arrives is dropped, so the result always belongs to
     // the values that were sent.
     UpdatedField: (model, { name, value }) =>
-      model.submitting ? model : { ...model, form: SignupValidation.change(model.form, name, value) },
+      model.submitting ? model : UiStruct.evolve(model, { form: (form) => SignupValidation.change(form, name, value) }),
     UpdatedSecret: (model, { name, value }) =>
-      model.submitting ? model : { ...model, form: SignupValidation.change(model.form, name, value) },
+      model.submitting ? model : UiStruct.evolve(model, { form: (form) => SignupValidation.change(form, name, value) }),
     // A tried submit shows every field. `value` is `Some` only when every
     // field passes, so it gates the Command.
     SubmittedForm: (model, _message, $) => {
       const form = SignupValidation.submit(model.form)
       return Option.match(validateSignup(form, $.queries.usernameTaken).value, {
-        onNone: () => ({ ...model, form }),
+        onNone: () => $.evolve({ form }),
         onSome: ({ confirm: _, ...account }) =>
           model.submitting ? model : $.set({ form, submitting: true }).run(CreateAccount.make(account))
       })
     },
     SucceededCreateAccount: (model, _message, $) =>
-      $.set({ ...model, submitting: false }).emit(SignupFormEvents.SignedUp({ username: model.form.values.username })),
+      $.evolve({ submitting: false }).emit(SignupFormEvents.SignedUp({ username: model.form.values.username })),
     // The server's error sits on its field until that field changes.
     FailedCreateAccount: (model, { field, message }) => ({
       submitting: false,

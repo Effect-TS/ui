@@ -44,10 +44,10 @@ const AppDef = Component.define({
 })
 
 const navLinks = (route: AppRoute) => [
-  { label: "Home", to: AppRoute.Home(), active: route._tag === "Home" },
-  { label: "People", to: AppRoute.People(), active: route._tag === "People" || route._tag === "Person" },
-  { label: "Files", to: AppRoute.FilesIndex(), active: route._tag === "FilesIndex" || route._tag === "Files" },
-  { label: "Nested", to: AppRoute.Nested(), active: route._tag === "Nested" }
+  { label: "Home", to: AppRoute.Home(), active: route._tag === "Home", inSection: false },
+  { label: "People", to: AppRoute.People(), active: route._tag === "People", inSection: route._tag === "Person" },
+  { label: "Files", to: AppRoute.FilesIndex(), active: route._tag === "FilesIndex", inSection: route._tag === "Files" },
+  { label: "Nested", to: AppRoute.Nested(), active: route._tag === "Nested", inSection: false }
 ]
 
 export const App = AppDef.make({
@@ -86,12 +86,13 @@ export const App = AppDef.make({
           view: (navigationMenu) =>
             navigationMenu.root(h.nav.class("bg-blue-500 text-white p-4 mb-6").attr("aria-label", "Main")).children(
               navigationMenu.list(h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")).children(
-                navLinks(route).map(({ active, label, to }) =>
+                navLinks(route).map(({ active, inSection, label, to }) =>
                   navigationMenu.item(h.li.key(label)).children(
                     navigationMenu.link({
                       element: h.a.attr("href", AppRoute.print(to))
                         .class(
-                          "hover:bg-blue-600 font-medium px-3 py-1 rounded transition data-active:bg-blue-700/50"
+                          "hover:bg-blue-600 font-medium px-3 py-1 rounded transition data-active:bg-blue-700/50",
+                          inSection && "bg-blue-700/50"
                         ),
                       active
                     }).children(label)

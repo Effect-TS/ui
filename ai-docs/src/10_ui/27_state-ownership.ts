@@ -83,7 +83,7 @@ export const Page = Component.define({
 // ---------------------------------------------------------------------------
 // A child owning an encapsulated workflow, which the parent only starts
 // ---------------------------------------------------------------------------
-const WizardMessage = UiSchema.TaggedEnum({ ClickedNext: {}, ClickedCancel: {} })
+const WizardMessage = UiSchema.TaggedEnum({ ClickedNext: {}, ClickedCancel: {}, ClosedDialog: {} })
 export const WizardEvents = UiSchema.TaggedEnum({ Finished: {}, Cancelled: {} })
 
 export const Wizard = Component.define({
@@ -109,11 +109,14 @@ export const Wizard = Component.define({
         model.step + 1 < $.props.steps
           ? { step: model.step + 1 }
           : $.emit(WizardEvents.Finished()),
-      ClickedCancel: () => $.emit(WizardEvents.Cancelled())
+      ClickedCancel: () => $.emit(WizardEvents.Cancelled()),
+      // The wizard is always open while mounted, so a forced close cancels it.
+      ClosedDialog: () => $.emit(WizardEvents.Cancelled())
     }),
   view: (model, h) =>
     h.dialog.attr("aria-label", "Import").modal(true)
       .onCancel(WizardMessage.ClickedCancel())
+      .onClose(WizardMessage.ClosedDialog())
       .children(
         h.p.children(`Step ${model.step + 1} of ${h.props.steps}`),
         h.button.onClick(WizardMessage.ClickedNext()).children("Next")
@@ -200,8 +203,8 @@ export const OpenButton = Component.define({
   view: (_, h) => h.button.onClick(OpenButtonMessage.ClickedOpen()).children("Open")
 })
 
-// One message for both events: this host does the same thing for each.
-const ModalHostMessage = UiSchema.TaggedEnum({ RequestedCloseDialog: {} })
+// Two events, two messages; they share the handler in `update`.
+const ModalHostMessage = UiSchema.TaggedEnum({ RequestedCloseDialog: {}, ConfirmedDialog: {} })
 
 // Convention: the reader is the dialog's parent, so the dialog still has one
 // source for `open`, its prop, and knows nothing about the provider.
@@ -210,20 +213,23 @@ export const ModalHost = Component.define({
   scoped: false,
   model: Schema.Null,
   message: ModalHostMessage,
-  shared: { modal: ModalProvider },
+  shared: { provider: ModalProvider },
   elements: Html
 }).make({
   init: () => null,
-  update: (_model, message, $) =>
-    ModalHostMessage.match(message, {
-      RequestedCloseDialog: () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
-    }),
+  update: (_model, message, $) => {
+    const close = () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
+    return ModalHostMessage.match(message, {
+      RequestedCloseDialog: close,
+      ConfirmedDialog: close
+    })
+  },
   view: (_, h) =>
     ConfirmDialog(h, {
-      props: { open: h.shared.modal.open },
+      props: { open: h.shared.provider.open },
       onEmit: {
         RequestedClose: () => ModalHostMessage.RequestedCloseDialog(),
-        Confirmed: () => ModalHostMessage.RequestedCloseDialog()
+        Confirmed: () => ModalHostMessage.ConfirmedDialog()
       }
     })
 })

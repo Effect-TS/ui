@@ -1,5 +1,5 @@
 import { ListNotes } from "#queries/ListNotes"
-import { Component, Head, UiSchema } from "@effect/ui"
+import { Component, Head, UiSchema, UiStruct } from "@effect/ui"
 import { HtmlHead } from "@effect/ui/html"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -27,7 +27,8 @@ export const NotesIndexNoDeps = Component.define({
   model: Schema.Struct({ pinned: Schema.Array(Schema.String), over: Schema.Boolean }),
   message: NotesIndexMessage,
   // `ListNotes` takes no args, so this query is the same for every instance.
-  queries: { notes: { query: ListNotes, args: () => ({}) } }
+  queries: { notes: { query: ListNotes, args: () => ({}) } },
+  restore: (model) => UiStruct.evolve(model, { over: false })
 }).make({
   init: () => ({ pinned: [], over: false }),
   update: (_model, message, $) =>
