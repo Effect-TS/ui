@@ -4,6 +4,10 @@
  * the component adds ARIA and data attributes, handles user input and
  * supplies the form field.
  *
+ * Inside a `CheckboxGroup`, a checkbox with a `value` is a member and one
+ * with `parent: true` is the group's parent: the group decides whether each
+ * is ticked, and stores what they toggle.
+ *
  * **Anatomy**
  *
  * | Part        | Element                  |
@@ -38,6 +42,10 @@
  * - `data-disabled`
  * - `data-readonly`
  * - `data-required`
+ *
+ * On `root` only:
+ *
+ * - `data-parent`: the group's parent checkbox
  *
  * **Keyboard**
  *
@@ -110,7 +118,9 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
+import { CheckboxGroup } from "./CheckboxGroup.ts"
 import { type Attributed, flag } from "./internal/attributes.ts"
+import { CheckboxGroupMessage } from "./internal/checkboxGroup.ts"
 import { field } from "./internal/field.ts"
 
 /**
@@ -118,35 +128,49 @@ import { field } from "./internal/field.ts"
  *
  * **Details**
  *
- * - `checked`: whether the checkbox is ticked. Required: the consumer owns
- *   it.
+ * - `checked`: whether the checkbox is ticked. The consumer owns it, and
+ *   left out it is unticked. Inside a `CheckboxGroup`, a member or the
+ *   parent ignores it: the group decides.
  * - `indeterminate`: shows the checkbox as neither ticked nor unticked,
  *   with `aria-checked="mixed"`. It overrides `checked` in the ARIA and
  *   data attributes, but not in the form value. A click still emits the
- *   opposite of `checked`, so clear `indeterminate` when storing it.
+ *   opposite of `checked`, so clear `indeterminate` when storing it. On a
+ *   group's parent it adds to the group's own, for a member that is itself
+ *   the parent of a nested group.
  * - `disabled`: sets the native `disabled` attribute, so the checkbox is
- *   skipped by Tab and ignores clicks.
+ *   skipped by Tab and ignores clicks. A disabled `CheckboxGroup` disables
+ *   every checkbox inside it.
  * - `readOnly`: ignores clicks but stays focusable, and sets
  *   `aria-readonly`.
  * - `required`: sets `aria-required` and `data-required`.
  * - `name`, `value` and `uncheckedValue`: the form field. A ticked
  *   checkbox submits `value`, `"on"` by default. An unticked one submits
  *   `uncheckedValue`, or nothing when it is unset. A disabled checkbox, or
- *   one without a `name`, submits nothing.
+ *   one without a `name`, submits nothing. Inside a `CheckboxGroup`, `value`
+ *   makes the checkbox a member: a member without a `name` takes the
+ *   group's, and an unticked one submits nothing.
+ * - `parent`: makes the checkbox the parent of the `CheckboxGroup` around
+ *   it. It submits nothing.
+ * - `id`: the root's `id`, for a `<label for>` beside it. A member
+ *   writes it, or a generated one when it is left out, and the group's parent
+ *   lists it in `aria-controls`. Outside a group the root writes it only
+ *   when it is set, so `field.control` keeps the one it writes.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const CheckboxProps = Schema.Struct({
-  checked: Schema.Boolean,
+  checked: Schema.optional(Schema.Boolean),
   indeterminate: Schema.optional(Schema.Boolean),
   disabled: Schema.optional(Schema.Boolean),
   readOnly: Schema.optional(Schema.Boolean),
   required: Schema.optional(Schema.Boolean),
   name: Schema.optional(Schema.String),
   value: Schema.optional(Schema.String),
-  uncheckedValue: Schema.optional(Schema.String)
+  uncheckedValue: Schema.optional(Schema.String),
+  parent: Schema.optional(Schema.Boolean),
+  id: Schema.optional(Schema.String)
 })
 
 /**
@@ -160,7 +184,9 @@ export type CheckboxProps = typeof CheckboxProps.Type
 
 /**
  * `Toggled` reports the requested value in `checked`. Store that value
- * and pass it back as the `checked` prop to update the checkbox.
+ * and pass it back as the `checked` prop to update the checkbox. Inside a
+ * `CheckboxGroup`, a member and the parent emit it too, and the group's
+ * `Updated` carries the list to store.
  *
  * @stability experimental
  * @category schemas
@@ -183,26 +209,54 @@ export type CheckboxEvents = typeof CheckboxEvents.Type
 // is its own message so the root can cancel the button's click on Enter.
 const CheckboxMessage = UiSchema.TaggedEnum({ ClickedRoot: {}, PressedEnter: {} })
 
-const interactive = (props: CheckboxProps): boolean => props.disabled !== true && props.readOnly !== true
+type GroupShared = Component.Shared.Value<typeof CheckboxGroup>
+
+const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
+  const parent = props.parent === true ? group?.parent ?? undefined : undefined
+  const member = group !== undefined && props.parent !== true && props.value !== undefined
+  const checked = parent !== undefined
+    ? parent.checked
+    : member
+    ? group.value.includes(props.value!)
+    : props.checked === true
+  const disabled = props.disabled === true || group?.disabled === true
+  return {
+    checked,
+    indeterminate: props.indeterminate === true || parent?.indeterminate === true,
+    disabled,
+    readOnly: props.readOnly === true,
+    required: props.required === true,
+    role: parent !== undefined ? "parent" as const : member ? "member" as const : undefined,
+    controls: parent?.controls ?? undefined,
+    field: {
+      checked,
+      disabled,
+      name: props.parent === true ? undefined : member ? props.name ?? group.name ?? undefined : props.name,
+      value: props.value,
+      uncheckedValue: member ? undefined : props.uncheckedValue
+    }
+  }
+}
+
+type Resolved = ReturnType<typeof resolve>
+
+const interactive = (resolved: Resolved): boolean => !resolved.disabled && !resolved.readOnly
 
 // The state attributes, the same on the root and the indicator so either
 // one can be styled on its own. An indeterminate checkbox is neither
 // checked nor unchecked.
 const state = <B extends Attributed<B>>(
   builder: B,
-  props: CheckboxProps
-): B => {
-  const indeterminate = props.indeterminate === true
-  return builder
-    .attrs({
-      "data-checked": flag(!indeterminate && props.checked),
-      "data-unchecked": flag(!indeterminate && !props.checked),
-      "data-indeterminate": flag(indeterminate),
-      "data-disabled": flag(props.disabled),
-      "data-readonly": flag(props.readOnly),
-      "data-required": flag(props.required)
-    })
-}
+  resolved: Resolved
+): B =>
+  builder.attrs({
+    "data-checked": flag(!resolved.indeterminate && resolved.checked),
+    "data-unchecked": flag(!resolved.indeterminate && !resolved.checked),
+    "data-indeterminate": flag(resolved.indeterminate),
+    "data-disabled": flag(resolved.disabled),
+    "data-readonly": flag(resolved.readOnly),
+    "data-required": flag(resolved.required)
+  })
 
 /**
  * A headless checkbox. Call it with the consumer's `h`, the `props`, and a
@@ -213,6 +267,7 @@ const state = <B extends Attributed<B>>(
  *
  * The parts also return `checked`, `indeterminate`, `disabled`, `readOnly`
  * and `required`, resolved to booleans, for markup that depends on them.
+ * Inside a `CheckboxGroup` they are what the group decided.
  *
  * `root(button)` and `indicator(span)` each return the builder they were
  * given, so the consumer chains classes, attributes, handlers and children
@@ -229,7 +284,11 @@ const state = <B extends Attributed<B>>(
  * so a `disabled` on the consumer's button is removed unless the
  * `disabled` prop is set. A part writes them when it is applied, so an
  * attribute the consumer chains after `checkbox.root(...)` or `checkbox.indicator(...)`
- * is the consumer's to answer for.
+ * is the consumer's to answer for. The root writes `id` as the `id` prop
+ * says, and the group's parent adds the members' ids to the consumer's
+ * `aria-controls`.
+ *
+ * The checkbox reads the nearest `CheckboxGroup` above it, if there is one.
  *
  * @stability experimental
  * @category components
@@ -242,40 +301,62 @@ export const Checkbox = Component.define({
   model: Schema.Struct({}),
   message: CheckboxMessage,
   events: CheckboxEvents,
+  shared: {
+    group: {
+      owner: CheckboxGroup,
+      optional: true,
+      report: (_model, props, id) =>
+        props.parent === true || props.value === undefined
+          ? null
+          : { value: props.value, disabled: props.disabled === true, id: props.id ?? id("root") }
+    }
+  },
   elements: Html
 }).make({
   init: () => ({}),
   update: {
-    ClickedRoot: (model, _message, $) =>
-      interactive($.props)
-        ? $.emit(CheckboxEvents.Toggled({ checked: !$.props.checked }))
-        : model,
+    ClickedRoot: (model, _message, $) => {
+      const resolved = resolve($.props, $.shared.group)
+      if (!interactive(resolved)) return model
+      const toggled = $.emit(CheckboxEvents.Toggled({ checked: !resolved.checked }))
+      return resolved.role === "member"
+        ? toggled.send(
+          CheckboxGroup,
+          CheckboxGroupMessage.ToggledItem({ value: $.props.value!, checked: !resolved.checked })
+        )
+        : resolved.role === "parent"
+        ? toggled.send(CheckboxGroup, CheckboxGroupMessage.ToggledParent())
+        : toggled
+    },
     // Enter means nothing to a checkbox: the message only cancels it.
     PressedEnter: (model) => model
   },
   parts: (_model, p) => {
-    const indeterminate = p.props.indeterminate === true
-    const hidden = field(p.props)
+    const resolved = resolve(p.props, p.shared.group)
+    const hidden = field(resolved.field)
+    const id = resolved.role === "member" ? p.props.id ?? p.id("root") : p.props.id
     return {
-      checked: p.props.checked,
-      indeterminate,
-      disabled: p.props.disabled === true,
-      readOnly: p.props.readOnly === true,
-      required: p.props.required === true,
+      checked: resolved.checked,
+      indeterminate: resolved.indeterminate,
+      disabled: resolved.disabled,
+      readOnly: resolved.readOnly,
+      required: resolved.required,
       root: p.part("button", (b) =>
-        state(b, p.props)
+        state(id === undefined ? b : b.attr("id", id), resolved)
           .attrs({
             // Inside a form a button submits by default.
             type: "button",
             role: "checkbox",
-            "aria-checked": indeterminate ? "mixed" : String(p.props.checked),
-            "aria-readonly": p.props.readOnly === true ? "true" : undefined,
-            "aria-required": p.props.required === true ? "true" : undefined,
+            "aria-checked": resolved.indeterminate ? "mixed" : String(resolved.checked),
+            "aria-readonly": resolved.readOnly ? "true" : undefined,
+            "aria-required": resolved.required ? "true" : undefined,
             // Never set: the native `disabled` reports it. Removed, so the
             // consumer's can't report a state the props don't have.
-            "aria-disabled": undefined
+            "aria-disabled": undefined,
+            "data-parent": flag(p.props.parent),
+            "aria-controls": resolved.controls
           })
-          .disabled(p.props.disabled === true)
+          .disabled(resolved.disabled)
           .onClick(CheckboxMessage.ClickedRoot())
           .onKeyDown(
             ({ key }) => key === "Enter" ? CheckboxMessage.PressedEnter() : undefined,
@@ -285,7 +366,7 @@ export const Checkbox = Component.define({
           // The form field goes after the children already on the button, and
           // before the ones the consumer chains afterward.
           .children(hidden)),
-      indicator: p.part("span", (b) => state(b, p.props))
+      indicator: p.part("span", (b) => state(b, resolved))
     }
   }
 })

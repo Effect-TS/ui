@@ -371,9 +371,12 @@ export declare namespace Shared {
  * reader works with no owner above it: the read is `undefined` there, and the
  * reader carries no `Shared.Of<typeof Owner>`. `report` is what the reader
  * tells the owner, from its own Model and props, for an owner whose
- * `shares` has `collects`. `onChange` is the reader's message for a new
- * shared value. An owner may be listed under more than one name, but only
- * one of them may have an `onChange`: `define` throws otherwise.
+ * `shares` has `collects`. Its third argument is the reader's `id`, the
+ * same as `p.id` and `h.id`, so a report can name an element of the
+ * reader, such as one the owner points at with `aria-controls`. `onChange`
+ * is the reader's message for a new shared value. An owner may be listed
+ * under more than one name, but only one of them may have an `onChange`:
+ * `define` throws otherwise.
  *
  * `owner: "self"` names the component being defined, which can't name
  * itself yet: an instance reads the nearest instance of its own kind above
@@ -1986,6 +1989,8 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
 // a string index of its own is kept.
 type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
 
+type ReportId = (name: string, key?: string | number | undefined) => string
+
 // One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `SR` holds what's written, and `optional` with it, and this checks it against the owner. An entry for
 // `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
@@ -1995,7 +2000,7 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
       readonly optional: true
       readonly report?:
         | ([Rp] extends [never] ? "This component collects no reports: its shares has no collects"
-          : (model: Model, props: Props) => Rp)
+          : (model: Model, props: Props, id: ReportId) => Rp)
         | undefined
       readonly onChange?: ((value: SV) => Msg) | undefined
     }
@@ -2004,7 +2009,7 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
     readonly optional?: boolean | undefined
     readonly report?:
       | ([Shared.Report<O>] extends [never] ? "This owner collects no reports: its shares has no collects"
-        : (model: Model, props: Props) => Shared.Report<O>)
+        : (model: Model, props: Props, id: ReportId) => Shared.Report<O>)
       | undefined
     readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
   }
@@ -2808,8 +2813,8 @@ export const define = <
      * The owners whose shared state the component reads, by the name `h.shared`, `p.shared` and `$.shared` use:
      * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
      * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
-     * component tells an owner whose `shares` has `collects`. `onChange` is its message when the
-     * value changes, delivered once per owner round before the next render, with the latest value.
+     * component tells an owner whose `shares` has `collects`, from its Model, props and `id`.
+     * `onChange` is its message when the value changes, delivered once per owner round before the next render, with the latest value.
      * One `onChange` per owner: `define` throws for an owner listed twice with one each.
      * `owner: "self"` reads the nearest instance of this component above, and is `optional: true`;
      * write `shares` before `shared`, so `report` and `onChange` are typed by it.

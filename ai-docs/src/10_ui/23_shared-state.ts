@@ -199,7 +199,10 @@ const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen:
 //   and logged as `SendDropped`, and the Panel needs no
 //   `Component.Shared<"PanelGroup">`.
 // - `report`: what the Panel tells the owner, from its own Model and props.
-//   It fails to compile for an owner whose `shares` has no `collects`.
+//   It fails to compile for an owner whose `shares` has no `collects`. Its
+//   third argument is the Panel's `id`, the same as `h.id`, for an owner
+//   that points at one of the Panel's elements, as a parent checkbox lists
+//   the ones it controls in `aria-controls`.
 // - `onChange`: the Panel's message when the owner's value changes, for an
 //   `update` that must act on the change, as counting the times the group
 //   opened does here. To read the current value, `update` has

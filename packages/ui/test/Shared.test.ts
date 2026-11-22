@@ -423,6 +423,47 @@ describe("optional owners, reports and onChange", () => {
       ])
     })))
 
+  it.effect("a report's id is the reader's own, in an app and in a Scene", () =>
+    provideHost(Effect.gen(function*() {
+      const IdsMessage = UiSchema.TaggedEnum({ ChangedIds: { ids: Schema.Array(Schema.String) } })
+      const Controls = Component.define({
+        name: "Controls",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: IdsMessage,
+        shares: {
+          value: () => null,
+          collects: { schema: Schema.String, onChange: (ids) => IdsMessage.ChangedIds({ ids: [...ids].sort() }) }
+        }
+      }).make({ init: () => [], update: (_, { ids }) => ids, parts: (ids) => ({ ids }) })
+      const Box = Component.define({
+        name: "Box",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        shared: { controls: { owner: Controls, report: (_, __, id) => id("box") } }
+      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("span").attr("id", h.id("box")) })
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Controls(h, {
+            key: "c",
+            view: (controls) =>
+              h.el("div", h.el("p", controls.ids.join(" ")), Box(h, { key: "a" }), Box(h, { key: "b" }))
+          })
+      })
+      const root = yield* TestHost.mount(Page, {})
+      yield* TestHost.settle
+      const rendered = root.all(Locator.tag("span")).map((span) => span.attrs?.id).sort()
+      assert.lengthOf(rendered, 2)
+      assert.strictEqual(Locator.textOf(root.get(Locator.tag("p"))), rendered.join(" "))
+
+      const box = yield* Scene.make(Box, {})
+      box.shared(Controls, null)
+      assert.deepStrictEqual(box.current.reports, { controls: box.get(Locator.tag("span")).attrs?.id })
+    })))
+
   it.effect("a reader's onChange gets the new value, pointing at the owner's entry that changed it", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})

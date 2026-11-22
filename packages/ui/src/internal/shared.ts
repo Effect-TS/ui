@@ -12,7 +12,9 @@ export interface Read {
   readonly name: string
   readonly owner: Component.Headless.Any
   readonly optional: boolean
-  readonly report: ((model: unknown, props: unknown) => unknown) | undefined
+  readonly report:
+    | ((model: unknown, props: unknown, id: (name: string, key?: string | number) => string) => unknown)
+    | undefined
   readonly onChange: ((value: unknown) => unknown) | undefined
 }
 
