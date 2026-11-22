@@ -118,6 +118,12 @@ export * from "./Progress.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./ScrollArea.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Select.ts"
 
 /**

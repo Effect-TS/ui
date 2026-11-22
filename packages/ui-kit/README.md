@@ -37,6 +37,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
+- [ScrollArea](src/ScrollArea.ts): a native scroll container with custom scrollbars, overflow state, and edge-fade CSS variables.
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.
