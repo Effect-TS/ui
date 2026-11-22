@@ -208,8 +208,8 @@ export interface ScrollOptions {
 export type PointerType = "mouse" | "touch" | "pen" | ""
 
 /**
- * The payload of `click`, `dblclick`, `contextmenu`, `mousedown` and
- * `mouseup`: the button, the position in the viewport, the modifier keys,
+ * The payload of `click`, `dblclick`, `contextmenu`, `mousedown`,
+ * `mouseup` and `pointerdown`: the button, the position in the viewport, the modifier keys,
  * and the kind of pointer.
  *
  * **Details**
@@ -588,6 +588,9 @@ export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
  * with a handler, except the drop target's events: `dragenter`, `dragleave`,
  * `dragover` and `drop` go to the active drop target, as `onDrop` describes.
  *
+ * `pointerdown` starts every press. A `mousedown` doesn't come after a
+ * touch, or after a `pointerdown` whose default was cancelled.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -598,6 +601,7 @@ export interface Events {
   readonly contextmenu: PointerPayload
   readonly mousedown: PointerPayload
   readonly mouseup: PointerPayload
+  readonly pointerdown: PointerPayload
   readonly mouseenter: HoverPayload
   readonly mouseleave: HoverPayload
   readonly keydown: KeyPayload

@@ -707,7 +707,7 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  * A part writes them when it is applied, so an attribute the consumer
  * chains after the part is the consumer's to answer for.
  *
- * A tab handles `click`, `keydown`, `focus` and `blur`, and `mousedown` with
+ * A tab handles `click`, `keydown`, `focus` and `blur`, and `pointerdown` with
  * `activateOnFocus`, on a layer of its own, so the consumer's handlers for them
  * still run. It cancels the keys it handles, and a click on a disabled tab,
  * so a disabled link doesn't follow its `href`. A click on an enabled link
@@ -832,7 +832,7 @@ export const Tabs = Component.define({
         .onBlur(Message.BlurredTab())
       const typed = b.tag === "button" ? decorated.attr("type", "button") : decorated
       return props.activateOnFocus === true
-        ? typed.on("mousedown", ({ button }: Html.PointerPayload) => Message.PressedTab({ value, button }))
+        ? typed.on("pointerdown", ({ button }: Html.PointerPayload) => Message.PressedTab({ value, button }))
         : typed
     })
 

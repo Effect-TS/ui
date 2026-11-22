@@ -120,10 +120,19 @@ describe("Tabs in a document", { concurrent: false }, () => {
   it.effect("with activateOnFocus, focus during a secondary press doesn't select, and focus after the press ends does", () =>
     Effect.gen(function*() {
       const { get } = yield* mountPageWith({ activateOnFocus: true })
-      const press = (tab: HTMLElement, type: string, button = 2) => {
-        const init = { bubbles: true, cancelable: true, composed: true, button }
-        tab.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init))
-      }
+      const press = (tab: HTMLElement, type: string, button = 2) =>
+        tab.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, button }))
+      let mousedowns = 0
+      const cancel = (event: Event) => event.preventDefault()
+      const count = () => mousedowns++
+      document.addEventListener("pointerdown", cancel)
+      document.addEventListener("mousedown", count)
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          document.removeEventListener("pointerdown", cancel)
+          document.removeEventListener("mousedown", count)
+        })
+      )
       const selected = () => ["a", "b", "c"].filter((id) => get(id).getAttribute("aria-selected") === "true")
       const focusFrom = function*(tab: HTMLElement) {
         get("a").focus()
@@ -135,7 +144,6 @@ describe("Tabs in a document", { concurrent: false }, () => {
 
       for (const [end, id] of [["pointercancel", "b"], ["pointerup", "c"]] as const) {
         press(get(id), "pointerdown")
-        press(get(id), "mousedown")
         yield* focusFrom(get(id))
         yield* focusFrom(get(id))
         assert.deepStrictEqual(selected(), ["a"])
@@ -147,10 +155,10 @@ describe("Tabs in a document", { concurrent: false }, () => {
       get("c").focus()
       yield* tick
       press(get("b"), "pointerdown", 0)
-      press(get("b"), "mousedown", 0)
       get("b").focus()
       yield* tick
       assert.deepStrictEqual(selected(), ["b"])
+      assert.strictEqual(mousedowns, 0)
     }).pipe(Effect.scoped))
 
   it.effect("Space clicks a tab once, with its modifiers, and Enter is left native except on an <a> without an href", () =>
