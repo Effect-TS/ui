@@ -15,6 +15,12 @@ export * as Locator from "./Locator.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as Play from "./Play.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Scene from "./Scene.ts"
 
 /**

@@ -652,8 +652,9 @@ read the Model. An instance has one listener per target, event and phase.
 `BrowserHost.layer` provides the source; elsewhere nothing fires. A
 `Story` delivers one with `s.subscription(key, message)`, an `HtmlScene`
 fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
-`TestHost` test adds `TestGlobalEvents.layer` and calls
-`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`.
+`Play` adds `TestGlobalEvents.layer` and calls
+`TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`, which
+its next step settles.
 
 ### Forms
 
@@ -893,6 +894,6 @@ client, not the services.
   Hydrate what the server rendered with `BrowserHost`. This is the browser
   entry module of the server-rendered app, served as `/client.js`.
 - **[Testing @effect/ui components](./ai-docs/src/10_ui/50_testing.ts)**:
-  Test a component's logic as a `Story` and its view as a `Scene`, a Command
-  against a fake Layer, and a whole tree on `TestHost`. The last test renders on the server and hydrates
-  with `ssr`.
+  Test a component's logic as a `Story`, its view as a `Scene`, a Command
+  against a fake Layer, and components working together as a `Play`. The
+  last test renders on the server and hydrates with `ssr`.

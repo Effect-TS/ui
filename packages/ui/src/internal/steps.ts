@@ -354,24 +354,30 @@ export abstract class Cursor {
  * @internal
  */
 export const scoped = <S extends Cursor>(make: Function, begin: () => S): Effect.Effect<S, never, Scope.Scope> => {
-  const site = new Error()
-  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, make)
+  const site = callSite(make)
   return Effect.acquireRelease(
     Effect.sync(begin),
-    (steps, exit) =>
-      Exit.isSuccess(exit)
-        ? Effect.sync(() => {
-          try {
-            steps.finish()
-          } catch (error) {
-            if (error instanceof Error && site.stack !== undefined) {
-              error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
-            }
-            throw error
-          }
-        })
-        : Effect.void
+    (steps, exit) => Exit.isSuccess(exit) ? Effect.sync(() => atSite(site, () => steps.finish())) : Effect.void
   )
+}
+
+/** @internal */
+export const callSite = (fn: Function): Error => {
+  const site = new Error()
+  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
+  return site
+}
+
+/** @internal */
+export const atSite = <A>(site: Error, f: () => A): A => {
+  try {
+    return f()
+  } catch (error) {
+    if (error instanceof Error && site.stack !== undefined) {
+      error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
+    }
+    throw error
+  }
 }
 
 /**

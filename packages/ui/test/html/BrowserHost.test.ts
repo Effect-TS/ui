@@ -1624,9 +1624,10 @@ describe("BrowserHost", { concurrent: false }, () => {
       const host = BrowserHost.makeHost(document)
       const dispatch: Renderer.Dispatch = (_, handler, payload, onMessage) => {
         const message = typeof handler === "function" ? (handler as (payload: unknown) => unknown)(payload) : handler
-        if (message === undefined) return
+        if (message === undefined) return false
         onMessage?.()
         seen.push(message)
+        return true
       }
       return Effect.acquireRelease(Effect.succeed({ host, dispatch }), () => Effect.sync(() => host.dispose()))
     }
@@ -1837,7 +1838,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       })
       const seen: Array<unknown> = []
       try {
-        host.setEvents(dialog, { close: "closed" }, (_, handler) => seen.push(handler), {})
+        host.setEvents(dialog, { close: "closed" }, (_, handler) => seen.push(handler) > 0, {})
         host.setProp(dialog, "open", "modal")
         host.commit?.()
         for (const state of states) {
@@ -1858,7 +1859,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       const dialog = document.body.appendChild(document.createElement("dialog"))
       const seen: Array<unknown> = []
       try {
-        host.setEvents(dialog, { close: "closed" }, (_, handler) => seen.push(handler), {})
+        host.setEvents(dialog, { close: "closed" }, (_, handler) => seen.push(handler) > 0, {})
         host.setProp(dialog, "open", "modal")
         host.commit?.()
         // A forced close reported before the reconciliation shows it again.
@@ -1884,7 +1885,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       dialog.setAttribute("open", "")
       const seen: Array<unknown> = []
       try {
-        host.setEvents(dialog, { close: "closed" }, (_, handler) => seen.push(handler), {})
+        host.setEvents(dialog, { close: "closed" }, (_, handler) => seen.push(handler) > 0, {})
         for (let i = 0; i < 3; i++) {
           host.setProp(dialog, "open", true)
           host.commit?.()
