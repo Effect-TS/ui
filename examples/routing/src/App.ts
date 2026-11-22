@@ -44,10 +44,10 @@ const AppDef = Component.define({
 })
 
 const navLinks = (route: AppRoute) => [
-  { label: "Home", to: AppRoute.Home(), active: route._tag === "Home", inSection: false },
+  { label: "Home", to: AppRoute.Home(), active: route._tag === "Home" },
   { label: "People", to: AppRoute.People(), active: route._tag === "People", inSection: route._tag === "Person" },
   { label: "Files", to: AppRoute.FilesIndex(), active: route._tag === "FilesIndex", inSection: route._tag === "Files" },
-  { label: "Nested", to: AppRoute.Nested(), active: route._tag === "Nested", inSection: false }
+  { label: "Nested", to: AppRoute.Nested(), active: route._tag === "Nested" }
 ]
 
 export const App = AppDef.make({

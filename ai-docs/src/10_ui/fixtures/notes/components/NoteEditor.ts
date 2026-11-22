@@ -230,7 +230,9 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
         ? $.evolve({ draft: model.saved, confirming: false })
         : $.evolve({ confirming: false }),
     CancelledDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false }),
-    ClosedDiscardDialog: (model, _message, $) => model.confirming ? $.evolve({ confirming: false }) : model
+    // `close` also fires after the editor's own close. `confirming` is
+    // already false by then, so this changes nothing.
+    ClosedDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false })
   },
   // A Subscription is a keyed Stream that runs while it is listed. Use one
   // when you can say "while ...", and a Command for a single event. This one
