@@ -24,7 +24,7 @@ describe("Select", () => {
   })
 
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -51,7 +51,7 @@ describe("Select", () => {
   })
 
   it("the trigger takes only a button, and an item needs its value", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -69,7 +69,7 @@ describe("Select", () => {
   })
 
   it("draws its trigger with a field's member, inside the field's focusWithin", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -90,7 +90,7 @@ describe("Select", () => {
   })
 
   it("requires open and items", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {

@@ -141,6 +141,7 @@
  *
  * const Settings = Component.define({
  *   name: "Settings",
+ *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, theme: Schema.String }),
  *   message: SettingsMessage,
  *   elements: Html
@@ -1212,6 +1213,7 @@ const scrolling = "position:relative;max-height:100%;overflow-x:hidden;overflow-
  */
 export const Select = Component.define({
   name: "Select",
+  scoped: false,
   props: SelectProps,
   model: Model,
   message: Message,

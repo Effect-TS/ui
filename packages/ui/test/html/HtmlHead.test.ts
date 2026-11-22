@@ -143,6 +143,7 @@ describe("HtmlHead", () => {
       const Post = Schema.Struct({ slug: Schema.String, title: Schema.String, description: Schema.String })
       const BlogPost = Component.define({
         name: "BlogPost",
+        scoped: false,
         props: Schema.Struct({ post: Post }),
         model: Schema.Null,
         message: Schema.Never,
@@ -159,6 +160,7 @@ describe("HtmlHead", () => {
       })
       const Blog = Component.define({
         name: "Blog",
+        scoped: false,
         props: Schema.Struct({ post: Schema.optional(Post) }),
         model: Schema.Null,
         message: Schema.Never,
@@ -179,6 +181,7 @@ describe("HtmlHead", () => {
       const Message = UiSchema.TaggedEnum({ Opened: { post: Post }, Closed: {} })
       const Site = Component.define({
         name: "Site",
+        scoped: false,
         model: Schema.Struct({ post: Schema.optional(Post) }),
         message: Message,
         elements: Html
@@ -242,19 +245,25 @@ describe("HtmlHead", () => {
     assert.deepStrictEqual(head, { title: "Own" })
   })
 
-  const Neutral = Component.define({ name: "Neutral", model: Schema.Null, message: Schema.Never }).make({
+  const Neutral = Component.define({ name: "Neutral", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
     update: (model) => model,
     head: () => [Head.reduce(() => ({ title: "Neutral" }))],
     view: (_, h) => h.text("neutral")
   })
-  const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+  const Page = Component.define({
+    name: "Page",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
     init: () => null,
     update: (model) => model,
     head: () => [HtmlHead.lang("en"), HtmlHead.meta({ name: "description", content: "Page" })],
     view: (_, h) => h.main(Neutral(h, { key: "n", props: {} }))
   })
-  const Shell = Component.define({ name: "Shell", model: Schema.Null, message: Schema.Never }).make({
+  const Shell = Component.define({ name: "Shell", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
     update: (model) => model,
     head: () => [Head.title("Shell")],

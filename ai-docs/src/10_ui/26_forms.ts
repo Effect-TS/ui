@@ -145,6 +145,7 @@ export const validateSignup = (
 // It never holds an error the rules produce. Those are derived each time.
 export const SignupForm = Component.define({
   name: "SignupForm",
+  scoped: false,
   model: Schema.Struct({ form: SignupValidation.State, submitting: Schema.Boolean }),
   message: SignupMessage,
   events: SignupEvents,

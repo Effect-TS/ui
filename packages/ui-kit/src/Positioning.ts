@@ -1403,6 +1403,7 @@ export const trackPosition = (
  *
  * const Hint = Component.define({
  *   name: "Hint",
+ *   scoped: false,
  *   props: Schema.Struct({ open: Schema.Boolean, ...Positioning.PositionerFields }),
  *   model: Schema.Struct({ placement: Schema.NullOr(Positioning.Placement) }),
  *   message: Message,

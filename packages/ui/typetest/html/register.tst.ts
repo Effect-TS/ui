@@ -15,6 +15,7 @@ describe("@effect/ui/html/register", () => {
     }
     Component.define({
       name: "SaveButton",
+      scoped: false,
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Number,
       message: Schema.Literal("Save")
@@ -35,6 +36,7 @@ describe("@effect/ui/html/register", () => {
     }
     Component.define({
       name: "Greeting",
+      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never
     }).make({
@@ -59,23 +61,26 @@ it("shared wrappers preserve unspread options.children requirements across compo
     readonly label: string
     readonly children: C
   }) => h.label.children(options.label, h.div.class("control").children(options.children))
-  const Page = Component.define({ name: "Page", model: Schema.Null, message: Msg, elements: Html }).make({
-    init: () => null,
-    update: (model) => model,
-    view: (_, h) => {
-      const clock = {} as View.Node<Msg, Clock>
-      const logger = {} as View.Node<Msg, Logger>
-      type Label<R> = Html.Element<Msg, R, Html.EventsOf<"label">, HTMLLabelElement, "label">
-      expect(Field(h, { label: "Empty", children: [] })).type.toBe<Label<never>>()
-      expect(Field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<Label<never>>()
-      const children = [clock, logger] as const
-      expect(Field(h, { label: "Services", children })).type.toBe<Label<Clock | Logger>>()
-      return Card(h).children(Field(h, { label: "Services", children: [clock, logger] }))
+  const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
+    {
+      init: () => null,
+      update: (model) => model,
+      view: (_, h) => {
+        const clock = {} as View.Node<Msg, Clock>
+        const logger = {} as View.Node<Msg, Logger>
+        type Label<R> = Html.Element<Msg, R, Html.EventsOf<"label">, HTMLLabelElement, "label">
+        expect(Field(h, { label: "Empty", children: [] })).type.toBe<Label<never>>()
+        expect(Field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<Label<never>>()
+        const children = [clock, logger] as const
+        expect(Field(h, { label: "Services", children })).type.toBe<Label<Clock | Logger>>()
+        return Card(h).children(Field(h, { label: "Services", children: [clock, logger] }))
+      }
     }
-  })
+  )
   expect<Component.Requirements<typeof Page>>().type.toBe<Clock | Logger>()
   const Other = Component.define({
     name: "Other",
+    scoped: false,
     props: Schema.Struct({ title: Schema.String }),
     model: Schema.Null,
     message: Schema.String,

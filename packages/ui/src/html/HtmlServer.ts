@@ -26,6 +26,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -172,7 +173,7 @@ export const renderToHtml = <
   RP = never,
   Rcv = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv> & BrowserHost.HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & BrowserHost.HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
@@ -182,7 +183,7 @@ export const renderToHtml = <
   Effect.suspend(() => {
     const writer = server.makeWriter()
     // `Renderer.prerender`, with the writer as the tree's sink.
-    return runtime.prerender(component, props, {
+    return runtime.prerender(component as any, props, {
       budget: options?.budget ?? "500 millis",
       elements: [Html.name],
       static: options?.static,

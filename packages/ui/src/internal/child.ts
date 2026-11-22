@@ -19,7 +19,6 @@ export interface Options {
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
-  readonly detached?: boolean | undefined
 }
 
 /** @internal */
@@ -31,6 +30,7 @@ export interface ComposeOptions extends Options {
 export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
   options: Options,
+  alive?: View.Child<any, any>["alive"],
   owner?: View.Owner
 ): View.Child<any, any> => {
   // A child with a key and a ref would have two identities that can disagree.
@@ -50,7 +50,7 @@ export const make = (
     onFailure: options.onFailure,
     view: options.view,
     slots: options.slots,
-    detached: options.detached === true,
+    alive,
     owner
   }
 }
@@ -68,7 +68,7 @@ export interface Composed {
 /** @internal */
 export const isComposed = (u: unknown): u is Composed => typeof u === "object" && u !== null && ComposedTypeId in u
 
-const refused = ["view", "slots", "fallback", "detached"] as const
+const refused = ["view", "slots", "fallback"] as const
 
 /** @internal */
 export const compose = (
@@ -83,7 +83,7 @@ export const compose = (
   }
   return {
     [ComposedTypeId]: ComposedTypeId,
-    child: make(component, options, owner),
+    child: make(component, options, undefined, owner),
     parts: options.parts
   }
 }

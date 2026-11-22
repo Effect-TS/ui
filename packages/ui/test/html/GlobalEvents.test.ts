@@ -16,6 +16,7 @@ const Message = UiSchema.TaggedEnum({
 // when something cancelled it first.
 const Keys = Component.define({
   name: "Keys",
+  scoped: false,
   model: Schema.Struct({ listening: Schema.Boolean, prefix: Schema.String, log: Schema.Array(Schema.String) }),
   message: Message,
   elements: Html
@@ -54,6 +55,7 @@ const PhaseMessage = UiSchema.TaggedEnum({ Heard: { what: Schema.String } })
 // cancels every press, and stops listening after the first.
 const Phases = Component.define({
   name: "Phases",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: PhaseMessage,
   elements: Html
@@ -120,6 +122,7 @@ describe("Html.onDocument and Html.onWindow", () => {
     Effect.gen(function*() {
       const Throws = Component.define({
         name: "Throws",
+        scoped: false,
         model: Schema.Null,
         message: Message,
         elements: Html
@@ -149,6 +152,7 @@ const ParentMessage = UiSchema.TaggedEnum({ Set: { listen: Schema.NullOr(Prevent
 // at all for `null`. Its handler emits a message for every key but Escape.
 const Listener = Component.define({
   name: "Listener",
+  scoped: false,
   props: Schema.Struct({ preventDefault: PreventDefault }),
   model: Schema.Null,
   message: Message,
@@ -164,6 +168,7 @@ const Listener = Component.define({
 
 const Parent = Component.define({
   name: "Parent",
+  scoped: false,
   model: Schema.NullOr(PreventDefault),
   message: ParentMessage,
   elements: Html

@@ -67,6 +67,7 @@ import type * as Renderer from "./Renderer.ts"
  *
  * export const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedIncrement")
  * }).make({
@@ -326,18 +327,29 @@ export type MountHint =
  * failure boundary: a failed child shows `fallback`, or nothing, until its
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
- * A child dropped from the view unmounts, and its Model goes with it. Declare
- * it with `detached: true` instead when the user should find it as they left
- * it, such as a hidden tab with a half-filled form or a wizard step. Its nodes
- * leave the document and the runtime keeps them, so the child keeps its
- * Model, its Commands in flight, its Subscriptions and what the user typed
- * into its inputs. It still gets props, `$.send` and query results, and its
- * events reach the parent through the `onEmit` of the latest render. It
- * contributes no head entries, a ref lookup inside it finds nothing, and its
- * element mounts stop until it is attached again, when they start anew. The
- * log records `Detached` and `Attached`. A server render writes no nodes
- * for a detached child but sends its state, and the client builds its nodes,
- * detached, from the server's Model.
+ * A child dropped from the view unmounts, and its Model goes with it. A
+ * component defined with `scoped: true` is kept instead, so the user finds it
+ * as they left it: a hidden tab with a half-filled form, a wizard step, a row
+ * a filter hides. It's written inside `h.scoped` with the `s` that passes,
+ * `h.scoped((s) => Profile(s, { key: "profile" }))`, and it belongs to the
+ * component whose view called `h.scoped`, its author. Its path is
+ * `Name[key]` under the author wherever the view puts it, so moving it to
+ * another element or into another child's slot keeps the instance.
+ *
+ * While no view writes it, the runtime keeps its nodes out of the document,
+ * and the child keeps its Model, its Commands in flight, its Subscriptions
+ * and what the user typed into its inputs. It still gets `$.send` and query
+ * results, and its events reach the author's `update` through the `onEmit`
+ * of the last render that placed it. It contributes no head entries and no
+ * reports to `collects`, a ref lookup inside it finds nothing, and its
+ * element mounts stop until it's written again. The log records `Kept` and
+ * `Drawn`. Saved state, from the server or a history entry, holds a kept
+ * child's Model, and the child takes it once it's written again.
+ *
+ * Without a predicate it lives as long as its author. With one,
+ * `h.scoped(({ key, model }) => key in model.rows, (s) => ...)`, the runtime
+ * asks the predicate about each live child on every render of the author and
+ * ends the child once it says no.
  *
  * **Gotchas**
  *
@@ -352,12 +364,12 @@ export type MountHint =
  * keeps the Model when `cond` changes, and `init` doesn't run again. Key each
  * branch when the component's Model holds state that shouldn't carry over.
  *
- * A detached child costs what a shown one does. Declare a wizard step once it
- * has been visited, `detached: step !== model.current`, rather than every
- * step up front. Its Subscriptions keep running, so gate one on the Model
- * when it should pause. A dialog or popover open inside it closes when it is
- * detached, and focus inside it is lost. A host without `createContainer`
- * fails the parent of a detached child.
+ * A kept child costs what a shown one does. Its Subscriptions keep running,
+ * so gate one on the Model when it should pause. A dialog or popover open
+ * inside it closes when it's kept, and focus inside it is lost. A host
+ * without `createContainer` fails the author of a kept child. The props and
+ * `onEmit` it has are those of the last render that placed it: write it
+ * inside a `hidden` element instead when it needs fresh ones.
  *
  * @stability experimental
  * @category models
@@ -383,8 +395,11 @@ export interface Child<out Msg, out R = never> {
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
-  /** The child's nodes are out of the document, and its instance goes on. */
-  readonly detached?: boolean | undefined
+  /**
+   * Set when the child is a scoped component written with the `s` of
+   * `h.scoped`: its scope's predicate, or `true` for a scope without one.
+   */
+  readonly alive?: ((input: any) => boolean) | true | undefined
   /** The headless instance that declared the child with `p.child`, which takes its events and failures. */
   readonly owner?: Owner | undefined
   /** Phantom: the child's requirements surface in its parent's. */
@@ -441,12 +456,6 @@ export declare namespace Child {
       readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-      /**
-       * Takes the child's nodes out of the document while it stays declared.
-       * Its Model, Commands, Subscriptions, props and `onEmit` go on, and its
-       * element mounts stop until it is attached again. `false` by default.
-       */
-      readonly detached?: boolean | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 
@@ -472,6 +481,76 @@ export declare namespace Child {
    * @since 0.1.0
    */
   export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
+
+  /**
+   * The options of a scoped child: `Options`, with the key and ref checked
+   * against the scope. `K` is the key as written, and `Ends` is `true`
+   * in a scope with a predicate. Without one, the key's type must be a
+   * literal, so the source fixes how many children the scope can keep, and a
+   * ref must not come from `at` with a key that isn't one.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type ScopedOptions<Props, Events, Msg, Rcv, K, Ends extends boolean> =
+    & (
+      | {
+        /** The child's identity among the scoped children of one component. The empty string by default. */
+        readonly key?: ScopedKey<K, Ends> | undefined
+        readonly ref?: undefined
+      }
+      | {
+        /** Names the child, so the parent can send it messages. Its key is the child's key. */
+        readonly ref: Component.Ref.For<Receives<Rcv>> & ScopedRef<Ends>
+        readonly key?: undefined
+      }
+    )
+    & {
+      /**
+       * Handle the child's events with a callback, or supply one handler per tag for tagged events.
+       * Return a parent message to dispatch it, or `undefined` to ignore the event.
+       */
+      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
+      /** Also tells the parent that the child failed. The failure stays in the child either way. */
+      readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+    }
+    & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
+}
+
+type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
+  : true extends WideKey<K> ? ScopedKeyHint
+  : K
+
+type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false : false
+
+type ScopedRef<Ends extends boolean> = [Ends] extends [true] ? unknown : { readonly "~dynamicKey"?: false }
+
+/**
+ * The type a key takes when it needs a predicate, so the error names the fix.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ScopedKeyHint =
+  "A scoped child whose key isn't a literal needs a predicate that says when it ends: h.scoped(($) => ..., (s) => ...)"
+
+/**
+ * `s`, what `h.scoped` gives its content: `h`, marked as written in a
+ * scope. A scoped component is called with it, and a component that isn't
+ * scoped takes it as it takes `h`. `Ends` is `true` in a scope with a
+ * predicate. A function that takes `s` types it `Scope<Msg, true>` to
+ * write children whose keys aren't literals, `Scope<Msg, false>` for a
+ * scope without a predicate, or `Scope<Msg>` for either, where keys must be
+ * literals.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Scope<Msg, out Ends extends boolean = boolean> extends Helper<Msg, unknown> {
+  /** Phantom: the brand only `h.scoped` gives. Its name is the error a scoped component called with `h` shows. */
+  readonly "written inside h.scoped((s) => ...)": Ends
 }
 
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
@@ -1956,6 +2035,11 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     }
     lazies.used++
     return node
+  }
+  scoped(this: any, alive: any, content?: any): unknown {
+    const s = Object.create(this)
+    s["~alive"] = content ? alive : true
+    return (content ?? alive)(s)
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))

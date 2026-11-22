@@ -75,6 +75,7 @@ const SnippetMessage = UiSchema.TaggedEnum({
 // current.
 export const Snippet = Component.define({
   name: "Snippet",
+  scoped: false,
   model: Schema.Struct({ text: Schema.String, width: Schema.Number }),
   message: SnippetMessage,
   elements: Html

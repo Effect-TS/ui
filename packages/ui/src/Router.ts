@@ -58,6 +58,7 @@
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: Schema.Struct({ route: AppRoute }),
  *   message: Message
@@ -570,6 +571,7 @@ export const currentRoute = <U extends Routes>(routes: U): Effect.Effect<U["Type
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
  *   message: Schema.Never
@@ -743,7 +745,7 @@ const PageTypeId = "~@effect/ui/Router/Page" as const
  */
 export interface Page<out R = never> {
   readonly [PageTypeId]: { readonly _R: Types.Covariant<R> }
-  readonly component: Component.Any
+  readonly component: Component.AnyRoot
   readonly props: unknown
 }
 
@@ -788,7 +790,7 @@ interface ErasedPage {
  * @category subscriptions
  * @since 0.1.0
  */
-export const page = <C extends Component.Any>(
+export const page = <C extends Component.AnyRoot>(
   component: C & PageInput<C>,
   ...props: {} extends Component.Props<C> ? [props?: Component.Props<C>] : [props: Component.Props<C>]
 ): Page<PageRequirements<C>> => ({ [PageTypeId]: pageVariance, component, props: props[0] ?? {} })
@@ -878,6 +880,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * const Person = Component.define({
  *   name: "Person",
+ *   scoped: false,
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -1296,7 +1299,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const blocks = new Map<string, number>()
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
-    let restoring: Map<string, unknown> | undefined
+    let restoring: Record<string, unknown> | undefined
     let pending: {
       readonly location: Location
       readonly from: string
@@ -1450,13 +1453,13 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       mode: { readonly quiet: boolean; readonly scroll: boolean; readonly blocks?: ReadonlyArray<string> | undefined },
       saved?: Record<string, unknown> | undefined
     ) => {
+      restoring = saved && { ...saved }
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
       for (const root of roots) root.navigated()
       const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
       const checks = runs ? runDeclarations(next, false) : []
       const from = pathnameOf(current.url)
       current = next
-      restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
       const previous = pending
       const blocked = [...(previous?.blocks ?? []), ...(mode.blocks ?? [])]
       if (previous !== undefined && !previous.quiet && mode.quiet) {
@@ -1648,11 +1651,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         }
       },
       restore: (path) => {
-        if (restoring === undefined) return undefined
-        const found = restoring.get(path)
-        restoring.delete(path)
+        const found = restoring?.[path]
+        delete restoring?.[path]
         return found
       },
+      entry: () => restoring,
       prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
       afterFlush: (root, info) => {
         if (pending === undefined || pending.since === undefined || root !== primary()) return
@@ -1660,6 +1663,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         const done = pending
         pending = undefined
         restoring = undefined
+        for (const each of roots) each.restored()
         for (const check of done.checks) check.settled()
         const lost = Array.from(new Set(done.blocks)).filter((key) => !blocks.has(key))
         if (lost.length > 0) {

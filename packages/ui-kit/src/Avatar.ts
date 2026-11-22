@@ -41,6 +41,7 @@
  *
  * const Profile = Component.define({
  *   name: "Profile",
+ *   scoped: false,
  *   model: Schema.Null,
  *   message: Schema.Never,
  *   elements: Html
@@ -235,6 +236,7 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"
  */
 export const Avatar = Component.define({
   name: "Avatar",
+  scoped: false,
   props: AvatarProps,
   model: Model,
   message: Message,

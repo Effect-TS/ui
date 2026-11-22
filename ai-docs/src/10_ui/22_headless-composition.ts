@@ -29,6 +29,7 @@ export const TagPickerEvents = UiSchema.TaggedEnum({ Changed: { tags: Schema.Arr
 
 export const TagPicker = Component.define({
   name: "TagPicker",
+  scoped: false,
   props: Schema.Struct({ options: Schema.Array(ListboxOption), tags: Schema.Array(Schema.String) }),
   // What the status region last announced, so a screen reader hears what a
   // pick or a removal did.
@@ -100,6 +101,7 @@ const options: ReadonlyArray<ListboxOption> = [
 
 export const NoteTags = Component.define({
   name: "NoteTags",
+  scoped: false,
   model: Schema.Struct({ tags: Schema.Array(Schema.String) }),
   message: NoteTagsMessage,
   elements: Html

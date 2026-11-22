@@ -45,6 +45,7 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
+ *   scoped: false,
  *   model: Schema.Struct({ saving: Schema.Boolean }),
  *   message: EditorMessage,
  *   elements: Html

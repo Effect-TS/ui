@@ -69,6 +69,7 @@
  *
  * const Billing = Component.define({
  *   name: "Billing",
+ *   scoped: false,
  *   model: Schema.Struct({ locked: Schema.Boolean }),
  *   message: Schema.Never,
  *   elements: Html
@@ -165,6 +166,7 @@ export type FieldsetProps = typeof FieldsetProps.Type
  */
 export const Fieldset = Component.define({
   name: "Fieldset",
+  scoped: false,
   props: FieldsetProps,
   model: Schema.Struct({}),
   message: Schema.Never,

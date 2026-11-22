@@ -46,6 +46,7 @@
  *
  * const Profile = Component.define({
  *   name: "Profile",
+ *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: ProfileMessage,
  *   elements: Html

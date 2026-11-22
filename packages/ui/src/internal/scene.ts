@@ -116,11 +116,6 @@ const continues = (old: View.Node<any, any>, node: View.Node<any, any>): boolean
 const childrenOf = (node: View.Node<any, any>): ReadonlyArray<View.Node<any, any>> =>
   (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children ?? []
 
-/** Whether `node` is a detached child, or the expanded view of a headless child any of whose declarations is. */
-const isDetached = (node: View.Node<any, any>): boolean =>
-  (node._tag === "Child" && node.detached) ||
-  (engine.expansionOf.get(node)?.some((child) => child.detached) ?? false)
-
 /** A slotted child's `children` by slot, else the one list. */
 const groups = (node: View.Node<any, any>): Map<string, ReadonlyArray<View.Node<any, any>>> => {
   const children = childrenOf(node)
@@ -170,9 +165,6 @@ const followMounts = (
     )
   }
   const walk = (old: View.Node<any, any> | undefined, node: View.Node<any, any>, authored: boolean): void => {
-    // The runtime stops the mounts below a detached child, and starts them anew once it is attached.
-    if (isDetached(node)) return
-    if (old !== undefined && isDetached(old)) old = undefined
     if (node._tag === "Element") {
       const olds = old === undefined ? [] : before.get(old as View.Element<any, any>) ?? []
       if (authored && node.mount !== undefined) follow(node.mount, undefined, node, olds)

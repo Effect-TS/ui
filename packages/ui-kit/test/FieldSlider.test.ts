@@ -8,7 +8,13 @@ import { container, tick } from "./utils/document.ts"
 
 it.effect("a range slider in a field is named by the legend, described, and focused and touched as a whole", () =>
   Effect.gen(function*() {
-    const Price = Component.define({ name: "Price", model: Schema.Struct({}), message: Schema.Never, elements: Html })
+    const Price = Component.define({
+      name: "Price",
+      scoped: false,
+      model: Schema.Struct({}),
+      message: Schema.Never,
+      elements: Html
+    })
       .make({
         init: () => ({}),
         update: (model) => model,

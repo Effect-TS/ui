@@ -11,6 +11,7 @@ export const CollapsibleMessage = UiSchema.TaggedEnum({ ClickedToggle: {} })
 
 export const Collapsible = Component.define({
   name: "Collapsible",
+  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: CollapsibleMessage,
   elements: Html,

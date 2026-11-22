@@ -156,6 +156,7 @@
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
+ *   scoped: false,
  *   model: Schema.Struct({ settings: Schema.Boolean }),
  *   message: ToolbarMessage,
  *   elements: Html
@@ -1012,6 +1013,7 @@ export const DialogTrigger = <Msg, R = never>(
  */
 export const Dialog = Component.define({
   name: "Dialog",
+  scoped: false,
   props: DialogProps,
   model: Model,
   message: Message,
