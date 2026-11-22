@@ -16,29 +16,30 @@ interface Parent {
   readonly vertical?: boolean
   readonly accepts?: (value: number | null) => boolean
   readonly scrubs?: (value: number | null) => boolean
+  readonly hideScrubOnCommit?: boolean
 }
 
 const mount = Effect.fnUntraced(function*(
   props: Omit<NumberFieldProps, "value">,
   value: number | null = 5,
-  { accepts = () => true, scrubs = () => true, vertical = false }: Parent = {}
+  { accepts = () => true, hideScrubOnCommit = false, scrubs = () => true, vertical = false }: Parent = {}
 ) {
   const log: Array<string> = []
   const Amount = Component.define({
     name: "Amount",
-    model: Schema.Struct({ value: Value }),
+    model: Schema.Struct({ value: Value, committed: Schema.Boolean }),
     message: Message,
     elements: Html
   }).make({
-    init: () => ({ value }),
+    init: () => ({ value, committed: false }),
     update: {
       Updated: (model, { reason, value }) => {
         log.push("updated " + value + " " + reason)
-        return accepts(value) ? { value } : model
+        return accepts(value) ? { ...model, value } : model
       },
       Committed: (model, { reason, value }) => {
         log.push("committed " + value + " " + reason)
-        return model
+        return hideScrubOnCommit ? { ...model, committed: true } : model
       }
     },
     view: (model, h) =>
@@ -50,7 +51,7 @@ const mount = Effect.fnUntraced(function*(
         },
         view: (numberField) =>
           numberField.root(h.div).children(
-            scrubs(model.value) && numberField.scrubArea({
+            scrubs(model.value) && !model.committed && numberField.scrubArea({
               element: h.span.class("scrub"),
               direction: vertical ? "vertical" : "horizontal"
             }).children(
@@ -361,6 +362,21 @@ describe("NumberField in a document", { concurrent: false }, () => {
       pointer(window, "pointerup")
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 9 scrub"])
+    }))
+
+  it.effect("removing the scrub area on commit still releases the pointer lock in Firefox", () =>
+    Effect.gen(function*() {
+      yield* firefox
+      const lock = yield* pointerLock
+      const { app, taken } = yield* mount({ locale: "en-US" }, 5, { hideScrubOnCommit: true })
+      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
+      yield* tick
+      assert.strictEqual(lock.held(), document.body)
+      pointer(window, "pointerup")
+      yield* tick
+      assert.isNull(app.querySelector(".scrub"))
+      assert.isNull(lock.held())
+      assert.deepStrictEqual(taken(), ["committed 5 scrub"])
     }))
 
   it.effect("a cancelled pointer ends a hold and a drag", () =>

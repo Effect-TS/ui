@@ -882,6 +882,7 @@ const TrackScrub = Mount.makeStream(
         let target: EventTarget | null = null
         let travelled = 0
         let pointerId = -1
+        let mounted = true
         let asked = false
         let client = { x: 0, y: 0 }
         let pointer = { x: 0, y: 0 }
@@ -942,6 +943,7 @@ const TrackScrub = Mount.makeStream(
           const pressedOn = moved ? null : target
           stop(true)
           const release = () => {
+            exit = undefined
             unlock()
             // The click of a locked pointer goes to the element that holds
             // the lock, so one that didn't move is sent on to what it pressed.
@@ -997,6 +999,7 @@ const TrackScrub = Mount.makeStream(
           clicked = false
           clearTimeout(click)
           clearTimeout(exit)
+          exit = undefined
           target = event.composedPath()[0] ?? event.target
           travelled = 0
           pointerId = event.pointerId
@@ -1014,7 +1017,9 @@ const TrackScrub = Mount.makeStream(
           if (document.pointerLockElement != null) return Queue.offerUnsafe(queue, Message.LockedPointer())
           asked = true
           try {
-            Promise.resolve(document.body.requestPointerLock()).catch(onLockError)
+            Promise.resolve(document.body.requestPointerLock()).then(() => {
+              if (!mounted) unlock()
+            }, onLockError)
           } catch {
             asked = false
           }
@@ -1048,18 +1053,20 @@ const TrackScrub = Mount.makeStream(
           }),
           () =>
             Effect.sync(() => {
+              mounted = false
               liveScrubs.delete(args.cursorId)
               node.removeEventListener("pointerdown", onDown)
               node.removeEventListener("touchstart", onTouchStart)
               node.removeEventListener("click", onClick, { capture: true })
               document.removeEventListener("pointerlockchange", onLockChange)
               document.removeEventListener("pointerlockerror", onLockError)
+              const pendingExit = exit !== undefined
               clearTimeout(exit)
+              exit = undefined
               clearTimeout(click)
               listening?.abort()
-              if (!scrubbing) return
-              unlock()
-              scrubRoots.get(args.cursorId)?.()
+              if (scrubbing || pendingExit) unlock()
+              if (scrubbing) scrubRoots.get(args.cursorId)?.()
             })
         )
         yield* Stream.runForEach(changes, (next) =>
