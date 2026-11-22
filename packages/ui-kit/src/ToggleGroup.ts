@@ -1,0 +1,368 @@
+/**
+ * A row of toggle buttons that share one value: the values of the pressed
+ * ones, such as text alignment in a toolbar.
+ *
+ * `ToggleGroup` is a headless component. It keeps which item holds the tab
+ * stop, and moves focus between the items with the arrow keys through a
+ * Command. The value is the consumer's: it comes in as the `value` prop,
+ * and the group emits `Toggled` with the value the user asked for.
+ *
+ * **Anatomy**
+ *
+ * | Part   | Element                     |
+ * | :----- | :-------------------------- |
+ * | `root` | `<div>`                     |
+ * | `item` | `<button>`, one for each item |
+ *
+ * `root` takes the consumer's builder and returns it, so the consumer goes
+ * on chaining and adds the items with `.children(...)`. `item` takes
+ * `{ element, value }`, the item's `<button>` and the `value` of one entry
+ * in the `items` prop, and returns the builder. A `value` that isn't in
+ * `items` fails the render. Neither part adds markup.
+ *
+ * An item writes the same attributes as `Toggle`, so don't stack `Toggle`
+ * on it. Naming an item is the consumer's job, as for `Toggle`: text inside
+ * it, or an `aria-label` on the button.
+ *
+ * **Data attributes**
+ *
+ * Each present with an empty value or absent, except `data-orientation`,
+ * which holds the orientation:
+ *
+ * - `root`: `data-orientation`, `data-disabled` and `data-multiple`
+ * - `item`: `data-pressed` and `data-disabled`
+ *
+ * **Keyboard**
+ *
+ * Only one item is in the Tab order: the one focused last, or else the
+ * first enabled item. A key handler on each item moves focus:
+ *
+ * | Key          | Action                                  |
+ * | :----------- | :-------------------------------------- |
+ * | Right, Left  | next and previous item, horizontally    |
+ * | Down, Up     | next and previous item, vertically      |
+ * | Home, End    | first and last enabled item             |
+ * | Space, Enter | press the item, from the native button  |
+ *
+ * The arrow keys follow `orientation`: a horizontal group ignores Down and
+ * Up, and a vertical one Right and Left. They skip disabled items, and with `loopFocus` they wrap from the last
+ * item to the first and back. Inside a `DirectionProvider` with
+ * `direction: "rtl"`, Left and Right swap. A key held with Alt, Ctrl, Meta
+ * or Shift does nothing.
+ *
+ * **Usage**
+ *
+ * The `items` prop lists every item in the order they are drawn, so the
+ * group can move focus without reading the page. Draw one `item` for each
+ * entry.
+ *
+ * **Example** (Text alignment, one choice at a time)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { ToggleGroup } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const EditorMessage = UiSchema.TaggedEnum({ ToggledAlign: { value: Schema.Array(Schema.String) } })
+ *
+ * const alignments = ["left", "center", "right"]
+ *
+ * const Editor = Component.define({
+ *   name: "Editor",
+ *   scoped: false,
+ *   model: Schema.Struct({ align: Schema.Array(Schema.String) }),
+ *   message: EditorMessage,
+ *   elements: Html
+ * }).make({
+ *   init: () => ({ align: ["left"] }),
+ *   update: { ToggledAlign: (_model, { value }) => ({ align: value }) },
+ *   view: (model, h) =>
+ *     ToggleGroup(h, {
+ *       props: { value: model.align, items: alignments.map((value) => ({ value })) },
+ *       onEmit: ({ value }) => EditorMessage.ToggledAlign({ value }),
+ *       view: (toggleGroup) =>
+ *         toggleGroup.root(h.div.class("alignment").attr("aria-label", "Text alignment")).children(
+ *           alignments.map((value) =>
+ *             toggleGroup.item({ element: h.button.class("tool").attr("aria-label", "Align " + value), value })
+ *           )
+ *         )
+ *     })
+ * })
+ *
+ * // The left item is pressed, and holds the one tab stop.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Editor, {}))
+ * if (!/<div class="alignment"[^>]* role="group"/.test(html)) throw new Error("the root isn't a group")
+ * if (!/aria-label="Align left"[^>]* aria-pressed="true"[^>]* tabindex="0"/.test(html)) {
+ *   throw new Error("the left item isn't pressed with the tab stop")
+ * }
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import * as Command from "@effect/ui/Command"
+import * as Component from "@effect/ui/Component"
+import * as DomCommand from "@effect/ui/html/DomCommand"
+import * as Html from "@effect/ui/html/Html"
+import * as UiSchema from "@effect/ui/UiSchema"
+import * as View from "@effect/ui/View"
+import * as Schema from "effect/Schema"
+import { DirectionProvider } from "./DirectionProvider.ts"
+import { flag, pressedAttrs } from "./internal/attributes.ts"
+import { arrowKeys, available, stepped } from "./internal/list.ts"
+
+/**
+ * The direction a toggle group's items run in, which picks its arrow keys.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const ToggleGroupOrientation = Schema.Literals(["horizontal", "vertical"])
+
+/**
+ * The direction a toggle group's items run in.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ToggleGroupOrientation = typeof ToggleGroupOrientation.Type
+
+/**
+ * One item of a toggle group: the `value` its `item` part is drawn with,
+ * and whether it is disabled.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const ToggleGroupItem = Schema.Struct({
+  value: Schema.String,
+  disabled: Schema.optional(Schema.Boolean)
+})
+
+/**
+ * One item of a toggle group.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ToggleGroupItem = typeof ToggleGroupItem.Type
+
+/**
+ * Props for the state of a `ToggleGroup`.
+ *
+ * **Details**
+ *
+ * - `value`: the values of the pressed items. Required: the consumer owns
+ *   it.
+ * - `items`: every item, in the order they are drawn. Required. A disabled
+ *   item ignores clicks and is skipped by the arrow keys.
+ * - `disabled`: disables every item.
+ * - `multiple`: lets several items be pressed at once. Off by default, so
+ *   pressing an item releases the others.
+ * - `orientation`: `"horizontal"` by default, which moves with Right and
+ *   Left, or `"vertical"`, which moves with Down and Up.
+ * - `loopFocus`: the arrow keys wrap from the last item to the first and
+ *   back. On by default.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const ToggleGroupProps = Schema.Struct({
+  value: Schema.Array(Schema.String),
+  items: Schema.Array(ToggleGroupItem),
+  disabled: Schema.optional(Schema.Boolean),
+  multiple: Schema.optional(Schema.Boolean),
+  orientation: Schema.optional(ToggleGroupOrientation),
+  loopFocus: Schema.optional(Schema.Boolean)
+})
+
+/**
+ * The props of a `ToggleGroup`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ToggleGroupProps = typeof ToggleGroupProps.Type
+
+/**
+ * What a toggle group emits.
+ *
+ * **Details**
+ *
+ * - `Toggled`: the group's value the user asked for. Pressing an item
+ *   gives `[value]` and pressing the pressed one gives `[]`. With
+ *   `multiple`, the item's value is added at the end or removed. Store it
+ *   and pass it back as the `value` prop. A disabled group or item emits
+ *   nothing.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const ToggleGroupEvents = UiSchema.TaggedEnum({
+  Toggled: { value: Schema.Array(Schema.String) }
+})
+
+/**
+ * What a `ToggleGroup` emits.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ToggleGroupEvents = typeof ToggleGroupEvents.Type
+
+const ToggleGroupMessage = UiSchema.TaggedEnum({
+  ClickedItem: { value: Schema.String },
+  FocusedItem: { value: Schema.String },
+  PressedKey: { value: Schema.String, key: Schema.String }
+})
+
+const ToggleGroupModel = Schema.Struct({ active: Schema.NullOr(Schema.String) })
+
+type ToggleGroupModel = typeof ToggleGroupModel.Type
+
+const Item = Html.ref("ToggleGroupItem", "button")
+
+const enabledOf = (props: ToggleGroupProps): ReadonlyArray<ToggleGroupItem> =>
+  props.disabled === true ? [] : props.items.filter(available)
+
+const enabled = (props: ToggleGroupProps, value: string): boolean =>
+  enabledOf(props).some((item) => item.value === value)
+
+const toggled = (props: ToggleGroupProps, value: string): ReadonlyArray<string> => {
+  const pressed = props.value.includes(value)
+  if (props.multiple !== true) return pressed ? [] : [value]
+  return pressed ? props.value.filter((other) => other !== value) : [...props.value, value]
+}
+
+const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps): string | null => {
+  const items = enabledOf(props)
+  return (items.find((item) => item.value === model.active) ?? items[0])?.value ?? null
+}
+
+/**
+ * A headless toggle group. Call it with the consumer's `h`, the `props`,
+ * an `onEmit` for `Toggled`, and a `view` closure that draws the root with
+ * `toggleGroup.root(h.div)` and, inside it, one
+ * `toggleGroup.item({ element: h.button, value })` for each item.
+ *
+ * **Details**
+ *
+ * The parts also return `value`, `disabled`, `multiple` and
+ * `orientation`, resolved, for markup that depends on them.
+ *
+ * The group's own attributes win over the ones the consumer set on the
+ * builder before the part, including the ones a state leaves absent:
+ *
+ * - `root`: `role="group"`, `data-orientation`, `data-disabled` and
+ *   `data-multiple`
+ * - `item`: `type="button"`, `aria-pressed`, `disabled`, `aria-disabled`,
+ *   which it never sets, `tabindex`, `data-pressed` and `data-disabled`
+ *
+ * A part writes them when it is applied, so an attribute the consumer
+ * chains after the part is the consumer's to answer for.
+ *
+ * An item handles `click`, `focus` and `keydown` on a layer of its own,
+ * so the consumer's handlers for them still run. It cancels only the keys
+ * it moves focus with.
+ *
+ * The group reads the nearest `DirectionProvider` above it, if there is
+ * one, and swaps Left and Right in a right-to-left layout.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const ToggleGroup = Component.define({
+  name: "ToggleGroup",
+  scoped: false,
+  props: ToggleGroupProps,
+  model: ToggleGroupModel,
+  message: ToggleGroupMessage,
+  events: ToggleGroupEvents,
+  restore: false,
+  shared: {
+    provider: { owner: DirectionProvider, optional: true }
+  },
+  elements: Html
+}).make({
+  init: () => ({ active: null }),
+  update: {
+    ClickedItem: (model, { value }, $) =>
+      enabled($.props, value) ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) })) : model,
+    FocusedItem: (model, { value }) => model.active === value ? model : { ...model, active: value },
+    PressedKey: (model, { key, value }, $) => {
+      const items = enabledOf($.props)
+      const last = items.length - 1
+      const { next } = arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
+      const target = items[
+        key === "Home"
+          ? 0
+          : key === "End"
+          ? last
+          : stepped(
+            items.findIndex((item) => item.value === value),
+            last,
+            key === next ? 1 : -1,
+            $.props.loopFocus !== false ? "wrap" : "none"
+          )
+      ]
+      if (target === undefined || target.value === value) return model
+      return $.set({ ...model, active: target.value }).run(
+        DomCommand.Focus.make({ ref: Item.at(target.value) }).pipe(Command.asNoop)
+      )
+    }
+  },
+  parts: (model, p) => {
+    const props = p.props
+    const disabled = props.disabled === true
+    const multiple = props.multiple === true
+    const orientation = props.orientation ?? "horizontal"
+    const tabStop = tabStopOf(model, props)
+    const axis = arrowKeys(orientation, false)
+    const item = p.part("button", (b, value: string) => {
+      const entry = props.items.find((item) => item.value === value)
+      if (entry === undefined) throw new Error("ToggleGroup: no item with value \"" + value + "\" in items")
+      return pressedAttrs(b, props.value.includes(value), disabled || entry.disabled === true)
+        .attr("tabindex", value === tabStop ? "0" : "-1")
+        .ref(Item.at(value))
+        .onClick(ToggleGroupMessage.ClickedItem({ value }))
+        .onFocus(ToggleGroupMessage.FocusedItem({ value }))
+        .onKeyDown(
+          ({ alt, ctrl, key, meta, shift }) =>
+            alt || ctrl || meta || shift ||
+              !(key === axis.next || key === axis.previous || key === "Home" || key === "End")
+              ? undefined
+              : ToggleGroupMessage.PressedKey({ value, key }),
+          { preventDefault: true }
+        )
+    })
+    return {
+      value: props.value,
+      disabled,
+      multiple,
+      orientation,
+      root: p.part("div", (b) =>
+        b.attrs({
+          role: "group",
+          "data-orientation": orientation,
+          "data-disabled": flag(disabled),
+          "data-multiple": flag(multiple)
+        })),
+      item: View.wrapPart(
+        item,
+        <B extends View.PartTarget<"button"> & { readonly key: (key: string) => View.PartTarget<"button"> }>(
+          { element, value }: { readonly element: B; readonly value: string }
+        ): ReturnType<B["attr"]> => item(element.key(value), value)
+      )
+    }
+  }
+})

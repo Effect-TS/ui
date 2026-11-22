@@ -52,6 +52,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Switch](src/Switch.ts): a controlled on/off setting.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
 - [Toggle](src/Toggle.ts): a controlled two-state button, pressed or not.
+- [ToggleGroup](src/ToggleGroup.ts): a row of toggle buttons whose pressed values live in your Model, one at a time or several, with the arrow keys moving focus between them.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.
 - [VirtualList](src/VirtualList.ts): a list that renders only the items near the visible part of its scroll container or the page, with measured item sizes, grids whose lanes follow the CSS, scrolling to an item or the end, following the end of a chat or log, and the focused item kept rendered.
 

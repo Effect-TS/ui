@@ -41,5 +41,20 @@ export const defaults = <B extends Attributed<B> & { readonly elementAttrs: Read
     node
   )
 
+export const pressedAttrs = <B extends Attributed<B> & { readonly disabled: (disabled: boolean) => B }>(
+  button: B,
+  pressed: boolean,
+  disabled: boolean
+): B =>
+  button
+    .attrs({
+      type: "button",
+      "aria-pressed": String(pressed),
+      "aria-disabled": undefined,
+      "data-pressed": flag(pressed),
+      "data-disabled": flag(disabled)
+    })
+    .disabled(disabled)
+
 export const separatorAttrs = <B extends Attributed<B>>(builder: B, orientation: "horizontal" | "vertical"): B =>
   builder.attrs({ role: "separator", "aria-orientation": orientation, "data-orientation": orientation })
