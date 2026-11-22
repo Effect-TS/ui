@@ -552,4 +552,67 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       app.querySelector("button")!.dispatchEvent(event)
       assert.isTrue(event.defaultPrevented)
     }).pipe(Effect.scoped))
+
+  it.effect("removing a focused headless part during synchronous blur does not throw or dispatch to the closed owner", () =>
+    Effect.gen(function*() {
+      let frameBlurs = 0
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literal("blurred"),
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => {
+          frameBlurs++
+          return model
+        },
+        parts: (_, p) => ({ root: p.part("div", (b) => b.onBlur("blurred")) })
+      })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Literal("hide"),
+        elements: Html
+      }).make({
+        init: () => true,
+        update: () => false,
+        view: (shown, h) =>
+          h.main(
+            shown
+              ? Frame(h, {
+                view: (frame) => frame.root(h.div).children(h.button.onClick("hide").children("Hide"))
+              })
+              : h.button.children("Show")
+          )
+      })
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Page, {}, app)
+      yield* tick
+      const main = app.querySelector("main")!
+      const root = main.querySelector("div")!
+      const button = main.querySelector("button")!
+      root.dispatchEvent(new FocusEvent("blur"))
+      yield* tick
+      assert.strictEqual(frameBlurs, 1)
+      const errors: Array<unknown> = []
+      const removeChild = main.removeChild.bind(main)
+      main.removeChild = ((child: Node) => {
+        for (const event of [new FocusEvent("blur"), new FocusEvent("focusout", { bubbles: true })]) {
+          try {
+            button.dispatchEvent(event)
+          } catch (error) {
+            errors.push(error)
+          }
+        }
+        return removeChild(child)
+      }) as typeof main.removeChild
+      HtmlLocator.click(button)
+      yield* tick
+      assert.deepStrictEqual(errors, [])
+      assert.strictEqual(frameBlurs, 1)
+      assert.strictEqual(app.querySelector("button")!.textContent, "Show")
+    }).pipe(Effect.scoped))
 })

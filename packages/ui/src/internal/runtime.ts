@@ -5168,13 +5168,14 @@ const setup = (
   const eventsOf = (inst: Instance, view: View.Element<any, any>): Renderer.Events =>
     view.owned === undefined || view.owned.length === 0
       ? { handlers: view.handlers, dispatch: inst.author.fire, options: view.eventOptions }
-      : layeredEvents(inst, view, view.owned)
+      : layeredEvents(inst, view, view.owned, false)
 
   /** With owned layers, each event gets one `Layered` value, which the host hands back to `fireLayered`. */
   const layeredEvents = (
     inst: Instance,
     view: View.Element<any, any>,
-    layers: ReadonlyArray<View.Owned>
+    layers: ReadonlyArray<View.Owned>,
+    strict = true
   ): Renderer.Events => {
     // Deepest owner first, and the author last.
     const owned = layers.length === 1 ? layers : layers.slice().sort((a, b) => b.owner.depth - a.owner.depth)
@@ -5188,9 +5189,16 @@ const setup = (
         })
       }
     }
-    for (const layer of owned) add(ownerInstance(inst, layer.owner), layer)
+    const active: Array<Pick<View.Owned, "eventOptions">> = []
+    for (const layer of owned) {
+      const target = strict ? ownerInstance(inst, layer.owner) : owners.get(layer.owner)
+      if (target === undefined || target.closed) continue
+      add(target, layer)
+      active.push(layer)
+    }
     add(inst.author, view)
-    return { handlers: handlers as any, dispatch: fireLayered, options: mergeOptions(inst, [...owned, view]) }
+    active.push(view)
+    return { handlers: handlers as any, dispatch: fireLayered, options: mergeOptions(inst, active) }
   }
 
   /**
@@ -5208,12 +5216,14 @@ const setup = (
     for (let at = path.length - 1; at >= 0; at--) {
       const node = path[at]
       if (node === container) {
-        if (rootInstance !== undefined) walkEvents(rootInstance, rootInstance.rendered, path, at - 1, out)
+        if (rootInstance !== undefined && !rootInstance.closed) {
+          walkEvents(rootInstance, rootInstance.rendered, path, at - 1, out)
+        }
         break
       }
       const held = parked.size === 0 ? undefined : parked.get(node)
       if (held !== undefined) {
-        walkEvents(held.owner, held.inner, path, at - 1, out)
+        if (!held.owner.closed) walkEvents(held.owner, held.inner, path, at - 1, out)
         break
       }
     }
@@ -5226,7 +5236,8 @@ const setup = (
       let found = false
       for (let index = published.length - 3; index >= 0; index -= 3) {
         if (published[index] !== path[at]) continue
-        out[at] = eventsOf(published[index + 1], published[index + 2])
+        const inst = published[index + 1] as Instance
+        out[at] = inst.closed ? undefined : eventsOf(inst, published[index + 2])
         found = true
         break
       }
@@ -5274,7 +5285,7 @@ const setup = (
         return item
       case "Child":
       case "Outlet":
-        return findElement(item.inst, item.inst.rendered, node, cursor)
+        return item.inst.closed ? undefined : findElement(item.inst, item.inst.rendered, node, cursor)
       case "Fallback":
         return findIn(inst, item.inner, node, cursor)
       // Text holds no events.
