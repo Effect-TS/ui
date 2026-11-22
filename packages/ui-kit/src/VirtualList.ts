@@ -271,6 +271,15 @@ export const VirtualListProps = Schema.Struct({
  */
 export type VirtualListProps = typeof VirtualListProps.Type
 
+const Visible = Schema.Struct({
+  first: Schema.Number,
+  last: Schema.Number,
+  atStart: Schema.Boolean,
+  atEnd: Schema.Boolean
+})
+
+const sameVisible = Schema.toEquivalence(Visible)
+
 /**
  * The events of a {@link VirtualList}. `Scrolled` reports the first and last
  * visible items, and whether the list is scrolled to its start and to its
@@ -281,9 +290,7 @@ export type VirtualListProps = typeof VirtualListProps.Type
  * @category models
  * @since 0.1.0
  */
-export const VirtualListEvents = UiSchema.TaggedEnum({
-  Scrolled: { first: Schema.Number, last: Schema.Number, atStart: Schema.Boolean, atEnd: Schema.Boolean }
-})
+export const VirtualListEvents = UiSchema.TaggedEnum({ Scrolled: Visible.fields })
 
 /**
  * The events of a {@link VirtualList}.
@@ -312,11 +319,8 @@ const Model = Schema.Struct({
   dataset: Schema.NullOr(Schema.String),
   epoch: Schema.Number,
   focused: Schema.NullOr(ItemRef),
-  handled: Schema.NullOr(VirtualListScrollTo),
-  requested: Schema.NullOr(VirtualListScrollTo),
-  announced: Schema.NullOr(
-    Schema.Struct({ first: Schema.Number, last: Schema.Number, atStart: Schema.Boolean, atEnd: Schema.Boolean })
-  )
+  scroll: Schema.NullOr(Schema.Struct({ scrollTo: VirtualListScrollTo, done: Schema.Boolean })),
+  announced: Schema.NullOr(Visible)
 })
 
 type Model = typeof Model.Type
@@ -437,16 +441,21 @@ const restingBand = (model: Model, props: VirtualListProps, layout: Layout): Ban
   return { start, end: start + model.height }
 }
 
-interface Pending {
-  readonly scrollTo: VirtualListScrollTo
-  readonly index: number | null
-  readonly offset: number | null
-}
+const ScrollRequest = Schema.Struct({
+  scrollTo: VirtualListScrollTo,
+  index: Schema.NullOr(Schema.Number),
+  offset: Schema.NullOr(Schema.Number)
+})
+
+type Pending = typeof ScrollRequest.Type
 
 const sameRequest = (a: VirtualListScrollTo | undefined, b: VirtualListScrollTo | null): boolean =>
   a !== undefined && b !== null && sameScrollTo(a, b)
 
-const latestOf = (model: Model): VirtualListScrollTo | null => model.requested ?? model.handled
+const latestOf = (model: Model): VirtualListScrollTo | null => model.scroll?.scrollTo ?? null
+
+const waitingOf = (model: Model): VirtualListScrollTo | null =>
+  model.scroll === null || model.scroll.done ? null : model.scroll.scrollTo
 
 const freshOf = (model: Model, props: VirtualListProps): VirtualListScrollTo | null =>
   props.scrollTo === undefined || sameRequest(props.scrollTo, latestOf(model)) ? null : props.scrollTo
@@ -468,6 +477,19 @@ const pendingOf = (scrollTo: VirtualListScrollTo | null, props: VirtualListProps
   }
 }
 
+const alignedStart = (top: number, bottom: number, view: number, height: number, align: VirtualListAlign): number =>
+  align === "start"
+    ? top
+    : align === "end"
+    ? bottom - height
+    : align === "center"
+    ? (top + bottom - height) / 2
+    : top < view
+    ? top
+    : bottom > view + height
+    ? Math.min(bottom - height, top)
+    : view
+
 const pendingBand = (model: Model, layout: Layout, pending: Pending, resting: Band | null): Band => {
   const height = model.height
   let start: number
@@ -475,18 +497,7 @@ const pendingBand = (model: Model, layout: Layout, pending: Pending, resting: Ba
     const row = rowOf(layout, pending.index)
     const top = layout.offsets[row]!
     const bottom = layout.offsets[row + 1]! - layout.gap
-    const align = pending.scrollTo.align ?? "start"
-    start = align === "start"
-      ? top
-      : align === "end"
-      ? bottom - height
-      : align === "center"
-      ? (top + bottom - height) / 2
-      : resting !== null && top >= resting.start && bottom <= resting.end
-      ? resting.start
-      : resting !== null && top < resting.start
-      ? top
-      : bottom - height
+    start = alignedStart(top, bottom, resting?.start ?? 0, height, pending.scrollTo.align ?? "start")
   } else {
     start = pending.offset ?? layout.total - height
   }
@@ -612,12 +623,6 @@ const measured = (
   return { ...model, gap, lanes, width, sizes, epoch: reset ? model.epoch + 1 : model.epoch }
 }
 
-const ScrollRequest = Schema.Struct({
-  scrollTo: VirtualListScrollTo,
-  index: Schema.NullOr(Schema.Number),
-  offset: Schema.NullOr(Schema.Number)
-})
-
 const TrackVirtualListArgs = {
   id: Schema.String,
   epoch: Schema.Number,
@@ -659,14 +664,11 @@ const TrackVirtualList = Mount.makeStream(
           readonly atEnd: boolean
         } | null = null
         let applied: VirtualListScrollTo | null = null
-        let noted: VirtualListScrollTo | null = null
         let pinned: typeof ScrollRequest.Type | null = null
         let seen = 0
         let focused: string | null = null
         let focusTimer: ReturnType<typeof setTimeout> | undefined
-        let sentEpoch = args.epoch
-        let sentWidth = -1
-        const sent = new Map<string, string>()
+        let sent = ""
         const observed = new Set<Element>()
 
         const itemsOf = () => Array.from(list.querySelectorAll<HTMLElement>(attrSelector(itemAttr, args.id)))
@@ -694,9 +696,7 @@ const TrackVirtualList = Mount.makeStream(
         const movedByUser = () => {
           const top = scrollTop()
           const element = scroller()
-          const max = element.scrollHeight - element.clientHeight
-          const clamped = top < seen && seen > max + 0.5 && top >= max - 1
-          const moved = !same(top, seen) && !clamped
+          const moved = !same(top, Math.min(seen, element.scrollHeight - element.clientHeight))
           seen = top
           return moved
         }
@@ -757,29 +757,21 @@ const TrackVirtualList = Mount.makeStream(
 
         const measure = () => {
           if (hidden()) return
-          if (sentEpoch !== args.epoch) {
-            sentEpoch = args.epoch
-            sentWidth = -1
-            sent.clear()
-          }
           const rect = list.getBoundingClientRect()
           const zero = origin()
           const items: Array<MeasuredItem> = []
-          let changed = !same(rect.width, sentWidth)
+          let shape = args.epoch + ":" + Math.round(rect.width)
           let firstTop: number | undefined
           for (const item of itemsOf()) {
             const box = item.getBoundingClientRect()
             const top = box.top - zero
             firstTop ??= top
-            const id = identity(item)
-            const shape = Math.round(box.height) + ":" + Math.round(top - firstTop) + ":" +
+            shape += "|" + identity(item) + ":" + Math.round(box.height) + ":" + Math.round(top - firstTop) + ":" +
               Math.round(box.left - rect.left)
-            if (sent.get(id) !== shape) changed = true
-            sent.set(id, shape)
             items.push({ ...refOf(item), top, left: box.left - rect.left, size: box.height })
           }
-          if (!changed) return
-          sentWidth = rect.width
+          if (shape === sent) return
+          sent = shape
           send(Message.MeasuredItems({ epoch: args.epoch, width: rect.width, items }))
         }
 
@@ -841,12 +833,7 @@ const TrackVirtualList = Mount.makeStream(
           const request = args.request
           const fresh = args.fresh
           if (request === null) applied = null
-          if (fresh === null) noted = null
-          if (
-            fresh !== null && (noted === null || !sameScrollTo(noted, fresh)) &&
-            (request === null || !sameScrollTo(request.scrollTo, fresh))
-          ) {
-            noted = fresh
+          if (fresh !== null && (request === null || !sameScrollTo(request.scrollTo, fresh))) {
             send(Message.RequestedScroll({ scrollTo: fresh }))
           }
           if (request !== null && (applied === null || !sameScrollTo(applied, request.scrollTo))) {
@@ -871,22 +858,7 @@ const TrackVirtualList = Mount.makeStream(
             const item = itemsOf().find((item) => item.getAttribute("data-index") === String(index))
             if (item === undefined) return
             const { bottom, top } = item.getBoundingClientRect()
-            const viewTop = view.top
-            const viewBottom = view.top + view.height
-            const align = scrollTo.align ?? "start"
-            scrollBy(
-              align === "start"
-                ? top - viewTop
-                : align === "end"
-                ? bottom - viewBottom
-                : align === "center"
-                ? (top + bottom - viewTop - viewBottom) / 2
-                : top < viewTop
-                ? top - viewTop
-                : bottom > viewBottom
-                ? Math.min(bottom - viewBottom, top - viewTop)
-                : 0
-            )
+            scrollBy(alignedStart(top, bottom, view.top, view.height, scrollTo.align ?? "start") - view.top)
           } else if (offset !== null) scrollBy(origin() + offset - view.top)
           else scrollBy(toEnd())
         }
@@ -932,14 +904,11 @@ const TrackVirtualList = Mount.makeStream(
 
 type ListUpdate = Component.Update<Model, Message, VirtualListEvents, VirtualListProps>
 
-const reported = ($: ListUpdate, next: Model) => {
-  const layout = layoutOf(next, $.props)
+const announce = ($: ListUpdate, next: Model, layout = layoutOf(next, $.props)) => {
   const visible = visibleItems(layout, restingBand(next, $.props, layout))
   if (visible === null) return $.set(next)
   const announced = { first: visible[0], last: visible[1], atStart: next.atStart, atEnd: next.atEnd }
-  const previous = next.announced
-  return previous !== null && previous.first === announced.first && previous.last === announced.last &&
-      previous.atStart === announced.atStart && previous.atEnd === announced.atEnd
+  return next.announced !== null && sameVisible(next.announced, announced)
     ? $.set(next)
     : $.set({ ...next, announced }).emit(VirtualListEvents.Scrolled(announced))
 }
@@ -999,8 +968,7 @@ export const VirtualList = Component.define({
     dataset: $.props.dataset ?? null,
     epoch: 0,
     focused: null,
-    handled: null,
-    requested: $.props.scrollTo ?? null,
+    scroll: $.props.scrollTo === undefined ? null : { scrollTo: $.props.scrollTo, done: false },
     announced: null
   }),
   update: {
@@ -1013,24 +981,23 @@ export const VirtualList = Component.define({
         key: keyOf($.props, row * layout.lanes),
         offset: start - (layout.offsets[row] ?? 0)
       }
-      return reported($, {
+      return announce($, {
         ...model,
         position,
         height,
         atStart,
         atEnd,
-        handled: scrolled ?? model.handled,
-        requested: scrolled === null ? model.requested : null
-      })
+        scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
+      }, layout)
     },
     RequestedScroll: (model, { scrollTo }) =>
-      sameRequest(scrollTo, latestOf(model)) ? model : { ...model, requested: scrollTo },
+      sameRequest(scrollTo, latestOf(model)) ? model : { ...model, scroll: { scrollTo, done: false } },
     ScrolledByUser: (model) =>
-      model.requested === null ? model : { ...model, handled: model.requested, requested: null },
+      model.scroll === null || model.scroll.done ? model : { ...model, scroll: { ...model.scroll, done: true } },
     MeasuredItems: (stored, message, $) => {
       const model = current(stored, $.props)
       const next = measured(model, $.props, message)
-      return next === model ? stored : reported($, next)
+      return next === model ? stored : announce($, next)
     },
     FocusedItem: (stored, { index, key }, $) => ({ ...current(stored, $.props), focused: { index, key } }),
     BlurredItems: (stored, _message, $) => ({ ...current(stored, $.props), focused: null })
@@ -1042,7 +1009,8 @@ export const VirtualList = Component.define({
     const layout = layoutOf(model, props)
     const resting = restingBand(model, props, layout)
     const fresh = freshOf(model, props)
-    const pending = pendingOf(fresh ?? model.requested, props, layout)
+    const waiting = fresh ?? waitingOf(model)
+    const pending = pendingOf(waiting, props, layout)
     const band = pending === null ? resting : pendingBand(model, layout, pending, resting)
     const { after, before, between, ranges, visible } = windowOf(model, props, layout, band)
     const inset = props.contentAlignment === "end" && model.position !== null && model.height > layout.total
@@ -1082,7 +1050,7 @@ export const VirtualList = Component.define({
             threshold: endThreshold(props),
             request: pending,
             fresh,
-            waiting: model.requested !== null || fresh !== null
+            waiting: waiting !== null
           }))
           .forward((node) =>
             ownStyle(
