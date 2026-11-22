@@ -144,7 +144,7 @@ export const make = (): DomSubscription.GlobalEvents & TestGlobalEvents => {
         }
       }),
     fireCustomEvent: (event, payload) =>
-      fireGlobal.fire(event, { detail: null, ...payload }, function*(capture) {
+      fireGlobal.fire(event, { ...payload, detail: payload?.detail ?? null }, function*(capture) {
         for (const entry of Array.from(entries)) {
           if (entry.target === "document" && entry.event === event && entry.capture === capture && entries.has(entry)) {
             yield entry.listener

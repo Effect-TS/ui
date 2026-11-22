@@ -374,8 +374,11 @@ class StepsImpl extends internal.SceneCursor {
   fireWindow(event: string, payload?: object): this {
     return this.fireGlobal("fireWindow", "window", event, payload)
   }
-  fireCustomEvent(event: string, payload?: object): this {
-    return this.fireGlobal("fireCustomEvent", "document", event, { detail: null, ...payload })
+  fireCustomEvent(
+    event: string,
+    payload?: Partial<DomSubscription.GlobalPayload<{ readonly detail: unknown }>>
+  ): this {
+    return this.fireGlobal("fireCustomEvent", "document", event, { ...payload, detail: payload?.detail ?? null })
   }
   private fireGlobal(
     step: string,
