@@ -3234,7 +3234,7 @@ const setup = (
       )
       interruptOnClose(inst.scope, decoded)
       decoded.addObserver((exit) =>
-        resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit))
+        defer(() => resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit)))
       )
     }
     if (late !== undefined) {
@@ -3600,7 +3600,9 @@ const setup = (
     layer.logEarly()
     const resume = hold(inst, range)
     const start = (adopt: boolean) =>
-      resume(adopt, () => begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer))
+      defer(() =>
+        resume(adopt, () => begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer))
+      )
     whenReady(inst.env, () => start(true), () => {
       if (inst.component.layerFailure !== undefined) start(false)
     })
@@ -3638,22 +3640,22 @@ const setup = (
       if (held !== undefined) replaced = inst
       start()
       replaced = undefined
-      if (inst.waiting) {
-        if (held !== undefined) heldPlacement.set(inst, held)
-        return settleWaiting()
-      }
+      const draws = lates.splice(0)
       // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
       // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
       if (range === undefined || !range.claimed) { for (const node of nodes) host.remove(node) }
       if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
+      if (inst.waiting) {
+        if (held !== undefined) heldPlacement.set(inst, held)
+        return settleWaiting()
+      }
       if (adopt) recordAdopted(inst)
       if (held !== undefined && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
-      if (lates.length > 0 && dirty.delete(inst)) renderDirty(inst)
-      for (const draw of lates.splice(0)) draw()
+      for (const draw of draws) draw()
       viewChanged = true
       settleWaiting()
     }
-    return (adopt: boolean | "late", start: () => void) => defer(() => resume(adopt, start))
+    return resume
   }
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
@@ -5589,6 +5591,8 @@ const setup = (
     if (!propsEqual(child.props, inst.props)) changeProps(inst, child.props)
     if (inst.closed) return
     markDirty(inst)
+    dirty.delete(inst)
+    renderDirty(inst)
     if (slotted !== undefined) refreshOutlets(slotted)
   }
   /** New props from the parent: written to the log, then the watches, keyed queries and shares follow them. */
@@ -6993,7 +6997,7 @@ const setup = (
     if (inst !== author) {
       for (const child of author.children) if (child.key === view.key && child.path === named) failShared(child, made)
     }
-    if (at.late !== undefined) {
+    if (stale) {
       lates.push(() => {
         if (at.late !== undefined && !at.gone && !inst.closed) patchScoped(inst, at, at.v, env)
       })
@@ -7272,7 +7276,7 @@ const setup = (
 
   const patchScoped = (inst: Instance, at: RScoped, view: View.Child<any, any>, env: Env): RScoped => {
     at.v = view
-    at.late?.()
+    const late = at.late
     at.late = undefined
     const old = at.inner
     const entry = old._tag === "Text" ? undefined : entryAt(inst.author, view)
@@ -7294,6 +7298,7 @@ const setup = (
         return at
       }
       at.inner = entry.inner = patchChild(inst, inner, view, env)
+      late?.()
       return at
     }
     const placeholder = (old as RText).node

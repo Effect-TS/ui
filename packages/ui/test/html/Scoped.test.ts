@@ -1155,6 +1155,135 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).pipe(Effect.scoped)
   )
 
+  const Sides = Component.define({
+    name: "Sides",
+    scoped: false,
+    props: Schema.Struct({ shows: Schema.Array(Schema.Literals(["a", "b"])) }),
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html,
+    slots: ["a", "b"]
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.section(h.props.shows.map((slot) => h.slots[slot]))
+  })
+    .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
+
+  it.effect.each(
+    [
+      ["the other slot", ["a"], ["b"], ["y"], ["z"]],
+      ["neither slot", ["a"], [], ["y"], []],
+      ["a slot that holds one more", ["a"], ["a"], ["x", "y"], ["x", "y"]],
+      ["its slots the other way around", ["a", "b"], ["b", "a"], ["x"], ["z", "x"]]
+    ] as const
+  )(
+    "start in the order drawn, and only where placed, when the receiver resumes placing %s",
+    ([_, before, after, left, started]) =>
+      Effect.gen(function*() {
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => false,
+          update: (_, changed) => changed,
+          view: (changed, h) => {
+            const fields = (keys: ReadonlyArray<string>) =>
+              h.scoped(({ model }) => model, (s) => keys.map((key) => Labelled(s, { key, props: { label: key } })))
+            const slots = { a: fields(changed ? left : ["x"]), b: fields(["z"]) }
+            return h.main(Sides(h, { key: "f", props: { shows: changed ? after : before }, slots }))
+          }
+        })
+        const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
+        labels.length = 0
+        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        root.send(true)
+        yield* tick
+        yield* open
+        yield* root.adopted
+        yield* tick
+        assert.deepStrictEqual(
+          [labels, Array.from(app.querySelectorAll("b"), (label) => label.textContent)],
+          [started, started]
+        )
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect("keep the server's Model when first written out of a slot the receiver resumes without", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        props: Schema.Struct({ first: Schema.String }),
+        model: Schema.Number,
+        message: Schema.Number,
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: (_, step) => step,
+        view: (step, h) => {
+          const a = h.scoped(
+            ({ model }) => model !== 1,
+            (s) => Labelled(s, { key: step === 0 ? h.props.first : "l", props: { label: side(step) } })
+          )
+          return h.main(Sides(h, { key: "f", props: { shows: step === 1 ? [] : ["a"] }, slots: { a, b: null } }))
+        }
+      })
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, { first: "l" }))
+      const root = yield* BrowserHost.mountEffect(Page, { first: "other" }, app, { state })
+      root.send(1)
+      yield* tick
+      yield* open
+      yield* root.adopted
+      root.send(2)
+      yield* tick
+      assert.strictEqual(app.querySelector("b")?.textContent, "server")
+    }).pipe(Effect.scoped))
+
+  it.effect("are built where the client last drew them, when their state decodes after the receiver resumes", () =>
+    Effect.gen(function*() {
+      const decoding = yield* Deferred.make<void>()
+      let inits = 0
+      const Late = Component.define({
+        name: "Late",
+        scoped: true,
+        model: Schema.String.pipe(Schema.decode({
+          decode: SchemaGetter.transformEffect((text: string) => Effect.as(Deferred.await(decoding), text)),
+          encode: SchemaGetter.passthrough()
+        })),
+        message: Schema.Never,
+        elements: Html
+      }).make({ init: () => side(inits++), update: (model) => model, view: (text, h) => h.b(text) })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        props: Schema.Struct({ compact: Schema.Boolean }),
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => false,
+        update: (_, drawn) => drawn,
+        view: (_, h) => {
+          const field = h.scoped((s) => Late(s, { key: "l" }))
+          return h.main(Gated(h, { key: "f", slots: { body: h.props.compact ? h.nav(field) : h.header(field) } }))
+        }
+      })
+      const { app, open, state } = yield* serve(HtmlServer.renderToHtml(Page, { compact: false }))
+      const root = yield* BrowserHost.mountEffect(Page, { compact: true }, app, { state })
+      root.send(true)
+      yield* tick
+      yield* open
+      yield* tick
+      yield* Deferred.succeed(decoding, undefined)
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("nav b")?.textContent, "server")
+    }).pipe(Effect.scoped))
+
   it.effect.each(
     [[true, "keep the server's nodes"], [false, "don't start"]] as const
   )(
