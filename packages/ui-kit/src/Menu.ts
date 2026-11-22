@@ -850,7 +850,7 @@ const dismiss = (
     : method === "keyboard" && reason === "trigger-press"
     ? "click"
     : null
-  return base.set(UiStruct.evolve(model, {
+  return base.set(model).evolve({
     closeMethod: method,
     closeReason: reason,
     focusLeft,
@@ -859,7 +859,7 @@ const dismiss = (
     hovering: false,
     stick: false,
     instant
-  })).emit(MenuEvents.RequestedClose({ reason }))
+  }).emit(MenuEvents.RequestedClose({ reason }))
 }
 
 const closeTree = (
@@ -941,7 +941,7 @@ const pressKey = (model: MenuModel, $: MenuUpdate, key: string, action: ItemActi
     return dismiss(model, $, "list-navigation", "keyboard")
   }
   if (key === "Enter") return action === null ? $.set(model) : activate(model, $, action, "keyboard")
-  if (key === " " && model.typed === "") return $.set(UiStruct.evolve(model, { spaceDown: true }))
+  if (key === " " && model.typed === "") return $.set(model).evolve({ spaceDown: true })
   if (key.length === 1 && !filteringOf(props)) return typeKey(model, $, key)
   return $.set(model)
 }
@@ -990,7 +990,7 @@ const pressTrigger = (
   if (disabledOf($)) return $.set(model)
   if (props.open && opensFor(model, props, key, triggerId)) {
     if (model.stick && model.reason === "trigger-hover") {
-      return $.evolve({ reason: "trigger-press", stick: false, hovering: false })
+      return $.set(model).evolve({ reason: "trigger-press", stick: false, hovering: false })
         .run(Command.interrupt(WaitBeforeHoverClose))
     }
     return dismiss(model, $, "trigger-press", method)

@@ -32,7 +32,7 @@
  *
  * **Data attributes**
  *
- * None. Style the parts from `imageLoadingStatus` in the view.
+ * None.
  *
  * **Keyboard**
  *

@@ -508,7 +508,7 @@ const openFor = (
   reason: PopoverOpenReason,
   method: DialogInteraction | null = null
 ) =>
-  $.set(UiStruct.evolve(model, {
+  $.set(model).evolve({
     reason,
     stale: false,
     patient: reason === "trigger-hover",
@@ -518,7 +518,7 @@ const openFor = (
     onPositioner: $.props.open && model.onPositioner,
     switched: $.props.open && model.switched && triggerId === activeOf(model, $.props),
     transition: $.props.open ? model.transition : null
-  })).run(
+  }).run(
     Command.interrupt(WaitBeforeOpening),
     Command.interrupt(WaitBeforeClosing),
     reason === "trigger-hover" ? WaitBeforeClosingOnPress.make({}) : Command.interrupt(WaitBeforeClosingOnPress)

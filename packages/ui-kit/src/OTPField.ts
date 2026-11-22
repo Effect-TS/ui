@@ -751,9 +751,7 @@ export const OTPField = Component.define({
   update: {
     UpdatedSlot: (model, { composing, index, value }, $) => {
       if (locked($.props)) return model
-      if ((composing && !model.android) || model.composing === index) {
-        return model.composing === index ? model : $.evolve({ composing: index })
-      }
+      if ((composing && !model.android) || model.composing === index) return $.evolve({ composing: index })
       const s = settingsOf($.props, model.edit)
       const shown = Redacted.value(value)
       if (model.composed === null) return enter(model, $, s, index, shown, "input-change")
@@ -801,7 +799,7 @@ export const OTPField = Component.define({
       const s = settingsOf($.props)
       const complete = completed(model.edit, s)
       const edit = settle(model.edit, s)
-      const next = edit === model.edit ? model : UiStruct.evolve(model, { edit })
+      const next = UiStruct.evolve(model, { edit })
       const at = model.target ?? (model.focused ? model.focusedIndex : null)
       const back = !s.disabled && at !== null && at > s.characters.length
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next
@@ -813,8 +811,7 @@ export const OTPField = Component.define({
       $.evolve({ focused: false, target: null, composing: null, composed: null }),
     CompletedSelectSlot: (model, _message, $) =>
       model.moving > 1 ? $.evolve({ moving: (moving) => moving - 1 }) : $.evolve({ moving: 0, target: null }),
-    CompletedInspectFirstSlot: (model, { android, label }, $) =>
-      model.android === android && model.label === label ? model : $.evolve({ android, label })
+    CompletedInspectFirstSlot: (_model, { android, label }, $) => $.evolve({ android, label })
   },
   subscriptions: (model, props) => [
     settled(model, props),

@@ -515,7 +515,7 @@ const openFor = (
   triggerId: string | null,
   reason: PreviewCardOpenReason
 ) =>
-  $.set(UiStruct.evolve(model, {
+  $.set(model).evolve({
     away: !model.onTrigger,
     pending: null,
     pendingTrigger: null,
@@ -525,20 +525,20 @@ const openFor = (
     anchorHit: reason === "trigger-hover" ? model.point : null,
     closeReason: null,
     transition: $.props.open ? model.transition : null
-  })).run(Command.interrupt(WaitBeforeOpening), Command.interrupt(WaitBeforeClosing)).emit(
+  }).run(Command.interrupt(WaitBeforeOpening), Command.interrupt(WaitBeforeClosing)).emit(
     PreviewCardEvents.RequestedOpen({ triggerId, reason })
   )
 
 const dismiss = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
   $.props.open
-    ? $.evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
+    ? $.set(model).evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
       PreviewCardEvents.RequestedClose({ reason })
     )
     : model
 
 const cancelled = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardOpenReason) =>
   !$.props.open && model.pending === reason
-    ? $.set(UiStruct.evolve(model, { pending: null, pendingTrigger: null })).run(Command.interrupt(WaitBeforeOpening))
+    ? $.set(model).evolve({ pending: null, pendingTrigger: null }).run(Command.interrupt(WaitBeforeOpening))
     : model
 
 const watchLines = (
@@ -981,7 +981,7 @@ export const PreviewCard = Component.define({
       if (!$.props.open) {
         return uncovered || model.touched
           ? next
-          : $.set(UiStruct.evolve(next, { closeDelay, pending: "trigger-hover", pendingTrigger: triggerId })).run(
+          : $.set(next).evolve({ closeDelay, pending: "trigger-hover", pendingTrigger: triggerId }).run(
             WaitBeforeOpening.make({ delay })
           )
       }
@@ -1008,7 +1008,7 @@ export const PreviewCard = Component.define({
       if (!visible) return model
       const next = UiStruct.evolve(model, { focused: true, focusTrigger: triggerId })
       if (!$.props.open) {
-        return $.set(UiStruct.evolve(next, { closeDelay, pending: "trigger-focus", pendingTrigger: triggerId })).run(
+        return $.set(next).evolve({ closeDelay, pending: "trigger-focus", pendingTrigger: triggerId }).run(
           WaitBeforeOpening.make({ delay })
         )
       }
@@ -1055,7 +1055,7 @@ export const PreviewCard = Component.define({
           closeReason: null
         })
         : $.evolve({ mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? $.evolve({ started: true }) : model,
+    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model
       if (open) return $.set(model).emit(PreviewCardEvents.Settled({ open }))

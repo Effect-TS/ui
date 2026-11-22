@@ -1107,13 +1107,11 @@ export const Dialog = Component.define({
       $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true
         ? dismiss($, "focus-out", null)
         : model,
-    ShowedPortal: (model, _message, $) =>
+    ShowedPortal: (_model, _message, $) =>
       $.props.open
         ? $.evolve({ mounted: true, reason: null, closeMethod: null })
-        : model.mounted
-        ? model
         : $.evolve({ mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? $.evolve({ started: true }) : model,
+    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model
       if (open) return $.set(model).emit(DialogEvents.Settled({ open }))

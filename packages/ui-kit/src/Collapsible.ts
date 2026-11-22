@@ -428,7 +428,7 @@ export const Collapsible = Component.define({
           ? { size, mounted: true, ending: false }
           : { size, mounted: true, ending: false, instant: false, openOnLoad: false }
       ),
-    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? $.evolve({ started: true }) : model,
+    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
     RenderedSize: (model, _message, $) => !$.props.open && model.mounted ? $.evolve({ ending: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model

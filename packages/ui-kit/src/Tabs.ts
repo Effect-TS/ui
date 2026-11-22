@@ -746,17 +746,14 @@ export const Tabs = Component.define({
       const next = UiStruct.evolve(model, { focused: true, highlighted: value })
       return $.props.activateOnFocus === true && model.secondary !== value ? activate(next, $, value) : next
     },
-    BlurredTab: (model, _message, $) => model.focused ? $.evolve({ focused: false }) : model,
-    PressedTab: (model, { button, value }, $) => {
-      const secondary = button === 0 ? null : value
-      return secondary === model.secondary ? model : $.evolve({ secondary })
-    },
-    ReleasedPointer: (model, _message, $) => model.secondary === null ? model : $.evolve({ secondary: null }),
+    BlurredTab: (_model, _message, $) => $.evolve({ focused: false }),
+    PressedTab: (_model, { button, value }, $) => $.evolve({ secondary: button === 0 ? null : value }),
+    ReleasedPointer: (_model, _message, $) => $.evolve({ secondary: null }),
     PressedKey: (model, { to, value }, $) => navigate(model, $, value, to),
     ChangedValue: (model, _message, $) => phaseOf(model, $.props, rtlOf($)),
     RenderedFirstFrame: (model, { value }, $) => {
       const next = phaseOf(model, $.props, rtlOf($))
-      return value === next.shown && !next.started ? UiStruct.evolve(next, { started: true }) : next
+      return value === next.shown ? UiStruct.evolve(next, { started: true }) : next
     },
     FinishedTransition: (model, { value }, $) => {
       const next = phaseOf(model, $.props, rtlOf($))
@@ -764,7 +761,7 @@ export const Tabs = Component.define({
         ? UiStruct.evolve(next, { leaving: (leaving) => leaving.filter((v) => v !== value) })
         : next
     },
-    MeasuredActiveTab: (model, { sized }, $) => model.indicator === sized ? model : $.evolve({ indicator: sized })
+    MeasuredActiveTab: (_model, { sized }, $) => $.evolve({ indicator: sized })
   },
   subscriptions: (model, props) => [
     props.value !== model.shown &&

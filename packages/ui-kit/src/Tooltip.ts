@@ -385,7 +385,7 @@ type TooltipUpdate = Component.Update<typeof TooltipModel.Type, typeof TooltipMe
 // The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
 const dismiss = (model: typeof TooltipModel.Type, $: TooltipUpdate, instant = model.instant) =>
   shownBy($.props)
-    ? $.evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
+    ? $.set(model).evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
     : model
 
 // The pointer left the trigger or the positioner: a pending open stops, and

@@ -298,7 +298,7 @@ export const ToggleGroup = Component.define({
   update: {
     ClickedItem: (model, { value }, $) =>
       enabled($.props, value) ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) })) : model,
-    FocusedItem: (model, { value }, $) => model.active === value ? model : $.evolve({ active: value }),
+    FocusedItem: (_model, { value }, $) => $.evolve({ active: value }),
     PressedKey: (model, { key, value }, $) => {
       const items = enabledOf($.props)
       const last = items.length - 1

@@ -555,7 +555,7 @@ const dismiss = (
   focusLeft = false
 ) =>
   $.props.open
-    ? $.set(UiStruct.evolve(model, { closeMethod: method, focusLeft, pressing: false, spaceDown: false })).emit(
+    ? $.set(model).evolve({ closeMethod: method, focusLeft, pressing: false, spaceDown: false }).emit(
       SelectEvents.RequestedClose({ reason })
     )
     : model
@@ -575,7 +575,7 @@ const pick = (model: SelectModel, $: SelectUpdate, value: string, method: Select
   if (props.multiple === true) {
     return $.set(next).emit(SelectEvents.Picked({ value: toggled(valuesOf(props), value), reason: "item-press" }))
   }
-  return $.set(UiStruct.evolve(next, { closeMethod: method, focusLeft: false, pressing: false }))
+  return $.set(next).evolve({ closeMethod: method, focusLeft: false, pressing: false })
     .emit(SelectEvents.Picked({ value, reason: "item-press" }))
     .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
 }
@@ -593,7 +593,7 @@ const typeKey = (model: SelectModel, $: SelectUpdate, key: string) => {
   const { index, next } = typeahead(model, key, props.items, startOf(model, props))
   const item = props.items[index]
   const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
+  const typed = $.set(model).evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
   return item === undefined || props.open || valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))

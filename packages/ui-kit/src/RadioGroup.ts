@@ -116,7 +116,6 @@ import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -350,9 +349,6 @@ const itemState = <B extends Attributed<B>>(builder: B, state: ItemState, requir
 const itemOf = (items: ReadonlyArray<RadioGroupItem>, value: string): RadioGroupItem | undefined =>
   items.find((item) => item.value === value)
 
-const highlight = (model: RadioGroupModel, value: string): RadioGroupModel =>
-  UiStruct.evolve(model, { highlighted: value })
-
 const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
   props.readOnly !== true && item.readOnly !== true && props.value !== item.value
 
@@ -418,18 +414,18 @@ export const RadioGroup = Component.define({
     ClickedRadio: (model, { value }, $) => {
       const item = itemOf($.props.items, value)
       if ($.props.disabled === true || !available(item)) return model
-      const next = highlight(model, value)
-      return picks($.props, item) ? $.set(next).emit(RadioGroupEvents.Picked({ value })) : next
+      const highlighted = $.evolve({ highlighted: value })
+      return picks($.props, item) ? highlighted.emit(RadioGroupEvents.Picked({ value })) : highlighted
     },
     FocusedRadio: (model, { value }, $) =>
-      $.props.disabled === true || !available(itemOf($.props.items, value)) ? model : highlight(model, value),
+      $.props.disabled === true || !available(itemOf($.props.items, value)) ? model : $.evolve({ highlighted: value }),
     PressedArrow: (model, { direction, value }, $) => {
       if ($.props.disabled === true) return model
       const enabled = $.props.items.filter(available)
       const at = enabled.findIndex((item) => item.value === value)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
       if (target === undefined) return model
-      const moved = $.set(highlight(model, target.value)).run(focusRadio(target.value))
+      const moved = $.evolve({ highlighted: target.value }).run(focusRadio(target.value))
       return picks($.props, target) ? moved.emit(RadioGroupEvents.Picked({ value: target.value })) : moved
     },
     PressedEnter: (model) => model,
