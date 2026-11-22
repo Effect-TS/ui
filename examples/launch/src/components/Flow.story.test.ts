@@ -20,7 +20,7 @@ describe("Flow", () => {
 
   it.effect("records from the press that opens the dialog, and plays once", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Flow, props({ steps: [], live: true }))
+      const s = yield* Story.make(Flow, props({ steps: undefined }))
       assert.deepStrictEqual(s.subscriptions, ["trace"])
       s.send(FlowMessage.RecordedStep({ step: opened }))
       assert.deepStrictEqual(s.model.recorded, [])
@@ -34,7 +34,7 @@ describe("Flow", () => {
 
   it.effect("a new open starts a new recording", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Flow, props({ steps: [], live: true }))
+      const s = yield* Story.make(Flow, props({ steps: undefined }))
       s.send(FlowMessage.RecordedStep({ step: press }))
         .send(FlowMessage.RecordedStep({ step: opened }))
         .send(FlowMessage.ClickedPill({ index: 1 }))

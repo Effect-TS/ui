@@ -1,6 +1,7 @@
-import { type FlowStep, step } from "#domain/FlowStep"
+import type { FlowStep } from "#domain/FlowStep"
 import { MessageLog } from "@effect/ui"
-import { Context, Effect, Layer, Queue, Stream } from "effect"
+import { DialogEvents } from "@effect/ui-kit"
+import { Context, Effect, Layer, Predicate, Queue, Schema, Stream } from "effect"
 
 export class DialogTrace extends Context.Service<DialogTrace, {
   readonly steps: Stream.Stream<FlowStep>
@@ -20,8 +21,7 @@ export class DialogTrace extends Context.Service<DialogTrace, {
   }))
 }
 
-const field = (value: unknown, name: string): unknown =>
-  typeof value === "object" && value !== null && name in value ? (value as Record<string, unknown>)[name] : undefined
+const field = (value: unknown, name: string): unknown => Predicate.hasProperty(value, name) ? value[name] : undefined
 
 const tagOf = (value: unknown): string => String(field(value, "_tag"))
 
@@ -44,24 +44,22 @@ const pressLines: Record<string, string> = {
   PressedOutside: "dialog.backdrop("
 }
 
+const eventCaptions: Record<DialogEvents["_tag"], string> = {
+  RequestedOpen: "The Dialog emits RequestedOpen. It doesn't open itself.",
+  RequestedClose: "The Dialog emits RequestedClose. The page can refuse.",
+  Settled: "The Dialog emits Settled: the transition finished. The page maps it to nothing."
+}
+
 const eventSteps = (events: ReadonlyArray<unknown>, where: string): Array<FlowStep> =>
-  events.map((event) => {
-    const name = tagOf(event)
-    const caption = name === "RequestedOpen"
-      ? "The Dialog emits RequestedOpen. It doesn't open itself."
-      : name === "RequestedClose"
-      ? "The Dialog emits RequestedClose. The page can refuse."
-      : "The Dialog emits Settled: the transition finished. The page maps it to nothing."
-    return step({
-      kind: "event",
-      at: "dialog",
-      move: "up",
-      name,
-      where,
-      caption,
-      line: `${name}: () =>`
-    })
-  })
+  events.filter(Schema.is(DialogEvents)).map(({ _tag }) => ({
+    kind: "event",
+    at: "dialog",
+    move: "up",
+    name: _tag,
+    where,
+    caption: eventCaptions[_tag],
+    line: `${_tag}: () =>`
+  }))
 
 const dialogState = (model: unknown): ReadonlyArray<string> => [
   `mounted: ${String(field(model, "mounted"))}`,
@@ -84,7 +82,7 @@ export const toSteps = (entry: MessageLog.Entry): ReadonlyArray<FlowStep> => {
       const name = tagOf(entry.message)
       if (at === "page") {
         const confirm = String(field(entry.model, "confirm"))
-        return [step({
+        return [{
           kind: "message",
           at,
           name,
@@ -92,26 +90,26 @@ export const toSteps = (entry: MessageLog.Entry): ReadonlyArray<FlowStep> => {
           caption: `The page's onEmit turns the event into its own message, and its update sets confirm to ${confirm}.`,
           line: `${name}: (_model`,
           page: [`confirm: ${confirm}`]
-        })]
+        }]
       }
       const fromMount = entry.source._tag === "Mount"
       return [
-        step({
+        {
           kind: "message",
           at,
           name,
           where,
           caption: (fromMount ? mountCaptions[name] : pressCaptions[name]) ?? `The Dialog's update handles ${name}.`,
-          line: fromMount ? (name === "ShowedPortal" ? "dialog.portal(" : "dialog.popup(") : pressLines[name] ?? "",
+          line: fromMount ? (name === "ShowedPortal" ? "dialog.portal(" : "dialog.popup(") : pressLines[name],
           dialog: dialogState(entry.model),
-          starts: !fromMount && entry.events.some((event) => tagOf(event) === "RequestedOpen")
-        }),
+          starts: !fromMount && entry.events.some(DialogEvents.is("RequestedOpen"))
+        },
         ...eventSteps(entry.events, where)
       ]
     }
     case "PropsChanged": {
       const open = String(field(entry.props, "open"))
-      return [step({
+      return [{
         kind: "props",
         at,
         move: "down",
@@ -119,10 +117,10 @@ export const toSteps = (entry: MessageLog.Entry): ReadonlyArray<FlowStep> => {
         where,
         caption: `The page renders again and passes open: ${open} down. A prop change is a log entry, not a message.`,
         line: "props: { open: model.confirm }"
-      })]
+      }]
     }
     case "MountStarted":
-      return [step({
+      return [{
         kind: "mount",
         at,
         name: entry.name,
@@ -130,16 +128,16 @@ export const toSteps = (entry: MessageLog.Entry): ReadonlyArray<FlowStep> => {
         caption:
           "The <dialog> is in the document now, so its mount starts. It does the focus, scroll lock and Escape work.",
         line: "dialog.portal("
-      })]
+      }]
     case "MountEnded":
-      return [step({
+      return [{
         kind: "mount",
         at,
         name: entry.name,
         where,
         caption: "The <dialog> leaves the document and its mount ends.",
         line: "dialog.portal("
-      })]
+      }]
     default:
       return []
   }

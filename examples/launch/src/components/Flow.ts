@@ -1,12 +1,12 @@
 import { FlowStep } from "#domain/FlowStep"
-import { countLines, findLine, Snippet } from "#domain/Snippet"
+import { countLines, lineOf, Snippet } from "#domain/Snippet"
 import { Component, Subscription, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import { DialogTrace } from "../trace/DialogTrace.ts"
 import { Code } from "./Code.ts"
 
-export const FlowBox = Schema.Struct({
+const FlowBox = Schema.Struct({
   name: Schema.String,
   note: Schema.String,
   state: Schema.Array(Schema.String)
@@ -15,8 +15,7 @@ export const FlowBox = Schema.Struct({
 export const FlowProps = Schema.Struct({
   title: Schema.String,
   files: Schema.Array(Snippet),
-  steps: Schema.Array(FlowStep),
-  live: Schema.Boolean,
+  steps: Schema.optional(Schema.Array(FlowStep)),
   page: FlowBox,
   dialog: FlowBox,
   empty: Schema.String
@@ -38,8 +37,7 @@ export const FlowMessage = UiSchema.TaggedEnum({
   ClickedPill: { index: Schema.Number }
 })
 
-const stepsOf = (model: FlowModel, props: FlowProps): ReadonlyArray<FlowStep> =>
-  props.live ? model.recorded : props.steps
+const stepsOf = (model: FlowModel, props: FlowProps): ReadonlyArray<FlowStep> => props.steps ?? model.recorded
 
 const stateAt = (
   steps: ReadonlyArray<FlowStep>,
@@ -49,18 +47,9 @@ const stateAt = (
 ) => {
   for (let index = step; index >= 0; index--) {
     const state = steps[index]?.[box]
-    if (state !== null && state !== undefined) return state
+    if (state !== undefined) return state
   }
   return initial
-}
-
-const kindLabels: Record<FlowStep["kind"], string> = {
-  message: "message",
-  event: "event",
-  props: "props",
-  mount: "mount",
-  command: "command",
-  outmessage: "OutMessage"
 }
 
 const playInterval = "1200 millis"
@@ -92,7 +81,7 @@ export const Flow = Component.define({
     ClickedPill: (_model, { index }, $) => $.evolve({ step: index, playing: false })
   },
   subscriptions: (model, props) => [
-    props.live && Subscription.make(
+    props.steps === undefined && Subscription.make(
       "trace",
       Stream.unwrap(Effect.gen(function*() {
         const trace = yield* DialogTrace
@@ -106,10 +95,9 @@ export const Flow = Component.define({
     const props = h.props
     const steps = stepsOf(model, props)
     const current = steps[model.step]
-    const lit = current === undefined ? undefined : findLine(props.files, current.line)
     const fileCount = props.files.length
     const box = (name: "page" | "dialog") =>
-      h.div.class("box").attr("data-box", name).attr("data-active", current?.at === name ? "" : undefined).children(
+      h.div.class("box").attr("data-active", current?.at === name ? "" : undefined).children(
         h.p.class("box-name").children(props[name].name),
         h.p.class("box-note").children(props[name].note),
         h.ul.class("box-state").children(
@@ -127,7 +115,7 @@ export const Flow = Component.define({
       h.div.class("stage").children(
         box("page"),
         h.div.class("channel").children(
-          current !== undefined && current.move !== "none" &&
+          current?.move !== undefined &&
             h.span.key(`chip-${model.step}`).class("chip").attr("data-move", current.move).children(current.name)
         ),
         box("dialog")
@@ -136,7 +124,7 @@ export const Flow = Component.define({
         current === undefined
           ? h.p.class("entry entry-empty").children(steps.length === 0 ? "No entries yet" : `${steps.length} steps`)
           : h.p.class("entry").children(
-            h.span.class("kind").attr("data-kind", current.kind).children(kindLabels[current.kind]),
+            h.span.class("kind").children(current.kind),
             h.code.class("entry-name").children(current.name),
             h.span.class("entry-where").children(current.where)
           ),
@@ -147,7 +135,6 @@ export const Flow = Component.define({
           ...steps.map((step, index) =>
             h.li.key(String(index)).children(
               h.button.class("pill").attr("type", "button")
-                .attr("data-kind", step.kind)
                 .attr("aria-current", index === model.step ? "step" : undefined)
                 .attr("aria-label", `Step ${index + 1}: ${step.name}`)
                 .onClick(FlowMessage.ClickedPill({ index }))
@@ -164,9 +151,7 @@ export const Flow = Component.define({
       ),
       h.div.class("files").children(
         ...props.files.map((snippet) =>
-          h.div.key(snippet.name).children(
-            Code(h, { snippet, lit: lit !== undefined && lit[0] === snippet.name ? lit[1] : undefined })
-          )
+          h.div.key(snippet.name).children(Code(h, { snippet, lit: lineOf(snippet, current?.line) }))
         )
       )
     )

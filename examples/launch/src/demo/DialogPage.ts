@@ -31,7 +31,7 @@ export const DialogPage = Component.define({
       view: (dialog) =>
         h.div(
           dialog.trigger(h.button.class("button")).children("Discard draft"),
-          dialog.portal(h.dialog.class("dialog"))?.children(
+          dialog.portal(h.dialog)?.children(
             dialog.backdrop(h.div.class("backdrop")),
             dialog.popup(h.div.class("popup")).children(
               dialog.title(h.h2).children("Discard this draft?"),

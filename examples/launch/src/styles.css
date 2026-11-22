@@ -88,11 +88,15 @@ a {
   padding: 0 clamp(20px, 5vw, 56px);
 }
 
-.label {
+.label,
+.totals caption {
   font: 500 12px/1 var(--mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+}
+
+.label {
   margin-bottom: 20px;
 }
 
@@ -125,21 +129,24 @@ a {
   border-top: 1px solid var(--border);
 }
 
-.name {
+.names .term {
   padding: 20px 24px 0 0;
 }
 
-.name + .name {
+.names .term + .term {
   padding-left: 24px;
   border-left: 1px solid var(--border);
 }
 
-.name dt {
-  font-weight: 600;
+.names dt {
   letter-spacing: -0.01em;
 }
 
-.name dd {
+.term dt {
+  font-weight: 600;
+}
+
+.term dd {
   margin-top: 4px;
   font-size: 0.9375rem;
   line-height: 1.5;
@@ -183,20 +190,9 @@ h2 + .split {
   margin-top: 40px;
 }
 
-.kept-item {
+.kept .term {
   padding-top: 14px;
   border-top: 1px solid var(--border-strong);
-}
-
-.kept-item dt {
-  font-weight: 600;
-}
-
-.kept-item dd {
-  margin-top: 4px;
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  color: var(--muted-foreground);
 }
 
 .split {
@@ -258,10 +254,6 @@ h2 + .split {
 .totals caption {
   padding-bottom: 12px;
   text-align: left;
-  font: 500 12px/1 var(--mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
 }
 
 .totals th,
@@ -304,7 +296,8 @@ h2 + .split {
   gap: 12px;
 }
 
-.flow-title {
+.flow-title,
+.popup h2 {
   font-size: 1.125rem;
   font-weight: 620;
   letter-spacing: -0.015em;
@@ -508,7 +501,7 @@ h2 + .split {
   transition: background-color 0.15s, color 0.15s;
 }
 
-.button:hover {
+.button:not(:disabled):hover {
   background: var(--wash);
 }
 
@@ -517,21 +510,13 @@ h2 + .split {
   color: var(--background);
 }
 
-.button.primary:hover {
+.button.primary:not(:disabled):hover {
   background: color-mix(in oklab, var(--foreground) 86%, var(--background));
 }
 
 .button:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-.button:disabled:hover {
-  background: none;
-}
-
-.button.primary:disabled:hover {
-  background: var(--foreground);
 }
 
 .files {
@@ -574,16 +559,6 @@ h2 + .split {
   border-left-color: var(--foreground);
 }
 
-.code .line span {
-  color: var(--light);
-}
-
-@media (prefers-color-scheme: dark) {
-  .code .line span {
-    color: var(--dark);
-  }
-}
-
 .links {
   margin-top: 28px;
 }
@@ -621,12 +596,6 @@ h2 + .split {
   color: var(--foreground);
   box-shadow: 0 24px 64px -16px oklch(14.1% 0.005 285.823 / 0.35);
   transition: opacity 0.2s var(--ease), scale 0.2s var(--ease);
-}
-
-.popup h2 {
-  font-size: 1.125rem;
-  font-weight: 620;
-  letter-spacing: -0.015em;
 }
 
 .popup p {
@@ -669,8 +638,8 @@ h2 + .split {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .name,
-  .name + .name {
+  .names .term,
+  .names .term + .term {
     padding: 16px 0 0;
     border-left: 0;
   }
