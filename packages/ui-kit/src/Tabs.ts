@@ -58,18 +58,20 @@
  *
  * **Keyboard**
  *
- * One tab is in the page's Tab order: the active one, or the first enabled
- * tab when the active one is disabled or none is active. Once focus is in
- * the list, it is the focused tab.
+ * One tab is in the page's Tab order: the one focus last left, or, while
+ * focus is outside the list, the active tab. A disabled active tab leaves
+ * the previous one in place, and with none the first enabled tab is used.
  *
  * - Left and Right move focus between the tabs of a horizontal list, swapped
  *   in a right-to-left layout. Up and Down do it in a vertical list.
  * - Home and End move focus to the first and the last tab.
  * - The arrow keys wrap around, unless `loopFocus` is `false`.
- * - Enter and Space activate the focused tab: a `<button>` clicks natively,
- *   and a tab drawn as `<a>` is clicked on Space by the tabs, so the link
- *   still follows its `href`. With `activateOnFocus`, moving focus activates
- *   the tab as well.
+ * - Space clicks the focused tab once, when the key goes down, with the
+ *   key's modifiers, so a link tab still follows its `href`.
+ * - Enter clicks a `<button>` or a link natively, and the tabs click an
+ *   `<a>` that has no `href`.
+ * - With `activateOnFocus`, moving focus activates the tab as well, unless
+ *   a mouse button other than the main one pressed it.
  *
  * Disabled tabs take focus and are not skipped, so a screen reader can find
  * them, but they never activate.
@@ -282,7 +284,7 @@ const Message = UiSchema.TaggedEnum({
   ClickedTab: { value: Schema.String },
   FocusedTab: { value: Schema.String },
   BlurredTab: {},
-  PressedTab: { button: Schema.Number },
+  PressedTab: { value: Schema.String, button: Schema.Number },
   ReleasedMouse: {},
   PressedKey: { value: Schema.String, key: Schema.String },
   ChangedValue: {},
@@ -296,7 +298,7 @@ type Message = typeof Message.Type
 const Model = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
   focused: Schema.Boolean,
-  pressing: Schema.Boolean,
+  secondary: Schema.NullOr(Schema.String),
   shown: Schema.NullOr(Schema.String),
   leaving: Schema.Array(Schema.String),
   started: Schema.Boolean,
@@ -332,6 +334,7 @@ const directionOf = (
 const phaseOf = (model: Model, props: TabsProps, rtl: boolean): Model =>
   props.value === model.shown ? model : {
     ...model,
+    highlighted: !model.focused && enabledIn(props.tabs, props.value) ? props.value : model.highlighted,
     shown: props.value,
     leaving: [
       ...model.leaving.filter((value) => value !== props.value),
@@ -341,6 +344,11 @@ const phaseOf = (model: Model, props: TabsProps, rtl: boolean): Model =>
     direction: directionOf(props, rtl, model.shown, props.value),
     indicator: props.value === null ? false : model.indicator
   }
+
+const enabledIn = (tabs: ReadonlyArray<TabsTab>, value: string | null): value is string => {
+  const tab = tabs[indexOf(tabs, value)]
+  return tab !== undefined && tab.disabled !== true
+}
 
 const rtlOf = ($: { readonly shared: { readonly provider?: { readonly direction: string } | undefined } }) =>
   $.shared.provider?.direction === "rtl"
@@ -408,40 +416,100 @@ const TrackPanel = Mount.makeStream(
     )
 )
 
-const ClickOnSpace = Mount.makeStream(
-  "ClickOnSpace",
+const tabOf = (event: Event, list: unknown): HTMLElement | null => {
+  const tab = event.target
+  return isHTMLElement(tab) && tab.getAttribute("role") === "tab" && tab.closest("[role=tablist]") === list
+    ? tab
+    : null
+}
+
+const clickFrom = (tab: HTMLElement, event: KeyboardEvent) => {
+  const view = tab.ownerDocument.defaultView
+  const Click = view?.PointerEvent ?? view?.MouseEvent ?? MouseEvent
+  tab.dispatchEvent(
+    new Click("click", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      detail: 0,
+      view,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey
+    })
+  )
+}
+
+const ActivateFromKeys = Mount.makeStream(
+  "ActivateFromKeys",
   { args: {} },
   (node: unknown) =>
     Stream.callback<never>(() =>
       Effect.acquireRelease(
         Effect.sync(() => {
           const onKeyDown = (event: KeyboardEvent) => {
-            const tab = event.target
-            if (event.key !== " " || event.defaultPrevented || !isHTMLElement(tab)) return
-            if (tab.localName !== "a" || tab.getAttribute("role") !== "tab" || tab.closest("[role=tablist]") !== node) {
-              return
+            const tab = tabOf(event, node)
+            if (tab === null) return
+            const enabled = tab.getAttribute("aria-disabled") !== "true"
+            if (event.key === " ") {
+              event.preventDefault()
+              if (enabled) clickFrom(tab, event)
+            } else if (event.key === "Enter" && enabled && tab.localName === "a" && !tab.hasAttribute("href")) {
+              event.preventDefault()
+              clickFrom(tab, event)
             }
-            if (event.altKey || event.ctrlKey || event.metaKey) return
-            event.preventDefault()
-            if (tab.getAttribute("aria-disabled") === "true") return
-            tab.dispatchEvent(
-              new MouseEvent("click", {
-                bubbles: true,
-                cancelable: true,
-                composed: true,
-                view: tab.ownerDocument.defaultView,
-                shiftKey: event.shiftKey
-              })
-            )
+          }
+          const onKeyUp = (event: KeyboardEvent) => {
+            const tab = tabOf(event, node)
+            if (tab !== null && event.key === " " && tab.localName === "button") event.preventDefault()
           }
           const target = isHTMLElement(node) ? node : null
           target?.addEventListener("keydown", onKeyDown)
-          return () => target?.removeEventListener("keydown", onKeyDown)
+          target?.addEventListener("keyup", onKeyUp)
+          return () => {
+            target?.removeEventListener("keydown", onKeyDown)
+            target?.removeEventListener("keyup", onKeyUp)
+          }
         }),
         (remove) => Effect.sync(remove)
       )
     )
 )
+
+const linkPanels = <E extends View.Element<any, any>>(root: E, controls: ReadonlyMap<string, string>): E => {
+  const panelIds = new Set(controls.values())
+  const drawn = new Set<string>()
+  const isPanel = (node: View.Element<any, any>) =>
+    node.attrs.role === "tabpanel" && node.attrs.id !== undefined && panelIds.has(node.attrs.id)
+  const collect = (node: View.Node<any, any>): void => {
+    if (node._tag !== "Element") return
+    if (isPanel(node)) drawn.add(node.attrs.id!)
+    else node.children.forEach(collect)
+  }
+  collect(root)
+  if (drawn.size === 0) return root
+  const link = (node: View.Node<any, any>): View.Node<any, any> => {
+    if (node._tag !== "Element" || isPanel(node)) return node
+    const panel = node.attrs.id === undefined ? undefined : controls.get(node.attrs.id)
+    if (panel !== undefined) {
+      const own = node.attrs["aria-controls"]
+      if (!drawn.has(panel) || own?.split(/\s+/).includes(panel)) return node
+      return {
+        ...node,
+        attrs: { ...node.attrs, "aria-controls": own === undefined || own === "" ? panel : own + " " + panel }
+      }
+    }
+    let changed = false
+    const children = node.children.map((child) => {
+      const next = link(child)
+      changed ||= next !== child
+      return next
+    })
+    return changed ? { ...node, children } : node
+  }
+  return link(root) as E
+}
 
 const MAX_LAYOUT_ROUNDING_ERROR = 2
 
@@ -620,14 +688,17 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  * - every part: `data-orientation` and `data-activation-direction`
  * - `list`: `role="tablist"`, and `aria-orientation`, written only for a
  *   vertical list
- * - `tab`: `role="tab"`, `id`, `aria-selected`, `aria-controls`, written while
- *   its panel is drawn, `aria-disabled`, `tabindex`, `disabled`, which it
+ * - `tab`: `role="tab"`, `id`, `aria-selected`, `aria-controls`, added only
+ *   while the view draws its panel, `aria-disabled`, `tabindex`, `disabled`, which it
  *   never sets so a disabled tab keeps its focus, `type="button"` on a
  *   `<button>`, `data-active` and `data-disabled`
  * - `panel`: `role="tabpanel"`, `id`, `aria-labelledby`, `hidden`, `inert` on
  *   a panel that isn't active, `tabindex`, `data-index`, `data-hidden`,
  *   `data-starting-style` and `data-ending-style`
  * - `indicator`: `role="presentation"` and `hidden`
+ *
+ * `aria-controls` and `aria-labelledby` are lists of ids, so the part adds
+ * its id to the consumer's instead of replacing them.
  *
  * A part writes them when it is applied, so an attribute the consumer
  * chains after the part is the consumer's to answer for.
@@ -663,9 +734,9 @@ export const Tabs = Component.define({
   elements: Html
 }).make({
   init: ({ props }) => ({
-    highlighted: null,
+    highlighted: enabledIn(props.tabs, props.value) ? props.value : null,
     focused: false,
-    pressing: false,
+    secondary: null,
     shown: props.value,
     leaving: [],
     started: true,
@@ -675,13 +746,13 @@ export const Tabs = Component.define({
   update: {
     ClickedTab: (model, { value }, $) => activate(model, $, value, rtlOf($)),
     FocusedTab: (model, { value }, $) => {
-      const next = { ...model, focused: true, highlighted: value }
-      return $.props.activateOnFocus === true && !model.pressing ? activate(next, $, value, rtlOf($)) : next
+      const next = { ...model, focused: true, highlighted: value, secondary: null }
+      return $.props.activateOnFocus === true && model.secondary !== value ? activate(next, $, value, rtlOf($)) : next
     },
     BlurredTab: (model) => model.focused ? { ...model, focused: false } : model,
-    PressedTab: (model, { button }) => ({ ...model, pressing: button !== 0 }),
-    ReleasedMouse: (model) => model.pressing ? { ...model, pressing: false } : model,
-    PressedKey: (model, { key, value }, $) => navigate(model, $, value, key, rtlOf($)),
+    PressedTab: (model, { button, value }) => ({ ...model, secondary: button === 0 ? null : value }),
+    ReleasedMouse: (model) => model.secondary === null ? model : { ...model, secondary: null },
+    PressedKey: (model, { key, value }, $) => navigate({ ...model, secondary: null }, $, value, key, rtlOf($)),
     ChangedValue: (model, _message, $) => phaseOf(model, $.props, rtlOf($)),
     RenderedFirstFrame: (model, { value }, $) => {
       const next = phaseOf(model, $.props, rtlOf($))
@@ -696,7 +767,7 @@ export const Tabs = Component.define({
   subscriptions: (model, props) => [
     props.value !== model.shown &&
     Subscription.make("changedValue", [props.value], () => Stream.make(Message.ChangedValue())),
-    model.pressing && releasedMouse
+    model.secondary !== null && releasedMouse
   ],
   parts: (model, p) => {
     const props = p.props
@@ -720,15 +791,10 @@ export const Tabs = Component.define({
     const panelId = (value: string) => p.id("panel", value)
     const mounted = (value: string) => value === props.value || phase.leaving.includes(value)
     const kept = (tab: TabsTab) => tab.keepMounted ?? props.keepMounted === true
-    const enabled = (value: string | null) => {
-      const tab = value === null ? undefined : tabs[positions.get(value) ?? -1]
-      return tab !== undefined && tab.disabled !== true
-    }
-    const stop = model.focused && model.highlighted !== null && positions.has(model.highlighted)
-      ? model.highlighted
-      : enabled(props.value)
-      ? props.value
+    const stop = phase.highlighted !== null && positions.has(phase.highlighted)
+      ? phase.highlighted
       : (tabs.find((tab) => tab.disabled !== true) ?? tabs[0])?.value ?? null
+    const controls = new Map(tabs.map((tab) => [tabId(tab.value), panelId(tab.value)]))
     const common = <B extends Attributed<B>>(builder: B): B =>
       builder.attr("data-orientation", orientation).attr("data-activation-direction", phase.direction)
 
@@ -741,7 +807,6 @@ export const Tabs = Component.define({
         .attr("role", "tab")
         .attr("id", tabId(value))
         .attr("aria-selected", String(active))
-        .attr("aria-controls", mounted(value) || kept(tab) ? panelId(value) : undefined)
         .attr("aria-disabled", disabled ? "true" : undefined)
         .attr("tabindex", value === stop ? "0" : "-1")
         .attr("disabled", undefined)
@@ -763,7 +828,7 @@ export const Tabs = Component.define({
         .onBlur(Message.BlurredTab())
       const typed = b.tag === "button" ? decorated.attr("type", "button") : decorated
       return props.activateOnFocus === true
-        ? typed.on("mousedown", ({ button }: Html.PointerPayload) => Message.PressedTab({ button }))
+        ? typed.on("mousedown", ({ button }: Html.PointerPayload) => Message.PressedTab({ value, button }))
         : typed
     })
 
@@ -800,12 +865,12 @@ export const Tabs = Component.define({
       value: props.value,
       orientation,
       activationDirection: phase.direction,
-      root: p.part(common),
+      root: p.part((b) => common(b).forward((node) => linkPanels(View.build(node, []), controls))),
       list: p.part((b) =>
         common(b)
           .attr("role", "tablist")
           .attr("aria-orientation", orientation === "vertical" ? "vertical" : undefined)
-          .onMount(ClickOnSpace({}))
+          .onMount(ActivateFromKeys({}))
       ),
       tab: View.wrapPart(
         tabPart,

@@ -21,7 +21,7 @@ const Page = Component.define({
     Tabs(h, {
       props: {
         value: model.tab,
-        tabs: [{ value: "a" }, { value: "b" }, { value: "c" }, { value: "d", disabled: true }]
+        tabs: [{ value: "a" }, { value: "b" }, { value: "c" }, { value: "d", disabled: true }, { value: "e" }]
       },
       onEmit: { Selected: ({ value }) => Message.Selected({ value }) },
       view: (tabs) =>
@@ -31,9 +31,12 @@ const Page = Component.define({
             tabs.tab({ element: h.button.class("b"), value: "b" }).children("B"),
             tabs.tab({ element: h.a.class("c").attr("href", "#c"), value: "c" }).children("C"),
             tabs.tab({ element: h.a.class("d").attr("href", "#d"), value: "d" }).children("D"),
+            tabs.tab({ element: h.a.class("e"), value: "e" }).children("E"),
             tabs.indicator(h.span.class("indicator"))
           ),
-          ["a", "b", "c", "d"].map((value) => tabs.panel({ element: h.div.class("panel"), value })?.children(value))
+          ["a", "b", "c", "d", "e"].map((value) =>
+            tabs.panel({ element: h.div.class("panel"), value })?.children(value)
+          )
         )
     })
 })
@@ -79,8 +82,8 @@ const mountPage = Effect.gen(function*() {
   return { get, panels }
 })
 
-const key = (target: Element, key: string) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, composed: true })
+const key = (target: Element, key: string, init: KeyboardEventInit = {}, type = "keydown") => {
+  const event = new KeyboardEvent(type, { key, bubbles: true, cancelable: true, composed: true, ...init })
   target.dispatchEvent(event)
   return event.defaultPrevented
 }
@@ -98,10 +101,10 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.isTrue(key(get("a"), "ArrowRight"))
       yield* tick
       assert.strictEqual(document.activeElement, get("b"))
-      assert.deepStrictEqual(["a", "b", "c", "d"].map((id) => get(id).tabIndex), [-1, 0, -1, -1])
+      assert.deepStrictEqual(["a", "b", "c", "d", "e"].map((id) => get(id).tabIndex), [-1, 0, -1, -1, -1])
       key(get("b"), "End")
       yield* tick
-      assert.strictEqual(document.activeElement, get("d"))
+      assert.strictEqual(document.activeElement, get("e"))
 
       assert.isFalse(clicked(get("b")))
       yield* tick
@@ -111,25 +114,40 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.isNull(document.querySelector("[data-starting-style], [data-ending-style]"))
     }).pipe(Effect.scoped))
 
-  it.effect("a link tab follows its href on a click or Space, and a disabled one doesn't", () =>
+  it.effect("Space clicks a tab once, with its modifiers, and Enter is left native except on an <a> without an href", () =>
     Effect.gen(function*() {
       const { get } = yield* mountPage
       const clicks: Array<string> = []
-      const record = (event: Event) => clicks.push((event.target as Element).className)
+      const record = (event: MouseEvent) =>
+        clicks.push((event.target as Element).className + (event.ctrlKey ? "+ctrl" : ""))
       document.addEventListener("click", record)
       yield* Effect.addFinalizer(() => Effect.sync(() => document.removeEventListener("click", record)))
 
-      assert.isTrue(key(get("c"), " "))
+      assert.isTrue(key(get("b"), " "))
+      assert.isTrue(key(get("b"), " ", {}, "keyup"))
       yield* tick
-      assert.deepStrictEqual(clicks, ["c"])
+      assert.deepStrictEqual(clicks, ["b"])
+      assert.strictEqual(get("b").getAttribute("aria-selected"), "true")
+
+      assert.isTrue(key(get("c"), " ", { ctrlKey: true }))
+      assert.isFalse(key(get("c"), " ", {}, "keyup"))
+      yield* tick
+      assert.deepStrictEqual(clicks, ["b", "c+ctrl"])
       assert.strictEqual(get("c").getAttribute("aria-selected"), "true")
 
       assert.isTrue(key(get("d"), " "))
       assert.isTrue(clicked(get("d")))
+      assert.isFalse(key(get("d"), "Enter"))
       yield* tick
-      assert.deepStrictEqual(clicks, ["c", "d"])
+      assert.deepStrictEqual(clicks, ["b", "c+ctrl", "d"])
       assert.strictEqual(get("c").getAttribute("aria-selected"), "true")
-      assert.isFalse(key(get("a"), " "))
+
+      assert.isFalse(key(get("a"), "Enter"))
+      assert.isFalse(key(get("c"), "Enter"))
+      assert.isTrue(key(get("e"), "Enter"))
+      yield* tick
+      assert.deepStrictEqual(clicks, ["b", "c+ctrl", "d", "e"])
+      assert.strictEqual(get("e").getAttribute("aria-selected"), "true")
     }).pipe(Effect.scoped))
 
   it.effect("the indicator is measured against the list, through a scaled list, and again on resize", () =>
