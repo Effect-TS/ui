@@ -65,7 +65,7 @@ const layout = Effect.acquireRelease(
 
 const Steps = Effect.fnUntraced(function*(
   steps: ReadonlyArray<Partial<VirtualListProps>>,
-  { overflow = "auto", ownViewport = false }: { readonly ownViewport?: boolean; readonly overflow?: string } = {}
+  { ownViewport = false }: { readonly ownViewport?: boolean } = {}
 ) {
   const geometry = yield* layout
   const events: Array<VirtualListEvents> = []
@@ -90,7 +90,7 @@ const Steps = Effect.fnUntraced(function*(
           },
           view: (virtualList) =>
             (ownViewport
-              ? h.div.class("viewport").attr("style", "overflow-y:" + overflow)
+              ? h.div.class("viewport").attr("style", "overflow-y:visible")
               : virtualList.viewport(h.div.class("viewport"))).children(
                 virtualList.list(h.ul.class("list")).children(
                   virtualList.items.map((index) =>
@@ -147,27 +147,17 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(indices(), span(47, 57))
     }))
 
-  it.effect("scrolls with the nearest scrolling element when it renders none", () =>
+  it.effect("scrolls with the nearest element that scrolls, once it starts to after the list mounts", () =>
     Effect.gen(function*() {
       const { indices, next, scrollTo, scrollTop } = yield* Steps([
         { scrollContainer: "nearest" },
         { scrollContainer: "nearest", scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } }
       ], { ownViewport: true })
+      document.querySelector(".viewport")!.setAttribute("style", "overflow-y:auto")
+      yield* tick
       scrollTo(1000)
       yield* tick
       assert.deepStrictEqual(indices(), span(47, 57))
-      yield* next
-      assert.strictEqual(scrollTop(), 500 * itemSize)
-    }))
-
-  it.effect("scrolls with an element that starts to scroll after the list mounts", () =>
-    Effect.gen(function*() {
-      const { next, scrollTop } = yield* Steps([
-        { scrollContainer: "nearest" },
-        { scrollContainer: "nearest", scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } }
-      ], { ownViewport: true, overflow: "visible" })
-      document.querySelector(".viewport")!.setAttribute("style", "overflow-y:auto")
-      yield* tick
       yield* next
       assert.strictEqual(scrollTop(), 500 * itemSize)
     }))

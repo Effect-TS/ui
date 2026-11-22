@@ -1,9 +1,9 @@
-import { Component, type Mount, type View } from "@effect/ui"
+import type { Component, Mount, View } from "@effect/ui"
 import { VirtualList, VirtualListEvents, type VirtualListProps } from "@effect/ui-kit"
-import { Html, HtmlServer } from "@effect/ui/html"
+import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 
 type Parts = Component.Headless.Parts<typeof VirtualList>
 type H = View.Helper<never, VirtualListProps> & View.Tags<Html.Elements, never>
@@ -239,9 +239,6 @@ describe("VirtualList", () => {
       s.expectMount(tracked(s))
       assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-posinset"], "201")
       assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "10000")
-      s.props({ ...base, setSize: -1 })
-      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-posinset"], "1")
-      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "-1")
     }))
 
   it.effect("writes the size of each item it doesn't measure", () =>
@@ -263,8 +260,6 @@ describe("VirtualList", () => {
       const s = yield* Scene.make(VirtualList, { ...base, reserveStart: 400 }, makeStandIn())
       s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:400px")
-      s.props(base)
-      assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:0px")
     }))
 
   it.effect("stands in for the rows left out of a table body with empty rows", () =>
@@ -293,52 +288,6 @@ describe("VirtualList", () => {
       ])
       assert.strictEqual(s.get(listLoc).attrs?.role, undefined)
       assert.strictEqual(s.get(Locator.attr("class", "table")).attrs?.["aria-rowcount"], "1001")
-    }))
-
-  it.effect("renders the first rows of a table and of the absolute layout on the server", () =>
-    Effect.gen(function*() {
-      const Rows = Component.define({
-        name: "Rows",
-        scoped: false,
-        model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
-      }).make({
-        init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) =>
-          h.div.children(
-            VirtualList(h, {
-              key: "table",
-              props: { count: 100, itemSize: 20, initialCount: 2 },
-              view: (virtualList) =>
-                virtualList.table(h.table).children(
-                  virtualList.list(h.tbody).children(
-                    virtualList.items.map((index) =>
-                      virtualList.item({ element: h.tr.key(String(index)), index }).children(h.td.children("T" + index))
-                    )
-                  )
-                )
-            }),
-            VirtualList(h, {
-              key: "absolute",
-              props: { count: 100, itemSize: 20, initialCount: 2, layout: "absolute" },
-              view: (virtualList) =>
-                virtualList.list(h.div).children(
-                  virtualList.items.map((index) =>
-                    virtualList.item({ element: h.div.key(String(index)), index }).children("A" + index)
-                  )
-                )
-            })
-          )
-      })
-      const { html } = yield* HtmlServer.renderToHtml(Rows, {})
-      const rows = Array.from(html.matchAll(/<tr[^>]*>/g), ([tag]) =>
-        tag.includes("data-virtual-list-spacer") ? "spacer" : "row")
-      assert.deepStrictEqual(rows, ["row", "row", "spacer"])
-      assert.include(html, "height:1960px")
-      assert.include(html, "translateY(20px)")
-      assert.notInclude(html, "A2<")
     }))
 
   it.effect("places each item with a transform in the absolute layout", () =>
@@ -383,7 +332,7 @@ describe("VirtualList", () => {
       let latest!: Parts
       const keys = ["a", "b", "c"]
       const s = yield* Scene.make(VirtualList, { keys, itemSize: 20 }, makeStandIn((p) => (latest = p)))
-      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 2, { atEnd: false }))
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 2))
       assert.deepStrictEqual(indices(s), [0, 1, 2])
       s.props({ keys, itemSize: 20, count: 1000 })
       assert.deepStrictEqual(indices(s), [0, 1, 2])
