@@ -3152,7 +3152,7 @@ const setup = (
     const restored = hooks !== undefined && component.definition.restore !== false && (navigated || !serves)
       ? hooks.restore(inst.path)
       : undefined
-    const hydrates = restored === undefined && serves
+    const hydrates = restored === undefined && serves && !(navigated && component.definition.restore === false)
     if (popped !== undefined) claimSaved(inst, popped)
     const state = hydrates || restored !== undefined || own === undefined ? restored?.state : own[inst.path]
     const reported = restored !== undefined ? restored.reported : (own?.["~reported"] as Saved | undefined)?.[inst.path]
@@ -7341,8 +7341,14 @@ const setup = (
     const homes = new Map<Instance, Saved>()
     let into: Saved = out
     const keptIn = (home: Saved): Saved => (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
-    const write = (inst: Instance, to: Saved, path: string, exit: Exit.Exit<PageState, SchemaIssue.Issue>) => {
+    const write = (
+      inst: Instance,
+      to: Saved,
+      path: string,
+      exit: Exit.Exit<PageState | undefined, SchemaIssue.Issue>
+    ) => {
       if (Exit.isFailure(exit)) return warnUnencoded(inst, ctx, exit.cause)
+      if (exit.value === undefined) return
       to[path] = exit.value.state
       if (exit.value.reported !== undefined) ((to["~reported"] ??= {}) as Saved)[path] = exit.value.reported
     }
@@ -7363,6 +7369,33 @@ const setup = (
       warnLate(inst, ctx)
       encoded.addObserver((exit) => write(inst, to, path, exit))
     }
+    const keep = (inst: Instance, from: Saved, to: Saved) => {
+      const path = inst.path
+      const restore = inst.component.definition.restore
+      const state = from[path]
+      const reported = (from["~reported"] as Saved | undefined)?.[path]
+      delete to[path]
+      if (to["~reported"] !== undefined) {
+        const { [path]: _, ...others } = to["~reported"] as Saved
+        to["~reported"] = others
+      }
+      if (state === undefined || restore === false) return
+      if (restore === undefined) return write(inst, to, path, Exit.succeed({ state, reported }))
+      const codec = stateCodecOf(inst.component)
+      const encoded = runCodec(Effect.flatMapEager(codec.decode(state), (decoded) => {
+        let model: unknown
+        try {
+          model = restore(decoded.model, inst.props)
+        } catch (error) {
+          warnRestore(inst, ctx, error)
+          return Effect.undefined
+        }
+        return Effect.mapEager(codec.encode(model, decoded.results), (state) => ({ state, reported }))
+      }))
+      if (Exit.isExit(encoded)) return write(inst, to, path, encoded)
+      warnLate(inst, ctx)
+      encoded.addObserver((exit) => write(inst, to, path, exit))
+    }
     const visit = (inst: Instance) => {
       // A keyed query's pending writes go first, so the result holds only the declared keys. A
       // navigation issued in the `update` that changed them runs in the flush's deferred work, which
@@ -7372,8 +7405,13 @@ const setup = (
       const was = into
       const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
       if (entry !== undefined) {
-        if (inst.waiting) return
         const author = entry.author
+        if (inst.waiting) {
+          const drawn = keptIn(homes.get(author)!)[author.path] as Saved | undefined
+          const from = drawn?.[inst.path] as Saved | undefined
+          if (from !== undefined) keep(inst, from, drawn![inst.path] = { ...from })
+          return
+        }
         into = ((keptIn(homes.get(author)!)[author.path] ??= {}) as Saved)[inst.path] = {}
       }
       const waits = waitingOf.get(inst)
@@ -7404,6 +7442,7 @@ const setup = (
         }
         Object.assign(into, state)
         if (reported !== undefined) Object.assign((into["~reported"] ??= {}) as Saved, reported)
+        keep(inst, all, into)
         return
       }
       save(inst, into)

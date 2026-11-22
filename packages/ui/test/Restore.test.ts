@@ -7,18 +7,21 @@ const AppRoute = Route.union({ Home: Route.make("/"), Page: Route.make("/page") 
 
 const LoginMessage = UiSchema.TaggedEnum({ Filled: {} })
 
-const Login = Component.define({
-  name: "Login",
-  scoped: false,
-  model: Schema.Struct({ email: Schema.String, password: Schema.String }),
-  message: LoginMessage,
-  restore: (model) => ({ ...model, password: "" })
-}).make({
-  init: () => ({ email: "", password: "" }),
-  update: () => ({ email: "ada@example.com", password: "hunter2" }),
-  view: (model, h) =>
-    h.el("button").on("click", LoginMessage.Filled()).children(`login ${model.email}|${model.password}`)
-})
+const login = <Scoped extends boolean>(scoped: Scoped) =>
+  Component.define({
+    name: "Login",
+    scoped,
+    model: Schema.Struct({ email: Schema.String, password: Schema.String }),
+    message: LoginMessage,
+    restore: (model) => ({ ...model, password: "" })
+  }).make({
+    init: () => ({ email: "", password: "" }),
+    update: () => ({ email: "ada@example.com", password: "hunter2" }),
+    view: (model, h) =>
+      h.el("button").on("click", LoginMessage.Filled()).children(`login ${model.email}|${model.password}`)
+  })
+const Login = login(false)
+const ScopedLogin = login(true)
 
 const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
 
@@ -132,6 +135,12 @@ const textOf = (root: TestHost.TestRoot<any, any, any>, prefix: string) =>
 const collectedAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry) => entry._tag === "Update" && entry.path === path && entry.source._tag === "Collected").length
 
+const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+  init: () => null,
+  update: (model) => model,
+  view: (_, h) => h.scoped((s) => ScopedLogin(s, { key: "login" }))
+})
+
 const ShellMessage = UiSchema.TaggedEnum({ Counted: {}, Shown: {} })
 
 const Shell = Component.define({
@@ -152,7 +161,7 @@ const Shell = Component.define({
       "div",
       h.el("button").on("click", ShellMessage.Counted()).children(`shell ${model.count}`),
       h.el("button").on("click", ShellMessage.Shown()).children("show"),
-      model.shown ? Login(h, { key: "login" }) : null
+      model.shown ? Editor(h, { key: "editor" }) : null
     )
 })
 

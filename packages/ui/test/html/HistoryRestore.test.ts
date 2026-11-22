@@ -12,14 +12,19 @@ let gate: Effect.Effect<void> = Effect.void
 const slow = Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))
 
 let inits = 0
-const form = (name: string) =>
-  Component.define({ name, scoped: false, model: Schema.String, message: Schema.String, elements: Html }).make({
-    init: () => inits++ === 0 ? "server" : "client",
-    update: (_, text) => text,
-    view: (text, h) => h.input.value(text).onInput(({ value }) => value)
-  })
+const form = (name: string, restore?: false | ((model: string) => string)) =>
+  Component.define({ name, scoped: false, model: Schema.String, message: Schema.String, elements: Html, restore }).make(
+    {
+      init: () => inits++ === 0 ? "server" : "client",
+      update: (_, text) => text,
+      view: (text, h) => h.input.value(text).onInput(({ value }) => value)
+    }
+  )
 const Form = form("Form")
+const ExcludedForm = form("ExcludedForm", false)
 const SlowForm = form("SlowForm").pipe(Component.provide(slow))
+const ExcludedSlowForm = form("ExcludedSlowForm", false).pipe(Component.provide(slow))
+const FilteredSlowForm = form("FilteredSlowForm", () => "filtered").pipe(Component.provide(slow))
 const SlowSide = Component.define({
   name: "SlowSide",
   scoped: false,
@@ -43,28 +48,37 @@ const LateForm = Component.define({
   update: (_, text) => text,
   view: (text, h) => h.input.value(text).onInput(({ value }) => value)
 })
-const ScopedForm = Component.define({
-  name: "ScopedForm",
-  scoped: true,
-  model: Schema.String,
-  message: Schema.String,
-  elements: Html
-}).make({
-  init: () => inits++ === 0 ? "server" : "client",
-  update: (_, text) => text,
-  view: (text, h) => h.input.value(text)
-}).pipe(Component.provide(slow))
-const Holder = Component.define({
-  name: "Holder",
-  scoped: false,
-  model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
-}).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.scoped((s) => h.div(ScopedForm(s, { key: "d" })))
-})
+const scopedForm = (name: string, restore?: false | ((model: string) => string)) =>
+  Component.define({
+    name,
+    scoped: true,
+    model: Schema.String,
+    message: Schema.String,
+    elements: Html,
+    restore
+  }).make({
+    init: () => inits++ === 0 ? "server" : "client",
+    update: (_, text) => text,
+    view: (text, h) => h.input.value(text)
+  }).pipe(Component.provide(slow))
+const ScopedForm = scopedForm("ScopedForm")
+const ExcludedScopedForm = scopedForm("ExcludedScopedForm", false)
+const FilteredScopedForm = scopedForm("FilteredScopedForm", () => "filtered")
+const holder = (child: typeof ScopedForm) =>
+  Component.define({
+    name: "Holder",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.scoped((s) => h.div(child(s, { key: "d" })))
+  })
+const Holder = holder(ScopedForm)
+const ExcludedHolder = holder(ExcludedScopedForm)
+const FilteredHolder = holder(FilteredScopedForm)
 
 class GetTab extends Query.Service<GetTab>()("GetTab", {
   args: {},
@@ -101,28 +115,35 @@ const LateSettings = Component.define({
         : null
     )
 }).pipe(Component.provide(GetTab.layer))
-const LateScoped = Component.define({
-  name: "LateScoped",
-  scoped: true,
-  model: Late,
-  message: Schema.Never,
-  elements: Html
-}).make({
-  init: () => inits++ === 0 ? "server" : "client",
-  update: (model) => model,
-  view: (text, h) => h.input.value(text)
-})
-const LateHolder = Component.define({
-  name: "LateHolder",
-  scoped: false,
-  model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
-}).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.scoped((s) => h.div(LateScoped(s, { key: "d" })))
-})
+const lateScoped = (name: string, restore?: (model: string) => string) =>
+  Component.define({
+    name,
+    scoped: true,
+    model: Late,
+    message: Schema.Never,
+    elements: Html,
+    restore
+  }).make({
+    init: () => inits++ === 0 ? "server" : "client",
+    update: (model) => model,
+    view: (text, h) => h.input.value(text)
+  })
+const LateScoped = lateScoped("LateScoped")
+const FilteredLateScoped = lateScoped("FilteredLateScoped", () => "filtered")
+const lateHolder = (child: typeof LateScoped) =>
+  Component.define({
+    name: "LateHolder",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.scoped((s) => h.div(child(s, { key: "d" })))
+  })
+const LateHolder = lateHolder(LateScoped)
+const FilteredLateHolder = lateHolder(FilteredLateScoped)
 const Field = Component.define({
   name: "Field",
   scoped: true,
@@ -201,6 +222,12 @@ const Nesting = Component.define({
 type Page =
   | "slow form"
   | "slow side"
+  | "excluded slow side"
+  | "excluded scoped form"
+  | "excluded slow form"
+  | "filtered slow form"
+  | "filtered scoped form"
+  | "filtered late scoped"
   | "late form"
   | "scoped form"
   | "late settings"
@@ -232,11 +259,25 @@ const appOf = (page: Page) =>
     subscriptions: (route) => [Router.subscription(Routes, route, (changed) => Msg.Changed({ route: changed }))],
     view: (route, h) =>
       h.main(
-        page === "slow side" || (page.startsWith("open") && route._tag === "Home") ? SlowSide(h, { key: "s" }) : null,
+        page.endsWith("slow side") || (page.startsWith("open") && route._tag === "Home")
+          ? SlowSide(h, { key: "s" })
+          : null,
         route._tag === "Away"
           ? h.p("away")
           : page === "slow side"
           ? Form(h, { key: "f" })
+          : page === "excluded slow side"
+          ? ExcludedForm(h, { key: "f" })
+          : page === "excluded slow form"
+          ? ExcludedSlowForm(h, { key: "f" })
+          : page === "filtered slow form"
+          ? FilteredSlowForm(h, { key: "f" })
+          : page === "excluded scoped form"
+          ? ExcludedHolder(h, { key: "f" })
+          : page === "filtered scoped form"
+          ? FilteredHolder(h, { key: "f" })
+          : page === "filtered late scoped"
+          ? FilteredLateHolder(h, { key: "f" })
           : page === "late form"
           ? LateForm(h, { key: "f" })
           : page === "scoped form"
@@ -376,6 +417,45 @@ const aside = Effect.fnUntraced(function*(first: Page) {
 })
 
 describe("history restore of a page whose hydration hasn't settled", { concurrent: false }, () => {
+  it.effect.each(
+    [
+      ["excluded slow form", "/App/ExcludedSlowForm[f]", undefined, "client"],
+      ["filtered slow form", "/App/FilteredSlowForm[f]", "filtered", "filtered"],
+      ["excluded scoped form", "/App/Holder[f]/ExcludedScopedForm[d]", undefined, "client"],
+      ["filtered scoped form", "/App/Holder[f]/FilteredScopedForm[d]", "filtered", "filtered"],
+      ["filtered late scoped", "/App/LateHolder[f]/FilteredLateScoped[d]", undefined, "client"]
+    ] as const
+  )("a push as a %s waits writes what its restore keeps into the entry", ([page, path, saved, shown]) => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, open, root } = yield* visit(page)
+      root.send(Msg.Go())
+      yield* tick
+      history.go(-1)
+      const entry = JSON.stringify(history.current().state)
+      assert.notInclude(entry, "\"server\"")
+      if (saved === undefined) assert.notInclude(entry, `"${path}":"`)
+      else assert.include(entry, `"${path}":"${saved}"`)
+      yield* tick
+      yield* open
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, shown)
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back runs a component with restore: false from init while another component waits", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, root } = yield* visit("excluded slow side")
+      assert.strictEqual(app.querySelector("input")!.value, "server")
+      root.send(Msg.Go())
+      yield* tick
+      history.go(-1)
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "client")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
   it.effect("Back restores the server's Model of a scoped child whose state still decodes after that Back", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {

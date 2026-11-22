@@ -1309,7 +1309,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     let restoring: Record<string, unknown> | undefined = readState(start.state)?.snapshot
     restoring &&= { ...restoring }
     const forgetRestoring = (root: services.RootHandle) => {
-      if (restoring === undefined || pending !== undefined) return
+      if (pending !== undefined) return
+      root.restored()
+      if (restoring === undefined) return
       for (const path in restoring) {
         if (path === root.path || path.startsWith(root.path + "/")) delete restoring[path]
       }
