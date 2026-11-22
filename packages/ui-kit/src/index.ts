@@ -64,6 +64,12 @@ export * from "./Combobox.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./ContextMenu.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Dialog.ts"
 
 /**

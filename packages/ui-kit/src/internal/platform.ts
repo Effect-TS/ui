@@ -1,8 +1,8 @@
-export const isAndroid = (view: Window | null): boolean => {
-  if (view === null) return false
-  const agent = view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }
-  return agent.userAgentData?.platform === "Android" || /android/i.test(agent.userAgent)
-}
+const agentPlatform = (view: Window): string | undefined =>
+  (view.navigator as Navigator & { readonly userAgentData?: { readonly platform: string } }).userAgentData?.platform
+
+export const isAndroid = (view: Window | null): boolean =>
+  view !== null && (agentPlatform(view) === "Android" || /android/i.test(view.navigator.userAgent))
 
 export const isIOS = (view: Window | null): boolean => {
   if (view === null) return false
@@ -16,3 +16,7 @@ export const isWebKit = (view: Window | null): boolean =>
 
 export const isGecko = (view: Window | null): boolean =>
   view !== null && !isWebKit(view) && /firefox/i.test(view.navigator.userAgent)
+
+export const isMac = (view: Window | null): boolean =>
+  view !== null &&
+  (agentPlatform(view) === "macOS" || (/^mac/i.test(view.navigator.platform) && view.navigator.maxTouchPoints <= 1))
