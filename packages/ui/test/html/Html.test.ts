@@ -165,6 +165,12 @@ describe("Html", () => {
       const empty = base.attrs({})
       assert.notStrictEqual(empty, base)
       assert.strictEqual(empty.elementAttrs, base.elementAttrs)
+      assert.strictEqual(base.attrs({ hidden: undefined }).elementAttrs, base.elementAttrs)
+      const tracked = Object.assign(h.div.attrs({}), { removals: [] as ReadonlyArray<string> })
+      const afterTracked = tracked.attrs({ "aria-readonly": undefined, title: "part", "data-removed": undefined })
+      assert.deepStrictEqual(tracked.removals, [])
+      assert.deepStrictEqual(afterTracked.removals, ["aria-readonly", "data-removed"])
+      assert.deepStrictEqual(afterTracked.elementAttrs, { title: "part" })
       class TrimmedId extends View.ElementBuilder<TodoMessage> {
         override attr(name: string, value: string | undefined): this {
           return super.attr(name, name === "id" && value !== undefined ? value.trim() : value)

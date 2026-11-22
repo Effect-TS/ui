@@ -1377,11 +1377,38 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   attrs(attributes: Readonly<Record<string, string | undefined>>): this {
-    let out: this | undefined
-    for (const name in attributes) {
-      if (Object.hasOwn(attributes, name)) out = (out ?? this).attr(name, attributes[name])
+    if (this.attr !== ElementBuilder.prototype.attr) {
+      let out: this | undefined
+      for (const name in attributes) {
+        if (Object.hasOwn(attributes, name)) out = (out ?? this).attr(name, attributes[name])
+      }
+      return out ?? copyBuilder(this)
     }
-    return out ?? copyBuilder(this)
+    const out = copyBuilder(this) as Mutable<this>
+    const current = this.elementAttrs
+    let removals: Array<string> | undefined
+    let next: Record<string, string> | undefined
+    for (const name in attributes) {
+      if (!Object.hasOwn(attributes, name)) continue
+      const value = attributes[name]
+      if (value === undefined) {
+        if (this.removals !== undefined) {
+          removals ??= this.removals.slice()
+          removals.push(name)
+        }
+        if (current !== noFields && Object.hasOwn(next ?? current, name)) {
+          next ??= { ...current }
+          delete next[name]
+        }
+      } else {
+        next ??= current === noFields ? {} : { ...current }
+        if (Object.hasOwn(next, name)) delete next[name]
+        put(next, name, value)
+      }
+    }
+    if (removals !== undefined) out.removals = removals
+    if (next !== undefined) out.elementAttrs = next
+    return out
   }
   /**
    * Sets a property. The host decides what it means.
