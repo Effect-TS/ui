@@ -217,7 +217,7 @@ describe("slots", () => {
         message: Schema.Boolean,
         elements: Html
       }).make({
-        init: ($) => $.set(undefined).run(Look()),
+        init: ($) => $.set(undefined).run(Look.make()),
         update: (_, found) => found,
         view: (_, h) => Frame(h, { key: "f", slots: { body: h.input.ref(Field) } })
       })

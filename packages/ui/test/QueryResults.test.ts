@@ -795,7 +795,7 @@ describe("Query results", () => {
       message: BadMessage,
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
-      init: ($) => $.set({}).run(Hold()),
+      init: ($) => $.set({}).run(Hold.make()),
       update: (): {} => {
         throw new Error("crash")
       },
@@ -859,7 +859,7 @@ describe("Query results", () => {
       init: () => ({ done: false }),
       update: (model, message, $) =>
         PollMessage.match(message, {
-          Go: () => $.set(model).run(Go()),
+          Go: () => $.set(model).run(Go.make()),
           Done: () => ({ ...model, done: true })
         }),
       view: (model, h) => h.el("p", model.done ? "done" : "not yet")
@@ -917,12 +917,12 @@ describe("Query results", () => {
         }
       }
     }).make({
-      init: ($) => $.set({}).run(Note({ text: "init" })),
+      init: ($) => $.set({}).run(Note.make({ text: "init" })),
       update: (model, message, $) =>
         Message.match(message, {
           UserChanged: () => {
             seen.push("update UserChanged")
-            return $.set(model).run(Note({ text: "fold" }))
+            return $.set(model).run(Note.make({ text: "fold" }))
           },
           Noted: () => model
         }),
@@ -1308,9 +1308,9 @@ describe("Query results", () => {
       model: Schema.Number,
       message: Message
     }).make({
-      init: ($) => $.set(0).run(Wait()),
+      init: ($) => $.set(0).run(Wait.make()),
       // Each Tick issues the next: the work never runs out.
-      update: (count, _message, $) => $.set(count + 1).run(Spin()),
+      update: (count, _message, $) => $.set(count + 1).run(Spin.make()),
       view: (count, h) => h.el("p", String(count))
     })
     return Effect.gen(function*() {

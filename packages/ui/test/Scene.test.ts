@@ -20,7 +20,7 @@ describe("Scene", () => {
       s.fire(text, "input", { value: "milk", checked: false })
         .click(save)
         .expect(Locator.text("saving")).toExist()
-        .expectExact(SaveNote({ text: "milk" }))
+        .expectExact(SaveNote.make({ text: "milk" }))
         .resolve(SaveNote, NoteMessage.Saved())
         .emitted(NoteEvents.Saved({ text: "milk" }))
         .expect(status).toHaveText("saved milk")
@@ -37,7 +37,7 @@ describe("Scene", () => {
         () => s.click(saveAgain),
         /^Scene\.click: earlier work isn't settled or acknowledged:\n {2}- notes\/SaveNote\(\{"text":""\}\) \[running\] is pending: settle it with resolve or fail, or keep it with keepPending/
       )
-      s.keepPending(SaveNote).click(saveAgain).expectExact(SaveNote({ text: "" }), SaveNote({ text: "" }))
+      s.keepPending(SaveNote).click(saveAgain).expectExact(SaveNote.make({ text: "" }), SaveNote.make({ text: "" }))
       assert.throws(() => s.childEmit(Badge, BadgeRef, { _tag: "Opened", count: 1 }), /^Scene\.childEmit: earlier work/)
       // Kept or not, the end of make checks it.
       const message = yield* defect(Effect.gen(function*() {
