@@ -38,7 +38,7 @@
  *
  * const { email, confirm } = Signup.validate(state).fields
  * email._tag // => "NotValidated"
- * confirm // => { _tag: "Invalid", value: Redacted.make("hunter2"), required: true, errors: ["Passwords must match"] }
+ * confirm // => { _tag: "Invalid", value: Redacted.make("hunter2"), empty: false, required: true, errors: ["Passwords must match"] }
  * ```
  *
  * @stability experimental
@@ -144,7 +144,7 @@ const PERMISSIVE_URL = /^(https?:\/\/)?\S+\.\S+$/
  * }, { mode: "onChange", errors: "all" })
  *
  * const state = Profile.change(Profile.init({ name: "", website: "", age: "" }), "age", "ten")
- * Profile.validate(state).fields.age // => { _tag: "Invalid", value: "ten", required: false, errors: ["ten is not a number"] }
+ * Profile.validate(state).fields.age // => { _tag: "Invalid", value: "ten", empty: false, required: false, errors: ["ten is not a number"] }
  * ```
  *
  * @stability experimental
@@ -302,6 +302,7 @@ export interface State<Values> {
 export interface NotValidated<A> {
   readonly _tag: "NotValidated"
   readonly value: A
+  readonly empty: boolean
   readonly required: boolean
 }
 
@@ -315,6 +316,7 @@ export interface NotValidated<A> {
 export interface Validating<A> {
   readonly _tag: "Validating"
   readonly value: A
+  readonly empty: boolean
   readonly required: boolean
 }
 
@@ -328,6 +330,7 @@ export interface Validating<A> {
 export interface Valid<A> {
   readonly _tag: "Valid"
   readonly value: A
+  readonly empty: boolean
   readonly required: boolean
 }
 
@@ -341,6 +344,7 @@ export interface Valid<A> {
 export interface Invalid<A> {
   readonly _tag: "Invalid"
   readonly value: A
+  readonly empty: boolean
   readonly required: boolean
   readonly errors: Arr.NonEmptyReadonlyArray<string>
 }
@@ -350,8 +354,9 @@ export interface Invalid<A> {
  *
  * **Details**
  *
- * Each state has the field's `value` and `required`, which is `true` when an
- * empty value would be an error, for a `*` next to the label.
+ * Each state has the field's `value`, `empty` (the field's `isEmpty` applied
+ * to `value`) and `required`, which is `true` when an empty value would be
+ * an error, for a `*` next to the label.
  *
  * @stability experimental
  * @category models
@@ -680,7 +685,7 @@ const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> => names.inc
  * Login.validate(form).fields.email._tag // => "NotValidated"
  *
  * form = Login.submit(form)
- * Login.validate(form).fields.email // => { _tag: "Invalid", value: "ada@example", required: true, errors: ["Please enter a valid email"] }
+ * Login.validate(form).fields.email // => { _tag: "Invalid", value: "ada@example", empty: false, required: true, errors: ["Please enter a valid email"] }
  *
  * form = Login.change(form, "email", "ada@example.com")
  * form = Login.change(form, "password", Redacted.make("secret"))
@@ -754,36 +759,37 @@ export const make = <S, K extends string>(
     let validating = false
     for (const [name, spec] of specs) {
       const value = state.values[name]
+      const empty = spec.isEmpty(value)
       const message = requiredMessage(spec, state.values)
-      const required = message !== undefined
+      const shared = { value, empty, required: message !== undefined }
       const rejected = Object.hasOwn(state.rejected, name) ? state.rejected[name] : undefined
       // The field's result before it shows. An optional empty field is
       // acceptable and has no result to show.
       let result: Field<unknown>
       if (rejected !== undefined) {
-        result = { _tag: "Invalid", value, required, errors: rejected }
-      } else if (spec.isEmpty(value)) {
+        result = { _tag: "Invalid", ...shared, errors: rejected }
+      } else if (empty) {
         result = message === undefined
-          ? { _tag: "NotValidated", value, required }
-          : { _tag: "Invalid", value, required, errors: [message] }
+          ? { _tag: "NotValidated", ...shared }
+          : { _tag: "Invalid", ...shared, errors: [message] }
       } else {
         const errors = ruleErrors(spec, value, state.values, all)
         const check = Object.hasOwn(checks, name) ? checks[name] : undefined
         if (isNonEmpty(errors)) {
-          result = { _tag: "Invalid", value, required, errors }
+          result = { _tag: "Invalid", ...shared, errors }
         } else if (check === undefined) {
-          result = { _tag: "Valid", value, required }
+          result = { _tag: "Valid", ...shared }
         } else if (check._tag === "Success" && !check.waiting) {
           result = isNonEmpty(check.value)
-            ? { _tag: "Invalid", value, required, errors: check.value }
-            : { _tag: "Valid", value, required }
+            ? { _tag: "Invalid", ...shared, errors: check.value }
+            : { _tag: "Valid", ...shared }
         } else {
-          result = { _tag: "Validating", value, required }
+          result = { _tag: "Validating", ...shared }
         }
       }
       acceptable &&= result._tag === "Valid" || result._tag === "NotValidated"
       if (rejected === undefined && !shows(state, name)) {
-        result = { _tag: "NotValidated", value, required }
+        result = { _tag: "NotValidated", ...shared }
       }
       fields.push([name, result])
       invalid ||= result._tag === "Invalid"

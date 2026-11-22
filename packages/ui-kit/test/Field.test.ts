@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, View } from "@effect/ui"
-import { Checkbox, Field, type FieldProps, Input, Switch } from "@effect/ui-kit"
+import { Checkbox, Field, type FieldProps, fieldValidationProps, Input, Switch } from "@effect/ui-kit"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -183,5 +183,22 @@ describe("Field", () => {
     )
     assert.throws(() => field.description(h.p), /Field: the description was drawn without the described prop/)
     assert.isUndefined(attrsOf(field.control(h.select))["aria-describedby"])
+  })
+
+  it("fieldValidationProps maps each Validation.Field state to invalid and filled", () => {
+    const filled = { value: "ada", empty: false, required: true }
+    assert.deepStrictEqual(
+      fieldValidationProps({ _tag: "NotValidated", value: " ", empty: true, required: true }),
+      { invalid: undefined, filled: false }
+    )
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Validating", ...filled }), {
+      invalid: undefined,
+      filled: true
+    })
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Valid", ...filled }), { invalid: false, filled: true })
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Invalid", ...filled, errors: ["Too short"] }), {
+      invalid: true,
+      filled: true
+    })
   })
 })

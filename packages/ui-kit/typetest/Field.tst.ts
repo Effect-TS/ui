@@ -1,5 +1,13 @@
-import { Component, UiSchema, type View } from "@effect/ui"
-import { Checkbox, Field, Input, type InputElement, Switch } from "@effect/ui-kit"
+import { Component, UiSchema, type Validation, type View } from "@effect/ui"
+import {
+  Checkbox,
+  Field,
+  type FieldProps,
+  fieldValidationProps,
+  Input,
+  type InputElement,
+  Switch
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -88,5 +96,11 @@ describe("Field", () => {
 
   it("a field needs no service", () => {
     expect<Component.Headless.Requirements<typeof Field>>().type.toBe<never>()
+  })
+
+  it("fieldValidationProps accepts any Validation.Field and spreads into FieldProps", () => {
+    const props = fieldValidationProps({} as Validation.Field<boolean>)
+    expect(props).type.toBe<{ readonly invalid: boolean | undefined; readonly filled: boolean }>()
+    expect({ ...props, disabled: true }).type.toBeAssignableTo<FieldProps>()
   })
 })
