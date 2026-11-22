@@ -1250,6 +1250,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           const shadow = shadowHost.attachShadow({ mode: "open" })
           const shadowInput = document.createElement("input")
           shadow.appendChild(shadowInput)
+          const editableIds = ["kt-readonly", "kt-unknown", "kt-area", "kt-select", "kt-ce", "kt-ce-child"]
           const nonEditableTypes = [
             "button",
             "checkbox",
@@ -1303,14 +1304,9 @@ describe("BrowserHost", { concurrent: false }, () => {
             target.dispatchEvent(new KeyboardEvent(type, { key, repeat, bubbles: true, composed: true }))
           const byId = (id: string) => app.querySelector(`#${id}`)!
           fire(byId("kt-text"), "keydown", "g", true)
-          fire(byId("kt-text"), "keyup", "g", false)
-          fire(byId("kt-readonly"), "keydown", "g")
-          fire(byId("kt-unknown"), "keydown", "g")
-          fire(byId("kt-area"), "keydown", "g")
-          fire(byId("kt-select"), "keydown", "g")
-          fire(byId("kt-ce"), "keydown", "g")
-          fire(byId("kt-ce-child"), "keydown", "g")
-          fire(byId("kt-ce-btn"), "keydown", "g")
+          fire(byId("kt-text"), "keyup", "g")
+          for (const id of editableIds) fire(byId(id), "keydown", id)
+          fire(byId("kt-ce-btn"), "keydown", "island")
           fire(byId("kt-button"), "keydown", "g", true)
           for (const type of nonEditableTypes) fire(byId(`kt-${type}`), "keydown", type)
           const shadowEvent = new KeyboardEvent("keydown", { key: "s", bubbles: true, composed: true })
@@ -1327,20 +1323,9 @@ describe("BrowserHost", { concurrent: false }, () => {
             "doc:down:g:true:true",
             "el:up:g:true:false",
             "doc:up:g:true:false",
-            "el:down:g:true:false",
-            "doc:down:g:true:false",
-            "el:down:g:true:false",
-            "doc:down:g:true:false",
-            "el:down:g:true:false",
-            "doc:down:g:true:false",
-            "el:down:g:true:false",
-            "doc:down:g:true:false",
-            "el:down:g:true:false",
-            "doc:down:g:true:false",
-            "el:down:g:true:false",
-            "doc:down:g:true:false",
-            "el:down:g:false:false",
-            "doc:down:g:false:false",
+            ...editableIds.flatMap((id) => [`el:down:${id}:true:false`, `doc:down:${id}:true:false`]),
+            "el:down:island:false:false",
+            "doc:down:island:false:false",
             "el:down:g:false:true",
             "doc:down:g:false:true",
             ...nonEditableTypes.flatMap((type) => [`el:down:${type}:false:false`, `doc:down:${type}:false:false`]),

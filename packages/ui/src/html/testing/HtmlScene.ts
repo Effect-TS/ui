@@ -169,9 +169,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    */
   compositionEnd(locator: Locator.Locator, value?: string): this
   /**
-   * Presses `key`: sends `keydown` with the modifier keys, `composing` and
-   * selection given, each `false` or `null` otherwise. `editable` defaults
-   * from the matched element unless given.
+   * Presses `key`: sends `keydown` with the modifier keys, `composing`,
+   * `repeat` and selection given, each `false` or `null` otherwise. `editable`
+   * defaults from the matched element unless given.
    */
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this
   /**
@@ -313,16 +313,12 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
-    return this.interact("keydown", (state) => {
-      const node = engine.findOne(state, locator, this.name("keydown"))
-      const path = engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
-      return [{
-        node: () => node,
-        description: locator.description,
-        event: "keydown",
-        payload: () => defaults.keyPayload(key, details, path)
-      }]
-    })
+    return this.one(
+      "keydown",
+      locator,
+      "keydown",
+      (node, state) => defaults.keyPayload(key, details, engine.ancestry(state, node) as ReadonlyArray<Locator.Node>)
+    )
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {

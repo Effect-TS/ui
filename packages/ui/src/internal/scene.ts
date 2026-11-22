@@ -367,11 +367,16 @@ export class SceneCursor extends Cursor {
       return out
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: prevented }))
   }
-  /** An interaction of one event, on the one element `locator` matches. */
-  protected one(step: string, locator: Locator.Locator, event: string, payload: (node: Locator.Node) => unknown): this {
+  /** An interaction of one event, on the one element `locator` matches in the view of `state`. */
+  protected one(
+    step: string,
+    locator: Locator.Locator,
+    event: string,
+    payload: (node: Locator.Node, state: engine.State<any, any, any, any>) => unknown
+  ): this {
     return this.interact(step, (state) => {
       const node = engine.findOne(state, locator, this.name(step))
-      return [{ node: () => node, description: locator.description, event, payload: () => payload(node) }]
+      return [{ node: () => node, description: locator.description, event, payload: () => payload(node, state) }]
     })
   }
 

@@ -124,6 +124,7 @@ import * as View from "../View.ts"
 import * as DomImages from "./DomImages.ts"
 import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
+import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
@@ -318,30 +319,14 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
 
 const noSelection = { selectionStart: null, selectionEnd: null }
 
-const nonEditableInputTypes: ReadonlySet<string> = new Set([
-  "button",
-  "checkbox",
-  "color",
-  "file",
-  "image",
-  "radio",
-  "range",
-  "reset",
-  "submit"
-])
-
-const isEditableTarget = (event: Event, fallback: EventTarget | null): boolean => {
-  const raw = (typeof event.composedPath === "function" ? event.composedPath()[0] : undefined) ?? fallback
-  if (raw === null || raw === undefined) return false
-  const node = raw as globalThis.Node
-  const element = (node.nodeType === 3 ? node.parentElement : raw) as HTMLElement | null
-  if (element === null || element.nodeType !== 1) return false
-  if (element.namespaceURI === HTML) {
+const isEditable = (target: EventTarget | null): boolean => {
+  const element = target as HTMLElement | null
+  if (element?.namespaceURI === HTML) {
     const tag = element.localName
     if (tag === "textarea" || tag === "select") return true
-    if (tag === "input") return !nonEditableInputTypes.has((element as HTMLInputElement).type.toLowerCase())
+    if (tag === "input") return !nonTextInputTypes.has((element as HTMLInputElement).type)
   }
-  return element.isContentEditable === true
+  return element?.isContentEditable === true
 }
 
 const selectionOf = (target: EventTarget | null) => {
@@ -445,7 +430,7 @@ const payloadOf = (
         ...modifiers(event),
         composing,
         repeat: e.repeat === true,
-        editable: isEditableTarget(event, target),
+        editable: isEditable(event.composedPath()[0] ?? target),
         ...selectionOf(target)
       }
     }

@@ -3,6 +3,7 @@ import * as scene from "../../internal/scene.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Html from "../Html.ts"
 import * as HtmlLocator from "../testing/HtmlLocator.ts"
+import { nonTextInputTypes } from "./editable.ts"
 
 const lower = (value: string | undefined) => value?.toLowerCase()
 
@@ -13,26 +14,14 @@ const inputType = (node: Locator.Node): string =>
 const flag = (node: Locator.Node, name: string): boolean =>
   node.props?.[name] === true || (node.props?.[name] === undefined && node.attrs?.[name] !== undefined)
 
-const nonEditableInputTypes: ReadonlySet<string> = new Set([
-  "button",
-  "checkbox",
-  "color",
-  "file",
-  "image",
-  "radio",
-  "range",
-  "reset",
-  "submit"
-])
-
+/** Whether a key pressed on `path[0]`, with its ancestors innermost first in `path`, is `editable`. */
 const isEditable = (path: ReadonlyArray<Locator.Node>): boolean => {
-  const node = path[0]
-  if (node === undefined) return false
-  if (node.tag === "textarea" || node.tag === "select") return true
-  if (node.tag === "input") return !nonEditableInputTypes.has(inputType(node))
+  const tag = path[0]?.tag
+  if (tag === "textarea" || tag === "select") return true
+  if (tag === "input") return !nonTextInputTypes.has(inputType(path[0]!))
   for (const at of path) {
-    const raw = typeof at.props?.contentEditable === "string" ? at.props.contentEditable : at.attrs?.contenteditable
-    const value = lower(raw)
+    const set = at.props?.contentEditable
+    const value = lower(typeof set === "string" ? set : at.attrs?.contenteditable)
     if (value === "" || value === "true" || value === "plaintext-only") return true
     if (value === "false") return false
   }
@@ -299,7 +288,7 @@ export const changePayload = (
 export const keyPayload = (
   key: string,
   details: Partial<Omit<Html.KeyPayload, "key">> | undefined,
-  path?: ReadonlyArray<Locator.Node> | undefined
+  path: ReadonlyArray<Locator.Node> = []
 ): Html.KeyPayload => ({
   key,
   shift: details?.shift === true,
@@ -308,7 +297,7 @@ export const keyPayload = (
   meta: details?.meta === true,
   composing: details?.composing === true,
   repeat: details?.repeat === true,
-  editable: details?.editable ?? (path !== undefined && isEditable(path)),
+  editable: details?.editable ?? isEditable(path),
   selectionStart: details?.selectionStart ?? null,
   selectionEnd: details?.selectionEnd ?? null
 })

@@ -36,9 +36,8 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // an arrow the game took, and keeps every other key. The handler may read
 // the Model: the listener runs the one from the latest `subscriptions`.
 // `defaultPrevented` skips a key an element's handler already took,
-// `repeat` skips held auto-repeats, and `editable` skips keys typed into a
-// text field, `textarea`, `select`, or `contenteditable` element while still
-// letting `Escape` through.
+// `repeat` skips a held key's auto-repeats, and `editable` skips keys typed
+// into a field, while `Escape` still gets through.
 export const Snake = Component.define({
   name: "Snake",
   scoped: false,
