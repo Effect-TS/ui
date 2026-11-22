@@ -119,7 +119,7 @@ export interface GlobalEvents {
   readonly listen: (
     target: "document" | "window",
     event: string,
-    options: { readonly capture: boolean },
+    options: { readonly capture: boolean; readonly custom?: boolean | undefined },
     listener: (payload: unknown, preventDefault: () => void) => void
   ) => () => void
 }
@@ -143,7 +143,8 @@ const listenFor = (
   target: "document" | "window",
   event: string,
   handler: View.Handler<unknown, any>,
-  options: GlobalEventOptions | undefined
+  options: GlobalEventOptions | undefined,
+  custom = false
 ): Subscription.Subscription<any> => {
   const capture = options?.capture === true
   const declared: globalEvents.Listener = {
@@ -161,7 +162,7 @@ const listenFor = (
     close: Context.get(context, GlobalEvents).listen(
       target,
       event,
-      { capture },
+      custom ? { capture, custom: true } : { capture },
       (payload, preventDefault) =>
         enter((latest) => {
           try {
@@ -344,4 +345,4 @@ export const onCustomEvent = <Msg>(
   event: string,
   handler: View.Handler<Msg, GlobalPayload<{ readonly detail: unknown }>>,
   options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("document", event, handler, options)
+): Subscription.Subscription<Msg> => listenFor("document", event, handler, options, true)

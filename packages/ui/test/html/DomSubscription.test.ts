@@ -319,7 +319,7 @@ describe("DomSubscription.onCustomEvent", { concurrent: false }, () => {
     view: (log, h) => h.output(log.join(",")),
     subscriptions: () => [
       DomSubscription.onCustomEvent(
-        "change",
+        "submit",
         ({ defaultPrevented, detail }) =>
           typeof detail === "string"
             ? PhaseMessage.Heard({ what: `${detail}${defaultPrevented ? "!" : ""}` })
@@ -335,26 +335,26 @@ describe("DomSubscription.onCustomEvent", { concurrent: false }, () => {
     Effect.gen(function*() {
       const browser = yield* BrowserHost.mountEffect(Custom, {}, yield* container)
       yield* tick
-      const cancelled = new CustomEvent("change", { detail: "hello", cancelable: true })
+      const cancelled = new CustomEvent("submit", { detail: "hello", cancelable: true })
       document.dispatchEvent(cancelled)
-      document.dispatchEvent(new CustomEvent("change", { detail: undefined }))
-      document.dispatchEvent(new CustomEvent("change", { detail: 123 }))
+      document.dispatchEvent(new CustomEvent("submit", { detail: undefined }))
+      document.dispatchEvent(new CustomEvent("submit", { detail: 123 }))
       yield* tick
       assert.isTrue(cancelled.defaultPrevented)
       assert.deepStrictEqual(browser.model(), ["hello", "empty"])
 
       const root = yield* TestHost.mount(Custom, {})
       yield* TestHost.settle
-      assert.isTrue(yield* TestGlobalEvents.fireCustomEvent("change", { detail: "test" }))
-      assert.isTrue(yield* TestGlobalEvents.fireCustomEvent("change", { detail: undefined }))
-      assert.isFalse(yield* TestGlobalEvents.fireCustomEvent("change", { detail: 42 }))
+      assert.isTrue(yield* TestGlobalEvents.fireCustomEvent("submit", { detail: "test" }))
+      assert.isTrue(yield* TestGlobalEvents.fireCustomEvent("submit", { detail: undefined }))
+      assert.isFalse(yield* TestGlobalEvents.fireCustomEvent("submit", { detail: 42 }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["test", "empty"])
 
       const s = yield* HtmlScene.make(Custom, {})
-      s.fireCustomEvent("change", { detail: "scene", defaultPrevented: true }).expectDefaultPrevented()
-        .fireCustomEvent("change", { detail: undefined })
-        .fireCustomEvent("change", { detail: 0 }).expectIgnored()
+      s.fireCustomEvent("submit", { detail: "scene", defaultPrevented: true }).expectDefaultPrevented()
+        .fireCustomEvent("submit", { detail: undefined })
+        .fireCustomEvent("submit", { detail: 0 }).expectIgnored()
         .expect(Locator.tag("output")).toHaveText("scene!,empty")
     }).pipe(Effect.provide(testLayer), Effect.scoped))
 })
