@@ -148,6 +148,7 @@
  *
  * const Cart = Component.define({
  *   name: "Cart",
+ *   scoped: false,
  *   model: Schema.Struct({ price: Schema.NullOr(Schema.Number) }),
  *   message: CartMessage,
  *   elements: Html
@@ -880,7 +881,6 @@ const TrackScrub = Mount.makeStream(
   (element: unknown, args, changes) =>
     Stream.callback<Message>((queue) =>
       Effect.gen(function*() {
-        // A part for any element has no node type to give its mount.
         const node = element as HTMLElement
         const document = node.ownerDocument
         const view = document.defaultView
@@ -1163,6 +1163,7 @@ const stepperDefaults = { [1]: { "aria-label": "Increase" }, [-1]: { "aria-label
  */
 export const NumberField = Component.define({
   name: "NumberField",
+  scoped: false,
   props: NumberFieldProps,
   model: Model,
   message: Message,

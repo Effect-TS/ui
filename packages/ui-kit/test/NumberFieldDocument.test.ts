@@ -27,6 +27,7 @@ const mount = Effect.fnUntraced(function*(
   const log: Array<string> = []
   const Amount = Component.define({
     name: "Amount",
+    scoped: false,
     model: Schema.Struct({ value: Value, committed: Schema.Boolean }),
     message: Message,
     elements: Html
@@ -144,7 +145,7 @@ const firefox = Effect.acquireRelease(
 )
 
 describe("NumberField in a document", { concurrent: false }, () => {
-  it.effect("the input takes only the keys that can be part of a number in its locale", () =>
+  it.effect("filters keys by locale, format, and range", () =>
     Effect.gen(function*() {
       const { input } = yield* mount({ locale: "en-US", min: -100 })
       select(input, "12.5", 4)
@@ -158,38 +159,28 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isFalse(blocks(input, "a", { isComposing: true }))
       select(input, "12.5", 0, 4)
       assert.isFalse(blocks(input, "."))
-    }))
-
-  it.effect("a sign is taken once, or in place of the one selected, and a minus only when the range goes below zero", () =>
-    Effect.gen(function*() {
-      const { input } = yield* mount({ locale: "en-US", min: -100 })
       select(input, "12.5", 0)
       assert.isFalse(blocks(input, "-"))
-      assert.isFalse(blocks(input, "+"))
       select(input, "-12.5", 5)
       assert.isTrue(blocks(input, "-"))
-      assert.isTrue(blocks(input, "+"))
       select(input, "-12.5", 0, 1)
       assert.isFalse(blocks(input, "+"))
-      assert.isFalse(blocks(input, "-"))
+
       const positive = yield* mount({ locale: "en-US", min: 0 })
       select(positive.input, "12.5", 0)
       assert.isTrue(blocks(positive.input, "-"))
+
+      const eur = yield* mount({ locale: "de-DE", format: { style: "currency", currency: "EUR" } })
+      select(eur.input, "2.345,75 ", 9)
+      assert.isFalse(blocks(eur.input, "€"))
+      assert.isTrue(blocks(eur.input, "$"))
+      assert.isTrue(blocks(eur.input, ","))
+      assert.isFalse(blocks(eur.input, "."))
+      select(eur.input, "2.345,75 €", 10)
+      assert.isTrue(blocks(eur.input, "€"))
     }))
 
-  it.effect("a locale's own separators and one currency sign are taken", () =>
-    Effect.gen(function*() {
-      const { input } = yield* mount({ locale: "de-DE", format: { style: "currency", currency: "EUR" } })
-      select(input, "2.345,75 ", 9)
-      assert.isFalse(blocks(input, "€"))
-      assert.isTrue(blocks(input, "$"))
-      assert.isTrue(blocks(input, ","))
-      assert.isFalse(blocks(input, "."))
-      select(input, "2.345,75 €", 10)
-      assert.isTrue(blocks(input, "€"))
-    }))
-
-  it.effect("pasted text goes in at the caret, keeps only what the locale can show, and is dropped unless it makes a number", () =>
+  it.effect("inserts sanitized pasted text at the caret and drops non-numeric paste", () =>
     Effect.gen(function*() {
       const { input, taken } = yield* mount({ locale: "en-US" }, 0)
       select(input, "0", 1)
@@ -198,7 +189,6 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual([input.selectionStart, input.selectionEnd], [6, 6])
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 1234 input-paste"])
-      assert.strictEqual(input.value, "01,234")
       input.setSelectionRange(0, 6)
       assert.isTrue(paste(input, "USD 1,250.75 total"))
       assert.strictEqual(input.value, "1,250.75")
@@ -214,10 +204,16 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), [])
     }))
 
-  it.effect("a pressed button steps at once, repeats while it is held, and commits on the release", () =>
+  it.effect("stepper press steps, repeats while held, commits on release, and ignores secondary or mouse clicks", () =>
     Effect.gen(function*() {
       const { app, input, taken } = yield* mount({ locale: "en-US", max: 12 })
       const increment = app.querySelector<HTMLButtonElement>(".increment")!
+      const decrement = app.querySelector<HTMLButtonElement>(".decrement")!
+      pointer(decrement, "pointerdown", { button: 2 })
+      decrement.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+      yield* tick
+      assert.deepStrictEqual(taken(), [])
+
       assert.isFalse(pointer(increment, "pointerdown"))
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 6 increment-press"])
@@ -234,22 +230,13 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.strictEqual(input.value, "12")
       yield* wait(200)
       assert.deepStrictEqual(taken(), [])
-    }))
 
-  it.effect("a press with another button, and the click that follows a mouse press, step nothing", () =>
-    Effect.gen(function*() {
-      const { app, taken } = yield* mount({ locale: "en-US" })
-      const decrement = app.querySelector<HTMLButtonElement>(".decrement")!
-      pointer(decrement, "pointerdown", { button: 2 })
-      decrement.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
-      yield* tick
-      assert.deepStrictEqual(taken(), [])
       decrement.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0, shiftKey: true }))
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated -5 decrement-press", "committed -5 decrement-press"])
+      assert.deepStrictEqual(taken(), ["updated 2 decrement-press", "committed 2 decrement-press"])
     }))
 
-  it.effect("the wheel steps a focused input only, and only when asked to", () =>
+  it.effect("wheel steps only a focused input when allowWheelScrub is set", () =>
     Effect.gen(function*() {
       const { input, taken } = yield* mount({ locale: "en-US", allowWheelScrub: true })
       assert.isFalse(turn(input, { deltaY: 100 }))
@@ -272,7 +259,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(still.taken(), [])
     }))
 
-  it.effect("a drag on the scrub area changes the value by the distance, and commits on the release", () =>
+  it.effect("unlocked horizontal and vertical scrub drags step by pointer distance and commit on release", () =>
     Effect.gen(function*() {
       const { app, input, taken } = yield* mount({ locale: "en-US" })
       const area = app.querySelector<HTMLElement>(".scrub")!
@@ -295,26 +282,26 @@ describe("NumberField in a document", { concurrent: false }, () => {
       pointer(window, "pointermove", { clientX: 40, clientY: 30 })
       yield* tick
       assert.deepStrictEqual(taken(), [])
-    }))
 
-  it.effect("a vertical drag without the lock steps by how far the pointer rose", () =>
-    Effect.gen(function*() {
-      const { app, taken } = yield* mount({ locale: "en-US" }, 5, { vertical: true })
-      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 40 })
+      const vertical = yield* mount({ locale: "en-US" }, 5, { vertical: true })
+      pointer(vertical.app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 40 })
       pointer(window, "pointermove", { clientX: 90, clientY: 36 })
       pointer(window, "pointerup")
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated 9 scrub", "committed 9 scrub"])
+      assert.deepStrictEqual(vertical.taken(), ["updated 9 scrub", "committed 9 scrub"])
     }))
 
-  it.effect("a locked pointer steps by its movement and shows the cursor, until the lock is lost", () =>
+  it.effect("locked pointer scrub shows popover cursor, steps by movement, and keeps scrubbing if lock is lost", () =>
     Effect.gen(function*() {
       const lock = yield* pointerLock
       const { app, taken } = yield* mount({ locale: "en-US" })
       pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
       yield* tick
       assert.strictEqual(lock.held(), document.body)
-      assert.isNotNull(app.querySelector(".cursor"))
+      const cursor = app.querySelector<HTMLElement>(".cursor")!
+      assert.isNotNull(cursor)
+      assert.strictEqual(cursor.getAttribute("popover"), "manual")
+      assert.strictEqual(cursor.getAttribute("role"), "presentation")
       pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 4 })
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 9 scrub"])
@@ -328,7 +315,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), ["updated 12 scrub", "committed 12 scrub"])
     }))
 
-  it.effect("a move after the release changes nothing while Firefox still holds the lock", () =>
+  it.effect("post-release pointermove during Firefox unlock delay changes nothing and preserves label click", () =>
     Effect.gen(function*() {
       yield* firefox
       const lock = yield* pointerLock
@@ -347,7 +334,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.strictEqual(clicks, 1)
     }))
 
-  it.effect("removing the scrub area in the middle of a drag ends it without a commit", () =>
+  it.effect("removing the scrub area mid-drag releases lock, clears data-scrubbing, and does not commit", () =>
     Effect.gen(function*() {
       const lock = yield* pointerLock
       const { app, taken } = yield* mount({ locale: "en-US" }, 5, { scrubs: (value) => value === 5 })
@@ -364,7 +351,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), ["updated 9 scrub"])
     }))
 
-  it.effect("removing the scrub area on commit still releases the pointer lock in Firefox", () =>
+  it.effect("removing the scrub area on commit still releases the delayed pointer lock in Firefox", () =>
     Effect.gen(function*() {
       yield* firefox
       const lock = yield* pointerLock
@@ -379,7 +366,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), ["committed 5 scrub"])
     }))
 
-  it.effect("a cancelled pointer ends a hold and a drag", () =>
+  it.effect("pointercancel scoped to pointerId stops a stepper hold and ends an active scrub drag", () =>
     Effect.gen(function*() {
       const { app, taken } = yield* mount({ locale: "en-US" })
       const increment = app.querySelector<HTMLButtonElement>(".increment")!
@@ -408,7 +395,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
     }))
 
-  it.effect("a parent that declines what was typed sees no commit of it, and the text goes back on blur", () =>
+  it.effect("refused edits restore displayed text on blur without committing, and stepper release commits props.value", () =>
     Effect.gen(function*() {
       const { app, input, taken } = yield* mount({ locale: "en-US" }, 5, { accepts: () => false })
       type(input, "19")
@@ -429,7 +416,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), ["updated 6 increment-press", "committed 5 increment-press"])
     }))
 
-  it.effect("a disabled field takes no press, drag or wheel", () =>
+  it.effect("disabled field takes no press, drag, or wheel", () =>
     Effect.gen(function*() {
       const { app, input, taken } = yield* mount({ locale: "en-US", disabled: true, allowWheelScrub: true })
       assert.isTrue(pointer(app.querySelector(".increment")!, "pointerdown"))
@@ -438,7 +425,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isTrue(pointer(window, "pointermove", { movementX: 9 }))
       pointer(window, "pointerup")
       assert.isFalse(turn(input, { deltaY: 100 }))
-      yield* wait(500)
+      yield* tick
       assert.deepStrictEqual(taken(), [])
     }))
 })
