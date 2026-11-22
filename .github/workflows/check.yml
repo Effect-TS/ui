@@ -49,6 +49,39 @@ jobs:
           echo "Type checks finished with result: ${{ needs.types-matrix.result }}"
           exit 1
 
+  bundle-size:
+    name: Bundle size
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # On a pull request HEAD is the merge commit and HEAD^1 is the base it merges into.
+          fetch-depth: 2
+      - name: Install dependencies
+        uses: ./.github/actions/setup
+      - run: pnpm build
+      - name: Measure PR base
+        if: github.event_name == 'pull_request'
+        # A base that cannot be measured leaves no file, and the report shows absolute sizes only.
+        continue-on-error: true
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/bundle-base" HEAD^1
+          cd "$RUNNER_TEMP/bundle-base"
+          pnpm install
+          pnpm build
+          env -u GITHUB_STEP_SUMMARY pnpm bundle-size --json "$RUNNER_TEMP/base-size.json"
+      - name: Report bundle size
+        run: |
+          base="$RUNNER_TEMP/base-size.json"
+          if [[ -f "$base" ]]; then
+            pnpm bundle-size --base "$base"
+          else
+            pnpm bundle-size
+          fi
+
   test:
     name: Test (${{ matrix.runtime }})
     runs-on: ubuntu-latest
