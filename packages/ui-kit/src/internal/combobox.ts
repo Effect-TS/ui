@@ -70,7 +70,7 @@ export type HighlightReason = "keyboard" | "pointer" | "none"
 export interface Emits<E> {
   readonly opened: (reason: TextReason) => E
   readonly dismissed: (reason: TextReason) => E
-  readonly picked: (value: string | ReadonlyArray<string> | null, reason: ChangeReason) => E
+  readonly picked?: ((value: string | ReadonlyArray<string> | null, reason: ChangeReason) => E) | undefined
   readonly edited: (inputValue: string, reason: TextReason) => E
   readonly highlighted: (value: string | null, index: number, reason: HighlightReason) => E
   readonly settled: (open: boolean) => E
@@ -87,7 +87,10 @@ export interface Settings<E> extends Positioning.PositionerOptions {
   readonly filteredItems?: ReadonlyArray<Item> | undefined
   readonly locale?: string | undefined
   readonly limit?: number | undefined
-  readonly autoHighlight?: boolean | undefined
+  readonly autoHighlight?: boolean | "always" | undefined
+  readonly mode?: "list" | "both" | "inline" | "none" | undefined
+  readonly keepHighlight?: boolean | undefined
+  readonly submitOnItemClick?: boolean | undefined
   readonly highlightItemOnHover?: boolean | undefined
   readonly loopFocus?: boolean | undefined
   readonly openOnInputClick?: boolean | undefined
@@ -164,7 +167,8 @@ export const Model = Schema.Struct({
   typed: Schema.String,
   typedFrom: Schema.Number,
   matched: Schema.Number,
-  placement: Schema.NullOr(Positioning.Placement)
+  placement: Schema.NullOr(Positioning.Placement),
+  completion: Schema.NullOr(Schema.Struct({ label: Schema.String, from: Schema.String }))
 })
 
 export type Model = typeof Model.Type
@@ -186,7 +190,8 @@ export const init = (): Model => ({
   typed: "",
   typedFrom: -1,
   matched: -1,
-  placement: null
+  placement: null,
+  completion: null
 })
 
 type Step<E> = Component.Step<Model, Message, E>
@@ -204,6 +209,20 @@ const WaitBeforeResetTyping = Command.make(
 const lockedOf = (props: AnySettings): boolean => props.disabled === true || props.readOnly === true
 
 const navigableOf = (props: AnySettings): boolean => props.open || props.inline === true
+
+const selectableOf = (props: AnySettings): boolean => props.emits.picked !== undefined
+
+const autoOf = (props: AnySettings): boolean => props.autoHighlight !== undefined && props.autoHighlight !== false
+
+const completesOf = (props: AnySettings): boolean =>
+  (props.mode === "inline" || props.mode === "both") && props.readOnly !== true
+
+const nonEmptyOf = (props: AnySettings): boolean => selectableOf(props) ? filledOf(props) : props.inputValue !== ""
+
+const displayedOf = (model: Model, props: AnySettings): string =>
+  model.completion !== null && model.completion.from === props.inputValue && completesOf(props)
+    ? model.completion.label
+    : props.inputValue
 
 const itemOf = (props: AnySettings, value: string): Item | undefined =>
   props.items.find((item) => item.value === value) ?? props.filteredItems?.find((item) => item.value === value)
@@ -277,6 +296,13 @@ const groupsOf = (items: ReadonlyArray<Item>): ReadonlyArray<Group> => {
 const focus = <E>(step: Step<E>, ref: typeof Input | typeof Trigger | typeof Chip): Step<E> =>
   step.run(DomCommand.Focus.make({ ref }).pipe(Command.asNoop))
 
+const picked = <E>(
+  step: Step<E>,
+  props: Settings<E>,
+  value: string | ReadonlyArray<string> | null,
+  reason: ChangeReason
+): Step<E> => props.emits.picked === undefined ? step : step.emit(props.emits.picked(value, reason))
+
 const rewrite = <E>(
   step: Step<E>,
   props: Settings<E>,
@@ -293,9 +319,17 @@ const highlight = <E>(
   byKey = false
 ): Step<E> => {
   const before = highlightedOf(step.model, shown)
-  const next = step.evolve({ active: value, activeByKey: byKey, autoFirst: false })
-  return before === value ? next : next.emit(
-    props.emits.highlighted(value, value === null ? -1 : shown.findIndex((item) => item.value === value), reason)
+  const first = value === null && props.autoHighlight === "always" && navigableOf(props)
+  const after = first ? shown[0]?.value ?? null : value
+  const label = after === null || !completesOf(props) ? undefined : itemOf(props, after)?.label
+  const completion = reason === "pointer"
+    ? step.model.completion
+    : label === undefined
+    ? null
+    : { label, from: props.inputValue }
+  const next = step.evolve({ active: value, activeByKey: byKey, autoFirst: first, completion })
+  return before === after ? next : next.emit(
+    props.emits.highlighted(after, after === null ? -1 : shown.findIndex((item) => item.value === after), reason)
   )
 }
 
@@ -341,17 +375,18 @@ const open = <E>(
     typed: "",
     pressing: reason === "trigger-press" && props.inputInPopup === true && (method === "mouse" || method === "pen")
   }).emit(props.emits.opened(reason))
-  const shown = shownOf(next.model, { ...props, open: true, inputValue }, true)
+  const opened = { ...props, open: true, inputValue }
+  const shown = shownOf(next.model, opened, true)
   let target: string | null = null
   if (reason !== "input-change" && !next.model.queryChanged) {
     const chosen = new Set(valuesOf(props))
     target = shown.find((item) => chosen.has(item.value))?.value ?? null
-    if (target === null && reason === "list-navigation") {
+    if (target === null && reason === "list-navigation" && (selectableOf(props) || autoOf(props))) {
       target = (key === "ArrowUp" ? shown[shown.length - 1] : shown[0])?.value ?? null
     }
   }
-  next = highlight(next, props, shown, target, method === "keyboard" ? "keyboard" : "none", method === "keyboard")
-  return reason === "input-change" && props.autoHighlight === true ? next.evolve({ autoFirst: true }) : next
+  next = highlight(next, opened, shown, target, method === "keyboard" ? "keyboard" : "none", method === "keyboard")
+  return reason === "input-change" && autoOf(props) ? next.evolve({ autoFirst: true }) : next
 }
 
 const dismiss = <E>(
@@ -374,7 +409,8 @@ const dismiss = <E>(
       if (props.inputInPopup !== true || inline) next = rewrite(next, props, "", "input-clear")
     }
   }
-  return next.evolve({ closeMethod: method, focusLeft, pressing: false }).emit(props.emits.dismissed(reason))
+  return next.evolve({ closeMethod: method, focusLeft, pressing: false, completion: null })
+    .emit(props.emits.dismissed(reason))
 }
 
 const toggle = <E>(step: Step<E>, props: Settings<E>, method: Interaction): Step<E> =>
@@ -388,26 +424,27 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
   const item = itemOf(props, value)
   if (item === undefined || !available(item) || lockedOf(props)) return step
   if (props.multiple === true) {
-    const picked = step.emit(props.emits.picked(toggled(valuesOf(props), value), "item-press"))
-    if (props.inputValue.trim() === "") return picked
+    const added = picked(step, props, toggled(valuesOf(props), value), "item-press")
+    if (props.inputValue.trim() === "") return added
     return props.inputInPopup === true
-      ? rewrite(picked, props, "", "input-clear")
-      : dismiss(picked, props, "item-press", method)
+      ? rewrite(added, props, "", "input-clear")
+      : dismiss(added, props, "item-press", method)
   }
-  const picked = step.emit(props.emits.picked(value, "item-press"))
-  return dismiss(
-    props.inputInPopup === true ? picked : rewrite(picked, props, item.label, "item-press"),
+  const chosen = picked(step, props, value, "item-press")
+  const closed = dismiss(
+    props.inputInPopup === true ? chosen : rewrite(chosen, props, item.label, "item-press"),
     props,
     "item-press",
     method
   )
+  return props.submitOnItemClick === true
+    ? closed.run(Html.RequestSubmit.make({ ref: Input }).pipe(Command.asNoop))
+    : closed
 }
 
 const clear = <E>(step: Step<E>, props: Settings<E>, reason: TextReason): Step<E> => {
   const cleared = rewrite(step, props, "", reason)
-  return filledOf(props)
-    ? cleared.emit(props.emits.picked(props.multiple === true ? [] : null, reason))
-    : cleared
+  return filledOf(props) ? picked(cleared, props, props.multiple === true ? [] : null, reason) : cleared
 }
 
 const navigate = <E>(
@@ -420,7 +457,7 @@ const navigate = <E>(
   const at = shown.findIndex((item) => item.value === highlighted)
   const last = shown.length - 1
   const loops = props.loopFocus !== false
-  const loop: Loop = !loops ? "none" : props.autoHighlight === true ? "wrap" : "escape"
+  const loop: Loop = !loops ? "none" : autoOf(props) ? "wrap" : "escape"
   let index: number
   if (props.grid === true && (key === "ArrowLeft" || key === "ArrowRight")) {
     index = stepped(at, last, (key === "ArrowRight") !== (props.dir === "rtl") ? 1 : -1, loops ? "wrap" : "none")
@@ -445,7 +482,7 @@ const edit = <E>(
 ): Step<E> => {
   if (lockedOf(props)) return step
   const query = value.trim()
-  const auto = props.autoHighlight === true
+  const auto = autoOf(props)
   const navigable = navigableOf(props)
   const inPopup = props.inputInPopup === true
   let next = step
@@ -461,15 +498,13 @@ const edit = <E>(
     if (props.open) next = next.evolve({ closeQuery: null })
   }
   if (value === "" && !inPopup) {
-    if (props.multiple !== true && filledOf(props)) {
-      next = next.emit(props.emits.picked(null, "input-clear"))
-    }
+    if (props.multiple !== true && filledOf(props)) next = picked(next, props, null, "input-clear")
     if (props.openOnInputClick === false) next = dismiss(next, props, "input-clear", null)
   }
   if (!props.open && typed && query !== "") {
     return open(next, { ...props, inputValue: value }, "input-change", "keyboard")
   }
-  if (auto && typed) return next.evolve({ active: null, autoFirst: query !== "" })
+  if (auto && typed) return next.evolve({ active: null, autoFirst: query !== "" || props.autoHighlight === "always" })
   return navigable ? unhighlight(next, props, "none", step.model) : next
 }
 
@@ -482,14 +517,12 @@ const removeChip = <E>(
   if (lockedOf(props)) return step
   const values = valuesOf(props)
   if (!values.includes(value)) return step
-  const removed = unhighlight(step, props, "keyboard").emit(
-    props.emits.picked(values.filter((other) => other !== value), reason)
-  )
+  const removed = picked(unhighlight(step, props, "keyboard"), props, values.filter((other) => other !== value), reason)
   return reason === "chip-remove-press" ? focus(removed, Input) : removed
 }
 
 const hover = <E>(step: Step<E>, props: Settings<E>, value: string | null): Step<E> =>
-  props.highlightItemOnHover === false || !navigableOf(props)
+  props.highlightItemOnHover === false || !navigableOf(props) || (value === null && props.keepHighlight === true)
     ? step
     : value === null
     ? unhighlight(step, props, "pointer")
@@ -858,7 +891,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       const typed = $.evolve(next).run(WaitBeforeResetTyping.make({}))
       return item === undefined || values.includes(item.value)
         ? typed
-        : typed.emit(props.emits.picked(item.value, "none"))
+        : picked(typed, props, item.value, "none")
     },
     ClickedLabel: focusInput,
     FocusedFormInput: focusInput,
@@ -867,8 +900,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       if (lockedOf(props) || props.multiple === true) return model
       const item = autofillMatch(props.items, value)
       if (item === undefined || valuesOf(props).includes(item.value)) return model
-      const picked = $.emit(props.emits.picked(item.value, "none"))
-      return props.inputInPopup === true ? picked : rewrite(picked, props, item.label, "none")
+      const chosen = picked($, props, item.value, "none")
+      return props.inputInPopup === true ? chosen : rewrite(chosen, props, item.label, "none")
     },
     PressedClear: (model, _message, $) => {
       const props = s($)
@@ -905,7 +938,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         pressedItem: null,
         pressing: false
       })
-      return rewrite(closed, props, rest, rest === "" ? "input-clear" : "none").emit(props.emits.settled(open))
+      const settled = selectableOf(props) ? rewrite(closed, props, rest, rest === "" ? "input-clear" : "none") : closed
+      return settled.emit(props.emits.settled(open))
     },
     ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
     PressedOutside: (_model, { pointerType }, $) => dismiss($, s($), "outside-press", methodOf(pointerType)),
@@ -933,7 +967,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const modal = props.modal === true
     const values = valuesOf(props)
     const chosen = new Set(values)
-    const filled = filledOf(props)
+    const selectable = selectableOf(props)
+    const filled = nonEmptyOf(props)
+    const displayed = displayedOf(model, props)
     const items = shownOf(model, props)
     const listEmpty = items.length === 0
     const highlighted = navigable || model.mounted ? highlightedOf(model, items) : null
@@ -959,7 +995,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const align = model.placement?.align ?? tracked.options.align
     const popupSide = shown ? side : undefined
     const selectedItems = values.map((value) => known.get(value) ?? { value, label: value })
-    const text = !filled && props.placeholder !== undefined
+    const text = !selectable
+      ? displayed
+      : !filled && props.placeholder !== undefined
       ? props.placeholder
       : selectedItems.map((item) => item.label).join(", ")
     const hovers = navigable && props.highlightItemOnHover !== false
@@ -986,7 +1024,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("data-disabled", flag(disabled))
         .attr("data-readonly", flag(readOnly))
 
-    const inputs = formInputs(p, {
+    const inputs = !selectable ? [] : formInputs(p, {
       name: props.name,
       form: props.form,
       autoComplete: props.autoComplete,
@@ -1013,7 +1051,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     })
 
     const value = p.part("span", (b) =>
-      b.attr("data-placeholder", flag(!filled))
+      b.attr("data-placeholder", flag(selectable && !filled))
         .forward((node) => node.children.length > 0 ? node : node.children(text)))
 
     const pressGroup = ({ button, pointerType }: Html.PointerPayload) =>
@@ -1023,7 +1061,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       inside(control(b))
         .attr("role", "group")
         .attr("data-combobox-group", owner)
-        .attr("data-placeholder", flag(!filled))
+        .attr("data-placeholder", flag(selectable && !filled))
         .on("mousedown", pressGroup, { preventDefault: true }))
 
     const keyHandled = (key: string, selectionStart: number | null): boolean => {
@@ -1054,13 +1092,13 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .ref(Input)
         .attr("data-combobox-input", owner)
         .attr("data-required", flag(required))
-        .attr("value", props.inputValue)
-        .value(props.inputValue)
+        .attr("value", displayed)
+        .value(displayed)
         .attr("role", "combobox")
         .attr("aria-expanded", String(navigable))
         .attr("aria-haspopup", grid ? "grid" : "listbox")
         .attr("aria-controls", navigable ? listId : undefined)
-        .attr("aria-autocomplete", readOnly ? "none" : "list")
+        .attr("aria-autocomplete", readOnly ? "none" : props.mode ?? "list")
         .attr("aria-activedescendant", navigable && highlighted !== null ? itemId(highlighted) : undefined)
         .attr("aria-readonly", readOnly ? "true" : undefined)
         .attr("aria-required", required ? "true" : undefined)
@@ -1069,6 +1107,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("autocorrect", "off")
         .attr("autocapitalize", "none")
         .attr("readonly", flag(readOnly))
+        .attr("name", selectable ? undefined : props.name)
+        .attr("form", selectable ? undefined : props.form)
+        .attr("required", flag(!selectable && required))
         .disabled(disabled)
         .on(
           "mousedown",
@@ -1111,7 +1152,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("type", "button")
         .attr("data-combobox-trigger", owner)
         .attr("data-required", flag(required))
-        .attr("data-placeholder", flag(!filled))
+        .attr("data-placeholder", flag(selectable && !filled))
         .attr("aria-expanded", String(open))
         .attr("aria-haspopup", inPopup ? "dialog" : "listbox")
         .attr("aria-controls", open ? (inPopup ? popupId : listId) : undefined)
@@ -1287,9 +1328,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       return b
         .attr("id", itemId(value))
         .attr("role", grid ? "gridcell" : "option")
-        .attr("aria-selected", String(selected))
+        .attr("aria-selected", selectable ? String(selected) : undefined)
         .attr("aria-disabled", off ? "true" : undefined)
-        .attr("data-selected", flag(selected))
+        .attr("data-selected", flag(selectable && selected))
         .attr("data-highlighted", flag(active))
         .attr("data-disabled", flag(off))
         .on("mouseenter", () => hovers ? Message.EnteredItem({ value }) : undefined)
