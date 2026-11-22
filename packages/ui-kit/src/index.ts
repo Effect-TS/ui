@@ -208,6 +208,12 @@ export * from "./Toggle.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./ToggleGroup.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Tooltip.ts"
 
 /**

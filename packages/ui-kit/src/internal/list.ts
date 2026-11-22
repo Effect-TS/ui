@@ -29,3 +29,10 @@ export const stepped = (at: number, last: number, direction: 1 | -1, loop: Loop)
   if (next >= 0 && next <= last) return next
   return loop === "none" ? at : loop === "escape" ? -1 : direction === 1 ? 0 : last
 }
+
+export type Orientation = "horizontal" | "vertical"
+
+export const arrowKeys = (orientation: Orientation, rtl: boolean) =>
+  orientation === "vertical"
+    ? { next: "ArrowDown", previous: "ArrowUp" }
+    : { next: rtl ? "ArrowLeft" : "ArrowRight", previous: rtl ? "ArrowRight" : "ArrowLeft" }

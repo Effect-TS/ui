@@ -70,7 +70,7 @@
  * @since 0.1.0
  */
 import type * as Html from "@effect/ui/html/Html"
-import { flag } from "./internal/attributes.ts"
+import { pressedAttrs } from "./internal/attributes.ts"
 
 /**
  * The controlled value and interaction state for `Toggle`.
@@ -154,17 +154,7 @@ export const Toggle = <Msg, R = never>(
         "Toggle: the element already handles click, which onToggle would replace. Send the message from onToggle"
       )
     }
-    const button = node
-      .attrs({
-        // Inside a form a button submits by default.
-        type: "button",
-        "aria-pressed": String(props.pressed),
-        // Never set: the native `disabled` reports it.
-        "aria-disabled": undefined,
-        "data-pressed": flag(props.pressed),
-        "data-disabled": flag(disabled)
-      })
-      .disabled(disabled)
+    const button = pressedAttrs(node, props.pressed, disabled)
     return !disabled && onToggle !== undefined
       ? button.onClick(() => onToggle({ pressed: !props.pressed }))
       : button

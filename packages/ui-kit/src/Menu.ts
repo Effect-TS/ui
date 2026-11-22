@@ -260,7 +260,7 @@ import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { available, keyed, stepped } from "./internal/list.ts"
+import { arrowKeys, available, keyed, type Orientation, stepped } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { isMac } from "./internal/platform.ts"
@@ -910,20 +910,10 @@ const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
   return commit($, model, { ...model, ...next, ...moved }, "keyboard").run(WaitBeforeResetTyping.make({ delay: 500 }))
 }
 
-const keys = (orientation: "vertical" | "horizontal", rtl: boolean) =>
-  orientation === "vertical"
-    ? {
-      next: "ArrowDown",
-      previous: "ArrowUp",
-      open: rtl ? "ArrowLeft" : "ArrowRight",
-      close: rtl ? "ArrowRight" : "ArrowLeft"
-    }
-    : {
-      next: rtl ? "ArrowLeft" : "ArrowRight",
-      previous: rtl ? "ArrowRight" : "ArrowLeft",
-      open: "ArrowDown",
-      close: "ArrowUp"
-    }
+const keys = (orientation: Orientation, rtl: boolean) => {
+  const cross = arrowKeys(orientation === "vertical" ? "horizontal" : "vertical", rtl)
+  return { ...arrowKeys(orientation, rtl), open: cross.next, close: cross.previous }
+}
 
 const pressKey = (model: MenuModel, $: MenuUpdate, key: string, action: ItemAction | null) => {
   const props = $.props
