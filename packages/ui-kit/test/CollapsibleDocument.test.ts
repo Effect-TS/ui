@@ -7,45 +7,60 @@ import { Effect, Schema } from "effect"
 import { byId, container, tick } from "./utils/document.ts"
 
 const Config = Schema.Struct({
+  initialOpen: Schema.Boolean,
   hiddenUntilFound: Schema.Boolean,
   refuse: Schema.Boolean,
   disabled: Schema.Boolean,
+  holdExit: Schema.Boolean,
   style: Schema.optional(Schema.String)
 })
 type Config = typeof Config.Type
 
 const Message = UiSchema.TaggedEnum({
   Toggled: { open: Schema.Boolean, reason: Schema.String },
-  Settled: { open: Schema.Boolean }
+  Settled: { open: Schema.Boolean },
+  ReleaseHold: {}
 })
 
 const Page = Component.define({
   name: "Page",
   scoped: false,
   props: Config,
-  model: Schema.Struct({ config: Config, open: Schema.Boolean, log: Schema.Array(Schema.String) }),
+  model: Schema.Struct({
+    config: Config,
+    open: Schema.Boolean,
+    holdExit: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
   message: Message,
   elements: Html
 }).make({
-  init: ($) => ({ config: $.props, open: false, log: [] }),
+  init: ($) => ({ config: $.props, open: $.props.initialOpen, holdExit: $.props.holdExit, log: [] }),
   update: {
     Toggled: (model, { open, reason }) => ({
       ...model,
       open: model.config.refuse ? model.open : open,
       log: [...model.log, `Toggled ${open} ${reason}`]
     }),
-    Settled: (model, { open }) => ({ ...model, log: [...model.log, `Settled ${open}`] })
+    Settled: (model, { open }) => ({ ...model, log: [...model.log, `Settled ${open}`] }),
+    ReleaseHold: (model) => ({ ...model, holdExit: false })
   },
   view: (model, h) =>
     Collapsible(h, {
-      props: { open: model.open, hiddenUntilFound: model.config.hiddenUntilFound, disabled: model.config.disabled },
+      props: {
+        open: model.open,
+        hiddenUntilFound: model.config.hiddenUntilFound,
+        disabled: model.config.disabled,
+        holdExit: model.holdExit
+      },
       onEmit: {
         Toggled: ({ open, reason }) => Message.Toggled({ open, reason }),
         Settled: ({ open }) => Message.Settled({ open })
       },
       view: (collapsible) =>
-        collapsible.root(h.div).children(
+        collapsible.root(h.div.attr("id", "root")).children(
           collapsible.trigger(h.button.attr("id", "trigger")).children("Details"),
+          h.button.attr("id", "release").onClick(Message.ReleaseHold()).children("Release"),
           collapsible.panel(h.div.attr("id", "panel").attr("style", model.config.style))?.children(
             "Content",
             h.div.attr("id", "child")
@@ -141,7 +156,7 @@ const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config> = {}) {
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(
     Page,
-    { hiddenUntilFound: false, refuse: false, disabled: false, ...overrides },
+    { initialOpen: false, hiddenUntilFound: false, refuse: false, disabled: false, holdExit: false, ...overrides },
     app
   )
   yield* tick
@@ -149,18 +164,20 @@ const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config> = {}) {
 })
 
 describe("Collapsible in a document", { concurrent: false }, () => {
-  it.effect("an open runs from the measured size, and a close writes it before the ending style", () =>
+  it.effect("opens and closes with measured sizes, respects holdExit, and starts settled when open on load", () =>
     Effect.gen(function*() {
       const { finish } = yield* animations
-      const { log } = yield* mountPage()
+      const { log } = yield* mountPage({ holdExit: true })
       const { seen, stop } = record(() => document.getElementById("panel"))
+
       byId("trigger").click()
       yield* tick
       yield* tick
       assert.deepStrictEqual(seen, ["starting auto", "starting 120px", "120px"])
+      assert.include(byId("panel").getAttribute("style") ?? "", "--collapsible-panel-width:200px")
       finish()
       yield* tick
-      assert.deepStrictEqual(seen.at(-1), "auto")
+      assert.strictEqual(seen.at(-1), "auto")
       assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Settled true"])
 
       seen.length = 0
@@ -168,19 +185,37 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.deepStrictEqual(seen, ["auto", "120px", "ending 120px"])
+      assert.isTrue(byId("root").hasAttribute("data-ending-style"))
+      assert.isTrue(byId("trigger").hasAttribute("data-ending-style"))
+
+      finish()
+      yield* tick
+      assert.isNotNull(document.getElementById("panel"))
+      assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Settled true", "Toggled false trigger-press"])
+
+      byId("release").click()
+      yield* tick
       finish()
       yield* tick
       stop()
-      assert.deepStrictEqual(seen.at(-1), "gone")
+      assert.strictEqual(seen.at(-1), "gone")
       assert.deepStrictEqual(log().slice(2), ["Toggled false trigger-press", "Settled false"])
+
+      yield* Effect.scoped(Effect.gen(function*() {
+        const opened = yield* mountPage({ initialOpen: true })
+        assert.isFalse(byId("panel").hasAttribute("data-starting-style"))
+        assert.include(byId("panel").getAttribute("style") ?? "", "--collapsible-panel-height:auto")
+        assert.deepStrictEqual(opened.log(), [])
+      }))
     }))
 
-  it.effect("a close interrupted by an open and another close waits two frames from the last close", () =>
+  it.effect("an interrupted close waits two frames from the last close and keeps important alignment", () =>
     Effect.gen(function*() {
       const { finish } = yield* animations
       const { next } = yield* frames
-      yield* mountPage()
+      yield* mountPage({ style: "justify-content:flex-end !important" })
       const panel = () => byId("panel")
+
       byId("trigger").click()
       yield* tick
       yield* next
@@ -197,63 +232,43 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       yield* next
       assert.isFalse(panel().hasAttribute("data-ending-style"))
+      assert.strictEqual(panel().style.getPropertyValue("justify-content"), "flex-end")
+      assert.strictEqual(panel().style.getPropertyPriority("justify-content"), "important")
+
       yield* next
       assert.isTrue(panel().hasAttribute("data-ending-style"))
     }))
 
-  it.effect("a close measuring the same size keeps the consumer's important alignment", () =>
+  it.effect("ignores bubbled child matches and opens immediately on the panel's own match", () =>
     Effect.gen(function*() {
-      yield* animations
-      yield* mountPage({ style: "justify-content:flex-end !important" })
-      byId("trigger").click()
-      yield* tick
-      yield* tick
-      byId("trigger").click()
-      yield* tick
-      assert.strictEqual(byId("panel").style.getPropertyValue("justify-content"), "flex-end")
-      assert.strictEqual(byId("panel").style.getPropertyPriority("justify-content"), "important")
-    }))
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* animations
+        const { log } = yield* mountPage()
+        byId("trigger").click()
+        yield* tick
+        yield* tick
+        byId("trigger").click()
+        yield* tick
+        yield* tick
+        const panel = byId("panel")
+        assert.isTrue(panel.hasAttribute("data-ending-style"))
+        byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
+        yield* tick
+        yield* tick
+        assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Toggled false trigger-press"])
+        assert.isTrue(panel.hasAttribute("data-ending-style"))
+      }))
 
-  it.effect("a match bubbling from inside the panel is not the panel's own", () =>
-    Effect.gen(function*() {
-      yield* animations
-      const { log } = yield* mountPage()
-      byId("trigger").click()
-      yield* tick
-      yield* tick
-      byId("trigger").click()
-      yield* tick
-      yield* tick
-      const panel = byId("panel")
-      assert.isTrue(panel.hasAttribute("data-ending-style"))
-      byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
-      yield* tick
-      yield* tick
-      assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Toggled false trigger-press"])
-      assert.isTrue(panel.hasAttribute("data-ending-style"))
-    }))
-
-  it.effect("a match bubbling from inside a panel hidden until found waits for the panel's own", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage({ hiddenUntilFound: true })
-      const panel = byId("panel")
-      byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
-      yield* tick
-      assert.deepStrictEqual(log(), [])
-      assert.isTrue(panel.hasAttribute("data-starting-style"))
-      panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
-      panel.removeAttribute("hidden")
-      yield* tick
-      yield* tick
-      assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Settled true"])
-    }))
-
-  it.effect("a find-in-page match opens the panel at once", () =>
-    Effect.gen(function*() {
       const { log } = yield* mountPage({ hiddenUntilFound: true })
       const panel = byId("panel")
       assert.strictEqual(panel.getAttribute("hidden"), "until-found")
       assert.isTrue(panel.hasAttribute("data-starting-style"))
+
+      byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+      assert.isTrue(panel.hasAttribute("data-starting-style"))
+
       panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
       panel.removeAttribute("hidden")
       assert.isFalse(panel.hasAttribute("data-starting-style"))
@@ -265,35 +280,31 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       assert.notInclude(panel.getAttribute("style") ?? "", "duration")
     }))
 
-  it.effect("a refused or disabled reveal puts the panel back to hidden until found", () =>
+  it.effect("refused, overlapping, and disabled reveals restore hidden until found and starting style", () =>
     Effect.gen(function*() {
-      for (const config of [{ refuse: true }, { disabled: true }]) {
-        yield* Effect.scoped(Effect.gen(function*() {
-          const { log } = yield* mountPage({ hiddenUntilFound: true, ...config })
-          const panel = byId("panel")
-          panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
-          panel.removeAttribute("hidden")
-          yield* tick
-          yield* tick
-          assert.deepStrictEqual(log(), config.refuse ? ["Toggled true find-in-page"] : [])
-          assert.strictEqual(panel.getAttribute("hidden"), "until-found")
-          assert.isTrue(panel.hasAttribute("data-starting-style"))
-          assert.notInclude(panel.getAttribute("style") ?? "", "duration")
-        }))
-      }
-    }))
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { log } = yield* mountPage({ hiddenUntilFound: true, refuse: true })
+        const panel = byId("panel")
+        panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
+        panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
+        panel.removeAttribute("hidden")
+        yield* tick
+        yield* tick
+        assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Toggled true find-in-page"])
+        assert.strictEqual(panel.getAttribute("hidden"), "until-found")
+        assert.isTrue(panel.hasAttribute("data-starting-style"))
+        assert.notInclude(panel.getAttribute("style") ?? "", "duration")
+      }))
 
-  it.effect("matches that overlap and are refused restore the closed panel's starting style", () =>
-    Effect.gen(function*() {
-      const { log } = yield* mountPage({ hiddenUntilFound: true, refuse: true })
+      const { log } = yield* mountPage({ hiddenUntilFound: true, disabled: true })
       const panel = byId("panel")
-      panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
       panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
       panel.removeAttribute("hidden")
       yield* tick
       yield* tick
-      assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Toggled true find-in-page"])
+      assert.deepStrictEqual(log(), [])
       assert.strictEqual(panel.getAttribute("hidden"), "until-found")
       assert.isTrue(panel.hasAttribute("data-starting-style"))
+      assert.notInclude(panel.getAttribute("style") ?? "", "duration")
     }))
 })
