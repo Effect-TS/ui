@@ -4,7 +4,7 @@ import { Popover, PopoverTrigger } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, click, container, popovers, tick } from "./utils/document.ts"
+import { byId, click, container, holdExits, popovers, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
   Shown: {},
@@ -101,6 +101,24 @@ const containers = () =>
   )
 
 describe("Popover in a document", { concurrent: false }, () => {
+  it.effect("Escape gives focus to finalFocus as the close starts, and the popup is inert through its exit", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const { log } = yield* mountPage()
+      click(byId("a"))
+      yield* tick
+      yield* tick
+      const popup = document.querySelector("[data-positioner] > div")!
+      assert.isTrue(popup.contains(document.activeElement))
+      assert.isNull(popup.getAttribute("inert"))
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+      yield* tick
+      assert.deepStrictEqual(log(), ["Opened a trigger-press", "Dismissed escape-key"])
+      assert.isTrue(popup.isConnected)
+      assert.strictEqual(popup.getAttribute("inert"), "")
+      assert.strictEqual(document.activeElement?.id, "final")
+    }))
+
   it.effect("a trigger drawn elsewhere opens the popover it names, is its anchor, and closes it", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()

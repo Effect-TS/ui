@@ -80,7 +80,8 @@
  * popover opens by a press, focus moves to the `initialFocus` element, or
  * else to the first element in the popup that Tab reaches, or else to the
  * popup. Tab leaves the popup for the page, and the popover then asks to
- * close with `focus-out`. Once it has closed, focus goes back to the trigger.
+ * close with `focus-out`. As a close starts with focus in the popup, focus
+ * goes back to the trigger, and the popup is `inert` through its exit.
  * `Dialog` describes the rest, which is the same here.
  *
  * **Modes**

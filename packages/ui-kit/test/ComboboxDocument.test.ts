@@ -4,7 +4,7 @@ import { Combobox, Dialog, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, popovers, press, tick } from "./utils/document.ts"
+import { byId, container, holdExits, popovers, press, tick } from "./utils/document.ts"
 
 type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 
@@ -341,6 +341,22 @@ describe("Combobox in a document", { concurrent: false }, () => {
         "Dismissed item-press",
         "EditedInput \"\" input-clear"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("with the input in the popup, Escape gives focus back to the trigger as the close starts, and the popup is inert", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      yield* mountPage({ inputInPopup: true })
+      byId("trigger").focus()
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      assert.strictEqual(document.activeElement, input())
+      assert.isNull(input().closest("[inert]"))
+      keydown(input(), "Escape")
+      yield* tick
+      assert.isTrue(shown())
+      assert.isNotNull(input().closest("[inert]"))
+      assert.strictEqual(document.activeElement, byId("trigger"))
     }).pipe(Effect.scoped))
 
   it.effect("in a modal dialog, Escape closes only the combobox", () =>
