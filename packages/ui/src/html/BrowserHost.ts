@@ -541,55 +541,57 @@ export const makeHost = (
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
-  const beforeEdits = new WeakMap<globalThis.Node, Array<FieldState>>()
+  const beforeEdits = new WeakMap<globalThis.Node, Map<string, FieldState>>()
   let pendingEdit:
     | { readonly node: globalThis.Node; readonly state: FieldState; readonly event: Partial<InputEvent> }
     | undefined
-  let dropsPendingEdit = false
   const expectEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
     const state = fieldStateOf(node)
-    pendingEdit = state === undefined ? undefined : { node, state, event }
+    const edit = pendingEdit = state === undefined ? undefined : { node, state, event }
     // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
-    if (pendingEdit !== undefined && !dropsPendingEdit) {
-      dropsPendingEdit = true
+    if (edit !== undefined) {
       setTimeout(() => {
-        dropsPendingEdit = false
-        pendingEdit = undefined
+        if (pendingEdit === edit) pendingEdit = undefined
       }, 0)
     }
   }
   const recordEdit = (node: globalThis.Node, state: FieldState | undefined) => {
     if (state === undefined) return
-    const edits = beforeEdits.get(node)
-    if (edits === undefined) beforeEdits.set(node, [state])
-    else edits.push(state)
+    let edits = beforeEdits.get(node)
+    if (edits === undefined) beforeEdits.set(node, edits = new Map())
+    edits.set(state.value, state)
+  }
+  const settleEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
+    const edit = pendingEdit
+    pendingEdit = undefined
+    if (edit?.node === node && edit.event.defaultPrevented !== true && edit.event.inputType === event.inputType) {
+      recordEdit(node, edit.state)
+    }
+  }
+  const retireEdits = (node: globalThis.Node) => {
+    if (!composing.has(node)) beforeEdits.delete(node)
   }
   // Assigning a value that changes the text moves the caret to the end, so the selection is put back.
-  const writeValue = (field: HTMLInputElement, value: string) => {
-    const root = field.getRootNode() as Document | ShadowRoot
-    const state = root.activeElement === field ? fieldStateOf(field) : undefined
-    const { scrollLeft, scrollTop } = field
-    field.value = value
-    if (state === undefined) return
-    const shown = field.value
-    const edits = beforeEdits.get(field)
-    let before: FieldState | undefined
-    for (let i = (edits?.length ?? 0) - 1; i >= 0 && before === undefined; i--) {
-      if (edits![i]!.value === shown) before = edits![i]
-    }
-    if (before !== undefined) field.setSelectionRange(before.start, before.end, before.direction)
-    else if (state.start !== state.end || state.end !== state.value.length) {
-      const { direction, end, start, value: current } = state
-      field.setSelectionRange(offsetIn(current, shown, start), offsetIn(current, shown, end), direction)
-    } else return
-    field.scrollLeft = scrollLeft
-    field.scrollTop = scrollTop
-  }
   const writeControlled = (element: any, name: string, value: unknown) => {
-    const tag = (element as globalThis.Element).localName
-    if (name === "value" && typeof value === "string" && (tag === "input" || tag === "textarea")) {
-      writeValue(element, value)
-    } else element[name] = value
+    const state = name === "value" && element.getRootNode().activeElement === element
+      ? fieldStateOf(element)
+      : undefined
+    if (state === undefined) {
+      element[name] = value
+      return
+    }
+    const { scrollLeft, scrollTop } = element
+    element.value = value
+    const shown: string = element.value
+    const before = beforeEdits.get(element)?.get(shown)
+    if (before !== undefined) element.setSelectionRange(before.start, before.end, before.direction)
+    else if (state.start !== state.end || state.end !== state.value.length) {
+      const start = offsetIn(state.value, shown, state.start)
+      const end = state.end === state.start ? start : offsetIn(state.value, shown, state.end)
+      element.setSelectionRange(start, end, state.direction)
+    } else return
+    element.scrollLeft = scrollLeft
+    element.scrollTop = scrollTop
   }
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
@@ -835,7 +837,7 @@ export const makeHost = (
         restoring = undefined
         for (const node of nodes) {
           restoreAffected(node)
-          if (!composing.has(node)) beforeEdits.delete(node)
+          retireEdits(node)
         }
       })
     }
@@ -1097,22 +1099,13 @@ export const makeHost = (
     if (name === "compositionstart" || name === "compositionend" || name === "input" || name === "beforeinput") {
       if (target !== null && target !== undefined && "nodeType" in target) {
         const node = target as globalThis.Node
+        const e = event as Partial<InputEvent>
         if (name === "beforeinput") {
-          const e = event as Partial<InputEvent>
           if (e.isComposing !== true && !composing.has(node)) expectEdit(node, e)
-        } else if (name === "compositionstart") {
-          recordEdit(node, fieldStateOf(node))
-          composing.add(node)
         } else {
-          if (name === "input") {
-            const edit = pendingEdit
-            pendingEdit = undefined
-            if (
-              edit?.node === node && edit.event.defaultPrevented !== true &&
-              edit.event.inputType === (event as Partial<InputEvent>).inputType
-            ) recordEdit(node, edit.state)
-          }
-          if ((event as Partial<InputEvent>).isComposing === true) composing.add(node)
+          if (name === "compositionstart") recordEdit(node, fieldStateOf(node))
+          else if (name === "input") settleEdit(node, e)
+          if (name === "compositionstart" || e.isComposing === true) composing.add(node)
           else composing.delete(node)
         }
       }
@@ -1302,7 +1295,7 @@ export const makeHost = (
         if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) writeControlled(element, name, value)
-        if (name === "value") beforeEdits.delete(node)
+        if (name === "value") retireEdits(node)
         return
       }
       if (value === undefined) {

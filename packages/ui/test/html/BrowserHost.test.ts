@@ -302,10 +302,17 @@ describe("BrowserHost", { concurrent: false }, () => {
       const mountFields = Effect.gen(function*() {
         const app = yield* container
         yield* BrowserHost.mountEffect(Fields, {}, app)
-        return (name: string) => HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement
+        return {
+          field: (name: string) => HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement,
+          press: (name: string) => HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name }))
+        }
       })
-      const edit = (field: HTMLInputElement, value: string, caret: number) => {
+      const beforeInput = (field: HTMLInputElement, cancel = false) => {
+        if (cancel) field.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
         field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" }))
+      }
+      const edit = (field: HTMLInputElement, value: string, caret: number) => {
+        beforeInput(field)
         field.value = value
         field.setSelectionRange(caret, caret)
         field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }))
@@ -314,7 +321,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
       it.effect("a rejected edit puts back the selection it started from", () =>
         Effect.gen(function*() {
-          const field = (yield* mountFields)("Fixed")
+          const field = (yield* mountFields).field("Fixed")
           field.focus()
           for (let i = 0; i < 3; i++) {
             field.setSelectionRange(3, 3)
@@ -334,10 +341,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           yield* tick
           expect(selection(field)).toEqual(["123456", 3, 6])
           field.setSelectionRange(1, 1)
-          field.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
-          field.dispatchEvent(
-            new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" })
-          )
+          beforeInput(field, true)
           field.value = "123x456"
           field.setSelectionRange(4, 4)
           field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }))
@@ -347,7 +351,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
       it.effect("a normalized value keeps the caret with the text around it, and at the end", () =>
         Effect.gen(function*() {
-          const field = yield* mountFields
+          const { field, press } = yield* mountFields
           const upper = field("Upper")
           upper.focus()
           edit(upper, "abcdef", 6)
@@ -356,14 +360,14 @@ describe("BrowserHost", { concurrent: false }, () => {
           edit(upper, "ABCxDEF", 4)
           yield* tick
           expect(selection(upper)).toEqual(["ABCXDEF", 4, 4])
-          HtmlLocator.click(HtmlLocator.getByRole(upper.parentElement!, "button", { name: "Reset" }))
+          press("Reset")
           yield* tick
           upper.setSelectionRange(1, 1)
           edit(upper, "AXBCDEF", 2)
           yield* Effect.promise(() => Promise.resolve())
           expect(upper.value).toBe("AXBCDEF")
           upper.setSelectionRange(5, 5)
-          HtmlLocator.click(HtmlLocator.getByRole(upper.parentElement!, "button", { name: "Reset" }))
+          press("Reset")
           yield* tick
           expect(selection(upper)).toEqual(["ABCDEF", 4, 4])
 
@@ -382,37 +386,33 @@ describe("BrowserHost", { concurrent: false }, () => {
 
       it.effect("a value the Model pushes keeps a focused field's selection, clamped", () =>
         Effect.gen(function*() {
-          const field = yield* mountFields
+          const { field, press } = yield* mountFields
           const [pushed, other] = [field("Pushed"), field("Other")]
           pushed.setSelectionRange(2, 8)
           other.setSelectionRange(2, 8)
           pushed.focus()
-          HtmlLocator.click(HtmlLocator.getByRole(pushed.parentElement!, "button", { name: "Push" }))
+          press("Push")
           yield* tick
           expect(selection(pushed)).toEqual(["hello", 2, 5])
           expect(selection(other)).toEqual(["hello", 5, 5])
-          const push = () => HtmlLocator.click(HtmlLocator.getByRole(pushed.parentElement!, "button", { name: "Push" }))
           pushed.setSelectionRange(1, 1)
-          pushed.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
-          pushed.dispatchEvent(
-            new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" })
-          )
-          push()
+          beforeInput(pushed, true)
+          press("Push")
           yield* Effect.promise(() => Promise.resolve())
           expect(pushed.value).toBe("hello world")
           pushed.setSelectionRange(3, 3)
-          push()
+          press("Push")
           yield* tick
           expect(selection(pushed)).toEqual(["hello", 3, 3])
           field("Email").focus()
-          push()
+          press("Push")
           yield* tick
           expect(field("Email").value).toBe("hello world")
         }).pipe(Effect.scoped))
 
       it.effect("a rejected composition puts back the selection it started from after compositionend", () =>
         Effect.gen(function*() {
-          const field = (yield* mountFields)("Fixed")
+          const field = (yield* mountFields).field("Fixed")
           field.focus()
           field.setSelectionRange(1, 4)
           field.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
