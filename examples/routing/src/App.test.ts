@@ -33,23 +33,24 @@ const link = (name: string) => HtmlLocator.role("link", { name })
 const searchInput = HtmlLocator.label("Search people")
 
 it.layer(AppTest("/"), { buildPerTest: true })("App", (it) => {
-  it.effect("each path shows its page and sets its title", () =>
+  it.effect("each path shows its page, sets its title and marks only its menu link as current", () =>
     Effect.gen(function*() {
       const root = yield* mountApp
       const pages = [
-        ["/", "Routing", "Welcome Home"],
-        ["/nested/route/is/very/nested", "Nested | Routing", "Very Nested Route!"],
-        ["/people", "People | Routing", "People"],
-        ["/people/1", "Person 1 | Routing", "Alice Johnson"],
-        ["/people/99", "Person 99 | Routing", "Person Not Found"],
-        ["/files", "Files | Routing", "Files"],
-        ["/files/documents/resume.pdf", "resume.pdf | Files | Routing", "resume.pdf"],
-        ["/files/documents/missing.txt", "missing.txt | Files | Routing", "Nothing Here"]
+        ["/", "Routing", "Welcome Home", "Home"],
+        ["/nested/route/is/very/nested", "Nested | Routing", "Very Nested Route!", "Nested"],
+        ["/people", "People | Routing", "People", "People"],
+        ["/people/1", "Person 1 | Routing", "Alice Johnson", "People"],
+        ["/people/99", "Person 99 | Routing", "Person Not Found", "People"],
+        ["/files", "Files | Routing", "Files", "Files"],
+        ["/files/documents/resume.pdf", "resume.pdf | Files | Routing", "resume.pdf", "Files"],
+        ["/files/documents/missing.txt", "missing.txt | Files | Routing", "Nothing Here", "Files"]
       ] as const
-      for (const [url, title, name] of pages) {
+      for (const [url, title, name, current] of pages) {
         yield* navigate(url)
         assert.strictEqual(root.head().title, title)
         assert.isDefined(root.query(heading(name)), url)
+        assert.deepStrictEqual(root.all(Locator.attr("aria-current", "page")).map(Locator.textOf), [current], url)
       }
     }))
 
