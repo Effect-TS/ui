@@ -31,28 +31,33 @@ const standIn = {
   view: (menu: Parts, h: H) => {
     const filtering = h.props.query !== undefined
     const entries = [
-      menu.group(h.div.class("group"), "edit").children(
-        menu.groupLabel(h.div.class("group-label"), "edit").children("Edit"),
-        menu.item(entry(h, "undo"), "undo").children("Undo"),
-        menu.item(entry(h, "copy"), "copy").children("Copy"),
-        menu.item(entry(h, "cut"), "cut", false).children("Cut"),
-        menu.item(entry(h, "paste"), "paste").children("Paste")
+      menu.group({ element: h.div.class("group"), group: "edit" }).children(
+        menu.groupLabel({ element: h.div.class("group-label"), group: "edit" }).children("Edit"),
+        menu.item({ element: entry(h, "undo"), value: "undo" }).children("Undo"),
+        menu.item({ element: entry(h, "copy"), value: "copy" }).children("Copy"),
+        menu.item({ element: entry(h, "cut"), value: "cut", closeOnClick: false }).children("Cut"),
+        menu.item({ element: entry(h, "paste"), value: "paste" }).children("Paste")
       ),
       menu.separator(h.div.class("separator")),
-      menu.checkboxItem(entry(h, "wrap").attr("aria-checked", "false"), "wrap", true, true).children(
-        menu.checkboxItemIndicator(h.span.class("tick"), "wrap")?.children("✓"),
+      menu.checkboxItem({
+        element: entry(h, "wrap").attr("aria-checked", "false"),
+        value: "wrap",
+        checked: true,
+        closeOnClick: true
+      }).children(
+        menu.checkboxItemIndicator({ element: h.span.class("tick"), value: "wrap" })?.children("✓"),
         "Wrap lines"
       ),
-      menu.checkboxItem(entry(h, "minimap"), "minimap", false).children("Minimap"),
-      menu.radioGroup(h.div.class("sizes"), "small").children(
-        menu.radioItem(entry(h, "small").attr("data-checked", "x"), "small").children("Small"),
-        menu.radioItem(entry(h, "large"), "large").children("Large")
+      menu.checkboxItem({ element: entry(h, "minimap"), value: "minimap", checked: false }).children("Minimap"),
+      menu.radioGroup({ element: h.div.class("sizes"), value: "small" }).children(
+        menu.radioItem({ element: entry(h, "small").attr("data-checked", "x"), value: "small" }).children("Small"),
+        menu.radioItem({ element: entry(h, "large"), value: "large" }).children("Large")
       ),
-      menu.linkItem(h.a.attrs({ "data-testid": "docs", href: "/docs" }), "docs").children("Docs"),
-      menu.item(entry(h, "delete"), "delete").children("Delete")
+      menu.linkItem({ element: h.a.attrs({ "data-testid": "docs", href: "/docs" }), value: "docs" }).children("Docs"),
+      menu.item({ element: entry(h, "delete"), value: "delete" }).children("Delete")
     ]
     return h.div(
-      menu.trigger(h.button.class("trigger").attr("id", "edit")).children("Edit"),
+      menu.trigger({ element: h.button.class("trigger").attr("id", "edit") }).children("Edit"),
       menu.positioner(h.div.class("positioner")).children(
         menu.popup(h.div.class("popup")).children(
           filtering ? menu.input(h.input.class("input")) : null,
@@ -165,7 +170,7 @@ const Page = Component.define({
           key: "menu",
           props: { open: model.open, items },
           onEmit: (event) => event._tag === "RequestedOpen" ? PageMessage.RequestedOpen() : undefined,
-          view: (menu) => menu.trigger(h.button.class("trigger")).children("Edit")
+          view: (menu) => menu.trigger({ element: h.button.class("trigger") }).children("Edit")
         })
         : null
     )
@@ -507,11 +512,11 @@ describe("Menu", () => {
         elements: Html,
         view: (menu, h) =>
           h.div(
-            menu.trigger(h.button.class("trigger").attr("aria-disabled", "true")).children("Edit"),
+            menu.trigger({ element: h.button.class("trigger").attr("aria-disabled", "true") }).children("Edit"),
             menu.input(h.input.class("input").attr("aria-disabled", "true")),
             menu.clear(h.button.class("clear").attr("aria-disabled", "true")),
-            menu.group(h.div.class("group").attr("hidden", ""), "g").children(
-              menu.item(h.div.class("item"), "copy").children("Copy")
+            menu.group({ element: h.div.class("group").attr("hidden", ""), group: "g" }).children(
+              menu.item({ element: h.div.class("item"), value: "copy" }).children("Copy")
             )
           )
       })
@@ -530,8 +535,8 @@ describe("Menu", () => {
       assert.strictEqual(s.get(Locator.attr("class", "group")).attrs?.hidden, "")
 
       const hiddenTagCases: ReadonlyArray<(menu: Parts, h: H) => View.Content<never>> = [
-        (menu, h) => h.div(menu.checkboxItemIndicator(h.div as never, "wrap")),
-        (menu, h) => h.div(menu.radioItemIndicator(h.div as never, "small")),
+        (menu, h) => h.div(menu.checkboxItemIndicator({ element: h.div as never, value: "wrap" })),
+        (menu, h) => h.div(menu.radioItemIndicator({ element: h.div as never, value: "small" })),
         (menu, h) => h.div(menu.clear(h.div as never)),
         (menu, h) => h.div(menu.empty(h.span as never))
       ]

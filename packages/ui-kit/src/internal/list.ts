@@ -20,6 +20,14 @@ export const keyed = <Tag extends string, Rest extends ReadonlyArray<unknown>, R
     ): ReturnType<B["attr"]> => part(element.key(value), value, ...rest)
   )
 
+export const grouped = <Tag extends string, R>(part: View.Part<Tag, [group: string], R>) =>
+  View.wrapPart(
+    part,
+    <B extends View.PartTarget<Tag>>(
+      { element, group }: { readonly element: B; readonly group: string }
+    ): ReturnType<B["attr"]> => part(element, group)
+  )
+
 export type Loop = "none" | "wrap" | "escape"
 
 export const stepped = (at: number, last: number, direction: 1 | -1, loop: Loop): number => {

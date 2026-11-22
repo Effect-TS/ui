@@ -122,21 +122,23 @@ const Page = Component.define({
       view: (menu) =>
         h.div(
           h.button.attrs({ id: "before", type: "button" }).children("Before"),
-          menu.trigger(h.button.attr("id", "trigger")).children("Edit"),
+          menu.trigger({ element: h.button.attr("id", "trigger") }).children("Edit"),
           h.props.viewport
-            ? menu.trigger(h.button.attr("id", "trigger-2"), { openOnHover: true, delay: 0, closeDelay: 300 })
+            ? menu.trigger({ element: h.button.attr("id", "trigger-2"), openOnHover: true, delay: 0, closeDelay: 300 })
               .children("View")
             : null,
-          h.props.viewport ? menu.trigger(h.button.attr("id", "trigger-3"), { disabled: true }).children("Off") : null,
+          h.props.viewport
+            ? menu.trigger({ element: h.button.attr("id", "trigger-3"), disabled: true }).children("Off")
+            : null,
           menu.positioner(h.div.attr("id", "positioner")).children(
             menu.popup(h.div).children(
               h.props.viewport
                 ? menu.viewport(h.div.attr("id", "viewport")).children(h.span.children("Content"))
                 : null,
               h.props.filter ? menu.input(h.input.attr("data-testid", "input")) : null,
-              menu.item(h.div.attr("data-testid", "copy"), "copy").children("Copy"),
-              menu.item(h.div.attr("data-testid", "cut"), "cut").children("Cut"),
-              menu.item(h.div.attr("data-testid", "paste"), "paste").children("Paste"),
+              menu.item({ element: h.div.attr("data-testid", "copy"), value: "copy" }).children("Copy"),
+              menu.item({ element: h.div.attr("data-testid", "cut"), value: "cut" }).children("Cut"),
+              menu.item({ element: h.div.attr("data-testid", "paste"), value: "paste" }).children("Paste"),
               Menu(h, {
                 props: {
                   open: model.share,
@@ -155,11 +157,12 @@ const Page = Component.define({
                 },
                 view: (share) =>
                   h.div(
-                    menu.item(share.submenuTrigger(h.div.attr("data-testid", "share")), "share").children("Share"),
+                    menu.item({ element: share.submenuTrigger(h.div.attr("data-testid", "share")), value: "share" })
+                      .children("Share"),
                     share.positioner(h.div.attr("id", "share-positioner")).children(
                       share.popup(h.div).children(
-                        share.item(h.div.attr("data-testid", "email"), "email").children("Email"),
-                        share.item(h.div.attr("data-testid", "link"), "link").children("Copy link")
+                        share.item({ element: h.div.attr("data-testid", "email"), value: "email" }).children("Email"),
+                        share.item({ element: h.div.attr("data-testid", "link"), value: "link" }).children("Copy link")
                       )
                     )
                   )

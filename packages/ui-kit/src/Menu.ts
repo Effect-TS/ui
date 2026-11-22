@@ -38,20 +38,22 @@
  * | `finalFocus`            | any focusable element, focused on close                 |
  *
  * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children. `trigger` takes optional
- * `MenuTriggerOptions`. The items take their value,
- * `checkboxItem` whether it's checked, and `group` and `groupLabel` the
- * group's key. `item` closes the menu when picked and the others don't;
- * a last `closeOnClick` argument changes that. The indicators, `clear`
- * and `empty` return `undefined` while they're hidden, and `keepMounted`
- * keeps an indicator drawn. Every item value has to be in `items`, and an
- * item keys its element with the value.
+ * applied, and the consumer adds the children. `trigger` takes an options
+ * object, `{ element }`, with the optional fields of `MenuTriggerOptions`.
+ * The items, the indicators and `radioGroup` take `{ element, value }`,
+ * `checkboxItem` with `checked` as well, and `group` and `groupLabel`
+ * take `{ element, group }`, where `group` is the `group` of the items
+ * inside. `item` closes the menu when picked and the others don't; a
+ * `closeOnClick` field changes that. The indicators, `clear` and `empty`
+ * return `undefined` while they're hidden, and a `keepMounted` field keeps
+ * an indicator drawn. Every item value has to be in `items`, and an item
+ * keys its element with the value.
  *
  * A submenu is another `Menu` drawn inside the parent's popup, with the
  * parent's item value as `parentItem`. Apply both parts to the item that
- * opens it, `menu.item(submenu.submenuTrigger(h.div), value)`, and own its
- * `open` like the root's. Picking an item in a submenu closes every menu
- * above it.
+ * opens it, `menu.item({ element: submenu.submenuTrigger(h.div), value })`,
+ * and own its `open` like the root's. Picking an item in a submenu closes
+ * every menu above it.
  *
  * The positioner is a manual popover, so it renders in the top layer and
  * needs no portal. The browser gives a popover a border, padding, a
@@ -200,12 +202,12 @@
  *       },
  *       view: (editMenu) =>
  *         h.div(
- *           editMenu.trigger(h.button).children("Edit"),
+ *           editMenu.trigger({ element: h.button }).children("Edit"),
  *           editMenu.positioner(h.div).children(
  *             editMenu.popup(h.div).children(
- *               editMenu.item(h.div, "copy").children("Copy"),
- *               editMenu.checkboxItem(h.div, "wrap", model.wrap).children(
- *                 editMenu.checkboxItemIndicator(h.span, "wrap")?.children("✓"),
+ *               editMenu.item({ element: h.div, value: "copy" }).children("Copy"),
+ *               editMenu.checkboxItem({ element: h.div, value: "wrap", checked: model.wrap }).children(
+ *                 editMenu.checkboxItemIndicator({ element: h.span, value: "wrap" })?.children("✓"),
  *                 "Wrap lines"
  *               ),
  *               editMenu.separator(h.div),
@@ -218,9 +220,11 @@
  *                 },
  *                 view: (shareMenu) =>
  *                   h.div(
- *                     editMenu.item(shareMenu.submenuTrigger(h.div), "share").children("Share"),
+ *                     editMenu.item({ element: shareMenu.submenuTrigger(h.div), value: "share" }).children("Share"),
  *                     shareMenu.positioner(h.div).children(
- *                       shareMenu.popup(h.div).children(shareMenu.item(h.div, "email").children("Email"))
+ *                       shareMenu.popup(h.div).children(
+ *                         shareMenu.item({ element: h.div, value: "email" }).children("Email")
+ *                       )
  *                     )
  *                   )
  *               })
@@ -257,6 +261,7 @@ import {
   attrSelector,
   flag,
   idOf,
+  type Keyed,
   ownStyle,
   separatorAttrs,
   withStyle
@@ -265,7 +270,7 @@ import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onEscape } from "./internal/interaction.ts"
-import { arrowKeys, available, keyed, type Orientation, stepped } from "./internal/list.ts"
+import { arrowKeys, available, grouped, keyed, type Orientation, stepped } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { isMac } from "./internal/platform.ts"
@@ -1657,9 +1662,10 @@ const pressable = <B extends Handles<any>>(
     )
 
 /**
- * The options of one `trigger` part, over the menu's props of the same
- * name: `disabled` turns this trigger off, and `openOnHover`, `delay` and
- * `closeDelay` set how the pointer opens and closes the menu from it.
+ * The options of one `trigger` part besides its `element`, over the
+ * menu's props of the same name: `disabled` turns this trigger off, and
+ * `openOnHover`, `delay` and `closeDelay` set how the pointer opens and
+ * closes the menu from it.
  *
  * @stability experimental
  * @category models
@@ -2260,7 +2266,9 @@ export const Menu = Component.define({
     })
     const trigger = View.wrapPart(
       triggerPart,
-      <B extends View.PartTarget<"button">>(element: B, options: MenuTriggerOptions = {}): ReturnType<B["attr"]> => {
+      <B extends View.PartTarget<"button">>(
+        { element, ...options }: MenuTriggerOptions & { readonly element: B }
+      ): ReturnType<B["attr"]> => {
         const id = idOf(element)
         triggers++
         return triggerPart(element, id ?? p.id("trigger", triggers - 1), id, options)
@@ -2492,7 +2500,21 @@ export const Menu = Component.define({
           "data-unchecked": flag(!checked)
         })
 
-    const item = keyed(
+    const closing = <Tag extends string, R>(part: View.Part<Tag, [value: string, closeOnClick?: boolean], R>) => {
+      const keyedPart = keyed(part)
+      return View.wrapPart(
+        keyedPart,
+        <B extends Keyed<Tag>>(
+          { closeOnClick, element, value }: {
+            readonly element: B
+            readonly value: string
+            readonly closeOnClick?: boolean | undefined
+          }
+        ) => keyedPart(element, value, closeOnClick)
+      )
+    }
+
+    const item = closing(
       p.part(
         "div",
         (b, value: string, closeOnClick?: boolean) =>
@@ -2500,7 +2522,7 @@ export const Menu = Component.define({
       )
     )
 
-    const linkItem = keyed(
+    const linkItem = closing(
       p.part(
         "a",
         (b, value: string, closeOnClick?: boolean) =>
@@ -2508,7 +2530,7 @@ export const Menu = Component.define({
       )
     )
 
-    const checkboxItem = keyed(
+    const checkboxItemPart = keyed(
       p.part("div", (b, value: string, checked: boolean, closeOnClick?: boolean) => {
         checks.set(value, checked)
         return checkedAttrs(
@@ -2522,13 +2544,29 @@ export const Menu = Component.define({
         )
       })
     )
+    const checkboxItem = View.wrapPart(
+      checkboxItemPart,
+      <B extends Keyed<"div">>(
+        { checked, closeOnClick, element, value }: {
+          readonly element: B
+          readonly value: string
+          readonly checked: boolean
+          readonly closeOnClick?: boolean | undefined
+        }
+      ) => checkboxItemPart(element, value, checked, closeOnClick)
+    )
 
-    const radioGroup = p.part("div", (b, value: string | null) => {
+    const radioGroupPart = p.part("div", (b, value: string | null) => {
       radio = value
       return b.attrs({ role: "group", "data-disabled": flag(disabled) })
     })
+    const radioGroup = View.wrapPart(
+      radioGroupPart,
+      <B extends View.PartTarget<"div">>({ element, value }: { readonly element: B; readonly value: string | null }) =>
+        radioGroupPart(element, value)
+    )
 
-    const radioItem = keyed(
+    const radioItem = closing(
       p.part("div", (b, value: string, closeOnClick?: boolean) => {
         const checked = radio === value
         checks.set(value, checked)
@@ -2549,9 +2587,11 @@ export const Menu = Component.define({
       return View.wrapPart(
         part,
         <B extends View.PartTarget<"span">>(
-          element: B,
-          value: string,
-          keepMounted?: boolean
+          { element, keepMounted, value }: {
+            readonly element: B
+            readonly value: string
+            readonly keepMounted?: boolean | undefined
+          }
         ): ReturnType<B["attr"]> | undefined => {
           const applied = part(element, value)
           return checks.get(itemOf(value).value) === true || keepMounted === true ? applied : undefined
@@ -2559,10 +2599,12 @@ export const Menu = Component.define({
       )
     }
 
-    const group = p.part("div", (b, key: string) =>
-      b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
-        .forward((node) => node.attr("hidden", flag(matches !== null && !hasShownItem(View.build(node, []))))))
-    const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)))
+    const group = grouped(
+      p.part("div", (b, key: string) =>
+        b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
+          .forward((node) => node.attr("hidden", flag(matches !== null && !hasShownItem(View.build(node, []))))))
+    )
+    const groupLabel = grouped(p.part("div", (b, key: string) => b.attr("id", groupLabelId(key))))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const input = p.part("input", (b) => {

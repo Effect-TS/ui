@@ -29,7 +29,7 @@ const standIn = {
     h.div(
       autocomplete.inputGroup(h.div.class("group")).children(
         autocomplete.input(h.input.class("input")),
-        autocomplete.clear(h.button.class("clear"))?.children("×"),
+        autocomplete.clear({ element: h.button.class("clear") })?.children("×"),
         autocomplete.trigger(h.button.class("trigger")).children(autocomplete.icon(h.span.class("icon")).children("▾"))
       ),
       autocomplete.value(h.span.class("value")),
@@ -38,7 +38,7 @@ const standIn = {
           autocomplete.empty(h.div.class("empty")).children("No fruit found"),
           autocomplete.list(h.div.class("list")).children(
             ...autocomplete.items.map(({ label, value }) =>
-              autocomplete.item(h.div.attr("data-testid", value), value).children(label)
+              autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
             )
           )
         )

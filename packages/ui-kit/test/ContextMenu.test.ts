@@ -19,12 +19,12 @@ const standIn = {
   elements: Html,
   view: (menu: Parts, h: H) =>
     h.div(
-      menu.trigger(h.button.class("button").attr("id", "more")).children("More"),
+      menu.trigger({ element: h.button.class("button").attr("id", "more") }).children("More"),
       menu.contextTrigger(h.div.class("area").attr("id", "row")).children("Row"),
       menu.positioner(h.div.class("positioner")).children(
         menu.popup(h.div.class("popup")).children(
-          menu.item(h.div.attr("data-testid", "copy"), "copy").children("Copy"),
-          menu.item(h.div.attr("data-testid", "paste"), "paste").children("Paste")
+          menu.item({ element: h.div.attr("data-testid", "copy"), value: "copy" }).children("Copy"),
+          menu.item({ element: h.div.attr("data-testid", "paste"), value: "paste" }).children("Paste")
         )
       )
     )

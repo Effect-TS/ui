@@ -42,11 +42,13 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children. `item`, `itemIndicator`,
- * `chip` and `chipRemove` take the value as well, and `group` and
- * `groupLabel` the group's key. `item` and `chip` key their element with
- * the value. `clear` and `itemIndicator` return `undefined` while they're
- * hidden; `keepMounted` keeps them drawn. `empty` drops its children while
- * the list has items, so the live region stays in the page.
+ * `chip` and `chipRemove` take an options object, `{ element, value }`,
+ * and `group` and `groupLabel` take `{ element, group }`, where `group` is
+ * the `group` of the items inside. `clear` takes `{ element }`. `item` and
+ * `chip` key their element with the value. `clear` and `itemIndicator`
+ * return `undefined` while they're hidden; a `keepMounted` field keeps
+ * them drawn. `empty` drops its children while the list has items, so the
+ * live region stays in the page.
  *
  * Draw `combobox.items`, not `items`: it's the filtered list, which keeps
  * its contents while the popup animates out. `combobox.groups` splits it
@@ -213,7 +215,7 @@
  *               field.label(h.label).children("Fruit"),
  *               combobox.inputGroup(h.div).children(
  *                 combobox.input(field.control(h.input)),
- *                 combobox.clear(h.button)?.children("×"),
+ *                 combobox.clear({ element: h.button })?.children("×"),
  *                 combobox.trigger(h.button).children(combobox.icon(h.span).children("▾"))
  *               ),
  *               combobox.positioner(h.div).children(
@@ -221,9 +223,9 @@
  *                   combobox.empty(h.div).children("No fruit found"),
  *                   combobox.list(h.div).children(
  *                     ...combobox.items.map(({ label, value }) =>
- *                       combobox.item(h.div, value).children(
+ *                       combobox.item({ element: h.div, value }).children(
  *                         label,
- *                         combobox.itemIndicator(h.span, value)?.children("✓")
+ *                         combobox.itemIndicator({ element: h.span, value })?.children("✓")
  *                       )
  *                     )
  *                   )

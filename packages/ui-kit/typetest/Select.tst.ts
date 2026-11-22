@@ -37,12 +37,14 @@ describe("Select", () => {
             expect(select.label(h.div)).type.toBe<Div>()
             expect(select.positioner(h.div)).type.toBe<Div>()
             expect(select.popup(h.div)).type.toBe<Div>()
-            expect(select.item(h.div, "light")).type.toBe<Div>()
-            expect(select.group(h.div, "all")).type.toBe<Div>()
+            expect(select.item({ element: h.div, value: "light" })).type.toBe<Div>()
+            expect(select.group({ element: h.div, group: "all" })).type.toBe<Div>()
             expect(select.arrow(h.div)).type.toBe<Div | undefined>()
-            expect(select.itemIndicator(h.span, "light")).type.toBe<Span | undefined>()
-            expect(select.itemIndicator(h.span, "light", true)).type.toBe<Span | undefined>()
-            expect(select.scrollUpArrow(h.div, true)).type.toBe<Div | undefined>()
+            expect(select.itemIndicator({ element: h.span, value: "light" })).type.toBe<Span | undefined>()
+            expect(select.itemIndicator({ element: h.span, value: "light", keepMounted: true })).type.toBe<
+              Span | undefined
+            >()
+            expect(select.scrollUpArrow({ element: h.div, keepMounted: true })).type.toBe<Div | undefined>()
             expect(select.finalFocus(h.button)).type.toBe<Button>()
             return select.trigger(h.button)
           }
@@ -61,7 +63,11 @@ describe("Select", () => {
           view: (select) => {
             expect(select.trigger).type.not.toBeCallableWith(h.a)
             expect(select.positioner).type.not.toBeCallableWith(h.span)
-            expect(select.item).type.not.toBeCallableWith(h.div)
+            expect(select.item).type.not.toBeCallableWith({ element: h.div })
+            expect(select.item).type.not.toBeCallableWith(h.div, "light")
+            expect(select.itemIndicator).type.not.toBeCallableWith(h.span, "light")
+            expect(select.group).type.not.toBeCallableWith(h.div, "all")
+            expect(select.scrollUpArrow).type.not.toBeCallableWith(h.div)
             return select.trigger(h.button)
           }
         })

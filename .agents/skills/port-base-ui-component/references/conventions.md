@@ -287,7 +287,8 @@ model.advanced
 
   A part takes an options object only when it has more than one argument,
   such as a tab's `value`. It still returns the builder, and `children` is
-  never a field of it:
+  never a field of it. A part whose extra arguments are all optional takes
+  the object every time, as `menu.trigger({ element: h.button })` does:
 
   ```ts
   tabs.tab({ element: h.button, value: "a" }).children("Account")

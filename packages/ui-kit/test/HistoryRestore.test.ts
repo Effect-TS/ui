@@ -94,7 +94,8 @@ const Page = Component.define({
                 ac.input(h.input.attr("data-testid", "ac-input")),
                 ac.list(h.div).children(
                   ...ac.items.map((item) =>
-                    ac.item(h.div.attr("data-testid", `ac-item-${item.value}`), item.value).children(item.label)
+                    ac.item({ element: h.div.attr("data-testid", `ac-item-${item.value}`), value: item.value })
+                      .children(item.label)
                   )
                 )
               )
@@ -110,7 +111,8 @@ const Page = Component.define({
                 cb.input(h.input.attr("data-testid", "cb-input")),
                 cb.list(h.div).children(
                   ...cb.items.map((item) =>
-                    cb.item(h.div.attr("data-testid", `cb-item-${item.value}`), item.value).children(item.label)
+                    cb.item({ element: h.div.attr("data-testid", `cb-item-${item.value}`), value: item.value })
+                      .children(item.label)
                   )
                 )
               )

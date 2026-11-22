@@ -75,7 +75,7 @@ const Page = Component.define({
                   autocomplete.popup(h.div).children(
                     autocomplete.list(h.div).children(
                       ...autocomplete.items.map(({ label, value }) =>
-                        autocomplete.item(h.div.attr("data-testid", value), value).children(label)
+                        autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
                       )
                     )
                   )
@@ -123,7 +123,7 @@ const InPopup = Component.define({
                 autocomplete.input(h.input.class("input")),
                 autocomplete.list(h.div).children(
                   ...autocomplete.items.map(({ label, value }) =>
-                    autocomplete.item(h.div.attr("data-testid", value), value).children(label)
+                    autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
                   )
                 )
               )
@@ -191,7 +191,7 @@ const Nested = Component.define({
                         autocomplete.popup(h.div).children(
                           autocomplete.list(h.div).children(
                             ...autocomplete.items.map(({ label, value }) =>
-                              autocomplete.item(h.div, value).children(label)
+                              autocomplete.item({ element: h.div, value }).children(label)
                             )
                           )
                         )
@@ -219,7 +219,7 @@ const Nested = Component.define({
                       )
                     )
                 }),
-                ...combobox.items.map(({ label, value }) => combobox.item(h.div, value).children(label))
+                ...combobox.items.map(({ label, value }) => combobox.item({ element: h.div, value }).children(label))
               )
             )
           )

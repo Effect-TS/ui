@@ -11,13 +11,21 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Positioning from "../Positioning.ts"
-import { type Attributed, attrSelector, flag, separatorAttrs, visuallyHidden, withStyle } from "./attributes.ts"
+import {
+  type Attributed,
+  attrSelector,
+  flag,
+  type Keyed,
+  separatorAttrs,
+  visuallyHidden,
+  withStyle
+} from "./attributes.ts"
 import { backdropBox, blockers, cutPath } from "./blocker.ts"
 import { byAttribute, focusFinal } from "./dom.ts"
 import { textFilter } from "./filter.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./formInputs.ts"
 import { methodOf } from "./interaction.ts"
-import { available, keyed, type Loop, stepped } from "./list.ts"
+import { available, grouped, keyed, type Loop, stepped } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
@@ -1263,7 +1271,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .onClick(Message.PressedClear()))
     const clearButton = View.wrapPart(
       clearPart,
-      <B extends View.PartTarget<"button">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"button">>(
+        { element, keepMounted }: { readonly element: B; readonly keepMounted?: boolean | undefined }
+      ): ReturnType<B["attr"]> | undefined => {
         const applied = clearPart(element)
         return filled || keepMounted === true ? applied : undefined
       }
@@ -1286,9 +1296,14 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "aria-readonly": readOnly ? "true" : undefined,
           "data-disabled": flag(disabled)
         }))
-    const chip = keyed(chipPart)
+    const keyedChip = keyed(chipPart)
+    const chip = View.wrapPart(
+      keyedChip,
+      <B extends Keyed<"div">>({ element, value }: { readonly element: B; readonly value: string }) =>
+        keyedChip(element, value)
+    )
 
-    const chipRemove = p.part("button", (b, value: string) =>
+    const chipRemovePart = p.part("button", (b, value: string) =>
       inside(b)
         .attrs({
           type: "button",
@@ -1299,6 +1314,11 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
         .onClick(Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })))
+    const chipRemove = View.wrapPart(
+      chipRemovePart,
+      <B extends View.PartTarget<"button">>({ element, value }: { readonly element: B; readonly value: string }) =>
+        chipRemovePart(element, value)
+    )
 
     const backdrop = p.part("div", (b) =>
       states(b)
@@ -1425,26 +1445,37 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         )
         .onClick(({ pointerType }) => off ? undefined : Message.ClickedItem({ value, pointerType }))
     })
-    const item = keyed(itemPart)
+    const keyedItem = keyed(itemPart)
+    const item = View.wrapPart(
+      keyedItem,
+      <B extends Keyed<"div">>({ element, value }: { readonly element: B; readonly value: string }) =>
+        keyedItem(element, value)
+    )
 
     const indicatorPart = p.part("span", (b) => b.attr("aria-hidden", "true"))
     const itemIndicator = View.wrapPart(
       indicatorPart,
       <B extends View.PartTarget<"span">>(
-        element: B,
-        value: string,
-        keepMounted?: boolean
+        { element, keepMounted, value }: {
+          readonly element: B
+          readonly value: string
+          readonly keepMounted?: boolean | undefined
+        }
       ): ReturnType<B["attr"]> | undefined => {
         const applied = indicatorPart(element)
         return chosen.has(value) || keepMounted === true ? applied : undefined
       }
     )
 
-    const group = p.part(
-      "div",
-      (b, key: string) => b.attrs({ role: grid ? "rowgroup" : "group", "aria-labelledby": groupLabelId(key) })
+    const group = grouped(
+      p.part(
+        "div",
+        (b, key: string) => b.attrs({ role: grid ? "rowgroup" : "group", "aria-labelledby": groupLabelId(key) })
+      )
     )
-    const groupLabel = p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    const groupLabel = grouped(
+      p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    )
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const live = <B extends Attributed<B>>(builder: B): B =>
