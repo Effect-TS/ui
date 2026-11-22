@@ -768,6 +768,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   it.effect.each(
     [
       ["a child of theirs whose state decodes late", "server", "at once", "late"],
+      ["a child of theirs whose state fails to decode late", "client", "at once", "never"],
       ["them when their own state fails to decode late", "client", "never", "at once"]
     ] as const
   )(
@@ -1078,6 +1079,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   it.effect.each(
     [
       ["neither slot", ["a"], [], ["y"], []],
+      ["a slot that holds one more", ["a"], ["a"], ["x", "y"], ["x", "y"]],
       ["its slots the other way around", ["a", "b"], ["b", "a"], ["x"], ["z", "x"]]
     ] as const
   )(

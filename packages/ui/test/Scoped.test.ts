@@ -2186,7 +2186,7 @@ describe("scoped children written into closed slots", () => {
       assert.include(Cause.pretty(failureOf(root)!.cause), "Row[k]")
     })))
 
-  it.effect.each(["its own view", "a slot before it", "the author's view beside its slot"] as const)(
+  it.effect.each(["its own view", "a slot after it", "a slot before it", "the author's view beside its slot"] as const)(
     "an ordinary child and a scoped one of the same name and key, the scoped one in %s",
     (where) =>
       provideHost(Effect.gen(function*() {
@@ -2211,6 +2211,8 @@ describe("scoped children written into closed slots", () => {
                 const slot = () => Plain(h, { key: "o", slots: { body: kept } })
                 return where === "its own view"
                   ? Headless(h, { key: "k", view: () => kept })
+                  : where === "a slot after it"
+                  ? h.el("div", Plain(h, { key: "k" }), slot())
                   : where === "a slot before it"
                   ? h.el("div", slot(), Plain(h, { key: "k" }))
                   : h.el("div", Plain(h, { key: "o", slots: { body: Plain(h, { key: "k" }) } }), kept)

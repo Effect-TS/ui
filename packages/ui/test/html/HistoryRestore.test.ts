@@ -458,6 +458,31 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
 
+  it.effect("Back restores what the user typed in a form a push closed as an earlier Back's state decoded", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app, open, root } = yield* visit("late form")
+      yield* open
+      yield* tick
+      const field = app.querySelector("input")!
+      field.value = "typed"
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      yield* tick
+      root.send(Msg.Go())
+      yield* tick
+      const latch = yield* Deferred.make<void>()
+      gate = Deferred.await(latch)
+      history.go(-1)
+      yield* tick
+      root.send(Msg.Go())
+      yield* tick
+      yield* Deferred.succeed(latch, undefined)
+      history.go(-1)
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "typed")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
   it.effect.each(
     [
       ["open card", true],
@@ -644,6 +669,22 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
       yield* open
       yield* tick
       assert.strictEqual(draft(), "client")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
+
+  it.effect("Back restores a scoped child of an author made before the Back settles", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { draft, root } = yield* sit(false, true)
+      root.send(DeskMsg.Go())
+      yield* tick
+      gate = Effect.never
+      root.send(DeskMsg.Show({ editor: "none" }))
+      history.go(-1)
+      yield* tick
+      root.send(DeskMsg.Show({ editor: "open" }))
+      yield* tick
+      assert.strictEqual(draft(), "server")
     }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
   })
 
