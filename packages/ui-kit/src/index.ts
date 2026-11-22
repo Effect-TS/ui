@@ -52,6 +52,12 @@ export * from "./Checkbox.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Collapsible.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./CheckboxGroup.ts"
 
 /**
