@@ -26,6 +26,7 @@ export const PeoplePageEvents = UiSchema.TaggedEnum({
 
 const PeoplePageDef = Component.define({
   name: "PeoplePage",
+  scoped: false,
   props: Schema.Struct({
     route: PeopleRoute,
     searchInput: Schema.String,
