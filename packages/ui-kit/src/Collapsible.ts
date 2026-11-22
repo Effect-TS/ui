@@ -258,12 +258,14 @@ const layoutStyles = ["justify-content", "align-items", "align-content", "justif
 // A panel that aligns its content to the end, as a slide-down panel does,
 // reports less than its content's size unless the alignment is reset.
 const measure = (panel: HTMLElement): Size => {
-  const saved = layoutStyles.map((name) => [name, panel.style.getPropertyValue(name)] as const)
+  const saved = layoutStyles.map((name) =>
+    [name, panel.style.getPropertyValue(name), panel.style.getPropertyPriority(name)] as const
+  )
   for (const name of layoutStyles) panel.style.setProperty(name, "initial", "important")
   const size = { height: panel.scrollHeight, width: panel.scrollWidth }
-  for (const [name, value] of saved) {
+  for (const [name, value, priority] of saved) {
     if (value === "") panel.style.removeProperty(name)
-    else panel.style.setProperty(name, value)
+    else panel.style.setProperty(name, value, priority)
   }
   return size
 }
@@ -273,7 +275,8 @@ const TrackPanelArgs = {
   mounted: Schema.Boolean,
   started: Schema.Boolean,
   ending: Schema.Boolean,
-  holdExit: Schema.Boolean
+  holdExit: Schema.Boolean,
+  hiddenUntilFound: Schema.Boolean
 }
 
 type TrackPanelArgs = Schema.Struct<typeof TrackPanelArgs>["Type"]
@@ -291,7 +294,15 @@ const TrackPanel = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.callback<Message>((queue) => {
       const frame = frameOf(node.ownerDocument.defaultView)
-      const twoFrames = (f: () => void) => frame(() => frame(f))
+      let step = 0
+      const twoFrames = (f: () => void) => {
+        const id = ++step
+        frame(() =>
+          frame(() => {
+            if (id === step) f()
+          })
+        )
+      }
       let current: TrackPanelArgs = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
 
@@ -312,17 +323,25 @@ const TrackPanel = Mount.makeStream(
       // The browser removes `hidden` as it reveals a match, behind the renderer's
       // back, so the renderer won't put it back if the open never arrives. The
       // starting style comes off at once, or the match would measure zero-sized.
-      let reveal: ReturnType<typeof setTimeout> | undefined
-      const onBeforeMatch = () => {
-        const starting = node.hasAttribute("data-starting-style")
+      let reveal = 0
+      let revealTimer: ReturnType<typeof setTimeout> | undefined
+      const cancelReveal = () => {
+        reveal++
+        clearTimeout(revealTimer)
+      }
+      const onBeforeMatch = (event: Event) => {
+        if (event.target !== node) return
         node.removeAttribute("data-starting-style")
         send(Message.MatchedFind())
-        clearTimeout(reveal)
-        reveal = setTimeout(() =>
+        cancelReveal()
+        const id = reveal
+        revealTimer = setTimeout(() =>
           frame(() => {
-            if (current.open || !node.isConnected) return
-            if (starting) node.setAttribute("data-starting-style", "")
-            node.setAttribute("hidden", "until-found")
+            if (id !== reveal) return
+            if (current.hiddenUntilFound && node.isConnected) {
+              node.setAttribute("data-starting-style", "")
+              node.setAttribute("hidden", "until-found")
+            }
             send(Message.StayedHidden())
           }), 0)
       }
@@ -331,6 +350,7 @@ const TrackPanel = Mount.makeStream(
       const onChange = (next: TrackPanelArgs) => {
         const previous = current
         current = next
+        if (next.open) cancelReveal()
         if (!previous.open && next.open) opened()
         else if (previous.open && !next.open) closed()
         transition.follow(phaseOf(previous), phaseOf(next))
@@ -348,7 +368,8 @@ const TrackPanel = Mount.makeStream(
         () =>
           Effect.sync(() => {
             controller.abort()
-            clearTimeout(reveal)
+            step++
+            cancelReveal()
             transition.cancel()
           })
       )
@@ -473,7 +494,8 @@ export const Collapsible = Component.define({
             mounted: model.mounted,
             started: model.started,
             ending: model.ending,
-            holdExit: props.holdExit === true
+            holdExit: props.holdExit === true,
+            hiddenUntilFound
           })
         ))
     const panel = View.wrapPart(

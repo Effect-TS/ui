@@ -6,7 +6,12 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { byId, container, tick } from "./utils/document.ts"
 
-const Config = Schema.Struct({ hiddenUntilFound: Schema.Boolean, refuse: Schema.Boolean, disabled: Schema.Boolean })
+const Config = Schema.Struct({
+  hiddenUntilFound: Schema.Boolean,
+  refuse: Schema.Boolean,
+  disabled: Schema.Boolean,
+  style: Schema.optional(Schema.String)
+})
 type Config = typeof Config.Type
 
 const Message = UiSchema.TaggedEnum({
@@ -41,7 +46,10 @@ const Page = Component.define({
       view: (collapsible) =>
         collapsible.root(h.div).children(
           collapsible.trigger(h.button.attr("id", "trigger")).children("Details"),
-          collapsible.panel(h.div.attr("id", "panel"))?.children("Content")
+          collapsible.panel(h.div.attr("id", "panel").attr("style", model.config.style))?.children(
+            "Content",
+            h.div.attr("id", "child")
+          )
         )
     })
 })
@@ -87,6 +95,27 @@ const animations = Effect.acquireRelease(
     }
   }),
   ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
+)
+
+const frames = Effect.acquireRelease(
+  Effect.sync(() => {
+    const original = window.requestAnimationFrame
+    let queued: Array<FrameRequestCallback> = []
+    window.requestAnimationFrame = (f) => {
+      queued.push(f)
+      return queued.length
+    }
+    return {
+      original,
+      next: Effect.gen(function*() {
+        const run = queued
+        queued = []
+        for (const f of run) f(performance.now())
+        yield* tick
+      })
+    }
+  }),
+  ({ original }) => Effect.sync(() => (window.requestAnimationFrame = original))
 )
 
 const record = (target: () => Element | null) => {
@@ -146,14 +175,87 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log().slice(2), ["Toggled false trigger-press", "Settled false"])
     }))
 
+  it.effect("a close interrupted by an open and another close waits two frames from the last close", () =>
+    Effect.gen(function*() {
+      const { finish } = yield* animations
+      const { next } = yield* frames
+      yield* mountPage()
+      const panel = () => byId("panel")
+      byId("trigger").click()
+      yield* tick
+      yield* next
+      yield* next
+      finish()
+      yield* tick
+
+      byId("trigger").click()
+      yield* tick
+      yield* next
+      byId("trigger").click()
+      yield* tick
+      byId("trigger").click()
+      yield* tick
+      yield* next
+      assert.isFalse(panel().hasAttribute("data-ending-style"))
+      yield* next
+      assert.isTrue(panel().hasAttribute("data-ending-style"))
+    }))
+
+  it.effect("a close measuring the same size keeps the consumer's important alignment", () =>
+    Effect.gen(function*() {
+      yield* animations
+      yield* mountPage({ style: "justify-content:flex-end !important" })
+      byId("trigger").click()
+      yield* tick
+      yield* tick
+      byId("trigger").click()
+      yield* tick
+      assert.strictEqual(byId("panel").style.getPropertyValue("justify-content"), "flex-end")
+      assert.strictEqual(byId("panel").style.getPropertyPriority("justify-content"), "important")
+    }))
+
+  it.effect("a match bubbling from inside the panel is not the panel's own", () =>
+    Effect.gen(function*() {
+      yield* animations
+      const { log } = yield* mountPage()
+      byId("trigger").click()
+      yield* tick
+      yield* tick
+      byId("trigger").click()
+      yield* tick
+      yield* tick
+      const panel = byId("panel")
+      assert.isTrue(panel.hasAttribute("data-ending-style"))
+      byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Toggled false trigger-press"])
+      assert.isTrue(panel.hasAttribute("data-ending-style"))
+    }))
+
+  it.effect("a match bubbling from inside a panel hidden until found waits for the panel's own", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ hiddenUntilFound: true })
+      const panel = byId("panel")
+      byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+      assert.isTrue(panel.hasAttribute("data-starting-style"))
+      panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
+      panel.removeAttribute("hidden")
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Settled true"])
+    }))
+
   it.effect("a find-in-page match opens the panel at once", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage({ hiddenUntilFound: true })
       const panel = byId("panel")
       assert.strictEqual(panel.getAttribute("hidden"), "until-found")
       assert.isTrue(panel.hasAttribute("data-starting-style"))
+      panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
       panel.removeAttribute("hidden")
-      panel.dispatchEvent(new Event("beforematch"))
       assert.isFalse(panel.hasAttribute("data-starting-style"))
       yield* tick
       yield* tick
@@ -169,8 +271,8 @@ describe("Collapsible in a document", { concurrent: false }, () => {
         yield* Effect.scoped(Effect.gen(function*() {
           const { log } = yield* mountPage({ hiddenUntilFound: true, ...config })
           const panel = byId("panel")
+          panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
           panel.removeAttribute("hidden")
-          panel.dispatchEvent(new Event("beforematch"))
           yield* tick
           yield* tick
           assert.deepStrictEqual(log(), config.refuse ? ["Toggled true find-in-page"] : [])
@@ -179,5 +281,19 @@ describe("Collapsible in a document", { concurrent: false }, () => {
           assert.notInclude(panel.getAttribute("style") ?? "", "duration")
         }))
       }
+    }))
+
+  it.effect("matches that overlap and are refused restore the closed panel's starting style", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ hiddenUntilFound: true, refuse: true })
+      const panel = byId("panel")
+      panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
+      panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
+      panel.removeAttribute("hidden")
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Toggled true find-in-page"])
+      assert.strictEqual(panel.getAttribute("hidden"), "until-found")
+      assert.isTrue(panel.hasAttribute("data-starting-style"))
     }))
 })
