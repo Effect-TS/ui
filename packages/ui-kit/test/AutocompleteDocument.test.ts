@@ -19,24 +19,40 @@ const Message = UiSchema.TaggedEnum({
   Submitted: { query: Schema.String }
 })
 
+const FormModel = Schema.Struct({ open: Schema.Boolean, value: Schema.String, log: Schema.Array(Schema.String) })
+type FormModel = typeof FormModel.Type
+
+const formUpdate = {
+  Opened: (model: FormModel, { reason }: { readonly reason: string }) => ({
+    ...model,
+    open: true,
+    log: [...model.log, "Opened " + reason]
+  }),
+  Dismissed: (model: FormModel, { reason }: { readonly reason: string }) => ({
+    ...model,
+    open: false,
+    log: [...model.log, "Dismissed " + reason]
+  }),
+  Updated: (model: FormModel, { reason, value }: { readonly reason: string; readonly value: string }) => ({
+    ...model,
+    value,
+    log: [...model.log, "Updated " + JSON.stringify(value) + " " + reason]
+  }),
+  Submitted: (model: FormModel, { query }: { readonly query: string }) => ({
+    ...model,
+    log: [...model.log, "Submitted " + JSON.stringify(query)]
+  })
+}
+
 const Page = Component.define({
   name: "Page",
   scoped: false,
-  model: Schema.Struct({ open: Schema.Boolean, value: Schema.String, log: Schema.Array(Schema.String) }),
+  model: FormModel,
   message: Message,
   elements: Html
 }).make({
   init: () => ({ open: false, value: "", log: [] }),
-  update: {
-    Opened: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "Opened " + reason] }),
-    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, "Dismissed " + reason] }),
-    Updated: (model, { reason, value }) => ({
-      ...model,
-      value,
-      log: [...model.log, "Updated " + JSON.stringify(value) + " " + reason]
-    }),
-    Submitted: (model, { query }) => ({ ...model, log: [...model.log, "Submitted " + JSON.stringify(query)] })
-  },
+  update: formUpdate,
   view: (model, h) =>
     h.form.onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })).children(
       Field(h, {
@@ -73,21 +89,12 @@ const Page = Component.define({
 const InPopup = Component.define({
   name: "InPopup",
   scoped: false,
-  model: Schema.Struct({ open: Schema.Boolean, value: Schema.String, log: Schema.Array(Schema.String) }),
+  model: FormModel,
   message: Message,
   elements: Html
 }).make({
   init: () => ({ open: false, value: "", log: [] }),
-  update: {
-    Opened: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "Opened " + reason] }),
-    Dismissed: (model, { reason }) => ({ ...model, open: false, log: [...model.log, "Dismissed " + reason] }),
-    Updated: (model, { reason, value }) => ({
-      ...model,
-      value,
-      log: [...model.log, "Updated " + JSON.stringify(value) + " " + reason]
-    }),
-    Submitted: (model, { query }) => ({ ...model, log: [...model.log, "Submitted " + JSON.stringify(query)] })
-  },
+  update: formUpdate,
   view: (model, h) =>
     h.div(
       h.form.attr("id", "search").onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })),
