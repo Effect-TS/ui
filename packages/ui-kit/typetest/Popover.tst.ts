@@ -12,7 +12,7 @@ type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
 
 describe("Popover", () => {
   it("each part returns the builder it was given, and the portal and backdrop may be absent", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -42,7 +42,7 @@ describe("Popover", () => {
   })
 
   it("the trigger takes only a button, and reports why the popover opened and closed", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>

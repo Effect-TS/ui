@@ -15,6 +15,7 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Schema.Struct({
     modal: Schema.optional(Schema.Boolean),
     holdHoverExit: Schema.optional(Schema.Boolean),
