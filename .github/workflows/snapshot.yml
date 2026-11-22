@@ -15,7 +15,7 @@ permissions: {}
 jobs:
   approval-gate:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-small
     environment: fork
     steps:
       - run: echo "Fork PR approved by maintainer."
@@ -27,7 +27,7 @@ jobs:
       !cancelled()
       && (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped')
       && github.repository_owner == 'Effect-TS'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-small
     permissions:
       contents: read
     timeout-minutes: 10
@@ -41,6 +41,10 @@ jobs:
       - name: Run codemods
         run: pnpm codemod
       - name: Build package
+        env:
+          # Leave memory for the runner and package builds on the 8 GB runner.
+          # The native TypeScript compiler uses Go's soft memory limit.
+          GOMEMLIMIT: 4GiB
         run: pnpm build
       - name: Create snapshot
         id: snapshot
