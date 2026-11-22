@@ -82,10 +82,12 @@
  * moves to the popup.
  *
  * As soon as the close starts, focus moves to the `finalFocus` element,
- * unless the dialog closed because focus left it. Otherwise, if focus was
- * inside the dialog, it moves to the trigger that opened it, or else to what
- * had focus before it opened. Focus that a press outside gave to the page or
- * to another dialog stays there. A touch that closes the dialog moves focus
+ * unless the dialog closed because focus left it, or because a press outside
+ * gave focus to an element of the page. Otherwise, if focus was inside the
+ * dialog, it moves to the trigger that opened it, or else to what had focus
+ * before it opened. Focus that a press outside gave to the page or to
+ * another dialog stays there. A dialog removed while focus is inside gives
+ * focus back the same way. A touch that closes the dialog moves focus
  * once the finger lifts, so a tap on a field of the page keeps the field
  * focused. The popup is `inert` while the dialog closes, so during the exit
  * transition Tab skips it and screen readers don't reach it. Tab stays
@@ -478,6 +480,7 @@ const TrackDialogArgs = {
   openMethod: Schema.NullOr(DialogInteraction),
   closeMethod: Schema.NullOr(DialogInteraction),
   closedByFocusOut: Schema.Boolean,
+  closedByOutsidePress: Schema.Boolean,
   triggerId: Schema.NullOr(Schema.String),
   holdExit: Schema.Boolean,
   portalId: Schema.String,
@@ -777,10 +780,10 @@ const TrackDialog = Mount.makeStream(
         })
 
       const parentsOf = () => showing.filter((other) => other.node.contains(node))
-      const restoreFocus = (parents: ReadonlyArray<typeof entry>) => {
-        const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
+      const restoreFocus = (parents: ReadonlyArray<typeof entry>, held: boolean) => {
+        const { closedByFocusOut, closedByOutsidePress, closeMethod, finalFocus, portalId } = current
         const focused = document.activeElement as HTMLElement | null
-        const away = focused !== null && focused !== document.body && !node.contains(focused)
+        const away = !held && focused !== null && focused !== document.body && !node.contains(focused)
         if (
           focused !== null &&
           showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
@@ -790,7 +793,9 @@ const TrackDialog = Mount.makeStream(
           return
         }
         const visible = closeMethod === "keyboard"
-        const marked = closedByFocusOut ? null : byAttribute(document, "data-final-focus", portalId)
+        const marked = closedByFocusOut || (closedByOutsidePress && away)
+          ? null
+          : byAttribute(document, "data-final-focus", portalId)
         if (marked?.isConnected === true) return handOff(marked, visible)
         if (away) return
         const back = [trigger, before, ...[...visited].reverse()].find((element) =>
@@ -800,7 +805,7 @@ const TrackDialog = Mount.makeStream(
       }
       const restore = (parents: ReadonlyArray<typeof entry>) =>
         frame(() => {
-          if (!current.open) restoreFocus(parents)
+          if (!current.open) restoreFocus(parents, false)
         })
       const closing = () => {
         const parents = parentsOf()
@@ -879,7 +884,8 @@ const TrackDialog = Mount.makeStream(
             transition.cancel()
             if (current.open) {
               const parents = parentsOf()
-              frame(() => restoreFocus(parents))
+              const held = focusInside
+              frame(() => restoreFocus(parents, held))
             }
           })
       )
@@ -1170,6 +1176,7 @@ export const Dialog = Component.define({
           openMethod,
           closeMethod: model.closeMethod,
           closedByFocusOut: model.reason === "focus-out",
+          closedByOutsidePress: model.reason === "outside-press",
           triggerId: activeTrigger,
           holdExit: props.holdExit === true,
           portalId,

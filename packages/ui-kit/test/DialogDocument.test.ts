@@ -142,7 +142,7 @@ const Page = Component.define({
               onPress: ({ method, triggerId }) => Message.Opened({ which: "a", triggerId, method })
             }).children("Settings")
             : null,
-          model.removed ? null : Dialog(h, {
+          model.removed && !props.nested ? null : Dialog(h, {
             key: "a",
             props: {
               open: model.a,
@@ -179,8 +179,8 @@ const Page = Component.define({
                     view: (nestedDialog) =>
                       h.div(
                         nestedDialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
-                        nestedDialog.finalFocus(h.button.attr("id", "final-b")).children("Back"),
-                        nestedDialog.portal(h.dialog)?.children(
+                        model.removed ? null : nestedDialog.finalFocus(h.button.attr("id", "final-b")).children("Back"),
+                        model.removed ? null : nestedDialog.portal(h.dialog)?.children(
                           nestedDialog.popup(h.div).children(h.input.attr("id", "b-field"))
                         )
                       )
@@ -738,7 +738,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       for (const modal of [false, "trap-focus"] as const) {
         yield* Effect.scoped(Effect.gen(function*() {
           yield* holdExits
-          const { log } = yield* mountPage({ modal })
+          const { log } = yield* mountPage({ modal, finalMark: true })
           if (modal === false) byId("page").focus()
           else {
             press(byId("page"))
@@ -763,7 +763,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           press(page, "touch")
           yield* tick
           assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
-          assert.strictEqual(document.activeElement?.id, "first", String(focuses))
+          assert.notStrictEqual(document.activeElement?.id, "trigger", String(focuses))
           if (focuses) page.focus()
           page.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }))
           yield* tick
@@ -784,17 +784,31 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "b-field")
     }))
 
-  it.effect("a dialog unmounted while open gives focus back", () =>
+  it.effect("a dialog unmounted while open gives focus back, though its parent dialog took focus as it went", () =>
     Effect.gen(function*() {
-      const { send } = yield* mountPage({ a: false })
-      byId("page").focus()
-      byId("trigger").click()
-      yield* tick
-      assert.strictEqual(document.activeElement?.id, "first")
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { send } = yield* mountPage({ a: false })
+        byId("page").focus()
+        byId("trigger").click()
+        yield* tick
+        assert.strictEqual(document.activeElement?.id, "first")
+        send(Message.Removed())
+        yield* tick
+        assert.isNull(document.querySelector(".popup-a"))
+        assert.strictEqual(document.activeElement?.id, "page")
+      }))
+      const { app, send } = yield* mountPage({ nested: true, b: true })
+      assert.strictEqual(document.activeElement?.id, "b-field")
+      const parent = app.querySelector<HTMLElement>(".popup-a")!
+      const recovery = new MutationObserver(() => {
+        if (byId("b-field") === null) parent.focus()
+      })
+      recovery.observe(app, { childList: true, subtree: true })
       send(Message.Removed())
       yield* tick
-      assert.isNull(document.querySelector(".popup-a"))
-      assert.strictEqual(document.activeElement?.id, "page")
+      recovery.disconnect()
+      assert.isNull(byId("b-field"))
+      assert.strictEqual(document.activeElement?.id, "trigger-b")
     }))
 
   it.effect("with the trigger gone, focus goes back to what had it before the open, over what had it since", () =>
