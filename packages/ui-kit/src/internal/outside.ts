@@ -6,7 +6,7 @@ export interface Outside {
   readonly anyButton?: (() => boolean) | undefined
   readonly inside: (target: Node) => boolean
   readonly pressed: (pointerType: string) => void
-  readonly focused: () => void
+  readonly focused?: (() => void) | undefined
 }
 
 export const listenOutside = (document: Document, signal: AbortSignal, outside: Outside): void => {
@@ -28,13 +28,14 @@ export const listenOutside = (document: Document, signal: AbortSignal, outside: 
     const target = event.target as Node | null
     if (outside.open() && target !== null && !outside.inside(target)) outside.pressed("touch")
   }
+  const focused = outside.focused
   const onFocusIn = (event: FocusEvent) => {
     const target = event.target as Node | null
-    if (outside.open() && target !== null && !outside.inside(target)) outside.focused()
+    if (outside.open() && target !== null && !outside.inside(target)) focused?.()
   }
   document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
   document.addEventListener("click", onClick, { capture: true, signal })
-  document.addEventListener("focusin", onFocusIn, { capture: true, signal })
+  if (focused !== undefined) document.addEventListener("focusin", onFocusIn, { capture: true, signal })
 }
 
 export const releasedOutside = (

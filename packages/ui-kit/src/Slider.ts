@@ -174,6 +174,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
+import { focusVisible } from "./internal/dom.ts"
 import { clamp } from "./internal/range.ts"
 import type { WithRequirements } from "./internal/requirements.ts"
 
@@ -523,16 +524,6 @@ const thumbsIn = (node: HTMLElement): Array<Thumb> =>
     .sort((a, b) => a.index - b.index)
 
 const focusEvents = ["blur", "focusout", "focus", "focusin"] as const
-
-// Whether the element shows its focus ring. A browser that can't tell
-// counts as showing it, so nothing is refocused.
-const focusVisible = (element: Element): boolean => {
-  try {
-    return element.matches(":focus-visible")
-  } catch {
-    return true
-  }
-}
 
 const midpointOf = (element: Element, vertical: boolean): number => {
   const rect = element.getBoundingClientRect()

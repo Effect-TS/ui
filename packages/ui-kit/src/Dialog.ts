@@ -214,7 +214,7 @@ import { radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
-import { inKept, raiseAbove } from "./internal/topLayer.ts"
+import { inKept, portalBox, raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 
 /**
@@ -418,21 +418,6 @@ const dismiss = (
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
 ) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.Dismissed({ reason }))
-
-const portalBox = [
-  "position:fixed",
-  "inset:0",
-  "width:0",
-  "height:0",
-  "max-width:none",
-  "max-height:none",
-  "margin:0",
-  "padding:0",
-  "border:0",
-  "overflow:visible",
-  "background:transparent",
-  "color:inherit"
-].join(";")
 
 const blocker = new Html.Element<never>("div").attrs({
   role: "presentation",

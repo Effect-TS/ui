@@ -1117,6 +1117,36 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["blur", "focusout", "blur disabled", "focusout disabled", "blur", "focusout"])
       }).pipe(Effect.scoped))
 
+    it.effect("focus says whether the element shows a focus ring", () =>
+      Effect.gen(function*() {
+        const Seen = UiSchema.TaggedEnum({ Focused: { focusVisible: Schema.Boolean } })
+        const Focusing = Component.define({
+          name: "Focusing",
+          scoped: false,
+          model: Schema.Array(Schema.Boolean),
+          message: Seen,
+          elements: Html
+        }).make({
+          init: (): ReadonlyArray<boolean> => [],
+          update: (log, { focusVisible }) => [...log, focusVisible],
+          view: (_, h) => h.a.attr("href", "/a").onFocus(({ focusVisible }) => Seen.Focused({ focusVisible }))
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Focusing, {}, app)
+        const link = app.querySelector("a")!
+        const focusWith = (matches: (selector: string) => boolean) => {
+          Object.defineProperty(link, "matches", { configurable: true, value: matches })
+          link.dispatchEvent(new FocusEvent("focus"))
+        }
+        focusWith((selector) => selector === ":focus-visible")
+        focusWith(() => false)
+        focusWith(() => {
+          throw new SyntaxError(":focus-visible")
+        })
+        yield* tick
+        expect(root.model()).toEqual([true, false, true])
+      }).pipe(Effect.scoped))
+
     it.effect("payloads are plain data", () =>
       Effect.gen(function*() {
         const app = yield* container

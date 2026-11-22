@@ -375,6 +375,15 @@ const isDisabled = (target: EventTarget | null): boolean =>
   typeof (target as globalThis.Element | null)?.matches === "function" &&
   (target as globalThis.Element).matches(":disabled")
 
+const isFocusVisible = (target: EventTarget | null): boolean => {
+  if (typeof (target as globalThis.Element | null)?.matches !== "function") return true
+  try {
+    return (target as globalThis.Element).matches(":focus-visible")
+  } catch {
+    return true
+  }
+}
+
 const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
   (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
 
@@ -448,6 +457,8 @@ const payloadOf = (
       return { cancelable: event.cancelable }
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
+    case "focus":
+      return { focusVisible: isFocusVisible(target) }
     case "blur":
       // A window listener's `blur` has no element that lost focus.
       return target === element ? { disabled: isDisabled(target) } : {}

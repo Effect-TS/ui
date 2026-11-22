@@ -1,3 +1,13 @@
+import type * as Html from "@effect/ui/html/Html"
+import * as Schema from "effect/Schema"
+
+export const Point = Schema.Struct({ x: Schema.Number, y: Schema.Number })
+
+export type Point = typeof Point.Type
+
+export const pointOf = ({ x, y }: Partial<Html.HoverPayload>): Point | null =>
+  x === undefined || y === undefined ? null : { x, y }
+
 export const methodOf = (pointerType: string): "mouse" | "touch" | "pen" | "keyboard" =>
   pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
 
