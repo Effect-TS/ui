@@ -9,6 +9,13 @@ export const activeOf = (document: Document): Element | null => {
   return active
 }
 
+export const radioGroup = (element: HTMLElement): Array<HTMLInputElement> => {
+  const radio = element as HTMLInputElement
+  if (radio.localName !== "input" || radio.type !== "radio" || radio.name === "") return []
+  return Array.from((radio.form ?? radio.ownerDocument).querySelectorAll<HTMLInputElement>("input[type=\"radio\"]"))
+    .filter((other) => other.name === radio.name && other.form === radio.form)
+}
+
 export const onRange = (event: Event): boolean =>
   event.composedPath().some((target) =>
     isHTMLElement(target) && target.localName === "input" && (target as HTMLInputElement).type === "range"

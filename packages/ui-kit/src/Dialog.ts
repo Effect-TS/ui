@@ -209,6 +209,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, noSelect, withStyle } from "./internal/attributes.ts"
+import { radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
@@ -455,10 +456,7 @@ const radioOut = (element: HTMLElement): boolean => {
   if (!(element instanceof HTMLInputElement) || element.type !== "radio" || element.name === "" || element.checked) {
     return false
   }
-  const scope = element.form ?? element.ownerDocument
-  const group = Array.from(scope.querySelectorAll<HTMLInputElement>("input[type=\"radio\"]")).filter((radio) =>
-    radio.name === element.name && radio.form === element.form
-  )
+  const group = radioGroup(element)
   return group.some((radio) => radio.checked) || group[0] !== element
 }
 

@@ -8,11 +8,12 @@ import { container, focusability, tick } from "./utils/document.ts"
 
 const SignupValidation = Validation.make({
   plan: { required: "Pick a plan" },
+  billing: { rules: [Validation.Rule.equals("monthly", "Yearly billing isn't open yet")] },
   email: { required: "Enter your email", rules: [Validation.Rule.email("Enter a valid email")] },
   name: { required: "Enter your name" }
 })
 
-const FieldName = Schema.Literals(["plan", "email", "name"])
+const FieldName = Schema.Literals(["plan", "billing", "email", "name"])
 
 const Message = UiSchema.TaggedEnum({
   UpdatedField: { name: FieldName, value: Schema.String },
@@ -38,7 +39,7 @@ const Signup = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ form: SignupValidation.init({ plan: "", email: "", name: "" }), saving: false }),
+  init: () => ({ form: SignupValidation.init({ plan: "", billing: "yearly", email: "", name: "" }), saving: false }),
   update: {
     UpdatedField: (model, { name, value }) => ({ ...model, form: SignupValidation.change(model.form, name, value) }),
     SubmittedForm: (model, _message, $) => {
@@ -78,6 +79,19 @@ const Signup = Component.define({
         form.root(h.form).children(
           h.div.attr("role", "radiogroup").attr("aria-invalid", fields.plan._tag === "Invalid" ? "true" : undefined)
             .children(radio("free", false), radio("team", true)),
+          Field(h, {
+            key: "billing",
+            props: { invalid: fields.billing._tag === "Invalid" },
+            view: (field) =>
+              field.group(h.div).children(
+                field.legend(h.span).children("Billing"),
+                ...["monthly", "yearly"].map((value) =>
+                  field.member(h.input).attr("type", "radio").attr("name", "billing").attr("value", value)
+                    .checked(fields.billing.value === value)
+                    .onClick(Message.UpdatedField({ name: "billing", value }))
+                )
+              )
+          }),
           text("email"),
           text("name"),
           h.button.attr("type", "submit").children("Sign up")
@@ -112,6 +126,10 @@ describe("Form in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, team)
 
       team.click()
+      yield* submitForm
+      assert.strictEqual(document.activeElement, app.querySelector("input[value=yearly]"))
+
+      app.querySelector<HTMLInputElement>("input[value=monthly]")!.click()
       yield* submitForm
       assert.strictEqual(document.activeElement, email)
       assert.deepStrictEqual([email.selectionStart, email.selectionEnd], [0, 4])

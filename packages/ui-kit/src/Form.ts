@@ -41,9 +41,11 @@
  * first element inside it with `aria-invalid="true"`, in document order,
  * and selects the text of an `<input>`. An invalid element that can't take
  * focus itself, such as the root of a radio group, passes it to the first
- * element inside it that Tab reaches. An invalid element that neither takes
- * focus nor holds one that does, such as a disabled input, is skipped. With
- * no invalid element the focus stays where it was.
+ * element inside it, in document order, that Tab can reach. A native radio,
+ * invalid itself or inside an invalid element, passes it to the checked
+ * radio of its group, where Tab stops. An invalid element that neither
+ * takes focus nor holds one that does, such as a disabled input, is
+ * skipped. With no invalid element the focus stays where it was.
  *
  * The consumer's `update` for `Submitted` runs before that render, so the
  * errors it records are the ones the form reads. Errors that arrive later,
@@ -60,9 +62,11 @@
  * **Limits**
  *
  * A control outside the `<form>` that names it with a `form` attribute is
- * submitted with it, but isn't focused. To send focus somewhere else after a
- * failed submit, such as to an error summary, draw a plain `h.form` with
- * `novalidate` and `onSubmit`.
+ * submitted with it, but isn't focused. Document order decides which
+ * element comes first, so a positive `tabindex` moves none ahead.
+ *
+ * To send focus somewhere else after a failed submit, such as to an error
+ * summary, draw a plain `h.form` with `novalidate` and `onSubmit`.
  *
  * **Example** (A sign-up form whose email field is invalid)
  *
@@ -119,6 +123,7 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+import { radioGroup } from "./internal/dom.ts"
 
 const Submission = {
   fields: Schema.Record(Schema.String, Schema.String),
@@ -159,10 +164,13 @@ const takeFocus = (element: HTMLElement): boolean => {
   return true
 }
 
+const takeTabStop = (element: HTMLElement): boolean =>
+  radioGroup(element).some((radio) => radio.checked && takeFocus(radio)) || takeFocus(element)
+
 const focusInvalid = (form: HTMLFormElement): boolean =>
   Array.from(form.querySelectorAll<HTMLElement>("[aria-invalid=\"true\"]")).some((invalid) =>
-    takeFocus(invalid) ||
-    Array.from(invalid.querySelectorAll<HTMLElement>("*")).some((inner) => inner.tabIndex >= 0 && takeFocus(inner))
+    [invalid, ...Array.from(invalid.querySelectorAll<HTMLElement>("*")).filter((inner) => inner.tabIndex >= 0)]
+      .some(takeTabStop)
   )
 
 const FocusInvalid = Command.make(
