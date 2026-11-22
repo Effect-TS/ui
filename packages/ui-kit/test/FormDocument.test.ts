@@ -100,7 +100,7 @@ const type = (input: HTMLInputElement, value: string) => {
 }
 
 describe("Form in a document", { concurrent: false }, () => {
-  it.effect("focuses the first invalid control on submit, and leaves focus alone when valid", () =>
+  it.effect("focuses the first invalid control on submit, and leaves focus alone when valid or invalidated later", () =>
     Effect.gen(function*() {
       yield* focusability
       const app = yield* container
@@ -131,6 +131,11 @@ describe("Form in a document", { concurrent: false }, () => {
       type(name, "Ada")
       type(email, "ada@example.com")
       yield* submitForm
+      assert.strictEqual(document.activeElement, submit)
+
+      type(email, "nope")
+      yield* tick
+      assert.strictEqual(email.getAttribute("aria-invalid"), "true")
       assert.strictEqual(document.activeElement, submit)
     }).pipe(Effect.scoped))
 })
