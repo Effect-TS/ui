@@ -209,8 +209,8 @@ export type PointerType = "mouse" | "touch" | "pen" | ""
 
 /**
  * The payload of `click`, `dblclick`, `contextmenu`, `mousedown`,
- * `mouseup` and `pointerdown`: the button, the position in the viewport, the modifier keys,
- * and the kind of pointer.
+ * `mouseup` and `pointerdown`: the button, the position in the viewport,
+ * the modifier keys, and the kind of pointer.
  *
  * **Details**
  *
@@ -588,8 +588,9 @@ export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
  * with a handler, except the drop target's events: `dragenter`, `dragleave`,
  * `dragover` and `drop` go to the active drop target, as `onDrop` describes.
  *
- * `pointerdown` starts every press. A `mousedown` doesn't come after a
- * touch, or after a `pointerdown` whose default was cancelled.
+ * `pointerdown` starts every press. A `mousedown` may not follow it: a
+ * touch may send no mouse events, and a `pointerdown` whose default was
+ * cancelled sends none.
  *
  * @stability experimental
  * @category events

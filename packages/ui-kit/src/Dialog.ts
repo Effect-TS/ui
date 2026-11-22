@@ -209,7 +209,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, noSelect, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
 import { radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
@@ -882,9 +882,6 @@ const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popu
       "data-popup-open": flag(active),
       "data-dialog-trigger": popupId
     })
-
-const withTokens = (consumer: string | undefined, own: string | undefined): string | undefined =>
-  own === undefined ? consumer : consumer === undefined || consumer.trim() === "" ? own : consumer + " " + own
 
 /**
  * A press on a `DialogTrigger`: the trigger's `id`, if it has one, and how
