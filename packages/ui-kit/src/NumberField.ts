@@ -1160,6 +1160,9 @@ const stepperDefaults = { [1]: { "aria-label": "Increase" }, [-1]: { "aria-label
  * The input handles `input`, `blur` and `keydown` on a layer of its own, so
  * the consumer's handlers for them, and a `Field`'s, still run.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -1171,6 +1174,7 @@ export const NumberField = Component.define({
   model: NumberFieldModel,
   message: NumberFieldMessage,
   events: NumberFieldEvents,
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ text: null, pending: false, scrubbing: false, cursor: false, focus: 0, ios: false }),

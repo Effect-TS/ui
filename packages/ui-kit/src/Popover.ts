@@ -730,6 +730,9 @@ export const PopoverTrigger = <Msg, R = never>(
  * On the server and on a host that doesn't run mounts, the popover renders
  * closed, isn't placed and doesn't open on hover from a `PopoverTrigger`.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -741,6 +744,7 @@ export const Popover = Component.define({
   model: PopoverModel,
   message: PopoverMessage,
   events: PopoverEvents,
+  restore: false,
   elements: Html
 }).make({
   init: () => ({

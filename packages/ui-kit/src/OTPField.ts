@@ -696,6 +696,9 @@ const checked = (
  * The field reads the nearest `DirectionProvider` above it, if there is
  * one, and swaps Left and Right in a right-to-left layout.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -710,6 +713,7 @@ export const OTPField = Component.define({
   shared: {
     provider: { owner: DirectionProvider, optional: true }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({

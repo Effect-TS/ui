@@ -707,6 +707,9 @@ const hidden =
  *
  * A thumb whose `index` has no value throws when the view renders.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -718,6 +721,7 @@ export const Slider = Component.define({
   model: SliderModel,
   message: SliderMessage,
   events: SliderEvents,
+  restore: false,
   elements: Html
 }).make({
   init: () => released,
