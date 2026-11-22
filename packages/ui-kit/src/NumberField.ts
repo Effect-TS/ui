@@ -155,7 +155,7 @@
  * }).make({
  *   init: () => ({ price: 1234.5 }),
  *   update: {
- *     UpdatedPrice: (model, { value }) => ({ ...model, price: value })
+ *     UpdatedPrice: (_model, { value }, $) => $.evolve({ price: value })
  *   },
  *   view: (model, h) =>
  *     Field(h, {
@@ -204,6 +204,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -561,7 +562,7 @@ const setValue = (
   const fired = value !== s.value || (entered && (asked !== s.value || options.typed === true))
   const direction = options.step === undefined ? undefined : options.step < 0 ? -1 : 1
   return {
-    model: { ...model, pending: model.pending || fired },
+    model: UiStruct.evolve(model, { pending: (pending) => pending || fired }),
     events: fired
       ? [NumberFieldEvents.Updated(direction === undefined ? { value, reason } : { value, reason, direction })]
       : [],
@@ -596,7 +597,7 @@ const commit = (
   change: Pick<Change, "model" | "value"> & { readonly events?: ReadonlyArray<NumberFieldEvents> },
   reason: NumberFieldCommitReason
 ) =>
-  $.set({ ...change.model, pending: false }).emit(
+  $.set(change.model).evolve({ pending: false }).emit(
     ...(change.events ?? []),
     NumberFieldEvents.Committed({ value: change.value, reason })
   )
@@ -611,7 +612,7 @@ const press = (
   modifiers: Modifiers,
   reason: NumberFieldChangeReason,
   from: number | null = shown(model, s)
-): Change => stepBy({ ...model, text: null }, s, direction, modifiers, reason, from)
+): Change => stepBy(UiStruct.evolve(model, { text: null }), s, direction, modifiers, reason, from)
 
 const touchLike = (pointerType: string): boolean => pointerType === "touch" || pointerType === "pen"
 
@@ -1183,10 +1184,10 @@ export const NumberField = Component.define({
       const s = settingsOf($.props)
       if (s.locked) return model
       if (value.trim() === "") {
-        return apply($, setValue({ ...model, text: value }, s, null, "input-clear", { typed: true }))
+        return apply($, setValue(UiStruct.evolve(model, { text: value }), s, null, "input-clear", { typed: true }))
       }
       if (!allowsText(value, typingFor(s))) return model
-      const typed = { ...model, text: value }
+      const typed = UiStruct.evolve(model, { text: value })
       const parsed = parse(s, value)
       return parsed === null ? typed : apply($, setValue(typed, s, parsed, "input-change", { typed: true }))
     },
@@ -1195,14 +1196,14 @@ export const NumberField = Component.define({
       const parsed = s.locked ? null : parse(s, value)
       return parsed === null
         ? model
-        : apply($, setValue({ ...model, text: value }, s, parsed, "input-paste", { typed: true }))
+        : apply($, setValue(UiStruct.evolve(model, { text: value }), s, parsed, "input-paste", { typed: true }))
     },
     BlurredInput: (model, { disabled }, $) => {
       const s = settingsOf($.props)
       if (disabled || s.locked) return model
       const typed = model.text !== null
       const text = model.text ?? formatNumber(s.value, s.locale, s.format)
-      const synced: NumberFieldModel = typed ? { ...model, text: null } : model
+      const synced = typed ? UiStruct.evolve(model, { text: null }) : model
       const empty = text.trim() === ""
       const read = empty ? null : typed ? parse(s, text) : s.value
       if (read === null && !empty) return synced
@@ -1215,13 +1216,13 @@ export const NumberField = Component.define({
       // didn't store it is asked once more, with no commit of a value it may
       // decline again.
       const declined = typed && change.fired && s.value !== settled(s, read, true)
-      if (declined) return apply($, { ...change, model: { ...change.model, pending: false } })
+      if (declined) return apply($, { ...change, model: UiStruct.evolve(change.model, { pending: false }) })
       return typed || model.pending || change.fired ? commit($, change, reason) : apply($, change)
     },
     PressedKey: (model, { key, ...modifiers }, $) => {
       const s = settingsOf($.props)
       if (s.locked) return model
-      const synced = { ...model, text: null }
+      const synced = UiStruct.evolve(model, { text: null })
       const up = key === "ArrowUp"
       const bound = key === "Home" ? s.min : key === "End" ? s.max : undefined
       if (!up && key !== "ArrowDown" && bound === undefined) return model
@@ -1233,14 +1234,14 @@ export const NumberField = Component.define({
     TurnedWheel: (model, { direction, ...modifiers }, $) => {
       const s = settingsOf($.props)
       if (s.locked || $.props.allowWheelScrub !== true) return model
-      return settle($, stepBy({ ...model, text: null }, s, direction, modifiers, "wheel"), "wheel")
+      return settle($, stepBy(UiStruct.evolve(model, { text: null }), s, direction, modifiers, "wheel"), "wheel")
     },
-    DetectedIOS: (model) => ({ ...model, ios: true }),
+    DetectedIOS: (_model, _message, $) => $.evolve({ ios: true }),
     PressedStepper: (model, { direction, focus, ...modifiers }, $) => {
       const s = settingsOf($.props)
       if (s.locked || atBound(s, direction)) return model
       const change = press(model, s, direction, modifiers, reasonOf(direction))
-      return apply($, focus ? { ...change, model: { ...change.model, focus: model.focus + 1 } } : change)
+      return apply($, focus ? { ...change, model: UiStruct.evolve(change.model, { focus: (n) => n + 1 }) } : change)
     },
     HeldStepper: (model, { direction, ...modifiers }, $) => {
       const s = settingsOf($.props)
@@ -1264,21 +1265,21 @@ export const NumberField = Component.define({
     StartedScrub: (model, { focus }, $) =>
       settingsOf($.props).locked
         ? model
-        : { ...model, scrubbing: true, cursor: false, focus: focus ? model.focus + 1 : model.focus },
-    ChangedPointerLock: (model, { locked }) => (model.scrubbing ? { ...model, cursor: locked } : model),
+        : $.evolve({ scrubbing: true, cursor: false, focus: focus ? model.focus + 1 : model.focus }),
+    ChangedPointerLock: (model, { locked }, $) => model.scrubbing ? $.evolve({ cursor: locked }) : model,
     MovedScrub: (model, { amount, ...modifiers }, $) => {
       const s = settingsOf($.props)
       return !model.scrubbing || s.locked || amount * amountOf(s, modifiers) === 0
         ? model
-        : apply($, stepBy({ ...model, text: null }, s, amount, modifiers, "scrub"))
+        : apply($, stepBy(UiStruct.evolve(model, { text: null }), s, amount, modifiers, "scrub"))
     },
     EndedScrub: (model, { commit: done }, $) => {
       if (!model.scrubbing) return model
       const s = settingsOf($.props)
-      const next = { ...model, scrubbing: false, cursor: false }
+      const next = UiStruct.evolve(model, { scrubbing: false, cursor: false })
       return done && !s.locked ? commit($, { model: next, value: s.value }, "scrub") : next
     },
-    FocusedFormInput: (model) => ({ ...model, focus: model.focus + 1 }),
+    FocusedFormInput: (_model, _message, $) => $.evolve({ focus: (n) => n + 1 }),
     Autofilled: (model, { value }, $) => {
       const s = settingsOf($.props)
       if (s.locked) return model

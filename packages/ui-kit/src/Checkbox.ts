@@ -4,9 +4,15 @@
  * the component adds ARIA and data attributes, handles user input and
  * supplies the form field.
  *
+ * `Checkbox` is a headless component, although its Model is empty: it
+ * reads an enclosing `CheckboxGroup` and reports its toggles to it, which
+ * needs an instance.
+ *
  * Inside a `CheckboxGroup`, a checkbox with a `value` is a member and one
- * with `parent: true` is the group's parent: the group decides whether each
- * is ticked, and stores what they toggle.
+ * with `parent: true` is the group's parent. The group ticks each from its
+ * `value` prop, the list the consumer stores from the group's `Updated`
+ * event. The group itself remembers only the mixed selection that its
+ * parent checkbox brings back.
  *
  * **Anatomy**
  *
@@ -92,7 +98,7 @@
  * }).make({
  *   init: () => ({ terms: false }),
  *   update: {
- *     ToggledTerms: (model, { checked }) => ({ ...model, terms: checked })
+ *     ToggledTerms: (_model, { checked }, $) => $.evolve({ terms: checked })
  *   },
  *   view: (model, h) =>
  *     Checkbox(h, {

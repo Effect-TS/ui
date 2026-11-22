@@ -177,11 +177,11 @@
  * }).make({
  *   init: () => ({ open: false, share: false, wrap: true }),
  *   update: {
- *     RequestedOpenMenu: (model) => ({ ...model, open: true }),
- *     RequestedCloseMenu: (model) => ({ ...model, open: false }),
- *     RequestedOpenShare: (model) => ({ ...model, share: true }),
- *     RequestedCloseShare: (model) => ({ ...model, share: false }),
- *     PickedAction: (model, { checked, value }) => value === "wrap" ? { ...model, wrap: checked === true } : model
+ *     RequestedOpenMenu: (_model, _message, $) => $.evolve({ open: true }),
+ *     RequestedCloseMenu: (_model, _message, $) => $.evolve({ open: false }),
+ *     RequestedOpenShare: (_model, _message, $) => $.evolve({ share: true }),
+ *     RequestedCloseShare: (_model, _message, $) => $.evolve({ share: false }),
+ *     PickedAction: (model, { checked, value }, $) => value === "wrap" ? $.evolve({ wrap: checked === true }) : model
  *   },
  *   view: (model, h) => {
  *     const events = {
@@ -198,17 +198,17 @@
  *         RequestedOpen: () => EditorMessage.RequestedOpenMenu(),
  *         RequestedClose: () => EditorMessage.RequestedCloseMenu()
  *       },
- *       view: (menu) =>
+ *       view: (editMenu) =>
  *         h.div(
- *           menu.trigger(h.button).children("Edit"),
- *           menu.positioner(h.div).children(
- *             menu.popup(h.div).children(
- *               menu.item(h.div, "copy").children("Copy"),
- *               menu.checkboxItem(h.div, "wrap", model.wrap).children(
- *                 menu.checkboxItemIndicator(h.span, "wrap")?.children("✓"),
+ *           editMenu.trigger(h.button).children("Edit"),
+ *           editMenu.positioner(h.div).children(
+ *             editMenu.popup(h.div).children(
+ *               editMenu.item(h.div, "copy").children("Copy"),
+ *               editMenu.checkboxItem(h.div, "wrap", model.wrap).children(
+ *                 editMenu.checkboxItemIndicator(h.span, "wrap")?.children("✓"),
  *                 "Wrap lines"
  *               ),
- *               menu.separator(h.div),
+ *               editMenu.separator(h.div),
  *               Menu(h, {
  *                 props: { open: model.share, items: targets, parentItem: "share" },
  *                 onEmit: {
@@ -216,11 +216,11 @@
  *                   RequestedOpen: () => EditorMessage.RequestedOpenShare(),
  *                   RequestedClose: () => EditorMessage.RequestedCloseShare()
  *                 },
- *                 view: (share) =>
+ *                 view: (shareMenu) =>
  *                   h.div(
- *                     menu.item(share.submenuTrigger(h.div), "share").children("Share"),
- *                     share.positioner(h.div).children(
- *                       share.popup(h.div).children(share.item(h.div, "email").children("Email"))
+ *                     editMenu.item(shareMenu.submenuTrigger(h.div), "share").children("Share"),
+ *                     shareMenu.positioner(h.div).children(
+ *                       shareMenu.popup(h.div).children(shareMenu.item(h.div, "email").children("Email"))
  *                     )
  *                   )
  *               })
@@ -245,6 +245,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
@@ -808,8 +809,7 @@ const open = (
     : keyboard
     ? firstEnabled(visibleOf(props), last)?.value ?? null
     : null
-  const next: MenuModel = {
-    ...model,
+  const next = UiStruct.evolve(model, {
     openMethod: method,
     closeMethod: null,
     reason,
@@ -831,7 +831,7 @@ const open = (
     justOpened: context !== null,
     releaseArmed: context?.release ?? false,
     longPress: null
-  }
+  })
   const opened = commit($, model, next, "none").emit(MenuEvents.RequestedOpen({ reason, triggerId }))
   return reason === "trigger-hover" ? opened.run(WaitBeforeStickExpires.make({ delay: 500 })) : opened
 }
@@ -850,8 +850,7 @@ const dismiss = (
     : method === "keyboard" && reason === "trigger-press"
     ? "click"
     : null
-  return base.set({
-    ...model,
+  return base.set(UiStruct.evolve(model, {
     closeMethod: method,
     closeReason: reason,
     focusLeft,
@@ -860,7 +859,7 @@ const dismiss = (
     hovering: false,
     stick: false,
     instant
-  }).emit(MenuEvents.RequestedClose({ reason }))
+  })).emit(MenuEvents.RequestedClose({ reason }))
 }
 
 const closeTree = (
@@ -882,7 +881,7 @@ const activate = (model: MenuModel, $: MenuUpdate, action: ItemAction, method: M
   if (!props.open || !available(item) || disabledOf($) || isSubmenu(model, action.value)) {
     return $.set(model)
   }
-  const next = { ...model, pressedItem: false, spaceDown: false }
+  const next = UiStruct.evolve(model, { pressedItem: false, spaceDown: false })
   const picked = MenuEvents.Picked(
     action.kind === "checkbox"
       ? { value: action.value, checked: !action.checked }
@@ -890,8 +889,10 @@ const activate = (model: MenuModel, $: MenuUpdate, action: ItemAction, method: M
       ? { value: action.value, checked: true }
       : { value: action.value }
   )
-  if (!action.closeOnClick) return commit($, model, { ...next, active: action.value }, "none").emit(picked)
-  return closeTree({ ...next, pressing: false }, $, "item-press", method, picked)
+  if (!action.closeOnClick) {
+    return commit($, model, UiStruct.evolve(next, { active: action.value }), "none").emit(picked)
+  }
+  return closeTree(UiStruct.evolve(next, { pressing: false }), $, "item-press", method, picked)
 }
 
 const navigate = (model: MenuModel, $: MenuUpdate, key: string) => {
@@ -906,7 +907,7 @@ const navigate = (model: MenuModel, $: MenuUpdate, key: string) => {
     : key === "End"
     ? last
     : stepped(at, last, direction, props.loopFocus !== false ? "wrap" : "none")
-  return commit($, model, { ...model, active: items[index]!.value, activeByKey: true }, "keyboard")
+  return commit($, model, UiStruct.evolve(model, { active: items[index]!.value, activeByKey: true }), "keyboard")
 }
 
 const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
@@ -915,7 +916,9 @@ const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
   const { index, next } = typeahead(model, key, items, from)
   const item = items[index]
   const moved = item === undefined ? {} : { active: item.value, activeByKey: true }
-  return commit($, model, { ...model, ...next, ...moved }, "keyboard").run(WaitBeforeResetTyping.make({ delay: 500 }))
+  return commit($, model, UiStruct.evolve(model, { ...next, ...moved }), "keyboard").run(
+    WaitBeforeResetTyping.make({ delay: 500 })
+  )
 }
 
 const keys = (orientation: Orientation, rtl: boolean) => {
@@ -938,7 +941,7 @@ const pressKey = (model: MenuModel, $: MenuUpdate, key: string, action: ItemActi
     return dismiss(model, $, "list-navigation", "keyboard")
   }
   if (key === "Enter") return action === null ? $.set(model) : activate(model, $, action, "keyboard")
-  if (key === " " && model.typed === "") return $.set({ ...model, spaceDown: true })
+  if (key === " " && model.typed === "") return $.set(UiStruct.evolve(model, { spaceDown: true }))
   if (key.length === 1 && !filteringOf(props)) return typeKey(model, $, key)
   return $.set(model)
 }
@@ -954,13 +957,12 @@ const enterTrigger = (
   message: Extract<MenuMessage, { readonly _tag: "EnteredTrigger" }>
 ) => {
   const props = $.props
-  const next = {
-    ...model,
+  const next = UiStruct.evolve(model, {
     hovering: true,
     hoverTrigger: message.key,
     hoverTriggerId: message.triggerId,
     hoverCloseDelay: message.closeDelay
-  }
+  })
   if (disabledOf($)) return $.set(next)
   if (!props.open) return $.set(next).run(WaitBeforeHoverOpen.make({ delay: message.delay }))
   const stay = Command.interrupt(WaitBeforeHoverClose)
@@ -969,7 +971,7 @@ const enterTrigger = (
 
 const hoverOpen = (model: MenuModel, $: MenuUpdate) =>
   open(
-    { ...model, closeDelay: model.hoverCloseDelay },
+    UiStruct.evolve(model, { closeDelay: model.hoverCloseDelay }),
     $,
     "trigger-hover",
     "mouse",
@@ -988,7 +990,7 @@ const pressTrigger = (
   if (disabledOf($)) return $.set(model)
   if (props.open && opensFor(model, props, key, triggerId)) {
     if (model.stick && model.reason === "trigger-hover") {
-      return $.set({ ...model, reason: "trigger-press", stick: false, hovering: false })
+      return $.evolve({ reason: "trigger-press", stick: false, hovering: false })
         .run(Command.interrupt(WaitBeforeHoverClose))
     }
     return dismiss(model, $, "trigger-press", method)
@@ -1528,7 +1530,7 @@ const TrackMenu = Mount.makeStream(
     )
 )
 
-const HoverIntent = Mount.makeStream(
+const MenuTriggerHover = Mount.makeStream(
   "MenuTriggerHover",
   { args: { delay: Schema.Number } },
   (node: HTMLElement, args, changes) =>
@@ -1564,7 +1566,7 @@ type Touch = { readonly _tag: "Started"; readonly x: number; readonly y: number 
 
 const LongPressSlop = 10
 
-const LongPress = Mount.makeStream(
+const MenuLongPress = Mount.makeStream(
   "MenuLongPress",
   { args: {} },
   (node: HTMLElement) =>
@@ -1776,7 +1778,7 @@ export const MenuTrigger = <Msg, R = never>(
     return onHover === undefined || disabled === true || open
       ? pressed
       : pressed.onMount(
-        HoverIntent({ delay: options.props.delay ?? MenuTriggerHoverDefault }).pipe(
+        MenuTriggerHover({ delay: options.props.delay ?? MenuTriggerHoverDefault }).pipe(
           Mount.map(() => message(onHover, "mouse", "trigger-hover"))
         )
       )
@@ -1834,9 +1836,70 @@ export const menuFilter = (
  * that one reports it open and anchors the popup. Pressing another one while
  * the menu is open asks it to open for that one.
  *
- * The popup, the list, the items, the group labels and the arrow set their
- * own `id`s, over any on the builder, for the ARIA attributes that point at
- * them.
+ * Each part's attributes win over the ones the consumer set on the builder
+ * before the part, including the ones a state leaves absent. Besides the
+ * ones under **Data attributes** in the module docs, they are:
+ *
+ * - `trigger`: `id`, the one on the builder or a generated one,
+ *   `type="button"`, `aria-haspopup="menu"`, `aria-expanded`,
+ *   `aria-controls` while open, and `disabled`
+ * - `submenuTrigger`: `aria-haspopup="menu"`, `aria-expanded`, and
+ *   `aria-controls` while open
+ * - `backdrop`, `positioner`: `role="presentation"` and
+ *   `popover="manual"`, which a submenu's backdrop doesn't take
+ * - `popup`: `id`, which the `id` prop sets, `tabindex="-1"`, and
+ *   `role="menu"`, `aria-orientation` for a horizontal menu and
+ *   `aria-labelledby` pointing at the trigger unless the builder has one,
+ *   or `role="presentation"` when a `list` or an `input` is drawn
+ *   inside it
+ * - `list`: `id`, `tabindex="-1"`, and the popup's `role="menu"`,
+ *   `aria-orientation` and `aria-labelledby`
+ * - `item`, `linkItem`: `id`, `role="menuitem"`, `aria-disabled`,
+ *   `tabindex`, `"0"` while it's highlighted or its submenu is open in a
+ *   menu without a filter and `"-1"` otherwise, and `hidden` while the
+ *   filter leaves it out
+ * - `checkboxItem`, `radioItem`: as `item`, with
+ *   `role="menuitemcheckbox"` or `"menuitemradio"` and `aria-checked`
+ * - `radioGroup`: `role="group"`
+ * - `group`: `role="group"`, `aria-labelledby` pointing at its
+ *   `groupLabel`, and `hidden` while the filter leaves none of its items
+ * - `groupLabel`: `id`
+ * - `arrow`, the indicators: `aria-hidden="true"`, and `id` on the
+ *   arrow
+ * - `separator`: `role="separator"`, `aria-orientation="horizontal"`
+ * - `input`: `id`, `type="text"`, `role="searchbox"`,
+ *   `inputmode="search"`, `aria-activedescendant`, `aria-controls`
+ *   pointing at the list, `value`, `disabled`, and `autocomplete="off"`,
+ *   `spellcheck`, `autocorrect` and `autocapitalize`
+ * - `clear`: `type="button"`, `tabindex="-1"`, `aria-hidden="true"`,
+ *   `disabled`
+ * - `empty`: `role="status"`, `aria-live="polite"`, `aria-atomic="true"`
+ *
+ * The parts handle these events on a layer of their own, so the
+ * consumer's handlers for them still run:
+ *
+ * - `trigger`: `mousedown`, `mouseup`, `click` and `keydown`, and
+ *   `mouseenter` and `mouseleave` when hovering opens it. A trigger with
+ *   the `disabled` option handles none.
+ * - `contextTrigger`: `contextmenu`, and touches through its mount
+ * - `submenuTrigger`: `mousedown`, `click` and `keydown`, and
+ *   `mouseenter` and `mouseleave` when hovering opens it
+ * - `backdrop`: `contextmenu`, in a menu opened from a `contextTrigger`
+ * - `popup`: `keydown` and `keyup`
+ * - the items: `mouseenter`, `mouseleave`, `mousedown`, `mouseup`,
+ *   `click`, `keydown` and `keyup`
+ * - `input`: `input`, `keydown`, `mousedown`, `focus` and `blur`
+ * - `clear`: `mousedown` and `click`
+ *
+ * The triggers, the popup and the items cancel the keys they handle, but
+ * Enter on a `linkItem` follows its `href`. `contextTrigger` and the
+ * backdrop cancel `contextmenu`, so the browser's menu doesn't show, and
+ * `clear` cancels `mousedown`, so focus stays in the input. The
+ * positioner's mount places the popup, moves focus, and listens for presses
+ * and focus outside it.
+ *
+ * It emits `RequestedOpen`, `RequestedClose`, `Picked`, `Highlighted`,
+ * `RequestedQuery` and `Settled`.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
@@ -1920,13 +1983,13 @@ export const Menu = Component.define({
     TouchedContextTrigger: (model, { key, triggerId, x, y }, $) =>
       disabledOf($)
         ? model
-        : $.set({ ...model, longPress: { key, triggerId, x, y } }).run(
+        : $.evolve({ longPress: { key, triggerId, x, y } }).run(
           WaitBeforeLongPress.make({ delay: LongPressDelay })
         ),
     CancelledLongPress: (model, _message, $) =>
       model.longPress === null
         ? model
-        : $.set({ ...model, longPress: null }).run(Command.interrupt(WaitBeforeLongPress)),
+        : $.evolve({ longPress: null }).run(Command.interrupt(WaitBeforeLongPress)),
     CompletedWaitBeforeLongPress: (model, _message, $) => {
       const press = model.longPress
       if (press === null) return model
@@ -1936,7 +1999,7 @@ export const Menu = Component.define({
     CompletedWaitBeforeContextGrace: (_model, _message, $) => $.evolve({ justOpened: false }),
     ReleasedContextPointer: (model, { outside }, $) => {
       if (!model.releaseArmed) return model
-      const next = { ...model, releaseArmed: false }
+      const next = UiStruct.evolve(model, { releaseArmed: false })
       return outside && !model.justOpened ? dismiss(next, $, "cancel-open", "mouse") : $.set(next)
     },
     PressedTriggerKey: (model, { key, trigger, triggerId }, $) =>
@@ -1944,16 +2007,16 @@ export const Menu = Component.define({
         ? model
         : open(model, $, "list-navigation", "keyboard", trigger, triggerId, key === "ArrowUp"),
     EnteredTrigger: (model, message, $) => enterTrigger(model, $, message),
-    LeftTrigger: (model, _message, $) =>
-      $.set($.props.open ? model : { ...model, hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
+    LeftTrigger: (_model, _message, $) =>
+      $.evolve($.props.open ? {} : { hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
     CompletedWaitBeforeHoverOpen: (model, _message, $) =>
       $.props.open || !model.hovering || disabledOf($) ? model : hoverOpen(model, $),
     LeftHoverArea: (model, _message, $) =>
       $.props.open && model.reason === "trigger-hover"
-        ? $.set({ ...model, hovering: false }).run(WaitBeforeHoverClose.make({ delay: model.closeDelay }))
+        ? $.evolve({ hovering: false }).run(WaitBeforeHoverClose.make({ delay: model.closeDelay }))
         : model,
-    ReturnedToHoverArea: (model, _message, $) =>
-      $.set({ ...model, hovering: true }).run(Command.interrupt(WaitBeforeHoverClose)),
+    ReturnedToHoverArea: (_model, _message, $) =>
+      $.evolve({ hovering: true }).run(Command.interrupt(WaitBeforeHoverClose)),
     CompletedWaitBeforeHoverClose: (model, _message, $) =>
       $.props.open && model.reason === "trigger-hover" && !model.hovering &&
         !model.submenus.some((submenu) => submenu.open)
@@ -1973,22 +2036,22 @@ export const Menu = Component.define({
     PressedKey: (model, { action, key }, $) => pressKey(model, $, key, action),
     ReleasedSpace: (model, { action }, $) => {
       if (!model.spaceDown) return model
-      const next = { ...model, spaceDown: false }
+      const next = UiStruct.evolve(model, { spaceDown: false })
       return action !== null && $.props.open ? activate(next, $, action, "keyboard") : next
     },
     EnteredItem: (model, { value }, $) =>
       $.props.open && $.props.highlightItemOnHover !== false && model.active !== value
-        ? commit($, model, { ...model, active: value, activeByKey: false }, "pointer")
+        ? commit($, model, UiStruct.evolve(model, { active: value, activeByKey: false }), "pointer")
         : model,
     LeftItem: (model, _message, $) =>
       model.active === null || model.submenus.some((submenu) => submenu.open && submenu.item === model.active) ||
         filteringOf($.props)
         ? model
-        : commit($, model, { ...model, active: null, activeByKey: false }, "pointer"),
+        : commit($, model, UiStruct.evolve(model, { active: null, activeByKey: false }), "pointer"),
     PressedItem: (_model, _message, $) => $.evolve({ pressedItem: true }),
     ReleasedItem: (model, { action, pointerType }, $) =>
       model.pressing && model.releaseAllowed && !model.pressedItem && action.kind !== "link"
-        ? activate({ ...model, pressing: false }, $, action, methodOf(pointerType))
+        ? activate(UiStruct.evolve(model, { pressing: false }), $, action, methodOf(pointerType))
         : model,
     ClickedItem: (model, { action, pointerType }, $) => activate(model, $, action, methodOf(pointerType)),
     CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
@@ -1999,8 +2062,7 @@ export const Menu = Component.define({
       if (open !== $.props.open) return model
       if (open) return $.emit(MenuEvents.Settled({ open }))
       if (!model.mounted || $.props.holdExit === true) return model
-      const closed = $.set({
-        ...model,
+      const closed = $.evolve({
         mounted: false,
         started: false,
         pressedItem: false,
@@ -2027,14 +2089,14 @@ export const Menu = Component.define({
     TabbedOut: (model, _message, $) => dismiss(model, $, "focus-out", "keyboard", true),
     ReleasedPointer: (model, { outside }, $) => {
       if (!model.pressing) return model
-      const next = { ...model, pressing: false }
+      const next = UiStruct.evolve(model, { pressing: false })
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
     AllowedRelease: (model, _message, $) => model.pressing ? $.evolve({ releaseAllowed: true }) : model,
     ChangedSubmenus: (_model, { submenus }, $) => $.evolve({ submenus }),
     ChangedParent: (model, { parent }, $) => {
       if ($.props.parentItem === undefined) return model
-      const next = parent.rtl === model.rtl ? model : { ...model, rtl: parent.rtl }
+      const next = UiStruct.evolve(model, { rtl: parent.rtl })
       if (!$.props.open) return next
       if (!parent.open) return dismiss(next, $, parent.reason ?? "none", null)
       if (parent.active !== null && parent.active !== $.props.parentItem) {
@@ -2051,12 +2113,12 @@ export const Menu = Component.define({
       const props = $.props
       if (!props.open) return model
       const reason = value === "" ? "input-clear" : "input-change"
-      const next = { ...model, active: autoHighlighted(props, value), activeByKey: false }
+      const next = UiStruct.evolve(model, { active: autoHighlighted(props, value), activeByKey: false })
       return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: value, reason }))
     },
     PressedInputKey: (model, { key, modified }, $) => {
       const props = $.props
-      const next = model.keyboard ? model : { ...model, keyboard: true }
+      const next = UiStruct.evolve(model, { keyboard: true })
       if (!props.open || modified) return next
       const hasValue = (props.query ?? "") !== ""
       const nav = keys(props.orientation ?? "vertical", model.rtl)
@@ -2076,7 +2138,7 @@ export const Menu = Component.define({
     ClickedClear: (model, _message, $) => {
       const props = $.props
       if (!props.open || (props.query ?? "") === "") return model
-      const next = { ...model, active: autoHighlighted(props, ""), activeByKey: false }
+      const next = UiStruct.evolve(model, { active: autoHighlighted(props, ""), activeByKey: false })
       return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: "", reason: "clear-press" }))
     }
   },
@@ -2209,7 +2271,7 @@ export const Menu = Component.define({
           { preventDefault: true }
         )
         .onMount(
-          LongPress({}).pipe(
+          MenuLongPress({}).pipe(
             Mount.map((touch) =>
               touch._tag === "Started"
                 ? MenuMessage.TouchedContextTrigger({ key, triggerId, x: touch.x, y: touch.y })

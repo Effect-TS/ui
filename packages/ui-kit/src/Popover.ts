@@ -170,8 +170,8 @@
  * }).make({
  *   init: () => ({ notifications: true }),
  *   update: {
- *     RequestedOpenNotifications: (model) => ({ ...model, notifications: true }),
- *     RequestedCloseNotifications: (model) => ({ ...model, notifications: false })
+ *     RequestedOpenNotifications: (_model, _message, $) => $.evolve({ notifications: true }),
+ *     RequestedCloseNotifications: (_model, _message, $) => $.evolve({ notifications: false })
  *   },
  *   view: (model, h) =>
  *     Popover(h, {
@@ -210,6 +210,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
@@ -507,8 +508,7 @@ const openFor = (
   reason: PopoverOpenReason,
   method: DialogInteraction | null = null
 ) =>
-  $.set({
-    ...model,
+  $.set(UiStruct.evolve(model, {
     reason,
     stale: false,
     patient: reason === "trigger-hover",
@@ -518,21 +518,21 @@ const openFor = (
     onPositioner: $.props.open && model.onPositioner,
     switched: $.props.open && model.switched && triggerId === activeOf(model, $.props),
     transition: $.props.open ? model.transition : null
-  }).run(
+  })).run(
     Command.interrupt(WaitBeforeOpening),
     Command.interrupt(WaitBeforeClosing),
     reason === "trigger-hover" ? WaitBeforeClosingOnPress.make({}) : Command.interrupt(WaitBeforeClosingOnPress)
   ).emit(PopoverEvents.RequestedOpen({ triggerId, reason }))
 
-const dismiss = (model: PopoverModel, $: PopoverUpdate, reason: PopoverDismissReason) =>
-  $.set({ ...model, closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
+const dismiss = ($: PopoverUpdate, reason: PopoverDismissReason) =>
+  $.evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
     PopoverEvents.RequestedClose({ reason })
   )
 
 const pressed = (model: PopoverModel, $: PopoverUpdate) =>
   model.patient
     ? openFor(model, $, activeOf(model, $.props), "trigger-press", model.method)
-    : dismiss(model, $, "trigger-press")
+    : dismiss($, "trigger-press")
 
 const left = (next: PopoverModel, $: PopoverUpdate) => {
   if (!$.props.open) return next.onTrigger ? next : $.set(next).run(Command.interrupt(WaitBeforeOpening))
@@ -772,16 +772,16 @@ export const Popover = Component.define({
     RequestedCloseDialog: (model, { reason }, $) => {
       if (reason === "trigger-press") return pressed(model, $)
       if (reason === "focus-out" && hoverOpened(model, $.props.open)) return model
-      return dismiss(model, $, reason)
+      return dismiss($, reason)
     },
-    SettledDialog: (model, { open }, $) =>
-      $.set(open ? model : { ...model, switched: false, transition: null }).emit(PopoverEvents.Settled({ open })),
+    SettledDialog: (_model, { open }, $) =>
+      $.evolve(open ? {} : { switched: false, transition: null }).emit(PopoverEvents.Settled({ open })),
     EnteredTrigger: (model, { at, closeDelay, delay, triggerId }, $) => {
       // A layer drawn over the trigger takes the pointer off it, and gives it back where it was once
       // it is gone. The pointer didn't move, so that is no hover.
       const uncovered = at !== null && model.rest !== null && model.rest.triggerId === triggerId &&
         at.x === model.rest.x && at.y === model.rest.y
-      const next = { ...model, onTrigger: true, hoverTrigger: triggerId, closeDelay, rest: null }
+      const next = UiStruct.evolve(model, { onTrigger: true, hoverTrigger: triggerId, closeDelay, rest: null })
       if (!$.props.open) return uncovered ? next : $.set(next).run(WaitBeforeOpening.make({ delay }))
       const active = activeOf(model, $.props)
       return uncovered || active === null || active === triggerId
@@ -789,29 +789,36 @@ export const Popover = Component.define({
         : openFor(next, $, triggerId, "trigger-hover")
     },
     LeftTrigger: (model, { at, triggerId }, $) =>
-      left({ ...model, onTrigger: false, hoverTrigger: null, rest: at === null ? null : { triggerId, ...at } }, $),
+      left(
+        UiStruct.evolve(model, {
+          onTrigger: false,
+          hoverTrigger: null,
+          rest: at === null ? null : { triggerId, ...at }
+        }),
+        $
+      ),
     PressedDetachedTrigger: (model, { pointerType, triggerId }, $) => {
       const active = activeOf(model, $.props)
       return $.props.open && (active === null || active === triggerId)
         ? pressed(model, $)
         : openFor(model, $, triggerId, "trigger-press", methodOf(pointerType))
     },
-    EnteredPositioner: (model, _message, $) =>
-      $.set({ ...model, onPositioner: true }).run(Command.interrupt(WaitBeforeClosing)),
-    LeftPositioner: (model, _message, $) => left({ ...model, onPositioner: false }, $),
+    EnteredPositioner: (_model, _message, $) =>
+      $.evolve({ onPositioner: true }).run(Command.interrupt(WaitBeforeClosing)),
+    LeftPositioner: (model, _message, $) => left(UiStruct.evolve(model, { onPositioner: false }), $),
     CompletedWaitBeforeOpening: (model, _message, $) =>
       !$.props.open && model.onTrigger ? openFor(model, $, model.hoverTrigger, "trigger-hover") : model,
     CompletedWaitBeforeClosing: (model, _message, $) =>
       $.props.open && hoverOpened(model, true) && !model.onTrigger && !model.onPositioner
-        ? dismiss(model, $, "trigger-hover")
+        ? dismiss($, "trigger-hover")
         : model,
-    CompletedWaitBeforeClosingOnPress: (model) => ({ ...model, patient: false }),
-    SwitchedTrigger: (model) => ({ ...model, switched: false }),
-    SettledSwitch: (model, _message, $) => $.props.open ? { ...model, switched: true } : model,
-    Closed: (model) => ({ ...model, stale: true, patient: false, method: null }),
-    Reopened: (model) => model.stale ? { ...model, reason: null, stale: false } : model,
+    CompletedWaitBeforeClosingOnPress: (_model, _message, $) => $.evolve({ patient: false }),
+    SwitchedTrigger: (_model, _message, $) => $.evolve({ switched: false }),
+    SettledSwitch: (model, _message, $) => $.props.open ? $.evolve({ switched: true }) : model,
+    Closed: (_model, _message, $) => $.evolve({ stale: true, patient: false, method: null }),
+    Reopened: (model, _message, $) => model.stale ? $.evolve({ reason: null, stale: false }) : model,
     ChangedViewport: (model, { change }, $) => stepViewport(model, change, $.props.open),
-    ChangedPlacement: (model, { placement }) => ({ ...model, placement })
+    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement })
   },
   subscriptions: (_model, props) => props.id === undefined ? [] : [detached.subscription(props.id)],
   parts: (model, p) => {

@@ -149,16 +149,16 @@
  * }).make({
  *   init: () => ({ open: false, theme: "system" }),
  *   update: {
- *     RequestedOpenTheme: (model) => ({ ...model, open: true }),
- *     RequestedCloseTheme: (model) => ({ ...model, open: false }),
- *     PickedTheme: (model, { theme }) => ({ ...model, theme })
+ *     RequestedOpenTheme: (_model, _message, $) => $.evolve({ open: true }),
+ *     RequestedCloseTheme: (_model, _message, $) => $.evolve({ open: false }),
+ *     PickedTheme: (_model, { theme }, $) => $.evolve({ theme })
  *   },
  *   view: (model, h) =>
  *     Field(h, {
  *       props: { filled: true },
  *       view: (field) =>
  *         Select(h, {
- *           props: { open: model.open, value: model.theme, items: themes, name: "theme" },
+ *           props: { open: model.open, value: model.theme, items: themes, name: "theme", disabled: field.disabled },
  *           onEmit: {
  *             RequestedOpen: () => SettingsMessage.RequestedOpenTheme(),
  *             RequestedClose: () => SettingsMessage.RequestedCloseTheme(),
@@ -521,13 +521,7 @@ const startOf = (model: SelectModel, props: SelectProps): number => {
   return selected !== -1 ? selected : indexOf(props, model.active)
 }
 
-const open = (
-  model: SelectModel,
-  $: SelectUpdate,
-  reason: SelectChangeReason,
-  method: SelectInteraction,
-  key?: string
-) => {
+const open = ($: SelectUpdate, reason: SelectChangeReason, method: SelectInteraction, key?: string) => {
   const props = $.props
   const items = props.items
   let active = selectedIndexOf(props)
@@ -537,8 +531,7 @@ const open = (
       active = 0
     }
   }
-  return $.set({
-    ...model,
+  return $.evolve({
     openMethod: method,
     closeMethod: null,
     focusLeft: false,
@@ -562,7 +555,7 @@ const dismiss = (
   focusLeft = false
 ) =>
   $.props.open
-    ? $.set({ ...model, closeMethod: method, focusLeft, pressing: false, spaceDown: false }).emit(
+    ? $.set(UiStruct.evolve(model, { closeMethod: method, focusLeft, pressing: false, spaceDown: false })).emit(
       SelectEvents.RequestedClose({ reason })
     )
     : model
@@ -572,35 +565,35 @@ const toggle = (model: SelectModel, $: SelectUpdate, method: SelectInteraction) 
     ? model
     : $.props.open
     ? dismiss(model, $, "trigger-press", method)
-    : open(model, $, "trigger-press", method)
+    : open($, "trigger-press", method)
 
 const pick = (model: SelectModel, $: SelectUpdate, value: string, method: SelectInteraction) => {
   const props = $.props
   const item = props.items.find((candidate) => candidate.value === value)
   if (!available(item) || props.disabled === true || props.readOnly === true) return model
-  const next = { ...model, active: value, pressedItem: false }
+  const next = UiStruct.evolve(model, { active: value, pressedItem: false })
   if (props.multiple === true) {
     return $.set(next).emit(SelectEvents.Picked({ value: toggled(valuesOf(props), value), reason: "item-press" }))
   }
-  return $.set({ ...next, closeMethod: method, focusLeft: false, pressing: false })
+  return $.set(UiStruct.evolve(next, { closeMethod: method, focusLeft: false, pressing: false }))
     .emit(SelectEvents.Picked({ value, reason: "item-press" }))
     .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
 }
 
 const highlight = (model: SelectModel, props: SelectProps, index: number): SelectModel => {
   const item = props.items[index]
-  return item === undefined ? model : { ...model, active: item.value, activeByKey: true }
+  return item === undefined ? model : UiStruct.evolve(model, { active: item.value, activeByKey: true })
 }
 
 const hover = (model: SelectModel, active: string | null): SelectModel =>
-  model.active === active ? model : { ...model, active, activeByKey: false }
+  model.active === active ? model : UiStruct.evolve(model, { active, activeByKey: false })
 
 const typeKey = (model: SelectModel, $: SelectUpdate, key: string) => {
   const props = $.props
   const { index, next } = typeahead(model, key, props.items, startOf(model, props))
   const item = props.items[index]
   const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.set({ ...model, ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
+  const typed = $.evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
   return item === undefined || props.open || valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
@@ -1085,10 +1078,47 @@ const scrolling = "position:relative;max-height:100%;overflow-x:hidden;overflow-
  * `alignedWithTrigger`, `highlighted` (the value of the item with focus) and
  * `openMethod`, which is `null` once the popup closes.
  *
- * The label, the trigger, the popup, the list, the arrow, the items and the
- * group labels set their own `id`s, over any on the builder, for the ARIA
- * attributes that point at them. Give the trigger an `id` with the `id`
- * prop.
+ * Each part's attributes win over the ones the consumer set on the builder
+ * before the part, including the ones a state leaves absent. Besides the
+ * ones under **Data attributes** in the module docs, they are:
+ *
+ * - `trigger`: `id`, which the `id` prop sets, `type="button"`,
+ *   `role="combobox"`, `aria-haspopup="listbox"`, `aria-expanded`,
+ *   `aria-readonly`, `aria-required`, `disabled`, no `aria-disabled`,
+ *   `aria-controls` while open, pointing at the list or else the popup, and
+ *   `aria-labelledby` pointing at `label` unless the builder has one
+ * - `label`: `id`
+ * - `backdrop`, `positioner`: `role="presentation"` and
+ *   `popover="manual"`
+ * - `popup`: `id`, `tabindex="-1"`, and `role="listbox"`,
+ *   `aria-multiselectable` and `aria-readonly`, or `role="presentation"`
+ *   when a `list` is drawn inside it
+ * - `list`: `id`, `role="listbox"`, `aria-multiselectable`,
+ *   `aria-readonly`
+ * - `item`: `id`, `role="option"`, `aria-selected`, `aria-disabled`,
+ *   and `tabindex`, `"0"` while it's highlighted in an open popup and
+ *   `"-1"` otherwise
+ * - `group`: `role="group"` and `aria-labelledby` pointing at its
+ *   `groupLabel`
+ * - `groupLabel`: `id` and `aria-hidden="true"`
+ * - `icon`, `arrow`, `itemIndicator`, `scrollUpArrow`,
+ *   `scrollDownArrow`: `aria-hidden="true"`, and `id` on the arrow
+ * - `separator`: `role="separator"`, `aria-orientation="horizontal"`
+ *
+ * The parts handle these events on a layer of their own, so the
+ * consumer's handlers for them still run:
+ *
+ * - `trigger`: `mousedown`, `mouseup`, `click` and `keydown`
+ * - `label`: `click`
+ * - `popup`: `keydown` and `keyup`
+ * - `item`: `mouseenter`, `mouseleave`, `mousedown`, `mouseup` and
+ *   `click`
+ *
+ * The trigger and the popup cancel the keys they handle. The positioner's
+ * mount places the popup, moves focus into it, scrolls it and listens for
+ * presses and focus outside it.
+ *
+ * It emits `RequestedOpen`, `RequestedClose`, `Picked` and `Settled`.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
@@ -1136,7 +1166,7 @@ export const Select = Component.define({
       const props = $.props
       if (props.disabled === true) return model
       if (key === "ArrowDown" || key === "ArrowUp") {
-        return props.open ? model : open(model, $, "list-navigation", "keyboard", key)
+        return props.open ? model : open($, "list-navigation", "keyboard", key)
       }
       if (!props.open && (props.readOnly === true || props.multiple === true)) return model
       return typeKey(model, $, key)
@@ -1179,7 +1209,7 @@ export const Select = Component.define({
     },
     ReleasedSpace: (model, _message, $) => {
       if (!model.spaceDown) return model
-      const next = { ...model, spaceDown: false }
+      const next = UiStruct.evolve(model, { spaceDown: false })
       return $.props.open && model.active !== null ? pick(next, $, model.active, "keyboard") : next
     },
     EnteredItem: (model, { value }) => hover(model, value),
@@ -1222,7 +1252,7 @@ export const Select = Component.define({
     FocusedTrigger: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "none", null) : model,
     ReleasedPointer: (model, { outside }, $) => {
       if (!model.pressing) return model
-      const next = { ...model, pressing: false }
+      const next = UiStruct.evolve(model, { pressing: false })
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
     ResizedWindow: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "window-resize", null) : model,

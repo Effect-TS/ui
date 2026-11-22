@@ -49,7 +49,7 @@
  * }).make({
  *   init: () => ({ bold: false }),
  *   update: {
- *     ToggledBold: (model, { pressed }) => ({ ...model, bold: pressed })
+ *     ToggledBold: (_model, { pressed }, $) => $.evolve({ bold: pressed })
  *   },
  *   view: (model, h) =>
  *     Toggle(h, {

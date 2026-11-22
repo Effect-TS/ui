@@ -124,7 +124,7 @@
  * }).make({
  *   init: () => ({ volume: 40 }),
  *   update: {
- *     MovedVolume: (model, { value }) => ({ ...model, volume: value })
+ *     MovedVolume: (_model, { value }, $) => $.evolve({ volume: value })
  *   },
  *   view: (model, h) =>
  *     Field(h, {
@@ -168,6 +168,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -499,9 +500,9 @@ const drag = (model: SliderModel, $: SliderUpdate, s: Settings, fraction: number
   const moved = s.values.length > 1
     ? collide(s, model.pressedValues.length === s.values.length ? model.pressedValues : s.values, model.pressed, target)
     : { values: [target], index: 0 }
-  const next = { ...model, pressed: moved.index }
+  const next = UiStruct.evolve(model, { pressed: moved.index })
   const value = changed(s, moved.values)
-  return value === undefined ? $.set(next) : $.set({ ...next, moved: value }).emit(SliderEvents.Moved({ value }))
+  return value === undefined ? $.set(next) : $.set(next).evolve({ moved: value }).emit(SliderEvents.Moved({ value }))
 }
 
 const released: SliderModel = { active: -1, pressed: -1, pressedValues: [], moved: null }
@@ -733,7 +734,7 @@ export const Slider = Component.define({
       // they can be pulled apart.
       let thumb = index
       if (onThumb) { while (thumb > 0 && s.values[thumb]! >= s.top && s.values[thumb - 1]! >= s.top) thumb-- }
-      const next: SliderModel = { ...model, pressed: thumb, pressedValues: s.values, moved: null }
+      const next = UiStruct.evolve(model, { pressed: thumb, pressedValues: s.values, moved: null })
       // A thumb grabbed where it is doesn't move until the pointer does.
       return onThumb ? next : drag(next, $, s, fraction)
     },
@@ -741,7 +742,7 @@ export const Slider = Component.define({
       model.pressed < 0 || $.props.disabled === true ? model : drag(model, $, settingsOf($.props), fraction),
     ReleasedPointer: (model, _message, $) => {
       if (model.pressed < 0) return model
-      const next: SliderModel = { ...released, active: model.active }
+      const next = UiStruct.evolve(released, { active: model.active })
       return model.moved === null || $.props.disabled === true
         ? next
         : $.set(next).emit(SliderEvents.Committed({ value: model.moved }))
@@ -753,8 +754,8 @@ export const Slider = Component.define({
     },
     UpdatedThumb: (model, { index, value }, $) =>
       value.trim() === "" ? model : setThumb(model, $, settingsOf($.props), index, Number(value)),
-    FocusedThumb: (model, { index }) => ({ ...model, active: index }),
-    BlurredThumb: (model, { index }) => (model.active === index ? { ...model, active: -1 } : model)
+    FocusedThumb: (_model, { index }, $) => $.evolve({ active: index }),
+    BlurredThumb: (model, { index }, $) => model.active === index ? $.evolve({ active: -1 }) : model
   },
   parts: (model, p) => {
     const s = settingsOf(p.props)

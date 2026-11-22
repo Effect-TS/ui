@@ -90,8 +90,8 @@
  * }).make({
  *   init: () => ({ open: false }),
  *   update: {
- *     RequestedOpenMenu: (model) => ({ ...model, open: true }),
- *     RequestedCloseMenu: (model) => ({ ...model, open: false }),
+ *     RequestedOpenMenu: (_model, _message, $) => $.evolve({ open: true }),
+ *     RequestedCloseMenu: (_model, _message, $) => $.evolve({ open: false }),
  *     PickedAction: (model) => model
  *   },
  *   view: (model, h) =>

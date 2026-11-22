@@ -97,13 +97,13 @@ describe("Drawer", () => {
 describe("DrawerProvider", () => {
   it("its parts return the builder they were given", () => {
     DrawerProvider(h, {
-      view: (provider) => {
-        expect(provider.active).type.toBe<boolean>()
-        expect(provider.indent(h.div.attr("id", "page"))).type.toBe<Div>()
-        expect(provider.indentBackground(h.div)).type.toBe<Div>()
-        expect(provider.indent).type.not.toBeCallableWith(h.span)
-        expect(provider.indentBackground).type.not.toBeCallableWith(h.span)
-        return h.div(provider.indentBackground(h.div), provider.indent(h.div))
+      view: (drawerProvider) => {
+        expect(drawerProvider.active).type.toBe<boolean>()
+        expect(drawerProvider.indent(h.div.attr("id", "page"))).type.toBe<Div>()
+        expect(drawerProvider.indentBackground(h.div)).type.toBe<Div>()
+        expect(drawerProvider.indent).type.not.toBeCallableWith(h.span)
+        expect(drawerProvider.indentBackground).type.not.toBeCallableWith(h.span)
+        return h.div(drawerProvider.indentBackground(h.div), drawerProvider.indent(h.div))
       }
     })
   })

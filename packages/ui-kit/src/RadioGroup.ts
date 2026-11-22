@@ -5,6 +5,9 @@
  * arrow-key navigation, ARIA and data attributes, indicator transitions and
  * the form field.
  *
+ * `RadioGroup` is a headless component: it keeps the highlighted radio and
+ * the indicator transitions, and moves focus with a Command.
+ *
  * **Anatomy**
  *
  * | Part        | Element                                          |
@@ -78,7 +81,7 @@
  * }).make({
  *   init: () => ({ storage: "ssd" }),
  *   update: {
- *     PickedStorage: (model, { value }) => ({ ...model, storage: value })
+ *     PickedStorage: (_model, { value }, $) => $.evolve({ storage: value })
  *   },
  *   view: (model, h) =>
  *     RadioGroup(h, {
@@ -113,6 +116,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -347,7 +351,7 @@ const itemOf = (items: ReadonlyArray<RadioGroupItem>, value: string): RadioGroup
   items.find((item) => item.value === value)
 
 const highlight = (model: RadioGroupModel, value: string): RadioGroupModel =>
-  model.highlighted === value ? model : { ...model, highlighted: value }
+  UiStruct.evolve(model, { highlighted: value })
 
 const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
   props.readOnly !== true && item.readOnly !== true && props.value !== item.value
@@ -429,37 +433,30 @@ export const RadioGroup = Component.define({
       return picks($.props, target) ? moved.emit(RadioGroupEvents.Picked({ value: target.value })) : moved
     },
     PressedEnter: (model) => model,
-    SyncedValue: (model, { value }) => {
-      if (model.current === value) return model.highlighted === null ? model : { ...model, highlighted: null }
+    SyncedValue: (model, { value }, $) => {
+      if (model.current === value) return $.evolve({ highlighted: null })
       const prev = model.current
       let leaving = prev !== null && model.mounted.includes(prev) ? withValue(model.leaving, prev) : model.leaving
       if (value !== null) leaving = without(leaving, value)
       const settled = model.settled === value ? value : null
-      return { ...model, highlighted: null, current: value, settled, leaving }
+      return $.evolve({ highlighted: null, current: value, settled, leaving })
     },
-    MountedIndicator: (model, { value }) => {
-      const mounted = withValue(model.mounted, value)
-      return mounted === model.mounted ? model : { ...model, mounted }
-    },
-    UnmountedIndicator: (model, { value }) => {
-      const mounted = without(model.mounted, value)
-      const leaving = without(model.leaving, value)
-      const settled = model.settled === value ? null : model.settled
-      return mounted === model.mounted && leaving === model.leaving && settled === model.settled
+    MountedIndicator: (_model, { value }, $) => $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
+    UnmountedIndicator: (model, { value }, $) =>
+      $.evolve({
+        settled: model.settled === value ? null : model.settled,
+        mounted: (mounted) => without(mounted, value),
+        leaving: (leaving) => without(leaving, value)
+      }),
+    StartedIndicator: (model, { value }, $) =>
+      $.props.value !== value ? model : $.evolve({ settled: value, leaving: (leaving) => without(leaving, value) }),
+    EndedIndicator: (model, { value }, $) =>
+      $.props.value === value
         ? model
-        : { ...model, settled, mounted, leaving }
-    },
-    StartedIndicator: (model, { value }, $) => {
-      if ($.props.value !== value) return model
-      const leaving = without(model.leaving, value)
-      return model.settled === value && leaving === model.leaving ? model : { ...model, settled: value, leaving }
-    },
-    EndedIndicator: (model, { value }, $) => {
-      if ($.props.value === value) return model
-      const leaving = without(model.leaving, value)
-      const settled = model.settled === value ? null : model.settled
-      return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
-    }
+        : $.evolve({
+          settled: model.settled === value ? null : model.settled,
+          leaving: (leaving) => without(leaving, value)
+        })
   },
   subscriptions: (_model, props) => [synced(props.value)],
   parts: (model, p) => {

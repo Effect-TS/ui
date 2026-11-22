@@ -55,7 +55,7 @@
  * don't show it: pass `disabled: fieldset.disabled` to it.
  *
  * A fieldset doesn't read the fieldset around it. Pass the outer one's
- * state to a nested fieldset, `props: { disabled: outer.disabled || locked }`.
+ * state to a nested fieldset, `props: { disabled: outerFieldset.disabled || locked }`.
  * Without it the browser still disables the controls of the inner one, but
  * its legend and its fields don't show it.
  *

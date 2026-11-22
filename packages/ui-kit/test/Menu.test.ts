@@ -148,8 +148,8 @@ const Page = Component.define({
 }).make({
   init: ($) => ({ route: $.props.route, open: false }),
   update: {
-    ChangedRoute: (model, { route }) => ({ ...model, route }),
-    RequestedOpen: (model) => ({ ...model, open: true }),
+    ChangedRoute: (_model, { route }, $) => $.evolve({ route }),
+    RequestedOpen: (_model, _message, $) => $.evolve({ open: true }),
     Left: (model, _message, $) =>
       $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
     Navigated: (model) => model

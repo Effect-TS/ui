@@ -225,9 +225,9 @@ describe("VirtualList", () => {
   it.effect("rejects tags the parts don't take", () =>
     Effect.gen(function*() {
       const cases: ReadonlyArray<(virtualList: Parts, h: H) => View.Content<never>> = [
-        (vl, h) => vl.viewport(h.span as never),
-        (vl, h) => vl.list(h.span as never),
-        (vl, h) => vl.list(h.div).children(vl.item({ element: h.span as never, index: 0 }))
+        (virtualList, h) => virtualList.viewport(h.span as never),
+        (virtualList, h) => virtualList.list(h.span as never),
+        (virtualList, h) => virtualList.list(h.div).children(virtualList.item({ element: h.span as never, index: 0 }))
       ]
       for (const render of cases) {
         const exit = yield* Effect.exit(Scene.make(VirtualList, base, { elements: Html, view: render }))

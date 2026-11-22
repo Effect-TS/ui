@@ -2,6 +2,9 @@
  * A user's picture with a fallback, such as initials or an icon, while the
  * picture loads or if it fails.
  *
+ * `Avatar` is a headless component: it loads the image and waits out the
+ * fallback delay, so it needs an instance.
+ *
  * **Anatomy**
  *
  * | Part       | Element | Behavior                                         |
@@ -24,8 +27,12 @@
  *
  * Use `imageLoadingStatus` in the view to style the parts. A source starts
  * as `"loading"` (including on the server), then becomes `"loaded"` or
- * `"error"`. A missing source is `"error"` immediately. The parts set no
- * state data attributes and switch without enter or exit transitions.
+ * `"error"`. A missing source is `"error"` immediately. The parts switch
+ * without enter or exit transitions.
+ *
+ * **Data attributes**
+ *
+ * None. Style the parts from `imageLoadingStatus` in the view.
  *
  * **Keyboard**
  *
@@ -50,7 +57,6 @@
  *   update: (model) => model,
  *   view: (_model, h) =>
  *     Avatar(h, {
- *       key: "avatar",
  *       props: { src: "/ada.png" },
  *       view: (avatar) =>
  *         avatar.root(h.span.class("avatar")).children(
@@ -248,8 +254,8 @@ export const Avatar = Component.define({
     delayElapsed: !((props.fallbackDelay ?? 0) > 0)
   }),
   update: {
-    ChangedImageStatus: (model, { source, status }) => ({ ...model, report: { source, status } }),
-    ElapsedFallbackDelay: (model) => ({ ...model, delayElapsed: true })
+    ChangedImageStatus: (_model, { source, status }, $) => $.evolve({ report: { source, status } }),
+    ElapsedFallbackDelay: (_model, _message, $) => $.evolve({ delayElapsed: true })
   },
   subscriptions: (model, props) => [
     loadImage(sourceOf(props)),

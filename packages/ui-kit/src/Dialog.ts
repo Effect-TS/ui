@@ -169,8 +169,8 @@
  * }).make({
  *   init: () => ({ settings: true }),
  *   update: {
- *     RequestedOpenSettings: (model) => ({ ...model, settings: true }),
- *     RequestedCloseSettings: (model) => ({ ...model, settings: false })
+ *     RequestedOpenSettings: (_model, _message, $) => $.evolve({ settings: true }),
+ *     RequestedCloseSettings: (_model, _message, $) => $.evolve({ settings: false })
  *   },
  *   view: (model, h) =>
  *     Dialog(h, {
@@ -419,11 +419,10 @@ type DialogUpdate = Component.Update<DialogModel, DialogMessage, DialogEvents, D
 const topmost = (model: DialogModel): boolean => model.nestedOpen === 0
 
 const dismiss = (
-  model: DialogModel,
   $: DialogUpdate,
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
-) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.RequestedClose({ reason }))
+) => $.evolve({ reason, closeMethod }).emit(DialogEvents.RequestedClose({ reason }))
 
 const blocker = new Html.Element<never>("div").attrs({
   role: "presentation",
@@ -1088,41 +1087,41 @@ export const Dialog = Component.define({
       const method = methodOf(pointerType)
       const active = $.props.triggerId ?? model.trigger
       if ($.props.open && (active === null || active === key)) {
-        return dismiss(model, $, "trigger-press", method)
+        return dismiss($, "trigger-press", method)
       }
-      return $.set({ ...model, trigger: key, reason: null, openMethod: method }).emit(
+      return $.evolve({ trigger: key, reason: null, openMethod: method }).emit(
         DialogEvents.RequestedOpen({ triggerId })
       )
     },
     ClickedClose: (model, { pointerType }, $) =>
-      $.props.open ? dismiss(model, $, "close-press", methodOf(pointerType)) : model,
+      $.props.open ? dismiss($, "close-press", methodOf(pointerType)) : model,
     PressedEscape: (model, _message, $) =>
-      $.props.open && topmost(model) ? dismiss(model, $, "escape-key", "keyboard") : model,
+      $.props.open && topmost(model) ? dismiss($, "escape-key", "keyboard") : model,
     PressedOutside: (model, { pointerType }, $) =>
       $.props.open && topmost(model) && $.props.disablePointerDismissal !== true
-        ? dismiss(model, $, "outside-press", methodOf(pointerType))
+        ? dismiss($, "outside-press", methodOf(pointerType))
         : model,
     CancelledCloseWatcher: (model, _message, $) =>
-      $.props.open && topmost(model) ? dismiss(model, $, "close-watcher", null) : model,
+      $.props.open && topmost(model) ? dismiss($, "close-watcher", null) : model,
     FocusedOutside: (model, _message, $) =>
       $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true
-        ? dismiss(model, $, "focus-out", null)
+        ? dismiss($, "focus-out", null)
         : model,
     ShowedPortal: (model, _message, $) =>
       $.props.open
-        ? { ...model, mounted: true, reason: null, closeMethod: null }
+        ? $.evolve({ mounted: true, reason: null, closeMethod: null })
         : model.mounted
         ? model
-        : { ...model, mounted: true },
-    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? { ...model, started: true } : model,
+        : $.evolve({ mounted: true }),
+    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? $.evolve({ started: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model
       if (open) return $.set(model).emit(DialogEvents.Settled({ open }))
       return model.mounted && $.props.holdExit !== true
-        ? $.set({ ...model, mounted: false, started: false, openMethod: null }).emit(DialogEvents.Settled({ open }))
+        ? $.evolve({ mounted: false, started: false, openMethod: null }).emit(DialogEvents.Settled({ open }))
         : model
     },
-    ChangedNested: (model, { count }) => ({ ...model, nestedOpen: count })
+    ChangedNested: (_model, { count }, $) => $.evolve({ nestedOpen: count })
   },
   parts: (model, p) => {
     const props = p.props

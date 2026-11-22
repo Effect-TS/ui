@@ -97,7 +97,7 @@
  * }).make({
  *   init: () => ({ tab: "overview" }),
  *   update: {
- *     SelectedTab: (model, { value }) => ({ ...model, tab: value })
+ *     SelectedTab: (_model, { value }, $) => $.evolve({ tab: value })
  *   },
  *   view: (model, h) =>
  *     Tabs(h, {
@@ -138,6 +138,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -286,7 +287,7 @@ const Step = Schema.Literals(["first", "previous", "next", "last"])
 
 type Step = typeof Step.Type
 
-const Message = UiSchema.TaggedEnum({
+const TabsMessage = UiSchema.TaggedEnum({
   ClickedTab: { value: Schema.String },
   FocusedTab: { value: Schema.String },
   BlurredTab: {},
@@ -299,9 +300,9 @@ const Message = UiSchema.TaggedEnum({
   MeasuredActiveTab: { sized: Schema.Boolean }
 })
 
-type Message = typeof Message.Type
+type TabsMessage = typeof TabsMessage.Type
 
-const Model = Schema.Struct({
+const TabsModel = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
   focused: Schema.Boolean,
   secondary: Schema.NullOr(Schema.String),
@@ -312,9 +313,9 @@ const Model = Schema.Struct({
   indicator: Schema.Boolean
 })
 
-type Model = typeof Model.Type
+type TabsModel = typeof TabsModel.Type
 
-type TabsUpdate = Component.Update<Model, Message, TabsEvents, TabsProps>
+type TabsUpdate = Component.Update<TabsModel, TabsMessage, TabsEvents, TabsProps>
 
 const Tab = Html.ref("TabsTab", "button")
 
@@ -337,9 +338,8 @@ const directionOf = (
 
 // The panels follow `value` from the render it changes in, before `update` hears
 // of the change, so the new panel's first frame already has its starting style.
-const phaseOf = (model: Model, props: TabsProps, rtl: boolean): Model =>
-  props.value === model.shown ? model : {
-    ...model,
+const phaseOf = (model: TabsModel, props: TabsProps, rtl: boolean): TabsModel =>
+  props.value === model.shown ? model : UiStruct.evolve(model, {
     highlighted: !model.focused && enabledIn(props.tabs, props.value) ? props.value : model.highlighted,
     shown: props.value,
     leaving: [
@@ -349,7 +349,7 @@ const phaseOf = (model: Model, props: TabsProps, rtl: boolean): Model =>
     started: false,
     direction: directionOf(props, rtl, model.shown, props.value),
     indicator: props.value === null ? false : model.indicator
-  }
+  })
 
 const enabledIn = (tabs: ReadonlyArray<TabsTab>, value: string | null): value is string => {
   const tab = tabs[indexOf(tabs, value)]
@@ -359,7 +359,7 @@ const enabledIn = (tabs: ReadonlyArray<TabsTab>, value: string | null): value is
 const rtlOf = ($: { readonly shared: { readonly provider?: { readonly direction: string } | undefined } }) =>
   $.shared.provider?.direction === "rtl"
 
-const activate = (model: Model, $: TabsUpdate, value: string) => {
+const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
   if (!enabledIn($.props.tabs, value) || value === $.props.value) return model
   return $.set(model).emit(
     TabsEvents.Selected({ value, activationDirection: directionOf($.props, rtlOf($), $.props.value, value) })
@@ -375,7 +375,7 @@ const stepOf = (key: string, orientation: TabsOrientation, rtl: boolean): Step |
   return undefined
 }
 
-const navigate = (model: Model, $: TabsUpdate, value: string, to: Step) => {
+const navigate = (model: TabsModel, $: TabsUpdate, value: string, to: Step) => {
   const tabs = $.props.tabs
   const from = indexOf(tabs, value)
   if (from < 0) return model
@@ -387,7 +387,7 @@ const navigate = (model: Model, $: TabsUpdate, value: string, to: Step) => {
     : stepped(from, last, to === "next" ? 1 : -1, $.props.loopFocus !== false ? "wrap" : "none")
   const tab = tabs[target]
   if (tab === undefined || target === from) return model
-  return $.set({ ...model, highlighted: tab.value }).run(
+  return $.set(model).evolve({ highlighted: tab.value }).run(
     DomCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
   )
 }
@@ -396,19 +396,19 @@ const TrackPanel = Mount.makeStream(
   "TrackPanel",
   { args: { value: Schema.String, status: Schema.Literals(["starting", "ending"]) } },
   (node: unknown, initial, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<TabsMessage>((queue) =>
       Effect.gen(function*() {
         if (!isHTMLElement(node)) return
         const frame = frameOf(node.ownerDocument.defaultView)
-        const send = (message: Message) => Queue.offerUnsafe(queue, message)
+        const send = (message: TabsMessage) => Queue.offerUnsafe(queue, message)
         let generation = 0
         const follow = ({ status, value }: typeof initial) => {
           const mine = ++generation
           const live = () => mine === generation && node.isConnected
           if (status === "starting") {
-            frame(() => frame(() => live() && send(Message.RenderedFirstFrame({ value }))))
+            frame(() => frame(() => live() && send(TabsMessage.RenderedFirstFrame({ value }))))
           } else {
-            frame(() => whenFinished(() => [node], frame, live, () => send(Message.FinishedTransition({ value }))))
+            frame(() => whenFinished(() => [node], frame, live, () => send(TabsMessage.FinishedTransition({ value }))))
           }
         }
         yield* Effect.addFinalizer(() =>
@@ -614,7 +614,7 @@ const TrackIndicator = Mount.makeStream(
   "TrackIndicator",
   { args: { tab: Schema.NullOr(Schema.String), tabs: Schema.Array(Schema.String) } },
   (node: unknown, initial, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<TabsMessage>((queue) =>
       Effect.gen(function*() {
         if (!isHTMLElement(node)) return
         const document = node.ownerDocument
@@ -627,7 +627,7 @@ const TrackIndicator = Mount.makeStream(
           const tab = args.tab === null ? null : document.getElementById(args.tab)
           const next = view !== null && list !== null && isHTMLElement(tab) && place(node, tab, list, view)
           if (!next) { for (const name of activeTabVars) node.style.removeProperty("--active-tab-" + name) }
-          if (next !== sized) Queue.offerUnsafe(queue, Message.MeasuredActiveTab({ sized: next }))
+          if (next !== sized) Queue.offerUnsafe(queue, TabsMessage.MeasuredActiveTab({ sized: next }))
           sized = next
         }
         const resizeObserver = view === null || typeof view.ResizeObserver === "undefined"
@@ -659,8 +659,8 @@ const TrackIndicator = Mount.makeStream(
 )
 
 const releasedPointer = [
-  DomSubscription.onDocument("pointerup", Message.ReleasedPointer()),
-  DomSubscription.onDocument("pointercancel", Message.ReleasedPointer())
+  DomSubscription.onDocument("pointerup", TabsMessage.ReleasedPointer()),
+  DomSubscription.onDocument("pointercancel", TabsMessage.ReleasedPointer())
 ]
 
 type Keyed<Tag extends string> = View.PartTarget<Tag> & { readonly key: (key: string) => View.PartTarget<Tag> }
@@ -721,8 +721,8 @@ export const Tabs = Component.define({
   name: "Tabs",
   scoped: false,
   props: TabsProps,
-  model: Model,
-  message: Message,
+  model: TabsModel,
+  message: TabsMessage,
   events: TabsEvents,
   shared: {
     provider: { owner: DirectionProvider, optional: true }
@@ -743,30 +743,32 @@ export const Tabs = Component.define({
   update: {
     ClickedTab: (model, { value }, $) => activate(model, $, value),
     FocusedTab: (model, { value }, $) => {
-      const next = { ...model, focused: true, highlighted: value }
+      const next = UiStruct.evolve(model, { focused: true, highlighted: value })
       return $.props.activateOnFocus === true && model.secondary !== value ? activate(next, $, value) : next
     },
-    BlurredTab: (model) => model.focused ? { ...model, focused: false } : model,
-    PressedTab: (model, { button, value }) => {
+    BlurredTab: (model, _message, $) => model.focused ? $.evolve({ focused: false }) : model,
+    PressedTab: (model, { button, value }, $) => {
       const secondary = button === 0 ? null : value
-      return secondary === model.secondary ? model : { ...model, secondary }
+      return secondary === model.secondary ? model : $.evolve({ secondary })
     },
-    ReleasedPointer: (model) => model.secondary === null ? model : { ...model, secondary: null },
+    ReleasedPointer: (model, _message, $) => model.secondary === null ? model : $.evolve({ secondary: null }),
     PressedKey: (model, { to, value }, $) => navigate(model, $, value, to),
     ChangedValue: (model, _message, $) => phaseOf(model, $.props, rtlOf($)),
     RenderedFirstFrame: (model, { value }, $) => {
       const next = phaseOf(model, $.props, rtlOf($))
-      return value === next.shown && !next.started ? { ...next, started: true } : next
+      return value === next.shown && !next.started ? UiStruct.evolve(next, { started: true }) : next
     },
     FinishedTransition: (model, { value }, $) => {
       const next = phaseOf(model, $.props, rtlOf($))
-      return next.leaving.includes(value) ? { ...next, leaving: next.leaving.filter((v) => v !== value) } : next
+      return next.leaving.includes(value)
+        ? UiStruct.evolve(next, { leaving: (leaving) => leaving.filter((v) => v !== value) })
+        : next
     },
-    MeasuredActiveTab: (model, { sized }) => model.indicator === sized ? model : { ...model, indicator: sized }
+    MeasuredActiveTab: (model, { sized }, $) => model.indicator === sized ? model : $.evolve({ indicator: sized })
   },
   subscriptions: (model, props) => [
     props.value !== model.shown &&
-    Subscription.make("changedValue", [props.value], () => Stream.make(Message.ChangedValue())),
+    Subscription.make("changedValue", [props.value], () => Stream.make(TabsMessage.ChangedValue())),
     ...(model.secondary === null ? [] : releasedPointer)
   ],
   parts: (model, p) => {
@@ -813,16 +815,16 @@ export const Tabs = Component.define({
           "data-active": flag(active),
           "data-disabled": flag(disabled)
         })
-        .onClick(Message.ClickedTab({ value }), disabled ? { preventDefault: "always" } : undefined)
+        .onClick(TabsMessage.ClickedTab({ value }), disabled ? { preventDefault: "always" } : undefined)
         .onKeyDown(({ alt, ctrl, key, meta }) => {
           const to = alt || ctrl || meta ? undefined : stepOf(key, orientation, rtl)
-          return to === undefined ? undefined : Message.PressedKey({ value, to })
+          return to === undefined ? undefined : TabsMessage.PressedKey({ value, to })
         }, { preventDefault: true })
-        .onFocus(Message.FocusedTab({ value }))
-        .onBlur(Message.BlurredTab())
+        .onFocus(TabsMessage.FocusedTab({ value }))
+        .onBlur(TabsMessage.BlurredTab())
       const typed = b.tag === "button" ? decorated.attr("type", "button") : decorated
       return props.activateOnFocus === true
-        ? typed.on("pointerdown", ({ button }: Html.PointerPayload) => Message.PressedTab({ value, button }))
+        ? typed.on("pointerdown", ({ button }: Html.PointerPayload) => TabsMessage.PressedTab({ value, button }))
         : typed
     }))
 

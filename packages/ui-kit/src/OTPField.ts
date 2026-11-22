@@ -165,6 +165,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Redacted from "effect/Redacted"
@@ -484,7 +485,7 @@ const settle = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldModel["edit"]
   if (edit.settled) return edit
   return edit.reason !== null && Array.from(Redacted.value(edit.asked)).length === s.length &&
       completes(edit, s.length)
-    ? { ...edit, settled: true }
+    ? UiStruct.evolve(edit, { settled: true })
     : null
 }
 
@@ -505,11 +506,8 @@ const firstEmpty = (s: Settings): number => Math.min(s.characters.length, s.leng
 // A Command moves focus and selects a slot's text a moment after the edit that asked for it, and
 // a key pressed in between reaches the slot as it was. So the Model keeps the slot focus is on its
 // way to, as `target`, until the last `selectSlot` it issued has run, and `moving` counts those.
-const aim = (model: OTPFieldModel, index: number): OTPFieldModel => ({
-  ...model,
-  target: index,
-  moving: model.moving + 1
-})
+const aim = (model: OTPFieldModel, index: number): OTPFieldModel =>
+  UiStruct.evolve(model, { target: index, moving: (moving) => moving + 1 })
 
 const moveTo = (model: OTPFieldModel, $: OTPFieldUpdate, index: number) =>
   $.set(aim(model, index)).run(...focusSlot(index))
@@ -570,13 +568,13 @@ const setValue = (
   const earlier = completed(edit, s)
   const again = unchanged && !unanswered && entry === "input-paste" && characters.length === s.length
   const focus = !unchanged || options.focusWhenUnchanged === true ? options.focus : undefined
-  return $.set({
-    ...(focus === undefined ? model : aim(model, focus)),
-    edit: unchanged
-      ? (unanswered ? { ...edit, reason: entry ?? edit.reason } : null)
-      : { before: Redacted.make(s.stored), asked: Redacted.make(value), reason: entry, settled: false },
-    edits: unchanged ? model.edits : model.edits + 1
-  })
+  return $.set(focus === undefined ? model : aim(model, focus))
+    .evolve({
+      edit: unchanged
+        ? (unanswered ? UiStruct.evolve(edit, { reason: entry ?? edit.reason }) : null)
+        : { before: Redacted.make(s.stored), asked: Redacted.make(value), reason: entry, settled: false },
+      edits: unchanged ? model.edits : model.edits + 1
+    })
     .run(
       ...(focus === undefined ? [] : focusSlot(focus)),
       ...((earlier !== null || again) && $.props.autoSubmit === true ? [submit] : [])
@@ -754,12 +752,12 @@ export const OTPField = Component.define({
     UpdatedSlot: (model, { composing, index, value }, $) => {
       if (locked($.props)) return model
       if ((composing && !model.android) || model.composing === index) {
-        return model.composing === index ? model : { ...model, composing: index }
+        return model.composing === index ? model : $.evolve({ composing: index })
       }
       const s = settingsOf($.props, model.edit)
       const shown = Redacted.value(value)
       if (model.composed === null) return enter(model, $, s, index, shown, "input-change")
-      const next = { ...model, composed: null }
+      const next = UiStruct.evolve(model, { composed: null })
       // Some browsers send one more `input` after `compositionend`, with the text that was just
       // entered or, once the slot is restored, the character it holds.
       const repeated = model.composed.index === index &&
@@ -768,7 +766,7 @@ export const OTPField = Component.define({
     },
     EndedComposition: (model, { index, value }, $) => {
       if (model.composing === null) return model
-      const next = { ...model, composing: null, composed: { index, text: value } }
+      const next = UiStruct.evolve(model, { composing: null, composed: { index, text: value } })
       return locked($.props)
         ? next
         : enter(next, $, settingsOf($.props, model.edit), index, Redacted.value(value), "input-change")
@@ -782,13 +780,13 @@ export const OTPField = Component.define({
     FocusedSlot: (model, { index }, $) => {
       if ($.props.disabled === true) return model
       const s = settingsOf($.props, model.edit)
-      const next = { ...model, focused: true, focusedIndex: index }
+      const next = UiStruct.evolve(model, { focused: true, focusedIndex: index })
       // Focus passing through on its way to `target` is left alone.
       if (model.target !== null && model.target !== index) return next
-      if (index > s.characters.length) return moveTo({ ...model, focused: true }, $, firstEmpty(s))
+      if (index > s.characters.length) return moveTo(UiStruct.evolve(model, { focused: true }), $, firstEmpty(s))
       return model.target === null ? reselect(next, $, index) : next
     },
-    BlurredSlot: (model) => ({ ...model, focused: false, composed: null }),
+    BlurredSlot: (_model, _message, $) => $.evolve({ focused: false, composed: null }),
     FocusedHiddenInput: (model, _message, $) => $.props.disabled === true ? model : moveTo(model, $, 0),
     UpdatedHiddenInput: (model, { value }, $) => {
       if (locked($.props)) return model
@@ -803,7 +801,7 @@ export const OTPField = Component.define({
       const s = settingsOf($.props)
       const complete = completed(model.edit, s)
       const edit = settle(model.edit, s)
-      const next = edit === model.edit ? model : { ...model, edit }
+      const next = edit === model.edit ? model : UiStruct.evolve(model, { edit })
       const at = model.target ?? (model.focused ? model.focusedIndex : null)
       const back = !s.disabled && at !== null && at > s.characters.length
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next
@@ -811,11 +809,12 @@ export const OTPField = Component.define({
         .run(...($.props.autoSubmit === true ? [submit] : []))
         .emit(OTPFieldEvents.Completed({ value: Redacted.make(s.stored), reason: complete }))
     },
-    DisabledWhileFocused: (model) => ({ ...model, focused: false, target: null, composing: null, composed: null }),
-    CompletedSelectSlot: (model) =>
-      model.moving > 1 ? { ...model, moving: model.moving - 1 } : { ...model, moving: 0, target: null },
-    CompletedInspectFirstSlot: (model, { android, label }) =>
-      model.android === android && model.label === label ? model : { ...model, android, label }
+    DisabledWhileFocused: (_model, _message, $) =>
+      $.evolve({ focused: false, target: null, composing: null, composed: null }),
+    CompletedSelectSlot: (model, _message, $) =>
+      model.moving > 1 ? $.evolve({ moving: (moving) => moving - 1 }) : $.evolve({ moving: 0, target: null }),
+    CompletedInspectFirstSlot: (model, { android, label }, $) =>
+      model.android === android && model.label === label ? model : $.evolve({ android, label })
   },
   subscriptions: (model, props) => [
     settled(model, props),

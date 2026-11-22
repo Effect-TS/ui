@@ -7,7 +7,7 @@ Frontend packages for [Effect](https://github.com/Effect-TS/effect).
 | Package                             | Description                                                                                                                           |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | [`@effect/ui`](packages/ui)         | A frontend framework whose apps are composed with Layers, with `@effect/ui/html` for the DOM, routing, server rendering and hydration |
-| [`@effect/ui-kit`](packages/ui-kit) | The component library for `@effect/ui`. It has no components yet                                                                      |
+| [`@effect/ui-kit`](packages/ui-kit) | The component library for `@effect/ui`: see [its components](packages/ui-kit/README.md#components)                                    |
 
 Both packages are experimental.
 
