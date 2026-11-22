@@ -4,7 +4,7 @@ import type { FlowProps } from "./Flow.ts"
 
 const plain = (text: string) => [{ text, color: "#000" }]
 
-export const snippet: Snippet = {
+const snippet: Snippet = {
   name: "DialogPage.ts",
   lines: [plain("update: {"), plain("  RequestedOpenConfirm: (_model) => model"), plain("}")]
 }

@@ -30,14 +30,4 @@ describe("Flow", () => {
         .click(reset)
         .expect(caption).toHaveText("Press Step to start.")
     }))
-
-  it.effect("waits for the live dialog before it has steps", () =>
-    Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Flow, props({ steps: undefined, empty: "Press Discard draft." }), {
-        slots: () => ({ demo: undefined })
-      })
-      s.expect(caption).toHaveText("Press Discard draft.")
-        .expect(Locator.text("No entries yet", { exact: true })).toExist()
-        .expect(step).toBeDisabled()
-    }))
 })

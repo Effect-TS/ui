@@ -43,9 +43,6 @@ describe("Foldkit 0.x confirm dialog", () => {
       Story.Command.resolve(Dialog.CloseDialog, Dialog.Message.CompletedCloseDialog()),
       Story.model((state) => expect(transition(state)).toBe("Idle"))
     )
-  })
-
-  it("figure follows the same messages", () => {
     expect(foldkitSteps.filter((step) => step.kind === "message").map((step) => step.name)).toEqual([
       "ClickedOpenConfirm",
       "SucceededShowDialog",
