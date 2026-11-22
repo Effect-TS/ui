@@ -354,10 +354,6 @@ const fieldStateOf = (target: EventTarget | null): FieldState | undefined => {
   return { value: field.value, start: selectionStart, end: selectionEnd, direction: field.selectionDirection ?? "none" }
 }
 
-/**
- * Where `offset` in `current` falls in `next`: with the unchanged text before it, else with the
- * unchanged text after it, else at the same offset.
- */
 const offsetIn = (current: string, next: string, offset: number): number => {
   const max = Math.min(current.length, next.length)
   let prefix = 0
@@ -545,7 +541,6 @@ export const makeHost = (
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
-  /** Each text field's state before every edit since its last restore, for a rejected edit to go back to. */
   const beforeEdits = new WeakMap<globalThis.Node, Array<FieldState>>()
   const recordEdit = (target: EventTarget) => {
     const state = fieldStateOf(target)
@@ -554,17 +549,13 @@ export const makeHost = (
     if (edits === undefined) beforeEdits.set(target as globalThis.Node, [state])
     else edits.push(state)
   }
-  /**
-   * Writes a field's `value`. A browser moves the caret to the end when the text changes, so a focused
-   * text field gets back the selection it had before the edit the Model rejected, or else keeps its
-   * selection and scroll with the text around them. A caret at the end stays at the end.
-   */
+  // Assigning a value that changes the text moves the caret to the end, so the selection is put back.
   const writeValue = (field: HTMLInputElement, value: string) => {
     const root = field.getRootNode() as Document | ShadowRoot
     const state = root.activeElement === field ? fieldStateOf(field) : undefined
     const { scrollLeft, scrollTop } = field
     field.value = value
-    if (state === undefined || (state.start === state.end && state.end === state.value.length)) return
+    if (state === undefined) return
     const shown = field.value
     const edits = beforeEdits.get(field)
     let before: FieldState | undefined
@@ -572,10 +563,10 @@ export const makeHost = (
       if (edits![i]!.value === shown) before = edits![i]
     }
     if (before !== undefined) field.setSelectionRange(before.start, before.end, before.direction)
-    else {
+    else if (state.start !== state.end || state.end !== state.value.length) {
       const { direction, end, start, value: current } = state
       field.setSelectionRange(offsetIn(current, shown, start), offsetIn(current, shown, end), direction)
-    }
+    } else return
     field.scrollLeft = scrollLeft
     field.scrollTop = scrollTop
   }
@@ -1092,7 +1083,10 @@ export const makeHost = (
       if (target !== null && target !== undefined && "nodeType" in target) {
         const node = target as globalThis.Node
         if (name === "beforeinput") {
-          if ((event as Partial<InputEvent>).isComposing !== true && !composing.has(node)) recordEdit(node)
+          if ((event as Partial<InputEvent>).isComposing !== true && !composing.has(node)) {
+            recordEdit(node)
+            restoreSoon(node)
+          }
         } else if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
           if (name === "compositionstart") recordEdit(node)
           composing.add(node)

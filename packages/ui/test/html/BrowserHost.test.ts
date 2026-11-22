@@ -297,7 +297,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(Fields, {}, app)
         return (name: string) => HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement
       })
-      /** Edits `field` as a browser does: `beforeinput`, then the new text and caret, then `input`. */
       const edit = (field: HTMLInputElement, value: string, caret: number) => {
         field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" }))
         field.value = value
@@ -323,6 +322,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           edit(field, "1a56", 2)
           yield* tick
           expect(selection(field)).toEqual(["123456", 1, 4])
+          field.setSelectionRange(3, 6)
+          edit(field, "123a", 4)
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 6])
         }).pipe(Effect.scoped))
 
       it.effect("a normalized value keeps the caret with the text around it, and at the end", () =>
@@ -361,8 +364,20 @@ describe("BrowserHost", { concurrent: false }, () => {
           yield* tick
           expect(selection(pushed)).toEqual(["hello", 2, 5])
           expect(selection(other)).toEqual(["hello", 5, 5])
+          const push = () => HtmlLocator.click(HtmlLocator.getByRole(pushed.parentElement!, "button", { name: "Push" }))
+          pushed.setSelectionRange(1, 1)
+          pushed.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
+          pushed.dispatchEvent(
+            new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" })
+          )
+          push()
+          yield* tick
+          pushed.setSelectionRange(3, 3)
+          push()
+          yield* tick
+          expect(selection(pushed)).toEqual(["hello", 3, 3])
           field("Email").focus()
-          HtmlLocator.click(HtmlLocator.getByRole(pushed.parentElement!, "button", { name: "Push" }))
+          push()
           yield* tick
           expect(field("Email").value).toBe("hello world")
         }).pipe(Effect.scoped))
