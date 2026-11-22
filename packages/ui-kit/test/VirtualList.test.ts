@@ -1,5 +1,5 @@
 import { Component, type Mount, type View } from "@effect/ui"
-import { VirtualList, VirtualListEvents, type VirtualListProps } from "@effect/ui-kit"
+import { VirtualList, VirtualListEvents, type VirtualListProps, VirtualListTrackedEvents } from "@effect/ui-kit"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -114,6 +114,22 @@ describe("VirtualList", () => {
 
       s.mounted(tracked(s), moved(1010, 90))
       assert.deepStrictEqual(s.current.emitted, [])
+    }))
+
+  it.effect("renders ahead as far as the last scroll moved, and not after a jump", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn())
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54))
+      assert.deepStrictEqual(indices(s), span(50, 54))
+
+      s.mounted(tracked(s), moved(960)).emitted(scrolled(48, 52))
+      assert.deepStrictEqual(indices(s), span(46, 52))
+
+      s.mounted(tracked(s), moved(1060)).emitted(scrolled(53, 57))
+      assert.deepStrictEqual(indices(s), span(53, 62))
+
+      s.mounted(tracked(s), moved(5000)).emitted(scrolled(250, 254))
+      assert.deepStrictEqual(indices(s), span(250, 254))
     }))
 
   it.effect("keeps measured sizes and estimates the rest from their average", () =>
@@ -324,8 +340,8 @@ describe("VirtualList", () => {
       assert.deepStrictEqual(quiet.current.emitted, [])
 
       const s = yield* Scene.make(VirtualList, { ...base, trackScroll: true }, makeStandIn())
-      s.mounted(tracked(s), sent("ScrolledViewport", at)).emitted(VirtualListEvents.ScrolledTo(at))
-      s.mounted(tracked(s), sent("EndedScroll")).emitted(VirtualListEvents.StoppedScrolling())
+      s.mounted(tracked(s), sent("ScrolledViewport", at)).emitted(VirtualListTrackedEvents.ScrolledTo(at))
+      s.mounted(tracked(s), sent("EndedScroll")).emitted(VirtualListTrackedEvents.StoppedScrolling())
     }))
 
   it.effect("drops what it measured when the dataset changes", () =>

@@ -66,9 +66,7 @@ const ChatDemoNoDeps = Component.define({
         },
         onEmit: {
           // Ask for the next page while a few screens of messages are left.
-          Scrolled: ({ first }) => first < 20 ? ChatMessage.ApproachedStart() : undefined,
-          ScrolledTo: () => undefined,
-          StoppedScrolling: () => undefined
+          Scrolled: ({ first }) => first < 20 ? ChatMessage.ApproachedStart() : undefined
         },
         view: (virtualList) =>
           virtualList.viewport(h.div.class("scroller chat").attr("data-at-start", String(virtualList.atStart)))

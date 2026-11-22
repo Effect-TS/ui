@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { VirtualList, VirtualListEvents } from "@effect/ui-kit"
+import { VirtualList, VirtualListTrackedEvents } from "@effect/ui-kit"
 import { Schema } from "effect"
 import { Html, textOf } from "./shared.ts"
 
@@ -58,7 +58,7 @@ export const ProgressDemo = Component.define({
         props: { count: 2000, itemSize: 72, trackScroll: model.track },
         // One callback for all of the list's events.
         onEmit: (event) =>
-          VirtualListEvents.match(event, {
+          VirtualListTrackedEvents.match(event, {
             Scrolled: () => ProgressMessage.Scrolled(),
             ScrolledTo: ({ height, length, offset }) => ProgressMessage.ScrolledTo({ offset, height, length }),
             StoppedScrolling: () => ProgressMessage.StoppedScrolling()
