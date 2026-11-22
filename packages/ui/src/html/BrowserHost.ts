@@ -36,6 +36,12 @@
  * Every `toggle` is sent, including a coalesced one whose states are equal,
  * since it may be the only report of a change.
  *
+ * Showing a modal dialog or a popover doesn't scroll the page. A browser
+ * focuses something inside a `<dialog>` as it shows it and scrolls to it,
+ * so the host puts the page's scroll position back after each
+ * `showModal()` and `showPopover()`, which also stops a smooth scroll the
+ * focus started.
+ *
  * A handler set with `{ preventDefault: true }` cancels its event's default
  * when it produces a message, before the message is sent, and leaves the
  * event alone when it returns `undefined`. Nothing else is cancelled, and the
@@ -398,6 +404,11 @@ const payloadOf = (
         pointerType: pressedWith(name, event, pointer)
       }
     }
+    case "mouseenter":
+    case "mouseleave": {
+      const e = event as MouseEvent
+      return { x: e.clientX ?? 0, y: e.clientY ?? 0 }
+    }
     case "keydown":
     case "keyup": {
       const e = event as KeyboardEvent
@@ -510,6 +521,17 @@ export const makeHost = (
       setTimeout(f, 0)
     }
 
+  // A browser focuses inside a dialog as it shows it and scrolls there. Scrolling back to where the page
+  // was, even when it hasn't moved yet, also cancels a smooth scroll the focus started.
+  const keepingScroll = (show: () => void) => {
+    const view = document.defaultView
+    if (view === null || typeof view.scrollTo !== "function") return show()
+    const left = view.scrollX
+    const top = view.scrollY
+    show()
+    view.scrollTo({ left, top, behavior: "instant" })
+  }
+
   // -- dialogs -----------------------------------------------------------------
   // A dialog's `open` is `false`, `true` or `"modal"`. `showModal()` needs a connected dialog, so a modal
   // is shown at the commit. Closing always goes through `close()`: setting `open` to false on a modal
@@ -602,7 +624,7 @@ export const makeHost = (
     // Between non-modal and modal the browser needs a close first. That close isn't the app's.
     if (current !== false) closeDialog(dialog, true)
     if (want === "modal") {
-      dialog.showModal()
+      keepingScroll(() => dialog.showModal())
       modals.add(dialog)
       modalPseudo ??= matchesModal(dialog)
     } else {
@@ -642,7 +664,7 @@ export const makeHost = (
     if (want) {
       if (!now) popoversToShow.add(element)
       else if (element.isConnected && element.hasAttribute("popover") && !popoverShowing(element)) {
-        element.showPopover()
+        keepingScroll(() => element.showPopover())
       }
       return
     }
@@ -668,7 +690,7 @@ export const makeHost = (
       // One that left the document is forgotten; a render that brings it back queues it again.
       if (!element.isConnected || !element.hasAttribute("popover")) continue
       if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
-      element.showPopover()
+      keepingScroll(() => element.showPopover())
     }
   }
 
