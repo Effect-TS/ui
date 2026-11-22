@@ -1058,13 +1058,15 @@ export const Popover = Component.define({
     const portalPart = p.part("dialog", (b) =>
       b.forward((node) =>
         tracked.positionMethod === "absolute"
-          ? node.attr("style", withStyle(node.attrs.style, "position:absolute;inset:0 auto auto 0"))
+          ? node.attr("style", withStyle(node.elementAttrs.style, "position:absolute;inset:0 auto auto 0"))
           : node
       ))
     const backdropPart = p.part(
       "div",
       (b) =>
-        b.forward((node) => byHover ? node.attr("style", withStyle(node.attrs.style, "pointer-events:none")) : node)
+        b.forward((node) =>
+          byHover ? node.attr("style", withStyle(node.elementAttrs.style, "pointer-events:none")) : node
+        )
     )
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
@@ -1074,7 +1076,7 @@ export const Popover = Component.define({
         .attr("data-anchor-hidden", flag(open && placement?.anchorHidden))
         .on("mouseenter", Message.EnteredPositioner())
         .on("mouseleave", Message.LeftPositioner())
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       return open
         ? decorated.onMount(
           Positioning.TrackPosition(tracked).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
@@ -1087,7 +1089,7 @@ export const Popover = Component.define({
         .attr("id", arrowId)
         .attr("aria-hidden", "true")
         .attr("data-uncentered", flag(placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
 
     return p.child(Dialog, {
       props: {
