@@ -65,7 +65,7 @@ describe("VirtualList", () => {
 
   it("takes a table, its body and its rows", () => {
     VirtualList(h, {
-      props: { count: 100, itemSize: 32 },
+      props: { count: 100, itemSize: 32, scrollContainer: { selector: "main" } },
       view: (virtualList) => {
         expect(virtualList.table(h.table)).type.toBe<Table>()
         expect(virtualList.list(h.tbody)).type.toBe<Tbody>()
@@ -95,6 +95,10 @@ describe("VirtualList", () => {
     expect(VirtualList).type.not.toBeCallableWith(h, { props: { count: 1 }, view: () => h.div })
     expect(VirtualList).type.not.toBeCallableWith(h, {
       props: { count: 1, itemSize: 20, contentAlignment: "middle" },
+      view: () => h.div
+    })
+    expect(VirtualList).type.not.toBeCallableWith(h, {
+      props: { count: 1, itemSize: 20, layout: "grid" },
       view: () => h.div
     })
     VirtualList(h, {

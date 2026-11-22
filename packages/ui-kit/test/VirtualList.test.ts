@@ -239,6 +239,8 @@ describe("VirtualList", () => {
       s.expectMount(tracked(s))
       assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-posinset"], "201")
       assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "10000")
+      s.props({ ...base, setSize: -1 })
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "-1")
     }))
 
   it.effect("writes the size of each item it doesn't measure", () =>
@@ -260,6 +262,8 @@ describe("VirtualList", () => {
       const s = yield* Scene.make(VirtualList, { ...base, reserveStart: 400 }, makeStandIn())
       s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:400px")
+      s.props(base)
+      assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:0px")
     }))
 
   it.effect("stands in for the rows left out of a table body with empty rows", () =>
@@ -277,11 +281,11 @@ describe("VirtualList", () => {
             )
           )
       })
+      const rows = () =>
+        (s.get(listLoc).children ?? []).map((node) => [node.attrs?.style ?? "", node.attrs?.["aria-rowindex"]])
+      assert.deepStrictEqual(rows(), [["", "2"], ["height:19980px", undefined]])
       s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
-      const rows = (s.get(listLoc).children ?? []).map((
-        node
-      ) => [node.attrs?.style ?? "", node.attrs?.["aria-rowindex"]])
-      assert.deepStrictEqual(rows, [
+      assert.deepStrictEqual(rows(), [
         ["height:1000px", undefined],
         ...span(50, 54).map((index) => ["", String(index + 2)]),
         ["height:18900px", undefined]
@@ -292,7 +296,15 @@ describe("VirtualList", () => {
 
   it.effect("places each item with a transform in the absolute layout", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(VirtualList, { ...base, layout: "absolute", overscan: 0 }, makeStandIn())
+      const s = yield* Scene.make(
+        VirtualList,
+        { ...base, layout: "absolute", overscan: 0, initialCount: 2 },
+        makeStandIn()
+      )
+      assert.strictEqual(
+        s.all(itemLoc)[1]!.attrs?.style,
+        "position:absolute;inset-inline:0;top:0;transform:translateY(20px)"
+      )
       s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
       assert.strictEqual(
         s.get(listLoc).attrs?.style,
