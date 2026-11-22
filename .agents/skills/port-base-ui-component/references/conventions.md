@@ -99,6 +99,14 @@ tracks focus as `field.group` does and writes no `role` and no
 `aria-labelledby`, so the control's own label part names the trigger. The
 same rule about `focusin` and `focusout` applies.
 
+A context that wraps several fields, as `Fieldset` does, reaches `Field`
+through shared state: `Fieldset` has `shares`, and `Field` reads it with an
+optional `shared` entry, so a field with no fieldset above needs nothing.
+The chain stops at the field. A control still takes `disabled` from its
+field's parts, and never reads the fieldset. A component can't share what it
+read from its own kind, so a nested `Fieldset` takes the outer one's state as
+a prop, `disabled: outer.disabled || own`.
+
 ARIA allows `aria-invalid` on `radiogroup` and not on `radio`, the reverse
 of a checkbox or a slider. So RadioGroup takes `invalid: field.invalid` and
 writes `aria-invalid` on its root, and the radio's root removes the one

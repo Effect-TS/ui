@@ -325,6 +325,10 @@ const containsTarget = (element: globalThis.Element, target: EventTarget | null)
   }
 }
 
+const isDisabled = (target: EventTarget | null): boolean =>
+  typeof (target as globalThis.Element | null)?.matches === "function" &&
+  (target as globalThis.Element).matches(":disabled")
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -386,9 +390,16 @@ const payloadOf = (
       return { cancelable: event.cancelable }
     case "scroll":
       return { top: element.scrollTop, left: element.scrollLeft }
+    case "blur":
+      // A window listener's `blur` has no element that lost focus.
+      return target === element ? { disabled: isDisabled(target) } : {}
     case "focusin":
-    case "focusout":
       return { within: containsTarget(element, (event as FocusEvent).relatedTarget) }
+    case "focusout":
+      return {
+        within: containsTarget(element, (event as FocusEvent).relatedTarget),
+        disabled: isDisabled(target)
+      }
     default:
       return {}
   }
