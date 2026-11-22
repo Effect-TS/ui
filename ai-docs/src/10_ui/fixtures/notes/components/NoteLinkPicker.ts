@@ -1,8 +1,8 @@
+import { ListNotes } from "#queries/ListNotes"
 import { Component, UiSchema } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Listbox } from "../../kit/Listbox.ts"
-import { ListNotes } from "../../queries/ListNotes.ts"
 import { Notes } from "../services/Notes.ts"
 
 export const NoteLinkPickerMessage = UiSchema.TaggedEnum({ PickedLink: { id: Schema.String } })

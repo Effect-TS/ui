@@ -1,9 +1,9 @@
+import { ListNotes } from "#queries/ListNotes"
 import { Component, Head, UiSchema } from "@effect/ui"
 import { HtmlHead } from "@effect/ui/html"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Notes } from "../notes/services/Notes.ts"
-import { ListNotes } from "../queries/ListNotes.ts"
 import { AppRoute } from "../routes.ts"
 
 const noteUrl = (id: string) => AppRoute.print(AppRoute.Note({ params: { id } }))

@@ -558,9 +558,10 @@ platform Layers, and it defines no components. The app is in
 `ai-docs/src/10_ui/fixtures`, laid out as it would be under `src/` in a real
 app. Read an example, then the files it imports.
 
-Put shared types in one top-level `domain` folder and queries in one top-level
-`queries` folder. Group services and components by feature, then by kind
-within each feature:
+Put shared types in one top-level `domain` folder, queries in a top-level
+`queries` folder, and app components shared across features or pages in a
+top-level `components` folder. Group services and feature-only components by
+feature, then by kind within each feature:
 
 ```text
 fixtures/
@@ -595,32 +596,39 @@ each other without one feature importing another.
 feature subfolders (such as `queries/people/SearchPeople.ts`) as the folder
 grows. Queries import `domain` and services; pages and components import them.
 
-Services and their Layers, and components, stay in a feature. A second
-feature is a sibling of `notes/`, with its types in `domain` next to
-`Note.ts`. Pages import features and queries, and neither imports pages. Keep
-`AppRoute` in `routes.ts`, outside `pages/` and separate from `App.ts`; pages
-can then build links without importing the root component that imports them.
+App components used by more than one feature or page go in a top-level
+`components/` folder (unlike `kit/`, which holds unstyled headless primitives
+no feature owns). Services and their Layers, and components only one feature
+uses, stay in that feature. A second feature is a sibling of `notes/`, with
+its types in `domain` next to `Note.ts`. Pages import features, shared
+components and queries, and none of them imports pages. Keep `AppRoute` in
+`routes.ts`, outside `pages/` and separate from `App.ts`; pages can then
+build links without importing the root component that imports them.
 
-From outside `domain`, import it through a subpath import, declared once in
-the app's `package.json`:
+From outside `domain` or `queries`, import them through subpath imports
+declared once in the app's `package.json`. You can map `#components/*` the
+same way for a top-level `components` folder:
 
 ```json
 {
   "imports": {
-    "#domain/*": "./src/domain/*.ts"
+    "#components/*": "./src/components/*.ts",
+    "#domain/*": "./src/domain/*.ts",
+    "#queries/*": "./src/queries/*.ts"
   }
 }
 ```
 
 ```ts
 import { Note } from "#domain/Note"
+import { ListNotes } from "#queries/ListNotes"
 ```
 
 Node, TypeScript, Vite and Vitest all read the `imports` field with no other
-config, so a server entry that imports `domain` still runs under plain `node`.
-The mapping adds the `.ts`, so the specifier has none: with
+config, so a server entry that imports `domain` or `queries` still runs under
+plain `node`. The mapping adds the `.ts`, so the specifier has none: with
 `rewriteRelativeImportExtensions` set, TypeScript accepts `.ts` only on a
-relative specifier. Between domain files, and everywhere else, imports stay
+relative specifier. Within `domain`, and everywhere else, imports stay
 relative, with their `.ts` extension.
 
 Keep one file per route in `pages/`, in folders that mirror the URL. A page's

@@ -4,7 +4,8 @@
   "type": "module",
   "version": "0.0.0",
   "imports": {
-    "#domain/*": "./src/10_ui/fixtures/domain/*.ts"
+    "#domain/*": "./src/10_ui/fixtures/domain/*.ts",
+    "#queries/*": "./src/10_ui/fixtures/queries/*.ts"
   },
   "dependencies": {
     "@effect/platform-node": "^4.1.4",

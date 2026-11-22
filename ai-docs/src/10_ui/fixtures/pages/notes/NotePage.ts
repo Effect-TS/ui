@@ -1,3 +1,4 @@
+import { GetNote } from "#queries/GetNote"
 import { Component, Head, UiSchema } from "@effect/ui"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -6,7 +7,6 @@ import { ActivityLog } from "../../notes/components/ActivityLog.ts"
 import { NoteActivity } from "../../notes/components/NoteActivity.ts"
 import { NoteEditor } from "../../notes/components/NoteEditor.ts"
 import { Notes } from "../../notes/services/Notes.ts"
-import { GetNote } from "../../queries/GetNote.ts"
 
 export const NotePageMessage = UiSchema.TaggedEnum({
   SavedNote: {},
