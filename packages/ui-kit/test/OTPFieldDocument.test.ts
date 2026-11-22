@@ -253,8 +253,9 @@ describe("OTPField in a document", { concurrent: false }, () => {
 
   it.effect("message log Wire entries redact the code and use non-secret settled subscription deps", () =>
     Effect.gen(function*() {
-      const secret = "K9Q7M2"
-      const rejectedText = "K9Q7!Z8X"
+      const typed = "Q7X"
+      const rejectedText = "!!!@@@"
+      const secret = "K9M4P2"
       const memory = MessageLog.makeMemory()
       const Msg = UiSchema.TaggedEnum({
         Updated: { value: Schema.Redacted(Schema.String) },
@@ -301,19 +302,25 @@ describe("OTPField in a document", { concurrent: false }, () => {
         slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
           clipboardData: { getData: () => text }
         }))
-      slots[0]!.value = "K"
+      slots[0]!.value = typed
       slots[0]!.dispatchEvent(new InputEvent("input", { bubbles: true }))
       yield* tick
+      assert.isFalse(root.model()?.done)
+      assert.strictEqual(Redacted.value(root.model()!.code), typed)
       paste(rejectedText)
       yield* tick
+      assert.isFalse(root.model()?.done)
+      assert.strictEqual(Redacted.value(root.model()!.code), typed)
       paste(secret)
       yield* tick
       assert.isTrue(root.model()?.done)
+      assert.strictEqual(Redacted.value(root.model()!.code), secret)
       const encoder = MessageLog.makeEncoder()
       const wire = memory.entries().map((entry) => encoder.encode(entry))
       const json = JSON.stringify(wire)
-      assert.notInclude(json, secret)
+      assert.notInclude(json, typed)
       assert.notInclude(json, rejectedText)
+      assert.notInclude(json, secret)
       const settledEntries = wire.filter((entry) => entry._tag === "SubscriptionStarted" && entry.name === "settled")
       assert.isNotEmpty(settledEntries)
       for (const entry of settledEntries) {

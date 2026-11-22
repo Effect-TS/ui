@@ -1,5 +1,5 @@
 import type { Mount } from "@effect/ui"
-import { Component, UiSchema, View } from "@effect/ui"
+import { Component, View } from "@effect/ui"
 import {
   DirectionProvider,
   OTPField,
@@ -430,21 +430,21 @@ describe("OTPField", () => {
   it.effect("server-rendered page state and non-input markup do not leak the verification code", () =>
     Effect.gen(function*() {
       const secret = "847291"
-      const Msg = UiSchema.TaggedEnum({ Updated: { value: Schema.Redacted(Schema.String) } })
       const Page = Component.define({
         name: "VerifyPage",
         scoped: false,
-        model: Schema.Struct({ code: Schema.Redacted(Schema.String) }),
-        message: Msg,
+        model: Schema.Struct({}),
+        message: Schema.Never,
         elements: Html
       }).make({
-        init: () => ({ code: Redacted.make(secret) }),
-        update: { Updated: (_model, { value }) => ({ code: value }) },
-        view: (model, h) =>
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) =>
           OTPField(h, {
-            props: { value: model.code, length: 6, name: "code" },
+            key: "otp",
+            props: { value: Redacted.make(secret), length: 6, name: "code" },
             onEmit: {
-              Updated: ({ value }) => Msg.Updated({ value }),
+              Updated: () => undefined,
               Completed: () => undefined,
               Rejected: () => undefined
             },
@@ -455,7 +455,10 @@ describe("OTPField", () => {
           })
       })
       const { html, state } = yield* HtmlServer.renderToHtml(Page, {})
+      assert.deepStrictEqual(state["/VerifyPage"], {})
+      assert.deepStrictEqual(state["~deferred"], ["/VerifyPage/OTPField[otp]"])
       assert.notInclude(JSON.stringify(state), secret)
+      assert.include(html, `value="${secret}"`)
       const withoutInputValues = html.replace(/<input\b[^>]*>/g, (tag) => tag.replace(/\svalue="[^"]*"/g, ""))
       assert.notInclude(withoutInputValues, secret)
     }))
