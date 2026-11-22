@@ -29,6 +29,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Drawer](src/Drawer.ts): a `Dialog` that slides in from an edge of the screen. A swipe toward that edge dismisses it once it travels far enough or is released fast enough. It has snap points, drawers nested in one another, and swipe areas that open it.
 - [DrawerProvider](src/Drawer.ts): scales the page behind the drawers inside it while one is open, as a native sheet does.
 - [Field](src/Field.ts): a label, a description and an error for a form control or a group of them, such as a range slider, with its validity, touched and focused state.
+- [Fieldset](src/Fieldset.ts): a native fieldset named by a legend, around several fields, which disables every control and every `Field` inside it at once.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
