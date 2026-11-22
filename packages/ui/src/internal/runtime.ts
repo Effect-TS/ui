@@ -5168,7 +5168,7 @@ const setup = (
   const eventsOf = (inst: Instance, view: View.Element<any, any>): Renderer.Events =>
     view.owned === undefined || view.owned.length === 0
       ? { handlers: view.handlers, dispatch: inst.author.fire, options: view.eventOptions }
-      : layeredEvents(inst, view, view.owned)
+      : layeredEvents(inst, view, view.owned.filter((layer) => owners.get(layer.owner)?.closed !== true))
 
   /** With owned layers, each event gets one `Layered` value, which the host hands back to `fireLayered`. */
   const layeredEvents = (

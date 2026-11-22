@@ -552,4 +552,60 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       app.querySelector("button")!.dispatchEvent(event)
       assert.isTrue(event.defaultPrevented)
     }).pipe(Effect.scoped))
+
+  it.effect("synchronous focusout during removal of a headless part does not throw or invoke the closed owner", () =>
+    Effect.gen(function*() {
+      let calls = 0
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Literal("out"),
+        elements: Html
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        parts: (_, p) => ({
+          root: p.part("div", (b) =>
+            b.on("focusout", () => {
+              calls++
+              return "out" as const
+            }))
+        })
+      })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Literal("hide"),
+        elements: Html
+      }).make({
+        init: () => true,
+        update: () => false,
+        view: (shown, h) =>
+          h.main(shown ? Frame(h, { view: (frame) => frame.root(h.div).children(h.button) }) : h.p("gone"))
+      })
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(Page, {}, app)
+      const main = app.querySelector("main")!
+      const button = main.querySelector("button")!
+      const focusout = () => button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+      focusout()
+      assert.strictEqual(calls, 1)
+      let thrown: unknown
+      const removeChild = main.removeChild.bind(main)
+      main.removeChild = ((child: Node) => {
+        try {
+          focusout()
+        } catch (error) {
+          thrown = error
+        }
+        return removeChild(child)
+      }) as typeof main.removeChild
+      root.send("hide")
+      yield* tick
+      assert.isUndefined(thrown)
+      assert.strictEqual(calls, 1)
+      assert.strictEqual(main.textContent, "gone")
+    }).pipe(Effect.scoped))
 })
