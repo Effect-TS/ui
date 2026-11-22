@@ -6,7 +6,7 @@ const plain = (text: string) => [{ text, light: "#000", dark: "#fff" }]
 
 export const snippet: Snippet = {
   name: "DialogPage.ts",
-  lines: [plain("update: {"), plain("  OpenedConfirm: (_model) => model"), plain("}")]
+  lines: [plain("update: {"), plain("  RequestedOpenConfirm: (_model) => model"), plain("}")]
 }
 
 export const press = step({
@@ -21,10 +21,10 @@ export const press = step({
 export const opened = step({
   kind: "message",
   at: "page",
-  name: "OpenedConfirm",
+  name: "RequestedOpenConfirm",
   where: "/DialogPage",
   caption: "The page sets confirm to true.",
-  line: "OpenedConfirm:",
+  line: "RequestedOpenConfirm:",
   page: ["confirm: true"]
 })
 

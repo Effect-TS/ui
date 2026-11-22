@@ -17,12 +17,12 @@ it.layer(TestHost.layer(), { buildPerTest: true })("DialogTrace", (it) => {
       const steps = play.root.log().flatMap(toSteps)
       assert.deepStrictEqual(steps.map((step) => `${step.kind} ${step.at} ${step.name}`), [
         "message dialog ClickedTrigger",
-        "event dialog Opened",
-        "message page OpenedConfirm",
+        "event dialog RequestedOpen",
+        "message page RequestedOpenConfirm",
         "props dialog open: true",
         "message dialog ClickedClose",
-        "event dialog Dismissed",
-        "message page DismissedConfirm",
+        "event dialog RequestedClose",
+        "message page RequestedCloseConfirm",
         "props dialog open: false"
       ])
       assert.deepStrictEqual(steps.map((step) => step.starts), [true, false, false, false, false, false, false, false])

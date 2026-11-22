@@ -4,8 +4,8 @@ import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 const DialogPageMessage = UiSchema.TaggedEnum({
-  OpenedConfirm: {},
-  DismissedConfirm: {}
+  RequestedOpenConfirm: {},
+  RequestedCloseConfirm: {}
 })
 
 export const DialogPage = Component.define({
@@ -17,15 +17,15 @@ export const DialogPage = Component.define({
 }).make({
   init: () => ({ confirm: false }),
   update: {
-    OpenedConfirm: (_model, _message, $) => $.evolve({ confirm: true }),
-    DismissedConfirm: (_model, _message, $) => $.evolve({ confirm: false })
+    RequestedOpenConfirm: (_model, _message, $) => $.evolve({ confirm: true }),
+    RequestedCloseConfirm: (_model, _message, $) => $.evolve({ confirm: false })
   },
   view: (model, h) =>
     Dialog(h, {
       props: { open: model.confirm },
       onEmit: {
-        Opened: () => DialogPageMessage.OpenedConfirm(),
-        Dismissed: () => DialogPageMessage.DismissedConfirm(),
+        RequestedOpen: () => DialogPageMessage.RequestedOpenConfirm(),
+        RequestedClose: () => DialogPageMessage.RequestedCloseConfirm(),
         Settled: () => undefined
       },
       view: (dialog) =>
