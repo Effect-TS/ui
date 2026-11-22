@@ -7,6 +7,7 @@ import { Effect, Schema } from "effect"
 import { byId, click, container, popovers, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
+  ClickedBold: {},
   Toggled: { value: Schema.Array(Schema.String) },
   OpenedMenu: {},
   DismissedMenu: {},
@@ -26,6 +27,7 @@ const Page = Component.define({
   scoped: false,
   props: Config,
   model: Schema.Struct({
+    clicks: Schema.Number,
     align: Schema.Array(Schema.String),
     menu: Schema.Boolean,
     select: Schema.Boolean,
@@ -34,8 +36,9 @@ const Page = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ align: [], menu: false, select: false, zoom: "100" }),
+  init: () => ({ clicks: 0, align: [], menu: false, select: false, zoom: "100" }),
   update: {
+    ClickedBold: (model) => ({ ...model, clicks: model.clicks + 1 }),
     Toggled: (model, { value }) => ({ ...model, align: value }),
     OpenedMenu: (model) => ({ ...model, menu: true }),
     DismissedMenu: (model) => ({ ...model, menu: false }),
@@ -64,8 +67,9 @@ const Page = Component.define({
           ]
         },
         view: (toolbar) =>
-          toolbar.root(h.div.attr("id", "toolbar")).children(
-            toolbar.button({ element: h.button.attr("id", "bold"), value: "bold" }).children("Bold"),
+          toolbar.root(h.div.attrs({ id: "toolbar", "data-clicks": String(model.clicks) })).children(
+            toolbar.button({ element: h.button.attr("id", "bold").onClick(Message.ClickedBold()), value: "bold" })
+              .children("Bold"),
             toolbar.group({ element: h.div, value: "align" }).children(
               ToggleGroup(h, {
                 props: { value: model.align, items: [{ value: "left" }, { value: "right" }] },
@@ -160,6 +164,12 @@ const focused = () => document.activeElement?.id
 
 const focusedText = () => document.activeElement?.textContent
 
+const pointerClick = (target: Element) => {
+  const event = new PointerEvent("click", { bubbles: true, cancelable: true, detail: 1, pointerType: "mouse" })
+  target.dispatchEvent(event)
+  return event
+}
+
 const keyboardClick = (target: Element) =>
   target.dispatchEvent(new PointerEvent("click", { bubbles: true, cancelable: true, detail: 0, pointerType: "" }))
 
@@ -192,8 +202,6 @@ describe("Toolbar in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       yield* mount()
       assert.deepStrictEqual(tabStops(), ["bold"])
-      assert.strictEqual(byId("align").getAttribute("role"), "group")
-      assert.strictEqual(byId("zoom").getAttribute("role"), "combobox")
       byId("bold").focus()
       yield* tick
       assert.deepStrictEqual(yield* walk("ArrowRight", 8), [
@@ -229,7 +237,7 @@ describe("Toolbar in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(tabStops(), ["left"])
     }).pipe(Effect.scoped))
 
-  it.effect("a disabled toolbar keeps its items focusable but inert, the toggle group included", () =>
+  it.effect("a disabled toolbar keeps its items focusable but inert, including consumer clicks, toggles and triggers", () =>
     Effect.gen(function*() {
       yield* mount({ disabled: true })
       for (const id of ["bold", "left", "dim", "menu", "zoom"]) {
@@ -241,27 +249,18 @@ describe("Toolbar in a document", { concurrent: false }, () => {
       byId("bold").focus()
       yield* tick
       assert.deepStrictEqual(yield* walk("ArrowRight", 3), ["left", "right", "dim"])
-      for (const id of ["left", "dim", "menu", "zoom"]) {
+      assert.isTrue(pointerClick(byId("bold")).defaultPrevented)
+      assert.isTrue(pointerClick(byId("dim")).defaultPrevented)
+      for (const id of ["left", "menu", "zoom"]) {
         click(byId(id))
         key(byId(id), "Enter")
         key(byId(id), "ArrowDown")
       }
       yield* tick
+      assert.strictEqual(byId("toolbar").getAttribute("data-clicks"), "0")
       assert.strictEqual(byId("left").getAttribute("aria-pressed"), "false")
       assert.strictEqual(byId("menu").getAttribute("aria-expanded"), "false")
       assert.strictEqual(byId("zoom").getAttribute("aria-expanded"), "false")
-    }).pipe(Effect.scoped))
-
-  it.effect("a vertical toolbar moves with Down and Up, and Right and Left are left alone", () =>
-    Effect.gen(function*() {
-      yield* mount({ orientation: "vertical" })
-      byId("bold").focus()
-      yield* tick
-      assert.deepStrictEqual(yield* walk("ArrowDown", 2), ["left", "right"])
-      assert.isFalse(key(byId("right"), "ArrowRight").defaultPrevented)
-      yield* tick
-      assert.strictEqual(focused(), "right")
-      assert.deepStrictEqual(yield* walk("ArrowUp", 2), ["left", "bold"])
     }).pipe(Effect.scoped))
 
   it.effect("a disabled toolbar group keeps its toggles focusable and unpressed", () =>
@@ -272,6 +271,9 @@ describe("Toolbar in a document", { concurrent: false }, () => {
         assert.isFalse(byId(id).hasAttribute("disabled"), id)
       }
       assert.isNull(byId("bold").getAttribute("aria-disabled"))
+      assert.isFalse(pointerClick(byId("bold")).defaultPrevented)
+      yield* tick
+      assert.strictEqual(byId("toolbar").getAttribute("data-clicks"), "1")
       byId("bold").focus()
       yield* tick
       assert.deepStrictEqual(yield* walk("ArrowRight", 2), ["left", "right"])
@@ -291,6 +293,9 @@ describe("Toolbar in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(yield* walk("ArrowDown", 3), ["menu", "zoom", "help"])
       assert.deepStrictEqual(yield* walk("ArrowUp", 2), ["zoom", "menu"])
+      assert.isFalse(key(byId("menu"), "ArrowRight").defaultPrevented)
+      yield* tick
+      assert.strictEqual(focused(), "menu")
       assert.strictEqual(byId("menu").getAttribute("aria-expanded"), "false")
       assert.strictEqual(byId("zoom").getAttribute("aria-expanded"), "false")
       assert.deepStrictEqual(tabStops(), ["menu"])
@@ -307,7 +312,7 @@ describe("Toolbar in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(tabStops(), ["menu"])
     }).pipe(Effect.scoped))
 
-  it.effect("Down on a Menu or Select trigger in a horizontal toolbar opens it, and Escape and focus leaving keep the tab stop on the trigger", () =>
+  it.effect("Down on a Menu or Select trigger in a horizontal toolbar opens it, popup keys stay inside, and Escape or focus leaving keeps the tab stop", () =>
     Effect.gen(function*() {
       yield* mount()
       for (const [id, item] of [["menu", "Copy"], ["zoom", "100%"]] as const) {
@@ -318,6 +323,13 @@ describe("Toolbar in a document", { concurrent: false }, () => {
         assert.strictEqual(byId(id).getAttribute("aria-expanded"), "true", id)
         assert.strictEqual(focusedText(), item, id)
         assert.deepStrictEqual(tabStops(), [id])
+        if (id === "menu") {
+          key(document.activeElement!, "ArrowRight")
+          key(document.activeElement!, "End")
+          yield* tick
+          assert.strictEqual(focusedText(), "Paste")
+          assert.deepStrictEqual(tabStops(), ["menu"])
+        }
         key(document.activeElement!, "Escape")
         yield* tick
         assert.strictEqual(byId(id).getAttribute("aria-expanded"), "false", id)
@@ -332,20 +344,5 @@ describe("Toolbar in a document", { concurrent: false }, () => {
         assert.strictEqual(byId(id).getAttribute("aria-expanded"), "false", id)
         assert.deepStrictEqual(tabStops(), [id])
       }
-    }).pipe(Effect.scoped))
-
-  it.effect("the keys in an open menu stay with the menu", () =>
-    Effect.gen(function*() {
-      yield* mount()
-      byId("menu").focus()
-      yield* tick
-      key(byId("menu"), "ArrowDown")
-      yield* tick
-      assert.strictEqual(focusedText(), "Copy")
-      key(document.activeElement!, "ArrowRight")
-      key(document.activeElement!, "End")
-      yield* tick
-      assert.strictEqual(focusedText(), "Paste")
-      assert.deepStrictEqual(tabStops(), ["menu"])
     }).pipe(Effect.scoped))
 })

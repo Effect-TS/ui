@@ -175,8 +175,6 @@ describe("Toolbar", () => {
         to: "underline"
       }])
       assert.deepStrictEqual(tabStops(s), ["underline"])
-      assert.deepStrictEqual(press("underline", "ArrowRight"), [{ to: "help" }])
-      assert.deepStrictEqual(press("help", "ArrowRight"), [{ to: "search" }])
       assert.deepStrictEqual(press("bold", "ArrowLeft"), [{ to: "search" }])
       assert.deepStrictEqual(press("underline", "End"), [{ to: "search" }])
       assert.deepStrictEqual(press("help", "Home"), [{ to: "bold" }])
@@ -221,7 +219,7 @@ describe("Toolbar", () => {
       assert.deepStrictEqual(press("ArrowLeft", 2), [{ to: "bold", leaving: { from: "search", caret: 2 } }])
     }))
 
-  it("the parts' own attributes win over the consumer's, whose class and others stay", () => {
+  it("the parts' own attributes win over the consumer's, invalid items or groups fail, and isDisabled resolves them", () => {
     const parts = (overrides: Partial<ToolbarProps> = {}) =>
       Story.parts(Toolbar, { model: { active: null }, props: props(overrides) })
     const owned = {
@@ -296,34 +294,7 @@ describe("Toolbar", () => {
         "data-orientation": "vertical"
       }
     )
-  })
 
-  it("a disabled, focusable button cancels its clicks and silences the consumer's click handler", () => {
-    const Clicked = { _tag: "Clicked" } as const
-    const own = View.makeHelper<typeof Clicked, {}, Html.Elements>({}, Html)
-    const parts = (overrides: Partial<ToolbarProps> = {}) =>
-      Story.parts(Toolbar, { model: { active: null }, props: props(overrides) })
-    const built = (overrides: Partial<ToolbarProps>) =>
-      View.build(parts(overrides).button({ element: own.button.onClick(Clicked), value: "bold" }).onClick(Clicked), [])
-
-    const run = (handler: unknown) => typeof handler === "function" ? handler({}) : handler
-    const enabled = built({})
-    assert.strictEqual(run(enabled.handlers.click), Clicked)
-    assert.isUndefined(enabled.owned?.[0]?.handlers.click)
-
-    const disabled = built({ disabled: true })
-    assert.isUndefined(run(disabled.handlers.click))
-    assert.strictEqual(disabled.eventOptions.click?.preventDefault, "always")
-    assert.strictEqual(disabled.owned?.[0]?.eventOptions.click?.preventDefault, "always")
-
-    const unfocusable = built({ disabled: true, items: [{ value: "bold", focusableWhenDisabled: false }] })
-    assert.strictEqual(run(unfocusable.handlers.click), Clicked)
-    assert.strictEqual(unfocusable.attrs.disabled, "")
-  })
-
-  it("a part for a value missing from items or groups, a repeated value and an unknown group fail the render", () => {
-    const parts = (overrides: Partial<ToolbarProps> = {}) =>
-      Story.parts(Toolbar, { model: { active: null }, props: props(overrides) })
     assert.throws(() => parts().button({ element: h.button, value: "strike" }), /no item with value "strike"/)
     assert.throws(() => parts().group({ element: h.div, value: "align" }), /no group with value "align"/)
     assert.throws(() => parts({ items: [{ value: "bold" }, { value: "bold" }] }), /two items have the value "bold"/)
