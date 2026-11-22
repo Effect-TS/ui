@@ -203,3 +203,9 @@ export * from "./Tooltip.ts"
  * @since 0.1.0
  */
 export * as VirtualKeyboard from "./VirtualKeyboard.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./VirtualList.ts"
