@@ -13,7 +13,7 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Button", () => {
   it("returns a button of the caller's message type, whose chained children keep their requirements", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {

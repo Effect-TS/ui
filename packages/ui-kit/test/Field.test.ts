@@ -56,7 +56,7 @@ describe("Field", () => {
       const state = () => [s.get(control).attrs?.["data-focused"], s.get(control).attrs?.["data-touched"]]
       s.fire(control, "focus").props({ described: true, disabled: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
-      s.subscription("lostFocus", { _tag: "BlurredControl" }).props({ described: true })
+      s.subscription("lostFocus", { _tag: "BlurredControl", disabled: true }).props({ described: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
       s.fire(control, "focus")
       assert.deepStrictEqual(state(), ["", undefined])
@@ -99,6 +99,9 @@ describe("Field", () => {
       assert.deepStrictEqual(state(), ["", undefined])
       s.fire(wrapper, "focusout", { within: true }).expectIgnored()
       assert.deepStrictEqual(state(), ["", undefined])
+      s.fire(wrapper, "focusout", { within: false, disabled: true })
+      assert.deepStrictEqual(state(), [undefined, undefined])
+      s.fire(wrapper, "focusin")
       s.fire(wrapper, "focusout", { within: false })
       assert.deepStrictEqual(state(), [undefined, ""])
     }))
@@ -126,6 +129,7 @@ describe("Field", () => {
     Effect.gen(function*() {
       const Form = Component.define({
         name: "Form",
+        scoped: false,
         props: Schema.Struct({ disabled: Schema.Boolean }),
         model: Schema.Struct({}),
         message: Schema.Never,

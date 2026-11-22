@@ -46,6 +46,7 @@
  *
  * const Profile = Component.define({
  *   name: "Profile",
+ *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: ProfileMessage,
  *   elements: Html
@@ -168,9 +169,11 @@ export const Input = <Msg, R = never>(
     }
     const input = node
       .value(props.value)
-      // Never set: the native `disabled` reports it.
-      .attr("aria-disabled", undefined)
-      .attr("data-disabled", flag(disabled))
+      .attrs({
+        // Never set: the native `disabled` reports it.
+        "aria-disabled": undefined,
+        "data-disabled": flag(disabled)
+      })
       .disabled(disabled)
     return !disabled && onUpdate !== undefined
       ? input.onInput(({ value }) => onUpdate({ value }))

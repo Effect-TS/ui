@@ -1,0 +1,5 @@
+---
+"@effect/ui-kit": minor
+---
+
+Add `Autocomplete`, a headless autocomplete ported from Base UI. Call it as `Autocomplete(h, { ... })` with `items`, the suggestions with their labels, and apply `autocomplete.input`, `autocomplete.positioner`, `autocomplete.popup`, `autocomplete.list`, `autocomplete.item` and the other parts to your own builders. Unlike `Combobox` it selects nothing: `open` and `value`, the input's text, are controlled, and the autocomplete emits `Opened`, `Dismissed` and `Updated`, each with a reason, `Highlighted` when the highlighted item changes, and `Settled` when its transitions end. Picking an item puts its label in the input and closes the popup. `mode` sets whether the text filters the items and whether the arrow keys show the highlighted label in the input. `autoHighlight: "always"` keeps the first item highlighted, `keepHighlight` keeps the highlight when the pointer leaves the list, and `submitOnItemClick` submits the form once a pick is drawn. The input is the form control, so `name`, `form` and `required` go on it. `makeAutocompleteFilter` exports its matchers.

@@ -17,10 +17,12 @@ const standIn = {
       drawer.viewport(h.div.class("viewport")).children(
         drawer.popup(
           h.div.class("popup")
-            .attr("data-swiping", "x")
-            .attr("data-swipe-direction", "sideways")
-            .attr("data-nested-drawer-open", "x")
-            .attr("style", "color:red")
+            .attrs({
+              "data-swiping": "x",
+              "data-swipe-direction": "sideways",
+              "data-nested-drawer-open": "x",
+              style: "color:red"
+            })
         ).children(drawer.content(h.div.class("content")))
       )
     )
@@ -242,6 +244,7 @@ describe("Drawer", () => {
 const PageMessage = UiSchema.TaggedEnum({ Toggled: { open: Schema.Boolean } })
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: PageMessage,
   elements: Html
@@ -300,7 +303,13 @@ describe("DrawerProvider", () => {
 })
 
 // A drawer in a dialog's popup, and a dialog in the drawer's, all open.
-const Mixed = Component.define({ name: "Mixed", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Mixed = Component.define({
+  name: "Mixed",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) =>

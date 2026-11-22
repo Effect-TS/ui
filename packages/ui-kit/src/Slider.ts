@@ -117,6 +117,7 @@
  *
  * const Player = Component.define({
  *   name: "Player",
+ *   scoped: false,
  *   model: Schema.Struct({ volume: Schema.Number }),
  *   message: PlayerMessage,
  *   elements: Html
@@ -172,8 +173,10 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
+import { focusVisible } from "./internal/dom.ts"
 import { clamp } from "./internal/range.ts"
+import type { WithRequirements } from "./internal/requirements.ts"
 
 // One number, or one per thumb.
 const Value = Schema.Union([Schema.Number, Schema.Array(Schema.Number)])
@@ -250,7 +253,7 @@ export type SliderEvents = typeof SliderEvents.Type
 
 // The pointer facts come from the control's mount, the rest from a thumb's
 // range input.
-const Message = UiSchema.TaggedEnum({
+const SliderMessage = UiSchema.TaggedEnum({
   PressedPointer: { index: Schema.Number, fraction: Schema.Number, onThumb: Schema.Boolean },
   MovedPointer: { fraction: Schema.Number },
   ReleasedPointer: {},
@@ -260,22 +263,22 @@ const Message = UiSchema.TaggedEnum({
   BlurredThumb: { index: Schema.Number }
 })
 
-type Message = typeof Message.Type
+type SliderMessage = typeof SliderMessage.Type
 
 // `active`: the thumb whose input has focus, or -1. `pressed`: the thumb
 // the pointer is dragging, or -1. `pressedValues`: the values when the press
 // began, which a swap restores. `moved`: the last value the press reported,
 // which its release commits.
-const Model = Schema.Struct({
+const SliderModel = Schema.Struct({
   active: Schema.Number,
   pressed: Schema.Number,
   pressedValues: Schema.Array(Schema.Number),
   moved: Schema.NullOr(Value)
 })
 
-type Model = typeof Model.Type
+type SliderModel = typeof SliderModel.Type
 
-type SliderUpdate = Component.Update<Model, Message, SliderEvents, SliderProps>
+type SliderUpdate = Component.Update<SliderModel, SliderMessage, SliderEvents, SliderProps>
 
 // -- the value arithmetic ----------------------------------------------------
 
@@ -453,7 +456,7 @@ const changed = (s: Settings, values: ReadonlyArray<number>): Value | undefined 
 // -- update ------------------------------------------------------------------
 
 // A key or the input set a thumb: report the new value and commit it at once.
-const setThumb = (model: Model, $: SliderUpdate, s: Settings, index: number, next: number) => {
+const setThumb = (model: SliderModel, $: SliderUpdate, s: Settings, index: number, next: number) => {
   if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return model
   const value = changed(s, withThumb(s, index, next))
   return value === undefined ? model : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
@@ -491,7 +494,7 @@ const keyed = (s: Settings, index: number, key: string, shift: boolean): number 
 }
 
 // The pointer put the thumb the Model drags at `fraction` of the control.
-const drag = (model: Model, $: SliderUpdate, s: Settings, fraction: number) => {
+const drag = (model: SliderModel, $: SliderUpdate, s: Settings, fraction: number) => {
   const target = valueAt(s, fraction)
   const moved = s.values.length > 1
     ? collide(s, model.pressedValues.length === s.values.length ? model.pressedValues : s.values, model.pressed, target)
@@ -501,7 +504,7 @@ const drag = (model: Model, $: SliderUpdate, s: Settings, fraction: number) => {
   return value === undefined ? $.set(next) : $.set({ ...next, moved: value }).emit(SliderEvents.Moved({ value }))
 }
 
-const released: Model = { active: -1, pressed: -1, pressedValues: [], moved: null }
+const released: SliderModel = { active: -1, pressed: -1, pressedValues: [], moved: null }
 
 // -- the pointer -------------------------------------------------------------
 
@@ -522,16 +525,6 @@ const thumbsIn = (node: HTMLElement): Array<Thumb> =>
 
 const focusEvents = ["blur", "focusout", "focus", "focusin"] as const
 
-// Whether the element shows its focus ring. A browser that can't tell
-// counts as showing it, so nothing is refocused.
-const focusVisible = (element: Element): boolean => {
-  try {
-    return element.matches(":focus-visible")
-  } catch {
-    return true
-  }
-}
-
 const midpointOf = (element: Element, vertical: boolean): number => {
   const rect = element.getBoundingClientRect()
   return vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2
@@ -546,7 +539,7 @@ const TrackPointer = Mount.makeStream(
   "TrackPointer",
   { args: { pressed: Schema.Number, disabled: Schema.Boolean, vertical: Schema.Boolean } },
   (node: HTMLElement, args, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<SliderMessage>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
         let { disabled, vertical } = args
@@ -576,13 +569,13 @@ const TrackPointer = Mount.makeStream(
           if (node.hasPointerCapture?.(pointer)) node.releasePointerCapture(pointer)
           pointer = null
           listening?.abort()
-          Queue.offerUnsafe(queue, Message.ReleasedPointer())
+          Queue.offerUnsafe(queue, SliderMessage.ReleasedPointer())
         }
         const onMove = (event: PointerEvent) => {
           if (event.pointerId !== pointer) return
           // Another element took the pointer's release.
           if (event.buttons === 0) return release()
-          Queue.offerUnsafe(queue, Message.MovedPointer({ fraction: fractionAt(event) }))
+          Queue.offerUnsafe(queue, SliderMessage.MovedPointer({ fraction: fractionAt(event) }))
         }
         const onUp = (event: PointerEvent) => {
           if (event.pointerId === pointer) release()
@@ -623,7 +616,7 @@ const TrackPointer = Mount.makeStream(
           document.addEventListener("pointercancel", onUp, { signal })
           Queue.offerUnsafe(
             queue,
-            Message.PressedPointer({ index, fraction: fractionAt(event), onThumb: hit !== undefined })
+            SliderMessage.PressedPointer({ index, fraction: fractionAt(event), onThumb: hit !== undefined })
           )
         }
         // A key on a thumb a press focused shows the focus ring, as Tab
@@ -684,12 +677,6 @@ type ThumbOf<B extends View.PartTarget<string>, I extends View.PartTarget<"input
   View.Requirements<I>
 >
 
-type WithRequirements<T, R2> = [R2] extends [never] ? T
-  : T extends Html.Element<infer Msg, infer R, infer E, infer N, infer Tag> ? Html.Element<Msg, R | R2, E, N, Tag>
-  : T extends View.ContainerBuilder<infer Msg, infer R, infer H, infer N, infer Tag> ?
-    View.ContainerBuilder<Msg, R | R2, H, N, Tag>
-  : T
-
 // Visually hidden, the size of the thumb, so a screen reader's focus ring
 // matches the thumb.
 const hidden =
@@ -726,9 +713,10 @@ const hidden =
  */
 export const Slider = Component.define({
   name: "Slider",
+  scoped: false,
   props: SliderProps,
-  model: Model,
-  message: Message,
+  model: SliderModel,
+  message: SliderMessage,
   events: SliderEvents,
   elements: Html
 }).make({
@@ -741,7 +729,7 @@ export const Slider = Component.define({
       // they can be pulled apart.
       let thumb = index
       if (onThumb) { while (thumb > 0 && s.values[thumb]! >= s.top && s.values[thumb - 1]! >= s.top) thumb-- }
-      const next: Model = { ...model, pressed: thumb, pressedValues: s.values, moved: null }
+      const next: SliderModel = { ...model, pressed: thumb, pressedValues: s.values, moved: null }
       // A thumb grabbed where it is doesn't move until the pointer does.
       return onThumb ? next : drag(next, $, s, fraction)
     },
@@ -749,7 +737,7 @@ export const Slider = Component.define({
       model.pressed < 0 || $.props.disabled === true ? model : drag(model, $, settingsOf($.props), fraction),
     ReleasedPointer: (model, _message, $) => {
       if (model.pressed < 0) return model
-      const next: Model = { ...released, active: model.active }
+      const next: SliderModel = { ...released, active: model.active }
       return model.moved === null || $.props.disabled === true
         ? next
         : $.set(next).emit(SliderEvents.Committed({ value: model.moved }))
@@ -768,42 +756,46 @@ export const Slider = Component.define({
     const s = settingsOf(p.props)
     const dragging = model.pressed >= 0 && !s.disabled
     const orientation = p.props.orientation ?? "horizontal"
-    const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const state = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-dragging", flag(dragging))
-        .attr("data-orientation", orientation)
-        .attr("data-disabled", flag(s.disabled))
+        .attrs({
+          "data-dragging": flag(dragging),
+          "data-orientation": orientation,
+          "data-disabled": flag(s.disabled)
+        })
     const start = s.values.length > 1 ? percentOf(s, s.values[0]!) : 0
     const end = s.values.length === 0 ? 0 : percentOf(s, s.values[s.values.length - 1]!)
     const inputPart = p.part("input", (b, index: number) => {
       const value = s.values[index]!
-      return b.attr("type", "range")
-        .attr("min", String(s.min))
-        .attr("max", String(s.max))
-        .attr("step", String(s.step))
-        .attr("aria-orientation", orientation)
-        .attr("aria-valuenow", String(value))
+      return b.attrs({
+        type: "range",
+        min: String(s.min),
+        max: String(s.max),
+        step: String(s.step),
+        "aria-orientation": orientation,
+        "aria-valuenow": String(value),
         // Never set: the native `disabled` reports it.
-        .attr("aria-disabled", undefined)
+        "aria-disabled": undefined
+      })
         .disabled(s.disabled)
         .value(String(value))
         .onKeyDown(
-          ({ key, shift }) => sliderKeys.has(key) ? Message.PressedKey({ index, key, shift }) : undefined,
+          ({ key, shift }) => sliderKeys.has(key) ? SliderMessage.PressedKey({ index, key, shift }) : undefined,
           // Only for the keys the slider handles: a key it doesn't keeps its
           // default, such as Tab.
           { preventDefault: true }
         )
-        .onInput(({ value }) => Message.UpdatedThumb({ index, value }))
-        .onFocus(Message.FocusedThumb({ index }))
-        .onBlur(Message.BlurredThumb({ index }))
+        .onInput(({ value }) => SliderMessage.UpdatedThumb({ index, value }))
+        .onFocus(SliderMessage.FocusedThumb({ index }))
+        .onBlur(SliderMessage.BlurredThumb({ index }))
         .forward((node) => {
           // The consumer's text wins. Two thumbs say which end each one is.
-          const text = node.attrs["aria-valuetext"] === undefined && s.values.length === 2
+          const text = node.elementAttrs["aria-valuetext"] === undefined && s.values.length === 2
             ? node.attr("aria-valuetext", value + " " + (index === 0 ? "start" : "end") + " range")
             : node
           return text.attr(
             "style",
-            withStyle(node.attrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
+            withStyle(node.elementAttrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
           )
         })
     })
@@ -813,7 +805,7 @@ export const Slider = Component.define({
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.attrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
+            withStyle(node.elementAttrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
           )
         )
         .children(input as never)
@@ -836,7 +828,7 @@ export const Slider = Component.define({
           node.attr(
             "style",
             withStyle(
-              node.attrs.style,
+              node.elementAttrs.style,
               "--slider-indicator-start:" + start + "%;--slider-indicator-size:" + (end - start) + "%"
             )
           )

@@ -9,6 +9,7 @@ class Store extends Context.Service<Store, { readonly draft: string }>()("typete
 const PanelMsg = UiSchema.TaggedEnum({ Toggle: {} })
 const PanelDef = Component.define({
   name: "Panel",
+  scoped: false,
   model: Schema.Boolean,
   message: PanelMsg,
   elements: Html,
@@ -20,7 +21,13 @@ const Panel = PanelDef.make({
   view: (open, h) => h.section(open && h.slots.body, h.footer(h.slots.footer))
 })
 
-const Plain = Component.define({ name: "Plain", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Plain = Component.define({
+  name: "Plain",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   view: (_, h) => h.p("plain")
@@ -57,7 +64,7 @@ describe("slots", () => {
     expect<Component.Helper<typeof PanelDef>["slots"]>().type.toBe<
       { readonly body: View.Outlet; readonly footer: View.Outlet }
     >()
-    Component.define({ name: "None", model: Schema.Null, message: Schema.Never }).view((_, h) => {
+    Component.define({ name: "None", scoped: false, model: Schema.Null, message: Schema.Never }).view((_, h) => {
       expect(h).type.not.toHaveProperty("slots")
       return h.el("p")
     })
@@ -96,7 +103,7 @@ describe("slots", () => {
 
   it("keeps a slotted component a Component.Any", () => {
     expect<typeof Panel>().type.toBeAssignableTo<Component.Any>()
-    expect<typeof Panel>().type.not.toBeAssignableTo<Component.Mountable<{}, never, never, never, "body" | "header">>()
+    expect<typeof Panel>().type.not.toBeAssignableTo<Component.Mountable<{}, never, never, "body" | "header">>()
   })
 
   it("takes a slots map from a variable, an interface's included, and rejects its undeclared names", () => {
@@ -131,7 +138,13 @@ describe("slots", () => {
   })
 
   it("rejects slots on headless and feature calls, from a variable too", () => {
-    const Headless = Component.define({ name: "Headless", model: Schema.Null, message: Schema.Never, elements: Html })
+    const Headless = Component.define({
+      name: "Headless",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    })
       .make({ init: () => null, update: (model) => model, parts: () => ({}) })
     class Badge extends Feature.Service<Badge>()("typetest/slots/Badge", { props: Schema.Struct({}) }) {}
     const options = { key: "p", slots: { body: "x" }, view: () => h.p("x"), fallback: () => h.p("wait") }

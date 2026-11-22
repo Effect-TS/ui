@@ -32,6 +32,7 @@
  *
  * const Weather = Component.define({
  *   name: "Weather",
+ *   scoped: false,
  *   model: Schema.Struct({ zip: Schema.String, forecast: Schema.String }),
  *   message: Message,
  *   elements: Html
@@ -47,7 +48,7 @@
  *     h.div(
  *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),
- *         h.input.attr("id", "zip").attr("name", "zip").value(model.zip)
+ *         h.input.attrs({ id: "zip", name: "zip" }).value(model.zip)
  *           .onInput(({ value }) => Message.UpdatedZip({ zip: value })),
  *         h.button.children("Get Weather")
  *       ),
@@ -78,7 +79,9 @@ import * as engine from "../../internal/story.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
+import type * as DomSubscription from "../DomSubscription.ts"
 import type * as Html from "../Html.ts"
+import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
@@ -104,13 +107,14 @@ export interface Expect<S> extends Scene.Expect<S> {
 
 // The same union as `Scene.ts`'s.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any, any>
+  | Component.Members<any, any, any, any, any, any, any, any, never>
+  | Component.Members<any, any, any, never, any, any, any, any, never>
 
-/** The modifier keys of a key or pointer payload, each `false` unless given. */
-type Modifiers = Partial<Pick<Html.KeyPayload, "shift" | "ctrl" | "alt" | "meta">>
+type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
+
+type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
 
 /**
  * A cursor over one HTML scene: the scene's steps, plus a step per user
@@ -147,23 +151,35 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   click(target: string | Locator.Locator): this
   /**
    * Sets a field's value as typing does: sends `input` with `value`. An
-   * `input` also sends its current `checked`.
+   * `input` also sends its current `checked`. `details` sets `composing`,
+   * `false` otherwise, and `inputType`, `"insertText"` otherwise, so an
+   * input method's text or an autofill's `"insertReplacementText"` can be
+   * sent too.
    */
-  type(locator: Locator.Locator, value: string): this
+  type(locator: Locator.Locator, value: string, details?: EditDetails): this
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
-   * the new value; an object also sets `checked` on an `input`.
+   * the new value; an object also sets `checked` on an `input`, and
+   * `composing` and `inputType`, `false` and `""` otherwise.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this
-  /** Presses `key`: sends `keydown` with the modifier keys given, each `false` otherwise. */
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): this
+  /**
+   * Ends an input method's composition: sends `compositionend` with
+   * `value`, or the field's current value when it's left out.
+   */
+  compositionEnd(locator: Locator.Locator, value?: string): this
+  /**
+   * Presses `key`: sends `keydown` with the modifier keys, `composing` and
+   * selection given, each `false` or `null` otherwise.
+   */
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this
   /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
    * fields read from the view. No button counts as the submitter.
    */
   submit(locator: Locator.Locator): this
-  /** Sends `focus`. */
+  /** Sends `focus` as the keyboard would, with `focusVisible` true. */
   focus(locator: Locator.Locator): this
   /** Sends `blur`. */
   blur(locator: Locator.Locator): this
@@ -183,9 +199,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this
   /**
    * Fires `event` on the document, as the browser host delivers it to the
-   * component's `Html.onDocument` listeners. Missing payload fields default
-   * as `keydown` and `click` default them, and `defaultPrevented` to
-   * `false`.
+   * component's `DomSubscription.onDocument` listeners. Missing payload
+   * fields default as `keydown` and `click` default them, and
+   * `defaultPrevented` to `false`.
    *
    * **Details**
    *
@@ -199,14 +215,17 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * It throws when nothing listens for `event` on the document, listing
    * the active keys, and is ignored when no listener produced a message.
    */
-  fireDocument<K extends keyof Html.DocumentEvents>(
+  fireDocument<K extends keyof DomSubscription.DocumentEvents>(
     event: K,
-    payload?: Partial<Html.GlobalPayload<Html.DocumentEvents[K]>>
+    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.DocumentEvents[K]>>
   ): this
-  /** Fires `event` on the window, as `fireDocument` does for `Html.onWindow`'s listeners. */
-  fireWindow<K extends keyof Html.WindowEvents>(
+  /**
+   * Fires `event` on the window, as `fireDocument` does for
+   * `DomSubscription.onWindow`'s listeners.
+   */
+  fireWindow<K extends keyof DomSubscription.WindowEvents>(
     event: K,
-    payload?: Partial<Html.GlobalPayload<Html.WindowEvents[K]>>
+    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.WindowEvents[K]>>
   ): this
 
   /** Asserts on the elements `locator` matches in the current view. */
@@ -228,145 +247,6 @@ export declare namespace Steps {
    * @since 0.1.0
    */
   export type Any = Steps<AnyComponent, any>
-}
-
-// ---------------------------------------------------------------------------
-// what the browser derives from the tree
-// ---------------------------------------------------------------------------
-
-const lower = (value: string | undefined) => value?.toLowerCase()
-
-const inputType = (node: Locator.Node): string => lower(node.attrs?.type) ?? "text"
-
-/** An attribute set, or a property set to `true`. */
-const flag = (node: Locator.Node, name: string): boolean =>
-  node.props?.[name] === true || (node.props?.[name] === undefined && node.attrs?.[name] !== undefined)
-
-const controls: ReadonlySet<string> = new Set([
-  "button",
-  "input",
-  "select",
-  "textarea",
-  "fieldset",
-  "optgroup",
-  "option"
-])
-
-/**
- * Whether `node`, with its ancestors innermost first in `path`, is disabled
- * as the browser sees it: a disabled control, or a control inside a disabled
- * `fieldset` other than in its first `legend`.
- */
-const isDisabled = (node: Locator.Node, path: ReadonlyArray<Locator.Node> = []): boolean => {
-  if (node.tag !== undefined && controls.has(node.tag) && flag(node, "disabled")) return true
-  if (node.tag === undefined || !controls.has(node.tag) || node.tag === "fieldset") return false
-  let previous: Locator.Node = node
-  for (const ancestor of path) {
-    if (ancestor === node) continue
-    if (ancestor.tag === "fieldset" && flag(ancestor, "disabled")) {
-      const legend = (ancestor.children ?? []).find((child) => child.tag === "legend")
-      if (legend === undefined || legend !== previous) return true
-    }
-    previous = ancestor
-  }
-  return false
-}
-
-/** The button or input that submits its form when clicked, among `node` and its ancestors. */
-const submitterIn = (path: ReadonlyArray<Locator.Node>): Locator.Node | undefined =>
-  path.find((node) =>
-    (node.tag === "button" && (lower(node.attrs?.type) ?? "submit") === "submit") ||
-    (node.tag === "input" && (inputType(node) === "submit" || inputType(node) === "image"))
-  )
-
-const fieldValue = (node: Locator.Node): string => HtmlLocator.value(node) ?? ""
-
-const selectValues = (select: Locator.Node): ReadonlyArray<string> => {
-  const set = select.props?.value
-  const options = Locator.elements(select).filter((node) => node.tag === "option" && !flag(node, "disabled"))
-  const valueOf = (option: Locator.Node) => option.attrs?.value ?? Locator.textOf(option).trim()
-  if (typeof set === "string") return options.some((option) => valueOf(option) === set) ? [set] : []
-  const selected = options.filter((option) => flag(option, "selected"))
-  if (selected.length > 0) return (flag(select, "multiple") ? selected : selected.slice(-1)).map(valueOf)
-  return flag(select, "multiple") || options.length === 0 ? [] : [valueOf(options[0]!)]
-}
-
-/**
- * The form a control in `root` belongs to, with its ancestors innermost
- * first in `path`: the element its `form` attribute names by id when that
- * is a form, else none, and without one its nearest form ancestor.
- */
-const ownerOf = (root: Locator.Node, path: ReadonlyArray<Locator.Node>): Locator.Node | undefined => {
-  const id = path[0]?.attrs?.form
-  if (id === undefined) return path.slice(1).find((node) => node.tag === "form")
-  const named = Locator.elements(root).find((node) => node.attrs?.id === id)
-  return named?.tag === "form" ? named : undefined
-}
-
-/**
- * The fields of `form` as `BrowserHost` reads them through `FormData`:
- * named, enabled fields whose form owner is `form`, in document order, a
- * checkbox or radio button only when checked, buttons only as the
- * submitter, and no files. A field outside the form that names it with its
- * `form` attribute is included, and one inside it that names another form
- * isn't.
- */
-const formFields = (
-  root: Locator.Node,
-  form: Locator.Node,
-  submitter: Locator.Node | undefined
-): Html.SubmitPayload => {
-  const fields: Record<string, string> = Object.create(null)
-  const entries: Array<readonly [string, string]> = []
-  const add = (name: string, value: string) => {
-    entries.push([name, value])
-    if (!Object.hasOwn(fields, name)) fields[name] = value
-  }
-  const walk = (node: Locator.Node, path: ReadonlyArray<Locator.Node>) => {
-    const name = node.attrs?.name
-    if (
-      node.tag !== undefined && name !== undefined && name !== "" && ownerOf(root, path) === form &&
-      !isDisabled(node, path)
-    ) {
-      switch (node.tag) {
-        case "button":
-          if (node === submitter) add(name, fieldValue(node))
-          break
-        case "input": {
-          const type = inputType(node)
-          if (type === "submit" || type === "image" || type === "button" || type === "reset") {
-            if (node === submitter && type === "submit") add(name, fieldValue(node))
-          } else if (type === "checkbox" || type === "radio") {
-            if (HtmlLocator.checked(node) === true) add(name, HtmlLocator.value(node) ?? "on")
-          } else if (type !== "file") {
-            add(name, fieldValue(node))
-          }
-          break
-        }
-        case "select":
-          for (const value of selectValues(node)) add(name, value)
-          break
-        case "textarea":
-          add(name, typeof node.props?.value === "string" ? node.props.value : Locator.textOf(node))
-          break
-      }
-    }
-    for (const child of node.children ?? []) walk(child, [child, ...path])
-  }
-  walk(root, [root])
-  return { fields, entries }
-}
-
-/**
- * The payload of the `toggle` a `popovertarget` button sends its popover, or `undefined` when the
- * click leaves the popover as it is.
- */
-const popoverToggle = (button: Locator.Node, popover: Locator.Node): Html.PopoverTogglePayload | undefined => {
-  const open = HtmlLocator.popoverState(popover) === "open"
-  const action = lower(button.attrs?.popovertargetaction) ?? "toggle"
-  const next = action === "show" ? true : action === "hide" ? false : !open
-  if (next === open) return undefined
-  return { open: next, newState: next ? "open" : "closed", oldState: open ? "open" : "closed" }
 }
 
 /** Child indices from the root to `node`, to find it again in a view rendered after an event. */
@@ -394,10 +274,6 @@ const follow = (root: Locator.Node, node: Locator.Node, description: string) =>
   return at
 }
 
-/** The form `path[0]` submits: itself when it is a form, else its form owner. */
-const formOf = (path: ReadonlyArray<Locator.Node>, root: Locator.Node): Locator.Node | undefined =>
-  path[0]?.tag === "form" ? path[0] : ownerOf(root, path)
-
 // ---------------------------------------------------------------------------
 // the cursor
 // ---------------------------------------------------------------------------
@@ -410,119 +286,56 @@ class StepsImpl extends internal.SceneCursor {
       const node = engine.findOne(state, locator, step)
       const root = state.root
       const path = engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
-      // A disabled fieldset disables the controls in it, not itself as a target.
-      if (path.some((at) => at.tag !== "fieldset" && isDisabled(at, path.slice(path.indexOf(at))))) {
-        throw new Error(`${step}: ${locator.description} is disabled`)
-      }
-      const events: Array<internal.PlannedEvent> = [
-        {
-          node: () => node,
-          description: locator.description,
-          event: "click",
-          payload: () => internal.pointer,
-          optional: true
-        }
-      ]
-      // The click's defaults run after it, unless a handler cancelled it.
-      const later = (
-        other: Locator.Node,
-        description: string,
-        event: string,
-        payload: internal.PlannedEvent["payload"]
-      ) =>
-        events.push({
-          node: follow(root, other, description),
-          description,
-          event,
-          payload,
-          optional: true,
-          isDefault: true
-        })
-      const type = node.tag === "input" ? inputType(node) : undefined
-      const submitter = submitterIn(path)
-      if (type === "checkbox" || (type === "radio" && HtmlLocator.checked(node) !== true)) {
-        const payload: Html.InputPayload = {
-          value: HtmlLocator.value(node) ?? "on",
-          checked: type === "radio" ? true : HtmlLocator.checked(node) !== true
-        }
-        later(node, locator.description, "input", () => payload)
-        later(node, locator.description, "change", () => payload)
-      } else if (submitter !== undefined) {
-        const form = formOf(path.slice(path.indexOf(submitter)), root)
-        if (form !== undefined) {
-          // Read when the submit runs, from the view the click left.
-          const submitterAt = follow(root, submitter, locator.description)
-          later(
-            form,
-            `the form of ${locator.description}`,
-            "submit",
-            (at, formAt) => formFields(at.root, formAt, submitterAt(at))
-          )
-        }
-      }
-      const invoker = path.find((at) => at.attrs?.popovertarget !== undefined)
-      if (invoker !== undefined) {
-        const id = invoker.attrs!.popovertarget!
-        const popover = Locator.elements(root).find((at) => at.attrs?.id === id && at.attrs?.popover !== undefined)
-        const payload = popover === undefined ? undefined : popoverToggle(invoker, popover)
-        if (payload !== undefined) later(popover!, `the popover #${id}`, "toggle", () => payload)
-      }
-      return events
+      return defaults.planClick(root, node, path, locator.description, step).map((planned) => ({
+        node: follow(root, planned.node, planned.description),
+        description: planned.description,
+        event: planned.event,
+        payload: (at: engine.State<any, any, any, any>) =>
+          planned.payload(at.root, (node, description) => follow(root, node, description)(at)),
+        optional: true,
+        isDefault: planned.isDefault
+      }))
     })
   }
-  type(locator: Locator.Locator, value: string): this {
-    return this.one(
-      "type",
-      locator,
-      "input",
-      (node) => node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true } : { value }
-    )
+  type(locator: Locator.Locator, value: string, details?: EditDetails): this {
+    return this.one("type", locator, "input", (node) => defaults.inputPayload(node, value, details))
   }
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this {
-    const given = typeof value === "string" ? { value } : value
-    return this.one("change", locator, "change", (node) =>
-      node.tag === "input"
-        ? {
-          value: given.value ?? HtmlLocator.value(node) ?? "",
-          checked: given.checked ?? HtmlLocator.checked(node) === true
-        }
-        : { value: given.value ?? HtmlLocator.value(node) ?? "" })
+    return this.one("change", locator, "change", (node) => defaults.changePayload(node, value))
   }
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): this {
-    const payload: Html.KeyPayload = {
-      key,
-      shift: modifiers?.shift === true,
-      ctrl: modifiers?.ctrl === true,
-      alt: modifiers?.alt === true,
-      meta: modifiers?.meta === true,
-      composing: false
-    }
-    return this.one("keydown", locator, "keydown", () => payload)
+  compositionEnd(locator: Locator.Locator, value?: string): this {
+    return this.one(
+      "compositionEnd",
+      locator,
+      "compositionend",
+      (node): Html.CompositionPayload => ({ value: value ?? HtmlLocator.value(node) ?? "" })
+    )
+  }
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
+    return this.one("keydown", locator, "keydown", () => defaults.keyPayload(key, details))
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {
       const step = this.name("submit")
       const node = engine.findOne(state, locator, step)
-      const form = formOf(engine.ancestry(state, node) as ReadonlyArray<Locator.Node>, state.root)
+      const form = defaults.formOf(engine.ancestry(state, node) as ReadonlyArray<Locator.Node>, state.root)
       if (form === undefined) throw new Error(`${step}: ${locator.description} isn't in a form`)
       return [{
         node: () => form,
         description: `the form of ${locator.description}`,
         event: "submit",
-        payload: () => formFields(state.root, form, undefined)
+        payload: () => defaults.formFields(state.root, form, undefined)
       }]
     })
   }
   focus(locator: Locator.Locator): this {
-    return this.one("focus", locator, "focus", () => ({}))
+    return this.one("focus", locator, "focus", () => ({ focusVisible: true }))
   }
   blur(locator: Locator.Locator): this {
     return this.one("blur", locator, "blur", () => ({}))
   }
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this {
-    const full: Html.DropPayload = { data: {}, files: [], x: 0, y: 0, width: 0, height: 0, ...payload }
-    const types = Object.keys(full.data).concat(full.files.length > 0 ? ["Files"] : [])
-    const lowered = types.map((type) => type.toLowerCase())
+    const drop = defaults.drop(payload)
     return this.interact("drop", (state) => {
       const step = this.name("drop")
       const node = engine.findOne(state, locator, step)
@@ -530,24 +343,15 @@ class StepsImpl extends internal.SceneCursor {
       const target = engine.ancestry(state, node).find((at): at is View.Element<any, any> =>
         at._tag === "Element" &&
         [at, ...(at.owned ?? [])].some((layer) =>
-          Object.hasOwn(layer.handlers, "drop") &&
-          ((layer.eventOptions.drop as Html.DropTargetOptions | undefined)?.accepts ?? []).some((type) =>
-            lowered.includes(type.toLowerCase())
-          )
+          Object.hasOwn(layer.handlers, "drop") && drop.accepts(layer.eventOptions.drop)
         )
       )
-      if (target === undefined) {
-        throw new Error(
-          `${step}: nothing at ${locator.description} accepts ${
-            types.length === 0 ? "a drag with no types" : types.map((type) => JSON.stringify(type)).join(", ")
-          }`
-        )
-      }
+      if (target === undefined) throw drop.noTarget(step, locator.description)
       return [{
         node: () => target as unknown as Locator.Node,
         description: `the drop target at ${locator.description}`,
         event: "drop",
-        payload: () => full
+        payload: () => drop.payload
       }]
     }).markPrevented()
   }
@@ -597,43 +401,8 @@ class StepsImpl extends internal.SceneCursor {
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))
   }
   override expect(locator: Locator.Locator): object {
-    return this.expectation(locator, {
-      ...internal.matchers,
-      toHaveValue: (expected: string) =>
-        internal.single((node) => {
-          const value = HtmlLocator.value(node)
-          return value === expected ? undefined : `its value is ${JSON.stringify(value)}`
-        }),
-      toBeChecked: (expected = true) =>
-        internal.single((node) => {
-          const checked = HtmlLocator.checked(node)
-          return checked === expected
-            ? undefined
-            : `it is ${checked === undefined ? "not checkable" : checked ? "checked" : "unchecked"}`
-        }),
-      toBeDisabled: (expected = true) =>
-        internal.single((node, root) => {
-          const disabled = isDisabled(node, [...(pathIn(root, node) ?? [])].reverse())
-          return disabled === expected ? undefined : `it is ${disabled ? "disabled" : "enabled"}`
-        }),
-      toHaveAccessibleName: (expected: string | RegExp) =>
-        internal.single((node, root) => {
-          const name = HtmlLocator.nameOf(root, node)
-          const pass = typeof expected === "string" ? name === expected : expected.test(name)
-          return pass ? undefined : `its accessible name is ${JSON.stringify(name)}`
-        })
-    })
+    return this.expectation(locator, defaults.matchers)
   }
-}
-
-/** The nodes from `root` down to `node`, both included. */
-const pathIn = (root: Locator.Node, node: Locator.Node): ReadonlyArray<Locator.Node> | undefined => {
-  if (root === node) return [root]
-  for (const child of root.children ?? []) {
-    const rest = pathIn(child, node)
-    if (rest !== undefined) return [root, ...rest]
-  }
-  return undefined
 }
 
 /**

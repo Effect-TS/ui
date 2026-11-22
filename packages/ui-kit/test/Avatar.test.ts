@@ -38,6 +38,7 @@ describe("Avatar", () => {
       const Message = UiSchema.TaggedEnum({ Picked: { src: Schema.String } })
       const Page = Component.define({
         name: "Page",
+        scoped: false,
         model: Schema.String,
         message: Message,
         elements: Html
@@ -77,19 +78,21 @@ describe("Avatar", () => {
   it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {
     const element = h.img
       .class("photo")
-      .attr("alt", "Ada Lovelace")
-      .attr("src", "/other.png")
-      .attr("srcset", "/other.png 2x")
-      .attr("sizes", "10vw")
-      .attr("crossorigin", "use-credentials")
-      .attr("referrerpolicy", "origin")
+      .attrs({
+        alt: "Ada Lovelace",
+        src: "/other.png",
+        srcset: "/other.png 2x",
+        sizes: "10vw",
+        crossorigin: "use-credentials",
+        referrerpolicy: "origin"
+      })
     const shown = (props: AvatarProps) => {
       const avatar = Story.parts(Avatar, {
         model: { report: { source: props, status: "loaded" }, delayElapsed: true },
         props
       })
       // A source attribute chained after the part loses too.
-      return View.build(avatar.image(element)!.attr("src", "/chained.png").attr("title", "Ada"), []).attrs
+      return View.build(avatar.image(element)!.attrs({ src: "/chained.png", title: "Ada" }), []).attrs
     }
     assert.deepStrictEqual(shown({ src: "/ada.png" }), {
       class: "photo",

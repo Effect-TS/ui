@@ -20,6 +20,7 @@ const excerpt = (body: string) => (body.length > 60 ? body.slice(0, 60) + "…" 
 // Model or loaded data change, and `{ noteId }` doesn't change while typing.
 export const NoteLinkPickerNoDeps = Component.define({
   name: "NoteLinkPicker",
+  scoped: false,
   // The note being edited, which can't link to itself.
   props: Schema.Struct({ noteId: Schema.String }),
   // The value is the consumer's. The Listbox only reads it, as `selected`.
@@ -66,7 +67,7 @@ export const NoteLinkPickerNoDeps = Component.define({
                   : `Linked: ${notes.get(model.linked)?.title ?? "a removed note"}`
               ),
               listbox.popup(h.div.attr("aria-label", "Link to a note")).children(
-                listbox.input(h.input.attr("aria-label", "Filter notes").attr("placeholder", "Filter notes")),
+                listbox.input(h.input.attrs({ "aria-label": "Filter notes", placeholder: "Filter notes" })),
                 listbox.list(h.ul.attr("aria-label", "Notes")).children(
                   // Each row is drawn here, with the excerpt the Listbox never
                   // sees, looked up by the row's id.

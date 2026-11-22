@@ -122,6 +122,7 @@ const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
  *
  * const Basket = Component.define({
  *   name: "Basket",
+ *   scoped: false,
  *   model: Schema.Struct({ lines: Schema.Array(Line), coupon: Coupon, notice: Schema.NullOr(Schema.String) }),
  *   message: Message
  * }).make({

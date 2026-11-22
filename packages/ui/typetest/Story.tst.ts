@@ -32,7 +32,7 @@ describe("Story", () => {
     expect(scene.current).type.not.toHaveProperty("model")
   })
 
-  it("a scene's child steps take the component, then a key or ref only when the child has one", () => {
+  it("a scene's child steps take the component, then a key only when the child has one", () => {
     const scene = Scene.start(Counter, { initial: 0 })
     const toggled = { _tag: "Toggled", done: true } as const
     expect(scene.childEmit).type.toBeCallableWith(TodoItem, toggled)
@@ -41,27 +41,14 @@ describe("Story", () => {
     expect(scene.childEmit).type.not.toBeCallableWith("t1", toggled)
   })
 
-  it("restricts receive to public messages and infers model callbacks", () => {
+  it("checks subscription messages and infers model callbacks", () => {
     const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Reset: {} })
-    const Receiver = Component.define({
-      name: "Receiver",
-      model: Schema.Number,
-      message: Message,
-      receives: ["Set"]
-    }).make({
+    const Setter = Component.define({ name: "Setter", scoped: false, model: Schema.Number, message: Message }).make({
       init: () => 0,
       update: (_model, message) => message._tag === "Set" ? message.value : 0,
       view: (model, h) => h.text(String(model))
     })
-    const steps: Steps.Steps<typeof Receiver> = Story.start(Receiver, {})
-    steps.receive((model) => {
-      expect(model).type.toBe<number>()
-      return { _tag: "Set", value: model + 1 }
-    })
-    expect(steps.receive).type.toBeCallableWith({ _tag: "Set", value: 1 })
-    expect(steps.receive).type.not.toBeCallableWith({ _tag: "Reset" })
-    expect(steps.receive).type.not.toBeCallableWith((_model: number) => ({ _tag: "Reset" as const }))
-    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.Increment())
+    const steps: Steps.Steps<typeof Setter> = Story.start(Setter, {})
     expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
     expect(steps.subscription).type.not.toBeCallableWith("tick", { _tag: "Missing" })
     counter.send((model) => {
@@ -131,6 +118,7 @@ describe("Story", () => {
   it("a component with no messages is a story, with its types kept", () => {
     const Static = Component.define({
       name: "Static",
+      scoped: false,
       model: Schema.Number,
       message: Schema.Never
     }).make({
@@ -152,21 +140,21 @@ describe("Story", () => {
     expect(todoItem.resolve).type.toBeCallableWith(SaveTodo, TodoItemMessage.Saved())
     expect(todoItem.resolve).type.not.toBeCallableWith(SaveTodo, SearchMessage.Tick())
     expect(searchBox.resolve).type.toBeCallableWith(
-      Search({ text: "x" }),
+      Search.make({ text: "x" }),
       SearchMessage.Results({ items: [] })
     )
-    expect(searchBox.resolve).type.not.toBeCallableWith(Search({ text: "x" }), TodoItemMessage.Saved())
+    expect(searchBox.resolve).type.not.toBeCallableWith(Search.make({ text: "x" }), TodoItemMessage.Saved())
   })
 
   it("an issued Command whose result never arrives is a target, and takes no result", () => {
     const Hold = Command.make("Hold", { args: { key: Schema.String } }, () => Effect.never)
     const Watch = Command.make("Watch", { args: { key: Schema.String }, stream: true }, () => Stream.never)
-    expect(counter.expectExact).type.toBeCallableWith(Hold({ key: "one" }), Watch({ key: "one" }))
-    expect(counter.expectHas).type.toBeCallableWith(Hold({ key: "one" }))
-    expect(counter.end).type.toBeCallableWith(Watch({ key: "one" }))
-    expect(counter.end).type.not.toBeCallableWith(Hold({ key: "one" }))
-    expect(counter.resolve).type.not.toBeCallableWith(Hold({ key: "one" }), "anything")
-    expect(counter.next).type.not.toBeCallableWith(Watch({ key: "one" }), "anything")
+    expect(counter.expectExact).type.toBeCallableWith(Hold.make({ key: "one" }), Watch.make({ key: "one" }))
+    expect(counter.expectHas).type.toBeCallableWith(Hold.make({ key: "one" }))
+    expect(counter.end).type.toBeCallableWith(Watch.make({ key: "one" }))
+    expect(counter.end).type.not.toBeCallableWith(Hold.make({ key: "one" }))
+    expect(counter.resolve).type.not.toBeCallableWith(Hold.make({ key: "one" }), "anything")
+    expect(counter.next).type.not.toBeCallableWith(Watch.make({ key: "one" }), "anything")
   })
 
   it("a mapped Command as the target takes the definition's own result", () => {
@@ -176,7 +164,7 @@ describe("Story", () => {
       { args: { name: Schema.String } },
       ({ name }) => Effect.succeed(`https://cdn/${name}`)
     )
-    const mapped = UploadFile({ name: "me.png" }).pipe(Command.map((url) => Uploaded.Uploaded({ url })))
+    const mapped = UploadFile.make({ name: "me.png" }).pipe(Command.map((url) => Uploaded.Uploaded({ url })))
     expect(mapped).type.toBe<Command.Issued<typeof Uploaded.Type, never, string, "Effect">>()
     expect(counter.resolve).type.toBeCallableWith(mapped, "https://cdn/me.png")
     expect(counter.resolve).type.not.toBeCallableWith(mapped, Uploaded.Uploaded({ url: "" }))
@@ -185,7 +173,7 @@ describe("Story", () => {
       { args: { name: Schema.String }, stream: true },
       () => Stream.fromIterable([1, 2])
     )
-    const mappedStream = Progress({ name: "x" }).pipe(
+    const mappedStream = Progress.make({ name: "x" }).pipe(
       Command.map((percent) => Uploaded.Uploaded({ url: String(percent) }))
     )
     expect(counter.next).type.toBeCallableWith(mappedStream, 50)

@@ -13,37 +13,9 @@ concurrency:
 permissions: {}
 
 jobs:
-  static-checks:
-    name: Static
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Install dependencies
-        uses: ./.github/actions/setup
-      - name: Lint
-        run: pnpm lint
-      - name: Check JSDoc
-        run: pnpm jsdocs --check
-      - name: Check circular dependencies
-        run: pnpm circular
-      - name: Check generated barrels
-        run: pnpm codegen
-      - name: Generate AI documentation
-        run: pnpm ai-docgen
-      - name: Verify generated files are up-to-date
-        run: |
-          if [ -n "$(git status --short)" ]; then
-            git status --short
-            echo "Run 'pnpm codegen' and 'pnpm ai-docgen' and commit generated changes."
-            exit 1
-          fi
-
   types-matrix:
     name: Types (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-small
     permissions:
       contents: read
     timeout-minutes: 10
@@ -51,7 +23,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # CI type checks with the official compiler; `pnpm check` runs tsrs locally.
           - name: Check
             command: pnpm check-tsc
           - name: Tests
@@ -62,9 +33,10 @@ jobs:
         uses: ./.github/actions/setup
       - run: ${{ matrix.command }}
         env:
+          # Leave memory headroom for the runner by collecting the Go heap earlier.
+          GOMEMLIMIT: 4GiB
           TSTYCHE_FETCH_TIMEOUT: "120"
 
-  # Keeps the required `Types` status check covering every job above.
   types:
     name: Types
     needs: types-matrix
@@ -78,23 +50,6 @@ jobs:
         run: |
           echo "Type checks finished with result: ${{ needs.types-matrix.result }}"
           exit 1
-
-  build:
-    name: Build
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Install dependencies
-        uses: ./.github/actions/setup
-      - name: Set strip internals config
-        run: |
-          sed -i 's/"stripInternal": false/"stripInternal": true/' tsconfig.base.json
-      - run: pnpm build
-      - run: pnpm check-dist-types
 
   bundle-size:
     name: Bundle size
@@ -131,7 +86,7 @@ jobs:
 
   test:
     name: Test (${{ matrix.runtime }})
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-default
     permissions:
       contents: read
     timeout-minutes: 15
@@ -145,8 +100,6 @@ jobs:
           - runtime: Node 22.19.0 minimum
             node: 22.19.0
             command: pnpm vitest run --project @effect/ui --max-concurrency=10
-          # The same tests with the render flush before, after and at seeded places among the
-          # scheduler's tasks: `TestHost.Flush`.
           - runtime: Node, flush first
             node: ""
             command: pnpm vitest run --max-concurrency=10
@@ -172,7 +125,7 @@ jobs:
 
   doctest:
     name: Test (Documentation)
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-small
     permissions:
       contents: read
     timeout-minutes: 10

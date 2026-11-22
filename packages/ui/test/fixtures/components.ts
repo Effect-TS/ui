@@ -15,6 +15,7 @@ export type CounterMessage = typeof CounterMessage.Type
 
 export const Counter = Component.define({
   name: "Counter",
+  scoped: false,
   props: Schema.Struct({ initial: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage
@@ -70,6 +71,7 @@ export class SaveTodo extends Command.Service<SaveTodo>()(
 
 export const TodoItem = Component.define({
   name: "TodoItem",
+  scoped: false,
   props: Schema.Struct({ todo: Todo }),
   model: Schema.Struct({ saving: Schema.Boolean }),
   message: TodoItemMessage,
@@ -104,6 +106,7 @@ export type TodoListMessage = typeof TodoListMessage.Type
 
 export const TodoList = Component.define({
   name: "TodoList",
+  scoped: false,
   props: Schema.Struct({ initial: Schema.Array(Todo) }),
   model: Schema.Struct({ todos: Schema.Array(Todo), failed: Schema.Array(Schema.String) }),
   message: TodoListMessage
@@ -161,6 +164,7 @@ export const Upload = Command.make(
 
 export const SearchBox = Component.define({
   name: "SearchBox",
+  scoped: false,
   model: Schema.Struct({
     text: Schema.String,
     items: Schema.Array(Schema.String),
@@ -172,9 +176,9 @@ export const SearchBox = Component.define({
   init: () => ({ text: "", items: [], percent: 0, ticks: 0 }),
   update: (model, message, $) =>
     SearchMessage.match(message, {
-      Query: ({ text }) => $.set({ ...model, text }).run(Search({ text })),
+      Query: ({ text }) => $.set({ ...model, text }).run(Search.make({ text })),
       Results: ({ items }) => ({ ...model, items }),
-      Start: () => $.run(Upload({ name: "photo.png" })),
+      Start: () => $.run(Upload.make({ name: "photo.png" })),
       Cancel: () => $.run(Command.interrupt(Upload, { name: "photo.png" })),
       Progress: ({ percent }) => ({ ...model, percent }),
       Tick: () => ({ ...model, ticks: model.ticks + 1 })

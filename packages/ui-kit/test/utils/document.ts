@@ -11,6 +11,36 @@ export const container = Effect.acquireRelease(
 
 export const byId = (id: string) => document.getElementById(id)!
 
+export const holdExits = Effect.acquireRelease(
+  Effect.sync(() => {
+    const original = Element.prototype.getAnimations
+    let finish = () => {}
+    const running = {
+      effect: { getComputedTiming: () => ({ endTime: 200 }) },
+      finished: new Promise<void>((resolve) => (finish = resolve))
+    } as unknown as Animation
+    Element.prototype.getAnimations = function(this: Element) {
+      return this.hasAttribute("data-ending-style") ? [running] : []
+    }
+    return { original, finish: () => finish() }
+  }),
+  ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
+)
+
+export const focusVisibility = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.HTMLElement.prototype
+    const focus = proto.focus
+    const calls: Array<readonly [string, boolean]> = []
+    proto.focus = function(this: HTMLElement, options?: FocusOptions) {
+      calls.push([this.id, (options as { readonly focusVisible?: boolean } | undefined)?.focusVisible === true])
+      focus.call(this, options)
+    }
+    return { calls, focus }
+  }),
+  ({ focus }) => Effect.sync(() => (window.HTMLElement.prototype.focus = focus))
+)
+
 /** A primary-button `pointerdown`, which is what an outside press listens for. */
 export const press = (target: Element, pointerType = "mouse") =>
   target.dispatchEvent(
@@ -22,11 +52,41 @@ export const click = (target: Element, pointerType = "mouse") => {
   target.dispatchEvent(new PointerEvent("click", { bubbles: true, composed: true, detail: 1, pointerType }))
 }
 
+/** happy-dom's `:disabled` misses a control in a disabled fieldset. */
+export const fieldsetDisabled = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.Element.prototype as any
+    const matches = proto.matches
+    proto.matches = function(this: Element, selector: string) {
+      return matches.call(this, selector) || (selector === ":disabled" &&
+        matches.call(this, "button,input,select,textarea") && this.closest("fieldset[disabled]") !== null)
+    }
+    return () => {
+      proto.matches = matches
+    }
+  }),
+  (restore) => Effect.sync(restore)
+)
+
+/** happy-dom focuses any element, such as a `<div>` with no `tabindex`. */
+export const focusability = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.HTMLElement.prototype
+    const focus = proto.focus
+    proto.focus = function(this: HTMLElement, options) {
+      if (this.tabIndex >= 0 || this.hasAttribute("tabindex")) focus.call(this, options)
+    }
+    return () => {
+      proto.focus = focus
+    }
+  }),
+  (restore) => Effect.sync(restore)
+)
+
 /**
  * happy-dom has no popover API. Showing one sends `beforetoggle`, and focuses
  * an `autofocus` element in it, or in a `<dialog>` the first field, as a
- * browser does before the dialog's own mount starts. Its `:disabled` also
- * misses a control in a disabled fieldset.
+ * browser does before the dialog's own mount starts.
  */
 export const popovers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -46,9 +106,7 @@ export const popovers = Effect.acquireRelease(
       showing.delete(this)
     }
     elementProto.matches = function(this: Element, selector: string) {
-      if (selector === ":popover-open") return showing.has(this)
-      return matches.call(this, selector) || (selector === ":disabled" &&
-        matches.call(this, "button,input,select,textarea") && this.closest("fieldset[disabled]") !== null)
+      return selector === ":popover-open" ? showing.has(this) : matches.call(this, selector)
     }
     return () => {
       delete proto.showPopover
@@ -57,7 +115,7 @@ export const popovers = Effect.acquireRelease(
     }
   }),
   (restore) => Effect.sync(restore)
-)
+).pipe(Effect.andThen(fieldsetDisabled))
 
 class FakeVisualViewport extends EventTarget {
   height = 800

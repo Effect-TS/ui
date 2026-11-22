@@ -1,13 +1,13 @@
 /**
  * @title Testing @effect/ui components
  *
- * Test a component's logic as a `Story` and its view as a `Scene`, a Command
- * against a fake Layer, and a whole tree on `TestHost`. The last test renders on the server and hydrates
- * with `ssr`.
+ * Test a component's logic as a `Story`, its view as a `Scene`, a Command
+ * against a fake Layer, and components working together as a `Play`. The
+ * last test renders on the server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
-import { HtmlLocator, HtmlScene, ssr } from "@effect/ui/html/testing"
+import { HtmlLocator, HtmlPlay, HtmlScene, ssr } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -18,7 +18,8 @@ import { TestClock } from "effect/testing"
 import "@effect/ui/html/register"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 // One file here, to read top to bottom. In an app each `describe` sits next
-// to what it tests: `notes/components/NoteEditor.test.ts` and `App.test.ts`.
+// to what it tests: `notes/components/NoteEditor.story.test.ts` and
+// `App.play.test.ts`.
 import type { Note } from "#domain/Note"
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
@@ -174,19 +175,18 @@ describe("Collapsible", () => {
 })
 
 describe("NotePage", () => {
-  it.effect("tells the editor to save now", () =>
+  it.effect("shows a notice when the editor saves", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(NotePageNoDeps, { id: note.id })
       // Load steps take the query's name. `loaded` writes the `note`
       // query's result, as the runtime would, and re-renders.
       s.loaded("note", note)
-        // The button is in the Collapsible's `summary` slot. A parent's
-        // scene shows the content it passed to a child's slots, but not the
-        // child's own view.
-        .click("Save now")
-        // A scene renders no children, so what `update` sent them is data,
-        // acknowledged with the ref and the message.
-        .sent(NoteEditor.ref("Editor").at(note.id), { _tag: "RequestedSave" })
+        // The editor is in the Collapsible's `body` slot. A parent's scene
+        // shows the content it passed to a child's slots, but not the
+        // child's own view, so the test emits for the editor, found by its
+        // component and key.
+        .childEmit(NoteEditor, note.id, NoteEditorEvents.Saved({ note }))
+        .expect(HtmlLocator.role("status")).toHaveText("Saved")
     }))
 })
 
@@ -233,8 +233,24 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), { b
 )
 
 // ---------------------------------------------------------------------------
-// Runtime: one component on `TestHost`, with the Layers the test picks.
+// Play: the runtime runs, with children, Layers and the Router real.
 // ---------------------------------------------------------------------------
+
+// A Play mounts on `TestHost` and drives the tree with the Scene's steps,
+// while effects run against the Layers the test provides. Write one for how
+// components work together: a child's real view, a Command's real
+// implementation, a Subscription on the clock, the Router, a Layer. One
+// component counts when its effects run. Write few: a Story or a Scene fails
+// closer to the cause. In an app the file is `NoteEditor.play.test.ts`.
+//
+// Every step is an Effect: `yield*` each one, `expect` included. A step
+// settles before it acts and again after, so it picks up a
+// `TestClock.adjust` or a navigation on its own. An interaction no handler
+// turned into a message still needs `expectIgnored()`. Nothing else needs
+// acknowledging, since Layers and real components answer it. When the scope
+// closes the Play settles once more, so a crash after the last step fails the
+// test. `TestHost.layer()` provides the host. `TestHost.settle`, `setOnline`
+// and `expectProblem` work beside the Play.
 
 // `NoteEditor` already provides the app's Layers, and an inner provide wins
 // over an outer one. So a test starts from `NoteEditorNoDeps` and provides
@@ -243,27 +259,22 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), { b
 const NoteEditorTest = NoteEditorNoDeps.pipe(Component.provide(SaveNote.layer))
 
 it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPerTest: true })(
-  "NoteEditor on TestHost",
+  "NoteEditor as a Play",
   (it) => {
     it.effect("autosaves an edit", () =>
       Effect.gen(function*() {
         const notes = yield* Notes
-        const root = yield* TestHost.mount(NoteEditorTest, { note })
-        Locator.fire(root.get(body), "input", { value: edited.body })
-        // `settle` drains Commands, fetches, Layer builds and the render flush.
-        yield* TestHost.settle
-        // The TestClock owns time. Adjusting it fires the autosave Subscription.
+        const play = yield* HtmlPlay.make(NoteEditorTest, { note })
+        yield* play.type(body, edited.body)
+        // The TestClock owns time. Adjusting it fires the autosave
+        // Subscription, and the next step settles what that started.
         yield* TestClock.adjust("2 seconds")
-        yield* TestHost.settle
+        yield* play.expect(body).toHaveValue(edited.body)
         assert.deepStrictEqual(yield* notes.get(note.id), edited)
-        assert.deepStrictEqual(root.emitted, [NoteEditorEvents.Saved({ note: edited })])
+        assert.deepStrictEqual(play.root.emitted, [NoteEditorEvents.Saved({ note: edited })])
       }))
   }
 )
-
-// ---------------------------------------------------------------------------
-// Runtime: the whole app, across children, Layers and the Router.
-// ---------------------------------------------------------------------------
 
 // The app is tested as it ships, so its components keep their own domain
 // Layers. The test provides what an entry module provides. `Router.memory`
@@ -291,19 +302,25 @@ const AppTest = Layer.mergeAll(
   TestHost.layer()
 )
 
-it.layer(AppTest, { buildPerTest: true })("App", (it) => {
+it.layer(AppTest, { buildPerTest: true })("App as a Play", (it) => {
   it.effect("loads a note, saves an edit and shows the notice", () =>
     Effect.gen(function*() {
       // `Router.props` reads the root's `{ route }` from the Router.
-      const root = yield* TestHost.mount(App, Router.props(AppRoute))
-      yield* TestHost.settle
-      assert.strictEqual(root.head().title, "Shopping · Notes")
+      const play = yield* HtmlPlay.make(App, Router.props(AppRoute))
+      // App's template around the title NotePage read from its query.
+      assert.strictEqual(play.root.head().title, "Shopping · Notes")
 
-      Locator.fire(root.get(body), "input", { value: edited.body })
-      yield* TestHost.settle
-      yield* TestClock.adjust("2 seconds")
-      yield* TestHost.settle
-      assert.strictEqual(Locator.textOf(root.get(HtmlLocator.role("status"))), "Saved")
+      // NoteEditor's textarea, three components down.
+      yield* play.type(body, edited.body)
+      // NotePage's button, in Collapsible's summary slot. It sends
+      // NoteEditor a save, NoteEditor runs SaveNote through the fake API and
+      // emits Saved, and NotePage shows the notice.
+      yield* play.click("Save now")
+      yield* play.expect(HtmlLocator.role("status")).toHaveText("Saved")
+
+      // Collapsible's own button.
+      yield* play.click("Hide")
+      yield* play.expect(body).toBeAbsent()
     }))
 
   it.effect("hydrates what the server rendered", () =>
@@ -315,7 +332,7 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
       assert.include(result.html, "Milk")
       // The paths of the instances that adopted the server's state.
       // The editor sits in the Collapsible's `body` slot, under its path.
-      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[Editor[n1]]")
+      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[n1]")
     }))
 })
 
@@ -348,13 +365,11 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
 // a render is never mounted.
 const timelineOf = (flush: TestHost.Flush) =>
   Effect.gen(function*() {
-    const root = yield* TestHost.mount(App, Router.props(AppRoute))
-    yield* TestHost.settle
-    Locator.fire(root.get(body), "input", { value: edited.body })
-    yield* TestHost.settle
+    const play = yield* HtmlPlay.make(App, Router.props(AppRoute))
+    yield* play.type(body, edited.body)
     yield* TestClock.adjust("2 seconds")
-    yield* TestHost.settle
-    const log = root.log()
+    yield* play.expect(HtmlLocator.role("status")).toHaveText("Saved")
+    const log = play.root.log()
     // Entry numbers follow the order entries were logged in, which a render
     // that ran earlier or later changes. Nothing else does.
     return { log, timeline: TestHost.formatTimeline(log).replace(/#\d+/g, "#") }

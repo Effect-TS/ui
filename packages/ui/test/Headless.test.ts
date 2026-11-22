@@ -1,8 +1,8 @@
-import { Command, Component, Feature, type MessageLog, UiSchema, type View } from "@effect/ui"
+import { Component, Feature, type MessageLog, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Locator, Scene, TestHost } from "@effect/ui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { Dialog, type Item, Menu } from "./html/fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
@@ -33,6 +33,7 @@ const PickerMessage = UiSchema.TaggedEnum({
 
 const Picker = Component.define({
   name: "Picker",
+  scoped: false,
   model: Schema.Array(Schema.String),
   message: PickerMessage,
   elements: Html
@@ -81,6 +82,7 @@ const BellMessage = UiSchema.TaggedEnum({ Ring: {}, Break: {} })
 
 const Bell = Component.define({
   name: "Bell",
+  scoped: false,
   model: Schema.Number,
   message: BellMessage,
   events: Schema.Literal("rang"),
@@ -105,6 +107,7 @@ const BoardMessage = UiSchema.TaggedEnum({ Rang: {}, Failed: {} })
 
 const Board = Component.define({
   name: "Board",
+  scoped: false,
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Array(Schema.String),
   message: BoardMessage,
@@ -133,91 +136,17 @@ const Board = Component.define({
 })
 
 // ---------------------------------------------------------------------------
-// A parent that sends to a headless child through its ref
-// ---------------------------------------------------------------------------
-
-const lingering = { release: Deferred.makeUnsafe<void>() }
-const Linger = Command.make(
-  "Linger",
-  { args: {} },
-  () => Effect.onInterrupt(Effect.never, () => Deferred.await(lingering.release))
-)
-const Lingering = Component.define({ name: "Lingering", model: Schema.Null, message: Schema.Never }).make({
-  init: ($) => $.set(null).run(Linger()),
-  update: (model) => model,
-  view: (_, h) => h.el("span")
-})
-
-const OpenerMessage = UiSchema.TaggedEnum({ Open: {}, Twin: {}, Swap: {} })
-
-const Actions = Menu.ref("Actions")
-const Spare = Menu.ref("Spare")
-
-/**
- * Sends to the Menu at `Actions`. Its closure renders a second child with that ref: from the mount,
- * once `Twin` re-renders the view, or once the Menu opens and re-renders alone. `Swap` moves the
- * child with the ref `Spare` between the view and the closure, in one render.
- */
-const Opener = Component.define({
-  name: "Opener",
-  props: Schema.Struct({ twin: Schema.Literals(["never", "mount", "open"]) }),
-  model: Schema.Struct({ twin: Schema.Boolean, swapped: Schema.Boolean }),
-  message: OpenerMessage,
-  elements: Html
-}).make({
-  init: ($) => ({ twin: $.props.twin === "mount", swapped: false }),
-  update: (model, message, $) =>
-    message._tag === "Twin"
-      ? { ...model, twin: true }
-      : message._tag === "Swap"
-      ? { ...model, swapped: !model.swapped }
-      : $.send(Actions, { _tag: "Toggle" }),
-  view: (model, h) =>
-    h.div(
-      h.button.onClick(OpenerMessage.Open()).children("open"),
-      Menu(h, {
-        ref: Actions,
-        props: { items },
-        view: (menu) =>
-          h.p(
-            menu.open ? "shown" : "hidden",
-            // The closure is the parent's code, so a child in it takes the parent's refs.
-            (model.twin || (h.props.twin === "open" && menu.open)) &&
-              Menu(h, { ref: Actions, props: { items }, view: () => h.span("again") }),
-            // Removed with its holder when the ref moves back to the view. The holder's Scope closes
-            // after its `Lingering` child's, which its Command holds open.
-            model.swapped && Menu(h, {
-              key: "holder",
-              props: { items },
-              view: () =>
-                h.div(
-                  Menu(
-                    h,
-                    { ref: Spare, props: { items }, view: () => h.span("spare in a closure") }
-                  ),
-                  Lingering(h, { key: "l" })
-                )
-            })
-          )
-      }),
-      !model.swapped && Menu(
-        h,
-        { ref: Spare, props: { items }, view: () => h.span("spare in the view") }
-      )
-    )
-})
-
-// ---------------------------------------------------------------------------
 // A feature child in a closure, under a Layer that never finishes building
 // ---------------------------------------------------------------------------
 
 class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
-const BadgeImpl = Component.define({ name: "BadgeImpl", model: Schema.Null, message: Schema.Never }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("span", "badge")
-})
-const Bare = Component.define({ name: "Bare", model: Schema.Null, message: Schema.Never }).make({
+const BadgeImpl = Component.define({ name: "BadgeImpl", scoped: false, model: Schema.Null, message: Schema.Never })
+  .make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => h.el("span", "badge")
+  })
+const Bare = Component.define({ name: "Bare", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
   update: (model) => model,
   parts: () => ({})
@@ -225,6 +154,7 @@ const Bare = Component.define({ name: "Bare", model: Schema.Null, message: Schem
 const ConsumerMessage = UiSchema.TaggedEnum({ Break: {} })
 const Consumer = Component.define({
   name: "Consumer",
+  scoped: false,
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
   model: Schema.Boolean,
   message: ConsumerMessage
@@ -255,6 +185,7 @@ const Provided = Component.provide(
 )
 const Waiting = Component.define({
   name: "Waiting",
+  scoped: false,
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
   model: Schema.Null,
   message: Schema.Never
@@ -273,7 +204,13 @@ const Waiting = Component.define({
 // Token lists: a part adds to the consumer's class and aria-describedby
 // ---------------------------------------------------------------------------
 
-const Field = Component.define({ name: "Field", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Field = Component.define({
+  name: "Field",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   parts: (_, p) => ({
@@ -284,7 +221,13 @@ const Field = Component.define({ name: "Field", model: Schema.Null, message: Sch
   })
 })
 
-const Form = Component.define({ name: "Form", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Form = Component.define({
+  name: "Form",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   // One list set before the part is applied, and one after.
@@ -297,6 +240,7 @@ const Form = Component.define({ name: "Form", model: Schema.Null, message: Schem
 
 const Shell = Component.define({
   name: "Shell",
+  scoped: false,
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never,
@@ -350,115 +294,6 @@ describe("headless components", () => {
       assert.include(root.text(), "Rang, Rang, Failed")
     })))
 
-  it.effect("a parent sends to a headless child through its ref", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Opener, { twin: "never" } as const)
-      assert.include(root.text(), "hidden")
-      click(root, "open")
-      yield* TestHost.settle
-      assert.include(root.text(), "shown")
-      assert.deepStrictEqual(updates(root), ["/Opener DomEvent Open", "/Opener/Menu[Actions] Send Toggle"])
-    })))
-
-  describe("a ref on a child in the view and on one in a closure", () => {
-    const crashed = (twin: "never" | "mount" | "open") =>
-      TestHost.mount(Opener, { twin }, { fallback: (_, h) => h.text("crashed") })
-    const failed = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
-      root.log().flatMap((entry) =>
-        entry._tag === "Failed" ? [entry.path + " " + entry.in + " " + Cause.squash(entry.cause)] : []
-      )
-    const twice =
-      "/Opener view Error: /Opener renders two children with the ref Actions, in the view it gives /Opener/Menu[Actions]"
-
-    it.effect("fail the parent on its first render", () =>
-      provideHost(Effect.gen(function*() {
-        const root = yield* crashed("mount")
-        yield* Effect.flip(TestHost.settle)
-        assert.strictEqual(root.text(), "crashed")
-        assert.deepStrictEqual(failed(root), [twice])
-      })))
-
-    it.effect("fail the parent when its view re-renders", () =>
-      provideHost(Effect.gen(function*() {
-        const root = yield* crashed("never")
-        root.send(OpenerMessage.Twin())
-        yield* Effect.flip(TestHost.settle)
-        assert.strictEqual(root.text(), "crashed")
-        assert.deepStrictEqual(failed(root), [twice])
-      })))
-
-    it.effect("fail the parent when the closure re-renders alone, before another send", () =>
-      provideHost(Effect.gen(function*() {
-        const root = yield* crashed("open")
-        click(root, "open")
-        yield* Effect.flip(TestHost.settle)
-        assert.strictEqual(root.text(), "crashed")
-        assert.deepStrictEqual(failed(root), [twice])
-        assert.deepStrictEqual(updates(root), ["/Opener DomEvent Open", "/Opener/Menu[Actions] Send Toggle"])
-      })))
-
-    it.effect("let a ref move between the view and a closure in one render", () =>
-      provideHost(
-        Effect.gen(function*() {
-          lingering.release = Deferred.makeUnsafe()
-          const root = yield* crashed("never")
-          root.send(OpenerMessage.Swap())
-          yield* TestHost.settle
-          assert.include(root.text(), "spare in a closure")
-          root.send(OpenerMessage.Swap())
-          yield* TestHost.settle
-          assert.include(root.text(), "spare in the view")
-          assert.deepStrictEqual(failed(root), [])
-        }).pipe(Effect.ensuring(Effect.sync(() => Deferred.doneUnsafe(lingering.release, Effect.void))))
-      ))
-
-    it.effect("fail the parent for a closure inside another closure", () =>
-      provideHost(Effect.gen(function*() {
-        const Nested = Component.define({ name: "Nested", model: Schema.Null, message: Schema.Never, elements: Html })
-          .make({
-            init: () => null,
-            update: (model) => model,
-            view: (_, h) =>
-              h.div(
-                Menu(h, { ref: Spare, props: { items }, view: () => h.span("in the view") }),
-                Menu(h, {
-                  key: "outer",
-                  props: { items },
-                  view: () =>
-                    Menu(h, {
-                      key: "inner",
-                      props: { items },
-                      view: () =>
-                        Menu(
-                          h,
-                          { ref: Spare, props: { items }, view: () => h.span("two closures down") }
-                        )
-                    })
-                })
-              )
-          })
-        const root = yield* TestHost.mount(Nested, {}, { fallback: (_, h) => h.text("crashed") })
-        yield* Effect.flip(TestHost.settle)
-        assert.strictEqual(root.text(), "crashed")
-        assert.deepStrictEqual(failed(root), [
-          "/Nested view Error: /Nested renders two children with the ref Spare, in the view it gives " +
-          "/Nested/Menu[outer]/Menu[inner]"
-        ])
-      })))
-
-    it("fail a Scene step the same way", () => {
-      const twice = /\/Opener renders two children with the ref Actions, in the view it gives \/Opener\/Menu\[Actions\]/
-      assert.throws(() => Scene.start(Opener, { twin: "mount" }).current.view(), twice)
-      // Nothing in the view sends `Twin` or `Swap`, so the scene starts from the Model they make.
-      assert.throws(() => Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, twin: true })), twice)
-      const open = { open: true, query: "", active: null, typed: "", focused: [] }
-      assert.throws(() => Scene.start(Opener, { twin: "open" }).givenChild(Menu, Actions, open).current.view(), twice)
-      // Moved in one step, the ref is held once.
-      const swapped = Scene.start(Opener, { twin: "never" }).given((model) => ({ ...model, swapped: true }))
-      assert.lengthOf(swapped.current.all(Locator.text("spare in a closure")), 1)
-    })
-  })
-
   it.effect("a part adds its tokens to a token list, whenever the consumer set it", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Form, {})
@@ -471,6 +306,7 @@ describe("headless components", () => {
     provideHost(Effect.gen(function*() {
       const Control = Component.define({
         name: "Control",
+        scoped: false,
         props: Schema.Struct({ active: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
@@ -490,6 +326,7 @@ describe("headless components", () => {
       })
       const Consumer = Component.define({
         name: "Consumer",
+        scoped: false,
         model: Schema.Boolean,
         message: Schema.Literal("toggle"),
         elements: Html
@@ -504,9 +341,13 @@ describe("headless components", () => {
               props: { active },
               view: (control) =>
                 control.root(
-                  h.button.disabled(true).attr("aria-readonly", "true").attr("data-checked", "")
-                    .attr("data-removed", "consumer").attr("title", "consumer")
-                    .attr("aria-label", "Keep me").class("consumer")
+                  h.button.disabled(true).attrs({
+                    "aria-readonly": "true",
+                    "data-checked": "",
+                    "data-removed": "consumer",
+                    title: "consumer",
+                    "aria-label": "Keep me"
+                  }).class("consumer")
                 ).children("control")
             })
           )
@@ -525,7 +366,12 @@ describe("headless components", () => {
 
   it.effect("an element written by hand leaves owned out", () =>
     provideHost(Effect.gen(function*() {
-      const Hand = Component.define({ name: "Hand", model: Schema.Number, message: Schema.Literal("hit") }).make({
+      const Hand = Component.define({
+        name: "Hand",
+        scoped: false,
+        model: Schema.Number,
+        message: Schema.Literal("hit")
+      }).make({
         init: () => 0,
         update: (count) => count + 1,
         view: (count): View.Element<"hit"> => ({

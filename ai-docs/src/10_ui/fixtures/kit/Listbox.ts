@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { DomCommand, Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 // `kit/` holds components that belong to no feature: a design system's
@@ -53,9 +53,11 @@ const step = (options: ReadonlyArray<ListboxOption>, from: string | null, direct
 const activeIn = (shown: ReadonlyArray<ListboxOption>, active: string | null) =>
   shown.some((o) => o.id === active && o.disabled !== true) ? active : null
 
-// `Html.focus` and `Html.scrollIntoView` report whether the ref was
-// rendered. Nothing here depends on it, so they end in `Component.noop`,
-// which sends nothing, and the Message union has no no-op variant.
+// `DomCommand.focus` and `DomCommand.scrollIntoView` act on the element a
+// ref from `Html.ref` names, once the render is committed, and report
+// whether the ref was rendered. Nothing here depends on it, so they end in
+// `Component.noop`, which sends nothing, and the Message union has no no-op
+// variant.
 const silent = () => Component.noop
 
 /**
@@ -67,6 +69,7 @@ const silent = () => Component.noop
  */
 export const Listbox = Component.define({
   name: "Listbox",
+  scoped: false,
   props: Schema.Struct({
     options: Schema.Array(ListboxOption),
     // The consumer owns the value. The Listbox reads it to start from it.
@@ -90,7 +93,7 @@ export const Listbox = Component.define({
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
         $.evolve({ open, query: "", active: open ? $.props.selected : null })
-          .run(open ? Html.focus(Input, silent) : Html.focus(Trigger, silent)),
+          .run(open ? DomCommand.focus(Input, silent) : DomCommand.focus(Trigger, silent)),
       UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
       PressedKey: ({ key }) => {
         const shown = filter($.props.options, model.query)
@@ -104,7 +107,7 @@ export const Listbox = Component.define({
             return next === null
               ? $.evolve({ open: true })
               : $.evolve({ open: true, active: next })
-                .run(Html.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
+                .run(DomCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
           }
           case "Enter":
             return active === null
@@ -149,13 +152,15 @@ export const Listbox = Component.define({
       active,
       trigger: p.part("button", (b) =>
         b.ref(Trigger)
-          .attr("type", "button")
-          .attr("aria-haspopup", "dialog")
-          .attr("aria-expanded", String(model.open))
-          .attr("aria-controls", p.id("popup"))
-          // A `popovertarget` invoker: the browser toggles the popup, and a
-          // click on the trigger while it's open closes it.
-          .attr("popovertarget", p.id("popup"))
+          .attrs({
+            type: "button",
+            "aria-haspopup": "dialog",
+            "aria-expanded": String(model.open),
+            "aria-controls": p.id("popup"),
+            // A `popovertarget` invoker: the browser toggles the popup, and a
+            // click on the trigger while it's open closes it.
+            popovertarget: p.id("popup")
+          })
           .onKeyDown(
             ({ alt, ctrl, key, meta }) =>
               key === "ArrowDown" || (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
@@ -172,11 +177,13 @@ export const Listbox = Component.define({
           .onToggle(({ open }) => ListboxMessage.ToggledPopup({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
-          .attr("role", "combobox")
-          .attr("aria-autocomplete", "list")
-          .attr("aria-expanded", "true")
-          .attr("aria-controls", p.id("list"))
-          .attr("aria-activedescendant", active === null ? undefined : p.id("option", active))
+          .attrs({
+            role: "combobox",
+            "aria-autocomplete": "list",
+            "aria-expanded": "true",
+            "aria-controls": p.id("list"),
+            "aria-activedescendant": active === null ? undefined : p.id("option", active)
+          })
           .value(model.query)
           .onInput(({ value }) => ListboxMessage.UpdatedQuery({ value }))
           .onKeyDown(
@@ -192,9 +199,11 @@ export const Listbox = Component.define({
       option: p.part("li", (b, option: ListboxOption) =>
         b.id(p.id("option", option.id))
           .ref(Row.at(option.id))
-          .attr("role", "option")
-          .attr("aria-selected", String(active === option.id))
-          .attr("aria-disabled", option.disabled === true ? "true" : undefined)
+          .attrs({
+            role: "option",
+            "aria-selected": String(active === option.id),
+            "aria-disabled": option.disabled === true ? "true" : undefined
+          })
           .onClick(
             option.disabled === true ? () => undefined : ListboxMessage.ClickedOption({ id: option.id })
           ))

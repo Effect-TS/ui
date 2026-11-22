@@ -29,6 +29,7 @@ export const TagPickerEvents = UiSchema.TaggedEnum({ Changed: { tags: Schema.Arr
 
 export const TagPicker = Component.define({
   name: "TagPicker",
+  scoped: false,
   props: Schema.Struct({ options: Schema.Array(ListboxOption), tags: Schema.Array(Schema.String) }),
   // What the status region last announced, so a screen reader hears what a
   // pick or a removal did.
@@ -58,9 +59,7 @@ export const TagPicker = Component.define({
   // The consumer's closure runs inside the Listbox, so the Listbox's path is
   // `TagPicker[]/Listbox[]` and its ids are derived from it. What the
   // Listbox emits goes to `onEmit` here and through this component's
-  // `update`, never to the consumer. A `ref` on it would let this
-  // `update` reach it with `$.send`, and a consumer's ref of the same key
-  // never matches it.
+  // `update`, never to the consumer.
   //
   // If the Listbox fails, it shows nothing, the closure with it, and an
   // `onFailure` here hears of it. The failure stops there: this component
@@ -76,10 +75,12 @@ export const TagPicker = Component.define({
         ...listbox,
         tags: p.props.options.filter((option) => picked.has(option.id)),
         announced: model.announced,
-        remove: p.part("button", (b, tag: ListboxOption) =>
-          b.attr("type", "button")
-            .attr("aria-label", `Remove ${tag.label}`)
-            .onClick(TagPickerMessage.ClickedRemove({ id: tag.id }))),
+        remove: p.part(
+          "button",
+          (b, tag: ListboxOption) =>
+            b.attrs({ type: "button", "aria-label": `Remove ${tag.label}` })
+              .onClick(TagPickerMessage.ClickedRemove({ id: tag.id }))
+        ),
         status: p.part("div", (b) => b.attr("role", "status"))
       })
     })
@@ -100,6 +101,7 @@ const options: ReadonlyArray<ListboxOption> = [
 
 export const NoteTags = Component.define({
   name: "NoteTags",
+  scoped: false,
   model: Schema.Struct({ tags: Schema.Array(Schema.String) }),
   message: NoteTagsMessage,
   elements: Html

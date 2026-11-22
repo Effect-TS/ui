@@ -27,21 +27,19 @@ export interface RootHandle {
   readonly hydrated: boolean
   /** Whether the root's server state came from a `static: true` render: it carries `~static`. */
   readonly static: boolean
+  readonly path: string
   readonly container: unknown
   /** The current flush: 0 for the first render, then one more per flush. */
   readonly flush: () => number
   /** Whether a flush is running, so what it delivers now renders in `flush()` and not the next one. */
   readonly flushing: () => boolean
-  /**
-   * Writes the JSON-encoded Model of every mounted instance into `out`, by path. One that encodes
-   * asynchronously is written once encoded, after this returns. Models that don't encode are left out.
-   */
   readonly snapshot: (out: Record<string, unknown>) => void
   /**
    * The Router navigated. It closes the cache's fetch-free window after hydration, if adoption
    * hasn't yet. The Router calls it first in `set`, before the route changes.
    */
   readonly navigated: () => void
+  readonly restored: () => void
   /** The runtime's problems sink. */
   readonly report: (problem: { readonly _tag: string; readonly message: string }) => void
 }
@@ -70,8 +68,8 @@ export interface RootHooks {
   /** Registers a mounted root. The returned function unregisters it. */
   readonly attach: (root: RootHandle) => () => void
   readonly afterFlush: (root: RootHandle, info: FlushInfo) => void
-  /** The encoded Model a new instance at `path` adopts, if the router is restoring one. */
-  readonly restore: (path: string) => unknown
+  readonly restore: (path: string) => PageState | undefined
+  readonly entry: () => Record<string, unknown> | undefined
   /**
    * Registers an instance's `Router.prefetch` declaration. The returned function unregisters it. The
    * Router makes the declarer, with its own walk and check, from what the runtime gives. `declared`
@@ -82,6 +80,12 @@ export interface RootHooks {
     inst: prefetchWalk.Instance,
     declared: { readonly declaration: Prefetch }
   ) => () => void
+}
+
+/** @internal */
+export interface PageState {
+  readonly state: unknown
+  readonly reported: unknown
 }
 
 /**
@@ -193,8 +197,8 @@ export interface OnServer {
  *
  * `enter` renders the dirty ancestors, then calls `f` with the key's latest
  * declaration, unless the Subscription has stopped. `emit` enters the same
- * way. A source that calls user code, such as `Html.onDocument`'s handler,
- * does so inside `enter`, so a stale declaration never runs.
+ * way. A source that calls user code, such as `DomSubscription.onDocument`'s
+ * handler, does so inside `enter`, so a stale declaration never runs.
  *
  * `Router.subscription` uses it, so a navigation reaches the root inside the
  * flush whose Command made it.

@@ -47,6 +47,7 @@ const count = (text: string, part: string) => text.split(part).length - 1
 /** The list page and the detail page side by side. */
 const Both = Component.define({
   name: "Both",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

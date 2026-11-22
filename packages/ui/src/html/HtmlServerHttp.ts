@@ -77,6 +77,7 @@ import * as HtmlServer from "./HtmlServer.ts"
  *
  * const App = Component.define({
  *   name: "App",
+ *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: Schema.Struct({ route: AppRoute }),
  *   message: Schema.Never
@@ -119,11 +120,10 @@ export const layerHttp = <
   Events,
   R,
   V extends View.Elements,
-  U extends Router.Routes,
-  Rcv = never
+  U extends Router.Routes
 >(
   component:
-    & Component.Component<Name, { readonly route: U["Type"] }, Model, Msg, Events, R, V, any, Rcv>
+    & Component.Members<Name, { readonly route: U["Type"] }, Model, Msg, Events, R, V, any>
     & BrowserHost.HtmlRoot<V>,
   options: {
     readonly routes: U

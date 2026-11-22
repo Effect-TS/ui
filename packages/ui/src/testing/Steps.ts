@@ -14,8 +14,8 @@
  * when earlier work is still in flight or an earlier output hasn't been
  * acknowledged:
  *
- * - A message step (`receive`, `subscription`, `layerFailed`, Story's
- *   `send`, a Scene's interactions and child steps) throws while a Command
+ * - A message step (`subscription`, `layerFailed`, Story's `send`, a
+ *   Scene's interactions and child steps) throws while a Command
  *   or a load more is pending, or while an enabled query has no result at
  *   its args. A Command whose mode is `switch` or `queue` doesn't block,
  *   nor does a stream Command, nor anything `keepPending` named.
@@ -90,8 +90,7 @@ export interface AwaitedQuery {
  * @since 0.1.0
  */
 export interface Record<Props, Model, Msg, Events> {
-  /** The component, erased to receive nothing: a test doesn't know what it receives. */
-  readonly component: Component.Component<any, Props, Model, Msg, Events, any, any, any, never>
+  readonly component: Component.Component<any, Props, Model, Msg, Events, any, any, any>
   readonly props: Props
   /** Commands issued but not yet resolved, oldest first. */
   readonly pending: ReadonlyArray<Pending<Msg>>
@@ -99,7 +98,7 @@ export interface Record<Props, Model, Msg, Events> {
   readonly emitted: ReadonlyArray<Events>
   /**
    * The `$.send`s no `sent` step acknowledged yet, oldest first. A test
-   * runs no children, so nothing receives them.
+   * runs no owner, so nothing receives them.
    */
   readonly sent: ReadonlyArray<Component.Send>
   /**
@@ -145,7 +144,7 @@ export interface QueryInfo {
   readonly args: unknown
 }
 
-/** What `$.send` takes for a receiver of `Rcv`: nothing when the receiver takes any message. */
+/** What `$.send` takes for an owner that receives `Rcv`: nothing when it takes any message. */
 type SendMessage<Rcv> = unknown extends Rcv ? never : Rcv
 
 /**
@@ -210,12 +209,9 @@ export type Target =
 export type StreamTarget = Command.Definition<any, any, true, any, any> | Command.Issued<any, any, never, "Stream">
 
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
-// `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any>
 
 /**
  * The steps every kind of test shares. Each step runs as soon as it's
@@ -239,6 +235,7 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({
@@ -264,13 +261,6 @@ type AnyComponent =
  * @since 0.1.0
  */
 export interface Steps<C extends AnyComponent> extends Pipeable {
-  /**
-   * Delivers a message the component receives from its parent, as a
-   * `$.send` to its ref would. An updater is called with the current Model.
-   * A message step.
-   */
-  receive(message: Component.Receives<C> | ((model: Component.Model<C>) => Component.Receives<C>)): this
-
   /**
    * Delivers a message from an active Subscription, using the key reported by
    * subscriptions. Throws for inactive keys and query watch keys, listing
@@ -497,13 +487,8 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   emitted(...events: readonly [Component.Events<C>, ...Array<Component.Events<C>>]): this
   /**
    * Acknowledges the oldest `$.send` no step acknowledged yet, after
-   * asserting it went to `ref` with `message`, compared with the ref's
-   * `receives` Schema.
-   */
-  sent<Rcv>(ref: Component.Ref<Rcv>, message: NoInfer<SendMessage<Rcv>>): this
-  /**
-   * Acknowledges the oldest `$.send` no step acknowledged yet, after
-   * asserting it went to the nearest `owner` above with `message`.
+   * asserting it went to the nearest `owner` above with `message`,
+   * compared with the owner's `receives` Schema.
    */
   sent<O extends Component.Headless.Any>(owner: O, message: NoInfer<SendMessage<Component.Shared.Receives<O>>>): this
   /**

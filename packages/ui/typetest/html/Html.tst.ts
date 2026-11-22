@@ -1,5 +1,5 @@
 import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
@@ -29,6 +29,7 @@ const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) => Effec
 
 const Ticker = Component.define({
   name: "Ticker",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Number,
   elements: Html
@@ -58,6 +59,7 @@ describe("Html", () => {
     expect(Html).type.toBeAssignableTo<View.Vocabulary<Html.Elements>>()
     Component.define({
       name: "Tags",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -79,6 +81,7 @@ describe("Html", () => {
   it("children returns the builder, so more children and attributes can follow", () => {
     Component.define({
       name: "Order",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -121,6 +124,7 @@ describe("Html", () => {
   it("forward returns the builder's own class, with what it adds in the requirements", () => {
     Component.define({
       name: "Forward",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -134,7 +138,7 @@ describe("Html", () => {
           return h.div.class("frame").children(node, needsClock)
         })
         expect(framed).type.toBe<Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
-        expect(framed.attr("title", "Go").children("Go")).type.toBe<
+        expect(framed.attr("title", "Go").attrs({ id: "go", "aria-label": undefined }).children("Go")).type.toBe<
           Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">
         >()
         // A void element keeps its class, and still takes no children.
@@ -154,6 +158,7 @@ describe("Html", () => {
   it("errors point at the offending child", () => {
     Component.define({
       name: "Errors",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -171,6 +176,7 @@ describe("Html", () => {
   it("events carry the tag's payloads", () => {
     Component.define({
       name: "Events",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -191,8 +197,31 @@ describe("Html", () => {
         expect(h.button.onClick).type.toBeCallableWith(({ shift }: Html.PointerPayload) =>
           shift ? undefined : Msg.Mounted()
         )
+        expect(h.input.onCompositionEnd).type.toBeCallableWith(
+          ({ value }: Html.CompositionPayload) => Msg.Typed({ value })
+        )
+        expect(h.textarea.on).type.toBeCallableWith(
+          "compositionend",
+          ({ value }: Html.CompositionPayload) => Msg.Typed({ value })
+        )
+        expect(h.input.onInput).type.toBeCallableWith(
+          ({ composing, inputType, value }: Html.InputPayload) =>
+            composing || inputType === "insertReplacementText" ? undefined : Msg.Typed({ value })
+        )
+        expect(h.input.onKeyDown).type.toBeCallableWith(
+          ({ selectionEnd, selectionStart }: Html.KeyPayload) =>
+            selectionStart === selectionEnd ? undefined : Msg.Mounted()
+        )
+        expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
+        expect(h.input.onPaste).type.toBeCallableWith(
+          ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
+          { preventDefault: true }
+        )
+        expect(h.div.on).type.toBeCallableWith("paste", ({ text }: Html.PastePayload) => Msg.Typed({ value: text }))
         expect(h.div.on).type.not.toBeCallableWith("input", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("submit", Msg.Mounted())
+        expect(h.select.on).type.not.toBeCallableWith("compositionend", Msg.Mounted())
+        expect(h.div.on).type.not.toBeCallableWith("compositionend", Msg.Mounted())
         expect(h.button.onClick).type.not.toBeCallableWith("not a message")
         return h.div()
       }
@@ -202,6 +231,7 @@ describe("Html", () => {
   it("controlled properties exist on the elements that have them", () => {
     Component.define({
       name: "Controlled",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -243,6 +273,7 @@ describe("Html", () => {
     })
     Component.define({
       name: "Refs",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -265,6 +296,7 @@ describe("Html", () => {
   it("requirements from onMount and from children reach the component", () => {
     const Mounted = Component.define({
       name: "Mounted",
+      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -279,6 +311,7 @@ describe("Html", () => {
     expect(Mounted).type.toBe<Component.Component<"Mounted", {}, null, Msg, never, Logger | Clock, Html.Elements>>()
     const Shorthand = Component.define({
       name: "Shorthand",
+      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -290,6 +323,7 @@ describe("Html", () => {
     expect(Shorthand).type.toBe<Component.Component<"Shorthand", {}, null, Msg, never, Clock, Html.Elements>>()
     const Bare = Component.define({
       name: "Bare",
+      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -319,6 +353,7 @@ describe("Html", () => {
     expect(DrawChart).type.not.toBeCallableWith({ points: "none" })
     const Chart = Component.define({
       name: "Chart",
+      scoped: false,
       model: Schema.Array(Schema.Number),
       message: Schema.Never,
       elements: Html
@@ -382,7 +417,7 @@ describe("Html", () => {
   })
 
   it("View.Input keeps what a child requires", () => {
-    const PageDef = Component.define({ name: "Page", model: Schema.Null, message: Msg, elements: Html })
+    const PageDef = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html })
     const ticker = {} as View.Node<Msg, Clock>
     const plain = (..._children: ReadonlyArray<View.Input<Msg>>) => {}
     expect(plain).type.toBeCallableWith("text", null)
@@ -434,12 +469,13 @@ describe("Html", () => {
   it("ref Commands add nothing to a component's requirements", () => {
     const Form = Component.define({
       name: "Form",
+      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
     }).make({
       init: () => "",
-      update: (_model, _, $) => $.run(Html.focus(Field, ({ found }) => Msg.Focused({ found }))),
+      update: (_model, _, $) => $.run(DomCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
       view: (_, h) => h.input.ref(Field)
     })
     expect(Form).type.toBe<Component.Component<"Form", {}, string, Msg, never, never, Html.Elements>>()
@@ -472,6 +508,7 @@ describe("HtmlLocator", () => {
 describe("BrowserHost", () => {
   const Counter = Component.define({
     name: "Counter",
+    scoped: false,
     model: Schema.Number,
     message: Msg,
     elements: Html
@@ -495,6 +532,7 @@ describe("BrowserHost", () => {
     const AppRoute = Route.union({ Home: Route.make("/"), NotFound: Route.make("/*") })
     const App = Component.define({
       name: "App",
+      scoped: false,
       props: Schema.Struct({ route: AppRoute }),
       model: AppRoute,
       message: Schema.Never,
@@ -522,6 +560,7 @@ describe("BrowserHost", () => {
     const Native: View.Vocabulary<Native> = { name: "native", tags: {} }
     const App = Component.define({
       name: "App",
+      scoped: false,
       model: Schema.Number,
       message: Msg,
       elements: Native

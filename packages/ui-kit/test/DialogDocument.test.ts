@@ -4,7 +4,7 @@ import { Dialog, DialogTrigger, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, click, container, popovers, press, tick } from "./utils/document.ts"
+import { byId, click, container, focusVisibility, holdExits, popovers, press, tick } from "./utils/document.ts"
 
 // The dialog's document work, in a DOM: what a press, a focus move or a
 // close does once the dialog shows.
@@ -16,6 +16,8 @@ const Message = UiSchema.TaggedEnum({
   Switched: {},
   ShowedToasts: {},
   AddedControl: {},
+  AllowedFocus: {},
+  Removed: {},
   Opened: { which: Schema.String, triggerId: Schema.NullOr(Schema.String), method: OpenMethod },
   Dismissed: { which: Schema.String, reason: Schema.String },
   Settled: { which: Schema.String, open: Schema.Boolean }
@@ -64,6 +66,7 @@ const config = (overrides: Partial<Config>): Config => ({
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Config,
   model: Schema.Struct({
     config: Config,
@@ -73,6 +76,7 @@ const Page = Component.define({
     method: OpenMethod,
     toasts: Schema.Boolean,
     late: Schema.Boolean,
+    removed: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
   message: Message,
@@ -86,6 +90,7 @@ const Page = Component.define({
     method: null,
     toasts: $.props.toast,
     late: false,
+    removed: false,
     log: []
   }),
   update: {
@@ -93,6 +98,8 @@ const Page = Component.define({
     ShowedToasts: (model) => ({ ...model, toasts: true }),
     AddedControl: (model) => ({ ...model, late: true }),
     Switched: (model) => ({ ...model, config: { ...model.config, modal: model.config.modal === false } }),
+    Removed: (model) => ({ ...model, removed: true }),
+    AllowedFocus: (model) => ({ ...model, config: { ...model.config, initialFocus: true } }),
     Opened: (model, { method, triggerId, which }) => ({
       ...model,
       [which]: true,
@@ -135,7 +142,7 @@ const Page = Component.define({
               onPress: ({ method, triggerId }) => Message.Opened({ which: "a", triggerId, method })
             }).children("Settings")
             : null,
-          Dialog(h, {
+          model.removed && !props.nested ? null : Dialog(h, {
             key: "a",
             props: {
               open: model.a,
@@ -153,9 +160,9 @@ const Page = Component.define({
                 props.skips
                   ? [
                     h.fieldset.attr("disabled", "").children(h.input.attr("id", "in-fieldset")),
-                    h.input.attr("id", "invisible").attr("style", "visibility:hidden"),
-                    h.input.attr("id", "r1").attr("type", "radio").attr("name", "size"),
-                    h.input.attr("id", "r2").attr("type", "radio").attr("name", "size").attr("checked", "")
+                    h.input.attrs({ id: "invisible", style: "visibility:hidden" }),
+                    h.input.attrs({ id: "r1", type: "radio", name: "size" }),
+                    h.input.attrs({ id: "r2", type: "radio", name: "size", checked: "" })
                   ]
                   : null,
                 h.input.attr("id", "first"),
@@ -172,8 +179,8 @@ const Page = Component.define({
                     view: (nestedDialog) =>
                       h.div(
                         nestedDialog.trigger(h.button.attr("id", "trigger-b")).children("B"),
-                        nestedDialog.finalFocus(h.button.attr("id", "final-b")).children("Back"),
-                        nestedDialog.portal(h.dialog)?.children(
+                        model.removed ? null : nestedDialog.finalFocus(h.button.attr("id", "final-b")).children("Back"),
+                        model.removed ? null : nestedDialog.portal(h.dialog)?.children(
                           nestedDialog.popup(h.div).children(h.input.attr("id", "b-field"))
                         )
                       )
@@ -230,21 +237,6 @@ const tab = () => {
   return event.defaultPrevented
 }
 const layerOf = (dialog: Element) => dialog.firstElementChild!
-const holdExits = Effect.acquireRelease(
-  Effect.sync(() => {
-    const original = Element.prototype.getAnimations
-    let finish = () => {}
-    const running = {
-      effect: { getComputedTiming: () => ({ endTime: 200 }) },
-      finished: new Promise<void>((resolve) => (finish = resolve))
-    } as unknown as Animation
-    Element.prototype.getAnimations = function(this: Element) {
-      return this.hasAttribute("data-ending-style") ? [running] : []
-    }
-    return { original, finish: () => finish() }
-  }),
-  ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
-)
 
 const closeWatchers = (platform: { readonly android: boolean; readonly closeWatcher: boolean }) =>
   Effect.acquireRelease(
@@ -360,9 +352,14 @@ describe("Dialog in a document", { concurrent: false }, () => {
 
   it.effect("a touch-opened dialog honors marked initial focus and can skip return focus", () =>
     Effect.gen(function*() {
+      const { finish } = yield* holdExits
       const { app } = yield* mountPage({ openMethod: "touch", marked: true, finalFocus: false })
       assert.strictEqual(document.activeElement?.id, "second")
       escape()
+      yield* tick
+      assert.isNotNull(app.querySelector("dialog"))
+      assert.strictEqual(document.activeElement, document.body)
+      finish()
       yield* tick
       yield* tick
       assert.isNull(app.querySelector("dialog"))
@@ -612,11 +609,13 @@ describe("Dialog in a document", { concurrent: false }, () => {
       const popup = app.querySelector(".popup-a")!
       byId("shut").click()
       yield* tick
+      assert.strictEqual(popup.getAttribute("inert"), "")
       byId("page").focus()
       byId("reopen").click()
       yield* tick
       yield* tick
       assert.strictEqual(document.activeElement?.id, "first")
+      assert.isNull(popup.getAttribute("inert"))
       assert.strictEqual(popup.getAttribute("data-open"), "")
       assert.isNull(popup.getAttribute("data-starting-style"))
       assert.strictEqual(byId("page").getAttribute("aria-hidden"), "true")
@@ -662,6 +661,19 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "trigger")
     }))
 
+  it.effect("a dialog open without initial focus takes focus once initialFocus allows it", () =>
+    Effect.gen(function*() {
+      const { send } = yield* mountPage({ a: false, initialFocus: false })
+      byId("trigger").focus()
+      byId("trigger").click()
+      yield* tick
+      yield* tick
+      send(Message.AllowedFocus())
+      yield* tick
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "first")
+    }))
+
   it.effect("a press that ends inside the popup isn't outside, though its click lands around it", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage({ viewport: true })
@@ -689,18 +701,114 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(state(), ["true", "hidden"])
     }))
 
-  it.effect("a nested dialog's exit ending gives its finalFocus focus from a field in its open parent", () =>
+  it.effect("a nested dialog gives its finalFocus focus as its close starts, and its exit ending takes none back", () =>
     Effect.gen(function*() {
       const { finish } = yield* holdExits
       const { log } = yield* mountPage({ nested: true, b: true })
       escape()
       yield* tick
+      assert.notInclude(log(), "Settled b false")
+      assert.strictEqual(document.activeElement?.id, "final-b")
       byId("first").focus()
       finish()
       yield* tick
       yield* tick
       assert.include(log(), "Settled b false")
-      assert.strictEqual(document.activeElement?.id, "final-b")
+      assert.strictEqual(document.activeElement?.id, "first")
+    }))
+
+  it.effect("Escape gives focus back to the trigger with a focus ring as the close starts, and the popup is inert", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const { calls } = yield* focusVisibility
+      const { app, log } = yield* mountPage({})
+      const popup = app.querySelector(".popup-a")!
+      assert.isNull(popup.getAttribute("inert"))
+      escape()
+      yield* tick
+      assert.notInclude(log(), "Settled a false")
+      assert.isTrue(popup.isConnected)
+      assert.strictEqual(popup.getAttribute("inert"), "")
+      assert.strictEqual(document.activeElement?.id, "trigger")
+      assert.deepStrictEqual(calls.at(-1), ["trigger", true])
+    }))
+
+  it.effect("focus leaving or a press that focuses the page keeps focus where it went as the close starts", () =>
+    Effect.gen(function*() {
+      for (const modal of [false, "trap-focus"] as const) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          yield* holdExits
+          const { log } = yield* mountPage({ modal, finalMark: true })
+          if (modal === false) byId("page").focus()
+          else {
+            press(byId("page"))
+            byId("page").focus()
+            byId("page").dispatchEvent(new PointerEvent("pointerup", { bubbles: true }))
+          }
+          yield* tick
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), [modal ? "Dismissed a outside-press" : "Dismissed a focus-out"])
+          assert.strictEqual(document.activeElement?.id, "page", String(modal))
+        }))
+      }
+    }))
+
+  it.effect("a touch that closes the dialog moves focus once it lifts, and leaves a field the tap focused", () =>
+    Effect.gen(function*() {
+      for (const focuses of [false, true]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          yield* holdExits
+          const { log } = yield* mountPage({ modal: false })
+          const page = byId("page")
+          press(page, "touch")
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+          assert.notStrictEqual(document.activeElement?.id, "trigger", String(focuses))
+          if (focuses) page.focus()
+          page.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" }))
+          yield* tick
+          assert.strictEqual(document.activeElement?.id, focuses ? "page" : "trigger", String(focuses))
+        }))
+      }
+    }))
+
+  it.effect("a press that opens another dialog leaves focus in it as the first one closes", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const { log } = yield* mountPage({ modal: false, siblings: true, finalMark: true })
+      click(byId("trigger-b"))
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["Dismissed a outside-press"])
+      assert.deepStrictEqual(opens(log()), ["Opened b trigger-b null"])
+      assert.strictEqual(document.activeElement?.id, "b-field")
+    }))
+
+  it.effect("a dialog unmounted while open gives focus back, though its parent dialog took focus as it went", () =>
+    Effect.gen(function*() {
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { send } = yield* mountPage({ a: false })
+        byId("page").focus()
+        byId("trigger").click()
+        yield* tick
+        assert.strictEqual(document.activeElement?.id, "first")
+        send(Message.Removed())
+        yield* tick
+        assert.isNull(document.querySelector(".popup-a"))
+        assert.strictEqual(document.activeElement?.id, "page")
+      }))
+      const { app, send } = yield* mountPage({ nested: true, b: true })
+      assert.strictEqual(document.activeElement?.id, "b-field")
+      const parent = app.querySelector<HTMLElement>(".popup-a")!
+      const recovery = new MutationObserver(() => {
+        if (byId("b-field") === null) parent.focus()
+      })
+      recovery.observe(app, { childList: true, subtree: true })
+      send(Message.Removed())
+      yield* tick
+      recovery.disconnect()
+      assert.isNull(byId("b-field"))
+      assert.strictEqual(document.activeElement?.id, "trigger-b")
     }))
 
   it.effect("with the trigger gone, focus goes back to what had it before the open, over what had it since", () =>

@@ -17,7 +17,14 @@ const update = (rows: ReadonlyArray<Row>, message: AppMessage): ReadonlyArray<Ro
     Toggle: ({ id }) => rows.map((row) => row.id === id ? { ...row, done: !row.done } : row),
     Reverse: () => [...rows].reverse()
   })
-const app = { name: "App", props: AppProps, model: Schema.Array(Row), message: AppMessage, elements: Html } as const
+const app = {
+  name: "App",
+  scoped: false,
+  props: AppProps,
+  model: Schema.Array(Row),
+  message: AppMessage,
+  elements: Html
+} as const
 
 // Every variant renders the same row:
 // li.row[data-done] > button[aria-expanded][aria-controls] + span + div#panel[hidden]
@@ -29,7 +36,7 @@ const Plain = Component.define(app).make({
   view: (rows, h) =>
     h.ul.children(rows.map((row) =>
       h.li.key(row.id).class("row").attr("data-done", row.done ? "" : undefined).children(
-        h.button.attr("aria-expanded", "false").attr("aria-controls", h.id("panel", row.id))
+        h.button.attrs({ "aria-expanded": "false", "aria-controls": h.id("panel", row.id) })
           .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
         h.span(row.done ? "done" : "todo"),
         h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
@@ -40,6 +47,7 @@ const Plain = Component.define(app).make({
 /** A normal child per row: it owns the markup, and skips when its props are the same. */
 const NormalRow = Component.define({
   name: "Row",
+  scoped: false,
   props: Schema.Struct({ row: Row }),
   model: Schema.Boolean,
   message: Flip,
@@ -49,7 +57,7 @@ const NormalRow = Component.define({
   update: (open) => !open,
   view: (open, h) =>
     h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
-      h.button.attr("aria-expanded", String(open)).attr("aria-controls", h.id("panel")).onClick(flip)
+      h.button.attrs({ "aria-expanded": String(open), "aria-controls": h.id("panel") }).onClick(flip)
         .children(h.props.row.label),
       h.span(h.props.row.done ? "done" : "todo"),
       h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children("details")
@@ -62,14 +70,20 @@ const Normal = Component.define(app).make({
 })
 
 /** The same disclosure, headless: the list's closure owns the markup. */
-const Disclosure = Component.define({ name: "Disclosure", model: Schema.Boolean, message: Flip, elements: Html }).make({
+const Disclosure = Component.define({
+  name: "Disclosure",
+  scoped: false,
+  model: Schema.Boolean,
+  message: Flip,
+  elements: Html
+}).make({
   init: () => false,
   update: (open) => !open,
   parts: (open, p) => ({
     open,
     trigger: p.part(
       "button",
-      (b) => b.attr("aria-expanded", String(open)).attr("aria-controls", p.id("panel")).onClick(flip)
+      (b) => b.attrs({ "aria-expanded": String(open), "aria-controls": p.id("panel") }).onClick(flip)
     ),
     panel: p.part("div", (b) => b.id(p.id("panel")).attr("hidden", open ? undefined : ""))
   })
@@ -94,6 +108,7 @@ const Headless = Component.define(app).make({
 /** The proposal's advice: a normal row component around the headless child, so the skip happens above the closure. */
 const WrappedRow = Component.define({
   name: "Row",
+  scoped: false,
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,
@@ -126,10 +141,10 @@ const Wrapped = Component.define(app).make({
 const ProviderMessage = UiSchema.TaggedEnum({ Touch: {}, Open: { id: Schema.String } })
 const Provider = Component.define({
   name: "Provider",
+  scoped: false,
   model: Schema.Struct({ open: Schema.NullOr(Schema.String), touches: Schema.Number }),
   message: ProviderMessage,
-  receives: ["Touch", "Open"],
-  shares: (model) => ({ open: model.open }),
+  shares: { value: (model) => ({ open: model.open }), receives: ["Touch", "Open"] },
   elements: Html
 }).make({
   init: () => ({ open: null, touches: 0 }),
@@ -142,7 +157,13 @@ const Provider = Component.define({
 })
 
 /** Sends to the Provider from inside its closure: a normal component with no props, so it's skipped. */
-const Poker = Component.define({ name: "Poker", model: Schema.Null, message: ProviderMessage, elements: Html })
+const Poker = Component.define({
+  name: "Poker",
+  scoped: false,
+  model: Schema.Null,
+  message: ProviderMessage,
+  elements: Html
+})
   .make({
     init: () => null,
     update: (model, message, $) => $.set(model).send(Provider, message),
@@ -199,6 +220,7 @@ const OwnerWrapped = Component.define(app).make({
 /** The guidance: one normal component directly under the Provider, holding the headless rows. */
 const Body = Component.define({
   name: "Body",
+  scoped: false,
   props: Schema.Struct({ rows: Schema.Array(Row) }),
   model: Schema.Null,
   message: Schema.Never,
@@ -228,6 +250,7 @@ const OwnerBoundary = Component.define(app).make({
 /** Wrapped rows that each read the Provider: every row re-renders when what it shares changes. */
 const ReaderRow = Component.define({
   name: "Row",
+  scoped: false,
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,
@@ -240,12 +263,14 @@ const ReaderRow = Component.define({
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
-        h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
-          .attr("data-open", h.shared.provider.open === h.props.row.id ? "" : undefined).children(
-            disclosure.trigger(h.button).children(h.props.row.label),
-            h.span(h.props.row.done ? "done" : "todo"),
-            disclosure.panel(h.div).children("details")
-          )
+        h.li.class("row").attrs({
+          "data-done": h.props.row.done ? "" : undefined,
+          "data-open": h.shared.provider.open === h.props.row.id ? "" : undefined
+        }).children(
+          disclosure.trigger(h.button).children(h.props.row.label),
+          h.span(h.props.row.done ? "done" : "todo"),
+          disclosure.panel(h.div).children("details")
+        )
     })
 })
 const OwnerReaders = Component.define(app).make({

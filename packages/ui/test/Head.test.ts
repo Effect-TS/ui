@@ -50,6 +50,7 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -60,6 +61,7 @@ describe("Head", () => {
       })
       const Layout = Component.define({
         name: "Layout",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -74,6 +76,7 @@ describe("Head", () => {
       })
       const App = Component.define({
         name: "App",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -94,6 +97,7 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -104,6 +108,7 @@ describe("Head", () => {
       })
       const App = Component.define({
         name: "App",
+        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       }).make({
@@ -143,7 +148,7 @@ describe("Head", () => {
       // The fold's value is the shape of the tree it was given.
       const Shaped = { ...Tiny, head: { merge: shape, title: () => undefined } }
       const leaf = (name: string, head?: ReadonlyArray<Head.Entry>) =>
-        Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
+        Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
           init: () => null,
           update: (model) => model,
           head: head === undefined ? undefined : () => head,
@@ -153,7 +158,7 @@ describe("Head", () => {
       const Aside = leaf("Aside")
       const Note = leaf("Note")
       const holding = (name: string, ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>) =>
-        Component.define({ name, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
+        Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
           init: () => null,
           update: (model) => model,
           view: (_, h) => h.box(...children.map(([key, child]) => child(h, { key, props: {} })))
@@ -183,6 +188,7 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
+        scoped: false,
         props: Schema.Struct({ id: Schema.String }),
         model: Schema.Null,
         message: Schema.Never
@@ -193,7 +199,7 @@ describe("Head", () => {
           head: (_model, props) => [Head.title(`Note ${props.id}`)],
           view: (_, h) => h.text(h.props.id)
         })
-      const App = Component.define({ name: "App", model: Schema.String, message: Schema.String }).make({
+      const App = Component.define({ name: "App", scoped: false, model: Schema.String, message: Schema.String }).make({
         init: () => "a",
         update: (_, id) => id,
         view: (id, h) => Page(h, { key: "page", props: { id } })
@@ -208,17 +214,19 @@ describe("Head", () => {
 
   it.effect("a component with a head that mounts after the first render sets it, and unmounting clears it", () =>
     Effect.gen(function*() {
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         head: () => [Head.title("Page")],
         view: (_, h) => h.text("page")
       })
-      const App = Component.define({ name: "App", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: () => false,
-        update: (_, shown) => shown,
-        view: (shown, h) => h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
-      })
+      const App = Component.define({ name: "App", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make(
+        {
+          init: () => false,
+          update: (_, shown) => shown,
+          view: (shown, h) => h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
+        }
+      )
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       assert.strictEqual(root.head().title, undefined)
@@ -235,21 +243,23 @@ describe("Head", () => {
 
   it.effect("a component placed in a child's fallback contributes its head", () =>
     Effect.gen(function*() {
-      const Notice = Component.define({ name: "Notice", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        head: () => [Head.title("Unavailable")],
-        view: (_, h) => h.text("unavailable")
-      })
-      const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
-        init: () => null,
-        update: (model) => model,
-        head: () => [Head.title("Broken")],
-        view: (): never => {
-          throw new Error("view")
-        }
-      })
-      const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never }).make({
+      const Notice = Component.define({ name: "Notice", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          head: () => [Head.title("Unavailable")],
+          view: (_, h) => h.text("unavailable")
+        })
+      const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: (model) => model,
+          head: () => [Head.title("Broken")],
+          view: (): never => {
+            throw new Error("view")
+          }
+        })
+      const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         head: () => [Head.titleTemplate((title) => `${title} · App`)],
@@ -264,6 +274,7 @@ describe("Head", () => {
 
   const Titled = Component.define({
     name: "Titled",
+    scoped: false,
     props: Schema.Struct({ title: Schema.String }),
     model: Schema.Null,
     message: Schema.Never
@@ -279,6 +290,7 @@ describe("Head", () => {
     Effect.gen(function*() {
       const App = Component.define({
         name: "App",
+        scoped: false,
         props: Schema.Struct({ swapped: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never

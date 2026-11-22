@@ -18,7 +18,7 @@
  * **Loading behavior**
  *
  * Set the image source and `fallbackDelay` on the avatar. The avatar loads
- * the source through `Html.Images` before the image part is rendered, so
+ * the source through `DomImages.Images` before the image part is rendered, so
  * `loading="lazy"` on that part does not defer the request. The delay
  * defaults to zero.
  *
@@ -41,6 +41,7 @@
  *
  * const Profile = Component.define({
  *   name: "Profile",
+ *   scoped: false,
  *   model: Schema.Null,
  *   message: Schema.Never,
  *   elements: Html
@@ -70,6 +71,7 @@
  * @since 0.1.0
  */
 import * as Component from "@effect/ui/Component"
+import * as DomImages from "@effect/ui/html/DomImages"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -141,12 +143,12 @@ type Report = typeof Report.Type
 // It reports every source, a missing one included, so a result never
 // outlives a change of source: going back to a source that loaded before is
 // loading until its new load settles. The fallback's delay passes once.
-const Model = Schema.Struct({
+const AvatarModel = Schema.Struct({
   report: Schema.NullOr(Report),
   delayElapsed: Schema.Boolean
 })
 
-const Message = UiSchema.TaggedEnum({
+const AvatarMessage = UiSchema.TaggedEnum({
   ChangedImageStatus: Report.fields,
   ElapsedFallbackDelay: {}
 })
@@ -174,11 +176,11 @@ const loadImage = (source: Source) =>
     "image",
     sourceFields.map((field) => source[field] ?? null),
     () => {
-      const report = (status: AvatarImageLoadingStatus) => Message.ChangedImageStatus({ source, status })
+      const report = (status: AvatarImageLoadingStatus) => AvatarMessage.ChangedImageStatus({ source, status })
       return hasImage(source)
         ? Stream.concat(
           Stream.make(report("loading")),
-          Stream.fromEffect(Html.Images.use((images) => images.load(source))).pipe(Stream.map(report))
+          Stream.fromEffect(DomImages.Images.use((images) => images.load(source))).pipe(Stream.map(report))
         )
         : Stream.make(report("error"))
     }
@@ -216,7 +218,7 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"
  *
  * **Details**
  *
- * The avatar loads the image through `Html.Images`, and the image shows
+ * The avatar loads the image through `DomImages.Images`, and the image shows
  * once it has loaded. Until then, or when it fails, the fallback shows,
  * after `fallbackDelay`. On the server, and on a host without a loader,
  * the image never loads, so the fallback shows. A `TestHost` test settles
@@ -235,9 +237,10 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"
  */
 export const Avatar = Component.define({
   name: "Avatar",
+  scoped: false,
   props: AvatarProps,
-  model: Model,
-  message: Message,
+  model: AvatarModel,
+  message: AvatarMessage,
   elements: Html
 }).make({
   init: ({ props }) => ({
@@ -254,7 +257,7 @@ export const Avatar = Component.define({
     Subscription.make(
       "fallbackDelay",
       props.fallbackDelay ?? 0,
-      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(Message.ElapsedFallbackDelay()))
+      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(AvatarMessage.ElapsedFallbackDelay()))
     )
   ],
   parts: (model, p) => {
@@ -268,11 +271,13 @@ export const Avatar = Component.define({
       (b) =>
         b.forward((node) =>
           imageAttributes.reduce((out, name) => out.attr(name, undefined), node)
-            .attr("crossorigin", source.crossOrigin)
-            .attr("referrerpolicy", source.referrerPolicy)
-            .attr("sizes", source.sizes)
-            .attr("srcset", source.srcSet)
-            .attr("src", source.src)
+            .attrs({
+              crossorigin: source.crossOrigin,
+              referrerpolicy: source.referrerPolicy,
+              sizes: source.sizes,
+              srcset: source.srcSet,
+              src: source.src
+            })
         )
     )
     const fallback = p.part("span", (b) => b)

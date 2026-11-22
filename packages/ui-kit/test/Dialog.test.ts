@@ -15,14 +15,14 @@ const standIn = {
   elements: Html,
   view: (dialog: Parts, h: H) =>
     h.div(
-      dialog.trigger(h.button.class("open").attr("aria-expanded", "mixed").attr("data-popup-open", "")).children(
+      dialog.trigger(h.button.class("open").attrs({ "aria-expanded": "mixed", "data-popup-open": "" })).children(
         "Open"
       ),
       dialog.trigger(h.button.attr("id", "other")).children("Other"),
-      dialog.portal(h.dialog.attr("id", "mine").attr("aria-describedby", "extra").attr("style", "z-index:2"))?.children(
-        dialog.backdrop(h.div.class("backdrop").attr("role", "none").attr("data-closed", "")),
+      dialog.portal(h.dialog.attrs({ id: "mine", "aria-describedby": "extra", style: "z-index:2" }))?.children(
+        dialog.backdrop(h.div.class("backdrop").attrs({ role: "none", "data-closed": "" })),
         dialog.viewport(h.div.class("viewport").attr("data-nested", "")).children(
-          dialog.popup(h.div.class("popup").attr("data-open", "").attr("tabindex", "0")).children(
+          dialog.popup(h.div.class("popup").attrs({ "data-open": "", tabindex: "0" })).children(
             dialog.title(h.h2.attr("id", "heading")).children("Settings"),
             dialog.description(h.p).children("For this workspace."),
             dialog.initialFocus(h.input),
@@ -88,6 +88,7 @@ describe("Dialog", () => {
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "false" })
       s.click(other).emitted({ _tag: "Opened", triggerId: "other" })
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "true", "aria-controls": id })
+      assert.strictEqual(partsOf(s).triggerId, "other")
       assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "false")
       // Enter or Space on the trigger is a click with no pointer.
       s.fire(other, "click", { button: 0, x: 0, y: 0, pointerType: "" })
@@ -242,7 +243,12 @@ describe("Dialog", () => {
       s.expectMount(tracked(s))
       s.shared(Dialog, { open: true })
       assert.isTrue(partsOf(s).nested)
+      assert.isUndefined(s.query(backdrop))
+      s.props({ open: true, nested: false })
+      assert.isFalse(partsOf(s).nested)
+      assert.isDefined(s.query(backdrop))
       s.props({ open: true, forceRenderBackdrop: true })
+      assert.isTrue(partsOf(s).nested)
       assert.isDefined(s.query(backdrop))
       // One dialog open inside this one, and one inside that.
       s.collected([2, 0])
@@ -256,6 +262,7 @@ describe("Dialog", () => {
 const NestedMessage = UiSchema.TaggedEnum({ DismissedInner: {} })
 const Nested = Component.define({
   name: "Nested",
+  scoped: false,
   model: Schema.Struct({ inner: Schema.Boolean }),
   message: NestedMessage,
   elements: Html
@@ -320,7 +327,7 @@ describe("DialogTrigger", () => {
   it("draws a trigger for a dialog drawn elsewhere, and its attributes win", () => {
     const closed = View.build(
       DialogTrigger(h, {
-        element: h.button.attr("aria-expanded", "true").attr("data-popup-open", ""),
+        element: h.button.attrs({ "aria-expanded": "true", "data-popup-open": "" }),
         props: { open: false },
         onPress: "open"
       }),

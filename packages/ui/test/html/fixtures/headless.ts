@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { DomCommand, Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 export const Item = Schema.Struct({
@@ -44,6 +44,7 @@ const activeIn = (visible: ReadonlyArray<Item>, active: string | null): string |
 
 const MenuDef = Component.define({
   name: "Menu",
+  scoped: false,
   props: Schema.Struct({ items: Schema.Array(Item) }),
   model: Schema.Struct({
     open: Schema.Boolean,
@@ -54,8 +55,6 @@ const MenuDef = Component.define({
   }),
   message: MenuMessage,
   events: MenuEvents,
-  // A parent may open or close it.
-  receives: ["Toggle"],
   elements: Html
 })
 
@@ -72,8 +71,8 @@ export const Menu = MenuDef.make({
       Toggled: ({ open }) =>
         $.set({ ...model, open, query: open ? model.query : "", active: open ? model.active : null }).run(
           open
-            ? Html.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
-            : Html.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
+            ? DomCommand.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
+            : DomCommand.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
         ),
       Query: ({ value }) => ({ ...model, query: value, active: step(filter($.props.items, value), null, 1) }),
       Key: ({ key }) => {
@@ -118,9 +117,11 @@ export const Menu = MenuDef.make({
       visible,
       trigger: p.part("button", (b) =>
         b.ref(Trigger)
-          .attr("aria-haspopup", "menu")
-          .attr("aria-expanded", String(model.open))
-          .attr("aria-controls", p.id("popup"))
+          .attrs({
+            "aria-haspopup": "menu",
+            "aria-expanded": String(model.open),
+            "aria-controls": p.id("popup")
+          })
           .onClick(MenuMessage.Toggle())
           .onKeyDown(
             ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.Key({ key }) : undefined,
@@ -135,9 +136,11 @@ export const Menu = MenuDef.make({
           .onToggle(({ open }) => MenuMessage.Toggled({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
-          .attr("role", "combobox")
-          .attr("aria-controls", p.id("popup"))
-          .attr("aria-activedescendant", active === null ? undefined : p.id("item", active))
+          .attrs({
+            role: "combobox",
+            "aria-controls": p.id("popup"),
+            "aria-activedescendant": active === null ? undefined : p.id("item", active)
+          })
           .value(model.query)
           .onInput(({ value }) => MenuMessage.Query({ value }))
           .onKeyDown(
@@ -149,9 +152,11 @@ export const Menu = MenuDef.make({
           )),
       item: p.part("li", (b, item: Item) =>
         b.id(p.id("item", item.id))
-          .attr("role", "menuitem")
-          .attr("aria-disabled", item.disabled === true ? "true" : undefined)
-          .attr("data-active", active === item.id ? "" : undefined)
+          .attrs({
+            role: "menuitem",
+            "aria-disabled": item.disabled === true ? "true" : undefined,
+            "data-active": active === item.id ? "" : undefined
+          })
           .onClick(item.disabled === true ? () => undefined : MenuMessage.Pick({ id: item.id })))
     }
   }
@@ -164,6 +169,7 @@ export const DialogEvents = UiSchema.TaggedEnum({ Closed: {} })
 /** A modal dialog with no markup of its own. Escape and its close part both close it. */
 export const Dialog = Component.define({
   name: "Dialog",
+  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: DialogMessage,

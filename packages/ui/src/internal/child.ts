@@ -11,15 +11,12 @@ import type * as View from "../View.ts"
 /** @internal */
 export interface Options {
   readonly key?: string | undefined
-  // Every ref fits `Ref.Any`; the call's type has checked what it receives.
-  readonly ref?: Component.Ref.Any | undefined
   readonly props?: unknown
   readonly onEmit?: ((event: any) => unknown) | Readonly<Record<string, (event: any) => unknown>> | undefined
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
   readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
-  readonly detached?: boolean | undefined
 }
 
 /** @internal */
@@ -31,26 +28,21 @@ export interface ComposeOptions extends Options {
 export const make = (
   component: Component.Any | Component.Headless.Any | Feature.Any,
   options: Options,
+  alive?: View.Child<any, any>["alive"],
   owner?: View.Owner
 ): View.Child<any, any> => {
-  // A child with a key and a ref would have two identities that can disagree.
-  if (options.key !== undefined && options.ref !== undefined) {
-    throw new Error("A child takes a key or a ref, not both")
-  }
   const { onEmit } = options
   return {
     _tag: "Child",
     component: component as Component.Any,
-    // Without a key or a ref, the empty key: the child's segment is `Name[]`.
-    key: options.ref !== undefined ? options.ref.key : options.key ?? "",
-    ref: options.ref,
+    key: options.key ?? "",
     props: options.props ?? {},
     onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
     slots: options.slots,
-    detached: options.detached === true,
+    alive,
     owner
   }
 }
@@ -68,7 +60,7 @@ export interface Composed {
 /** @internal */
 export const isComposed = (u: unknown): u is Composed => typeof u === "object" && u !== null && ComposedTypeId in u
 
-const refused = ["view", "slots", "fallback", "detached"] as const
+const refused = ["view", "slots", "fallback"] as const
 
 /** @internal */
 export const compose = (
@@ -83,7 +75,7 @@ export const compose = (
   }
   return {
     [ComposedTypeId]: ComposedTypeId,
-    child: make(component, options, owner),
+    child: make(component, options, undefined, owner),
     parts: options.parts
   }
 }

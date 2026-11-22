@@ -16,6 +16,7 @@ export const ConfirmMessage = UiSchema.TaggedEnum({
 /** A confirm dialog: Escape is accepted only with `acceptEscape`, and its form's choice closes it. */
 export const Confirm = Component.define({
   name: "Confirm",
+  scoped: false,
   props: Schema.Struct({ state: State, acceptEscape: Schema.Boolean }),
   model: Schema.Struct({
     state: State,
@@ -52,8 +53,8 @@ export const Confirm = Component.define({
           h.form.attr("method", "dialog").onSubmit(({ entries }) =>
             ConfirmMessage.Chosen({ choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
           ).children(
-            h.button.attr("name", "choice").attr("value", "keep").children("Keep"),
-            h.button.attr("name", "choice").attr("value", "delete").children("Delete")
+            h.button.attrs({ name: "choice", value: "keep" }).children("Keep"),
+            h.button.attrs({ name: "choice", value: "delete" }).children("Delete")
           )
         )
     )
@@ -63,6 +64,7 @@ export const Confirm = Component.define({
 /** Two modals, one nested in the other, both open from the start. */
 export const Nested = Component.define({
   name: "Nested",
+  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

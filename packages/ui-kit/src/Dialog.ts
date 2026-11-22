@@ -81,11 +81,17 @@
  * where it is. When the focused element inside is removed or hidden, focus
  * moves to the popup.
  *
- * Once the exit ends, focus moves to the `finalFocus` element, unless the
- * dialog closed because focus left it. Otherwise, if focus was inside the
+ * As soon as the close starts, focus moves to the `finalFocus` element,
+ * unless the dialog closed because focus left it, or because a press outside
+ * gave focus to an element of the page. Otherwise, if focus was inside the
  * dialog, it moves to the trigger that opened it, or else to what had focus
- * before it opened. Tab stays inside a dialog with `modal: true` or
- * `modal: "trap-focus"`.
+ * before it opened. Focus that a press outside gave to the page or to
+ * another dialog stays there. A dialog removed while focus is inside gives
+ * focus back the same way. A touch that closes the dialog moves focus
+ * once the finger lifts, so a tap on a field of the page keeps the field
+ * focused. The popup is `inert` while the dialog closes, so during the exit
+ * transition Tab skips it and screen readers don't reach it. Tab stays
+ * inside a dialog with `modal: true` or `modal: "trap-focus"`.
  *
  * **Modes**
  *
@@ -156,6 +162,7 @@
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
+ *   scoped: false,
  *   model: Schema.Struct({ settings: Schema.Boolean }),
  *   message: ToolbarMessage,
  *   elements: Html
@@ -208,10 +215,13 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, idOf, withStyle } from "./internal/attributes.ts"
-import { hideOthers, lockScroll } from "./internal/modal.ts"
+import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
+import { byAttribute, radioGroup } from "./internal/dom.ts"
+import { methodOf, onScrollbar } from "./internal/interaction.ts"
+import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
-import { inKept, raiseAbove } from "./internal/topLayer.ts"
+import { inKept, portalBox, raiseAbove } from "./internal/topLayer.ts"
+import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 
 /**
  * How a dialog limits the page behind it: `true` for a modal, `"trap-focus"`
@@ -268,7 +278,13 @@ export type DialogInteraction = typeof DialogInteraction.Type
  * - `keepMounted`: the portal stays in the page while the dialog is closed,
  *   hidden.
  * - `forceRenderBackdrop`: a nested dialog draws its backdrop too.
+ * - `nested`: `false` keeps a dialog drawn inside another one out of the
+ *   nesting: the outer popup doesn't count it, neither gets the nesting
+ *   attributes, and its backdrop draws. It is still on top, so only it hears
+ *   Escape and outside presses. For a popup that isn't a second dialog to
+ *   the user, such as a date picker in a form.
  * - `initialFocus`: `false` leaves focus where it is when the dialog opens.
+ *   Clearing it while the dialog is open moves focus in as an open does.
  * - `finalFocus`: `false` leaves focus where it is when the dialog closes.
  * - `id`: the portal's `id`, generated when left out. Set it to pair the
  *   dialog with a `DialogTrigger` drawn somewhere else, as its `popupId`.
@@ -291,6 +307,7 @@ export const DialogProps = Schema.Struct({
   triggerId: Schema.optional(Schema.NullOr(Schema.String)),
   keepMounted: Schema.optional(Schema.Boolean),
   forceRenderBackdrop: Schema.optional(Schema.Boolean),
+  nested: Schema.optional(Schema.Boolean),
   initialFocus: Schema.optional(Schema.Boolean),
   finalFocus: Schema.optional(Schema.Boolean),
   id: Schema.optional(Schema.String),
@@ -370,7 +387,7 @@ export type DialogEvents = typeof DialogEvents.Type
  */
 export type DialogTransitionStatus = "starting" | "ending" | null
 
-const Message = UiSchema.TaggedEnum({
+const DialogMessage = UiSchema.TaggedEnum({
   ClickedTrigger: { triggerId: Schema.NullOr(Schema.String), key: Schema.String, pointerType: Schema.String },
   ClickedClose: { pointerType: Schema.String },
   PressedEscape: {},
@@ -383,9 +400,9 @@ const Message = UiSchema.TaggedEnum({
   ChangedNested: { count: Schema.Number }
 })
 
-type Message = typeof Message.Type
+type DialogMessage = typeof DialogMessage.Type
 
-const Model = Schema.Struct({
+const DialogModel = Schema.Struct({
   mounted: Schema.Boolean,
   started: Schema.Boolean,
   nestedOpen: Schema.Number,
@@ -395,46 +412,23 @@ const Model = Schema.Struct({
   closeMethod: Schema.NullOr(DialogInteraction)
 })
 
-type Model = typeof Model.Type
+type DialogModel = typeof DialogModel.Type
 
-const methodOf = (pointerType: string): DialogInteraction =>
-  pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
+type DialogUpdate = Component.Update<DialogModel, DialogMessage, DialogEvents, DialogProps>
 
-const statusOf = (model: Model, props: DialogProps): DialogTransitionStatus =>
-  props.open ? (model.started ? null : "starting") : model.mounted ? "ending" : null
-
-type DialogUpdate = Component.Update<Model, Message, DialogEvents, DialogProps>
-
-const topmost = (model: Model): boolean => model.nestedOpen === 0
+const topmost = (model: DialogModel): boolean => model.nestedOpen === 0
 
 const dismiss = (
-  model: Model,
+  model: DialogModel,
   $: DialogUpdate,
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
 ) => $.set({ ...model, reason, closeMethod }).emit(DialogEvents.Dismissed({ reason }))
 
-const portalBox = [
-  "position:fixed",
-  "inset:0",
-  "width:0",
-  "height:0",
-  "max-width:none",
-  "max-height:none",
-  "margin:0",
-  "padding:0",
-  "border:0",
-  "overflow:visible",
-  "background:transparent",
-  "color:inherit"
-].join(";")
-
-const noSelect = "user-select:none;-webkit-user-select:none"
-
-const blocker = new Html.Element<never>("div").attr("role", "presentation").attr(
-  "style",
-  "position:fixed;inset:0;" + noSelect
-)
+const blocker = new Html.Element<never>("div").attrs({
+  role: "presentation",
+  style: "position:fixed;inset:0;" + noSelect
+})
 const layer = View.toNode(blocker)
 const inertLayer = View.toNode(blocker.attr("inert", ""))
 
@@ -461,10 +455,7 @@ const radioOut = (element: HTMLElement): boolean => {
   if (!(element instanceof HTMLInputElement) || element.type !== "radio" || element.name === "" || element.checked) {
     return false
   }
-  const scope = element.form ?? element.ownerDocument
-  const group = Array.from(scope.querySelectorAll<HTMLInputElement>("input[type=\"radio\"]")).filter((radio) =>
-    radio.name === element.name && radio.form === element.form
-  )
+  const group = radioGroup(element)
   return group.some((radio) => radio.checked) || group[0] !== element
 }
 
@@ -489,6 +480,7 @@ const TrackDialogArgs = {
   openMethod: Schema.NullOr(DialogInteraction),
   closeMethod: Schema.NullOr(DialogInteraction),
   closedByFocusOut: Schema.Boolean,
+  closedByOutsidePress: Schema.Boolean,
   triggerId: Schema.NullOr(Schema.String),
   holdExit: Schema.Boolean,
   portalId: Schema.String,
@@ -506,7 +498,6 @@ type Showing = {
   readonly watch: () => CloseWatcher | undefined
 }
 
-let nextOrder = 0
 const showing: Array<Showing> = []
 let watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
 const rewatch = () => {
@@ -557,48 +548,27 @@ if (typeof document !== "undefined") {
   }, true)
 }
 
-const finite = (animation: Animation): boolean => {
-  const end = animation.effect?.getComputedTiming().endTime
-  return typeof end === "number" && Number.isFinite(end)
-}
-
 const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined =>
   view !== null && isAndroid(view)
     ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher
     : undefined
 
-const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
-  if (!(target instanceof HTMLElement)) return false
-  const document = target.ownerDocument
-  const style = document.defaultView?.getComputedStyle(target)
-  if (style === undefined) return false
-  const page = target === document.documentElement || target === document.body
-  const scrollsX = (page || /auto|scroll/.test(style.overflowX)) && target.clientWidth > 0 &&
-    target.scrollWidth > target.clientWidth
-  const scrollsY = (page || /auto|scroll/.test(style.overflowY)) && target.clientHeight > 0 &&
-    target.scrollHeight > target.clientHeight
-  const onY = scrollsY && (style.direction === "rtl"
-    ? event.offsetX <= target.offsetWidth - target.clientWidth
-    : event.offsetX > target.clientWidth)
-  return onY || (scrollsX && event.offsetY > target.clientHeight)
-}
-
 const TrackDialog = Mount.makeStream(
   "TrackDialog",
   { args: TrackDialogArgs },
   (node: HTMLDialogElement, args, changes) =>
-    Stream.callback<Message>((queue) => {
+    Stream.callback<DialogMessage>((queue) => {
       const document = node.ownerDocument
       const view = document.defaultView
-      const frame = (f: () => void) => view === null ? setTimeout(f, 0) : view.requestAnimationFrame(f)
+      const frame = frameOf(view)
       let current: TrackDialogArgs = args
-      const send = (message: Message) => Queue.offerUnsafe(queue, message)
+      const send = (message: DialogMessage) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
       const topmost = () => current.topmost && onTop(node)
       const Watcher = closeWatcherOf(view)
       const entry: Showing = {
         node,
-        order: ++nextOrder,
+        order: nextLayerOrder(),
         open: () => current.open,
         top: () => current.open && topmost(),
         watch: () => {
@@ -606,7 +576,7 @@ const TrackDialog = Mount.makeStream(
           const watcher = new Watcher()
           watcher.addEventListener("cancel", (event) => {
             if (event.cancelable) event.preventDefault()
-            send(Message.RequestedClose())
+            send(DialogMessage.RequestedClose())
           })
           watcher.addEventListener("close", () => {
             if (watched?.watcher !== watcher) return
@@ -688,7 +658,7 @@ const TrackDialog = Mount.makeStream(
           if (event.isComposing || event.keyCode === 229 || event.timeStamp - composed < 20) return
           if (target !== null && inOtherLayer(node, target)) return
           event.preventDefault()
-          send(Message.PressedEscape())
+          send(DialogMessage.PressedEscape())
           return
         }
         if (event.key !== "Tab" || current.modal === false) return
@@ -725,6 +695,7 @@ const TrackDialog = Mount.makeStream(
         node.querySelector(`[data-dialog-backdrop="${CSS.escape(args.portalId)}"]`) !== null
       const touches = new Set<number>()
       let pressed: string | undefined
+      let dismissing: number | undefined
       let ignored: Node | null = null
       const listens = (): boolean => current.open && current.dismissible && topmost()
       // A touch dismisses on pointerdown, so the dialog has left the top
@@ -754,13 +725,15 @@ const TrackDialog = Mount.makeStream(
         if (!out || (event.pointerType !== "touch" && onScrollbar(target, event))) return
         if (event.pointerType === "touch" || (current.modal === "trap-focus" && !hasBackdrop())) {
           if (event.pointerType === "touch") swallowClick(event)
-          send(Message.PressedOutside({ pointerType: event.pointerType }))
+          dismissing = event.pointerId
+          send(DialogMessage.PressedOutside({ pointerType: event.pointerType }))
         } else {
           pressed = event.pointerType
         }
       }
       const onPointerEnd = (event: PointerEvent) => {
         touches.delete(event.pointerId)
+        if (event.pointerId === dismissing) dismissing = undefined
         ignored = null
         const target = event.target as Node | null
         if (event.type === "pointercancel" || target === null || !outside(target)) pressed = undefined
@@ -772,7 +745,7 @@ const TrackDialog = Mount.makeStream(
         if (pointerType === undefined && event.detail !== 0) return
         const target = event.target as Node | null
         if (target === null || !outside(target)) return
-        send(Message.PressedOutside({ pointerType: pointerType ?? "" }))
+        send(DialogMessage.PressedOutside({ pointerType: pointerType ?? "" }))
       }
 
       const onFocusIn = (event: FocusEvent) => {
@@ -782,7 +755,7 @@ const TrackDialog = Mount.makeStream(
         else if (target instanceof HTMLElement && visited.push(target) > 20) visited.shift()
         if (focusInside || target === null || current.modal !== false || !current.open) return
         if (!topmost() || inDialogAbove(node, target) || (ignored !== null && target.contains(ignored))) return
-        if (current.dismissible && handingOff === 0 && !onTrigger(target)) send(Message.FocusedOutside())
+        if (current.dismissible && handingOff === 0 && !onTrigger(target)) send(DialogMessage.FocusedOutside())
       }
 
       const recover = () =>
@@ -803,47 +776,72 @@ const TrackDialog = Mount.makeStream(
           if (current.open && topmost()) focusFirst(from)
           focusInside = node.contains(document.activeElement)
           if (focusInside) lastFocused = document.activeElement as HTMLElement
-          if (current.open && !current.started) frame(() => send(Message.RenderedFirstFrame()))
+          if (current.open && !current.started) frame(() => send(DialogMessage.RenderedFirstFrame()))
         })
 
-      let generation = 0
-      const settle = (open: boolean) => {
-        const mine = ++generation
-        const read = () => {
-          if (mine !== generation || !node.isConnected) return
-          const element = popup()
-          const running = element.getAnimations().filter(finite).map((animation) => animation.finished)
-          Promise.all(running).then(
-            () => {
-              if (mine === generation && node.isConnected) send(Message.FinishedTransition({ open }))
-            },
-            () => frame(read)
-          )
+      const parentsOf = () => showing.filter((other) => other.node.contains(node))
+      const restoreFocus = (parents: ReadonlyArray<typeof entry>, held: boolean) => {
+        const { closedByFocusOut, closedByOutsidePress, closeMethod, finalFocus, portalId } = current
+        const focused = document.activeElement as HTMLElement | null
+        const away = !held && focused !== null && focused !== document.body && !node.contains(focused)
+        if (
+          focused !== null &&
+          showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
+        ) return
+        if (!finalFocus) {
+          if (focusInside && node.contains(focused)) focused?.blur()
+          return
         }
-        frame(read)
+        const visible = closeMethod === "keyboard"
+        const marked = closedByFocusOut || (closedByOutsidePress && away)
+          ? null
+          : byAttribute(document, "data-final-focus", portalId)
+        if (marked?.isConnected === true) return handOff(marked, visible)
+        if (away) return
+        const back = [trigger, before, ...[...visited].reverse()].find((element) =>
+          element?.isConnected === true && !node.contains(element)
+        )
+        handOff(back, visible)
       }
-      const waits = (state: TrackDialogArgs): boolean | undefined =>
-        state.open ? (state.started ? true : undefined) : state.mounted && !state.holdExit ? false : undefined
+      const restore = (parents: ReadonlyArray<typeof entry>) =>
+        frame(() => {
+          if (!current.open) restoreFocus(parents, false)
+        })
+      const closing = () => {
+        const parents = parentsOf()
+        const press = dismissing
+        if (press === undefined) return restore(parents)
+        const done = new AbortController()
+        const options = { capture: true, signal: done.signal }
+        const end = (event: PointerEvent) => {
+          if (event.pointerId !== press) return
+          done.abort()
+          restore(parents)
+        }
+        document.addEventListener("pointerup", end, options)
+        document.addEventListener("pointercancel", end, options)
+      }
+
+      const transition = settling(node, popup, frame, (open) => send(DialogMessage.FinishedTransition({ open })))
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
         current = next
         if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
+        if (next.open && previous.open && next.initialFocus && !previous.initialFocus) opening(document.activeElement)
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
         if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch()
         if (previous.open && !next.open) {
           pressed = undefined
+          closing()
         } else if (!previous.open && next.open) {
-          send(Message.ShowedPortal())
+          send(DialogMessage.ShowedPortal())
           page.takeRecords()
           added = new WeakSet()
           const focused = document.activeElement
           if (focused instanceof HTMLElement && !node.contains(focused)) before = focused
           opening(focused)
         }
-        const wait = waits(next)
-        if (wait === waits(previous)) return
-        if (wait === undefined) generation++
-        else settle(wait)
+        transition.follow(previous, next)
       }
 
       const controller = new AbortController()
@@ -870,7 +868,7 @@ const TrackDialog = Mount.makeStream(
           hold()
           rewatch()
           raiseAbove(node)
-          if (!current.mounted) send(Message.ShowedPortal())
+          if (!current.mounted) send(DialogMessage.ShowedPortal())
           opening(active)
         }).pipe(
           Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
@@ -883,51 +881,27 @@ const TrackDialog = Mount.makeStream(
             observer.disconnect()
             page.disconnect()
             release?.()
-            generation++
-            const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
-            const lost = focusInside
-            const parents = showing.filter((other) => other.node.contains(node))
-            frame(() => {
-              const focused = document.activeElement as HTMLElement | null
-              if (
-                focused !== null &&
-                showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
-              ) return
-              if (!finalFocus) {
-                if (lost && focused !== null && focused !== document.body) focused.blur()
-                return
-              }
-              const visible = closeMethod === "keyboard"
-              const marked = closedByFocusOut ? null : document.querySelector<HTMLElement>(
-                `[data-final-focus="${CSS.escape(portalId)}"]`
-              )
-              if (marked?.isConnected === true) return handOff(marked, visible)
-              if (!lost && focused !== null && focused !== document.body) return
-              const back = [trigger, before, ...visited.reverse()].find((element) =>
-                element?.isConnected === true && !node.contains(element)
-              )
-              handOff(back, visible)
-            })
+            transition.cancel()
+            if (current.open) {
+              const parents = parentsOf()
+              const held = focusInside
+              frame(() => restoreFocus(parents, held))
+            }
           })
       )
     })
 )
 
-interface Attributed<B> {
-  readonly attr: (name: string, value: string | undefined) => B
-}
-
 const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popupId: string | undefined): B =>
   builder
-    .attr("type", "button")
-    .attr("aria-haspopup", "dialog")
-    .attr("aria-expanded", active ? "true" : "false")
-    .attr("aria-controls", active ? popupId : undefined)
-    .attr("data-popup-open", flag(active))
-    .attr("data-dialog-trigger", popupId)
-
-const withTokens = (consumer: string | undefined, own: string | undefined): string | undefined =>
-  own === undefined ? consumer : consumer === undefined || consumer.trim() === "" ? own : consumer + " " + own
+    .attrs({
+      type: "button",
+      "aria-haspopup": "dialog",
+      "aria-expanded": active ? "true" : "false",
+      "aria-controls": active ? popupId : undefined,
+      "data-popup-open": flag(active),
+      "data-dialog-trigger": popupId
+    })
 
 /**
  * A press on a `DialogTrigger`: the trigger's `id`, if it has one, and how
@@ -1025,7 +999,8 @@ export const DialogTrigger = <Msg, R = never>(
  *
  * The parts also return plain values for markup that depends on them:
  * `open`, `mounted` (the dialog shows, through its exit transition),
- * `transitionStatus`, `nested`, `nestedDialogs`, and `openMethod` and
+ * `transitionStatus`, `nested`, `nestedDialogs`, `triggerId`, the `id` of the
+ * trigger the dialog is open for or last was, and `openMethod` and
  * `closeMethod`, how the user opened the open dialog and last closed it.
  * Draw `initialFocus` on a field only for some ways of opening by branching
  * on `dialog.openMethod`, which is `null` once the dialog closes.
@@ -1043,7 +1018,7 @@ export const DialogTrigger = <Msg, R = never>(
  * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
  * portal `id`, `popover` and `open`; `role` on the backdrop and the viewport; the
  * data attributes on the backdrop (including `data-dialog-backdrop`), viewport
- * and popup; `id` and `tabindex` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
+ * and popup; `id`, `tabindex` and `inert` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
  * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
  * The title and description keep an `id` the consumer gives them, and get a
  * generated one otherwise. The portal's `aria-labelledby` and `aria-describedby`
@@ -1057,30 +1032,35 @@ export const DialogTrigger = <Msg, R = never>(
  * closed, stays at `data-starting-style` and closes without waiting for a
  * transition.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
  */
 export const Dialog = Component.define({
   name: "Dialog",
+  scoped: false,
   props: DialogProps,
-  model: Model,
-  message: Message,
+  model: DialogModel,
+  message: DialogMessage,
   events: DialogEvents,
   shares: {
     value: (_, props) => ({ open: props.open }),
     collects: {
       schema: Schema.Number,
-      onChange: (counts) => Message.ChangedNested({ count: counts.reduce((sum, count) => sum + count, 0) })
+      onChange: (counts) => DialogMessage.ChangedNested({ count: counts.reduce((sum, count) => sum + count, 0) })
     }
   },
   shared: {
     parent: {
       owner: "self",
       optional: true,
-      report: (model, props) => (props.open ? 1 + model.nestedOpen : 0)
+      report: (model, props) => (props.open && props.nested !== false ? 1 + model.nestedOpen : 0)
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({
@@ -1138,8 +1118,8 @@ export const Dialog = Component.define({
     const modal = props.modal ?? true
     const open = props.open
     const shown = open || model.mounted
-    const transitionStatus = statusOf(model, props)
-    const nested = p.shared.parent !== undefined
+    const transitionStatus: DialogTransitionStatus = statusOf(model, props)
+    const nested = p.shared.parent !== undefined && props.nested !== false
     const nestedDialogs = model.nestedOpen
     const portalId = props.id ?? p.id("portal")
     const openMethod = open ? props.openMethod ?? model.openMethod : null
@@ -1148,23 +1128,17 @@ export const Dialog = Component.define({
     let triggers = 0
     let titleId: string | undefined
     let descriptionId: string | undefined
-    const states = <B extends Attributed<B>>(builder: B): B =>
-      builder
-        .attr("data-open", flag(open))
-        .attr("data-closed", flag(!open))
-        .attr("data-starting-style", flag(transitionStatus === "starting"))
-        .attr("data-ending-style", flag(transitionStatus === "ending"))
+    const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
     const nesting = <B extends Attributed<B>>(builder: B): B =>
       states(builder)
-        .attr("data-nested", flag(nested))
-        .attr("data-nested-dialog-open", flag(nestedDialogs > 0))
+        .attrs({ "data-nested": flag(nested), "data-nested-dialog-open": flag(nestedDialogs > 0) })
     const passThrough = "pointer-events:none"
 
     const triggerPart = p.part(
       "button",
       (b, triggerId: string | null, key: string) =>
         triggerAttrs(b.attr("id", key), open && (activeTrigger === null || activeTrigger === key), portalId)
-          .onClick(({ pointerType }) => Message.ClickedTrigger({ triggerId, key, pointerType }))
+          .onClick(({ pointerType }) => DialogMessage.ClickedTrigger({ triggerId, key, pointerType }))
     )
     const trigger = View.wrapPart(
       triggerPart,
@@ -1181,9 +1155,11 @@ export const Dialog = Component.define({
         .popover("manual", shown)
         .forward((node) =>
           node
-            .attr("style", withStyle(node.attrs.style, portalBox))
-            .attr("aria-labelledby", withTokens(node.attrs["aria-labelledby"], titleId))
-            .attr("aria-describedby", withTokens(node.attrs["aria-describedby"], descriptionId))
+            .attrs({
+              style: withStyle(node.elementAttrs.style, portalBox),
+              "aria-labelledby": withTokens(node.elementAttrs["aria-labelledby"], titleId),
+              "aria-describedby": withTokens(node.elementAttrs["aria-describedby"], descriptionId)
+            })
         )
         .children(modal === true && (open ? layer : inertLayer))
       if (!shown) return dialog
@@ -1200,6 +1176,7 @@ export const Dialog = Component.define({
           openMethod,
           closeMethod: model.closeMethod,
           closedByFocusOut: model.reason === "focus-out",
+          closedByOutsidePress: model.reason === "outside-press",
           triggerId: activeTrigger,
           holdExit: props.holdExit === true,
           portalId,
@@ -1217,10 +1194,9 @@ export const Dialog = Component.define({
 
     const backdropPart = p.part("div", (b) =>
       states(b)
-        .attr("role", "presentation")
-        .attr("data-dialog-backdrop", portalId)
+        .attrs({ role: "presentation", "data-dialog-backdrop": portalId })
         .forward((node) =>
-          node.attr("style", withStyle(node.attrs.style, open ? noSelect : noSelect + ";" + passThrough))
+          node.attr("style", withStyle(node.elementAttrs.style, open ? noSelect : noSelect + ";" + passThrough))
         ))
     const backdrop = View.wrapPart(
       backdropPart,
@@ -1232,18 +1208,17 @@ export const Dialog = Component.define({
     const viewport = p.part("div", (b) =>
       nesting(b)
         .attr("role", "presentation")
-        .forward((node) => open ? node : node.attr("style", withStyle(node.attrs.style, passThrough))))
+        .forward((node) => open ? node : node.attr("style", withStyle(node.elementAttrs.style, passThrough))))
     const popup = p.part("div", (b) =>
       nesting(b)
-        .attr("id", popupId)
-        .attr("tabindex", "-1")
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, `--nested-dialogs:${nestedDialogs}`))))
+        .attrs({ id: popupId, tabindex: "-1", inert: flag(!open) })
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, `--nested-dialogs:${nestedDialogs}`))))
 
     const titlePart = p.part(
       ["h1", "h2", "h3", "h4", "h5", "h6"],
       (b, id: string) =>
         b.attr("id", id).forward((node) => {
-          titleId = node.attrs.id ?? id
+          titleId = node.elementAttrs.id ?? id
           return node
         })
     )
@@ -1256,7 +1231,7 @@ export const Dialog = Component.define({
     )
     const descriptionPart = p.part("p", (b, id: string) =>
       b.attr("id", id).forward((node) => {
-        descriptionId = node.attrs.id ?? id
+        descriptionId = node.elementAttrs.id ?? id
         return node
       }))
     const description = View.wrapPart(
@@ -1268,7 +1243,7 @@ export const Dialog = Component.define({
     )
     const close = p.part(
       "button",
-      (b) => b.attr("type", "button").onClick(({ pointerType }) => Message.ClickedClose({ pointerType }))
+      (b) => b.attr("type", "button").onClick(({ pointerType }) => DialogMessage.ClickedClose({ pointerType }))
     )
     const initialFocus = p.part((b) => b.attr("autofocus", props.initialFocus === false ? undefined : ""))
     const finalFocus = p.part((b) => b.attr("data-final-focus", portalId))
@@ -1280,6 +1255,7 @@ export const Dialog = Component.define({
       nestedDialogs,
       openMethod,
       closeMethod: model.closeMethod,
+      triggerId: activeTrigger,
       trigger,
       portal,
       backdrop,

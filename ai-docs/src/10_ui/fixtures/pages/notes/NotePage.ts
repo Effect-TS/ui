@@ -10,16 +10,12 @@ import { Notes } from "../../notes/services/Notes.ts"
 
 export const NotePageMessage = UiSchema.TaggedEnum({
   SavedNote: {},
-  FailedEditor: {},
-  ClickedSaveNow: {}
+  FailedEditor: {}
 })
-
-// A ref names a child so the page can send it messages. The note's id
-// goes in with `at`, so a new note still mounts a fresh editor.
-const Editor = NoteEditor.ref("Editor")
 
 export const NotePageNoDeps = Component.define({
   name: "NotePage",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   // The Model holds no copy of the note. The runtime keeps each query's
   // last result beside the Model, and the Model plus the query results is
@@ -37,14 +33,7 @@ export const NotePageNoDeps = Component.define({
   update: (_model, message, $) =>
     NotePageMessage.match(message, {
       SavedNote: () => $.evolve({ notice: "Saved" }),
-      FailedEditor: () => $.evolve({ notice: "The editor crashed" }),
-      // "Save now" is a one-shot instruction, so it's a send, not a prop.
-      // State the editor shows, like the note, stays in its props. The
-      // editor's `update` handles the message after this render, with the
-      // props from it. A send to a child that isn't rendered, such as while
-      // the note loads, is dropped and logged.
-      // The message sent is still a fact, named by the editor.
-      ClickedSaveNow: () => $.send(Editor.at($.props.id), { _tag: "RequestedSave" })
+      FailedEditor: () => $.evolve({ notice: "The editor crashed" })
     }),
   // `head` gets the Model, the props and the queries' results, as a view
   // does. The title comes from the loaded note, and the note's id from the
@@ -61,22 +50,19 @@ export const NotePageNoDeps = Component.define({
         h.article(
           // The Collapsible draws the frame and opens and closes the body.
           // Each slot's content is this page's: written with this `h`, so
-          // the button sends `ClickedSaveNow` here, the editor's events and failure
-          // map to this page's messages, `$.send` reaches the editor by its
-          // ref, and `NoteActivity` is resolved from this page's Layers.
-          // The editor's path is `.../Collapsible[note]/[body]/NoteEditor[...]`.
+          // the editor's events and failure map to this page's messages, and
+          // `NoteActivity` is resolved from this page's Layers. The page
+          // can't tell the editor to save: the draft is the editor's, and
+          // its own Save button, Ctrl+S and autosave save it.
+          // The note's id is the key, so a new note mounts a fresh editor,
+          // at `.../Collapsible[note]/[body]/NoteEditor[n1]`.
           Collapsible(h, {
             key: "note",
             slots: {
-              summary: [
-                h.h2(note.title),
-                h.button.attr("type", "button").onClick(NotePageMessage.ClickedSaveNow()).children(
-                  "Save now"
-                )
-              ],
+              summary: h.h2(note.title),
               body: [
                 NoteEditor(h, {
-                  ref: Editor.at(note.id),
+                  key: note.id,
                   props: { note },
                   // Maps the child's events to this component's messages:
                   // the event's verb, then this page's name for the child.

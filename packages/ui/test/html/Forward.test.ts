@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema, View } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -18,8 +18,7 @@ const h = View.makeHelper<Message, {}, Html.Elements>({}, Html)
 
 type Button<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
 
-const hidden = (name: string) =>
-  new Html.VoidElement<never>("input").attr("type", "hidden").attr("name", name).attr("value", "on")
+const hidden = (name: string) => new Html.VoidElement<never>("input").attrs({ type: "hidden", name, value: "on" })
 
 // A function that takes a builder and returns it, with a frame around it
 // and a form field beside it. Its own attribute is written by `place`.
@@ -31,6 +30,7 @@ const framed = <Msg, R>(element: Button<Msg, R>, name: string): Button<Msg, R> =
 // A headless part that adds a child of its own, and a second one to stack on it.
 const Checkbox = Component.define({
   name: "Checkbox",
+  scoped: false,
   props: Schema.Struct({ name: Schema.String }),
   model: Schema.Struct({}),
   message: Schema.Never,
@@ -44,6 +44,7 @@ const Checkbox = Component.define({
 })
 const Described = Component.define({
   name: "Described",
+  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -63,7 +64,13 @@ let count = 0
 const render = Effect.fnUntraced(function*(
   view: (h: View.Helper<Message, {}> & View.Tags<Html.Elements, Message>) => View.Content<Message, never>
 ) {
-  const App = Component.define({ name: `App${count++}`, model: Schema.Null, message: Message, elements: Html }).make({
+  const App = Component.define({
+    name: `App${count++}`,
+    scoped: false,
+    model: Schema.Null,
+    message: Message,
+    elements: Html
+  }).make({
     init: () => null,
     update: (model) => model,
     view: (_model, h) => view(h)
@@ -157,7 +164,7 @@ describe("forward", () => {
       if (node.handlers.click !== undefined) throw new Error("already handles click")
       return node.attr("type", "button")
     })
-    assert.deepStrictEqual(View.build(guarded.attr("type", "submit").attr("title", "Go"), []).attrs, {
+    assert.deepStrictEqual(View.build(guarded.attrs({ type: "submit", title: "Go" }), []).attrs, {
       title: "Go",
       type: "button"
     })
@@ -208,6 +215,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
   const ReadTag = Mount.make("ReadTag", { args: {} }, (element: HTMLElement) => Effect.succeed(element.localName))
   const Rows = Component.define({
     name: "Rows",
+    scoped: false,
     model: Schema.Struct({ ids: Schema.Array(Schema.String), log: Schema.Array(Schema.String) }),
     message: Message,
     elements: Html
@@ -217,7 +225,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
       Message.match(message, {
         Clicked: () => model,
         Reversed: () => ({ ...model, ids: [...model.ids].reverse() }),
-        Focus: () => $.run(Html.focus(First, ({ found }) => Message.Found({ found }))),
+        Focus: () => $.run(DomCommand.focus(First, ({ found }) => Message.Found({ found }))),
         Found: ({ found }) => ({ ...model, log: [...model.log, `found ${found}`] }),
         Mounted: ({ id, tag }) => ({ ...model, log: [...model.log, `mounted ${id} on ${tag}`] })
       }),

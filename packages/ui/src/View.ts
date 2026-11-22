@@ -67,6 +67,7 @@ import type * as Renderer from "./Renderer.ts"
  *
  * export const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedIncrement")
  * }).make({
@@ -326,18 +327,29 @@ export type MountHint =
  * failure boundary: a failed child shows `fallback`, or nothing, until its
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
- * A child dropped from the view unmounts, and its Model goes with it. Declare
- * it with `detached: true` instead when the user should find it as they left
- * it, such as a hidden tab with a half-filled form or a wizard step. Its nodes
- * leave the document and the runtime keeps them, so the child keeps its
- * Model, its Commands in flight, its Subscriptions and what the user typed
- * into its inputs. It still gets props, `$.send` and query results, and its
- * events reach the parent through the `onEmit` of the latest render. It
- * contributes no head entries, a ref lookup inside it finds nothing, and its
- * element mounts stop until it is attached again, when they start anew. The
- * log records `Detached` and `Attached`. A server render writes no nodes
- * for a detached child but sends its state, and the client builds its nodes,
- * detached, from the server's Model.
+ * A child dropped from the view unmounts, and its Model goes with it. A
+ * component defined with `scoped: true` is kept instead, so the user finds it
+ * as they left it: a hidden tab with a half-filled form, a wizard step, a row
+ * a filter hides. It's written inside `h.scoped` with the `s` that passes,
+ * `h.scoped((s) => Profile(s, { key: "profile" }))`, and it belongs to the
+ * component whose view called `h.scoped`, its author. Its path is
+ * `Name[key]` under the author wherever the view puts it, so moving it to
+ * another element or into another child's slot keeps the instance.
+ *
+ * While no view writes it, the runtime keeps its nodes out of the document,
+ * and the child keeps its Model, its Commands in flight, its Subscriptions
+ * and what the user typed into its inputs. It still gets `$.send` and query
+ * results, and its events reach the author's `update` through the `onEmit`
+ * of the last render that placed it. It contributes no head entries and no
+ * reports to `collects`, a ref lookup inside it finds nothing, and its
+ * element mounts stop until it's written again. The log records `Kept` and
+ * `Drawn`. Saved state, from the server or a history entry, holds a kept
+ * child's Model, and the child takes it once it's written again.
+ *
+ * Without a predicate it lives as long as its author. With one,
+ * `h.scoped(({ key, model }) => key in model.rows, (s) => ...)`, the runtime
+ * asks the predicate about each live child on every render of the author and
+ * ends the child once it says no.
  *
  * **Gotchas**
  *
@@ -352,12 +364,12 @@ export type MountHint =
  * keeps the Model when `cond` changes, and `init` doesn't run again. Key each
  * branch when the component's Model holds state that shouldn't carry over.
  *
- * A detached child costs what a shown one does. Declare a wizard step once it
- * has been visited, `detached: step !== model.current`, rather than every
- * step up front. Its Subscriptions keep running, so gate one on the Model
- * when it should pause. A dialog or popover open inside it closes when it is
- * detached, and focus inside it is lost. A host without `createContainer`
- * fails the parent of a detached child.
+ * A kept child costs what a shown one does. Its Subscriptions keep running,
+ * so gate one on the Model when it should pause. A dialog or popover open
+ * inside it closes when it's kept, and focus inside it is lost. A host
+ * without `createContainer` fails the author of a kept child. The props and
+ * `onEmit` it has are those of the last render that placed it: write it
+ * inside a `hidden` element instead when it needs fresh ones.
  *
  * @stability experimental
  * @category models
@@ -367,10 +379,8 @@ export interface Child<out Msg, out R = never> {
   readonly _tag: "Child"
   /** A component value, or a feature service resolved from the instance's context when it mounts. */
   readonly component: Component.Any | Feature.Any
-  /** The child's key: the ref's key for a child rendered with a ref. */
+  /** The child's key. */
   readonly key: string
-  /** The ref the parent sends to this child with, if it was rendered with one. */
-  readonly ref: Component.Ref.Any | undefined
   readonly props: unknown
   readonly onEmit: (events: any) => Msg | undefined
   /** What shows in the child's place while it can't be shown. Required for a feature child. */
@@ -383,8 +393,11 @@ export interface Child<out Msg, out R = never> {
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
-  /** The child's nodes are out of the document, and its instance goes on. */
-  readonly detached?: boolean | undefined
+  /**
+   * Set when the child is a scoped component written with the `s` of
+   * `h.scoped`: its scope's predicate, or `true` for a scope without one.
+   */
+  readonly alive?: ((input: any) => boolean) | true | undefined
   /** The headless instance that declared the child with `p.child`, which takes its events and failures. */
   readonly owner?: Owner | undefined
   /** Phantom: the child's requirements surface in its parent's. */
@@ -404,15 +417,8 @@ export declare namespace Child {
    *
    * **Details**
    *
-   * A child takes a `key`, a `ref` or neither, never both. Without either,
-   * its key is the empty string, so `key: ""` and no key name the same child.
-   * With a ref, the ref's key is the child's key, and the parent can
-   * `$.send` to the child. `Rcv` is
-   * what the component receives, and the ref must be a `Component.Ref.For`
-   * of it: a ref made from a component also fits a provided copy of it or a
-   * feature implementation. An erased `Component.Ref.Any` names no child:
-   * every typed ref fits it, so a child that took it would take a ref the
-   * component doesn't receive.
+   * Without a `key`, the child's key is the empty string, so `key: ""` and
+   * no key name the same child.
    *
    * A component call adds one rule: a component whose props are erased,
    * such as a `Component.Any`, takes `props` even when it needs none.
@@ -420,20 +426,10 @@ export declare namespace Child {
    * @category models
    * @since 0.1.0
    */
-  export type Options<Props, Events, Msg, Rcv = never> =
-    & (
-      | {
-        /** The child's identity among its parent's children of one component. The empty string by default. */
-        readonly key?: string | undefined
-        readonly ref?: undefined
-      }
-      | {
-        /** Names the child, so the parent can send it messages. Its key is the child's key. */
-        readonly ref: Component.Ref.For<Receives<Rcv>>
-        readonly key?: undefined
-      }
-    )
+  export type Options<Props, Events, Msg> =
     & {
+      /** The child's identity among its parent's children of one component. The empty string by default. */
+      readonly key?: string | undefined
       /**
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
@@ -441,12 +437,6 @@ export declare namespace Child {
       readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
       readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
-      /**
-       * Takes the child's nodes out of the document while it stays declared.
-       * Its Model, Commands, Subscriptions, props and `onEmit` go on, and its
-       * element mounts stop until it is attached again. `false` by default.
-       */
-      readonly detached?: boolean | undefined
     }
     & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
 
@@ -458,31 +448,71 @@ export declare namespace Child {
    */
   export type EmitHandlers<Events, Msg> = [Events] extends [never] ? never
     : [Events] extends [{ readonly _tag: string }]
-    // Reject a wide tag without testing against a type that depends on Events (see ErasedReceives).
+    // Reject a wide tag with a conditional on a fixed type: one on a type that depends on Events wouldn't relate
+    // for two Events, and would fail a variance check.
       ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ? never
       : { readonly [T in EventTag<Events>]: (event: Extract<Events, { readonly _tag: T }>) => Msg | undefined }
     : never
 
   /**
-   * What a component or feature receives, as a child checks a ref against
-   * it: `Rcv`, or nothing when `Rcv` is `any`, as for an erased component or
-   * `Feature.Any`.
+   * The options of a scoped child: `Options`, with the key checked against
+   * the scope. `K` is the key as written, and `Ends` is `true` in a scope
+   * with a predicate. Without one, the key's type must be a literal, so the
+   * source fixes how many children the scope can keep.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
+  export type ScopedOptions<Props, Events, Msg, K, Ends extends boolean> =
+    & {
+      /** The child's identity among the scoped children of one component. The empty string by default. */
+      readonly key?: ScopedKey<K, Ends> | undefined
+      /**
+       * Handle the child's events with a callback, or supply one handler per tag for tagged events.
+       * Return a parent message to dispatch it, or `undefined` to ignore the event.
+       */
+      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
+      /** Also tells the parent that the child failed. The failure stays in the child either way. */
+      readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+    }
+    & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
+}
+
+type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
+  : true extends WideKey<K> ? ScopedKeyHint
+  : K
+
+type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false : false
+
+/**
+ * The type a key takes when it needs a predicate, so the error names the fix.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ScopedKeyHint =
+  "A scoped child whose key isn't a literal needs a predicate that says when it ends: h.scoped(($) => ..., (s) => ...)"
+
+/**
+ * `s`, what `h.scoped` gives its content: `h`, marked as written in a
+ * scope. A scoped component is called with it, and a component that isn't
+ * scoped takes it as it takes `h`. `Ends` is `true` in a scope with a
+ * predicate. A function that takes `s` types it `Scope<Msg, true>` to
+ * write children whose keys aren't literals, `Scope<Msg, false>` for a
+ * scope without a predicate, or `Scope<Msg>` for either, where keys must be
+ * literals.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Scope<Msg, out Ends extends boolean = boolean> extends Helper<Msg, unknown> {
+  /** Phantom: the brand only `h.scoped` gives. Its name is the error a scoped component called with `h` shows. */
+  readonly "written inside h.scoped((s) => ...)": Ends
 }
 
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
-
-// Only `any` and `never` extend it. A conditional on `[Rcv]` against a fixed
-// type, unlike `0 extends 1 & Rcv`, relates for two `Rcv`s, so it passes a
-// variance check.
-declare const ErasedReceivesId: unique symbol
-interface ErasedReceives {
-  readonly [ErasedReceivesId]: never
-}
 
 /**
  * One child argument of an element: a node, an element builder, text, an
@@ -685,7 +715,7 @@ const elementOf = <Msg, R>(
   _tag: "Element",
   tag: builder.tag,
   elementKey: builder.elementKey,
-  attrs: builder.owned.length === 0 ? builder.attrs : withTokens(builder.attrs, builder.owned),
+  attrs: builder.owned.length === 0 ? builder.elementAttrs : withTokens(builder.elementAttrs, builder.owned),
   props: builder.props,
   handlers: builder.handlers,
   eventOptions: builder.eventOptions,
@@ -825,8 +855,8 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
   builder: B,
   fields: Partial<
     Pick<
-      Element<unknown>,
-      "elementKey" | "attrs" | "props" | "handlers" | "eventOptions" | "refKey" | "mount" | "owned"
+      ElementBuilder<unknown>,
+      "elementKey" | "elementAttrs" | "props" | "handlers" | "eventOptions" | "refKey" | "mount" | "owned"
     >
   >
 ): B => Object.assign(copyBuilder(builder), fields)
@@ -862,7 +892,7 @@ const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(builder: B): 
 
 const builderFields = [
   "elementKey",
-  "attrs",
+  "elementAttrs",
   "props",
   "handlers",
   "eventOptions",
@@ -891,7 +921,7 @@ const makeCopier = (proto: object, first: ElementBuilder<any, any, any, any>): C
   }
   const copier = function(this: Mutable<ElementBuilder<any, any, any, any>>, from: ElementBuilder<any, any, any, any>) {
     this.elementKey = from.elementKey
-    this.attrs = from.attrs
+    this.elementAttrs = from.elementAttrs
     this.props = from.props
     this.handlers = from.handlers
     this.eventOptions = from.eventOptions
@@ -1030,15 +1060,15 @@ export const makePart = (
   }
   if (patch.elementKey !== undefined) throw new Error(owner.path + ": a part can't set an element's key")
   if (patch.owned.length > 0) throw new Error(owner.path + ": a part can't apply another part")
-  const attrs: Record<string, string> = { ...builder.attrs }
+  const attrs: Record<string, string> = { ...builder.elementAttrs }
   const tokens: Record<string, string> = {}
   for (const name of patch.removals ?? []) {
     // Token lists are additive: a part can omit its own tokens, not the consumer's.
     if (!tokenListAttributes.has(name)) delete attrs[name]
   }
-  for (const name in patch.attrs) {
-    if (tokenListAttributes.has(name)) tokens[name] = patch.attrs[name]!
-    else attrs[name] = patch.attrs[name]!
+  for (const name in patch.elementAttrs) {
+    if (tokenListAttributes.has(name)) tokens[name] = patch.elementAttrs[name]!
+    else attrs[name] = patch.elementAttrs[name]!
   }
   const layer: Owned = {
     owner,
@@ -1049,7 +1079,7 @@ export const makePart = (
     tokens
   }
   const out = withFields(builder, {
-    attrs,
+    elementAttrs: attrs,
     props: { ...builder.props, ...patch.props },
     owned: [...builder.owned, layer]
   })
@@ -1130,7 +1160,7 @@ type Mutable<A> = { -readonly [K in keyof A]: A[K] }
 
 const blankFields = {
   elementKey: undefined,
-  attrs: noFields,
+  elementAttrs: noFields,
   props: noFields,
   handlers: noFields,
   eventOptions: noFields,
@@ -1192,11 +1222,11 @@ export class ElementBuilder<
    */
   readonly elementKey: string | undefined = undefined
   /**
-   * The attributes set with `attr`.
+   * The attributes set with `attr` or `attrs`.
    *
    * @since 0.1.0
    */
-  readonly attrs: Readonly<Record<string, string>> = noFields
+  readonly elementAttrs: Readonly<Record<string, string>> = noFields
   /**
    * The properties set with `prop`.
    *
@@ -1332,13 +1362,52 @@ export class ElementBuilder<
     const out = copyBuilder(this) as Mutable<this>
     const removals = this.removals
     if (value === undefined && removals !== undefined) out.removals = [...removals, name]
-    const attrs = this.attrs
+    const attrs = this.elementAttrs
     if (attrs === noFields) {
-      if (value !== undefined) out.attrs = assoc(attrs, name, value)
+      if (value !== undefined) out.elementAttrs = assoc(attrs, name, value)
       // Removing an attribute that isn't set leaves the record as it is.
     } else if (value !== undefined || Object.hasOwn(attrs, name)) {
-      out.attrs = withEntry(attrs, name, value)
+      out.elementAttrs = withEntry(attrs, name, value)
     }
+    return out
+  }
+  /**
+   * Sets multiple attributes, removing any whose value is `undefined`.
+   *
+   * @since 0.1.0
+   */
+  attrs(attributes: Readonly<Record<string, string | undefined>>): this {
+    if (this.attr !== ElementBuilder.prototype.attr) {
+      let out: this | undefined
+      for (const name in attributes) {
+        if (Object.hasOwn(attributes, name)) out = (out ?? this).attr(name, attributes[name])
+      }
+      return out ?? copyBuilder(this)
+    }
+    const out = copyBuilder(this) as Mutable<this>
+    const current = this.elementAttrs
+    let removals: Array<string> | undefined
+    let next: Record<string, string> | undefined
+    for (const name in attributes) {
+      if (!Object.hasOwn(attributes, name)) continue
+      const value = attributes[name]
+      if (value === undefined) {
+        if (this.removals !== undefined) {
+          removals ??= this.removals.slice()
+          removals.push(name)
+        }
+        if (current !== noFields && Object.hasOwn(next ?? current, name)) {
+          next ??= { ...current }
+          delete next[name]
+        }
+      } else {
+        next ??= current === noFields ? {} : { ...current }
+        if (Object.hasOwn(next, name)) delete next[name]
+        put(next, name, value)
+      }
+    }
+    if (removals !== undefined) out.removals = removals
+    if (next !== undefined) out.elementAttrs = next
     return out
   }
   /**
@@ -1956,6 +2025,11 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     }
     lazies.used++
     return node
+  }
+  scoped(this: any, alive: any, content?: any): unknown {
+    const s = Object.create(this)
+    s["~alive"] = content ? alive : true
+    return (content ?? alive)(s)
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
     return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))

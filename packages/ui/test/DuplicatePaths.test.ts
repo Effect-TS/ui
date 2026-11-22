@@ -8,6 +8,7 @@ const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Eff
 
 const Row = Component.define({
   name: "Row",
+  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Null,
   message: Schema.Never
@@ -23,6 +24,7 @@ const ListMessage = UiSchema.TaggedEnum({ Set: { keys: Schema.Array(Schema.Strin
 const makeList = (layout: "siblings" | "nested") =>
   Component.define({
     name: "List",
+    scoped: false,
     props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
     model: Schema.Array(Schema.String),
     message: ListMessage
@@ -40,6 +42,7 @@ const makePage = (layout: "siblings" | "nested") => {
   const List = makeList(layout)
   return Component.define({
     name: "Page",
+    scoped: false,
     props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
     model: Schema.Null,
     message: Schema.Never
@@ -113,6 +116,7 @@ describe("duplicate child paths", () => {
       provideHost(Effect.gen(function*() {
         const List = Component.define({
           name: "List",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: ListMessage
         }).make({
@@ -132,7 +136,7 @@ describe("duplicate child paths", () => {
   it.effect("never give a key holding ]/ the path of a grandchild", () =>
     provideHost(Effect.gen(function*() {
       const Group = makeList("siblings")
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -150,27 +154,6 @@ describe("duplicate child paths", () => {
       )
     })))
 
-  it("fail a parent that renders one ref on two components", () => {
-    const Other = Component.define({
-      name: "Other",
-      props: Schema.Struct({ label: Schema.String }),
-      model: Schema.Null,
-      message: Schema.Never
-    }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.label) })
-    const Shared = Row.ref("Shared")
-    const Both = Component.define({ name: "Both", model: Schema.Null, message: Schema.Never }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        h.el(
-          "div",
-          Row(h, { ref: Shared, props: { label: "a" } }),
-          Other(h, { ref: Shared, props: { label: "b" } })
-        )
-    })
-    assert.throws(() => Scene.start(Both, {}), /\/Both renders two children with the ref Shared/)
-  })
-
   it("fail a Scene step whose view renders two children at one path", () => {
     const steps = Scene.start(makeList("nested"), { keys: ["a"] })
     assert.lengthOf(Scene.children(steps.current.view()), 1)
@@ -186,7 +169,7 @@ describe("duplicate child paths", () => {
   })
 
   describe("in a child's fallback", () => {
-    const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
+    const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never }).make({
       init: () => {
         throw new Error("broken")
       },
@@ -207,7 +190,13 @@ describe("duplicate child paths", () => {
      * fallbacks show a `Row` per `first` and `second` key, each under its own
      * element. `Bump` re-renders it.
      */
-    const Parent = Component.define({ name: "Parent", props: Props, model: Schema.Number, message: ParentMessage })
+    const Parent = Component.define({
+      name: "Parent",
+      scoped: false,
+      props: Props,
+      model: Schema.Number,
+      message: ParentMessage
+    })
       .make({
         init: () => 0,
         update: (count) => count + 1,
@@ -223,7 +212,13 @@ describe("duplicate child paths", () => {
         }
       })
 
-    const Root = Component.define({ name: "Root", props: Props, model: Schema.Null, message: Schema.Never }).make({
+    const Root = Component.define({
+      name: "Root",
+      scoped: false,
+      props: Props,
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
@@ -280,14 +275,15 @@ describe("duplicate child paths", () => {
 
     it.effect("fail the parent when a child that fails after it rendered shows a fallback at a sibling's path", () =>
       provideHost(Effect.gen(function*() {
-        const Faulty = Component.define({ name: "Faulty", model: Schema.Null, message: Schema.Null }).make({
-          init: () => null,
-          update: () => {
-            throw new Error("faulty")
-          },
-          view: (_, h) => h.el("button").on("click", null).children("faulty")
-        })
-        const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+        const Faulty = Component.define({ name: "Faulty", scoped: false, model: Schema.Null, message: Schema.Null })
+          .make({
+            init: () => null,
+            update: () => {
+              throw new Error("faulty")
+            },
+            view: (_, h) => h.el("button").on("click", null).children("faulty")
+          })
+        const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
           update: (model) => model,
           view: (_, h) =>
@@ -327,7 +323,7 @@ describe("duplicate child paths", () => {
   })
 
   describe("in a nested fallback", () => {
-    const Broken = Component.define({ name: "Broken", model: Schema.Null, message: Schema.Never }).make({
+    const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never }).make({
       init: () => {
         throw new Error("broken")
       },
@@ -337,23 +333,27 @@ describe("duplicate child paths", () => {
 
     const Go = UiSchema.TaggedEnum({ Go: {} })
     /** Named `Row`, so its fallback can show a `Row` at its own path. Fails on a click. */
-    const Faulty = Component.define({ name: "Row", model: Schema.Null, message: Go }).make({
+    const Faulty = Component.define({ name: "Row", scoped: false, model: Schema.Null, message: Go }).make({
       init: () => null,
       update: () => {
         throw new Error("faulty")
       },
       view: (_, h) => h.el("button").on("click", Go.Go()).children("faulty")
     })
-    const RowRef = Row.ref("a")
-
-    const Props = Schema.Struct({ nested: Schema.Array(Schema.String), ref: Schema.Boolean })
+    const Props = Schema.Struct({ nested: Schema.Array(Schema.String) })
     const ParentMessage = UiSchema.TaggedEnum({ Bump: {} })
 
     /**
-     * `Broken[b]`'s fallback shows `Faulty` at `Row[a]`, by key or by ref, and
-     * `Faulty`'s fallback shows a `Row` per `nested` key, the same way.
+     * `Broken[b]`'s fallback shows `Faulty` at `Row[a]`, and `Faulty`'s
+     * fallback shows a `Row` per `nested` key.
      */
-    const Parent = Component.define({ name: "Parent", props: Props, model: Schema.Number, message: ParentMessage })
+    const Parent = Component.define({
+      name: "Parent",
+      scoped: false,
+      props: Props,
+      model: Schema.Number,
+      message: ParentMessage
+    })
       .make({
         init: () => 0,
         update: (count) => count + 1,
@@ -361,23 +361,19 @@ describe("duplicate child paths", () => {
           Broken(h, {
             key: "b",
             fallback: () => {
-              const rows = () =>
-                h.el(
-                  "ul",
-                  h.props.nested.map((key) =>
-                    h.props.ref
-                      ? Row(h, { ref: Row.ref(key), props: { label: key } })
-                      : Row(h, { key, props: { label: key } })
-                  )
-                )
-              return h.props.ref
-                ? Faulty(h, { ref: RowRef, fallback: rows })
-                : Faulty(h, { key: "a", fallback: rows })
+              const rows = () => h.el("ul", h.props.nested.map((key) => Row(h, { key, props: { label: key } })))
+              return Faulty(h, { key: "a", fallback: rows })
             }
           })
       })
 
-    const Root = Component.define({ name: "Root", props: Props, model: Schema.Null, message: Schema.Never }).make({
+    const Root = Component.define({
+      name: "Root",
+      scoped: false,
+      props: Props,
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
@@ -388,57 +384,47 @@ describe("duplicate child paths", () => {
         entry._tag === "Failed" && entry.path === "/Root/Parent[p]"
       )
 
-    for (const ref of [false, true]) {
-      const by = ref ? "ref" : "key"
-      it.effect(`let a failed child's fallback reuse the child's own ${by}, render after render`, () =>
-        provideHost(Effect.gen(function*() {
-          const root = yield* TestHost.mount(Parent, { nested: ["a"], ref })
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), "faulty")
-          Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), "a")
-          root.send(ParentMessage.Bump())
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), "a")
-          assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
-        })))
+    it.effect("let a failed child's fallback reuse the child's own key, render after render", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Parent, { nested: ["a"] })
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "faulty")
+        Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a")
+        root.send(ParentMessage.Bump())
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a")
+        assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
+      })))
 
-      it.effect(`fail the parent when a nested fallback renders two children with one ${by}`, () =>
-        provideHost(Effect.gen(function*() {
-          const root = yield* TestHost.mount(Root, { nested: ["a", "a"], ref })
-          yield* TestHost.settle
-          Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
-          yield* TestHost.settle
-          console.log(
-            JSON.stringify(
-              root.log().filter((e) => e._tag === "Failed").map((
-                e: any
-              ) => [e.path, e.source, Cause.pretty(e.cause).split("\n")[0]])
-            )
-          )
-          assert.strictEqual(root.text(), "parent-failed")
-          const failed = parentFailures(root)
-          assert.lengthOf(failed, 1)
-          assert.strictEqual(failed[0].in, "view")
-          assert.include(
-            Cause.pretty(failed[0].cause),
-            "/Root/Parent[p] renders two children at Row[a], in the fallback of Row[a]"
-          )
-        })))
-    }
+    it.effect("fail the parent when a nested fallback renders two children with one key", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Root, { nested: ["a", "a"] })
+        yield* TestHost.settle
+        Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "parent-failed")
+        const failed = parentFailures(root)
+        assert.lengthOf(failed, 1)
+        assert.strictEqual(failed[0].in, "view")
+        assert.include(
+          Cause.pretty(failed[0].cause),
+          "/Root/Parent[p] renders two children at Row[a], in the fallback of Row[a]"
+        )
+      })))
   })
 })
 
 describe("a child without a key", () => {
   it.effect("mounts at Name[], one per component", () =>
     provideHost(Effect.gen(function*() {
-      const Label = Component.define({ name: "Label", model: Schema.Null, message: Schema.Never }).make({
+      const Label = Component.define({ name: "Label", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => h.el("span", "label")
       })
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
@@ -456,6 +442,7 @@ describe("a child without a key", () => {
     provideHost(Effect.gen(function*() {
       const List = Component.define({
         name: "List",
+        scoped: false,
         props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
         model: Schema.Array(Schema.String),
         message: ListMessage

@@ -4,7 +4,7 @@ import { Drawer, DrawerProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, popovers, tick, visualViewport } from "./utils/document.ts"
+import { container, holdExits, popovers, tick, visualViewport } from "./utils/document.ts"
 
 const Config = Schema.Struct({
   open: Schema.Boolean,
@@ -40,6 +40,7 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Config,
   model: Schema.Struct({
     open: Schema.Boolean,
@@ -94,7 +95,7 @@ const Page = Component.define({
                 h.button.attr("id", "button").children("Go"),
                 h.input.attr("id", "field"),
                 props.scroll
-                  ? h.div.attr("id", "scroller").attr("style", "overflow-y:auto").children("Long")
+                  ? h.div.attrs({ id: "scroller", style: "overflow-y:auto" }).children("Long")
                   : undefined
               )
             )
@@ -212,6 +213,25 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.include(root.model()!.events, "Dismissed:swipe")
       assert.strictEqual(popup()?.getAttribute("data-swipe-dismiss") ?? "", "")
       assert.isFalse(root.model()!.open)
+    }))
+
+  it.effect("a close during a swipe ends the swipe, and the popup is inert through its exit", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const root = yield* mount({})
+      sized(popup(), 300, 200)
+      assert.strictEqual(document.activeElement?.id, "button")
+      drag(document.getElementById("handle")!, [10, 10], [10, 40])
+      yield* tick
+      assert.strictEqual(popup().getAttribute("data-swiping"), "")
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+      yield* tick
+      assert.include(root.model()!.events, "Dismissed:escape-key")
+      assert.notInclude(root.model()!.events, "Settled:false")
+      assert.isNull(popup().getAttribute("data-swiping"))
+      assert.strictEqual(movement(), "0px")
+      assert.strictEqual(popup().getAttribute("inert"), "")
+      assert.notStrictEqual(document.activeElement?.id, "button")
     }))
 
   it.effect("starts nothing from the content, a button or an ignored element", () =>

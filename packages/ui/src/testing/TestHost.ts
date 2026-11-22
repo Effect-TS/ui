@@ -9,8 +9,10 @@
  * and the render flush all go through, so `settle` can drain everything, and
  * provides `MessageLog.memory`, so `root.log()` reads back what happened.
  *
- * Runtime tests are plain scoped Effects. Anything that crosses into a child
- * is tested here; one instance on its own is a `Story`.
+ * Runtime tests are plain scoped Effects. An app's tests drive a tree on
+ * `TestHost` through `Play` and `HtmlPlay`, which act as a user does and
+ * settle on their own. Use `TestHost` directly to assert on what happens
+ * between settles. One instance on its own is a `Story` or a `Scene`.
  *
  * **Example** (Counting on a TestHost)
  *
@@ -23,6 +25,7 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
+ *   scoped: false,
  *   model: Schema.Number,
  *   message: Msg
  * }).make({
@@ -60,6 +63,7 @@ import * as Stream from "effect/Stream"
 import * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as Head from "../Head.ts"
+import * as controlled from "../internal/controlled.ts"
 import * as Executor from "../internal/executor.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as runtime from "../internal/runtime.ts"
@@ -135,6 +139,8 @@ type EventsAlong = (path: ReadonlyArray<TestNode>) => ReadonlyArray<Renderer.Eve
 
 const noLookup: EventsAlong = () => []
 
+const controlledProps: ReadonlySet<string> = new Set(["value", "checked", "selected", "open"])
+
 /** `node` and its ancestors. */
 const pathFrom = (node: TestNode): Array<TestNode> => {
   const path: Array<TestNode> = []
@@ -142,7 +148,7 @@ const pathFrom = (node: TestNode): Array<TestNode> => {
   return path
 }
 
-const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): void => {
+const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): boolean => {
   for (const entry of along(pathFrom(node))) {
     const handler = entry?.handlers[event]
     if (entry !== undefined && handler !== undefined) return entry.dispatch(event, handler, payload)
@@ -235,7 +241,6 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       operations.push(`create ${JSON.stringify(text)}`)
       return makeText(text, along)
     },
-    // A detached child's nodes go in an element that is never inserted, so no query reaches them.
     createContainer() {
       operations.push("create container")
       return makeElement("#container", along)
@@ -252,6 +257,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     setProp(node, name, value) {
       const element = node as TestElement
+      if (controlledProps.has(name)) controlled.want(element, name, value)
       // A no-op is skipped, as the browser host does for controlled properties.
       if (element.props[name] === value && name in element.props) return
       operations.push(`prop ${describe(node)} ${name}`)
@@ -280,7 +286,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     events: { connect, listen() {} },
     elements: "any",
-    controlled: new Set(["value", "checked", "selected", "open"]),
+    controlled: controlledProps,
     runsMounts: false,
     commit: () => {
       commits++
@@ -659,10 +665,9 @@ export const mount = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly fallback?:
@@ -689,7 +694,7 @@ export const mount = <
     }
     const offCommit = testHost.host.onCommit(frame)
     yield* Effect.addFinalizer(() => Effect.sync(offCommit))
-    const root = yield* runtime.mount(component, props, container, options as any).pipe(
+    const root = yield* runtime.mount(component as any, props, container, options as any).pipe(
       Effect.provideService(Clock.Clock, testHost.drainingClock(Context.get(outer, Clock.Clock), outer)),
       Effect.provideService(Query.Visibility, testHost.visibility),
       Effect.provideService(Query.Connectivity, testHost.connectivity),
@@ -1008,11 +1013,7 @@ const formatEntry = (entry: MessageLog.Entry): string => {
       const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
       const sends = entry.sends.length === 0
         ? ""
-        : ` sends ${
-          entry.sends.map((send) =>
-            `${send.ref !== undefined ? send.ref.key : send.owner.definition.name} ${summary(send.message)}`
-          ).join(", ")
-        }`
+        : ` sends ${entry.sends.map((send) => `${send.owner.definition.name} ${summary(send.message)}`).join(", ")}`
       return `${head} ${summary(entry.message)} (${from})${commands}${events}${sends}`
     }
     case "Mounted":
@@ -1040,7 +1041,7 @@ const formatEntry = (entry: MessageLog.Entry): string => {
     case "CommandDropped":
       return `${head} ${entry.name} (${entry.reason})`
     case "SendDropped":
-      return `${head} ${entry.ref} (${entry.reason})`
+      return `${head} ${entry.owner}`
     case "FetchStarted":
       return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
     default:
@@ -1055,50 +1056,41 @@ const formatEntry = (entry: MessageLog.Entry): string => {
  * @category models
  * @since 0.1.0
  */
-export interface Stub<Self, Props, Events, Receives = never> {
+export interface Stub<Self, Props, Events> {
   /** Provides the stub as the feature's implementation. */
   readonly layer: Layer.Layer<Self>
   /** The props the stub rendered with, in order, without repeats. */
   readonly props: () => ReadonlyArray<Props>
-  /** The messages parents sent the stubs with `$.send`, in order. */
-  readonly received: () => ReadonlyArray<Receives>
   /** Makes every mounted stub emit, as the real feature would. Settle first, so it's listening. */
   readonly emit: (events: Events) => void
 }
 
 /**
- * Stands in for a feature in a runtime test: it renders a `<stub>` element
- * with a `data-stub` attribute naming the feature, records the props it gets
- * and the messages a parent sends it, and emits what the test sends.
+ * Stands in for a feature in a `Play` or a runtime test: it renders a `<stub>` element
+ * with a `data-stub` attribute naming the feature, records the props it gets,
+ * and emits what the test sends.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const stub = <Self, Props, Events, Receives = never>(
-  feature: Feature.Service<Self, Props, Events, Receives>
-): Stub<Self, Props, Events, Receives> => {
+export const stub = <Self, Props, Events>(
+  feature: Feature.Service<Self, Props, Events>
+): Stub<Self, Props, Events> => {
   const name: string = feature[Feature.TypeId].name
   const seen: Array<Props> = []
-  const received: Array<Receives> = []
   const listeners = new Set<(events: Events) => void>()
-  // What the test emits, tagged so it can't be mistaken for a message a parent sent.
   const Emit = Schema.TaggedStruct("~@effect/ui/TestHost/Emit", { events: feature.events })
-  const isEmit = Schema.is(Emit)
-  const Message = Schema.Union([Emit, feature.receives])
   const component = Component.define({
     name,
+    scoped: false,
     props: feature.props,
     model: Schema.Number,
-    message: Message,
+    message: Emit,
     events: feature.events
   }).make({
     init: () => 0,
-    update: (count, message, $) => {
-      if (isEmit(message)) return $.set(count + 1).emit(message.events)
-      received.push(message as Receives)
-      return count
-    },
+    update: (count, message, $) => $.set(count + 1).emit(message.events),
     view: (_, h) => {
       if (seen.length === 0 || seen[seen.length - 1] !== h.props) seen.push(h.props)
       return h.el("stub").attr("data-stub", name)
@@ -1124,7 +1116,6 @@ export const stub = <Self, Props, Events, Receives = never>(
   return {
     layer: feature.toLayer(component as any),
     props: () => seen,
-    received: () => received,
     emit: (events) => {
       for (const listener of listeners) listener(events)
     }

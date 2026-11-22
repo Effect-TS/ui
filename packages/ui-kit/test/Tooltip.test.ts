@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { Command, Component, Route, Router, UiSchema, View } from "@effect/ui"
 import { Positioning, Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
@@ -37,6 +37,7 @@ const ToolbarMessage = UiSchema.TaggedEnum({ PressedBold: {}, OpenedBoldTip: {},
 
 const Toolbar = Component.define({
   name: "Toolbar",
+  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean, pressed: Schema.Number, dismissed: Schema.Number }),
   message: ToolbarMessage,
   elements: Html
@@ -72,6 +73,7 @@ const GroupedMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedT
 
 const Grouped = Component.define({
   name: "Grouped",
+  scoped: false,
   model: Schema.Struct({ tip: Schema.NullOr(Tip) }),
   message: GroupedMessage,
   elements: Html
@@ -103,12 +105,39 @@ const Grouped = Component.define({
     })
 })
 
+const PageRoute = Route.union({ Tips: Route.make("/"), Away: Route.make("/away") })
+const PagesMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: PageRoute }, Left: {}, Navigated: {} })
+
+const Pages = Component.define({
+  name: "Pages",
+  scoped: false,
+  props: Schema.Struct({ route: PageRoute }),
+  model: PageRoute,
+  message: PagesMessage,
+  elements: Html
+}).make({
+  init: ($) => $.props.route,
+  update: {
+    ChangedRoute: (_route, { route }) => route,
+    Left: (route, _message, $) =>
+      $.set(route).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PagesMessage.Navigated()))),
+    Navigated: (route) => route
+  },
+  subscriptions: (route) => [Router.subscription(PageRoute, route, (to) => PagesMessage.ChangedRoute({ route: to }))],
+  view: (route, h) =>
+    h.div(
+      h.a.onClick(PagesMessage.Left()).children("Away"),
+      route._tag === "Tips" ? Grouped(h, { key: "tips" }) : null
+    )
+})
+
 // Two tooltips under a provider, each with its own field. `keep` refuses
 // bold's `Dismissed`, and `bold` counts bold's requests to close.
 const IndependentMessage = UiSchema.TaggedEnum({ OpenedTip: { tip: Tip }, DismissedTip: { tip: Tip } })
 
 const Independent = Component.define({
   name: "Independent",
+  scoped: false,
   props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
   model: Schema.Struct({ bold: Schema.Boolean, italic: Schema.Boolean, requests: Schema.Number }),
   message: IndependentMessage,
@@ -163,6 +192,7 @@ const DeferredMessage = UiSchema.TaggedEnum({
 
 const Deferred = Component.define({
   name: "Deferred",
+  scoped: false,
   model: Schema.Struct({
     bold: Schema.Boolean,
     italic: Schema.Boolean,
@@ -432,6 +462,34 @@ describe("Tooltip", () => {
       assert.strictEqual(openTip(), "italic")
       assert.isUndefined(instant("italic"))
     }).pipe(Effect.provide(TestHost.layer())))
+
+  it.effect("a press outside closes a tooltip that Back brought back open", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const root = yield* TestHost.mount(Pages, Router.props(PageRoute))
+      const open = () => root.query(Locator.attr("data-popup-open", ""))
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.attr("aria-label", "bold")), "mouseenter")
+      yield* TestHost.settle
+      yield* TestClock.adjust("600 millis")
+      yield* TestHost.settle
+      assert.strictEqual(Locator.textOf(open()!), "bold")
+
+      Locator.fire(root.get(Locator.tag("a")), "click")
+      yield* TestHost.settle
+      assert.isUndefined(open())
+      history.go(-1)
+      yield* TestHost.settle
+      assert.strictEqual(Locator.textOf(open()!), "bold")
+
+      yield* TestGlobalEvents.fire("document", "mousedown")
+      yield* TestHost.settle
+      assert.isUndefined(open())
+    }).pipe(
+      Effect.provide(Router.make({ routes: PageRoute, history })),
+      Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+    )
+  })
 
   it.effect("when another tooltip of the group is shown, one held open asks once to close, and stays if refused", () =>
     Effect.gen(function*() {

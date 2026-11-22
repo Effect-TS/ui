@@ -1,18 +1,18 @@
 /**
- * A fake `Html.GlobalEvents` for whole-app tests, so a test fires document
- * and window events without a document, in Node too.
+ * A fake `DomSubscription.GlobalEvents` for whole-app tests, so a test fires
+ * document and window events without a document, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`, and fire an event with
- * `fire`. Every listener the mounted components' `Html.onDocument` and
- * `Html.onWindow` added runs, as the browser would run them. `fire`
- * returns whether one cancelled the default. Run `TestHost.settle` after
- * it to see the update.
+ * `fire`. Every listener the mounted components'
+ * `DomSubscription.onDocument` and `DomSubscription.onWindow` added runs,
+ * as the browser would run them. `fire` returns whether one cancelled the
+ * default. Run `TestHost.settle` after it to see the update.
  *
  * **Example** (Pressing Escape in a whole-app test)
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
+ * import { DomSubscription, Html } from "@effect/ui/html"
  * import { TestGlobalEvents } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
  * import { Effect, Layer, Schema } from "effect"
@@ -21,6 +21,7 @@
  *
  * const Menu = Component.define({
  *   name: "Menu",
+ *   scoped: false,
  *   model: Schema.Boolean,
  *   message: Message,
  *   elements: Html
@@ -29,7 +30,9 @@
  *   update: { PressedEscape: () => false },
  *   view: (open, h) => h.p(open ? "open" : "closed"),
  *   subscriptions: (open) => [
- *     open && Html.onDocument("keydown", ({ key }) => key === "Escape" ? Message.PressedEscape() : undefined)
+ *     open && DomSubscription.onDocument("keydown", ({ key }) =>
+ *       key === "Escape" ? Message.PressedEscape() : undefined
+ *     )
  *   ]
  * })
  *
@@ -48,7 +51,7 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import * as Html from "../Html.ts"
+import * as DomSubscription from "../DomSubscription.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 
 /**
@@ -59,8 +62,8 @@ import * as fireGlobal from "../internal/fireGlobal.ts"
  * @since 0.1.0
  */
 export interface Targets {
-  readonly document: Html.DocumentEvents
-  readonly window: Html.WindowEvents
+  readonly document: DomSubscription.DocumentEvents
+  readonly window: DomSubscription.WindowEvents
 }
 
 /**
@@ -82,7 +85,7 @@ export interface TestGlobalEvents {
   readonly fire: <T extends keyof Targets, K extends keyof Targets[T]>(
     target: T,
     event: K,
-    payload?: Partial<Html.GlobalPayload<Targets[T][K]>>
+    payload?: Partial<DomSubscription.GlobalPayload<Targets[T][K]>>
   ) => boolean
 }
 
@@ -112,7 +115,7 @@ interface Entry {
  * @category constructors
  * @since 0.1.0
  */
-export const make = (): Html.GlobalEvents & TestGlobalEvents => {
+export const make = (): DomSubscription.GlobalEvents & TestGlobalEvents => {
   const entries = new Set<Entry>()
   return {
     listen: (target, event, { capture }, listener) => {
@@ -135,7 +138,8 @@ export const make = (): Html.GlobalEvents & TestGlobalEvents => {
 }
 
 /**
- * Provides a fake `Html.GlobalEvents` with its control, `TestGlobalEvents`.
+ * Provides a fake `DomSubscription.GlobalEvents` with its control,
+ * `TestGlobalEvents`.
  *
  * @stability experimental
  * @category layers
@@ -144,7 +148,7 @@ export const make = (): Html.GlobalEvents & TestGlobalEvents => {
 export const layer: Layer.Layer<TestGlobalEvents> = Layer.effectContext(
   Effect.sync(() => {
     const events = make()
-    return Context.make(TestGlobalEvents, events).pipe(Context.add(Html.GlobalEvents, events))
+    return Context.make(TestGlobalEvents, events).pipe(Context.add(DomSubscription.GlobalEvents, events))
   })
 )
 
@@ -159,6 +163,6 @@ export const layer: Layer.Layer<TestGlobalEvents> = Layer.effectContext(
 export const fire = <T extends keyof Targets, K extends keyof Targets[T]>(
   target: T,
   event: K,
-  payload?: Partial<Html.GlobalPayload<Targets[T][K]>>
+  payload?: Partial<DomSubscription.GlobalPayload<Targets[T][K]>>
 ): Effect.Effect<boolean, never, TestGlobalEvents> =>
   TestGlobalEvents.useSync((events) => events.fire(target, event, payload))

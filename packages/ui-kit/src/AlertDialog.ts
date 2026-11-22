@@ -46,8 +46,9 @@
  * The trigger and the close button are native buttons, so Enter and Space
  * press them. Escape asks the alert dialog to close, with `escape-key`.
  * Focus moves into the popup when it opens, stays inside while it shows, and
- * goes back to the trigger once its exit ends, as in a modal `Dialog`. Put
- * `initialFocus` on the least destructive answer, such as Cancel.
+ * goes back to the trigger as soon as it starts closing, as in a modal
+ * `Dialog`. Put `initialFocus` on the least destructive answer, such as
+ * Cancel.
  *
  * **Dismissal**
  *
@@ -76,6 +77,7 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
+ *   scoped: false,
  *   model: Schema.Struct({ confirming: Schema.Boolean }),
  *   message: EditorMessage,
  *   elements: Html

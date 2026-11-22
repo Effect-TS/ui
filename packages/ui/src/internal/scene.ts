@@ -21,7 +21,7 @@ import * as engine from "./story.ts"
 const findDeclared = (
   state: engine.State<any, any, any, any>,
   child: ChildTarget,
-  key: string | Component.Ref.Any | undefined,
+  key: string | undefined,
   step: string
 ): engine.Occurrence => {
   const found = engine.findChild(state.view(), child, key, step)
@@ -76,6 +76,34 @@ export const matchers = {
 const describeExpected = (expected: unknown): string =>
   expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
 
+/** @internal */
+export const makeExpectation = <A>(
+  step: string,
+  locator: Locator.Locator,
+  matchers: { readonly [name: string]: (...args: Array<any>) => Matcher },
+  run: (
+    check: (nodes: ReadonlyArray<Locator.Node>, root: Locator.Node, listed?: Locator.Node) => void,
+    method: Function
+  ) => A
+): object => {
+  const out: { [name: string]: (...args: Array<any>) => A } = {}
+  for (const [name, make] of Object.entries(matchers)) {
+    const method = (...args: Array<any>): A =>
+      run((nodes, root, listed = root) => {
+        const failure = make(...args)(nodes, root)
+        if (failure !== undefined) {
+          throw new Error(
+            `${step}(${locator.description}).${name}(${args.map(describeExpected).join(", ")}): ${failure}; ${
+              engine.describeCandidates(listed)
+            }`
+          )
+        }
+      }, method)
+    out[name] = method
+  }
+  return out
+}
+
 /** A child a scene step names. */
 type ChildTarget = Component.Any | Component.Headless.Any | Feature.Any
 
@@ -90,10 +118,10 @@ const withSlot = (
   return engine.update(state, { childStatus: statuses })
 }
 
-/** The arguments after a child step's component: an optional key or ref, then the step's value. */
-type KeyAnd<A> = readonly [value: A] | readonly [key: string | Component.Ref.Any, value: A]
+/** The arguments after a child step's component: an optional key, then the step's value. */
+type KeyAnd<A> = readonly [value: A] | readonly [key: string, value: A]
 
-const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | Component.Ref.Any | undefined, value: A] =>
+const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | undefined, value: A] =>
   args.length === 1 ? [undefined, args[0]] : args
 
 // ---------------------------------------------------------------------------
@@ -115,11 +143,6 @@ const continues = (old: View.Node<any, any>, node: View.Node<any, any>): boolean
 
 const childrenOf = (node: View.Node<any, any>): ReadonlyArray<View.Node<any, any>> =>
   (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children ?? []
-
-/** Whether `node` is a detached child, or the expanded view of a headless child any of whose declarations is. */
-const isDetached = (node: View.Node<any, any>): boolean =>
-  (node._tag === "Child" && node.detached) ||
-  (engine.expansionOf.get(node)?.some((child) => child.detached) ?? false)
 
 /** A slotted child's `children` by slot, else the one list. */
 const groups = (node: View.Node<any, any>): Map<string, ReadonlyArray<View.Node<any, any>>> => {
@@ -170,9 +193,6 @@ const followMounts = (
     )
   }
   const walk = (old: View.Node<any, any> | undefined, node: View.Node<any, any>, authored: boolean): void => {
-    // The runtime stops the mounts below a detached child, and starts them anew once it is attached.
-    if (isDetached(node)) return
-    if (old !== undefined && isDetached(old)) old = undefined
     if (node._tag === "Element") {
       const olds = old === undefined ? [] : before.get(old as View.Element<any, any>) ?? []
       if (authored && node.mount !== undefined) follow(node.mount, undefined, node, olds)
@@ -376,7 +396,7 @@ export class SceneCursor extends Cursor {
       return engine.dispatch(withSlot(state, found, failure), found.child.onFailure?.(failure))
     })
   }
-  childPending(child: ChildTarget, key?: string | Component.Ref.Any): this {
+  childPending(child: ChildTarget, key?: string): this {
     const step = this.name("childPending")
     return this.act("childPending", "acting", (state) => {
       const found = findDeclared(state, child, key, step)
@@ -449,22 +469,10 @@ export class SceneCursor extends Cursor {
     locator: Locator.Locator,
     matchers: { readonly [name: string]: (...args: Array<any>) => Matcher }
   ): object {
-    const out: { [name: string]: (...args: Array<any>) => unknown } = {}
-    for (const [name, make] of Object.entries(matchers)) {
-      out[name] = (...args) => {
-        const root = this.state.root
-        const failure = make(...args)(this.state.all(locator), root)
-        if (failure !== undefined) {
-          throw new Error(
-            `${this.name("expect")}(${locator.description}).${name}(${
-              args.map(describeExpected).join(", ")
-            }): ${failure}; ${engine.describeCandidates(root)}`
-          )
-        }
-        return this
-      }
-    }
-    return out
+    return makeExpectation(this.name("expect"), locator, matchers, (check) => {
+      check(this.state.all(locator), this.state.root)
+      return this
+    })
   }
   expectHandled(): this {
     if (this.state.ack.interaction !== "handled") {
