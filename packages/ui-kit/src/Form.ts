@@ -212,6 +212,7 @@ const FocusInvalid = Command.make(
  */
 export const Form = Component.define({
   name: "Form",
+  scoped: false,
   model: Schema.Struct({}),
   message: Message,
   events: FormEvents,
