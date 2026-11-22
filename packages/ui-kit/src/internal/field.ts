@@ -21,28 +21,29 @@ const submitted = (props: FieldProps): string | undefined =>
     ? (props.value ?? "on")
     : props.uncheckedValue
 
+const proxies = new WeakSet<View.Node<any, any>>()
+
 // The hidden input inside the root. A hidden input isn't interactive
 // content, so it may sit inside a <button>, and a form still submits it.
 export const field = (props: FieldProps): View.Node<never> | undefined => {
   const value = submitted(props)
-  return value === undefined
-    ? undefined
-    : View.toNode(
-      new Html.VoidElement<never>("input")
-        .attrs({
-          type: "hidden",
-          name: props.name,
-          value,
-          form: props.form
-        })
-    )
+  if (value === undefined) return undefined
+  const node = View.toNode(
+    new Html.VoidElement<never>("input")
+      .attrs({
+        type: "hidden",
+        name: props.name,
+        value,
+        form: props.form
+      })
+  )
+  proxies.add(node)
+  return node
 }
 
 // The control without that input, for a control something else disabled
 // after it read its own props, such as a field.
 export const withoutField = <Msg, R>(control: View.Element<Msg, R>): View.Element<Msg, R> => ({
   ...control,
-  children: control.children.filter((node) =>
-    !(node._tag === "Element" && node.tag === "input" && node.attrs.type === "hidden")
-  )
+  children: control.children.filter((node) => !proxies.has(node))
 })

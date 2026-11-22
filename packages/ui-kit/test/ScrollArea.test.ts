@@ -58,14 +58,19 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
             "data-orientation": "horizontal",
             "data-hovering": "x",
             "data-scrolling": "x",
+            "data-scroll-area-scrollbar-x": "stale",
             style: "width:8px"
           }),
         thumb: h.div.class("thumb-y")
-          .attrs({ "data-orientation": "horizontal", "data-scrolling": "x" })
+          .attrs({
+            "data-orientation": "horizontal",
+            "data-scrolling": "x",
+            "data-scroll-area-thumb-x": "stale"
+          })
       }),
       scrollArea.scrollbar({
-        element: h.div.class("bar-x"),
-        thumb: h.div.class("thumb-x"),
+        element: h.div.class("bar-x").attr("data-scroll-area-scrollbar-y", "stale"),
+        thumb: h.div.class("thumb-x").attr("data-scroll-area-thumb-y", "stale"),
         orientation: "horizontal",
         keepMounted: true
       }),
@@ -155,6 +160,14 @@ describe("ScrollArea", () => {
 
       assert.strictEqual(s.get(barXLoc).attrs?.["data-orientation"], "horizontal")
       assert.strictEqual(s.get(thumbXLoc).attrs?.["data-orientation"], "horizontal")
+      assert.isString(s.get(barYLoc).attrs?.["data-scroll-area-scrollbar-y"])
+      assert.isUndefined(s.get(barYLoc).attrs?.["data-scroll-area-scrollbar-x"])
+      assert.isString(s.get(thumbYLoc).attrs?.["data-scroll-area-thumb-y"])
+      assert.isUndefined(s.get(thumbYLoc).attrs?.["data-scroll-area-thumb-x"])
+      assert.isString(s.get(barXLoc).attrs?.["data-scroll-area-scrollbar-x"])
+      assert.isUndefined(s.get(barXLoc).attrs?.["data-scroll-area-scrollbar-y"])
+      assert.isString(s.get(thumbXLoc).attrs?.["data-scroll-area-thumb-x"])
+      assert.isUndefined(s.get(thumbXLoc).attrs?.["data-scroll-area-thumb-y"])
       assert.strictEqual(s.get(cornerLoc).attrs?.["aria-hidden"], "true")
       assert.include(s.get(cornerLoc).attrs?.style ?? "", "background:gray;position:absolute")
       assert.strictEqual(latest.cornerHidden, false)

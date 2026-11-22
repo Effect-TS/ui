@@ -1,5 +1,5 @@
-import { Command, Component, type Mount, Route, Router, UiSchema, type View } from "@effect/ui"
-import { Menu, type MenuEvents, menuFilter, type MenuProps } from "@effect/ui-kit"
+import { Command, Component, type Mount, Route, Router, UiSchema, View } from "@effect/ui"
+import { Menu, type MenuEvents, menuFilter, type MenuProps, MenuTrigger } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -479,5 +479,65 @@ describe("Menu", () => {
       const accents = menuFilter({ locale: "en", sensitivity: "accent" })
       assert.isTrue(menuFilter({ locale: "en" }).contains("Crème", "creme"))
       assert.isFalse(accents.contains("Crème", "creme"))
+    }))
+
+  it.effect("clears consumer aria-disabled and group hidden, and validates hidden part tags", () =>
+    Effect.gen(function*() {
+      const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)
+      const triggerView = (disabled: boolean) =>
+        View.build(
+          MenuTrigger(helper, {
+            element: helper.button.attr("aria-disabled", "true").disabled(!disabled),
+            props: { open: false, popupId: "menu-popup", disabled }
+          }),
+          []
+        )
+      assert.strictEqual(triggerView(true).attrs.disabled, "")
+      assert.isUndefined(triggerView(true).attrs["aria-disabled"])
+      assert.isUndefined(triggerView(false).attrs.disabled)
+      assert.isUndefined(triggerView(false).attrs["aria-disabled"])
+
+      const s = yield* HtmlScene.make(Menu, { open: true, items, query: "co", disabled: true }, {
+        elements: Html,
+        view: (menu, h) =>
+          h.div(
+            menu.trigger(h.button.class("trigger").attr("aria-disabled", "true")).children("Edit"),
+            menu.input(h.input.class("input").attr("aria-disabled", "true")),
+            menu.clear(h.button.class("clear").attr("aria-disabled", "true")),
+            menu.group(h.div.class("group").attr("hidden", ""), "g").children(
+              menu.item(h.div.class("item"), "copy").children("Copy")
+            )
+          )
+      })
+      for (const loc of [trigger, input, clear]) {
+        assert.strictEqual(s.get(loc).attrs?.disabled, "")
+        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+      }
+      assert.isUndefined(s.get(Locator.attr("class", "group")).attrs?.hidden)
+
+      s.props({ open: true, items, query: "co", disabled: false })
+      for (const loc of [Locator.attr("class", "trigger"), input, clear]) {
+        assert.isUndefined(s.get(loc).attrs?.disabled)
+        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+      }
+      s.props({ open: true, items, query: "zzz", disabled: false })
+      assert.strictEqual(s.get(Locator.attr("class", "group")).attrs?.hidden, "")
+
+      const hiddenTagCases: ReadonlyArray<(menu: Parts, h: H) => View.Content<never>> = [
+        (menu, h) => h.div(menu.checkboxItemIndicator(h.div as never, "wrap")),
+        (menu, h) => h.div(menu.radioItemIndicator(h.div as never, "small")),
+        (menu, h) => h.div(menu.clear(h.div as never)),
+        (menu, h) => h.div(menu.empty(h.span as never))
+      ]
+      for (const render of hiddenTagCases) {
+        const exit = yield* Effect.exit(
+          HtmlScene.make(
+            Menu,
+            { open: true, items, query: "" },
+            { elements: Html, view: render }
+          )
+        )
+        assert.strictEqual(exit._tag, "Failure")
+      }
     }))
 })

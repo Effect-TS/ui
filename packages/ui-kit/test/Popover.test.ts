@@ -1,5 +1,5 @@
-import type { Component, Mount, View } from "@effect/ui"
-import { Dialog, Popover, type PopoverEvents, type PopoverProps, Positioning } from "@effect/ui-kit"
+import { type Component, type Mount, View } from "@effect/ui"
+import { Dialog, Popover, type PopoverEvents, type PopoverProps, PopoverTrigger, Positioning } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
@@ -162,5 +162,37 @@ describe("Popover", () => {
       s.props({ open: false, keepMounted: true })
       assert.strictEqual(s.get(popup).attrs?.["data-instant"], "dismiss")
       s.childEmit(Dialog, { _tag: "Settled", open: false }).emitted({ _tag: "Settled", open: false })
+    }))
+
+  it.effect("clears contradictory consumer aria-disabled on triggers", () =>
+    Effect.gen(function*() {
+      const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)
+      const detached = (disabled: boolean) =>
+        View.build(
+          PopoverTrigger(helper, {
+            element: helper.button.attr("aria-disabled", "true").disabled(!disabled),
+            props: { open: false, popupId: "pop", disabled }
+          }),
+          []
+        )
+      assert.strictEqual(detached(true).attrs.disabled, "")
+      assert.isUndefined(detached(true).attrs["aria-disabled"])
+      assert.isUndefined(detached(false).attrs.disabled)
+      assert.isUndefined(detached(false).attrs["aria-disabled"])
+
+      const s = yield* HtmlScene.make(Popover, { open: false }, {
+        elements: Html,
+        view: (popover, h) =>
+          h.div(
+            popover.trigger({ element: h.button.attr("id", "on").attr("aria-disabled", "true") }),
+            popover.trigger({ element: h.button.attr("id", "off").attr("aria-disabled", "true"), disabled: true })
+          )
+      })
+      const onLoc = Locator.attr("id", "on")
+      const offLoc = Locator.attr("id", "off")
+      assert.isUndefined(s.get(onLoc).attrs?.disabled)
+      assert.isUndefined(s.get(onLoc).attrs?.["aria-disabled"])
+      assert.strictEqual(s.get(offLoc).attrs?.disabled, "")
+      assert.isUndefined(s.get(offLoc).attrs?.["aria-disabled"])
     }))
 })

@@ -526,6 +526,56 @@ describe("Combobox", () => {
       s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
       s.fire(item("apple"), "click", pointer("mouse")).expectHandled()
     }))
+
+  it.effect("clears consumer aria-disabled on native controls, keeps custom value content, and validates hidden part tags", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Combobox, {
+        ...base,
+        multiple: true,
+        value: ["apple"],
+        inputValue: "ap",
+        disabled: true
+      }, {
+        elements: Html,
+        view: (combobox, h) =>
+          h.div(
+            combobox.value(h.span.class("custom-value")).children("Chosen"),
+            combobox.input(h.input.class("input").attr("aria-disabled", "true")),
+            combobox.trigger(h.button.class("trigger").attr("aria-disabled", "true")),
+            combobox.clear(h.button.class("clear").attr("aria-disabled", "true")),
+            combobox.chips(h.div.class("chips")).children(
+              combobox.chip(h.div.class("chip"), "apple").children(
+                combobox.chipRemove(h.button.class("chip-remove").attr("aria-disabled", "true"), "apple")
+              )
+            )
+          )
+      })
+      assert.strictEqual(Locator.textOf(s.get(Locator.attr("class", "custom-value"))), "Chosen")
+      const clearLoc = Locator.attr("class", "clear")
+      for (const loc of [input, trigger, clearLoc, Locator.attr("class", "chip-remove")]) {
+        assert.strictEqual(s.get(loc).attrs?.disabled, "")
+        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+      }
+      s.props({ ...base, multiple: true, value: ["apple"], inputValue: "ap", disabled: false })
+      for (const loc of [input, trigger, clearLoc, Locator.attr("class", "chip-remove")]) {
+        assert.isUndefined(s.get(loc).attrs?.disabled)
+        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+      }
+      s.expectMount(chipsTracked(s))
+      const hiddenTagCases: ReadonlyArray<(combobox: Parts, h: H) => View.Content<never>> = [
+        (combobox, h) => h.div(combobox.clear(h.div as never)),
+        (combobox, h) => h.div(combobox.itemIndicator(h.div as never, "apple"))
+      ]
+      for (const render of hiddenTagCases) {
+        const exit = yield* Effect.exit(
+          HtmlScene.make(Combobox, { ...base, open: false, value: null, inputValue: "" }, {
+            elements: Html,
+            view: render
+          })
+        )
+        assert.strictEqual(exit._tag, "Failure")
+      }
+    }))
 })
 
 describe("makeComboboxFilter", () => {

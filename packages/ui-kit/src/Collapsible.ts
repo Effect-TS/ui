@@ -118,7 +118,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, idOf, ownStyle, withTokens } from "./internal/attributes.ts"
 import { override } from "./internal/dom.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 
@@ -474,7 +474,9 @@ export const Collapsible = Component.define({
         })
         .disabled(disabled)
         .onClick(CollapsibleMessage.ClickedTrigger())
-        .forward((node) => node.attr("aria-controls", open ? panelId : undefined)))
+        .forward((node) =>
+          node.attr("aria-controls", withTokens(node.elementAttrs["aria-controls"], open ? panelId : undefined))
+        ))
 
     const panelPart = p.part("div", (b, id: string) =>
       states(b)

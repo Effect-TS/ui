@@ -1755,7 +1755,7 @@ export const MenuTrigger = <Msg, R = never>(
         ? (handler as (press: MenuTriggerPress) => Msg)({ triggerId, method, reason })
         : handler
     const button = triggerAttrs(node.attr("type", "button"), popupId, open, open)
-      .attrs({ "data-pressed": flag(open), "data-disabled": flag(disabled) })
+      .attrs({ "data-pressed": flag(open), "data-disabled": flag(disabled), "aria-disabled": undefined })
       .disabled(disabled === true)
     const pressed = onPress === undefined || disabled === true
       ? button
@@ -2154,7 +2154,7 @@ export const Menu = Component.define({
         open && active,
         shown && active
       )
-        .attrs({ "data-pressed": flag(open && active), "data-disabled": flag(off) })
+        .attrs({ "data-pressed": flag(open && active), "data-disabled": flag(off), "aria-disabled": undefined })
         .disabled(off)
       if (options.disabled === true) return attributed
       const own = pressable(attributed, (pointerType) => MenuMessage.PressedTrigger({ key, triggerId, pointerType }))
@@ -2459,14 +2459,18 @@ export const Menu = Component.define({
           element: B,
           value: string,
           keepMounted?: boolean
-        ): ReturnType<B["attr"]> | undefined =>
-          checks.get(itemOf(value).value) === true || keepMounted === true ? part(element, value) : undefined
+        ): ReturnType<B["attr"]> | undefined => {
+          const applied = part(element, value)
+          return checks.get(itemOf(value).value) === true || keepMounted === true ? applied : undefined
+        }
       )
     }
 
     const group = p.part("div", (b, key: string) =>
       b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
-        .forward((node) => matches === null || hasShownItem(View.build(node, [])) ? node : node.attr("hidden", "")))
+        .forward((node) =>
+          node.attr("hidden", matches === null || hasShownItem(View.build(node, [])) ? undefined : "")
+        ))
     const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
@@ -2486,6 +2490,7 @@ export const Menu = Component.define({
           "aria-activedescendant": highlighted !== null && items.has(highlighted) ? itemId(highlighted) : undefined,
           "aria-controls": listId,
           "data-highlighted": flag(model.inputFocused && (!model.keyboard || highlighted === null)),
+          "aria-disabled": undefined,
           value: query
         })
         .value(query)
@@ -2504,15 +2509,18 @@ export const Menu = Component.define({
         type: "button",
         tabindex: "-1",
         "aria-hidden": "true",
-        "data-disabled": flag(disabled)
+        "data-disabled": flag(disabled),
+        "aria-disabled": undefined
       })
         .disabled(disabled)
         .on("mousedown", MenuMessage.PressedInput(), { preventDefault: "always" })
         .onClick(MenuMessage.ClickedClear()))
     const clear = View.wrapPart(
       clearPart,
-      <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> | undefined =>
-        (props.query ?? "") === "" ? undefined : clearPart(element)
+      <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> | undefined => {
+        const applied = clearPart(element)
+        return (props.query ?? "") === "" ? undefined : applied
+      }
     )
 
     const emptyPart = p.part(
@@ -2521,8 +2529,10 @@ export const Menu = Component.define({
     )
     const emptyState = View.wrapPart(
       emptyPart,
-      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined =>
-        empty ? emptyPart(element) : undefined
+      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+        const applied = emptyPart(element)
+        return empty ? applied : undefined
+      }
     )
 
     const finalFocus = p.part((b) => b.attr("data-final-focus", popupId))

@@ -846,12 +846,16 @@ export const ScrollArea = Component.define({
     const areaState = <B extends Attributed<B>>(builder: B): B =>
       overflowData(builder, model).attr("data-scrolling", flag(scrolling))
 
+    const otherAxis = (orientation: ScrollAreaOrientation): ScrollAreaOrientation =>
+      orientation === "vertical" ? "horizontal" : "vertical"
+
     const thumbPart = p.part("div", (b, orientation: ScrollAreaOrientation) =>
       b
         .attrs({
           "data-orientation": orientation,
           "data-scrolling": scrollingOn(orientation),
-          [thumbAttr(orientation)]: id
+          [thumbAttr(orientation)]: id,
+          [thumbAttr(otherAxis(orientation))]: undefined
         })
         .forward(ownStyle(
           (orientation === "vertical" ? `height:var(${thumbHeightVar})` : `width:var(${thumbWidthVar})`) +
@@ -867,7 +871,8 @@ export const ScrollArea = Component.define({
             "data-orientation": orientation,
             "data-hovering": flag(model.hovering),
             "data-scrolling": scrollingOn(orientation),
-            [scrollbarAttr(orientation)]: id
+            [scrollbarAttr(orientation)]: id,
+            [scrollbarAttr(otherAxis(orientation))]: undefined
           })
           .forward(ownStyle(
             `position:absolute;touch-action:none;${noSelect};` + (orientation === "vertical"
