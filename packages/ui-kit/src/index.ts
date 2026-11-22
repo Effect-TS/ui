@@ -58,6 +58,12 @@ export * from "./Dialog.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./DirectionProvider.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Drawer.ts"
 
 /**
@@ -101,6 +107,12 @@ export * from "./Meter.ts"
  * @since 0.1.0
  */
 export * from "./NumberField.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./OTPField.ts"
 
 /**
  * @stability experimental

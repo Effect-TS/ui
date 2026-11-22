@@ -27,6 +27,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
 - [Combobox](src/Combobox.ts): an input that filters a list of options as the user types, whose open state, value and text live in your Model, with single or multiple selection, chips, an input inside the popup, grids, inline lists and inputs for a form.
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
+- [DirectionProvider](src/DirectionProvider.ts): tells the components inside it whether text runs left to right or right to left, so their arrow keys follow it.
 - [Drawer](src/Drawer.ts): a `Dialog` that slides in from an edge of the screen. A swipe toward that edge dismisses it once it travels far enough or is released fast enough. It has snap points, drawers nested in one another, and swipe areas that open it.
 - [DrawerProvider](src/Drawer.ts): scales the page behind the drawers inside it while one is open, as a native sheet does.
 - [Field](src/Field.ts): a label, a description and an error for a form control or a group of them, such as a range slider, with its validity, touched and focused state.
@@ -36,6 +37,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
+- [OTPField](src/OTPField.ts): a one-time code field, a row of one-character inputs whose code lives in your Model. It moves focus as the user types, takes a pasted or autofilled code whole, and submits it as one form value.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.

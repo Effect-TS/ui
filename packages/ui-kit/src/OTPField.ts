@@ -1,0 +1,855 @@
+/**
+ * A one-time code field: a row of one-character inputs for a verification
+ * code, which move focus as the user types, take a pasted or autofilled
+ * code whole, and submit it as one form value.
+ *
+ * `OTPField` is a headless component. It keeps which slot has focus and the
+ * text an input method is composing, moves focus and selects a slot's text
+ * with Commands, and emits `Updated`, `Completed` and `Rejected`. The code
+ * itself is the consumer's: it comes in as the `value` prop.
+ *
+ * **Anatomy**
+ *
+ * | Part    | Element                        |
+ * | :------ | :----------------------------- |
+ * | `root`  | any element, usually a `<div>` |
+ * | `input` | `<input>`, one for each slot   |
+ *
+ * `root` takes the consumer's builder and returns it, so the consumer goes
+ * on chaining and adds the slots with `.children(...)`. `input` takes
+ * `{ element, index }`, the slot's `<input>` and its place in the code from
+ * 0, and returns the builder. An index outside the field's `length`, or
+ * drawn twice, fails the render.
+ *
+ * The root adds one element: a visually hidden `<input type="text">`, after
+ * the consumer's children. It holds the whole code under the `name` prop,
+ * so the form submits one value, carries `required` and the pattern so the
+ * browser can refuse an incomplete code, and takes the browser's autofill.
+ * It is absolutely positioned, so a flex or grid `gap` doesn't count it,
+ * but `:last-child` and a selector such as `.otp input` do match it. Style
+ * the slots by a class of their own.
+ *
+ * Anything may sit between the slots, such as a `Separator` between two
+ * groups of three.
+ *
+ * **Data attributes**
+ *
+ * On the root and on every slot, present with an empty value or absent:
+ *
+ * - `data-disabled`, `data-readonly` and `data-required`, from the props
+ * - `data-complete`: every slot has a character
+ * - `data-filled`: on the root, the code isn't empty; on a slot, the slot
+ *   has a character
+ * - `data-focused`: a slot has focus
+ *
+ * **Keyboard**
+ *
+ * A key handler on each slot, since no native element gives these:
+ *
+ * | Key                                 | Action                                                    |
+ * | :---------------------------------- | :-------------------------------------------------------- |
+ * | a character                         | fills the slot and moves to the next                      |
+ * | Left, Right                         | move one slot                                             |
+ * | Ctrl or Cmd with Left, Home, Up     | move to the first slot                                    |
+ * | Ctrl or Cmd with Right, End, Down   | move to the first empty slot                              |
+ * | Backspace                           | removes the slot's character and moves back, or removes   |
+ * |                                     | the previous one from an empty slot                       |
+ * | Ctrl or Cmd with Backspace          | clears the code                                           |
+ * | Delete                              | removes the slot's character and stays                    |
+ *
+ * Removing a character moves the later ones one slot back, so the code has
+ * no gaps, and focus never goes past the first empty slot. Only one slot is
+ * in the Tab order: the focused one, or else the first empty one. Inside a
+ * `DirectionProvider` with `direction: "rtl"`, Left and Right swap. A
+ * read-only field keeps the navigation keys and drops the editing ones. A
+ * disabled field handles none.
+ *
+ * **Usage**
+ *
+ * The value is controlled. Each edit emits `Updated` with the code the user
+ * asked for, and the slots show it once the consumer passes it back as
+ * `value`. Focus moves on with the edit, and goes back to the first empty
+ * slot when the consumer stored fewer characters than were typed. So the
+ * consumer's `update` is where a code is changed on the way in: store
+ * `value.toUpperCase()` to show capitals, or use `validationType: "none"`
+ * and drop the characters a rule of your own rejects.
+ *
+ * `Completed` and `autoSubmit` wait for the stored code too. A consumer
+ * that never stores the code gets no completion, and `autoSubmit` submits a
+ * form that holds the code, through the form's own validation and its
+ * `submit` handler.
+ *
+ * Pasted text fills the slots from the one it was pasted into. Text an
+ * input method composes is entered once, when the composition ends.
+ *
+ * Name the field for assistive technology. The root is a `group`: give it
+ * `aria-labelledby`, which `field.group` does from `field.legend`. Each slot
+ * with no `aria-label` and no `aria-labelledby` of its own then takes the
+ * root's. That reaches the slots drawn in the root's own children, not ones
+ * drawn inside another component. Or give every slot an `aria-label`, such
+ * as "Character 2 of 6". A `<label for>` pointing at the `id` prop names
+ * and focuses the first slot only.
+ *
+ * In a `Field`, the root takes `field.group`, each slot's element takes
+ * `field.member`, and the props take `disabled: field.disabled`. Apply the
+ * field's part first, `otpField.root(field.group(h.div))`, so the slot's
+ * own `data-filled` and `data-focused` are the ones that show.
+ *
+ * **Example** (A six-digit code)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { OTPField } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ UpdatedCode: { value: Schema.String } })
+ *
+ * const Verify = Component.define({
+ *   name: "Verify",
+ *   model: Schema.Struct({ code: Schema.String }),
+ *   message: Message,
+ *   elements: Html
+ * }).make({
+ *   init: () => ({ code: "12" }),
+ *   update: { UpdatedCode: (_model, { value }) => ({ code: value }) },
+ *   view: (model, h) =>
+ *     OTPField(h, {
+ *       props: { value: model.code, length: 6, name: "code" },
+ *       onEmit: {
+ *         Updated: ({ value }) => Message.UpdatedCode({ value }),
+ *         Completed: () => undefined,
+ *         Rejected: () => undefined
+ *       },
+ *       view: (otpField) =>
+ *         otpField.root(h.div.class("otp").attr("aria-label", "Verification code")).children(
+ *           Array.from({ length: otpField.length }, (_, index) =>
+ *             otpField.input({
+ *               element: h.input.class("slot").attr("aria-label", "Digit " + (index + 1) + " of 6"),
+ *               index
+ *             }))
+ *         )
+ *     })
+ * })
+ *
+ * // Six slots, two of them filled, and one hidden input that submits the code.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Verify, {}))
+ * if (html.match(/<input class="slot"/g)?.length !== 6) throw new Error("the field doesn't draw six slots")
+ * if (html.match(/<input class="slot"[^>]* data-filled/g)?.length !== 2) throw new Error("two slots aren't filled")
+ * if (!/<input [^>]*name="code"[^>]* value="12"/.test(html)) throw new Error("the hidden input doesn't hold the code")
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import * as Command from "@effect/ui/Command"
+import * as Component from "@effect/ui/Component"
+import * as Html from "@effect/ui/html/Html"
+import * as Mount from "@effect/ui/Mount"
+import * as Subscription from "@effect/ui/Subscription"
+import * as UiSchema from "@effect/ui/UiSchema"
+import * as View from "@effect/ui/View"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+import * as Stream from "effect/Stream"
+import { DirectionProvider } from "./DirectionProvider.ts"
+import { type Attributed, flag, visuallyHidden } from "./internal/attributes.ts"
+import { isAndroid } from "./internal/platform.ts"
+
+/**
+ * Which characters a one-time code field accepts: digits, letters, both, or
+ * anything that isn't whitespace.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const OTPFieldValidationType = Schema.Literals(["numeric", "alpha", "alphanumeric", "none"])
+
+/**
+ * Which characters a one-time code field accepts.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OTPFieldValidationType = typeof OTPFieldValidationType.Type
+
+/**
+ * The virtual keyboard a one-time code field asks for, as the `inputmode`
+ * attribute names them.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const OTPFieldInputMode = Schema.Literals([
+  "none",
+  "text",
+  "tel",
+  "url",
+  "email",
+  "numeric",
+  "decimal",
+  "search"
+])
+
+/**
+ * The virtual keyboard a one-time code field asks for.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OTPFieldInputMode = typeof OTPFieldInputMode.Type
+
+/**
+ * Props for the state of an `OTPField`.
+ *
+ * **Details**
+ *
+ * - `value`: the code. The slots show it with whitespace and the
+ *   characters `validationType` rejects removed, cut to `length`.
+ * - `length`: the number of slots, a positive whole number.
+ * - `id`: the first slot's id. The others get `id-2`, `id-3` and so on,
+ *   so a `<label for>` focuses the first slot. Left out, each slot keeps
+ *   the id the consumer gave it.
+ * - `validationType`: `"numeric"` by default, `"alpha"`,
+ *   `"alphanumeric"`, or `"none"` to accept any character and leave the
+ *   rule to the consumer's `update`.
+ * - `mask`: draws each slot as a password input, unless the slot has a
+ *   `type` of its own.
+ * - `inputMode`: the virtual keyboard. By default `"numeric"` for a
+ *   numeric field, `"text"` for letters, and none for `"none"`.
+ * - `autoComplete`: the `autocomplete` of the first slot and the hidden
+ *   input, `"one-time-code"` by default. The other slots get `"off"`.
+ * - `autoSubmit`: submits the form the field belongs to once the stored
+ *   code is complete.
+ * - `disabled`: disables every slot and the hidden input, so the field
+ *   takes no focus, reports nothing and submits nothing.
+ * - `readOnly`: keeps focus and the navigation keys, and drops every edit.
+ * - `required`: the form doesn't submit while the code is empty.
+ * - `name`: the name the form submits the code under.
+ * - `form`: the id of the form the field belongs to, when it isn't inside
+ *   it.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const OTPFieldProps = Schema.Struct({
+  value: Schema.String,
+  length: Schema.Number,
+  id: Schema.optional(Schema.String),
+  validationType: Schema.optional(OTPFieldValidationType),
+  mask: Schema.optional(Schema.Boolean),
+  inputMode: Schema.optional(OTPFieldInputMode),
+  autoComplete: Schema.optional(Schema.String),
+  autoSubmit: Schema.optional(Schema.Boolean),
+  disabled: Schema.optional(Schema.Boolean),
+  readOnly: Schema.optional(Schema.Boolean),
+  required: Schema.optional(Schema.Boolean),
+  name: Schema.optional(Schema.String),
+  form: Schema.optional(Schema.String)
+})
+
+/**
+ * The props of an `OTPField`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OTPFieldProps = typeof OTPFieldProps.Type
+
+/**
+ * How the user changed the code: `"input-change"` for typing, an input
+ * method or autofill, `"input-clear"` for emptying a slot, `"input-paste"`
+ * for a paste, and `"keyboard"` for Backspace and Delete.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const OTPFieldUpdateReason = Schema.Literals(["input-change", "input-clear", "input-paste", "keyboard"])
+
+/**
+ * How the user changed the code.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OTPFieldUpdateReason = typeof OTPFieldUpdateReason.Type
+
+/**
+ * How the user entered text: `"input-change"` for typing, an input method
+ * or autofill, and `"input-paste"` for a paste.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const OTPFieldEntryReason = Schema.Literals(["input-change", "input-paste"])
+
+/**
+ * How the user entered text.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OTPFieldEntryReason = typeof OTPFieldEntryReason.Type
+
+/**
+ * What a one-time code field emits.
+ *
+ * **Details**
+ *
+ * - `Updated`: the code the user asked for. Store `value` and pass it back
+ *   as the `value` prop, changed if need be, such as in upper case. Until
+ *   then the slots go on showing the old code.
+ * - `Completed`: the stored code fills every slot after the user typed or
+ *   pasted its last character. `value` is the stored code, so a consumer
+ *   that changes or shortens what it stores gets the code it kept, or no
+ *   event. A complete code pasted over the same code reports it again.
+ *   Backspace and Delete never complete a code.
+ * - `Rejected`: the text the user typed or pasted held characters the
+ *   field dropped, or more characters than the field has slots. `value` is
+ *   that text as entered. The accepted part, if any, is reported by
+ *   `Updated`.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const OTPFieldEvents = UiSchema.TaggedEnum({
+  Updated: { value: Schema.String, reason: OTPFieldUpdateReason },
+  Completed: { value: Schema.String, reason: OTPFieldEntryReason },
+  Rejected: { value: Schema.String, reason: OTPFieldEntryReason }
+})
+
+/**
+ * What an `OTPField` emits.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type OTPFieldEvents = typeof OTPFieldEvents.Type
+
+const Message = UiSchema.TaggedEnum({
+  UpdatedSlot: { index: Schema.Number, value: Schema.String, composing: Schema.Boolean },
+  EndedComposition: { index: Schema.Number, value: Schema.String },
+  PastedText: { index: Schema.Number, text: Schema.String },
+  PressedKey: { index: Schema.Number, key: Schema.String, boundary: Schema.Boolean },
+  PressedSlot: { index: Schema.Number },
+  FocusedSlot: { index: Schema.Number },
+  BlurredSlot: { index: Schema.Number },
+  FocusedHiddenInput: {},
+  UpdatedHiddenInput: { value: Schema.String },
+  ChangedValue: {},
+  DisabledWhileFocused: {},
+  CompletedSelectSlot: {},
+  CompletedDetectAndroid: { android: Schema.Boolean }
+})
+
+type Message = typeof Message.Type
+
+const SlotText = Schema.Struct({ index: Schema.Number, text: Schema.String })
+
+const Model = Schema.Struct({
+  focused: Schema.Boolean,
+  focusedIndex: Schema.Number,
+  target: Schema.NullOr(Schema.Number),
+  moving: Schema.Number,
+  composing: Schema.NullOr(SlotText),
+  composed: Schema.NullOr(SlotText),
+  pending: Schema.NullOr(Schema.Struct({
+    index: Schema.NullOr(Schema.Number),
+    length: Schema.Number,
+    complete: Schema.NullOr(OTPFieldEntryReason)
+  })),
+  android: Schema.Boolean
+})
+
+type Model = typeof Model.Type
+
+type OTPFieldUpdate = Component.Update<Model, Message, OTPFieldEvents, OTPFieldProps>
+
+interface Rule {
+  readonly slot: string
+  readonly root: (length: number) => string
+  readonly rejected: RegExp
+  readonly inputMode: OTPFieldInputMode
+}
+
+const rules: Record<Exclude<OTPFieldValidationType, "none">, Rule> = {
+  numeric: { slot: "\\d{1}", root: (length) => "\\d{" + length + "}", rejected: /[^\d]/g, inputMode: "numeric" },
+  alpha: {
+    slot: "[a-zA-Z]{1}",
+    root: (length) => "[a-zA-Z]{" + length + "}",
+    rejected: /[^a-zA-Z]/g,
+    inputMode: "text"
+  },
+  alphanumeric: {
+    slot: "[a-zA-Z0-9]{1}",
+    root: (length) => "[a-zA-Z0-9]{" + length + "}",
+    rejected: /[^a-zA-Z0-9]/g,
+    inputMode: "text"
+  }
+}
+
+const ruleOf = (type: OTPFieldValidationType): Rule | undefined => type === "none" ? undefined : rules[type]
+
+const normalize = (
+  text: string,
+  length: number,
+  type: OTPFieldValidationType
+): readonly [characters: ReadonlyArray<string>, rejected: boolean] => {
+  const stripped = text.replace(/\s/g, "")
+  const rule = ruleOf(type)
+  const kept = rule === undefined ? stripped : stripped.replace(rule.rejected, "")
+  const characters = Array.from(kept)
+  return [characters.slice(0, length), stripped.length > kept.length || characters.length > length]
+}
+
+const without = (characters: ReadonlyArray<string>, index: number): ReadonlyArray<string> =>
+  index < 0 || index >= characters.length ? characters : [...characters.slice(0, index), ...characters.slice(index + 1)]
+
+interface Settings {
+  readonly length: number
+  readonly type: OTPFieldValidationType
+  readonly characters: ReadonlyArray<string>
+  readonly value: string
+  readonly disabled: boolean
+  readonly readOnly: boolean
+}
+
+const settingsOf = (props: OTPFieldProps): Settings => {
+  const length = Number.isInteger(props.length) && props.length > 0 ? props.length : 0
+  const type = props.validationType ?? "numeric"
+  const characters = normalize(props.value, length, type)[0]
+  return {
+    length,
+    type,
+    characters,
+    value: characters.join(""),
+    disabled: props.disabled === true,
+    readOnly: props.readOnly === true
+  }
+}
+
+const Slot = Html.ref("OTPFieldSlot", "input")
+const HiddenInput = Html.ref("OTPFieldHiddenInput", "input")
+
+const selectSlot = (index: number) => Html.select(Slot.at(index), () => Message.CompletedSelectSlot())
+
+const focusSlot = (index: number) => [
+  Html.Focus.make({ ref: Slot.at(index) }).pipe(Command.asNoop),
+  selectSlot(index)
+]
+
+const submit = Html.RequestSubmit.make({ ref: HiddenInput }).pipe(Command.asNoop)
+
+const firstEmpty = (s: Settings): number => Math.min(s.characters.length, s.length - 1)
+
+// A Command moves focus and selects a slot's text a moment after the edit that asked for it, and
+// a key pressed in between reaches the slot as it was. So the Model keeps the slot focus is on its
+// way to, as `target`, until the last `selectSlot` it issued has run, and `moving` counts those.
+const aim = (model: Model, index: number): Model => ({ ...model, target: index, moving: model.moving + 1 })
+
+const moveTo = (model: Model, $: OTPFieldUpdate, index: number) => $.set(aim(model, index)).run(...focusSlot(index))
+
+const reselect = (model: Model, $: OTPFieldUpdate, index: number) => $.set(aim(model, index)).run(selectSlot(index))
+
+const aimedAt = (model: Model, s: Settings, index: number): number =>
+  model.target === null || model.target === index ? index : Math.min(model.target, firstEmpty(s))
+
+const DetectAndroid = Mount.make(
+  "DetectAndroid",
+  { args: {} },
+  (node) => Effect.sync(() => isAndroid((node as Element).ownerDocument.defaultView))
+)
+
+const changedValue = (value: string) =>
+  Subscription.make("changedValue", value, () => Stream.make(Message.ChangedValue()))
+
+// A browser may send no blur event for an input disabled while it has
+// focus, so the field reports the blur itself.
+const disabledWhileFocused = Subscription.make("disabledWhileFocused", Stream.make(Message.DisabledWhileFocused()))
+
+const setValue = (
+  model: Model,
+  $: OTPFieldUpdate,
+  s: Settings,
+  characters: ReadonlyArray<string>,
+  reason: OTPFieldUpdateReason,
+  options: {
+    readonly events?: ReadonlyArray<OTPFieldEvents> | undefined
+    readonly focus?: number | undefined
+    readonly focusWhenUnchanged?: boolean | undefined
+  }
+) => {
+  const value = characters.join("")
+  const events = options.events ?? []
+  const moved = options.focus === undefined ? model : aim(model, options.focus)
+  const entry = reason === "input-change" || reason === "input-paste" ? reason : null
+  const complete = entry !== null && characters.length === s.length &&
+      (s.characters.length !== s.length || entry === "input-paste")
+    ? entry
+    : null
+  if (value === s.value) {
+    const focus = options.focusWhenUnchanged === true ? options.focus : undefined
+    return $.set(focus === undefined ? model : moved)
+      .run(
+        ...(focus === undefined ? [] : focusSlot(focus)),
+        ...(complete !== null && $.props.autoSubmit === true ? [submit] : [])
+      )
+      .emit(...events, ...(complete === null ? [] : [OTPFieldEvents.Completed({ value, reason: complete })]))
+  }
+  return $.set({ ...moved, pending: { index: options.focus ?? null, length: characters.length, complete } })
+    .run(...(options.focus === undefined ? [] : focusSlot(options.focus)))
+    .emit(...events, OTPFieldEvents.Updated({ value, reason }))
+}
+
+const enter = (model: Model, $: OTPFieldUpdate, index: number, text: string, reason: OTPFieldEntryReason) => {
+  const s = settingsOf($.props)
+  const [entered, rejected] = normalize(text, s.length, s.type)
+  const events = rejected ? [OTPFieldEvents.Rejected({ value: text, reason })] : []
+  if (entered.length === 0) {
+    if (reason === "input-paste") return $.set(model).emit(...events)
+    if (text === "") return setValue(model, $, s, without(s.characters, index), "input-clear", { events })
+    return reselect(model, $, index).emit(...events)
+  }
+  const merged = [...s.characters.slice(0, index), ...entered, ...s.characters.slice(index + entered.length)]
+  return setValue(model, $, s, normalize(merged.join(""), s.length, s.type)[0], reason, {
+    events,
+    focus: Math.min(index + entered.length, s.length - 1),
+    focusWhenUnchanged: true
+  })
+}
+
+const navigationKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"])
+const editingKeys = new Set(["Backspace", "Delete"])
+
+const pressKey = (
+  model: Model,
+  $: OTPFieldUpdate,
+  message: { readonly index: number; readonly key: string; readonly boundary: boolean },
+  rtl: boolean
+) => {
+  const s = settingsOf($.props)
+  if (s.disabled || model.composing !== null) return model
+  const { boundary, key } = message
+  const index = aimedAt(model, s, message.index)
+  const end = firstEmpty(s)
+  const go = (target: number) => moveTo(model, $, Math.min(Math.max(target, 0), end))
+  if (key === (rtl ? "ArrowRight" : "ArrowLeft")) return go(boundary ? 0 : index - 1)
+  if (key === (rtl ? "ArrowLeft" : "ArrowRight")) return go(boundary ? end : index + 1)
+  if (key === "Home" || key === "ArrowUp") return go(0)
+  if (key === "End" || key === "ArrowDown") return go(end)
+  if (s.readOnly) return model
+  if (key === "Delete") return setValue(model, $, s, without(s.characters, index), "keyboard", { focus: index })
+  if (key !== "Backspace") return model
+  if (boundary) return setValue(model, $, s, [], "keyboard", { focus: 0 })
+  const target = Math.max(0, index - 1)
+  const removed = index < s.characters.length ? index : target
+  return setValue(model, $, s, without(s.characters, removed), "keyboard", { focus: target })
+}
+
+type SlotOf<B extends View.PartTarget<"input">> = ReturnType<B["attr"]>
+
+const isSlot = (node: View.Element<any, any>): boolean =>
+  node.owned?.some((layer) => layer.refKey !== undefined && layer.refKey.startsWith(Slot.key + "[")) === true
+
+const named = (node: View.Node<any, any>, label: string): View.Node<any, any> => {
+  if (node._tag !== "Element") return node
+  if (isSlot(node)) {
+    return node.attrs["aria-label"] === undefined && node.attrs["aria-labelledby"] === undefined
+      ? { ...node, attrs: { ...node.attrs, "aria-labelledby": label } }
+      : node
+  }
+  const children = node.children.map((child) => named(child, label))
+  return children.some((child, index) => child !== node.children[index]) ? { ...node, children } : node
+}
+
+/**
+ * A headless one-time code field. Call it with the consumer's `h`, the
+ * `props`, an `onEmit` for its events, and a `view` closure that draws the
+ * root with `otpField.root(h.div)` and, inside it, one
+ * `otpField.input({ element: h.input, index })` for each slot.
+ *
+ * **Details**
+ *
+ * The parts also return `value`, the code the slots show, `length`, and
+ * `complete`, `filled`, `focused`, `disabled`, `readOnly` and `required`
+ * as booleans, for markup that depends on them.
+ *
+ * The field's own attributes win over the ones the consumer set on the
+ * builder before the part, including the ones a state leaves absent:
+ *
+ * - `root`: `role="group"`, `data-disabled`, `data-readonly`,
+ *   `data-required`, `data-complete`, `data-filled` and `data-focused`
+ * - `input`: the `value` property, `id` when the `id` prop is set,
+ *   `inputmode`, `autocomplete`, `autocorrect`, `spellcheck`,
+ *   `enterkeyhint`, `maxlength`, `tabindex`, `form`, `pattern`,
+ *   `readonly`, `required`, `disabled`, `aria-disabled`, which it never
+ *   sets, and the same data attributes as the root, with `data-filled` for
+ *   the slot's own character
+ *
+ * A part writes them when it is applied, so an attribute the consumer
+ * chains after the part is the consumer's to answer for. Two are left to
+ * the consumer: a slot's own `type` is kept, and the field writes
+ * `password` or `text` only on a slot with none; and a slot's
+ * `aria-label` or `aria-labelledby` is kept, and the field names only a
+ * slot with neither.
+ *
+ * A slot handles `input`, `compositionend`, `keydown`, `paste`,
+ * `mousedown`, `focus` and `blur` on a layer of its own, so the
+ * consumer's handlers for them still run. It cancels the keys it handles,
+ * every paste, and the mouse press, which would otherwise put a caret
+ * beside the character.
+ *
+ * The field reads the nearest `DirectionProvider` above it, if there is
+ * one, and swaps Left and Right in a right-to-left layout.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const OTPField = Component.define({
+  name: "OTPField",
+  props: OTPFieldProps,
+  model: Model,
+  message: Message,
+  events: OTPFieldEvents,
+  shared: {
+    provider: { owner: DirectionProvider, optional: true }
+  },
+  elements: Html
+}).make({
+  init: () => ({
+    focused: false,
+    focusedIndex: 0,
+    target: null,
+    moving: 0,
+    composing: null,
+    composed: null,
+    pending: null,
+    android: false
+  }),
+  update: {
+    UpdatedSlot: (model, { composing, index, value }, $) => {
+      const s = settingsOf($.props)
+      if (s.disabled || s.readOnly) return model
+      if ((composing && !model.android) || model.composing?.index === index) {
+        return { ...model, composing: { index, text: value } }
+      }
+      const typed = (from: Model) => {
+        const own = s.characters[index] ?? ""
+        // Until its text is selected, the slot shows its own character before the one just typed.
+        const unselected = from.target !== null && value.length > own.length && value.startsWith(own)
+        const at = value === "" ? index : aimedAt(from, s, index)
+        return enter(from, $, at, unselected ? value.slice(own.length) : value, "input-change")
+      }
+      if (model.composed === null) return typed(model)
+      const next = { ...model, composed: null }
+      // Some browsers send one more `input` after `compositionend`, with the text that was just
+      // entered or, once the slot is restored, the character it holds.
+      const repeated = model.composed.index === index &&
+        (value === model.composed.text || value === (s.characters[index] ?? ""))
+      return repeated ? next : typed(next)
+    },
+    EndedComposition: (model, { index, value }, $) => {
+      if (model.composing === null) return model
+      const s = settingsOf($.props)
+      const next = { ...model, composing: null, composed: { index, text: value } }
+      return s.disabled || s.readOnly ? next : enter(next, $, index, value, "input-change")
+    },
+    PastedText: (model, { index, text }, $) => {
+      const s = settingsOf($.props)
+      return s.disabled || s.readOnly ? model : enter(model, $, index, text, "input-paste")
+    },
+    PressedKey: (model, message, $) => pressKey(model, $, message, $.shared.provider?.direction === "rtl"),
+    PressedSlot: (model, { index }, $) => ($.props.disabled === true ? model : reselect(model, $, index)),
+    FocusedSlot: (model, { index }, $) => {
+      const s = settingsOf($.props)
+      if (s.disabled) return model
+      const next = { ...model, focused: true, focusedIndex: index }
+      // Focus passing through on its way to `target` is left alone.
+      if (model.target !== null && model.target !== index) return next
+      if (index > s.characters.length) return moveTo({ ...model, focused: true }, $, firstEmpty(s))
+      return model.target === null ? reselect(next, $, index) : next
+    },
+    BlurredSlot: (model) => ({ ...model, focused: false, composed: null }),
+    FocusedHiddenInput: (model, _message, $) => $.props.disabled === true ? model : moveTo(model, $, 0),
+    UpdatedHiddenInput: (model, { value }, $) => {
+      const s = settingsOf($.props)
+      if (s.disabled || s.readOnly) return model
+      const [entered, rejected] = normalize(value, s.length, s.type)
+      return setValue(model, $, s, entered, "input-change", {
+        events: rejected ? [OTPFieldEvents.Rejected({ value, reason: "input-change" })] : [],
+        focus: entered.length === 0 ? undefined : entered.length - 1
+      })
+    },
+    ChangedValue: (model, _message, $) => {
+      const s = settingsOf($.props)
+      const pending = model.pending
+      const next = pending === null ? model : { ...model, pending: null }
+      const end = firstEmpty(s)
+      if (pending !== null && pending.length === s.characters.length) {
+        const complete = s.characters.length === s.length ? pending.complete : null
+        const index = pending.index === null ? null : Math.min(pending.index, end)
+        // Focus went there with the edit, and came back if the consumer hadn't stored the code yet.
+        const late = index !== null && model.focused && model.focusedIndex !== index && model.target === null
+        return $.set(late ? aim(next, index) : next)
+          .run(
+            ...(late ? focusSlot(index) : []),
+            ...(complete !== null && $.props.autoSubmit === true ? [submit] : [])
+          )
+          .emit(...(complete === null ? [] : [OTPFieldEvents.Completed({ value: s.value, reason: complete })]))
+      }
+      return model.focused && !s.disabled && model.target === null && model.focusedIndex > s.characters.length
+        ? moveTo(next, $, end)
+        : next
+    },
+    DisabledWhileFocused: (model) => ({ ...model, focused: false, target: null, composing: null, composed: null }),
+    CompletedSelectSlot: (model) =>
+      model.moving > 1 ? { ...model, moving: model.moving - 1 } : { ...model, moving: 0, target: null },
+    CompletedDetectAndroid: (model, { android }) => (model.android === android ? model : { ...model, android })
+  },
+  subscriptions: (model, props) => [
+    changedValue(settingsOf(props).value),
+    model.focused && props.disabled === true && disabledWhileFocused
+  ],
+  parts: (model, p) => {
+    const props = p.props
+    if (!Number.isInteger(props.length) || props.length <= 0) {
+      throw new Error("OTPField: length is the number of slots, a positive whole number, and it was " + props.length)
+    }
+    const s = settingsOf(props)
+    const { characters, disabled, length, readOnly, value } = s
+    const rule = ruleOf(s.type)
+    const required = props.required === true
+    const complete = characters.length === length
+    const filled = characters.length > 0
+    const focused = model.focused && !disabled
+    const last = length - 1
+    const active = focused ? Math.min(model.focusedIndex, last) : firstEmpty(s)
+    const inputMode = props.inputMode ?? rule?.inputMode
+    const autoComplete = props.autoComplete ?? "one-time-code"
+    const drawn = new Set<number>()
+    const state = <B extends Attributed<B>>(builder: B): B =>
+      builder
+        .attr("data-disabled", flag(disabled))
+        .attr("data-readonly", flag(readOnly))
+        .attr("data-required", flag(required))
+        .attr("data-complete", flag(complete))
+        .attr("data-focused", flag(focused))
+    const hiddenInput = p.part("input", (b) =>
+      b.ref(HiddenInput)
+        .attr("type", "text")
+        .attr("id", props.id !== undefined && props.name === undefined ? props.id + "-hidden-input" : undefined)
+        .attr("name", props.name)
+        .attr("form", props.form)
+        .attr("autocomplete", autoComplete)
+        .attr("inputmode", inputMode)
+        .attr("minlength", String(length))
+        .attr("maxlength", String(length))
+        .attr("pattern", rule?.root(length))
+        .attr("readonly", flag(readOnly))
+        .attr("required", flag(required))
+        .attr("aria-hidden", "true")
+        .attr("tabindex", "-1")
+        .attr("style", visuallyHidden)
+        .disabled(disabled)
+        .value(value)
+        .onFocus(Message.FocusedHiddenInput())
+        .onInput(({ value }) => Message.UpdatedHiddenInput({ value })))
+    const slot = p.part("input", (b, index: number) => {
+      const character = characters[index] ?? ""
+      const identified = props.id === undefined
+        ? b
+        : b.attr("id", index === 0 ? props.id : props.id + "-" + (index + 1))
+      return state(identified)
+        .ref(Slot.at(index))
+        .attr("data-filled", flag(character !== ""))
+        .attr("inputmode", inputMode)
+        .attr("autocomplete", index === 0 ? autoComplete : "off")
+        .attr("autocorrect", "off")
+        .attr("spellcheck", "false")
+        .attr("enterkeyhint", index === last ? "done" : "next")
+        // Only the first slot, so a password manager doesn't offer to fill each of the others.
+        .attr("maxlength", index === 0 ? String(length) : undefined)
+        .attr("tabindex", index === active ? "0" : "-1")
+        .attr("form", props.form)
+        .attr("pattern", rule?.slot)
+        .attr("readonly", flag(readOnly))
+        .attr("required", flag(required))
+        .attr("aria-disabled", undefined)
+        .disabled(disabled)
+        .value(model.composing?.index === index ? model.composing.text : character)
+        .onKeyDown(
+          ({ alt, composing, ctrl, key, meta }) =>
+            composing || model.composing !== null ||
+              !(navigationKeys.has(key) || (!readOnly && editingKeys.has(key)))
+              ? undefined
+              : Message.PressedKey({ index, key, boundary: (ctrl || meta) && !alt }),
+          { preventDefault: true }
+        )
+        .onInput(({ composing, value }) => Message.UpdatedSlot({ index, value, composing }))
+        .onCompositionEnd(({ value }) => Message.EndedComposition({ index, value }))
+        .onPaste(({ text }) => Message.PastedText({ index, text }), { preventDefault: true })
+        // Only on the slot that has focus: a press elsewhere moves focus natively, at once, where a
+        // Command would move it a moment later and lose a key typed right after the press.
+        .on("mousedown", () => (focused && model.focusedIndex === index ? Message.PressedSlot({ index }) : undefined), {
+          preventDefault: true
+        })
+        .onFocus(Message.FocusedSlot({ index }))
+        .onBlur(Message.BlurredSlot({ index }))
+        .forward((node) =>
+          node.attrs.type === undefined ? node.attr("type", props.mask === true ? "password" : "text") : node
+        )
+    })
+    return {
+      value,
+      length,
+      complete,
+      filled,
+      focused,
+      disabled,
+      readOnly,
+      required,
+      root: p.part((b) =>
+        state(b)
+          .attr("role", "group")
+          .attr("data-filled", flag(filled))
+          .onMount(DetectAndroid().pipe(Mount.map((android) => Message.CompletedDetectAndroid({ android }))))
+          .forward((node) => {
+            const root = View.build(
+              node,
+              [hiddenInput(
+                new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
+              )]
+            )
+            const label = root.attrs["aria-labelledby"]
+            return label === undefined ? root : named(root, label) as typeof root
+          })
+      ),
+      input: View.wrapPart(
+        slot,
+        <B extends View.PartTarget<"input">>(
+          { element, index }: { readonly element: B; readonly index: number }
+        ): SlotOf<B> => {
+          if (!Number.isInteger(index) || index < 0 || index >= length) {
+            throw new Error("OTPField: no slot at index " + index + " in a field of " + length + " slots")
+          }
+          if (drawn.has(index)) throw new Error("OTPField: the slot at index " + index + " was drawn twice")
+          drawn.add(index)
+          return slot(element, index)
+        }
+      )
+    }
+  }
+})
