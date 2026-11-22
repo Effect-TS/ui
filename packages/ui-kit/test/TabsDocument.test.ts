@@ -1,0 +1,177 @@
+// @vitest-environment happy-dom
+import { Component, UiSchema } from "@effect/ui"
+import { Tabs } from "@effect/ui-kit"
+import { BrowserHost, Html } from "@effect/ui/html"
+import { assert, describe, it } from "@effect/vitest"
+import { Effect, Schema } from "effect"
+import { container, tick } from "./utils/document.ts"
+
+const Message = UiSchema.TaggedEnum({ Selected: { value: Schema.String } })
+
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  model: Schema.Struct({ tab: Schema.String }),
+  message: Message,
+  elements: Html
+}).make({
+  init: () => ({ tab: "a" }),
+  update: { Selected: (model, { value }) => ({ ...model, tab: value }) },
+  view: (model, h) =>
+    Tabs(h, {
+      props: {
+        value: model.tab,
+        tabs: [{ value: "a" }, { value: "b" }, { value: "c" }, { value: "d", disabled: true }]
+      },
+      onEmit: { Selected: ({ value }) => Message.Selected({ value }) },
+      view: (tabs) =>
+        tabs.root(h.div.class("root")).children(
+          tabs.list(h.div.class("list")).children(
+            tabs.tab({ element: h.button.class("a"), value: "a" }).children("A"),
+            tabs.tab({ element: h.button.class("b"), value: "b" }).children("B"),
+            tabs.tab({ element: h.a.class("c").attr("href", "#c"), value: "c" }).children("C"),
+            tabs.tab({ element: h.a.class("d").attr("href", "#d"), value: "d" }).children("D"),
+            tabs.indicator(h.span.class("indicator"))
+          ),
+          ["a", "b", "c", "d"].map((value) => tabs.panel({ element: h.div.class("panel"), value })?.children(value))
+        )
+    })
+})
+
+const stub = (element: Element, values: Record<string, unknown>) => {
+  for (const [key, value] of Object.entries(values)) {
+    Object.defineProperty(element, key, { configurable: true, value })
+  }
+}
+const rect = (left: number, top: number, width: number, height: number) => () =>
+  ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect
+
+const observers: Array<() => void> = []
+const fakeResizeObserver = Effect.acquireRelease(
+  Effect.sync(() => {
+    const original = Object.getOwnPropertyDescriptor(window, "ResizeObserver")
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: class {
+        constructor(callback: () => void) {
+          observers.push(callback)
+        }
+        observe() {}
+        disconnect() {}
+      }
+    })
+    return original
+  }),
+  (original) =>
+    Effect.sync(() => {
+      observers.length = 0
+      if (original === undefined) delete (window as { ResizeObserver?: unknown }).ResizeObserver
+      else Object.defineProperty(window, "ResizeObserver", original)
+    })
+)
+
+const mountPage = Effect.gen(function*() {
+  const app = yield* container
+  yield* BrowserHost.mountEffect(Page, {}, app)
+  yield* tick
+  const get = (name: string) => app.querySelector<HTMLElement>("." + name)!
+  const panels = () => Array.from(app.querySelectorAll(".panel"), (panel) => panel.textContent)
+  return { get, panels }
+})
+
+const key = (target: Element, key: string) => {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, composed: true })
+  target.dispatchEvent(event)
+  return event.defaultPrevented
+}
+const clicked = (target: Element) => {
+  const event = new MouseEvent("click", { bubbles: true, cancelable: true, composed: true })
+  target.dispatchEvent(event)
+  return event.defaultPrevented
+}
+
+describe("Tabs in a document", { concurrent: false }, () => {
+  it.effect("the arrow keys move focus and the roving tab, and a click swaps the panels", () =>
+    Effect.gen(function*() {
+      const { get, panels } = yield* mountPage
+      get("a").focus()
+      assert.isTrue(key(get("a"), "ArrowRight"))
+      yield* tick
+      assert.strictEqual(document.activeElement, get("b"))
+      assert.deepStrictEqual(["a", "b", "c", "d"].map((id) => get(id).tabIndex), [-1, 0, -1, -1])
+      key(get("b"), "End")
+      yield* tick
+      assert.strictEqual(document.activeElement, get("d"))
+
+      assert.isFalse(clicked(get("b")))
+      yield* tick
+      assert.strictEqual(get("b").getAttribute("aria-selected"), "true")
+      assert.strictEqual(get("root").dataset.activationDirection, "right")
+      assert.deepStrictEqual(panels(), ["b"])
+      assert.isNull(document.querySelector("[data-starting-style], [data-ending-style]"))
+    }).pipe(Effect.scoped))
+
+  it.effect("a link tab follows its href on a click or Space, and a disabled one doesn't", () =>
+    Effect.gen(function*() {
+      const { get } = yield* mountPage
+      const clicks: Array<string> = []
+      const record = (event: Event) => clicks.push((event.target as Element).className)
+      document.addEventListener("click", record)
+      yield* Effect.addFinalizer(() => Effect.sync(() => document.removeEventListener("click", record)))
+
+      assert.isTrue(key(get("c"), " "))
+      yield* tick
+      assert.deepStrictEqual(clicks, ["c"])
+      assert.strictEqual(get("c").getAttribute("aria-selected"), "true")
+
+      assert.isTrue(key(get("d"), " "))
+      assert.isTrue(clicked(get("d")))
+      yield* tick
+      assert.deepStrictEqual(clicks, ["c", "d"])
+      assert.strictEqual(get("c").getAttribute("aria-selected"), "true")
+      assert.isFalse(key(get("a"), " "))
+    }).pipe(Effect.scoped))
+
+  it.effect("the indicator is measured against the list, through a scaled list, and again on resize", () =>
+    Effect.gen(function*() {
+      yield* fakeResizeObserver
+      const { get } = yield* mountPage
+      const list = get("list")
+      const indicator = get("indicator")
+      assert.isTrue(indicator.hidden)
+
+      stub(list, {
+        offsetWidth: 300,
+        offsetHeight: 40,
+        scrollWidth: 300,
+        scrollHeight: 40,
+        getBoundingClientRect: rect(100, 50, 600, 80)
+      })
+      for (const [id, offsetLeft] of [["a", 0], ["b", 80]] as const) {
+        stub(get(id), {
+          offsetLeft,
+          offsetTop: 4,
+          offsetWidth: 60,
+          offsetHeight: 32,
+          offsetParent: list,
+          getBoundingClientRect: rect(100 + 2 * (offsetLeft + 0.25), 58, 120, 64)
+        })
+      }
+      observers.forEach((observe) => observe())
+      yield* tick
+      assert.isFalse(indicator.hidden)
+      const vars = () =>
+        ["left", "right", "top", "bottom", "width", "height"].map((name) =>
+          indicator.style.getPropertyValue("--active-tab-" + name)
+        )
+      assert.deepStrictEqual(vars(), ["0.25px", "239.75px", "4px", "4px", "60px", "32px"])
+
+      clicked(get("b"))
+      yield* tick
+      assert.deepStrictEqual(vars(), ["80.25px", "159.75px", "4px", "4px", "60px", "32px"])
+
+      stub(get("b"), { offsetWidth: 100, getBoundingClientRect: rect(400, 58, 200, 64) })
+      observers.forEach((observe) => observe())
+      assert.deepStrictEqual(vars(), ["80px", "120px", "4px", "4px", "100px", "32px"])
+    }).pipe(Effect.scoped))
+})

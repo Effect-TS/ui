@@ -47,6 +47,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.
 - [Switch](src/Switch.ts): a controlled on/off setting.
+- [Tabs](src/Tabs.ts): a list of tabs that each show a panel, whose active tab lives in your Model, with roving focus, link tabs, panel enter and exit transitions, and an indicator placed under the active tab with CSS variables.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
 - [Toggle](src/Toggle.ts): a controlled two-state button, pressed or not.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.
