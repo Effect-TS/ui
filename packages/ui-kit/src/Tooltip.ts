@@ -392,7 +392,7 @@ const left = (model: typeof Model.Type, _message: unknown, $: TooltipUpdate) => 
   const next = { ...model, hovered: false, pressed: false }
   if (!shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeOpening))
   if (model.focused) return next
-  return $.set(next).run(WaitBeforeClosing({ delay: $.props.closeDelay ?? 0 }))
+  return $.set(next).run(WaitBeforeClosing.make({ delay: $.props.closeDelay ?? 0 }))
 }
 
 /**
@@ -516,7 +516,7 @@ export const TooltipProvider = Component.define({
       if (open) return $.set({ ...next, instant: true }).run(Command.interrupt(WaitBeforeCooling))
       // The last one closed: the window starts.
       if (model.open) {
-        return $.set({ ...next, instant: true }).run(WaitBeforeCooling({ timeout: $.props.timeout ?? 400 }))
+        return $.set({ ...next, instant: true }).run(WaitBeforeCooling.make({ timeout: $.props.timeout ?? 400 }))
       }
       return next
     },
@@ -591,7 +591,7 @@ export const Tooltip = Component.define({
       if ($.shared.provider?.instant === true) {
         return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
       }
-      return $.set(next).run(WaitBeforeOpening({ delay: $.props.delay ?? 600 }))
+      return $.set(next).run(WaitBeforeOpening.make({ delay: $.props.delay ?? 600 }))
     },
     LeftTrigger: left,
     EnteredPositioner: (model, _message, $) =>

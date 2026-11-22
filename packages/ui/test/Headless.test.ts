@@ -143,7 +143,7 @@ const Linger = Command.make(
   () => Effect.onInterrupt(Effect.never, () => Deferred.await(lingering.release))
 )
 const Lingering = Component.define({ name: "Lingering", model: Schema.Null, message: Schema.Never }).make({
-  init: ($) => $.set(null).run(Linger()),
+  init: ($) => $.set(null).run(Linger.make()),
   update: (model) => model,
   view: (_, h) => h.el("span")
 })

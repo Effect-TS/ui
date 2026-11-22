@@ -92,7 +92,7 @@ describe("render timing", () => {
     }).make({
       init: () => 0,
       // The Command's result arrives before the flush or after it.
-      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again({})) : model + 1,
+      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again.make({})) : model + 1,
       view: (model, h) => h.el("button").on("click", "click").children(String(model))
     })
     return Effect.gen(function*() {
@@ -176,13 +176,13 @@ describe("causedBy", () => {
           switch (message._tag) {
             case "Start":
               return $.set(model).run(
-                Load().pipe(Command.map((value) => Message.make({ _tag: "Loaded", value }))),
-                Command.asNoop(Hang())
+                Load.make().pipe(Command.map((value) => Message.make({ _tag: "Loaded", value }))),
+                Command.asNoop(Hang.make())
               )
             case "Loaded":
               return message.value
             case "Stop":
-              return $.set(model).run(Command.asNoop(Hang()))
+              return $.set(model).run(Command.asNoop(Hang.make()))
           }
         },
         view: (model, h) => h.el("p").children(model)
@@ -259,7 +259,7 @@ describe("TestHost.layer flush", () => {
       message: Schema.Literals(["click", "again"])
     }).make({
       init: () => 0,
-      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again({})) : model + 1,
+      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again.make({})) : model + 1,
       view: (model, h) => {
         count++
         return h.el("button").on("click", "click").children(String(model))

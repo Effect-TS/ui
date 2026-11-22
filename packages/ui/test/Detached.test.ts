@@ -45,7 +45,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
     update: (model, message, $) =>
       FormMsg.match(message, {
         Typed: () => ({ ...model, draft: model.draft + "a" }),
-        Save: () => $.run(Save({ text: model.draft })),
+        Save: () => $.run(Save.make({ text: model.draft })),
         Saved: ({ text }) => $.set({ ...model, saved: text }).emit(FormEvents.Saved({ text })),
         Clear: () => ({ ...model, draft: "" })
       }),
@@ -224,7 +224,7 @@ describe("detached children", () => {
         model: Schema.NullOr(Schema.Boolean),
         message: Schema.Boolean
       }).make({
-        init: ($) => $.set(null).run(Look()),
+        init: ($) => $.set(null).run(Look.make()),
         update: (_, found) => found,
         view: (found, h) => h.el("i", `${h.props.label}:${found}`).ref(Input)
       })
@@ -279,7 +279,7 @@ describe("detached children", () => {
       const Msg = UiSchema.TaggedEnum({ Break: {} })
       const Boom = Command.make("Boom", { args: {} }, () => Effect.die("boom"))
       const Fragile = Component.define({ name: "Fragile", model: Schema.Null, message: Msg, receives: ["Break"] })
-        .make({ init: () => null, update: (_, __, $) => $.run(Boom()), view: (_, h) => h.el("p", "fine") })
+        .make({ init: () => null, update: (_, __, $) => $.run(Boom.make()), view: (_, h) => h.el("p", "fine") })
       const Ref = Fragile.ref("F")
       const PageMsg = UiSchema.TaggedEnum({ Detach: { detached: Schema.Boolean }, Break: {} })
       const Page = Component.define({ name: "Page", model: Schema.Boolean, message: PageMsg }).make({
@@ -369,7 +369,7 @@ describe("detached children", () => {
         .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
       const Reveal = Command.make("Reveal", { args: {} }, () => Effect.succeed(true))
       const Inner = Component.define({ name: "Inner", model: Schema.Boolean, message: Schema.Boolean }).make({
-        init: ($) => $.set(false).run(Reveal()),
+        init: ($) => $.set(false).run(Reveal.make()),
         update: (_, shown) => shown,
         view: (shown, h) => h.el("div", shown ? h.el("i").onMount(track("inner")) : null)
       })
