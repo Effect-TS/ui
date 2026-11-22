@@ -394,7 +394,9 @@ const payloadOf = (
     case "dblclick":
     case "contextmenu":
     case "mousedown":
-    case "mouseup": {
+    case "mouseup":
+    case "pointerup":
+    case "pointercancel": {
       const e = event as MouseEvent
       return {
         button: e.button ?? 0,

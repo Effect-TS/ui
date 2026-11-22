@@ -31,7 +31,8 @@ export const fire = (
 ): boolean => {
   const defaults = event === "keydown" || event === "keyup"
     ? key
-    : event === "click" || event === "mousedown" || event === "mouseup"
+    : event === "click" || event === "mousedown" || event === "mouseup" || event === "pointerup" ||
+        event === "pointercancel"
     ? scene.pointer
     : undefined
   const prevented = (given as { readonly defaultPrevented?: unknown } | undefined)?.defaultPrevented === true

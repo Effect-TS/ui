@@ -11,6 +11,7 @@ const Message = UiSchema.TaggedEnum({ Selected: { value: Schema.String } })
 const Page = Component.define({
   name: "Page",
   scoped: false,
+  props: Schema.Struct({ activateOnFocus: Schema.optional(Schema.Boolean) }),
   model: Schema.Struct({ tab: Schema.String }),
   message: Message,
   elements: Html
@@ -21,6 +22,7 @@ const Page = Component.define({
     Tabs(h, {
       props: {
         value: model.tab,
+        activateOnFocus: h.props.activateOnFocus,
         tabs: [{ value: "a" }, { value: "b" }, { value: "c" }, { value: "d", disabled: true }, { value: "e" }]
       },
       onEmit: { Selected: ({ value }) => Message.Selected({ value }) },
@@ -73,14 +75,15 @@ const fakeResizeObserver = Effect.acquireRelease(
     })
 )
 
-const mountPage = Effect.gen(function*() {
+const mountPageWith = Effect.fnUntraced(function*(props: { readonly activateOnFocus?: boolean }) {
   const app = yield* container
-  yield* BrowserHost.mountEffect(Page, {}, app)
+  yield* BrowserHost.mountEffect(Page, props, app)
   yield* tick
   const get = (name: string) => app.querySelector<HTMLElement>("." + name)!
   const panels = () => Array.from(app.querySelectorAll(".panel"), (panel) => panel.textContent)
   return { get, panels }
 })
+const mountPage = Effect.suspend(() => mountPageWith({}))
 
 const key = (target: Element, key: string, init: KeyboardEventInit = {}, type = "keydown") => {
   const event = new KeyboardEvent(type, { key, bubbles: true, cancelable: true, composed: true, ...init })
@@ -112,6 +115,42 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.strictEqual(get("root").dataset.activationDirection, "right")
       assert.deepStrictEqual(panels(), ["b"])
       assert.isNull(document.querySelector("[data-starting-style], [data-ending-style]"))
+    }).pipe(Effect.scoped))
+
+  it.effect("with activateOnFocus, focus during a secondary press doesn't select, and focus after the press ends does", () =>
+    Effect.gen(function*() {
+      const { get } = yield* mountPageWith({ activateOnFocus: true })
+      const press = (tab: HTMLElement, type: string, button = 2) => {
+        const init = { bubbles: true, cancelable: true, composed: true, button }
+        tab.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init))
+      }
+      const selected = () => ["a", "b", "c"].filter((id) => get(id).getAttribute("aria-selected") === "true")
+      const focusFrom = function*(tab: HTMLElement) {
+        get("a").focus()
+        yield* tick
+        tab.focus()
+        yield* tick
+        assert.strictEqual(document.activeElement, tab)
+      }
+
+      for (const [end, id] of [["pointercancel", "b"], ["pointerup", "c"]] as const) {
+        press(get(id), "pointerdown")
+        press(get(id), "mousedown")
+        yield* focusFrom(get(id))
+        yield* focusFrom(get(id))
+        assert.deepStrictEqual(selected(), ["a"])
+        press(get(id), end)
+        yield* focusFrom(get(id))
+        assert.deepStrictEqual(selected(), [id])
+      }
+
+      get("c").focus()
+      yield* tick
+      press(get("b"), "pointerdown", 0)
+      press(get("b"), "mousedown", 0)
+      get("b").focus()
+      yield* tick
+      assert.deepStrictEqual(selected(), ["b"])
     }).pipe(Effect.scoped))
 
   it.effect("Space clicks a tab once, with its modifiers, and Enter is left native except on an <a> without an href", () =>

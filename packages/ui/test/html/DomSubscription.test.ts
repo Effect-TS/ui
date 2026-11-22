@@ -74,7 +74,11 @@ const Phases = Component.define({
       "mousedown",
       ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })
     ),
-    DomSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" }))
+    DomSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" })),
+    DomSubscription.onDocument(
+      "pointercancel",
+      ({ button, pointerType }) => PhaseMessage.Heard({ what: `cancel ${button} ${pointerType}` })
+    )
   ]
 })
 
@@ -237,6 +241,17 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       }).pipe(Effect.scoped)
       assert.isFalse(press(document.body, "x"))
     }))
+
+  it.effect("a cancelled pointer reaches onDocument with its pointer payload", () =>
+    Effect.gen(function*() {
+      const root = yield* BrowserHost.mountEffect(Phases, {}, yield* container)
+      yield* tick
+      byId("inner").dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, button: 2, pointerType: "pen" }))
+      yield* tick
+      assert.deepStrictEqual(root.model(), ["cancel 2 pen"])
+      const s = yield* HtmlScene.make(Phases, {})
+      s.fireDocument("pointercancel", { button: 1 }).expect(Locator.tag("output")).toHaveText("cancel 1 mouse")
+    }).pipe(Effect.scoped))
 
   it.effect("a capture listener hears a press an element stops, and the window's focus reaches onWindow", () =>
     Effect.gen(function*() {

@@ -71,7 +71,7 @@
  * - Enter clicks a `<button>` or a link natively, and the tabs click an
  *   `<a>` that has no `href`.
  * - With `activateOnFocus`, moving focus activates the tab as well, unless
- *   a mouse button other than the main one pressed it.
+ *   a mouse button other than the main one is pressing it.
  *
  * Disabled tabs take focus and are not skipped, so a screen reader can find
  * them, but they never activate.
@@ -228,8 +228,9 @@ export type TabsTab = typeof TabsTab.Type
  *   drawn once with `tab`, and may be drawn with `panel`.
  * - `orientation`: `"horizontal"` by default.
  * - `activateOnFocus`: activates a tab when it takes focus, such as from
- *   the arrow keys, and not only when it is clicked. A press of a mouse
- *   button other than the main one still only focuses it.
+ *   the arrow keys, and not only when it is clicked. While a mouse button
+ *   other than the main one presses a tab, until `pointerup` or
+ *   `pointercancel`, focus only focuses it.
  * - `loopFocus`: the arrow keys wrap from the last tab to the first and
  *   back. `true` by default.
  * - `keepMounted`: keeps every panel drawn, and `hidden`, while its tab isn't
@@ -285,7 +286,7 @@ const Message = UiSchema.TaggedEnum({
   FocusedTab: { value: Schema.String },
   BlurredTab: {},
   PressedTab: { value: Schema.String, button: Schema.Number },
-  ReleasedMouse: {},
+  ReleasedPointer: {},
   PressedKey: { value: Schema.String, key: Schema.String },
   ChangedValue: {},
   RenderedFirstFrame: { value: Schema.String },
@@ -666,7 +667,10 @@ const TrackIndicator = Mount.makeStream(
     )
 )
 
-const releasedMouse = DomSubscription.onDocument("mouseup", Message.ReleasedMouse())
+const releasedPointer = [
+  DomSubscription.onDocument("pointerup", Message.ReleasedPointer()),
+  DomSubscription.onDocument("pointercancel", Message.ReleasedPointer())
+]
 
 type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
 
@@ -746,13 +750,13 @@ export const Tabs = Component.define({
   update: {
     ClickedTab: (model, { value }, $) => activate(model, $, value, rtlOf($)),
     FocusedTab: (model, { value }, $) => {
-      const next = { ...model, focused: true, highlighted: value, secondary: null }
+      const next = { ...model, focused: true, highlighted: value }
       return $.props.activateOnFocus === true && model.secondary !== value ? activate(next, $, value, rtlOf($)) : next
     },
     BlurredTab: (model) => model.focused ? { ...model, focused: false } : model,
     PressedTab: (model, { button, value }) => ({ ...model, secondary: button === 0 ? null : value }),
-    ReleasedMouse: (model) => model.secondary === null ? model : { ...model, secondary: null },
-    PressedKey: (model, { key, value }, $) => navigate({ ...model, secondary: null }, $, value, key, rtlOf($)),
+    ReleasedPointer: (model) => model.secondary === null ? model : { ...model, secondary: null },
+    PressedKey: (model, { key, value }, $) => navigate(model, $, value, key, rtlOf($)),
     ChangedValue: (model, _message, $) => phaseOf(model, $.props, rtlOf($)),
     RenderedFirstFrame: (model, { value }, $) => {
       const next = phaseOf(model, $.props, rtlOf($))
@@ -767,7 +771,7 @@ export const Tabs = Component.define({
   subscriptions: (model, props) => [
     props.value !== model.shown &&
     Subscription.make("changedValue", [props.value], () => Stream.make(Message.ChangedValue())),
-    model.secondary !== null && releasedMouse
+    ...(model.secondary === null ? [] : releasedPointer)
   ],
   parts: (model, p) => {
     const props = p.props
