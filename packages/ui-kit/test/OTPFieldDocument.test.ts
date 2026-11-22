@@ -49,7 +49,7 @@ const Page = Component.define({
                   },
                   onEmit: {
                     Updated: ({ value }) => Message.Updated({ value }),
-                    Completed: ({ value }) => Message.Logged({ entry: "completed " + value }),
+                    Completed: ({ reason, value }) => Message.Logged({ entry: "completed " + value + " " + reason }),
                     Rejected: ({ value }) => Message.Logged({ entry: "rejected " + value })
                   },
                   view: (otpField) =>
@@ -110,16 +110,18 @@ const Labelled = Component.define({
   view: (_model, h) =>
     h.div(
       h.label.attr("for", "otp").children("Verification code"),
+      h.p.id("own").children("Fourth digit"),
       OTPField(h, {
-        props: { value: "", length: 4, id: "otp" },
+        props: { value: "", length: 5, id: "otp" },
         onEmit: { Updated: () => undefined, Completed: () => undefined, Rejected: () => undefined },
         view: (otpField) =>
           otpField.root(h.div).children(
             otpField.input({ element: h.input, index: 0 }),
             otpField.input({ element: h.input.attr("aria-label", "Second digit"), index: 1 }),
             h.div(otpField.input({ element: h.input, index: 2 })),
+            otpField.input({ element: h.input.attr("aria-labelledby", "own"), index: 3 }),
             Frame(h, {
-              view: (frame) => frame.root(h.span).children(otpField.input({ element: h.input, index: 3 }))
+              view: (frame) => frame.root(h.span).children(otpField.input({ element: h.input, index: 4 }))
             })
           )
       })
@@ -152,7 +154,7 @@ describe("OTPField in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["A", "B", "2", "C"])
       assert.strictEqual(hidden.value, "AB2C")
-      assert.deepStrictEqual(log(), ["rejected !", "completed AB2C", "submitted AB2C"])
+      assert.deepStrictEqual(log(), ["rejected !", "completed AB2C input-change", "submitted AB2C"])
       slots[3]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }))
       yield* tick
       assert.strictEqual(focusedSlot(slots), 2)
@@ -209,17 +211,15 @@ describe("OTPField in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(log(), [])
 
-      root.send(Message.Stored({ value: "" }))
-      yield* tick
-      paste("1234")
+      paste("4321")
       yield* tick
       assert.deepStrictEqual(log(), [])
-      root.send(Message.Stored({ value: "1234" }))
+      root.send(Message.Stored({ value: "4321" }))
       yield* tick
-      assert.deepStrictEqual(slots.map((slot) => slot.value), ["1", "2", "3", "4"])
-      assert.deepStrictEqual(log(), ["completed 1234", "submitted 1234"])
+      assert.deepStrictEqual(slots.map((slot) => slot.value), ["4", "3", "2", "1"])
+      assert.deepStrictEqual(log(), ["completed 4321 input-paste", "submitted 4321"])
       yield* tick
-      assert.deepStrictEqual(log(), ["completed 1234", "submitted 1234"])
+      assert.deepStrictEqual(log(), ["completed 4321 input-paste", "submitted 4321"])
 
       root.send(Message.Stored({ value: "" }))
       yield* tick
@@ -230,7 +230,7 @@ describe("OTPField in a document", { concurrent: false }, () => {
       root.send(Message.Stored({ value: "5678" }))
       yield* tick
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["5", "6", "7", "8"])
-      assert.deepStrictEqual(log(), ["completed 1234", "submitted 1234"])
+      assert.deepStrictEqual(log(), ["completed 4321 input-paste", "submitted 4321"])
     }).pipe(Effect.scoped))
 
   it.effect("a label for the first slot names the group and every slot with no name of its own", () =>
@@ -239,7 +239,7 @@ describe("OTPField in a document", { concurrent: false }, () => {
       yield* BrowserHost.mountEffect(Labelled, {}, app)
       yield* tick
       const names = () => HtmlLocator.queryAllByRole(app, "textbox").map((slot) => HtmlLocator.nameOf(app, slot))
-      const expected = ["Verification code", "Second digit", "Verification code", "Verification code"]
+      const expected = ["Verification code", "Second digit", "Verification code", "Fourth digit", "Verification code"]
       assert.deepStrictEqual(names(), expected)
       assert.strictEqual(HtmlLocator.nameOf(app, HtmlLocator.getByRole(app, "group")), "Verification code")
       app.querySelector("span")!.click()
