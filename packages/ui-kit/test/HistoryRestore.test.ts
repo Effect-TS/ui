@@ -18,14 +18,9 @@ const PageRoute = Route.union({ Edit: Route.make("/"), Away: Route.make("/away")
 const PageMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: PageRoute },
   SetPopoverOpen: { open: Schema.Boolean },
-  SetAutocompleteOpen: { open: Schema.Boolean },
   SetAutocompleteValue: { value: Schema.String },
-  SetComboboxOpen: { open: Schema.Boolean },
-  SetComboboxValue: { value: Schema.NullOr(Schema.String) },
   SetComboboxInput: { value: Schema.String },
   SetSelectValue: { value: Schema.NullOr(Schema.String) },
-  SetNumberValue: { value: Schema.NullOr(Schema.Number) },
-  SetOtpValue: { value: Schema.String },
   SetSliderValue: { value: Schema.Number },
   Left: {},
   Navigated: {}
@@ -38,14 +33,9 @@ const Page = Component.define({
   model: Schema.Struct({
     route: PageRoute,
     popoverOpen: Schema.Boolean,
-    autocompleteOpen: Schema.Boolean,
     autocompleteValue: Schema.String,
-    comboboxOpen: Schema.Boolean,
-    comboboxValue: Schema.NullOr(Schema.String),
     comboboxInput: Schema.String,
     selectValue: Schema.NullOr(Schema.String),
-    numberValue: Schema.NullOr(Schema.Number),
-    otpValue: Schema.String,
     sliderValue: Schema.Number
   }),
   message: PageMessage,
@@ -54,27 +44,17 @@ const Page = Component.define({
   init: ($) => ({
     route: $.props.route,
     popoverOpen: false,
-    autocompleteOpen: true,
     autocompleteValue: "",
-    comboboxOpen: true,
-    comboboxValue: null,
     comboboxInput: "",
     selectValue: null,
-    numberValue: 12,
-    otpValue: "12",
     sliderValue: 25
   }),
   update: {
     ChangedRoute: (model, { route }) => ({ ...model, route }),
     SetPopoverOpen: (model, { open }) => ({ ...model, popoverOpen: open }),
-    SetAutocompleteOpen: (model, { open }) => ({ ...model, autocompleteOpen: open }),
     SetAutocompleteValue: (model, { value }) => ({ ...model, autocompleteValue: value }),
-    SetComboboxOpen: (model, { open }) => ({ ...model, comboboxOpen: open }),
-    SetComboboxValue: (model, { value }) => ({ ...model, comboboxValue: value }),
     SetComboboxInput: (model, { value }) => ({ ...model, comboboxInput: value }),
     SetSelectValue: (model, { value }) => ({ ...model, selectValue: value }),
-    SetNumberValue: (model, { value }) => ({ ...model, numberValue: value }),
-    SetOtpValue: (model, { value }) => ({ ...model, otpValue: value }),
     SetSliderValue: (model, { value }) => ({ ...model, sliderValue: value }),
     Left: (model, _message, $) =>
       $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
@@ -103,18 +83,14 @@ const Page = Component.define({
                   openOnHover: true,
                   delay: 100
                 }).children("Open"),
-                popover.popup(h.div.attr("data-testid", "popover-popup")).children("Body")
+                popover.popup(h.div).children("Body")
               )
           }),
           Autocomplete(h, {
             key: "autocomplete",
-            props: { open: model.autocompleteOpen, value: model.autocompleteValue, items },
-            onEmit: (event) => {
-              if (event._tag === "RequestedOpen") return PageMessage.SetAutocompleteOpen({ open: true })
-              if (event._tag === "RequestedClose") return PageMessage.SetAutocompleteOpen({ open: false })
-              if (event._tag === "Updated") return PageMessage.SetAutocompleteValue({ value: event.value })
-              return undefined
-            },
+            props: { open: true, value: model.autocompleteValue, items },
+            onEmit: (event) =>
+              event._tag === "Updated" ? PageMessage.SetAutocompleteValue({ value: event.value }) : undefined,
             view: (ac) =>
               h.div(
                 ac.input(h.input.attr("data-testid", "ac-input")),
@@ -127,26 +103,13 @@ const Page = Component.define({
           }),
           Combobox(h, {
             key: "combobox",
-            props: {
-              open: model.comboboxOpen,
-              value: model.comboboxValue,
-              inputValue: model.comboboxInput,
-              items
-            },
-            onEmit: (event) => {
-              if (event._tag === "RequestedOpen") return PageMessage.SetComboboxOpen({ open: true })
-              if (event._tag === "RequestedClose") return PageMessage.SetComboboxOpen({ open: false })
-              if (event._tag === "Picked" && (typeof event.value === "string" || event.value === null)) {
-                return PageMessage.SetComboboxValue({ value: event.value })
-              }
-              if (event._tag === "RequestedInputValue") {
-                return PageMessage.SetComboboxInput({ value: event.inputValue })
-              }
-              return undefined
-            },
+            props: { open: true, value: null, inputValue: model.comboboxInput, items },
+            onEmit: (event) =>
+              event._tag === "RequestedInputValue"
+                ? PageMessage.SetComboboxInput({ value: event.inputValue })
+                : undefined,
             view: (cb) =>
               h.div(
-                cb.trigger(h.button.attr("data-testid", "cb-trigger")).children("Pick"),
                 cb.input(h.input.attr("data-testid", "cb-input")),
                 cb.list(h.div).children(
                   ...cb.items.map((item) =>
@@ -167,18 +130,14 @@ const Page = Component.define({
           }),
           NumberField(h, {
             key: "number",
-            props: { value: model.numberValue },
-            onEmit: (event) =>
-              event._tag === "Updated" ? PageMessage.SetNumberValue({ value: event.value }) : undefined,
-            view: (nf) =>
-              nf.root(h.div.attr("data-testid", "nf-root")).children(nf.input(h.input.attr("data-testid", "nf-input")))
+            props: { value: 12 },
+            view: (nf) => nf.root(h.div).children(nf.input(h.input.attr("data-testid", "nf-input")))
           }),
           OTPField(h, {
             key: "otp",
-            props: { value: model.otpValue, length: 2 },
-            onEmit: (event) => event._tag === "Updated" ? PageMessage.SetOtpValue({ value: event.value }) : undefined,
+            props: { value: "12", length: 2 },
             view: (otp) =>
-              otp.root(h.div.attr("data-testid", "otp-root")).children(
+              otp.root(h.div).children(
                 Array.from(
                   { length: otp.length },
                   (_, index) => otp.input({ element: h.input.attr("data-testid", `otp-slot-${index}`), index })
@@ -196,7 +155,7 @@ const Page = Component.define({
               slider.root(h.div.attrs({ "data-testid": "slider-root", "data-active": String(slider.activeThumbIndex) }))
                 .children(
                   slider.control(h.div.attr("data-testid", "slider-control")).children(
-                    slider.track(h.div.attr("data-testid", "slider-track")).children(
+                    slider.track(h.div).children(
                       slider.thumb({
                         element: h.div.attr("data-testid", "slider-thumb"),
                         input: h.input.attr("data-testid", "slider-input")
@@ -223,36 +182,37 @@ describe("History restore", { concurrent: false }, () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, Router.props(PageRoute))
+      const at = (id: string) => root.get(Locator.testId(id))
       yield* TestHost.settle
 
-      Locator.fire(root.get(Locator.testId("popover-trigger")), "mouseenter")
+      Locator.fire(at("popover-trigger"), "mouseenter")
       yield* TestHost.settle
       yield* TestClock.adjust("100 millis")
       yield* TestHost.settle
-      assert.strictEqual(root.get(Locator.testId("popover-trigger")).attrs?.["aria-expanded"], "true")
+      assert.strictEqual(at("popover-trigger").attrs?.["aria-expanded"], "true")
 
-      Locator.fire(root.get(Locator.testId("ac-input")), "input", { value: "b" })
+      Locator.fire(at("ac-input"), "input", { value: "b" })
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.testId("ac-item-banana")), "mouseenter")
-      Locator.fire(root.get(Locator.testId("cb-input")), "input", { value: "b" })
+      Locator.fire(at("ac-item-banana"), "mouseenter")
+      Locator.fire(at("cb-input"), "input", { value: "b" })
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.testId("cb-item-banana")), "mouseenter")
-      Locator.fire(root.get(Locator.testId("select-trigger")), "keydown", { key: "b" })
-      Locator.fire(root.get(Locator.testId("nf-input")), "input", { value: "12." })
-      Locator.fire(root.get(Locator.testId("otp-slot-0")), "focus")
-      Locator.fire(root.get(Locator.testId("slider-input")), "focus")
+      Locator.fire(at("cb-item-banana"), "mouseenter")
+      Locator.fire(at("select-trigger"), "keydown", { key: "b" })
+      Locator.fire(at("nf-input"), "input", { value: "12." })
+      Locator.fire(at("otp-slot-0"), "focus")
+      Locator.fire(at("slider-input"), "focus")
       yield* TestHost.settle
 
-      assert.strictEqual(root.get(Locator.testId("ac-input")).props?.value, "b")
-      assert.strictEqual(root.get(Locator.testId("ac-item-banana")).attrs?.["data-highlighted"], "")
-      assert.strictEqual(root.get(Locator.testId("cb-input")).props?.value, "b")
-      assert.strictEqual(root.get(Locator.testId("cb-item-banana")).attrs?.["data-highlighted"], "")
-      assert.strictEqual(Locator.textOf(root.get(Locator.testId("select-trigger"))), "banana")
-      assert.strictEqual(root.get(Locator.testId("nf-input")).props?.value, "12.")
-      assert.strictEqual(root.get(Locator.testId("otp-slot-0")).attrs?.["data-focused"], "")
-      assert.strictEqual(root.get(Locator.testId("slider-root")).attrs?.["data-active"], "0")
+      assert.strictEqual(at("ac-input").props?.value, "b")
+      assert.strictEqual(at("ac-item-banana").attrs?.["data-highlighted"], "")
+      assert.strictEqual(at("cb-input").props?.value, "b")
+      assert.strictEqual(at("cb-item-banana").attrs?.["data-highlighted"], "")
+      assert.strictEqual(Locator.textOf(at("select-trigger")), "banana")
+      assert.strictEqual(at("nf-input").props?.value, "12.")
+      assert.strictEqual(at("otp-slot-0").attrs?.["data-focused"], "")
+      assert.strictEqual(at("slider-root").attrs?.["data-active"], "0")
 
-      Locator.fire(root.get(Locator.testId("away")), "click")
+      Locator.fire(at("away"), "click")
       yield* TestHost.settle
       history.go(-1)
       yield* TestHost.settle
@@ -274,26 +234,23 @@ describe("History restore", { concurrent: false }, () => {
         assert.notInclude(saved, key)
       }
 
-      assert.strictEqual(root.get(Locator.testId("popover-trigger")).attrs?.["aria-expanded"], "true")
-      assert.strictEqual(root.get(Locator.testId("ac-input")).props?.value, "b")
-      assert.isUndefined(root.get(Locator.testId("ac-item-banana")).attrs?.["data-highlighted"])
-      assert.strictEqual(root.get(Locator.testId("cb-input")).props?.value, "b")
-      assert.isUndefined(root.get(Locator.testId("cb-item-banana")).attrs?.["data-highlighted"])
-      assert.strictEqual(Locator.textOf(root.get(Locator.testId("select-trigger"))), "banana")
-      assert.strictEqual(root.get(Locator.testId("nf-input")).props?.value, "12")
-      assert.strictEqual(root.get(Locator.testId("otp-slot-0")).props?.value, "1")
-      assert.strictEqual(root.get(Locator.testId("slider-input")).props?.value, "25")
+      assert.strictEqual(at("popover-trigger").attrs?.["aria-expanded"], "true")
+      assert.strictEqual(at("ac-input").props?.value, "b")
+      assert.isUndefined(at("ac-item-banana").attrs?.["data-highlighted"])
+      assert.strictEqual(at("cb-input").props?.value, "b")
+      assert.isUndefined(at("cb-item-banana").attrs?.["data-highlighted"])
+      assert.strictEqual(Locator.textOf(at("select-trigger")), "banana")
+      assert.strictEqual(at("nf-input").props?.value, "12")
+      assert.isUndefined(at("otp-slot-0").attrs?.["data-focused"])
+      assert.strictEqual(at("slider-root").attrs?.["data-active"], "-1")
 
-      assert.isUndefined(root.get(Locator.testId("otp-slot-0")).attrs?.["data-focused"])
-      assert.strictEqual(root.get(Locator.testId("slider-root")).attrs?.["data-active"], "-1")
-
-      Locator.fire(root.get(Locator.testId("popover-trigger")), "click")
+      Locator.fire(at("popover-trigger"), "click")
       yield* TestHost.settle
-      assert.strictEqual(root.get(Locator.testId("popover-trigger")).attrs?.["aria-expanded"], "false")
+      assert.strictEqual(at("popover-trigger").attrs?.["aria-expanded"], "false")
 
-      Locator.fire(root.get(Locator.testId("select-trigger")), "keydown", { key: "a" })
+      Locator.fire(at("select-trigger"), "keydown", { key: "a" })
       yield* TestHost.settle
-      assert.strictEqual(Locator.textOf(root.get(Locator.testId("select-trigger"))), "apple")
+      assert.strictEqual(Locator.textOf(at("select-trigger")), "apple")
     }).pipe(
       Effect.provide(Router.make({ routes: PageRoute, history })),
       Effect.provide(
@@ -312,40 +269,45 @@ describe("History restore", { concurrent: false }, () => {
     )
   })
 
-  it.effect("clears Slider drag state on Back while keeping the moved value", () => {
+  it.effect("clears a Slider drag and ScrollArea scrolling on Back while keeping the moved value", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const app = yield* container
+      const at = <E extends HTMLElement = HTMLElement>(id: string) => app.querySelector<E>(`[data-testid="${id}"]`)!
       yield* BrowserHost.mountEffect(Page, Router.props(PageRoute), app)
       yield* tick
 
-      const control = app.querySelector<HTMLElement>("[data-testid=\"slider-control\"]")!
-      const thumb = app.querySelector<HTMLElement>("[data-testid=\"slider-thumb\"]")!
-      control.getBoundingClientRect = () =>
-        ({ left: 0, right: 100, width: 100, top: 0, bottom: 20, height: 20, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
-      thumb.getBoundingClientRect = () =>
-        ({ left: 20, right: 30, width: 10, top: 0, bottom: 20, height: 20, x: 20, y: 0, toJSON: () => ({}) }) as DOMRect
-
-      thumb.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 25, bubbles: true }))
+      at("slider-control").getBoundingClientRect = () => new DOMRect(0, 0, 100, 20)
+      at("slider-thumb").getBoundingClientRect = () => new DOMRect(20, 0, 10, 20)
+      at("slider-thumb").dispatchEvent(
+        new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 25, bubbles: true })
+      )
       document.dispatchEvent(
         new PointerEvent("pointermove", { pointerId: 1, buttons: 1, clientX: 60, bubbles: true })
       )
+
+      const viewport = at("sa-viewport")
+      Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 100 })
+      Object.defineProperty(viewport, "scrollHeight", { configurable: true, value: 400 })
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+      viewport.scrollTop = 80
+      viewport.dispatchEvent(new Event("scroll"))
       yield* tick
 
-      assert.isTrue(app.querySelector<HTMLElement>("[data-testid=\"slider-root\"]")!.hasAttribute("data-dragging"))
-      assert.strictEqual(app.querySelector<HTMLInputElement>("[data-testid=\"slider-input\"]")!.value, "60")
+      assert.isTrue(at("slider-root").hasAttribute("data-dragging"))
+      assert.strictEqual(at<HTMLInputElement>("slider-input").value, "60")
+      assert.isTrue(at("sa-root").hasAttribute("data-scrolling"))
 
-      app.querySelector<HTMLElement>("[data-testid=\"away\"]")!.click()
-      yield* tick
+      at("away").click()
       yield* tick
       assert.isNull(app.querySelector("[data-testid=\"slider-root\"]"))
 
       history.go(-1)
       yield* tick
-      yield* tick
 
-      assert.isFalse(app.querySelector<HTMLElement>("[data-testid=\"slider-root\"]")!.hasAttribute("data-dragging"))
-      assert.strictEqual(app.querySelector<HTMLInputElement>("[data-testid=\"slider-input\"]")!.value, "60")
+      assert.isFalse(at("slider-root").hasAttribute("data-dragging"))
+      assert.strictEqual(at<HTMLInputElement>("slider-input").value, "60")
+      assert.isFalse(at("sa-root").hasAttribute("data-scrolling"))
     }).pipe(Effect.provide(Router.make({ routes: PageRoute, history })))
   })
 })

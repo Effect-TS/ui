@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
+import { Component } from "@effect/ui"
 import { ScrollArea, type ScrollAreaProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -214,74 +214,4 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(root.hasAttribute("data-scrolling"))
     }))
-
-  it.effect("does not restore scrolling state on history Back", () => {
-    const PageRoute = Route.union({ List: Route.make("/"), Away: Route.make("/away") })
-    const PageMessage = UiSchema.TaggedEnum({
-      ChangedRoute: { route: PageRoute },
-      Left: {},
-      Navigated: {}
-    })
-    const Page = Component.define({
-      name: "ScrollPage",
-      scoped: false,
-      props: Schema.Struct({ route: PageRoute }),
-      model: Schema.Struct({ route: PageRoute }),
-      message: PageMessage,
-      elements: Html
-    }).make({
-      init: ($) => ({ route: $.props.route }),
-      update: {
-        ChangedRoute: (model, { route }) => ({ ...model, route }),
-        Left: (model, _message, $) =>
-          $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
-        Navigated: (model) => model
-      },
-      subscriptions: (model) => [
-        Router.subscription(PageRoute, model.route, (route) => PageMessage.ChangedRoute({ route }))
-      ],
-      view: (model, h) =>
-        h.div(
-          h.button.class("away").onClick(PageMessage.Left()).children("Away"),
-          model.route._tag === "List"
-            ? ScrollArea(h, {
-              key: "area",
-              props: {},
-              view: (scrollArea) =>
-                scrollArea.root(h.div.class("root")).children(
-                  scrollArea.viewport(h.div.class("viewport")).children(
-                    scrollArea.content(h.div.class("content")).children("Items")
-                  ),
-                  scrollArea.scrollbar({
-                    element: h.div.class("bar-y"),
-                    thumb: h.div.class("thumb-y"),
-                    keepMounted: true
-                  })
-                )
-            })
-            : null
-        )
-    })
-    const history = Router.memoryHistory("/")
-    return Effect.gen(function*() {
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Page, Router.props(PageRoute), app)
-      yield* tick
-      const viewport = app.querySelector<HTMLElement>(".viewport")!
-      stubMetrics(viewport, { clientHeight: 100, scrollHeight: 400 })
-      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
-      viewport.scrollTop = 80
-      viewport.dispatchEvent(new Event("scroll"))
-      yield* tick
-      assert.isTrue(app.querySelector<HTMLElement>(".root")!.hasAttribute("data-scrolling"))
-      app.querySelector<HTMLElement>(".away")!.click()
-      yield* tick
-      yield* tick
-      assert.isNull(app.querySelector(".root"))
-      history.go(-1)
-      yield* tick
-      yield* tick
-      assert.isFalse(app.querySelector<HTMLElement>(".root")!.hasAttribute("data-scrolling"))
-    }).pipe(Effect.provide(Router.make({ routes: PageRoute, history })))
-  })
 })
