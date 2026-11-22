@@ -212,6 +212,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
+import * as Struct from "effect/Struct"
 import * as Engine from "./internal/combobox.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import * as Positioning from "./Positioning.ts"
@@ -235,13 +236,7 @@ import * as Positioning from "./Positioning.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const AutocompleteItem = Schema.Struct({
-  value: Schema.String,
-  label: Schema.String,
-  disabled: Schema.optional(Schema.Boolean),
-  group: Schema.optional(Schema.String),
-  row: Schema.optional(Schema.Number)
-})
+export const AutocompleteItem = Engine.Item
 
 /**
  * One suggestion of an `Autocomplete`.
@@ -278,21 +273,7 @@ export type AutocompleteItem = typeof AutocompleteItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const AutocompleteChangeReason = Schema.Literals([
-  "trigger-press",
-  "input-press",
-  "outside-press",
-  "item-press",
-  "close-press",
-  "escape-key",
-  "list-navigation",
-  "focus-out",
-  "input-change",
-  "input-clear",
-  "clear-press",
-  "cancel-open",
-  "none"
-])
+export const AutocompleteChangeReason = Engine.TextReason
 
 /**
  * Why an `Autocomplete` asks to open, close or change its text.
@@ -311,7 +292,7 @@ export type AutocompleteChangeReason = typeof AutocompleteChangeReason.Type
  * @category schemas
  * @since 0.1.0
  */
-export const AutocompleteHighlightReason = Schema.Literals(["keyboard", "pointer", "none"])
+export const AutocompleteHighlightReason = Engine.HighlightReason
 
 /**
  * What moved the highlight.
@@ -339,7 +320,7 @@ export type AutocompleteHighlightReason = typeof AutocompleteHighlightReason.Typ
  * @category schemas
  * @since 0.1.0
  */
-export const AutocompleteFilterMode = Schema.Literals(["contains", "startsWith", "endsWith", "none"])
+export const AutocompleteFilterMode = Engine.FilterMode
 
 /**
  * How an `Autocomplete` matches its items against the text.
@@ -527,7 +508,7 @@ export type AutocompleteEvents = typeof AutocompleteEvents.Type
  * @category models
  * @since 0.1.0
  */
-export type AutocompleteTransitionStatus = "starting" | "ending" | null
+export type AutocompleteTransitionStatus = Engine.TransitionStatus
 
 /**
  * A run of items to draw under one group label: the items whose `group`
@@ -538,11 +519,7 @@ export type AutocompleteTransitionStatus = "starting" | "ending" | null
  * @category models
  * @since 0.1.0
  */
-export interface AutocompleteGroup {
-  readonly key: string | undefined
-  readonly items: ReadonlyArray<AutocompleteItem>
-  readonly rows: ReadonlyArray<ReadonlyArray<AutocompleteItem>>
-}
+export interface AutocompleteGroup extends Engine.Group {}
 
 /**
  * The matchers an `Autocomplete` filters with, for a consumer's own
@@ -578,22 +555,17 @@ export interface AutocompleteFilter extends TextFilter {}
  */
 export const makeAutocompleteFilter = (locale?: string | undefined): AutocompleteFilter => textFilter(locale)
 
+const emits: Engine.Emits<AutocompleteEvents> = {
+  opened: (reason) => AutocompleteEvents.Opened({ reason }),
+  dismissed: (reason) => AutocompleteEvents.Dismissed({ reason }),
+  edited: (value, reason) => AutocompleteEvents.Updated({ value, reason }),
+  highlighted: (value, index, reason) => AutocompleteEvents.Highlighted({ value, index, reason }),
+  settled: (open) => AutocompleteEvents.Settled({ open })
+}
+
 const engine = Engine.make("Autocomplete", (props: AutocompleteProps): Engine.Settings<AutocompleteEvents> => {
-  const { filter, mode, value, ...rest } = props
-  return {
-    ...rest,
-    inputValue: value,
-    mode,
-    filter: mode === "inline" || mode === "none" ? "none" : filter,
-    openOnInputClick: props.openOnInputClick ?? false,
-    emits: {
-      opened: (reason) => AutocompleteEvents.Opened({ reason }),
-      dismissed: (reason) => AutocompleteEvents.Dismissed({ reason }),
-      edited: (value, reason) => AutocompleteEvents.Updated({ value, reason }),
-      highlighted: (value, index, reason) => AutocompleteEvents.Highlighted({ value, index, reason }),
-      settled: (open) => AutocompleteEvents.Settled({ open })
-    }
-  }
+  const { value, ...rest } = props
+  return { ...rest, inputValue: value, openOnInputClick: props.openOnInputClick ?? false, emits }
 })
 
 /**
@@ -630,41 +602,17 @@ export const Autocomplete = Component.define({
 }).make({
   init: Engine.init,
   update: engine.update,
-  parts: (model, p) => {
-    const parts = engine.parts(model, p)
-    return {
-      open: parts.open,
-      mounted: parts.mounted,
-      transitionStatus: parts.transitionStatus,
-      inline: parts.inline,
-      disabled: parts.disabled,
-      readOnly: parts.readOnly,
-      required: parts.required,
-      side: parts.side,
-      align: parts.align,
-      highlighted: parts.highlighted,
-      openMethod: parts.openMethod,
-      items: parts.items,
-      groups: parts.groups,
-      listEmpty: parts.listEmpty,
-      inputGroup: parts.inputGroup,
-      input: parts.input,
-      trigger: parts.trigger,
-      icon: parts.icon,
-      clear: parts.clear,
-      value: parts.value,
-      backdrop: parts.backdrop,
-      positioner: parts.positioner,
-      popup: parts.popup,
-      arrow: parts.arrow,
-      list: parts.list,
-      row: parts.row,
-      item: parts.item,
-      group: parts.group,
-      groupLabel: parts.groupLabel,
-      separator: parts.separator,
-      empty: parts.empty,
-      status: parts.status
-    }
-  }
+  parts: (model, p) =>
+    Struct.omit(engine.parts(model, p), [
+      "selected",
+      "selectedItems",
+      "placeholder",
+      "multiple",
+      "label",
+      "chips",
+      "chip",
+      "chipRemove",
+      "itemIndicator",
+      "finalFocus"
+    ])
 })

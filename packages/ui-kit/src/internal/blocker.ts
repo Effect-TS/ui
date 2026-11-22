@@ -7,10 +7,12 @@ export const blockers = (attribute: string) => {
     .attr("role", "presentation")
     .attr(attribute, "")
     .attr("style", "position:fixed;inset:0;z-index:-1;" + noSelect)
+  const is = (target: Node): boolean => target instanceof Element && target.hasAttribute(attribute)
   return {
     open: View.toNode(blocker),
     closed: View.toNode(blocker.attr("inert", "")),
-    is: (target: Node): boolean => target instanceof Element && target.hasAttribute(attribute)
+    is,
+    owns: (layer: Node, target: Node): boolean => is(target) && target.parentNode === layer
   }
 }
 

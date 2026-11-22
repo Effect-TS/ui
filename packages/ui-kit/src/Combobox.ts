@@ -260,13 +260,7 @@ import * as Positioning from "./Positioning.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxItem = Schema.Struct({
-  value: Schema.String,
-  label: Schema.String,
-  disabled: Schema.optional(Schema.Boolean),
-  group: Schema.optional(Schema.String),
-  row: Schema.optional(Schema.Number)
-})
+export const ComboboxItem = Engine.Item
 
 /**
  * One option of a `Combobox`.
@@ -304,7 +298,7 @@ export type ComboboxValue = typeof ComboboxValue.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxInteraction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
+export const ComboboxInteraction = Engine.Interaction
 
 /**
  * How the combobox was opened or closed.
@@ -344,22 +338,7 @@ export type ComboboxInteraction = typeof ComboboxInteraction.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxChangeReason = Schema.Literals([
-  "trigger-press",
-  "input-press",
-  "outside-press",
-  "item-press",
-  "close-press",
-  "escape-key",
-  "list-navigation",
-  "focus-out",
-  "input-change",
-  "input-clear",
-  "clear-press",
-  "chip-remove-press",
-  "cancel-open",
-  "none"
-])
+export const ComboboxChangeReason = Engine.ChangeReason
 
 /**
  * Why a `Combobox` asks to open, close or change its value or its text.
@@ -379,7 +358,7 @@ export type ComboboxChangeReason = typeof ComboboxChangeReason.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxHighlightReason = Schema.Literals(["keyboard", "pointer", "none"])
+export const ComboboxHighlightReason = Engine.HighlightReason
 
 /**
  * What moved the highlight.
@@ -407,7 +386,7 @@ export type ComboboxHighlightReason = typeof ComboboxHighlightReason.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxFilterMode = Schema.Literals(["contains", "startsWith", "endsWith", "none"])
+export const ComboboxFilterMode = Engine.FilterMode
 
 /**
  * How a `Combobox` matches its items against the text.
@@ -569,7 +548,7 @@ export type ComboboxEvents = typeof ComboboxEvents.Type
  * @category models
  * @since 0.1.0
  */
-export type ComboboxTransitionStatus = "starting" | "ending" | null
+export type ComboboxTransitionStatus = Engine.TransitionStatus
 
 /**
  * A run of items to draw under one group label: the items whose `group`
@@ -580,11 +559,7 @@ export type ComboboxTransitionStatus = "starting" | "ending" | null
  * @category models
  * @since 0.1.0
  */
-export interface ComboboxGroup {
-  readonly key: string | undefined
-  readonly items: ReadonlyArray<ComboboxItem>
-  readonly rows: ReadonlyArray<ReadonlyArray<ComboboxItem>>
-}
+export interface ComboboxGroup extends Engine.Group {}
 
 /**
  * The matchers a `Combobox` filters with, for a consumer's own filter.
@@ -619,17 +594,16 @@ export interface ComboboxFilter extends TextFilter {}
  */
 export const makeComboboxFilter = (locale?: string | undefined): ComboboxFilter => textFilter(locale)
 
-const engine = Engine.make("Combobox", (props: ComboboxProps): Engine.Settings<ComboboxEvents> => ({
-  ...props,
-  emits: {
-    opened: (reason) => ComboboxEvents.Opened({ reason }),
-    dismissed: (reason) => ComboboxEvents.Dismissed({ reason }),
-    picked: (value, reason) => ComboboxEvents.Picked({ value, reason }),
-    edited: (inputValue, reason) => ComboboxEvents.EditedInput({ inputValue, reason }),
-    highlighted: (value, index, reason) => ComboboxEvents.Highlighted({ value, index, reason }),
-    settled: (open) => ComboboxEvents.Settled({ open })
-  }
-}))
+const emits: Engine.Emits<ComboboxEvents> = {
+  opened: (reason) => ComboboxEvents.Opened({ reason }),
+  dismissed: (reason) => ComboboxEvents.Dismissed({ reason }),
+  picked: (value, reason) => ComboboxEvents.Picked({ value, reason }),
+  edited: (inputValue, reason) => ComboboxEvents.EditedInput({ inputValue, reason }),
+  highlighted: (value, index, reason) => ComboboxEvents.Highlighted({ value, index, reason }),
+  settled: (open) => ComboboxEvents.Settled({ open })
+}
+
+const engine = Engine.make("Combobox", (props: ComboboxProps): Engine.Settings<ComboboxEvents> => ({ ...props, emits }))
 
 /**
  * A combobox: an input that filters a list of options as the user types.

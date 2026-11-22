@@ -21,16 +21,18 @@ import { available, keyed, type Loop, stepped } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { raiseAbove } from "./topLayer.ts"
-import { frameOf, settling, statusOf, transitionAttrs } from "./transition.ts"
+import { frameOf, settling, statusOf, transitionAttrs, type TransitionStatus } from "./transition.ts"
 import { printable, typeahead } from "./typeahead.ts"
 
-export interface Item {
-  readonly value: string
-  readonly label: string
-  readonly disabled?: boolean | undefined
-  readonly group?: string | undefined
-  readonly row?: number | undefined
-}
+export const Item = Schema.Struct({
+  value: Schema.String,
+  label: Schema.String,
+  disabled: Schema.optional(Schema.Boolean),
+  group: Schema.optional(Schema.String),
+  row: Schema.optional(Schema.Number)
+})
+
+export type Item = typeof Item.Type
 
 export interface Group {
   readonly key: string | undefined
@@ -38,13 +40,13 @@ export interface Group {
   readonly rows: ReadonlyArray<ReadonlyArray<Item>>
 }
 
-export type TransitionStatus = "starting" | "ending" | null
+export type { TransitionStatus }
 
 export const Interaction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
 
 export type Interaction = typeof Interaction.Type
 
-export const ChangeReason = Schema.Literals([
+export const TextReason = Schema.Literals([
   "trigger-press",
   "input-press",
   "outside-press",
@@ -56,16 +58,23 @@ export const ChangeReason = Schema.Literals([
   "input-change",
   "input-clear",
   "clear-press",
-  "chip-remove-press",
   "cancel-open",
   "none"
 ])
 
+export type TextReason = typeof TextReason.Type
+
+export const ChangeReason = Schema.Literals([...TextReason.literals, "chip-remove-press"])
+
 export type ChangeReason = typeof ChangeReason.Type
 
-export type TextReason = Exclude<ChangeReason, "chip-remove-press">
+export const HighlightReason = Schema.Literals(["keyboard", "pointer", "none"])
 
-export type HighlightReason = "keyboard" | "pointer" | "none"
+export type HighlightReason = typeof HighlightReason.Type
+
+export const FilterMode = Schema.Literals(["contains", "startsWith", "endsWith", "none"])
+
+export type FilterMode = typeof FilterMode.Type
 
 export interface Emits<E> {
   readonly opened: (reason: TextReason) => E
@@ -83,7 +92,7 @@ export interface Settings<E> extends Positioning.PositionerOptions {
   readonly items: ReadonlyArray<Item>
   readonly value?: string | ReadonlyArray<string> | null | undefined
   readonly multiple?: boolean | undefined
-  readonly filter?: "contains" | "startsWith" | "endsWith" | "none" | undefined
+  readonly filter?: FilterMode | undefined
   readonly filteredItems?: ReadonlyArray<Item> | undefined
   readonly locale?: string | undefined
   readonly limit?: number | undefined
@@ -247,7 +256,7 @@ const shownOf = (model: Model, props: AnySettings, open = props.open): ReadonlyA
   const query = queryOf(model, props, open)
   const bypass = bypassed(model, props, query)
   if (props.filteredItems !== undefined && !bypass) return props.filteredItems
-  const filter = props.filter ?? "contains"
+  const filter = props.mode === "inline" || props.mode === "none" ? "none" : props.filter ?? "contains"
   const match = textFilter(props.locale)
   const text = bypass ? "" : query
   const limit = props.limit ?? -1
@@ -320,14 +329,16 @@ const highlight = <E>(
   byKey = false,
   before = highlightedOf(step.model, props, shown)
 ): Step<E> => {
-  const after = value ?? (props.autoHighlight === "always" && navigableOf(props) ? shown[0]?.value ?? null : null)
-  const label = reason !== "keyboard" || value === null || !completesOf(props) ? undefined : itemOf(props, value)?.label
+  const label = reason !== "keyboard" || value === null || !completesOf(props)
+    ? undefined
+    : shown.find((item) => item.value === value)?.label
   const completion = reason === "pointer"
     ? step.model.completion
     : label === undefined
     ? null
     : { label, from: props.inputValue }
   const next = step.evolve({ active: value, activeByKey: byKey, autoFirst: false, completion })
+  const after = highlightedOf(next.model, props, shown)
   return before === after ? next : next.emit(
     props.emits.highlighted(after, after === null ? -1 : shown.findIndex((item) => item.value === after), reason)
   )
@@ -513,7 +524,7 @@ const edit = <E>(
   if (!props.open && typed && query !== "") {
     return open(next, { ...props, inputValue: value }, "input-change", "keyboard")
   }
-  if (auto && typed) return next.evolve({ active: null, autoFirst: query !== "" || props.autoHighlight === "always" })
+  if (auto && typed) return next.evolve({ active: null, autoFirst: query !== "" })
   return navigable ? unhighlight(next, props, "none", step.model) : next
 }
 
@@ -648,9 +659,8 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
     const owned = (): Array<HTMLElement> =>
       Array.from(document.querySelectorAll<HTMLElement>(attrSelector("data-combobox-inside", current.owner)))
     const find = (name: string): HTMLElement | null => byAttribute(document, name, current.owner)
-    const ownBlocker = (target: Node): boolean => blocking.is(target) && target.parentNode === node
     const inside = (target: Node): boolean =>
-      (node.contains(target) && !ownBlocker(target)) || owned().some((element) => element.contains(target))
+      (node.contains(target) && !blocking.owns(node, target)) || owned().some((element) => element.contains(target))
 
     const cut = () => {
       const layer = Array.from(node.children).find(blocking.is) as HTMLElement | undefined
@@ -705,16 +715,17 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
     const onFocusIn = (event: FocusEvent) => {
       if (current.inputInPopup || current.touch || !current.open) return
       const target = event.target
-      const owner = list()
       if (!(target instanceof Element)) return
-      const marked = target.closest("[data-combobox-inside],[data-combobox-positioner]")
-      const own = target === popup() ||
-        (owner !== null && owner.contains(target) && target.closest("[role=listbox],[role=grid]") === owner &&
-          (marked === node || marked?.getAttribute("data-combobox-inside") === current.owner))
-      if (own) find("data-combobox-input")?.focus({ preventScroll: true })
+      if (target !== popup()) {
+        const owner = list()
+        if (owner === null || !owner.contains(target) || target.closest("[role=listbox],[role=grid]") !== owner) return
+        const marked = target.closest("[data-combobox-inside],[data-combobox-positioner]")
+        if (marked !== node && marked?.getAttribute("data-combobox-inside") !== current.owner) return
+      }
+      find("data-combobox-input")?.focus({ preventScroll: true })
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && ownBlocker(event.target)) event.preventDefault()
+      if (event.target instanceof Node && blocking.owns(node, event.target)) event.preventDefault()
     }
 
     const transition = settling(node, popup, frame, (open) => send(Message.FinishedTransition({ open })))
@@ -858,8 +869,10 @@ type Handlers<P, E> = {
 export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) => {
   const s = ($: { readonly props: P }): Settings<E> => settingsOf($.props)
 
-  const focusInput = (_model: Model, _message: unknown, $: Component.Update<Model, Message, E, P>) =>
-    focus($, s($).inputInPopup === true && !s($).open ? Trigger : Input)
+  const focusInput = (_model: Model, _message: unknown, $: Component.Update<Model, Message, E, P>) => {
+    const props = s($)
+    return focus($, props.inputInPopup === true && !props.open ? Trigger : Input)
+  }
 
   const update: Handlers<P, E> = {
     PressedInput: (_model, { pointerType }, $) => open($, s($), "input-press", methodOf(pointerType)),
@@ -873,18 +886,21 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     PressedInputKey: (_model, { chips, key }, $) => pressInputKey($, s($), key, chips),
     ReleasedInputKey: (_model, { key }, $) =>
       key === "Enter" ? dismiss($, s($), "none", "keyboard") : clear($, s($), "escape-key"),
-    FocusedInput: (model, _message, $) =>
-      model.saved === null
-        ? model
-        : highlight($, s($), shownOf(model, s($)), model.saved, "none").evolve({ saved: null }),
+    FocusedInput: (model, _message, $) => {
+      if (model.saved === null) return model
+      const props = s($)
+      return highlight($, props, shownOf(model, props), model.saved, "none").evolve({ saved: null })
+    },
     BlurredInput: (model, _message, $) => {
       const props = s($)
       const shown = shownOf(model, props)
       const highlighted = highlightedOf(model, props, shown)
       return highlighted === null ? model : highlight($, props, shown, null, "none").evolve({ saved: highlighted })
     },
-    PressedTrigger: (_model, { pointerType }, $) =>
-      toggle(s($).inputInPopup === true ? $ : focus($, Input), s($), methodOf(pointerType)),
+    PressedTrigger: (_model, { pointerType }, $) => {
+      const props = s($)
+      return toggle(props.inputInPopup === true ? $ : focus($, Input), props, methodOf(pointerType))
+    },
     ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
     ClickedTrigger: (_model, { pointerType }, $) => toggle($, s($), methodOf(pointerType)),
     PressedTriggerKey: (model, { key }, $) => {
@@ -984,6 +1000,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const chosen = new Set(values)
     const selectable = selectableOf(props)
     const filled = nonEmptyOf(props)
+    const placeholding = selectable && !filled
+    const nativeField = !selectable && !inPopup
     const displayed = displayedOf(model, props)
     const items = shownOf(model, props)
     const listEmpty = items.length === 0
@@ -1012,7 +1030,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const selectedItems = values.map((value) => known.get(value) ?? { value, label: value })
     const text = !selectable
       ? displayed
-      : !filled && props.placeholder !== undefined
+      : placeholding && props.placeholder !== undefined
       ? props.placeholder
       : selectedItems.map((item) => item.label).join(", ")
     const hovers = navigable && props.highlightItemOnHover !== false
@@ -1039,7 +1057,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("data-disabled", flag(disabled))
         .attr("data-readonly", flag(readOnly))
 
-    const inputs = !selectable && !inPopup ? [] : formInputs(p, {
+    const inputs = nativeField ? [] : formInputs(p, {
       name: props.name,
       form: props.form,
       autoComplete: props.autoComplete,
@@ -1066,7 +1084,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     })
 
     const value = p.part("span", (b) =>
-      b.attr("data-placeholder", flag(selectable && !filled))
+      b.attr("data-placeholder", flag(placeholding))
         .forward((node) => node.children.length > 0 ? node : node.children(text)))
 
     const pressGroup = ({ button, pointerType }: Html.PointerPayload) =>
@@ -1076,7 +1094,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       inside(control(b))
         .attr("role", "group")
         .attr("data-combobox-group", owner)
-        .attr("data-placeholder", flag(selectable && !filled))
+        .attr("data-placeholder", flag(placeholding))
         .on("mousedown", pressGroup, { preventDefault: true }))
 
     const keyHandled = (key: string, selectionStart: number | null): boolean => {
@@ -1152,10 +1170,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       const focusable = inline
         ? decorated.on("focusin", Message.FocusedInput()).on("focusout", Message.BlurredInput())
         : decorated
-      const field = selectable ? focusable : focusable
-        .attr("name", inPopup ? undefined : props.name)
-        .attr("form", inPopup ? undefined : props.form)
-        .attr("required", flag(!inPopup && required))
+      const field = nativeField
+        ? focusable.attr("name", props.name).attr("form", props.form).attr("required", flag(required))
+        : focusable
       return field.forward((node) => {
         const named = node.attrs.id === undefined ? node.attr("id", inputId) : node
         return inPopup || inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
@@ -1168,7 +1185,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("type", "button")
         .attr("data-combobox-trigger", owner)
         .attr("data-required", flag(required))
-        .attr("data-placeholder", flag(selectable && !filled))
+        .attr("data-placeholder", flag(placeholding))
         .attr("aria-expanded", String(open))
         .attr("aria-haspopup", inPopup ? "dialog" : "listbox")
         .attr("aria-controls", open ? (inPopup ? popupId : listId) : undefined)
@@ -1346,7 +1363,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("role", grid ? "gridcell" : "option")
         .attr("aria-selected", selectable ? String(selected) : undefined)
         .attr("aria-disabled", off ? "true" : undefined)
-        .attr("data-selected", flag(selectable && selected))
+        .attr("data-selected", flag(selected))
         .attr("data-highlighted", flag(active))
         .attr("data-disabled", flag(off))
         .on("mouseenter", () => hovers ? Message.EnteredItem({ value }) : undefined)
@@ -1395,7 +1412,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       inline,
       selected: props.value ?? null,
       selectedItems,
-      placeholder: !filled,
+      placeholder: placeholding,
       disabled,
       readOnly,
       required,
