@@ -1316,7 +1316,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
 
     const primary = (): services.RootHandle | undefined => roots.values().next().value
     const snapshot = (): Record<string, unknown> => {
-      const out: Record<string, unknown> = {}
+      const out: Record<string, unknown> = Object.fromEntries(restoring ?? [])
       for (const root of roots) root.snapshot(out)
       return out
     }

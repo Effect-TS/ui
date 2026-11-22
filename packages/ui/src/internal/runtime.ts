@@ -7471,6 +7471,7 @@ const setup = (
     const homes = new Map<Instance, Saved>()
     let into: Saved = out
     const keptIn = (home: Saved): Saved => (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
+    if (popped !== undefined) Object.assign(keptIn(out), popped["~kept"])
     const write = (inst: Instance, to: Saved, path: string, exit: Exit.Exit<unknown, SchemaIssue.Issue>) => {
       if (Exit.isSuccess(exit)) to[path] = exit.value
       else warnUnencoded(inst, ctx, exit.cause)
