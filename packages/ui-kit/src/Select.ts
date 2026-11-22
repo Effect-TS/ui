@@ -1090,6 +1090,9 @@ const scrolling = "position:relative;max-height:100%;overflow-x:hidden;overflow-
  * attributes that point at them. Give the trigger an `id` with the `id`
  * prop.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -1101,6 +1104,7 @@ export const Select = Component.define({
   model: SelectModel,
   message: SelectMessage,
   events: SelectEvents,
+  restore: false,
   elements: Html
 }).make({
   init: () => ({

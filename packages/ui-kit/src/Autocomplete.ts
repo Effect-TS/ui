@@ -590,6 +590,9 @@ const engine = Engine.make("Autocomplete", (props: AutocompleteProps): Engine.Se
  * input keeps an `id` already on its builder, as from `field.control`,
  * and the `id` prop sets it otherwise.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -601,6 +604,7 @@ export const Autocomplete = Component.define({
   model: Engine.Model,
   message: Engine.Message,
   events: AutocompleteEvents,
+  restore: false,
   elements: Html
 }).make({
   init: Engine.init,

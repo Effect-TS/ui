@@ -806,6 +806,9 @@ const overflowData = <B extends Attributed<B>>(builder: B, model: ScrollAreaMode
  * part. Layout and sizing inline styles are appended after the consumer's
  * inline `style`.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -816,6 +819,7 @@ export const ScrollArea = Component.define({
   props: ScrollAreaProps,
   model: ScrollAreaModel,
   message: ScrollAreaMessage,
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ measured: false, hovering: false, scrollingX: false, scrollingY: false, ...noOverflow }),
