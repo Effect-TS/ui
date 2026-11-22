@@ -1699,7 +1699,7 @@ export interface MenuTriggerProps {
   readonly open: boolean
   /** The menu's `id`, which `aria-controls` points at while it is open. */
   readonly popupId: string
-  /** Whether the trigger is disabled. */
+  /** The trigger takes no press and no hover. */
   readonly disabled?: boolean | undefined
   /** How long the pointer rests on the trigger before `onHover`, in milliseconds. */
   readonly delay?: number | undefined
@@ -1730,7 +1730,8 @@ export interface MenuTriggerProps {
  *
  * Given `onPress`, a `mousedown` or `click` handler of the caller's own
  * throws at render: pass the message as `onPress`. Given `onHover`, it
- * reserves the element's mount slot, so the caller can't set another mount on it.
+ * reserves the element's mount slot, so the caller can't set another mount
+ * on it.
  *
  * @stability experimental
  * @category components

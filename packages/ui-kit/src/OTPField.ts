@@ -12,7 +12,7 @@
  *
  * | Part    | Element                        |
  * | :------ | :----------------------------- |
- * | `root`  | any container element where an `<input>` is valid, usually a `<div>` |
+ * | `root`  | any element that can contain an `<input>`, usually a `<div>` |
  * | `input` | `<input>`, one for each slot   |
  *
  * `root` takes the consumer's builder and returns it, so the consumer goes
