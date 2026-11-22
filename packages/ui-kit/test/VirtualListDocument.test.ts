@@ -228,9 +228,9 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       assert.strictEqual(scrollTop(), 100 * itemSize)
     }))
 
-  it.effect("drops a waiting key when the user scrolls", () =>
+  it.effect("drops a waiting key when the user scrolls 1px up from a clamped position", () =>
     Effect.gen(function*() {
-      const { next, scrollTo, scrollTop } = yield* Steps([
+      const { next, relayout, scrollTo, scrollTop } = yield* Steps([
         { scrollTo: { target: VirtualListScrollTarget.End() } },
         { scrollTo: toKey("wanted") },
         { count: 500 },
@@ -238,10 +238,13 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       ])
       yield* next
       yield* next
-      scrollTo(4000)
+      relayout()
+      yield* tick
+      assert.strictEqual(scrollTop(), 500 * itemSize - 100)
+      scrollTo(500 * itemSize - 101)
       yield* tick
       yield* next
-      assert.strictEqual(scrollTop(), 4000)
+      assert.strictEqual(scrollTop(), 500 * itemSize - 101)
     }))
 
   it.effect("scrolls to a key requested again after another request replaced it", () =>

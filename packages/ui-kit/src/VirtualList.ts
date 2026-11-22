@@ -694,7 +694,8 @@ const TrackVirtualList = Mount.makeStream(
         const movedByUser = () => {
           const top = scrollTop()
           const element = scroller()
-          const clamped = top < seen && top >= element.scrollHeight - element.clientHeight - 1
+          const max = element.scrollHeight - element.clientHeight
+          const clamped = top < seen && seen > max + 0.5 && top >= max - 1
           const moved = !same(top, seen) && !clamped
           seen = top
           return moved
