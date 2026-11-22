@@ -209,6 +209,16 @@ describe("Combobox", () => {
       assert.isUndefined(s.query(clearButton))
     }))
 
+  it.effect("keeps the name, form and required a consumer puts on the input", () =>
+    Effect.gen(function*() {
+      const s = yield* HtmlScene.make(Combobox, base, {
+        elements: Html,
+        view: (combobox: Parts, h: H) =>
+          combobox.input(h.input.class("input").attr("name", "query").attr("form", "search").attr("required", ""))
+      })
+      assert.deepInclude(s.get(input).attrs, { name: "query", form: "search", required: "" })
+    }))
+
   it.effect("typing opens and filters; autofill reports without opening; composition waits for compositionend", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)

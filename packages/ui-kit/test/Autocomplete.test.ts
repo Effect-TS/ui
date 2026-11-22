@@ -231,6 +231,39 @@ describe("Autocomplete", () => {
       assert.strictEqual(shownText(s), "ap")
     }))
 
+  it.effect("the first-item highlight and the keyboard preview follow open, value and mode", () =>
+    Effect.gen(function*() {
+      const always = { ...base, open: true, autoHighlight: "always" as const }
+      const s = yield* shown(always)
+      assert.strictEqual(partsOf(s).highlighted, "apple")
+      assert.strictEqual(s.get(input).attrs?.["aria-activedescendant"], s.get(item("apple")).attrs?.id)
+      const both = { ...always, open: false, mode: "both" as const }
+      s.props(both)
+      s.fire(input, "input", typed("ap")).emitted(updated("ap"), opened("input-change"), highlighted("apple", 0))
+      s.props({ ...both, open: true, value: "ap" })
+      assert.strictEqual(partsOf(s).highlighted, "apple")
+      assert.strictEqual(shownText(s), "ap")
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("apricot", 1))
+      assert.strictEqual(shownText(s), "Apricot")
+      s.props({ ...both, value: "ap" })
+      assert.strictEqual(shownText(s), "ap")
+    }))
+
+  it.effect("with inputInPopup, the trigger shows the picked label and one hidden input holds the form value", () =>
+    Effect.gen(function*() {
+      const props = { ...base, open: true, value: "ba", name: "q", required: true, inputInPopup: true }
+      const s = yield* shown(props)
+      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("banana", 0))
+      s.fire(input, "keydown", key("Enter")).emitted(updated("Banana", "item-press"), dismissed("item-press"))
+      s.props({ ...props, open: false, value: "Banana" })
+      assert.strictEqual(Locator.textOf(s.get(Locator.attr("class", "value"))), "Banana")
+      const named = s.all(Locator.attr("name", "q"))
+      assert.strictEqual(named.length, 1)
+      assert.deepInclude(named[0].attrs, { value: "Banana", required: "", "aria-hidden": "true" })
+      assert.isUndefined(s.get(input).attrs?.name)
+      assert.isUndefined(s.get(input).attrs?.required)
+    }))
+
   it("makeAutocompleteFilter matches as the autocomplete does", () => {
     const filter = makeAutocompleteFilter()
     assert.isTrue(filter.startsWith("Apricot", "apr"))

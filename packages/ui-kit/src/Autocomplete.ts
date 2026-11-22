@@ -121,7 +121,10 @@
  * **Form**
  *
  * The input is the form control: `name`, `form` and `required` go on it,
- * so the text is submitted and validated as typed. With
+ * so the text is submitted and validated as typed. With `inputInPopup`
+ * the input isn't always drawn, so the trigger is wrapped in a
+ * `display: contents` span that holds a visually hidden input with them
+ * and the text instead. With
  * `submitOnItemClick`, picking an item submits the input's form once the
  * picked label is drawn.
  *
@@ -409,6 +412,9 @@ export type AutocompleteMode = typeof AutocompleteMode.Type
  *   when left out.
  * - `inline`: the list is drawn without a popup and is always expanded.
  *   False when left out.
+ * - `inputInPopup`: the input is drawn inside the popup, and the trigger
+ *   is the combobox that opens it. The `value` part shows the text in the
+ *   trigger. False when left out.
  * - `grid`: the items are drawn in rows, by their `row`, and the list is
  *   a grid. False when left out.
  * - `virtualized`: the consumer draws only some of the items, so the
@@ -449,6 +455,7 @@ export const AutocompleteProps = Schema.Struct({
   openOnInputClick: Schema.optional(Schema.Boolean),
   submitOnItemClick: Schema.optional(Schema.Boolean),
   inline: Schema.optional(Schema.Boolean),
+  inputInPopup: Schema.optional(Schema.Boolean),
   grid: Schema.optional(Schema.Boolean),
   virtualized: Schema.optional(Schema.Boolean),
   disabled: Schema.optional(Schema.Boolean),
