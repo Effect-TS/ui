@@ -1,7 +1,7 @@
 import { Component, UiSchema } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-import { Html } from "./shared.ts"
 
 const AbsoluteMessage = UiSchema.TaggedEnum({ ToggledLayout: {}, ToggledRow: { index: Schema.Number } })
 

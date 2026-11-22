@@ -1,7 +1,8 @@
 import { Component } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-import { Html, textOf } from "./shared.ts"
+import { textOf } from "./shared.ts"
 
 export const GridDemo = Component.define({
   name: "GridDemo",

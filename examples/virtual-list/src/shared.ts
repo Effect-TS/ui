@@ -1,7 +1,3 @@
-import { Html } from "@effect/ui/html"
-
-export { Html }
-
 const words = [
   "The build finished without warnings.",
   "Can you take a look at the failing check on the release branch before lunch?",

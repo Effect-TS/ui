@@ -1,7 +1,7 @@
 import { Component, UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-import { Html } from "./shared.ts"
 
 const ShellMessage = UiSchema.TaggedEnum({ ClickedJump: {}, ClickedAppend: {} })
 
@@ -33,9 +33,9 @@ export const ShellDemo = Component.define({
             itemSize: 40,
             scrollContainer: "nearest",
             followEnd: true,
-            ...(model.jump === 0
-              ? {}
-              : { scrollTo: { target: VirtualListScrollTarget.Index({ index: 5000 }), id: model.jump } })
+            scrollTo: model.jump === 0
+              ? undefined
+              : { target: VirtualListScrollTarget.Index({ index: 5000 }), id: model.jump }
           },
           view: (virtualList) =>
             virtualList.list(h.ul.class("rows")).children(

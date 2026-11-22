@@ -1,7 +1,8 @@
 import { Command, Component, UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Duration, Effect, Schema } from "effect"
-import { Html, textOf } from "./shared.ts"
+import { textOf } from "./shared.ts"
 
 const total = 500
 const page = 50

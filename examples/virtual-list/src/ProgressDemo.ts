@@ -1,32 +1,16 @@
 import { Component, UiSchema } from "@effect/ui"
-import { VirtualList } from "@effect/ui-kit"
-import { Schema } from "effect"
-import { Html, textOf } from "./shared.ts"
+import { VirtualList, VirtualListEvents } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
+import { Schema, Struct } from "effect"
+import { textOf } from "./shared.ts"
 
-const ProgressMessage = UiSchema.TaggedEnum({
-  ToggledTracking: {},
-  Scrolled: {
-    first: Schema.Number,
-    last: Schema.Number,
-    atStart: Schema.Boolean,
-    atEnd: Schema.Boolean,
-    offset: Schema.Number,
-    height: Schema.Number,
-    length: Schema.Number,
-    scrolling: Schema.Boolean
-  }
-})
+const scrolledFields = Struct.omit(VirtualListEvents.cases.Scrolled.fields, ["_tag"])
+
+const ProgressMessage = UiSchema.TaggedEnum({ ToggledTracking: {}, Scrolled: scrolledFields })
 
 const ProgressModel = Schema.Struct({
   track: Schema.Boolean,
-  offset: Schema.Number,
-  height: Schema.Number,
-  length: Schema.Number,
-  scrolling: Schema.Boolean,
-  first: Schema.Number,
-  last: Schema.Number,
-  atStart: Schema.Boolean,
-  atEnd: Schema.Boolean,
+  ...scrolledFields,
   scrolled: Schema.Number,
   moves: Schema.Number,
   stops: Schema.Number
@@ -55,21 +39,15 @@ export const ProgressDemo = Component.define({
   }),
   update: {
     ToggledTracking: (model) => ({ ...model, track: !model.track, scrolled: 0, moves: 0, stops: 0 }),
-    Scrolled: (model, { atEnd, atStart, first, height, last, length, offset, scrolling }) => ({
+    Scrolled: (model, { _tag, ...at }) => ({
       ...model,
-      offset,
-      height,
-      length,
-      scrolling,
-      first,
-      last,
-      atStart,
-      atEnd,
+      ...at,
       scrolled: model.scrolled + 1,
-      moves: first !== model.first || last !== model.last || atStart !== model.atStart || atEnd !== model.atEnd
+      moves: at.first !== model.first || at.last !== model.last || at.atStart !== model.atStart ||
+          at.atEnd !== model.atEnd
         ? model.moves + 1
         : model.moves,
-      stops: model.scrolling && !scrolling ? model.stops + 1 : model.stops
+      stops: model.scrolling && !at.scrolling ? model.stops + 1 : model.stops
     })
   },
   view: (model, h) => {
@@ -93,8 +71,7 @@ export const ProgressDemo = Component.define({
       VirtualList(h, {
         props: { count: 2000, itemSize: 72, trackScroll: model.track },
         onEmit: {
-          Scrolled: ({ atEnd, atStart, first, height, last, length, offset, scrolling }) =>
-            ProgressMessage.Scrolled({ first, last, atStart, atEnd, offset, height, length, scrolling })
+          Scrolled: ({ _tag, ...at }) => ProgressMessage.Scrolled(at)
         },
         view: (virtualList) =>
           virtualList.list(h.div.class("article").attr("data-scrolling", String(virtualList.scrolling))).children(

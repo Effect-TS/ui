@@ -17,8 +17,11 @@ const transitions = Array.from({ length: (total - page) / page }, (_, i) => ({
   to: total - 2 * page - i * page
 }))
 
+const landingOf = (samples, { from, to }) =>
+  samples.findIndex((sample, i) => i > 0 && sample.start === to && samples[i - 1].start === from)
+
 const measure = (samples, { from, to }) => {
-  const landing = samples.findIndex((sample, i) => i > 0 && sample.start === to && samples[i - 1].start === from)
+  const landing = landingOf(samples, { from, to })
   if (landing < 0) return { from, to, problem: "no landing recorded" }
   const quiet = samples.slice(landing - settledFrames, landing)
   if (
@@ -128,8 +131,6 @@ try {
   }
 
   if (pass) {
-    const landingOf = (samples, { from, to }) =>
-      samples.findIndex((sample, i) => i > 0 && sample.start === to && samples[i - 1].start === from)
     const replay = (label, change) => {
       const copy = structuredClone(recorded)
       change(copy)

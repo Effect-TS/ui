@@ -1,7 +1,7 @@
 import { Component, UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-import { Html } from "./shared.ts"
 
 const FixedMessage = UiSchema.TaggedEnum({ ClickedLast: {} })
 
@@ -24,9 +24,9 @@ export const FixedDemo = Component.define({
           count: 10_000,
           itemSize: 32,
           measure: false,
-          ...(model.jump === 0
-            ? {}
-            : { scrollTo: { target: VirtualListScrollTarget.Index({ index: 9999 }), align: "end", id: model.jump } })
+          scrollTo: model.jump === 0
+            ? undefined
+            : { target: VirtualListScrollTarget.Index({ index: 9999 }), align: "end", id: model.jump }
         },
         view: (virtualList) =>
           virtualList.viewport(h.div.class("scroller")).children(
