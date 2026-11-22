@@ -686,17 +686,14 @@ export const Tooltip = Component.define({
     const trigger = p.part(
       "button",
       (b) =>
-        b.attrs({
-          "data-popup-open": flag(shown),
-          "data-trigger-disabled": flag(p.props.disabled),
-          "data-tooltip-trigger": triggerId
-        })
+        b.attrs({ "data-popup-open": flag(shown), "data-trigger-disabled": flag(p.props.disabled) })
           .on("mouseenter", Message.EnteredTrigger())
           .on("mouseleave", Message.LeftTrigger())
           .on("mousedown", Message.PressedTrigger())
           .onClick(Message.ClickedTrigger())
           .onFocus(Message.FocusedTrigger())
           .onBlur(Message.BlurredTrigger())
+          .attr("data-tooltip-trigger", triggerId)
     )
     const style = Positioning.positionerStyle(tracked.positionMethod) +
       (p.props.disableHoverablePopup === true ? ";pointer-events:none" : "")
