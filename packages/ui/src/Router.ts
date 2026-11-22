@@ -1255,12 +1255,13 @@ const commandLayers = Layer.mergeAll(
  * starts from `init`. An instance that hydrates server-rendered HTML starts
  * from the server's state instead.
  *
- * When a push leaves a page whose hydration hasn't settled, a component still
- * waiting for its Layer or for its state to decode has the server's state
- * saved through its `restore` option. The components below it aren't built
- * yet, so their `restore` options are unknown: none of their server state is
- * saved, nor that of a scoped child the server kept undrawn, and after Back
- * or forward they start from `init`.
+ * The snapshot holds server-rendered state only of components the client has
+ * built, since only a built component's `restore` option is known. One built
+ * but still waiting for its Layer or for its state to decode has the server's
+ * state saved through its `restore` option. One not built yet, such as a
+ * component below a waiting one, or a scoped child the server kept but the
+ * client hasn't drawn, has none of its server state saved, even after
+ * hydration has settled: after Back or forward it starts from `init`.
  *
  * A state whose Schema encodes asynchronously, as `Schema.File` does, joins
  * the snapshot in memory once it is encoded, after the push has written the
@@ -1320,9 +1321,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       root.restored()
       if (restoring === undefined) return
       for (const path in restoring) {
-        if (path === root.path || path.startsWith(root.path + "/")) delete restoring[path]
+        if (path === root.path || path.startsWith(root.path + "/") || path === "~kept" + root.path) {
+          delete restoring[path]
+        }
       }
-      if (Object.keys(restoring).every((key) => key.startsWith("~"))) restoring = undefined
+      if (Object.keys(restoring).every((key) => key === "~reported")) restoring = undefined
     }
     let pending: {
       readonly location: Location

@@ -2871,11 +2871,11 @@ export const define = <
     /**
      * What Back, forward and a reload bring back of the component. Left out, the Router saves the
      * instance's Model and query results when it leaves a history entry, and an instance mounted for
-     * that entry again starts from them. `false` saves nothing, so the instance starts from `init`;
-     * the components below it are saved as usual. A function returns the Model to save from the
-     * current Model and props. It runs when the Router saves, not on Back, so a field it clears is
-     * never written to `history.state`. One that throws leaves the instance out, with a warning
-     * logged once per component.
+     * that entry again starts from them. `false` saves nothing, so the instance starts from `init`,
+     * even from an entry an older build saved it in; the components below it are saved and restored
+     * as usual. A function returns the Model to save from the current Model and props. It runs
+     * when the Router saves, not on Back, so a field it clears is never written to `history.state`.
+     * One that throws leaves the instance out, with a warning logged once per component.
      *
      * Leave out what depends on a Command an `update` started, such as a timer or a request, and
      * what only the DOM knew, such as hover, focus or a measurement: restore replays `init`'s

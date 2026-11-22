@@ -3157,8 +3157,11 @@ const setup = (
       : undefined
     const hydrates = restored === undefined && serves && !(navigated && component.definition.restore === false)
     if (popped !== undefined) claimSaved(inst, popped)
-    const state = hydrates || restored !== undefined || own === undefined ? restored?.state : own[inst.path]
-    const reported = restored !== undefined ? restored.reported : (own?.["~reported"] as Saved | undefined)?.[inst.path]
+    const saved = own !== undefined && (component.definition.restore !== false || rawState.has(own)) ? own : undefined
+    const state = hydrates || restored !== undefined || saved === undefined ? restored?.state : saved[inst.path]
+    const reported = restored !== undefined
+      ? restored.reported
+      : (saved?.["~reported"] as Saved | undefined)?.[inst.path]
     const stateless = !hydrates && state === undefined
     if (stateless && late === undefined) {
       if (own !== undefined) claimSaved(inst, own)

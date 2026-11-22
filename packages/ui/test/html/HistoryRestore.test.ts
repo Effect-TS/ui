@@ -105,35 +105,42 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
   error: Schema.Never,
   staleTime: "30 seconds"
 }, Effect.succeed(() => Effect.succeed("billing"))) {}
-const Draft = Component.define({
-  name: "Draft",
-  scoped: true,
-  model: Schema.String,
-  message: Schema.Never,
-  elements: Html
-}).make({
-  init: () => inits++ === 0 ? "server" : "client",
-  update: (model) => model,
-  view: (text, h) => h.input.value(text)
-})
-const LateSettings = Component.define({
-  name: "LateSettings",
-  scoped: false,
-  model: Late,
-  message: Schema.String,
-  elements: Html,
-  queries: { tab: { query: GetTab, args: () => ({}) } }
-}).make({
-  init: () => "",
-  update: (_, shown) => shown,
-  view: (shown, h) =>
-    h.div(
-      h.button.onClick("shown").children("show"),
-      shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
-        ? h.scoped(({ queries }) => !AsyncResult.isFailure(queries.tab), (s) => Draft(s, { key: "d" }))
-        : null
-    )
-}).pipe(Component.provide(GetTab.layer))
+const draft = (restore?: false) =>
+  Component.define({
+    name: "Draft",
+    scoped: true,
+    model: Schema.String,
+    message: Schema.Never,
+    elements: Html,
+    restore
+  })
+    .make({
+      init: () => inits++ === 0 ? "server" : "client",
+      update: (model) => model,
+      view: (text, h) => h.input.value(text)
+    })
+const Draft = draft()
+const lateSettings = (child: typeof Draft) =>
+  Component.define({
+    name: "LateSettings",
+    scoped: false,
+    model: Late,
+    message: Schema.String,
+    elements: Html,
+    queries: { tab: { query: GetTab, args: () => ({}) } }
+  }).make({
+    init: () => "",
+    update: (_, shown) => shown,
+    view: (shown, h) =>
+      h.div(
+        h.button.onClick("shown").children("show"),
+        shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
+          ? h.scoped(({ queries }) => !AsyncResult.isFailure(queries.tab), (s) => child(s, { key: "d" }))
+          : null
+      )
+  }).pipe(Component.provide(GetTab.layer))
+const LateSettings = lateSettings(Draft)
+const ExcludedLateSettings = lateSettings(draft(false))
 const lateScoped = (name: string, restore?: (model: string) => string) =>
   Component.define({
     name,
@@ -252,6 +259,7 @@ type Page =
   | "late form"
   | "scoped form"
   | "late settings"
+  | "excluded late settings"
   | "nested"
   | "late scoped"
   | "late card"
@@ -309,6 +317,8 @@ const appOf = (page: Page) =>
           ? Holder(h, { key: "f" })
           : page === "late settings"
           ? LateSettings(h, { key: "f" })
+          : page === "excluded late settings"
+          ? ExcludedLateSettings(h, { key: "f" })
           : page === "nested"
           ? Nesting(h, { key: "f" })
           : page === "late scoped"
@@ -554,6 +564,17 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
       }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
     }
   )
+
+  it.effect("a scoped child with restore: false the server kept undrawn starts from the server's Model when first drawn", () => {
+    const history = Router.memoryHistory("/")
+    return Effect.gen(function*() {
+      const { app } = yield* visit("excluded late settings", true)
+      assert.notInclude(app.innerHTML, "input")
+      app.querySelector("button")!.click()
+      yield* tick
+      assert.strictEqual(app.querySelector("input")!.value, "server")
+    }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+  })
 
   it.effect("Back runs a scoped child the server kept undrawn from init when a push closed its author as its state decoded", () => {
     const history = Router.memoryHistory("/")
