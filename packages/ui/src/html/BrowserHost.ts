@@ -68,6 +68,13 @@
  * after the element's children exist, skips a no-op so the caret doesn't jump,
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
+ * A focused `input` or `textarea` keeps its selection when the host writes
+ * its `value`. A rejected edit, typed or composed, puts back the selection
+ * from before it. A value `update` changed, such as uppercased text or
+ * grouped digits, or one the Model set, keeps each end of the selection with
+ * the unchanged text before it, else after it, and a caret at the end stays at
+ * the end. When the text changed on both sides of the caret, as when a
+ * character typed next to a separator moves it, the caret keeps its offset.
  * A field's `value` isn't written while an input method composes text in it,
  * from `compositionstart`, or an `input` that says it's composing, to
  * `compositionend`, so a patch or a rejected `input` can't replace the text
@@ -146,7 +153,7 @@ const dropTargetEvents: ReadonlySet<string> = new Set(["dragenter", "dragleave",
 const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 
 /** Events the host listens to whether or not a handler wants them. */
-const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart"]
+const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart", "beforeinput"]
 
 /** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
 const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
@@ -333,6 +340,38 @@ const selectionOf = (target: EventTarget | null) => {
   }
 }
 
+interface FieldState {
+  readonly value: string
+  readonly start: number
+  readonly end: number
+  readonly direction: "forward" | "backward" | "none"
+}
+
+const fieldStateOf = (target: EventTarget | null): FieldState | undefined => {
+  const { selectionEnd, selectionStart } = selectionOf(target)
+  if (selectionStart === null || selectionEnd === null) return undefined
+  const field = target as HTMLInputElement
+  return { value: field.value, start: selectionStart, end: selectionEnd, direction: field.selectionDirection ?? "none" }
+}
+
+/**
+ * Where `offset` in `current` falls in `next`: with the unchanged text before it, else with the
+ * unchanged text after it, else at the same offset.
+ */
+const offsetIn = (current: string, next: string, offset: number): number => {
+  const max = Math.min(current.length, next.length)
+  let prefix = 0
+  while (prefix < max && current.charCodeAt(prefix) === next.charCodeAt(prefix)) prefix++
+  if (offset <= prefix) return offset
+  let suffix = 0
+  while (
+    suffix < max - prefix &&
+    current.charCodeAt(current.length - 1 - suffix) === next.charCodeAt(next.length - 1 - suffix)
+  ) suffix++
+  const fromEnd = current.length - offset
+  return fromEnd <= suffix ? next.length - fromEnd : Math.min(offset, next.length - suffix)
+}
+
 /** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
 const pastedText = (event: Event): string => {
   try {
@@ -506,6 +545,46 @@ export const makeHost = (
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
+  /** Each text field's state before every edit since its last restore, for a rejected edit to go back to. */
+  const beforeEdits = new WeakMap<globalThis.Node, Array<FieldState>>()
+  const recordEdit = (target: EventTarget) => {
+    const state = fieldStateOf(target)
+    if (state === undefined) return
+    const edits = beforeEdits.get(target as globalThis.Node)
+    if (edits === undefined) beforeEdits.set(target as globalThis.Node, [state])
+    else edits.push(state)
+  }
+  /**
+   * Writes a field's `value`. A browser moves the caret to the end when the text changes, so a focused
+   * text field gets back the selection it had before the edit the Model rejected, or else keeps its
+   * selection and scroll with the text around them. A caret at the end stays at the end.
+   */
+  const writeValue = (field: HTMLInputElement, value: string) => {
+    const root = field.getRootNode() as Document | ShadowRoot
+    const state = root.activeElement === field ? fieldStateOf(field) : undefined
+    const { scrollLeft, scrollTop } = field
+    field.value = value
+    if (state === undefined || (state.start === state.end && state.end === state.value.length)) return
+    const shown = field.value
+    const edits = beforeEdits.get(field)
+    let before: FieldState | undefined
+    for (let i = (edits?.length ?? 0) - 1; i >= 0 && before === undefined; i--) {
+      if (edits![i]!.value === shown) before = edits![i]
+    }
+    if (before !== undefined) field.setSelectionRange(before.start, before.end, before.direction)
+    else {
+      const { direction, end, start, value: current } = state
+      field.setSelectionRange(offsetIn(current, shown, start), offsetIn(current, shown, end), direction)
+    }
+    field.scrollLeft = scrollLeft
+    field.scrollTop = scrollTop
+  }
+  const writeControlled = (element: any, name: string, value: unknown) => {
+    const tag = (element as globalThis.Element).localName
+    if (name === "value" && typeof value === "string" && (tag === "input" || tag === "textarea")) {
+      writeValue(element, value)
+    } else element[name] = value
+  }
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
   let lastPointer: Html.PointerType | undefined
@@ -711,7 +790,7 @@ export const makeHost = (
         if ((node as globalThis.Element).getAttribute("popover") === "manual") {
           applyPopover(node as HTMLElement, value === true, true)
         }
-      } else if (element[name] !== value) element[name] = value
+      } else if (element[name] !== value) writeControlled(element, name, value)
     }
   }
   /** Restores `node` and what changing it also changes. */
@@ -748,7 +827,10 @@ export const makeHost = (
       later(() => {
         const nodes = restoring!
         restoring = undefined
-        for (const node of nodes) restoreAffected(node)
+        for (const node of nodes) {
+          restoreAffected(node)
+          if (!composing.has(node)) beforeEdits.delete(node)
+        }
       })
     }
     restoring.add(target as globalThis.Node)
@@ -1006,11 +1088,15 @@ export const makeHost = (
     }
     const path = event.composedPath() as Array<globalThis.Node>
     const target = path[0] ?? event.target
-    if (name === "compositionstart" || name === "compositionend" || name === "input") {
+    if (name === "compositionstart" || name === "compositionend" || name === "input" || name === "beforeinput") {
       if (target !== null && target !== undefined && "nodeType" in target) {
-        if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
-          composing.add(target as globalThis.Node)
-        } else composing.delete(target as globalThis.Node)
+        const node = target as globalThis.Node
+        if (name === "beforeinput") {
+          if ((event as Partial<InputEvent>).isComposing !== true && !composing.has(node)) recordEdit(node)
+        } else if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
+          if (name === "compositionstart") recordEdit(node)
+          composing.add(node)
+        } else composing.delete(node)
       }
     }
     const entries = eventsAlong(path)
@@ -1197,7 +1283,7 @@ export const makeHost = (
         if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
         if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
-        if (element[name] !== value) element[name] = value
+        if (element[name] !== value) writeControlled(element, name, value)
         return
       }
       if (value === undefined) {
