@@ -2146,10 +2146,12 @@ describe("BrowserHost", { concurrent: false }, () => {
       update: (log, message, $) =>
         EntryMessage.match(message, {
           Pasted: ({ text }) => [...log, `pasted ${text}`],
-          Select: () => $.run(Html.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
+          Select: () => $.run(DomCommand.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
           Selected: ({ found }) => [...log, `selected ${found}`],
           Submit: ({ loose }) =>
-            $.run(Html.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))),
+            $.run(
+              DomCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))
+            ),
           Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
           Sent: ({ code }) => [...log, `sent ${code}`]
         }),

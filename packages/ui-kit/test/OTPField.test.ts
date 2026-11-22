@@ -8,7 +8,7 @@ import {
   type OTPFieldProps,
   type OTPFieldUpdateReason
 } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+import { DomCommand, Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -65,9 +65,12 @@ const commands = (s: Scene): ReadonlyArray<string> =>
     s.resolve(command as never, { found: true, submitted: true } as never)
     return command.name + " " + (command.args as { readonly ref: { readonly key: string } }).ref.key
   })
-const inFlight = (s: Scene) => s.keepPending(Html.Focus).keepPending(Html.Select)
-const focusOn = (index: number) => ["Html.focus OTPFieldSlot[" + index + "]", "Html.select OTPFieldSlot[" + index + "]"]
-const submitted = "Html.requestSubmit OTPFieldHiddenInput"
+const inFlight = (s: Scene) => s.keepPending(DomCommand.Focus).keepPending(DomCommand.Select)
+const focusOn = (index: number) => [
+  "DomCommand.focus OTPFieldSlot[" + index + "]",
+  "DomCommand.select OTPFieldSlot[" + index + "]"
+]
+const submitted = "DomCommand.requestSubmit OTPFieldHiddenInput"
 
 const updated = (value: string, reason: OTPFieldUpdateReason = "input-change") =>
   OTPFieldEvents.Updated({ value, reason })
@@ -158,7 +161,7 @@ describe("OTPField", () => {
       quiet(s)
       assert.deepStrictEqual(commands(s), focusOn(1))
       s.type(slot(1), "x").emitted({ _tag: "Rejected", value: "x", reason: "input-change" })
-      assert.deepStrictEqual(commands(s), ["Html.select OTPFieldSlot[1]"])
+      assert.deepStrictEqual(commands(s), ["DomCommand.select OTPFieldSlot[1]"])
       s.type(slot(1), "23").emitted(updated("123"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       store(s, "123")
@@ -303,11 +306,11 @@ describe("OTPField", () => {
   it.effect("focus shows on every part, selects the slot's text, and never rests past the first empty slot", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: "12", length: 4 })
-      assert.deepStrictEqual(commands(s.focus(slot(0))), ["Html.select OTPFieldSlot[0]"])
+      assert.deepStrictEqual(commands(s.focus(slot(0))), ["DomCommand.select OTPFieldSlot[0]"])
       for (const part of [root, slot(0), slot(3)]) assert.strictEqual(s.get(part).attrs?.["data-focused"], "")
       assert.deepStrictEqual([0, 2].map((index) => s.get(slot(index)).attrs?.tabindex), ["0", "-1"])
       assert.deepStrictEqual(commands(s.fire(slot(0), "mousedown", {}).expectDefaultPrevented()), [
-        "Html.select OTPFieldSlot[0]"
+        "DomCommand.select OTPFieldSlot[0]"
       ])
       s.fire(slot(1), "mousedown", {}).expectIgnored().expectDefaultPrevented(false)
       s.blur(slot(0))

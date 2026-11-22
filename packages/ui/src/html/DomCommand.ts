@@ -1,6 +1,7 @@
 /**
- * Commands on rendered elements: `focus`, `blur`, `scrollIntoView` and
- * `measure`, each given a ref from `Html.ref` or `Row.at`.
+ * Commands on rendered elements: `focus`, `blur`, `scrollIntoView`,
+ * `measure`, `select` and `requestSubmit`, each given a ref from
+ * `Html.ref` or `Row.at`.
  *
  * A Command runs once the render the issuing `update` caused is committed,
  * and reaches the element through `Html.Host`, which a test on `TestHost`
@@ -18,8 +19,8 @@ import * as Renderer from "../Renderer.ts"
 import * as Html from "./Html.ts"
 
 /**
- * What `focus`, `blur` and `scrollIntoView` report: whether the ref was
- * rendered.
+ * What `focus`, `blur`, `scrollIntoView` and `select` report: whether the
+ * ref was rendered.
  *
  * @stability experimental
  * @category models
@@ -112,6 +113,48 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
 )
 
 /**
+ * The Command behind `select`.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const Select: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
+  "DomCommand.select",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) => found(ref, (host, element) => host.select(element))
+)
+
+/**
+ * What `requestSubmit` reports: whether the ref was rendered, and whether
+ * it had a form to submit.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Submitted extends Found {
+  readonly submitted: boolean
+}
+
+/**
+ * The Command behind `requestSubmit`.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Submitted> = Command.make(
+  "DomCommand.requestSubmit",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) =>
+    Effect.map(withElement(ref, (host, element) => host.requestSubmit(element)), (done): Submitted => ({
+      found: Option.isSome(done),
+      submitted: Option.getOrElse(done, () => false)
+    }))
+)
+
+/**
  * Focuses the element `ref` names, once the render the issuing `update`
  * caused is committed, and sends `f`'s message.
  *
@@ -184,3 +227,56 @@ export const measure = <N extends globalThis.Element, Msg>(
   f: (rect: Option.Option<Html.Rect>) => Msg
 ): Command.Mapped<Command.Issued<Option.Option<Html.Rect>, never, Option.Option<Html.Rect>, "Effect">, Msg> =>
   Command.map(Measure.make({ ref }), f)
+
+/**
+ * Selects all the text in the `input` or `textarea` `ref` names, once the
+ * render the issuing `update` caused is committed, and sends `f`'s message.
+ *
+ * **Details**
+ *
+ * It doesn't move focus: issue `focus` for that. The browser host first
+ * writes the element's controlled `value` if the element shows something
+ * else, such as a character `update` rejected, since writing it afterward
+ * would drop the selection.
+ *
+ * **Example** (Selecting a field's text once it has focus)
+ *
+ * ```ts
+ * import { DomCommand, Html } from "@effect/ui/html"
+ * import { UiSchema } from "@effect/ui"
+ *
+ * const Message = UiSchema.TaggedEnum({ FocusedAmount: {}, CompletedSelectAmount: {} })
+ * const Amount = Html.ref("Amount", "input")
+ *
+ * const command = DomCommand.select(Amount, () => Message.CompletedSelectAmount())
+ * ```
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
+  ref: Renderer.Ref<N>,
+  f: (result: Found) => Msg
+): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Select.make({ ref }), f)
+
+/**
+ * Submits the form of the element `ref` names, as a press on its submit
+ * button would, and sends `f`'s message.
+ *
+ * **Details**
+ *
+ * `ref` names a `form`, or a control that belongs to one, by nesting or by
+ * its `form` attribute. The browser validates the form first, unless it has
+ * `novalidate`, and then fires `submit`, which reaches the form's
+ * `onSubmit`. `submitted` is `false` when the element has no form.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const requestSubmit = <N extends HTMLElement, Msg>(
+  ref: Renderer.Ref<N>,
+  f: (result: Submitted) => Msg
+): Command.Mapped<Command.Issued<Submitted, never, Submitted, "Effect">, Msg> =>
+  Command.map(RequestSubmit.make({ ref }), f)
