@@ -192,14 +192,48 @@ describe("OTPField in a document", { concurrent: false }, () => {
   it.effect("a code the consumer stores after it declined an edit completes nothing", () =>
     Effect.gen(function*() {
       const { log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
-      slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
-        clipboardData: { getData: () => "1234" }
-      }))
+      const paste = (text: string) =>
+        slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+          clipboardData: { getData: () => text }
+        }))
+      paste("1234")
       yield* tick
       root.send(Message.Stored({ value: "9876" }))
       yield* tick
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["9", "8", "7", "6"])
       assert.deepStrictEqual(log(), [])
+      root.send(Message.Stored({ value: "1234" }))
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+    }).pipe(Effect.scoped))
+
+  it.effect("a delayed exact match completes and submits once, unless another edit supersedes it", () =>
+    Effect.gen(function*() {
+      const { enter, log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
+      const paste = (text: string) =>
+        slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+          clipboardData: { getData: () => text }
+        }))
+      paste("1234")
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+      root.send(Message.Stored({ value: "1234" }))
+      yield* tick
+      assert.deepStrictEqual(slots.map((slot) => slot.value), ["1", "2", "3", "4"])
+      assert.deepStrictEqual(log(), ["completed 1234", "submitted 1234"])
+      yield* tick
+      assert.deepStrictEqual(log(), ["completed 1234", "submitted 1234"])
+
+      root.send(Message.Stored({ value: "" }))
+      yield* tick
+      paste("5678")
+      yield* tick
+      enter(0, "9")
+      yield* tick
+      root.send(Message.Stored({ value: "5678" }))
+      yield* tick
+      assert.deepStrictEqual(slots.map((slot) => slot.value), ["5", "6", "7", "8"])
+      assert.deepStrictEqual(log(), ["completed 1234", "submitted 1234"])
     }).pipe(Effect.scoped))
 
   it.effect("a label for the first slot names the group and every slot with no name of its own", () =>

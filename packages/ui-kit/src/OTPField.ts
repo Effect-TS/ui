@@ -74,18 +74,20 @@
  * `value.toUpperCase()` to show capitals, or use `validationType: "none"`
  * and drop the characters a rule of your own rejects.
  *
- * The consumer answers an edit in the `update` that handles `Updated`. If
- * `value` is another code on the render that follows, the edit was accepted,
- * whatever the consumer made of it. If `value` is the same code, the edit
- * was declined and the field forgets it, so a code stored later, from a
- * Command or another part of the app, is never taken for its answer. Keys
- * that arrive before the answer carry on from the code the last edit asked
- * for.
+ * The consumer usually answers an edit in the `update` that handles
+ * `Updated`. If `value` is another code on the render that follows, the edit
+ * was accepted, whatever the consumer made of it. If `value` is still the
+ * same code, the field drops its temporary value and returns focus to the
+ * first empty slot, but remembers a complete requested code until the next
+ * `value` change or the next edit: if the next `value` change stores that
+ * exact code, it still completes; a different code or a newer edit discards
+ * it. Keys that arrive before the render settles carry on from the code the
+ * last edit asked for.
  *
  * `Completed` and `autoSubmit` follow an accepted edit, and read the code
- * the consumer stored. A consumer that declines the edit, or stores the code
- * later, gets no completion. `autoSubmit` submits a form that holds the
- * code, through the form's own validation and its `submit` handler.
+ * the consumer stored. A consumer that declines the edit and later stores an
+ * unrelated code gets no completion. `autoSubmit` submits a form that holds
+ * the code, through the form's own validation and its `submit` handler.
  *
  * Pasted text fills the slots from the one it was pasted into. Text an
  * input method composes is entered once, when the composition ends.
@@ -320,10 +322,12 @@ export type OTPFieldEntryReason = typeof OTPFieldEntryReason.Type
  *   then the slots go on showing the old code.
  * - `Completed`: the consumer answered text the user typed or pasted by
  *   storing a code that fills every slot. `value` is the stored code, so a
- *   consumer that changes or shortens what it stores gets the code it kept,
- *   or no event, and one that leaves `value` as it was gets none. A complete
- *   code pasted over the same code reports it again. Backspace and Delete
- *   never complete a code.
+ *   consumer that synchronously changes or shortens what it stores gets the
+ *   code it kept, or no event. If `value` doesn't change right away, the
+ *   field still completes if the next `value` change stores the exact
+ *   complete code it asked for before another edit arrives; an unrelated
+ *   code or a newer edit discards it. A complete code pasted over the same
+ *   code reports it again. Backspace and Delete never complete a code.
  * - `Rejected`: the text the user typed or pasted held characters the
  *   field dropped, or more characters than the field has slots. `value` is
  *   that text as entered. The accepted part, if any, is reported by
@@ -380,6 +384,11 @@ const Model = Schema.Struct({
     before: Schema.String,
     asked: Schema.String,
     reason: Schema.NullOr(OTPFieldEntryReason)
+  })),
+  candidate: Schema.NullOr(Schema.Struct({
+    before: Schema.String,
+    asked: Schema.String,
+    reason: OTPFieldEntryReason
   })),
   edits: Schema.Number,
   label: Schema.NullOr(Schema.String),
@@ -457,11 +466,32 @@ const settingsOf = (props: OTPFieldProps, pending: Model["pending"] = null): Set
   }
 }
 
-const completed = (pending: Model["pending"], s: Settings): OTPFieldEntryReason | null =>
-  pending === null || pending.reason === null || pending.before === s.stored || s.characters.length !== s.length ||
-    (pending.reason !== "input-paste" && Array.from(pending.before).length === s.length)
-    ? null
-    : pending.reason
+const completed = (
+  pending: Model["pending"],
+  candidate: Model["candidate"],
+  s: Settings
+): OTPFieldEntryReason | null => {
+  if (
+    pending !== null && pending.reason !== null && pending.before !== s.stored && s.characters.length === s.length &&
+    (pending.reason === "input-paste" || Array.from(pending.before).length !== s.length)
+  ) {
+    return pending.reason
+  }
+  if (
+    candidate !== null && candidate.before !== s.stored && candidate.asked === s.stored &&
+    s.characters.length === s.length
+  ) {
+    return candidate.reason
+  }
+  return null
+}
+
+const candidateOf = (pending: Model["pending"], s: Settings): Model["candidate"] =>
+  pending !== null && pending.reason !== null && pending.before === s.stored &&
+    Array.from(pending.asked).length === s.length &&
+    (pending.reason === "input-paste" || Array.from(pending.before).length !== s.length)
+    ? { before: pending.before, asked: pending.asked, reason: pending.reason }
+    : null
 
 const Slot = Html.ref("OTPFieldSlot", "input")
 const HiddenInput = Html.ref("OTPFieldHiddenInput", "input")
@@ -532,7 +562,7 @@ const setValue = (
   const pending = model.pending
   const unanswered = pending !== null && pending.before === s.stored
   const unchanged = value === s.value
-  const earlier = completed(pending, s)
+  const earlier = completed(pending, model.candidate, s)
   const again = unchanged && !unanswered && entry === "input-paste" && characters.length === s.length
   const focus = !unchanged || options.focusWhenUnchanged === true ? options.focus : undefined
   return $.set({
@@ -540,6 +570,7 @@ const setValue = (
     pending: unchanged
       ? (unanswered ? { ...pending, reason: entry ?? pending.reason } : null)
       : { before: s.stored, asked: value, reason: entry },
+    candidate: null,
     edits: unchanged ? model.edits : model.edits + 1
   })
     .run(
@@ -702,6 +733,7 @@ export const OTPField = Component.define({
     composing: null,
     composed: null,
     pending: null,
+    candidate: null,
     edits: 0,
     label: null,
     android: false
@@ -755,8 +787,13 @@ export const OTPField = Component.define({
     },
     Settled: (model, _message, $) => {
       const s = settingsOf($.props)
-      const complete = completed(model.pending, s)
-      const next = model.pending === null ? model : { ...model, pending: null }
+      const complete = completed(model.pending, model.candidate, s)
+      const candidate = model.pending !== null
+        ? candidateOf(model.pending, s)
+        : (model.candidate !== null && model.candidate.before === s.stored ? model.candidate : null)
+      const next = model.pending === null && model.candidate === candidate
+        ? model
+        : { ...model, pending: null, candidate }
       const at = model.target ?? (model.focused ? model.focusedIndex : null)
       const back = !s.disabled && at !== null && at > s.characters.length
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next

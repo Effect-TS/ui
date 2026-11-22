@@ -32,6 +32,7 @@ const idle = {
   composing: null,
   composed: null,
   pending: null,
+  candidate: null,
   edits: 0,
   label: null,
   android: false
@@ -207,9 +208,20 @@ describe("OTPField", () => {
       quiet(s)
       assert.deepStrictEqual(commands(store(s, "9876")), [])
       quiet(s)
+      assert.deepStrictEqual(commands(store(s, "1234")), [])
+      quiet(s)
       s.fire(slot(0), "paste", { text: "5555" }).emitted(updated("5555", "input-paste"))
       commands(s)
       assert.deepStrictEqual(commands(settle(s)), [])
+      quiet(s)
+      assert.deepStrictEqual(commands(store(s, "5555").emitted(completed("5555", "input-paste"))), [submitted])
+      s.fire(slot(0), "paste", { text: "6666" }).emitted(updated("6666", "input-paste"))
+      commands(s)
+      assert.deepStrictEqual(commands(settle(s)), [])
+      s.keydown(slot(3), "Backspace").emitted(updated("555", "keyboard"))
+      commands(s)
+      settle(s)
+      assert.deepStrictEqual(commands(store(s, "6666")), [])
       quiet(s)
 
       const upper = yield* scene({ value: "", length: 2, validationType: "none" })
