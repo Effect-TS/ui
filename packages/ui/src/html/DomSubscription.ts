@@ -245,7 +245,7 @@ const listenFor = (
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
- * **Example** (Ignoring shortcuts while typing, while still hearing Escape)
+ * **Example** (Shortcuts from a table, ignored while typing unless a row says otherwise)
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
@@ -255,6 +255,11 @@ const listenFor = (
  * import { Effect, Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ OpenedHelp: {}, ClosedHelp: {} })
+ *
+ * const shortcuts = [
+ *   { key: "?", message: Message.OpenedHelp(), whileTyping: false },
+ *   { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
+ * ]
  *
  * const Shortcuts = Component.define({
  *   name: "Shortcuts",
@@ -267,12 +272,15 @@ const listenFor = (
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
  *   view: (open, h) => h.p(open ? "help open" : "help closed"),
  *   subscriptions: () => [
- *     DomSubscription.onDocument("keydown", ({ alt, composing, ctrl, defaultPrevented, editable, key, meta, repeat }) => {
- *       if (defaultPrevented || composing || repeat) return undefined
- *       if (key === "Escape") return Message.ClosedHelp()
- *       if (editable || ctrl || meta || alt) return undefined
- *       return key === "?" ? Message.OpenedHelp() : undefined
- *     }, { preventDefault: true })
+ *     DomSubscription.onDocument(
+ *       "keydown",
+ *       // Adding a shortcut adds a row. This handler stays as it is.
+ *       ({ alt, composing, ctrl, defaultPrevented, editable, key, meta, repeat }) =>
+ *         defaultPrevented || composing || repeat || alt || ctrl || meta
+ *           ? undefined
+ *           : shortcuts.find((shortcut) => shortcut.key === key && (shortcut.whileTyping || !editable))?.message,
+ *       { preventDefault: true }
+ *     )
  *   ]
  * })
  *
