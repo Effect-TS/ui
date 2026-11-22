@@ -18,9 +18,28 @@ const tracked = (s: Rendered): Track =>
     ?.mount as unknown as Track
 const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
 const moved = (start: number, height = 100, fields: object = {}) =>
-  sent("MovedViewport", { start, height, anchor: null, atStart: start <= 0, atEnd: false, scrolled: null, ...fields })
-const scrolled = (first: number, last: number, edges: { readonly atStart?: boolean; readonly atEnd?: boolean } = {}) =>
-  VirtualListEvents.Scrolled({ first, last, atStart: edges.atStart ?? first === 0, atEnd: edges.atEnd ?? false })
+  sent("MovedViewport", {
+    start,
+    height,
+    length: 0,
+    anchor: null,
+    atStart: start <= 0,
+    atEnd: false,
+    scrolled: null,
+    ...fields
+  })
+const scrolled = (first: number, last: number, fields: Partial<VirtualListEvents> = {}) =>
+  VirtualListEvents.Scrolled({
+    first,
+    last,
+    atStart: first === 0,
+    atEnd: false,
+    offset: 0,
+    height: 100,
+    length: 0,
+    scrolling: false,
+    ...fields
+  })
 
 type Scene = { readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node> }
 const indices = (s: Scene) => s.all(itemLoc).map((node) => Number(node.attrs?.["data-index"]))
@@ -105,7 +124,7 @@ describe("VirtualList", () => {
       s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
       assert.deepStrictEqual(indices(s), span(0, 7))
 
-      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54))
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
       assert.deepStrictEqual(indices(s), span(47, 57))
       assert.strictEqual(
         s.get(listLoc).attrs?.style,
@@ -114,6 +133,22 @@ describe("VirtualList", () => {
 
       s.mounted(tracked(s), moved(1010, 90))
       assert.deepStrictEqual(s.current.emitted, [])
+    }))
+
+  it.effect("renders ahead as far as the last scroll moved, and not after a jump", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn())
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
+      assert.deepStrictEqual(indices(s), span(50, 54))
+
+      s.mounted(tracked(s), moved(960)).emitted(scrolled(48, 52, { offset: 960 }))
+      assert.deepStrictEqual(indices(s), span(46, 52))
+
+      s.mounted(tracked(s), moved(1060)).emitted(scrolled(53, 57, { offset: 1060 }))
+      assert.deepStrictEqual(indices(s), span(53, 62))
+
+      s.mounted(tracked(s), moved(5000)).emitted(scrolled(250, 254, { offset: 5000 }))
+      assert.deepStrictEqual(indices(s), span(250, 254))
     }))
 
   it.effect("keeps measured sizes and estimates the rest from their average", () =>
@@ -151,26 +186,30 @@ describe("VirtualList", () => {
         .emitted(scrolled(0, 11))
       assert.deepStrictEqual(indices(s), span(0, 11))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-end:9900px")
-      assert.isUndefined(s.get(Locator.attr("data-index", "0")).attrs?.style)
-      assert.isUndefined(s.get(Locator.attr("data-index", "1")).attrs?.style)
+      assert.strictEqual(s.get(Locator.attr("data-index", "0")).attrs?.style, "box-sizing:border-box;block-size:20px")
+      assert.strictEqual(s.get(Locator.attr("data-index", "1")).attrs?.style, "box-sizing:border-box;block-size:20px")
     }))
 
   it.effect("reports reaching and leaving either edge while the rows stay", () =>
     Effect.gen(function*() {
       let latest!: Parts
       const s = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn((p) => (latest = p)))
-      s.mounted(tracked(s), moved(19908, 90)).emitted(scrolled(995, 999))
-      s.mounted(tracked(s), moved(19910, 90, { atEnd: true })).emitted(scrolled(995, 999, { atEnd: true }))
+      s.mounted(tracked(s), moved(19908, 90)).emitted(scrolled(995, 999, { offset: 19908, height: 90 }))
+      s.mounted(tracked(s), moved(19910, 90, { atEnd: true })).emitted(
+        scrolled(995, 999, { atEnd: true, offset: 19910, height: 90 })
+      )
       assert.strictEqual(latest.atEnd, true)
       assert.deepStrictEqual(indices(s), span(995, 999))
       s.mounted(tracked(s), moved(19909.5, 90, { atEnd: true }))
       assert.deepStrictEqual(s.current.emitted, [])
-      s.mounted(tracked(s), moved(19900, 90)).emitted(scrolled(995, 999))
+      s.mounted(tracked(s), moved(19900, 90)).emitted(scrolled(995, 999, { offset: 19900, height: 90 }))
       assert.strictEqual(latest.atEnd, false)
 
-      s.mounted(tracked(s), moved(0, 90)).emitted(scrolled(0, 4))
+      s.mounted(tracked(s), moved(0, 90)).emitted(scrolled(0, 4, { height: 90 }))
       assert.strictEqual(latest.atStart, true)
-      s.mounted(tracked(s), moved(2, 90, { atStart: false })).emitted(scrolled(0, 4, { atStart: false }))
+      s.mounted(tracked(s), moved(2, 90, { atStart: false })).emitted(
+        scrolled(0, 4, { atStart: false, offset: 2, height: 90 })
+      )
       assert.strictEqual(latest.atStart, false)
       assert.deepStrictEqual(indices(s), span(0, 4))
     }))
@@ -190,8 +229,126 @@ describe("VirtualList", () => {
         { count: 8, itemSize: 0, sizes, measure: false, overscan: 0 },
         makeStandIn()
       )
-      s.mounted(tracked(s), moved(60, 60)).emitted(scrolled(1, 3))
+      s.mounted(tracked(s), moved(60, 60)).emitted(scrolled(1, 3, { offset: 60, height: 60 }))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:50px;padding-block-end:40px")
+    }))
+
+  it.effect("says where the items sit in a longer set", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, setSize: 10000, firstPosition: 201 }, makeStandIn())
+      s.expectMount(tracked(s))
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-posinset"], "201")
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "10000")
+      s.props({ ...base, setSize: -1 })
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["aria-setsize"], "-1")
+    }))
+
+  it.effect("writes the size of each item it doesn't measure", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { count: 3, itemSize: 32, sizes: [40], measure: false }, makeStandIn())
+      s.expectMount(tracked(s))
+      assert.deepStrictEqual(
+        s.all(itemLoc).map((node) => node.attrs?.style),
+        [
+          "box-sizing:border-box;block-size:40px",
+          "box-sizing:border-box;block-size:32px",
+          "box-sizing:border-box;block-size:32px"
+        ]
+      )
+    }))
+
+  it.effect("holds space above the first item for items still to load", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, reserveStart: 400 }, makeStandIn())
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 4))
+      assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:400px")
+      s.props(base)
+      assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-start:0px")
+    }))
+
+  it.effect("stands in for the rows left out of a table body with empty rows", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(VirtualList, { ...base, firstPosition: 2, overscan: 0 }, {
+        elements: Html,
+        view: (virtualList: Parts, h: H) =>
+          virtualList.table(h.table.class("table")).children(
+            virtualList.list(h.tbody.class("list")).children(
+              virtualList.items.map((index) =>
+                virtualList.item({ element: h.tr.class("item").key(String(index)), index }).children(
+                  h.td.children(String(index))
+                )
+              )
+            )
+          )
+      })
+      const rows = () =>
+        (s.get(listLoc).children ?? []).map((node) => [node.attrs?.style ?? "", node.attrs?.["aria-rowindex"]])
+      assert.deepStrictEqual(rows(), [["", "2"], ["height:19980px", undefined]])
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
+      assert.deepStrictEqual(rows(), [
+        ["height:1000px", undefined],
+        ...span(50, 54).map((index) => ["", String(index + 2)]),
+        ["height:18900px", undefined]
+      ])
+      assert.strictEqual(s.get(listLoc).attrs?.role, undefined)
+      assert.strictEqual(s.get(Locator.attr("class", "table")).attrs?.["aria-rowcount"], "1001")
+    }))
+
+  it.effect("places each item with a transform in the absolute layout", () =>
+    Effect.gen(function*() {
+      const s = yield* Scene.make(
+        VirtualList,
+        { ...base, layout: "absolute", overscan: 0, initialCount: 2 },
+        makeStandIn()
+      )
+      assert.strictEqual(
+        s.all(itemLoc)[1]!.attrs?.style,
+        "position:absolute;inset-inline:0;top:0;transform:translateY(20px)"
+      )
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
+      assert.strictEqual(
+        s.get(listLoc).attrs?.style,
+        "color:red;position:relative;padding-block-start:0px;padding-block-end:20000px;overflow-anchor:none"
+      )
+      assert.strictEqual(
+        s.all(itemLoc)[0]!.attrs?.style,
+        "position:absolute;inset-inline:0;top:0;transform:translateY(1000px)"
+      )
+    }))
+
+  it.effect("reports a scroll's start and end, and each offset only with trackScroll", () =>
+    Effect.gen(function*() {
+      const at = (offset: number, scrolling: boolean) =>
+        sent("ScrolledViewport", { offset, height: 100, length: 20000, scrolling })
+      let latest!: Parts
+      const quiet = yield* Scene.make(VirtualList, { ...base, overscan: 0 }, makeStandIn((p) => (latest = p)))
+      quiet.mounted(tracked(quiet), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
+      quiet.mounted(tracked(quiet), at(1005, true))
+        .emitted(scrolled(50, 54, { offset: 1005, length: 20000, scrolling: true }))
+      assert.strictEqual(latest.scrolling, true)
+      quiet.mounted(tracked(quiet), at(1010, true))
+      assert.deepStrictEqual(quiet.current.emitted, [])
+      quiet.mounted(tracked(quiet), at(1015, false)).emitted(scrolled(50, 54, { offset: 1015, length: 20000 }))
+      assert.strictEqual(latest.scrolling, false)
+
+      const s = yield* Scene.make(VirtualList, { ...base, overscan: 0, trackScroll: true }, makeStandIn())
+      s.mounted(tracked(s), moved(1000)).emitted(scrolled(50, 54, { offset: 1000 }))
+      s.mounted(tracked(s), at(1005, true)).emitted(scrolled(50, 54, { offset: 1005, length: 20000, scrolling: true }))
+      s.mounted(tracked(s), at(1010, true)).emitted(scrolled(50, 54, { offset: 1010, length: 20000, scrolling: true }))
+      s.mounted(tracked(s), at(1010, true))
+      assert.deepStrictEqual(s.current.emitted, [])
+    }))
+
+  it.effect("has one item per key, whatever the count", () =>
+    Effect.gen(function*() {
+      let latest!: Parts
+      const keys = ["a", "b", "c"]
+      const s = yield* Scene.make(VirtualList, { keys, itemSize: 20 }, makeStandIn((p) => (latest = p)))
+      s.mounted(tracked(s), moved(0)).emitted(scrolled(0, 2))
+      assert.deepStrictEqual(indices(s), [0, 1, 2])
+      s.props({ keys, itemSize: 20, count: 1000 })
+      assert.deepStrictEqual(indices(s), [0, 1, 2])
+      assert.strictEqual(latest.count, 3)
     }))
 
   it.effect("drops what it measured when the dataset changes", () =>

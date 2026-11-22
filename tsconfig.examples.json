@@ -8,6 +8,7 @@
     { "path": "examples/counters" },
     { "path": "examples/interrupting-commands" },
     { "path": "examples/routing" },
-    { "path": "examples/snake" }
+    { "path": "examples/snake" },
+    { "path": "examples/virtual-list" }
   ]
 }

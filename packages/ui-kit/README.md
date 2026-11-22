@@ -57,7 +57,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Toggle](src/Toggle.ts): a controlled two-state button, pressed or not.
 - [ToggleGroup](src/ToggleGroup.ts): a row of toggle buttons whose pressed values live in your Model, one at a time or several, with the arrow keys moving focus between them.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.
-- [VirtualList](src/VirtualList.ts): a list that renders only the items near the visible part of its scroll container or the page, with measured item sizes, grids whose lanes follow the CSS, scrolling to an item or the end, following the end of a chat or log, and the focused item kept rendered.
+- [VirtualList](src/VirtualList.ts): a list or table body that renders only the items near the visible part of its scroll container or the page, with measured item sizes, grids whose lanes follow the CSS, scrolling to an item or the end, following the end of a chat or log, loading earlier items, positions in a paged set, and the focused item kept rendered.
 
 ## Other modules
 

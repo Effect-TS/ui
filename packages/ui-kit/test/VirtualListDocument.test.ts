@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { VirtualList, type VirtualListProps, VirtualListScrollTarget, type VirtualListScrollTo } from "@effect/ui-kit"
+import {
+  VirtualList,
+  type VirtualListEvents,
+  type VirtualListProps,
+  VirtualListScrollTarget,
+  type VirtualListScrollTo
+} from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -57,8 +63,12 @@ const layout = Effect.acquireRelease(
   ({ original }) => Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
 )
 
-const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualListProps>>) {
+const Steps = Effect.fnUntraced(function*(
+  steps: ReadonlyArray<Partial<VirtualListProps>>,
+  { ownViewport = false }: { readonly ownViewport?: boolean } = {}
+) {
   const geometry = yield* layout
+  const events: Array<VirtualListEvents> = []
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Component.define({
     name: "Demo",
@@ -74,16 +84,22 @@ const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualLi
         h.button.class("next").onClick(Message.Advanced()).children("Next"),
         VirtualList(h, {
           props: { count: 1000, itemSize, ...steps[model.step] },
+          onEmit: (event) => {
+            events.push(event)
+            return undefined
+          },
           view: (virtualList) =>
-            virtualList.viewport(h.div.class("viewport")).children(
-              virtualList.list(h.ul.class("list")).children(
-                virtualList.items.map((index) =>
-                  virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
-                    h.button.children("Item " + index)
+            (ownViewport
+              ? h.div.class("viewport").attr("style", "overflow-y:visible")
+              : virtualList.viewport(h.div.class("viewport"))).children(
+                virtualList.list(h.ul.class("list")).children(
+                  virtualList.items.map((index) =>
+                    virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
+                      h.button.children("Item " + index)
+                    )
                   )
                 )
               )
-            )
         })
       )
   })
@@ -99,7 +115,7 @@ const Steps = Effect.fnUntraced(function*(steps: ReadonlyArray<Partial<VirtualLi
   })
   const indices = () => Array.from(app.querySelectorAll(".item"), (item) => Number(item.getAttribute("data-index")))
   const item = (index: number) => app.querySelector<HTMLElement>(`.item[data-index="${index}"]`)!
-  return { ...geometry, next, indices, item }
+  return { ...geometry, next, indices, item, events }
 })
 
 const keysWith = (count: number, index: number, key: string) =>
@@ -129,6 +145,21 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       button.blur()
       yield* tick
       assert.deepStrictEqual(indices(), span(47, 57))
+    }))
+
+  it.effect("scrolls with the nearest element that scrolls, once it starts to after the list mounts", () =>
+    Effect.gen(function*() {
+      const { indices, next, scrollTo, scrollTop } = yield* Steps([
+        { scrollContainer: "nearest" },
+        { scrollContainer: "nearest", scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } }
+      ], { ownViewport: true })
+      document.querySelector(".viewport")!.setAttribute("style", "overflow-y:auto")
+      yield* tick
+      scrollTo(1000)
+      yield* tick
+      assert.deepStrictEqual(indices(), span(47, 57))
+      yield* next
+      assert.strictEqual(scrollTop(), 500 * itemSize)
     }))
 
   it.effect("scrolls to a request once its items load, after the parent drops it", () =>
@@ -245,6 +276,19 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       yield* tick
       yield* next
       assert.strictEqual(scrollTop(), 4200)
+    }))
+
+  it.effect("reports a list that grows without a scroll once with trackScroll, and not without it", () =>
+    Effect.gen(function*() {
+      const tracked = yield* Steps([{ trackScroll: true }, { trackScroll: true, count: 1001 }])
+      tracked.events.length = 0
+      yield* tracked.next
+      assert.deepStrictEqual(tracked.events.map((event) => event.length), [1001 * itemSize])
+
+      const quiet = yield* Steps([{}, { count: 1001 }])
+      quiet.events.length = 0
+      yield* quiet.next
+      assert.deepStrictEqual(quiet.events, [])
     }))
 
   it.effect("follows the end as the list grows until the user scrolls away from it", () =>

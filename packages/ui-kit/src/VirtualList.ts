@@ -12,23 +12,30 @@
  *
  * | Part | Element |
  * | :-- | :-- |
- * | `viewport` | `<div>`, `<ul>` or `<ol>`: the element that scrolls. Leave it out and the list scrolls with the page |
- * | `list` | `<div>`, `<ul>` or `<ol>`, `role="list"` unless another role is set |
- * | `item` | `<div>` or `<li>`, `role="listitem"` unless another role is set |
+ * | `viewport` | `<div>`, `<ul>` or `<ol>`: the element that scrolls. Leave it out and the list scrolls with `scrollContainer` or the page |
+ * | `table` | `<table>`, for a list that is a `<tbody>`: `aria-rowcount` |
+ * | `list` | `<div>`, `<ul>`, `<ol>` or `<tbody>`, `role="list"` unless another role is set or it's a `<tbody>` |
+ * | `item` | `<div>`, `<li>` or `<tr>`, `role="listitem"` unless another role is set or it's a `<tr>` |
  *
  * `item` takes `{ element, index }`. Draw one for each index in `items`, in
  * order, as children of `list`, and key each element by the item's own id.
- * `viewport` and `list` may be one element. None of the parts adds markup.
+ * `viewport` and `list` may be one element. Only a `<tbody>` list adds
+ * markup: empty `<tr>` rows that stand in for the rows left out.
  *
  * **Data attributes**
  *
  * - `item`: `data-index`, the item's index, and `data-key`, its key when `keys`
  *   is given.
+ * - `list`: `data-virtual-list-spacer` on each row a `<tbody>` list adds.
  *
  * **Keyboard**
  *
- * Every item says where it is in the whole list with `aria-posinset` and
- * `aria-setsize`. The item that has the focus, or holds the element that has
+ * Every item says where it is in the whole set with `aria-posinset` and
+ * `aria-setsize`, or a `<tr>` with `aria-rowindex` and the `table` part
+ * with `aria-rowcount`. They count from `firstPosition` out of `setSize`, so
+ * a page of a longer set or one whose size isn't known says so. In a table,
+ * the header row takes a row index too: pass `firstPosition: 2` for one
+ * header row, and count it in `setSize`. The item that has the focus, or holds the element that has
  * it, stays rendered with the rows next to it wherever the list scrolls, so
  * Tab and Shift+Tab go where they would if every item were rendered.
  *
@@ -44,20 +51,34 @@
  * masonry and horizontal lists are not supported. Use `gap` for the space
  * between items, since a margin can collapse with the one the list writes.
  *
+ * With `layout: "absolute"` the items are taken out of the flow and each is
+ * placed with a `transform` in a single lane, the full width of the list, so
+ * an item can animate and rendering more of them rewrites no padding. When
+ * an item is measured and the size estimated for the items above changes,
+ * every rendered item moves and the list scrolls by as much, so a
+ * `transition` on `transform` shows that move too: pass `sizes` for the
+ * items you can size up front.
+ *
  * **Sizes**
  *
  * An item is `itemSize` tall, or `sizes[index]` when `sizes` is given, until
  * it's measured. An item that hasn't been measured takes the average of the
  * ones that have, when no `sizes` entry covers it. With `measure: false`
- * those numbers are exact and items aren't measured. Sizes are kept by index,
- * or by key when `keys` is given, and dropped when the list's width or its
- * number of lanes changes, or when `dataset` does.
+ * those numbers are exact, items aren't measured, and each item writes its
+ * `block-size` with `box-sizing: border-box`, so its padding, border and
+ * content can't make it taller. A CSS `min-height` above the size still
+ * wins. Sizes are kept by index, or by key when `keys` is given, and dropped
+ * when the list's width or its number of lanes changes, or when `dataset`
+ * does.
  *
  * **Scrolling**
  *
  * When the rows above the visible ones change size, or `keys` puts items
  * before them, the mount scrolls by the difference before the browser paints,
- * so what the user sees stays in place. `scrollTo` scrolls to an index, a
+ * so what the user sees stays in place. Content before the list that changes
+ * size does the same once the list's top has scrolled past the viewport's,
+ * and pushes the list down while it hasn't, as the browser's own scroll
+ * anchoring does. `scrollTo` scrolls to an index, a
  * key, an offset or the end once it's rendered, and keeps it there as the
  * items around it are measured, until anything else scrolls the list. A
  * request waits for its target, such as the items of a list that is still
@@ -68,22 +89,42 @@
  * shorter than its viewport at the bottom, as a chat does. Neither reverses
  * the order of the elements.
  *
+ * A browser that scrolls off the main thread, as Safari and Firefox do, can
+ * show the rows past the rendered ones before the list renders again. So
+ * after each scroll the list also renders ahead in the direction it moved, as
+ * far as it moved, up to the viewport's height. A jump further than that, or
+ * a `scrollTo`, renders only the rows around the new position.
+ *
+ * To load earlier items, such as older messages, as the user scrolls up,
+ * pass `reserveStart`, space held above the first item while there are more,
+ * and load a page when `Scrolled` reports a `first` near the start. Add the
+ * page to the start of `keys` and the rows on screen stay put, and drop
+ * `reserveStart` once the first item is the first of the set.
+ *
  * **Styling**
  *
  * `list` writes `padding-block-start`, `padding-block-end` and
  * `overflow-anchor: none` inline, and an item kept apart from the others
  * writes `margin-block-start`: the padding and margin stand in for the items
- * left out, so pad an element around the list instead. A `viewport` needs a
- * bounded height and an `overflow` that scrolls.
+ * left out, so pad an element around the list instead. A `<tbody>` list
+ * writes neither and adds spacer rows instead, and with `layout: "absolute"`
+ * the list writes `position: relative` and each item `position`, `inset-inline`,
+ * `top` and `transform`. A `viewport` needs a bounded height and an
+ * `overflow` that scrolls.
  *
  * **Limits**
  *
  * - `list` carries the component's mount, so it can't take a mount of your own.
- * - A list scrolls with the page or with its `viewport`, and not with another
- *   scrolling element around it.
+ * - A list scrolls with its `viewport`, the element `scrollContainer` names,
+ *   or the page, and not with another scrolling element around it.
  * - Without `keys`, items are known by index, so items added before the
  *   visible ones push them down.
- * - A `<table>` isn't supported, since padding on a `<tbody>` takes no room.
+ * - A `<tbody>` list is a single lane and can't use `layout: "absolute"`, and
+ *   `layout: "absolute"` is a single lane whatever the CSS.
+ * - Content before the list is watched for size and for the `class`, `style`,
+ *   `hidden` and `open` attributes, and the elements around it for children.
+ *   A change elsewhere that moves the list, such as a stylesheet loading, shows
+ *   at the next scroll or resize.
  * - On the server, and on a host that doesn't run mounts, the first
  *   `initialCount` items are rendered, or those around a `scrollTo` target.
  *
@@ -146,8 +187,11 @@ import { clamp } from "./internal/range.ts"
 
 const viewportAttr = "data-virtual-list-viewport"
 const itemAttr = "data-virtual-list-item"
+const spacerAttr = "data-virtual-list-spacer"
 const defaultOverscan = 3
 const defaultEndThreshold = 1
+const scrollEndDelay = 100
+const layoutAttributes = ["class", "style", "hidden", "open"]
 
 /**
  * Where `scrollTo` goes: an item by index or by key, a distance in pixels
@@ -219,6 +263,32 @@ export const VirtualListScrollTo = Schema.Struct({
 export type VirtualListScrollTo = typeof VirtualListScrollTo.Type
 
 /**
+ * The element that scrolls the list when no `viewport` part is applied:
+ * `"nearest"`, the closest ancestor whose `overflow-y` scrolls, or the closest
+ * ancestor that `selector` matches. The list looks for it again each time it
+ * renders, the window resizes, or the `class`, `style`, `hidden` or `open`
+ * of an ancestor changes, so a shell that starts or stops scrolling takes or
+ * gives back the list.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export const VirtualListScrollContainer = Schema.Union([
+  Schema.Literal("nearest"),
+  Schema.Struct({ selector: Schema.String })
+])
+
+/**
+ * The element that scrolls the list when no `viewport` part is applied.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type VirtualListScrollContainer = typeof VirtualListScrollContainer.Type
+
+/**
  * Schema for {@link VirtualListProps}.
  *
  * @stability experimental
@@ -226,8 +296,8 @@ export type VirtualListScrollTo = typeof VirtualListScrollTo.Type
  * @since 0.1.0
  */
 export const VirtualListProps = Schema.Struct({
-  /** How many items the list has. */
-  count: Schema.Number,
+  /** How many items the list has. Ignored when `keys` is passed, which has one key per item. 0 when omitted. */
+  count: Schema.optional(Schema.Number),
   /** The height of an item in pixels until it's measured, or always with `measure: false`. */
   itemSize: Schema.Number,
   /** The height of each item by index, in place of `itemSize`. */
@@ -235,12 +305,16 @@ export const VirtualListProps = Schema.Struct({
   /** Whether to measure the rendered items. `true` when omitted. */
   measure: Schema.optional(Schema.Boolean),
   /**
-   * A stable key for each item by index. Sizes are kept by key, `scrollTo` can
-   * name an item by key, and items added or removed before the visible ones
-   * leave them in place.
+   * A stable key for each item by index, which also sets how many items the
+   * list has. Sizes are kept by key, `scrollTo` can name an item by key, and
+   * items added or removed before the visible ones leave them in place.
    */
   keys: Schema.optional(Schema.Array(Schema.String)),
-  /** How many rows to render on each side of the visible ones. 3 when omitted. */
+  /**
+   * How many rows to render on each side of the visible ones. 3 when omitted.
+   * After a scroll, the list also renders as far ahead as that scroll moved,
+   * up to the viewport's height.
+   */
   overscan: Schema.optional(Schema.Number),
   /** How many items to render before the list is measured, as on the server. One row and the overscan when omitted. */
   initialCount: Schema.optional(Schema.Number),
@@ -260,7 +334,41 @@ export const VirtualListProps = Schema.Struct({
     Schema.Union([Schema.Boolean, Schema.Struct({ threshold: Schema.optional(Schema.Number) })])
   ),
   /** Where a list shorter than its viewport sits. `"start"` when omitted. */
-  contentAlignment: Schema.optional(Schema.Literals(["start", "end"]))
+  contentAlignment: Schema.optional(Schema.Literals(["start", "end"])),
+  /**
+   * The element that scrolls the list when no `viewport` part is applied, such
+   * as a layout's `<main>` or a dialog's body. The page when omitted, or when
+   * nothing matches.
+   */
+  scrollContainer: Schema.optional(VirtualListScrollContainer),
+  /**
+   * How the items are placed. `"flow"` leaves them in the list's own layout
+   * and pads the list for the rest. `"absolute"` positions each one in a
+   * single lane with a transform. `"flow"` when omitted.
+   */
+  layout: Schema.optional(Schema.Literals(["flow", "absolute"])),
+  /**
+   * Space in pixels held above the first item for items still to load before
+   * it, such as older messages, so scrolling up doesn't stop at the top while
+   * they load. 0 when omitted.
+   */
+  reserveStart: Schema.optional(Schema.Number),
+  /**
+   * How many items the whole set has when the list holds only some of them,
+   * for `aria-setsize`, or -1 when that isn't known. `count` when omitted.
+   */
+  setSize: Schema.optional(Schema.Number),
+  /**
+   * The position of the first item in the whole set, from 1, for
+   * `aria-posinset`, or `aria-rowindex` in a table. 1 when omitted.
+   */
+  firstPosition: Schema.optional(Schema.Number),
+  /**
+   * Emits `Scrolled` each time the scroll offset, the viewport's height or the
+   * list's length changes, and not only when the visible items, an edge or
+   * `scrolling` does. `false` when omitted.
+   */
+  trackScroll: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -279,19 +387,39 @@ const Visible = Schema.Struct({
   atEnd: Schema.Boolean
 })
 
-const sameVisible = Schema.toEquivalence(Visible)
+const Tracked = Schema.Struct({ offset: Schema.Number, height: Schema.Number, length: Schema.Number })
+
+type Tracked = typeof Tracked.Type
+
+const Announced = Schema.Struct({ ...Visible.fields, ...Tracked.fields, scrolling: Schema.Boolean })
+
+type Announced = typeof Announced.Type
 
 /**
- * The events of a {@link VirtualList}. `Scrolled` reports the first and last
- * visible items, and whether the list is scrolled to its start and to its
- * end, when any of them changes as the user scrolls or the viewport resizes.
- * The end counts within the `followEnd` threshold, and 1px otherwise.
+ * The events of a {@link VirtualList}.
+ *
+ * **Details**
+ *
+ * `Scrolled` reports `first` and `last`, the first and last visible items,
+ * `atStart` and `atEnd`, whether the list is scrolled to its start and to
+ * its end, and `scrolling`, whether it's scrolling. The end counts within
+ * the `followEnd` threshold, and 1px otherwise. It also reports `offset`,
+ * how far the top of the viewport is past the top of the first item, in the
+ * units of an `Offset` scroll target, `height`, the viewport's height, and
+ * `length`, the list's height from the top of its first item.
+ *
+ * It's emitted when `first`, `last`, `atStart`, `atEnd` or `scrolling`
+ * changes, and with `trackScroll` also when `offset`, `height` or `length`
+ * does. `scrolling` turns `true` at the first scroll event, from the user,
+ * a `scrollTo` or the list keeping its rows in place, and `false` once the
+ * scroll has ended and the list has stayed still for 100ms, so a burst of
+ * wheel ticks reports one start and one end.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export const VirtualListEvents = UiSchema.TaggedEnum({ Scrolled: Visible.fields })
+export const VirtualListEvents = UiSchema.TaggedEnum({ Scrolled: Announced.fields })
 
 /**
  * The events of a {@link VirtualList}.
@@ -321,7 +449,11 @@ const VirtualListModel = Schema.Struct({
   epoch: Schema.Number,
   focused: Schema.NullOr(ItemRef),
   scroll: Schema.NullOr(Schema.Struct({ scrollTo: VirtualListScrollTo, done: Schema.Boolean })),
-  announced: Schema.NullOr(Visible)
+  offset: Schema.Number,
+  length: Schema.Number,
+  scrolling: Schema.Boolean,
+  announced: Schema.NullOr(Announced),
+  lead: Schema.Number
 })
 
 type VirtualListModel = typeof VirtualListModel.Type
@@ -342,22 +474,30 @@ const VirtualListMessage = UiSchema.TaggedEnum({
     anchor: Schema.NullOr(Position),
     atStart: Schema.Boolean,
     atEnd: Schema.Boolean,
+    length: Schema.Number,
     scrolled: Schema.NullOr(VirtualListScrollTo)
   },
   RequestedScroll: { scrollTo: VirtualListScrollTo },
   ScrolledByUser: {},
   MeasuredItems: { epoch: Schema.Number, width: Schema.Number, items: Schema.Array(MeasuredItem) },
   FocusedItem: ItemRef.fields,
-  BlurredItems: {}
+  BlurredItems: {},
+  ScrolledViewport: { ...Tracked.fields, scrolling: Schema.Boolean }
 })
 
 type VirtualListMessage = typeof VirtualListMessage.Type
 
 const sameScrollTo = Schema.toEquivalence(VirtualListScrollTo)
 
+const sameVisible = Schema.toEquivalence(Visible)
+
 const same = (a: number, b: number): boolean => Math.abs(a - b) < 0.5
 
-const countOf = (props: VirtualListProps): number => Math.max(0, Math.floor(props.count))
+const sameTracked = (a: Tracked, b: Tracked): boolean =>
+  same(a.offset, b.offset) && same(a.height, b.height) && same(a.length, b.length)
+
+const countOf = (props: VirtualListProps): number =>
+  props.keys === undefined ? Math.max(0, Math.floor(props.count ?? 0)) : props.keys.length
 
 const keyOf = (props: VirtualListProps, index: number): string | null => props.keys?.[index] ?? null
 
@@ -381,7 +521,7 @@ const resolve = (props: VirtualListProps, ref: typeof ItemRef.Type, fallback: bo
   const count = countOf(props)
   if (ref.key !== null) {
     const at = props.keys?.indexOf(ref.key) ?? -1
-    if (at >= 0 && at < count) return at
+    if (at >= 0) return at
     if (!fallback) return null
   }
   return count === 0 ? null : clamp(Math.floor(ref.index), 0, count - 1)
@@ -398,7 +538,9 @@ interface Layout {
 
 const layoutOf = (model: VirtualListModel, props: VirtualListProps): Layout => {
   const count = countOf(props)
-  const lanes = Math.max(1, model.lanes)
+  const flow = props.layout !== "absolute"
+  const lanes = flow ? Math.max(1, model.lanes) : 1
+  const gap = flow ? model.gap : 0
   const rows = Math.ceil(count / lanes)
   const measured = props.measure !== false
   const known = measured ? Object.values(model.sizes) : []
@@ -411,9 +553,9 @@ const layoutOf = (model: VirtualListModel, props: VirtualListProps): Layout => {
       const item = measured ? model.sizes[sizeKey(props, index)] ?? given ?? estimate : given ?? props.itemSize
       size = Math.max(size, item)
     }
-    offsets.push(offsets[row]! + size + model.gap)
+    offsets.push(offsets[row]! + size + gap)
   }
-  return { count, lanes, gap: model.gap, rows, offsets, total: rows === 0 ? 0 : offsets[rows]! - model.gap }
+  return { count, lanes, gap, rows, offsets, total: rows === 0 ? 0 : offsets[rows]! - gap }
 }
 
 const rowAt = (layout: Layout, y: number): number => {
@@ -527,14 +669,24 @@ const visibleItems = (layout: Layout, band: Band | null): readonly [number, numb
     : [rows[0] * layout.lanes, Math.min(layout.count, (rows[1] + 1) * layout.lanes) - 1]
 }
 
-const windowOf = (model: VirtualListModel, props: VirtualListProps, layout: Layout, band: Band | null): Rendering => {
+const windowOf = (
+  model: VirtualListModel,
+  props: VirtualListProps,
+  layout: Layout,
+  band: Band | null,
+  lead: number
+): Rendering => {
   const overscan = Math.max(0, Math.floor(props.overscan ?? defaultOverscan))
   const visible = visibleRows(layout, band)
+  const ahead = band === null ? null : visibleRows(layout, {
+    start: band.start + Math.min(0, lead),
+    end: band.end + Math.max(0, lead)
+  })
   let startRow = 0
-  let endRow = visible === null
+  let endRow = ahead === null
     ? props.initialCount === undefined ? overscan + 1 : Math.ceil(props.initialCount / layout.lanes)
-    : visible[1] + overscan + 1
-  if (visible !== null) startRow = Math.max(0, visible[0] - overscan)
+    : ahead[1] + overscan + 1
+  if (ahead !== null) startRow = Math.max(0, ahead[0] - overscan)
   endRow = Math.min(layout.rows, endRow)
   startRow = Math.min(startRow, endRow)
 
@@ -581,8 +733,9 @@ const measured = (
   let reset = model.width !== 0 && !same(width, model.width)
   let changed = reset || model.width === 0
   const count = countOf(props)
+  const flow = props.layout !== "absolute"
   const found = lanesOf(items)
-  const lanesChanged = items.length > 0 && found !== lanes && (found < items.length || found > lanes)
+  const lanesChanged = flow && items.length > 0 && found !== lanes && (found < items.length || found > lanes)
   if (lanesChanged) {
     lanes = found
     reset = changed = true
@@ -596,7 +749,7 @@ const measured = (
     sizes = { ...sizes, ...Object.fromEntries(fresh.map((item) => [item.key ?? String(item.index), item.size])) }
     changed = true
   }
-  if (!lanesChanged) {
+  if (flow && !lanesChanged) {
     const rows = new Map<number, { top: number; bottom: number }>()
     for (const item of items) {
       const index = Math.floor(item.index / lanes)
@@ -636,7 +789,10 @@ const TrackVirtualListArgs = {
   threshold: Schema.NullOr(Schema.Number),
   request: Schema.NullOr(ScrollRequest),
   fresh: Schema.NullOr(VirtualListScrollTo),
-  waiting: Schema.Boolean
+  waiting: Schema.Boolean,
+  scrollContainer: Schema.NullOr(VirtualListScrollContainer),
+  track: Schema.Boolean,
+  absolute: Schema.Boolean
 }
 
 type TrackVirtualListArgs = Schema.Struct<typeof TrackVirtualListArgs>["Type"]
@@ -658,7 +814,7 @@ const TrackVirtualList = Mount.makeStream(
         let viewport: HTMLElement | null = null
         let listening: AbortController | undefined
         let disposed = false
-        let anchor: { readonly id: string; readonly top: number } | null = null
+        let anchor: { readonly id: string; readonly top: number; readonly placed: number } | null = null
         let atEnd = false
         let reported: {
           readonly start: number
@@ -672,7 +828,11 @@ const TrackVirtualList = Mount.makeStream(
         let focused: string | null = null
         let focusTimer: ReturnType<typeof setTimeout> | undefined
         let sent = ""
+        let tracked: Tracked = { offset: 0, height: 0, length: 0 }
+        let scrolling = false
+        let endTimer: ReturnType<typeof setTimeout> | undefined
         const observed = new Set<Element>()
+        const watched = new Set<Element>()
 
         const itemsOf = () => Array.from(list.querySelectorAll<HTMLElement>(attrSelector(itemAttr, args.id)))
         const identity = (item: Element) => item.getAttribute("data-key") ?? "#" + item.getAttribute("data-index")
@@ -681,13 +841,22 @@ const TrackVirtualList = Mount.makeStream(
           key: item.getAttribute("data-key")
         })
 
+        const listTop = () =>
+          list.getBoundingClientRect().top + list.clientTop - (list === viewport ? list.scrollTop : 0)
+        const placedAt = (item: HTMLElement) => {
+          const rect = item.getBoundingClientRect()
+          const shift = args.absolute ? /translateY\((-?[\d.]+)px\)/.exec(item.style.transform) : null
+          if (shift === null) return rect
+          const top = listTop() + Number(shift[1])
+          return { top, bottom: top + rect.height, left: rect.left, height: rect.height }
+        }
+
         const box = () => {
           if (viewport === null) return { top: 0, height: window.innerHeight }
           return { top: viewport.getBoundingClientRect().top + viewport.clientTop, height: viewport.clientHeight }
         }
         const scrollTop = () => viewport === null ? window.scrollY : viewport.scrollTop
-        const origin = () =>
-          list.getBoundingClientRect().top + list.clientTop - (list === viewport ? list.scrollTop : 0) + args.inset
+        const origin = () => listTop() + args.inset
         const scrollBy = (delta: number) => {
           if (Math.abs(delta) < 0.5) return
           const top = scrollTop() + delta
@@ -713,12 +882,16 @@ const TrackVirtualList = Mount.makeStream(
           return rect.width === 0 && rect.height === 0
         }
 
+        const placement = (top: number) => list === viewport ? 0 : listTop() - top
+
         const capture = () => {
           const top = box().top
+          const placed = placement(top)
           anchor = null
           for (const item of itemsOf()) {
-            if (item.getBoundingClientRect().bottom > top + 0.5) {
-              anchor = { id: identity(item), top: item.getBoundingClientRect().top - top }
+            const rect = placedAt(item)
+            if (rect.bottom > top + 0.5) {
+              anchor = { id: identity(item), top: rect.top - top, placed }
               return
             }
           }
@@ -726,15 +899,18 @@ const TrackVirtualList = Mount.makeStream(
 
         const keepAnchor = () => {
           if (anchor === null) return
-          const { id, top } = anchor
+          const { id, placed, top } = anchor
           const item = itemsOf().find((item) => identity(item) === id)
-          if (item !== undefined) scrollBy(item.getBoundingClientRect().top - box().top - top)
+          if (item === undefined) return
+          const view = box().top
+          const moved = placedAt(item).top - view - top
+          scrollBy(placed < -0.5 ? moved : moved - (placement(view) - placed))
         }
 
         const anchorAt = (start: number): Position | null => {
           const zero = origin()
           for (const item of itemsOf()) {
-            const rect = item.getBoundingClientRect()
+            const rect = placedAt(item)
             const top = rect.top - zero
             if (top > start + 0.5) return null
             if (rect.bottom - zero > start) return { ...refOf(item), offset: start - top }
@@ -742,10 +918,25 @@ const TrackVirtualList = Mount.makeStream(
           return null
         }
 
+        const metrics = (): Tracked => {
+          const { height, top } = box()
+          const zero = origin()
+          return {
+            offset: top - zero,
+            height,
+            length: list === viewport ? list.scrollHeight - args.inset : list.getBoundingClientRect().bottom - zero
+          }
+        }
+
+        const sendMetrics = (next: Tracked) => {
+          tracked = next
+          send(VirtualListMessage.ScrolledViewport({ ...next, scrolling }))
+        }
+
         const report = (scrolled: VirtualListScrollTo | null) => {
           if (hidden()) return
-          const { height, top } = box()
-          const start = top - origin()
+          const next = metrics()
+          const { height, length, offset: start } = next
           const atStart = start <= defaultEndThreshold
           atEnd = toEnd() <= (args.threshold ?? defaultEndThreshold)
           const unchanged = reported !== null && same(height, reported.height) && atStart === reported.atStart &&
@@ -753,9 +944,40 @@ const TrackVirtualList = Mount.makeStream(
           if (
             scrolled === null && unchanged &&
             (same(start, reported!.start) || (within(args.first, start) && within(args.last, start + height)))
-          ) return
+          ) {
+            if (args.track && !sameTracked(next, tracked)) sendMetrics(next)
+            return
+          }
           reported = { start, height, atStart, atEnd }
-          send(VirtualListMessage.MovedViewport({ start, height, atStart, atEnd, anchor: anchorAt(start), scrolled }))
+          tracked = next
+          send(
+            VirtualListMessage.MovedViewport({
+              start,
+              height,
+              atStart,
+              atEnd,
+              length,
+              anchor: anchorAt(start),
+              scrolled
+            })
+          )
+        }
+
+        const onScrollEnd = () => {
+          clearTimeout(endTimer)
+          endTimer = setTimeout(() => {
+            if (!scrolling) return
+            scrolling = false
+            sendMetrics(hidden() ? tracked : metrics())
+          }, scrollEndDelay)
+        }
+
+        const startScroll = () => {
+          if ("onscrollend" in window) clearTimeout(endTimer)
+          else onScrollEnd()
+          if (scrolling || hidden()) return
+          scrolling = true
+          sendMetrics(metrics())
         }
 
         const measure = () => {
@@ -766,7 +988,7 @@ const TrackVirtualList = Mount.makeStream(
           let shape = args.epoch + ":" + Math.round(rect.width)
           let firstTop: number | undefined
           for (const item of itemsOf()) {
-            const box = item.getBoundingClientRect()
+            const box = placedAt(item)
             const top = box.top - zero
             firstTop ??= top
             shape += "|" + identity(item) + ":" + Math.round(box.height) + ":" + Math.round(top - firstTop) + ":" +
@@ -780,6 +1002,75 @@ const TrackVirtualList = Mount.makeStream(
 
         const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => sync())
         const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => sync())
+        const structureObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
+          watchOutside()
+          sync()
+        })
+
+        const observeOnly = (current: Set<Element>, next: ReadonlySet<Element>, options?: ResizeObserverOptions) => {
+          for (const element of current) {
+            if (!next.has(element)) {
+              resizeObserver?.unobserve(element)
+              current.delete(element)
+            }
+          }
+          for (const element of next) {
+            if (!current.has(element)) {
+              resizeObserver?.observe(element, options)
+              current.add(element)
+            }
+          }
+        }
+
+        const watchOutside = () => {
+          const ancestors: Array<Element> = []
+          const before = new Set<Element>()
+          if (viewport !== list) {
+            const owner = viewport ?? document.documentElement
+            for (
+              let child: Element = list;
+              child !== owner && child.parentElement !== null;
+              child = child.parentElement
+            ) {
+              ancestors.push(child.parentElement)
+              for (
+                let sibling = child.previousElementSibling;
+                sibling !== null;
+                sibling = sibling.previousElementSibling
+              ) {
+                before.add(sibling)
+              }
+            }
+          }
+          observeOnly(watched, before)
+          structureObserver?.disconnect()
+          for (const element of before) {
+            structureObserver?.observe(element, { attributes: true, attributeFilter: layoutAttributes })
+          }
+          for (const element of ancestors) {
+            structureObserver?.observe(element, {
+              childList: true,
+              attributes: true,
+              attributeFilter: layoutAttributes
+            })
+          }
+        }
+
+        const resolveViewport = (): HTMLElement | null => {
+          const own = list.closest<HTMLElement>(attrSelector(viewportAttr, args.id))
+          if (own !== null) return own
+          const container = args.scrollContainer
+          if (container === null) return null
+          if (container !== "nearest") return list.parentElement?.closest<HTMLElement>(container.selector) ?? null
+          for (
+            let element = list.parentElement;
+            element !== null && element !== document.body && element !== document.documentElement;
+            element = element.parentElement
+          ) {
+            if (/^(auto|scroll|overlay)$/.test(window.getComputedStyle(element).overflowY)) return element
+          }
+          return null
+        }
 
         const unpin = () => {
           pinned = null
@@ -790,12 +1081,13 @@ const TrackVirtualList = Mount.makeStream(
             pinned = null
             if (args.waiting) send(VirtualListMessage.ScrolledByUser())
           }
+          startScroll()
           capture()
           report(null)
         }
 
         const bind = () => {
-          const next = list.closest<HTMLElement>(attrSelector(viewportAttr, args.id))
+          const next = resolveViewport()
           if (listening === undefined || next !== viewport) {
             listening?.abort()
             if (viewport !== null && viewport !== list) resizeObserver?.unobserve(viewport)
@@ -807,6 +1099,7 @@ const TrackVirtualList = Mount.makeStream(
             for (const type of ["wheel", "touchmove", "keydown", "pointerdown"]) {
               target.addEventListener(type, unpin, options)
             }
+            ;(viewport ?? document).addEventListener("scrollend", onScrollEnd, options)
             if (viewport === null) {
               window.addEventListener("scroll", onScroll, options)
               window.addEventListener("resize", () => sync(), options)
@@ -814,20 +1107,9 @@ const TrackVirtualList = Mount.makeStream(
               viewport.addEventListener("scroll", onScroll, options)
               if (viewport !== list) resizeObserver?.observe(viewport)
             }
+            watchOutside()
           }
-          const items = new Set<Element>(args.measure ? itemsOf() : [])
-          for (const item of observed) {
-            if (!items.has(item)) {
-              resizeObserver?.unobserve(item)
-              observed.delete(item)
-            }
-          }
-          for (const item of items) {
-            if (!observed.has(item)) {
-              resizeObserver?.observe(item, { box: "border-box" })
-              observed.add(item)
-            }
-          }
+          observeOnly(observed, new Set(args.measure ? itemsOf() : []), { box: "border-box" })
         }
 
         const sync = () => {
@@ -865,7 +1147,7 @@ const TrackVirtualList = Mount.makeStream(
                 : item.getAttribute("data-index") === String(index)
             )
             if (item === undefined) return
-            const { bottom, top } = item.getBoundingClientRect()
+            const { bottom, top } = placedAt(item)
             scrollBy(alignedStart(top, bottom, view.top, view.height, scrollTo.align ?? "start") - view.top)
           } else if (offset !== null) scrollBy(origin() + offset - view.top)
           else scrollBy(toEnd())
@@ -894,8 +1176,10 @@ const TrackVirtualList = Mount.makeStream(
           Effect.sync(() => {
             disposed = true
             clearTimeout(focusTimer)
+            clearTimeout(endTimer)
             resizeObserver?.disconnect()
             mutationObserver?.disconnect()
+            structureObserver?.disconnect()
             listening?.abort()
             own.abort()
           })
@@ -912,16 +1196,28 @@ const TrackVirtualList = Mount.makeStream(
 
 type VirtualListUpdate = Component.Update<VirtualListModel, VirtualListMessage, VirtualListEvents, VirtualListProps>
 
+const sameAnnounced = (a: Announced, b: Announced, track: boolean): boolean =>
+  sameVisible(a, b) && a.scrolling === b.scrolling && (!track || sameTracked(a, b))
+
 const announce = ($: VirtualListUpdate, next: VirtualListModel, layout = layoutOf(next, $.props)) => {
   const visible = visibleItems(layout, restingBand(next, $.props, layout))
   if (visible === null) return $.set(next)
-  const announced = { first: visible[0], last: visible[1], atStart: next.atStart, atEnd: next.atEnd }
-  return next.announced !== null && sameVisible(next.announced, announced)
+  const announced = {
+    first: visible[0],
+    last: visible[1],
+    atStart: next.atStart,
+    atEnd: next.atEnd,
+    offset: next.offset,
+    height: next.height,
+    length: next.length,
+    scrolling: next.scrolling
+  }
+  return next.announced !== null && sameAnnounced(next.announced, announced, $.props.trackScroll === true)
     ? $.set(next)
     : $.set(next).evolve({ announced }).emit(VirtualListEvents.Scrolled(announced))
 }
 
-type ItemOf<B extends View.PartTarget<"div" | "li">> = ReturnType<B["attr"]>
+type ItemOf<B extends View.PartTarget<"div" | "li" | "tr">> = ReturnType<B["attr"]>
 
 type Div = Html.Element<VirtualListMessage, never, Html.EventsOf<"div">, HTMLDivElement, "div">
 
@@ -933,8 +1229,10 @@ type Div = Html.Element<VirtualListMessage, never, Html.EventsOf<"div">, HTMLDiv
  * **Details**
  *
  * The parts object also carries `items`, the indices to render in order,
- * `count`, and `atStart` and `atEnd`, whether the list is scrolled to its
- * start and to its end, for a button that jumps back to the end.
+ * `count`, `atStart` and `atEnd`, whether the list is scrolled to its
+ * start and to its end, for a button that jumps back to the end, and
+ * `scrolling`, whether it's scrolling, for rows that skip costly content
+ * meanwhile.
  *
  * `item({ element, index })` returns `element`. `list` and `item` write
  * `role` only when no other role is set on the element, so a `role="feed"`
@@ -942,9 +1240,10 @@ type Div = Html.Element<VirtualListMessage, never, Html.EventsOf<"div">, HTMLDiv
  * `aria-setsize`, `data-index` and `data-key`. The list's padding and an
  * item's top margin are added after the consumer's inline style.
  *
- * It emits `Scrolled` with the first and last visible items and the two edge
- * flags when any of them changes as the user scrolls or the viewport resizes,
- * so a parent can load more items near either end, or when it reaches one.
+ * It emits `Scrolled` when the visible items, an edge or `scrolling`
+ * changes, so a parent can load more items near either end, react when it
+ * reaches one, or save the position once a scroll ends. With `trackScroll`
+ * it also emits it for each change of the scroll offset.
  *
  * History restore keeps the measured sizes and the position, so the list is
  * as tall as before when the page's scroll position comes back, and not the
@@ -961,7 +1260,7 @@ export const VirtualList = Component.define({
   model: VirtualListModel,
   message: VirtualListMessage,
   events: VirtualListEvents,
-  restore: (model) => UiStruct.evolve(model, { focused: null }),
+  restore: (model) => UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false }),
   elements: Html
 }).make({
   init: ($) => ({
@@ -977,10 +1276,14 @@ export const VirtualList = Component.define({
     epoch: 0,
     focused: null,
     scroll: $.props.scrollTo === undefined ? null : { scrollTo: $.props.scrollTo, done: false },
-    announced: null
+    offset: 0,
+    length: 0,
+    scrolling: false,
+    announced: null,
+    lead: 0
   }),
   update: {
-    MovedViewport: (stored, { anchor, atEnd, atStart, height, scrolled, start }, $) => {
+    MovedViewport: (stored, { anchor, atEnd, atStart, height, length, scrolled, start }, $) => {
       const model = current(stored, $.props)
       const layout = layoutOf(model, $.props)
       const row = rowAt(layout, start)
@@ -989,6 +1292,9 @@ export const VirtualList = Component.define({
         key: keyOf($.props, row * layout.lanes),
         offset: start - (layout.offsets[row] ?? 0)
       }
+      const before = restingBand(model, $.props, layout)
+      const moved = scrolled === null && before !== null ? start - before.start : 0
+      const lead = Math.abs(moved) <= height ? moved : 0
       return announce(
         $,
         UiStruct.evolve(model, {
@@ -996,6 +1302,9 @@ export const VirtualList = Component.define({
           height,
           atStart,
           atEnd,
+          offset: start,
+          length,
+          lead,
           scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
         }),
         layout
@@ -1013,7 +1322,9 @@ export const VirtualList = Component.define({
       return next === model ? stored : announce($, next)
     },
     FocusedItem: (stored, { index, key }, $) => UiStruct.evolve(current(stored, $.props), { focused: { index, key } }),
-    BlurredItems: (stored, _message, $) => UiStruct.evolve(current(stored, $.props), { focused: null })
+    BlurredItems: (stored, _message, $) => UiStruct.evolve(current(stored, $.props), { focused: null }),
+    ScrolledViewport: (stored, { height, length, offset, scrolling }, $) =>
+      announce($, UiStruct.evolve(current(stored, $.props), { offset, height, length, scrolling }))
   },
   parts: (stored, p) => {
     const props = p.props
@@ -1025,36 +1336,88 @@ export const VirtualList = Component.define({
     const waiting = fresh ?? waitingOf(model)
     const pending = pendingOf(waiting, props, layout)
     const band = pending === null ? resting : pendingBand(model, layout, pending, resting)
-    const { after, before, between, ranges, visible } = windowOf(model, props, layout, band)
-    const inset = props.contentAlignment === "end" && model.position !== null && model.height > layout.total
-      ? model.height - layout.total
+    const { after, before, between, ranges, visible } = windowOf(
+      model,
+      props,
+      layout,
+      band,
+      pending === null ? model.lead : 0
+    )
+    const reserve = Math.max(0, props.reserveStart ?? 0)
+    const fill = props.contentAlignment === "end" && model.position !== null
+      ? Math.max(0, model.height - layout.total - reserve)
       : 0
+    const inset = reserve + fill
     const pushed = ranges[1]?.[0]
+    const absolute = props.layout === "absolute"
+    const first = props.firstPosition ?? 1
+    const setSize = String(props.setSize ?? layout.count)
 
-    const itemPart = p.part(["div", "li"], (b, index: number) =>
-      (b as Div)
+    const itemPart = p.part(["div", "li", "tr"], (b, index: number) => {
+      const row = b.tag === "tr"
+      const style = [
+        props.measure === false ? `box-sizing:border-box;block-size:${props.sizes?.[index] ?? props.itemSize}px` : "",
+        absolute
+          ? `position:absolute;inset-inline:0;top:0;transform:translateY(${
+            inset + layout.offsets[rowOf(layout, index)]!
+          }px)`
+          : "",
+        !absolute && !row && pushed !== undefined && index >= pushed && index < pushed + layout.lanes
+          ? `margin-block-start:${between}px`
+          : ""
+      ].filter((declarations) => declarations !== "").join(";")
+      return (b as Div)
         .attrs({
           [itemAttr]: id,
           "data-index": String(index),
           "data-key": keyOf(props, index) ?? undefined,
-          "aria-posinset": String(index + 1),
-          "aria-setsize": String(layout.count)
+          "aria-posinset": row ? undefined : String(first + index),
+          "aria-setsize": row ? undefined : setSize,
+          "aria-rowindex": row ? String(first + index) : undefined
         })
         .forward((node) => {
-          const item = defaults(node, { role: "listitem" })
-          return pushed !== undefined && index >= pushed && index < pushed + layout.lanes
-            ? ownStyle(`margin-block-start:${between}px`)(item)
-            : item
-        }))
+          const item = row ? node : defaults(node, { role: "listitem" })
+          return style === "" ? item : ownStyle(style)(item)
+        })
+    })
+
+    const spacer = (name: string, height: number): ReadonlyArray<View.Node<never>> =>
+      height <= 0 ? [] : [
+        View.toNode(
+          new Html.Element<never>("tr").key(spacerAttr + ":" + name).attrs({
+            [spacerAttr]: "",
+            "aria-hidden": "true",
+            style: `height:${Math.max(0, height - layout.gap)}px`
+          })
+        )
+      ]
+
+    const withSpacers = (children: ReadonlyArray<View.Node<any>>): ReadonlyArray<View.Node<any>> => [
+      ...spacer("before", before + inset),
+      ...children.flatMap((child) =>
+        pushed !== undefined && child._tag === "Element" && child.attrs[itemAttr] === id &&
+          child.attrs["data-index"] === String(pushed)
+          ? [...spacer("between", between), child]
+          : [child]
+      ),
+      ...spacer("after", after)
+    ]
 
     return {
       items: ranges.flatMap(([start, end]) => Array.from({ length: end - start }, (_, i) => start + i)),
       count: layout.count,
       atStart: model.position !== null && model.atStart,
       atEnd: model.position !== null && model.atEnd,
+      scrolling: model.scrolling,
       viewport: p.part(["div", "ul", "ol"], (b) => b.attr(viewportAttr, id)),
-      list: p.part(["div", "ul", "ol"], (b) =>
-        (b as Div)
+      table: p.part(
+        ["table"],
+        (b) => b.attr("aria-rowcount", props.setSize === undefined ? String(layout.count + first - 1) : setSize)
+      ),
+      list: p.part(["div", "ul", "ol", "tbody"], (b) => {
+        const table = b.tag === "tbody"
+        if (table && absolute) throw new Error("VirtualList: a <tbody> list can't use layout: \"absolute\"")
+        return (b as Div)
           .onMount(TrackVirtualList({
             id,
             epoch: model.epoch,
@@ -1065,16 +1428,25 @@ export const VirtualList = Component.define({
             threshold: endThreshold(props),
             request: pending,
             fresh,
-            waiting: waiting !== null
+            waiting: waiting !== null,
+            scrollContainer: props.scrollContainer ?? null,
+            track: props.trackScroll === true,
+            absolute
           }))
-          .forward((node) =>
-            ownStyle(
-              `padding-block-start:${before + inset}px;padding-block-end:${after}px;overflow-anchor:none`
-            )(defaults(node, { role: "list" }))
-          )),
+          .forward((node) => {
+            if (table) {
+              const built = View.build(ownStyle("overflow-anchor:none")(node), [])
+              return { ...built, children: withSpacers(built.children) }
+            }
+            const style = absolute
+              ? `position:relative;padding-block-start:0px;padding-block-end:${inset + layout.total}px`
+              : `padding-block-start:${before + inset}px;padding-block-end:${after}px`
+            return ownStyle(style + ";overflow-anchor:none")(defaults(node, { role: "list" }))
+          })
+      }),
       item: View.wrapPart(
         itemPart,
-        <B extends View.PartTarget<"div" | "li">>(
+        <B extends View.PartTarget<"div" | "li" | "tr">>(
           { element, index }: { readonly element: B; readonly index: number }
         ): ItemOf<B> => itemPart(element, index) as ItemOf<B>
       )
