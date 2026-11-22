@@ -194,6 +194,7 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
+import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -603,7 +604,7 @@ const typeKey = (model: Model, $: SelectUpdate, key: string) => {
 }
 
 const focusTrigger = (_model: Model, _message: unknown, $: SelectUpdate) =>
-  $.run(Html.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+  $.run(DomCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 

@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { DomCommand, Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 // `kit/` holds components that belong to no feature: a design system's
@@ -53,9 +53,11 @@ const step = (options: ReadonlyArray<ListboxOption>, from: string | null, direct
 const activeIn = (shown: ReadonlyArray<ListboxOption>, active: string | null) =>
   shown.some((o) => o.id === active && o.disabled !== true) ? active : null
 
-// `Html.focus` and `Html.scrollIntoView` report whether the ref was
-// rendered. Nothing here depends on it, so they end in `Component.noop`,
-// which sends nothing, and the Message union has no no-op variant.
+// `DomCommand.focus` and `DomCommand.scrollIntoView` act on the element a
+// ref from `Html.ref` names, once the render is committed, and report
+// whether the ref was rendered. Nothing here depends on it, so they end in
+// `Component.noop`, which sends nothing, and the Message union has no no-op
+// variant.
 const silent = () => Component.noop
 
 /**
@@ -91,7 +93,7 @@ export const Listbox = Component.define({
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
         $.evolve({ open, query: "", active: open ? $.props.selected : null })
-          .run(open ? Html.focus(Input, silent) : Html.focus(Trigger, silent)),
+          .run(open ? DomCommand.focus(Input, silent) : DomCommand.focus(Trigger, silent)),
       UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
       PressedKey: ({ key }) => {
         const shown = filter($.props.options, model.query)
@@ -105,7 +107,7 @@ export const Listbox = Component.define({
             return next === null
               ? $.evolve({ open: true })
               : $.evolve({ open: true, active: next })
-                .run(Html.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
+                .run(DomCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
           }
           case "Enter":
             return active === null

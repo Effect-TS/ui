@@ -13,7 +13,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -2113,9 +2113,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: (log, message, $) =>
           Message.match(message, {
-            Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
-            FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
-            Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
+            Focus: () => $.run(DomCommand.focus(Field, ({ found }) => Message.Found({ found }))),
+            FocusMissing: () => $.run(DomCommand.focus(Missing, ({ found }) => Message.Found({ found }))),
+            Measure: () => $.run(DomCommand.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
             Found: ({ found }) => [...log, `found ${found}`],
             Measured: ({ some }) => [...log, `measured ${some}`],
             Mounted: ({ tag }) => [...log, `mounted ${tag}`]
@@ -2169,10 +2169,12 @@ describe("BrowserHost", { concurrent: false }, () => {
       update: (log, message, $) =>
         EntryMessage.match(message, {
           Pasted: ({ text }) => [...log, `pasted ${text}`],
-          Select: () => $.run(Html.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
+          Select: () => $.run(DomCommand.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
           Selected: ({ found }) => [...log, `selected ${found}`],
           Submit: ({ loose }) =>
-            $.run(Html.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))),
+            $.run(
+              DomCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))
+            ),
           Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
           Sent: ({ code }) => [...log, `sent ${code}`]
         }),

@@ -450,8 +450,8 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   delay or the consumer keeps open. A popup that opens with focus inside
   handles Escape on the focused part. One that opens without focus, such
   as `Tooltip` on hover, hears neither on a part, so it listens on its
-  document: `subscriptions` holds `Html.onDocument` entries gated on the
-  popup showing, one for Escape and one for mouse presses in the capture
+  document: `subscriptions` holds `DomSubscription.onDocument` entries gated
+  on the popup showing, one for Escape and one for mouse presses in the capture
   phase, as `Tooltip` does. The Escape entry cancels the key's default and
   skips one that's `defaultPrevented`, so a field inside or an enclosing
   dialog keeps its own. Which presses are outside is the component's call:

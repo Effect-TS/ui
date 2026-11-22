@@ -115,6 +115,8 @@ import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
+import * as DomImages from "./DomImages.ts"
+import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
@@ -1263,8 +1265,8 @@ export const makeHost = (
 }
 
 /**
- * The element operations behind `Html.focus`, `blur`, `scrollIntoView`,
- * `measure`, `select` and `requestSubmit`, on DOM elements.
+ * The element operations behind `DomCommand.focus`, `blur`,
+ * `scrollIntoView`, `measure`, `select` and `requestSubmit`, on DOM elements.
  *
  * @stability experimental
  * @category constructors
@@ -1328,9 +1330,9 @@ const signals = (document: Document) => {
   }
 }
 
-// `Html.onDocument` and `Html.onWindow` listen here. Each Subscription removes its own listener as
-// it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): Html.GlobalEvents => ({
+// `DomSubscription.onDocument` and `DomSubscription.onWindow` listen here. Each Subscription
+// removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
+const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   listen: (target, name, { capture }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
@@ -1348,7 +1350,7 @@ const globalEventsOf = (document: Document): Html.GlobalEvents => ({
 })
 
 // Loads in a detached <img>. A cached image may already be complete.
-const imagesOf = (document: Document): Html.Images => ({
+const imagesOf = (document: Document): DomImages.Images => ({
   load: (source) =>
     Effect.callback((resume) => {
       const image = document.createElement("img")
@@ -1371,14 +1373,14 @@ const imagesOf = (document: Document): Html.Images => ({
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `Html.GlobalEvents`, and an `Html.Images` over it, for the life of the
- * Layer.
+ * `DomSubscription.GlobalEvents`, and a `DomImages.Images` over it, for the
+ * life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `Html.GlobalEvents` and `Html.Images` use
- * the document and its `defaultView`, never globals.
+ * host's listeners. The signals, `DomSubscription.GlobalEvents` and
+ * `DomImages.Images` use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1397,8 +1399,8 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(Html.GlobalEvents, globalEventsOf(document)),
-      Context.add(Html.Images, imagesOf(document))
+      Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(DomImages.Images, imagesOf(document))
     )
   }))
 

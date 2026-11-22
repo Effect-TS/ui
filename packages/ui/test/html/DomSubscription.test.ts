@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, DomSubscription, Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -40,7 +40,7 @@ const Keys = Component.define({
       h.output(model.log.join(","))
     ),
   subscriptions: (model) => [
-    model.listening && Html.onDocument(
+    model.listening && DomSubscription.onDocument(
       "keydown",
       ({ defaultPrevented, key }) =>
         key === "Escape" ? undefined : Message.Pressed({ key: `${model.prefix}${key}${defaultPrevented ? "!" : ""}` }),
@@ -65,23 +65,29 @@ const Phases = Component.define({
   view: (log, h) => h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
   subscriptions: (log) => [
     !log.includes("capture") &&
-    Html.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), { capture: true, preventDefault: "always" }),
+    DomSubscription.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), {
+      capture: true,
+      preventDefault: "always"
+    }),
     log.length > 0 &&
-    Html.onDocument("mousedown", ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })),
-    Html.onWindow("focus", PhaseMessage.Heard({ what: "focus" }))
+    DomSubscription.onDocument(
+      "mousedown",
+      ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })
+    ),
+    DomSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" }))
   ]
 })
 
 const testLayer = Layer.merge(TestHost.layer(), TestGlobalEvents.layer)
 
-describe("Html.onDocument and Html.onWindow", () => {
+describe("DomSubscription.onDocument and DomSubscription.onWindow", () => {
   it("are keyed by target, event and phase", () => {
     const handler = () => undefined
     assert.deepStrictEqual(
       [
-        Html.onDocument("keydown", handler),
-        Html.onDocument("mousedown", handler, { capture: true }),
-        Html.onWindow("blur", handler)
+        DomSubscription.onDocument("keydown", handler),
+        DomSubscription.onDocument("mousedown", handler, { capture: true }),
+        DomSubscription.onWindow("blur", handler)
       ].map(({ key }) => key),
       [
         `@effect/ui/html/document:"keydown"`,
@@ -131,7 +137,7 @@ describe("Html.onDocument and Html.onWindow", () => {
         update: (model) => model,
         view: (_, h) => h.p("throws"),
         subscriptions: () => [
-          Html.onDocument("keydown", (): typeof Message.Type => {
+          DomSubscription.onDocument("keydown", (): typeof Message.Type => {
             throw new Error("boom")
           })
         ]
@@ -162,7 +168,9 @@ const Listener = Component.define({
   update: (model) => model,
   view: (_, h) => h.span(),
   subscriptions: (_, { preventDefault }) => [
-    Html.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), { preventDefault })
+    DomSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), {
+      preventDefault
+    })
   ]
 })
 

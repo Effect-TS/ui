@@ -63,7 +63,7 @@
  * Errors that arrive after the render that follows the submit, such as a
  * server's, aren't focused: a parent can't ask the form to act. The
  * consumer draws the controls, so it can focus one itself: give the field
- * or an error summary an `Html.ref`, and run `Html.focus` from the
+ * or an error summary an `Html.ref`, and run `DomCommand.focus` from the
  * `update` that records the rejection.
  *
  * To send focus somewhere else after a failed submit, such as to an error
