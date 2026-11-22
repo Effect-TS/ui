@@ -7,17 +7,33 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 
 // Every part, with the consumer's own name for the bar next to the label.
+const stale = { "data-progressing": "", "data-complete": "", "data-indeterminate": "" }
+
 const standIn = {
   elements: Html,
   view: (
     progress: Component.Headless.Parts<typeof Progress>,
     h: View.Helper<never, ProgressProps> & View.Tags<Html.Elements, never>
   ) =>
-    progress.root(h.div.attrs({ "aria-labelledby": "heading", "aria-valuenow": "99", "data-complete": "" }))
+    progress.root(
+      h.div.attrs({
+        ...stale,
+        role: "meter",
+        "aria-labelledby": "heading",
+        "aria-valuemin": "9",
+        "aria-valuemax": "99",
+        "aria-valuenow": "99",
+        "aria-valuetext": "wrong"
+      })
+    )
       .children(
-        progress.label(h.span.class("label")).children("Uploading"),
-        progress.value(h.span.class("value").attr("aria-hidden", "false")),
-        progress.track(h.div.class("track")).children(progress.indicator(h.div.class("fill")))
+        progress.label(h.span.class("label").attrs({ ...stale, id: "custom-label", role: "heading" })).children(
+          "Uploading"
+        ),
+        progress.value(h.span.class("value").attrs({ ...stale, "aria-hidden": "false" })),
+        progress.track(h.div.class("track").attrs(stale)).children(
+          progress.indicator(h.div.class("fill").attrs(stale))
+        )
       )
 }
 
@@ -40,6 +56,7 @@ describe("Progress", () => {
       const s = yield* Scene.make(Progress, { value: 1, max: 3 }, standIn)
       const id = s.get(label).attrs?.id
       assert.isString(id)
+      assert.notStrictEqual(id, "custom-label")
       assert.deepInclude(s.get(root).attrs, {
         "aria-valuemin": "0",
         "aria-valuemax": "3",

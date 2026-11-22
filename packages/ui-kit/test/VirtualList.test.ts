@@ -30,10 +30,21 @@ const makeStandIn = (snapshot: (parts: Parts) => void = () => {}) => ({
   elements: Html,
   view: (virtualList: Parts, h: H) => {
     snapshot(virtualList)
-    return virtualList.viewport(h.div.class("viewport")).children(
+    return virtualList.viewport(
+      h.div.class("viewport").attr("data-virtual-list-viewport", "wrong")
+    ).children(
       virtualList.list(h.ul.class("list").attr("style", "color:red")).children(
         virtualList.items.map((index) =>
-          virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(String(index))
+          virtualList.item({
+            element: h.li.class("item").key(String(index)).attrs({
+              "data-virtual-list-item": "wrong",
+              "data-index": "99",
+              "data-key": "stale",
+              "aria-posinset": "99",
+              "aria-setsize": "1"
+            }),
+            index
+          }).children(String(index))
         )
       )
     )
@@ -57,12 +68,16 @@ describe("VirtualList", () => {
         s.get(listLoc).attrs?.style,
         "color:red;padding-block-start:0px;padding-block-end:19920px;overflow-anchor:none"
       )
+      const viewportId = s.get(Locator.attr("class", "viewport")).attrs?.["data-virtual-list-viewport"]
+      assert.isString(viewportId)
+      assert.notStrictEqual(viewportId, "wrong")
       const first = s.all(itemLoc)[0]!
       assert.strictEqual(first.attrs?.role, "listitem")
       assert.strictEqual(first.attrs?.["aria-posinset"], "1")
       assert.strictEqual(first.attrs?.["aria-setsize"], "1000")
       assert.strictEqual(first.attrs?.["data-index"], "0")
       assert.strictEqual(first.attrs?.["data-key"], undefined)
+      assert.strictEqual(first.attrs?.["data-virtual-list-item"], viewportId)
     }))
 
   it.effect("keeps a role the consumer sets", () =>
