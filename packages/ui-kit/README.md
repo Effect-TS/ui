@@ -33,6 +33,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Fieldset](src/Fieldset.ts): a native fieldset named by a legend, around several fields, which disables every control and every `Field` inside it at once.
 - [Form](src/Form.ts): a native form that focuses its first invalid control after a submit, and again when you tell it a server rejected the values.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
+- [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.

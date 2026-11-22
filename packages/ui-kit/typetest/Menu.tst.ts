@@ -52,6 +52,7 @@ describe("Menu", () => {
       onEmit,
       view: (menu) => {
         expect(menu.trigger(h.button.onClick(Msg.Clicked()))).type.toBe<Button>()
+        expect(menu.trigger(h.button, { openOnHover: true, delay: 0, closeDelay: 300 })).type.toBe<Button>()
         expect(menu.positioner(h.div)).type.toBe<Div>()
         expect(menu.popup(h.div)).type.toBe<Div>()
         expect(menu.item(h.div, "copy")).type.toBe<Div>()
@@ -66,6 +67,7 @@ describe("Menu", () => {
         expect(menu.nothingMatches).type.toBe<boolean>()
 
         expect(menu.trigger).type.not.toBeCallableWith(h.div)
+        expect(menu.trigger).type.not.toBeCallableWith(h.button, { delay: "0" })
         expect(menu.item).type.not.toBeCallableWith(h.span, "copy")
         expect(menu.item).type.not.toBeCallableWith(h.a, "copy")
         expect(menu.item).type.not.toBeCallableWith(h.div)

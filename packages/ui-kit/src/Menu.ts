@@ -37,7 +37,8 @@
  * | `finalFocus`            | any focusable element, focused on close                 |
  *
  * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children. The items take their value,
+ * applied, and the consumer adds the children. `trigger` takes optional
+ * `MenuTriggerOptions`. The items take their value,
  * `checkboxItem` whether it's checked, and `group` and `groupLabel` the
  * group's key. `item` closes the menu when picked and the others don't;
  * a last `closeOnClick` argument changes that. The indicators, `clear`
@@ -60,10 +61,15 @@
  *
  * Set on the positioner, so the popup inherits them: `--anchor-width`,
  * `--anchor-height`, `--available-width`, `--available-height` and
- * `--transform-origin`. While the viewport moves to another trigger, its
- * outgoing content sits in a `data-previous` element that sets
- * `--popup-width` and `--popup-height` to the popup's last size, next to
- * the `data-current` one.
+ * `--transform-origin`. With a viewport, the positioner also gets
+ * `--positioner-width` and `--positioner-height`, the popup's size.
+ *
+ * When the viewport moves to another trigger, the popup's `--popup-width`
+ * and `--popup-height` go from its old size to its new one and back to
+ * `auto` once its transitions finish. Size the popup with them and
+ * transition `width` and `height` to animate it. The outgoing content
+ * sits in a `data-previous` element with the old size as `--popup-width`
+ * and `--popup-height`, next to the `data-current` one.
  *
  * **Data attributes**
  *
@@ -112,18 +118,23 @@
  *
  * A mouse press opens the popup, and a release over an item more than
  * 200ms later picks it. With `openOnHover`, which a submenu has by
- * default, resting on the trigger opens it, and the popup closes once the
- * pointer leaves both, unless it's crossing to the popup. A press within
- * 500ms of a hover open keeps it open. A `modal` menu, the default for a
+ * default, resting on the trigger for `delay` opens it, and the popup
+ * closes `closeDelay` after the pointer leaves both, unless it's crossing
+ * to the popup. On the way to a submenu, the parent's items don't react.
+ * Hovering another trigger of an open menu moves the popup to it at once.
+ * A trigger's own options override the menu's. A press within 500ms of a
+ * hover open keeps it open. A `modal` menu, the default for a
  * root menu not opened by hovering, locks the page's scroll and blocks
  * presses outside, except on the trigger.
  *
- * **Differences from Base UI**
+ * **Limits**
  *
- * `items` replaces reading the items from the rendered elements. The
- * trigger's `openOnHover`, `delay` and `closeDelay` are props of the
- * menu, and `MenuTrigger` draws a trigger outside the view. The writing
- * direction is read from the trigger's computed `direction`.
+ * The menu doesn't read its items from the rendered elements, so `items`
+ * lists them. A trigger carries no payload: `Opened` reports its
+ * `triggerId`, so draw the content for that trigger. `filter` picks a
+ * built-in match; for another, pass `filter: null` and draw only the
+ * items that match. `MenuTrigger` draws a trigger outside the view. The
+ * writing direction is read from the trigger's computed `direction`.
  *
  * **Example** (An edit menu with a checkbox item and a submenu, with the open states in the consumer's Model)
  *
@@ -232,11 +243,11 @@ import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { byAttribute } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
+import { available } from "./internal/list.ts"
 import { lockScroll } from "./internal/modal.ts"
 import { activationDirection, inSafeArea, type Point } from "./internal/safeArea.ts"
 import { inKept, raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
-import { available } from "./internal/list.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
 
@@ -417,7 +428,8 @@ export type MenuFilterMode = typeof MenuFilterMode.Type
  * - `openOnHover`: the pointer resting on the trigger for `delay`
  *   milliseconds opens the menu, and leaving the trigger and the popup
  *   closes it after `closeDelay`. False when left out, true in a submenu.
- * - `delay`, `closeDelay`: 100 and 0 when left out.
+ * - `delay`, `closeDelay`: 100 and 0 when left out. A trigger's
+ *   `MenuTriggerOptions` override these three for that trigger.
  * - `parentItem`: in a submenu, the value of the parent's item that opens
  *   it. A `Menu` drawn inside another one's popup is its submenu.
  * - `triggerId`: the `id` of the trigger the menu is open for, when it has
@@ -573,7 +585,12 @@ const Message = UiSchema.TaggedEnum({
   ReleasedTrigger: {},
   ClickedTrigger: { key: Schema.String, triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   PressedTriggerKey: { key: Schema.String, trigger: Schema.String, triggerId: Schema.NullOr(Schema.String) },
-  EnteredTrigger: { key: Schema.String, triggerId: Schema.NullOr(Schema.String) },
+  EnteredTrigger: {
+    key: Schema.String,
+    triggerId: Schema.NullOr(Schema.String),
+    delay: Schema.Number,
+    closeDelay: Schema.Number
+  },
   LeftTrigger: {},
   CompletedWaitBeforeHoverOpen: {},
   LeftHoverArea: {},
@@ -629,6 +646,8 @@ const Model = Schema.Struct({
   trigger: Schema.NullOr(Schema.String),
   hoverTrigger: Schema.NullOr(Schema.String),
   hoverTriggerId: Schema.NullOr(Schema.String),
+  hoverCloseDelay: Schema.Number,
+  closeDelay: Schema.Number,
   hovering: Schema.Boolean,
   stick: Schema.Boolean,
   active: Schema.NullOr(Schema.String),
@@ -881,13 +900,35 @@ const pressKey = (model: Model, $: MenuUpdate, key: string, action: ItemAction |
   return $.set(model)
 }
 
-const enterTrigger = (model: Model, $: MenuUpdate, key: string, triggerId: string | null, nested: boolean) => {
-  const props = $.props
-  const next = { ...model, hovering: true, hoverTrigger: key, hoverTriggerId: triggerId }
-  if (!hoverOf(props, nested) || disabledOf(props, nestedOf($))) return $.set(next)
-  if (props.open) return $.set(next).run(Command.interrupt(WaitBeforeHoverClose))
-  return $.set(next).run(WaitBeforeHoverOpen.make({ delay: props.delay ?? 100 }))
+const opensFor = (model: Model, props: MenuProps, key: string | null, triggerId: string | null): boolean => {
+  const active = props.triggerId ?? model.trigger
+  return active === null || active === key || (triggerId !== null && active === triggerId)
 }
+
+const enterTrigger = (model: Model, $: MenuUpdate, message: Extract<Message, { readonly _tag: "EnteredTrigger" }>) => {
+  const props = $.props
+  const next = {
+    ...model,
+    hovering: true,
+    hoverTrigger: message.key,
+    hoverTriggerId: message.triggerId,
+    hoverCloseDelay: message.closeDelay
+  }
+  if (disabledOf(props, nestedOf($))) return $.set(next)
+  if (!props.open) return $.set(next).run(WaitBeforeHoverOpen.make({ delay: message.delay }))
+  const stay = Command.interrupt(WaitBeforeHoverClose)
+  return opensFor(model, props, message.key, message.triggerId) ? $.set(next).run(stay) : hoverOpen(next, $).run(stay)
+}
+
+const hoverOpen = (model: Model, $: MenuUpdate) =>
+  open(
+    { ...model, closeDelay: model.hoverCloseDelay },
+    $,
+    "trigger-hover",
+    "mouse",
+    model.hoverTrigger,
+    model.hoverTriggerId
+  )
 
 const pressTrigger = (
   model: Model,
@@ -898,8 +939,7 @@ const pressTrigger = (
 ) => {
   const props = $.props
   if (disabledOf(props, nestedOf($))) return $.set(model)
-  const active = props.triggerId ?? model.trigger
-  if (props.open && (active === null || active === key || active === triggerId)) {
+  if (props.open && opensFor(model, props, key, triggerId)) {
     if (model.stick && model.reason === "trigger-hover") {
       return $.set({ ...model, reason: "trigger-press", stick: false, hovering: false })
         .run(Command.interrupt(WaitBeforeHoverClose))
@@ -940,7 +980,8 @@ const TrackMenuArgs = {
   popupId: Schema.String,
   inputId: Schema.NullOr(Schema.String),
   orientation: Orientation,
-  parentOrientation: Orientation
+  parentOrientation: Orientation,
+  side: Schema.String
 }
 
 type TrackMenuArgs = Schema.Struct<typeof TrackMenuArgs>["Type"]
@@ -950,6 +991,27 @@ const anyTrigger = (popupId: string) => "[data-menu-trigger=\"" + popupId.replac
 const triggerSelector = (popupId: string) => anyTrigger(popupId) + "[data-menu-active]"
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
+
+interface Size {
+  readonly width: number
+  readonly height: number
+}
+
+const setSize = (element: HTMLElement, prefix: string, size: Size | "auto" | "max-content") => {
+  element.style.setProperty(prefix + "-width", typeof size === "string" ? size : size.width + "px")
+  element.style.setProperty(prefix + "-height", typeof size === "string" ? size : size.height + "px")
+}
+
+const override = (element: HTMLElement, styles: Record<string, string>): () => void => {
+  const before = Object.keys(styles).map((name) => [name, element.style.getPropertyValue(name)] as const)
+  for (const [name, value] of Object.entries(styles)) element.style.setProperty(name, value)
+  return () => {
+    for (const [name, value] of before) {
+      if (value === "") element.style.removeProperty(name)
+      else element.style.setProperty(name, value)
+    }
+  }
+}
 
 const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<TrackMenuArgs>) =>
   Stream.callback<Message>((queue) => {
@@ -1035,6 +1097,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       direction()
       found()
       cut()
+      fit()
       const field = input()
       if (field !== null) field.focus({ preventScroll: true })
       else if (current.active !== null) focusActive(false)
@@ -1118,6 +1181,9 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
         return
       }
       const nav = keys(current.orientation, rtl)
+      if (current.orientation === "vertical" && (event.key === nav.next || event.key === nav.previous)) {
+        event.preventDefault()
+      }
       const caret = field.selectionStart === field.selectionEnd
       const atEnd = caret && field.selectionEnd === field.value.length
       const atStart = caret && field.selectionStart === 0
@@ -1146,31 +1212,36 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
 
     let leftAt: Point | null = null
     let away = false
-    let blockedParent: { readonly element: HTMLElement; readonly undo: () => void } | undefined
+    let unblock: (() => void) | undefined
     const unblockParent = () => {
-      blockedParent?.undo()
-      blockedParent = undefined
+      unblock?.()
+      unblock = undefined
     }
     const blockParent = () => {
-      if (!current.nested || blockedParent !== undefined) return
+      if (!current.nested || unblock !== undefined) return
       const element = node.parentElement?.closest<HTMLElement>("[data-menu-popup]")
       if (element === null || element === undefined) return
-      const before = element.style.getPropertyValue("pointer-events")
-      element.style.setProperty("pointer-events", "none")
-      blockedParent = {
-        element,
-        undo: () => {
-          if (before === "") element.style.removeProperty("pointer-events")
-          else element.style.setProperty("pointer-events", before)
-        }
+      const undo = [override(element, { "pointer-events": "none" }), override(node, { "pointer-events": "auto" })]
+      unblock = () => {
+        for (const restore of undo) restore()
       }
+    }
+    const onMouseEnter = (event: MouseEvent) => {
+      if (!current.open || !current.hoverClose || !current.nested || leftAt === null) return
+      const target = event.target
+      if (!(target instanceof Node) || node.contains(target) || trigger()?.contains(target) === true) return
+      if (!inSafeArea({ x: event.clientX, y: event.clientY }, leftAt, boxOf(node))) return
+      blockParent()
+      event.stopPropagation()
     }
     const onMouseMove = (event: MouseEvent) => {
       if (!current.open || !current.hoverClose) return
       const target = event.target as Node | null
       const anchor = trigger()
       const point = { x: event.clientX, y: event.clientY }
-      if (target !== null && (node.contains(target) || anchor?.contains(target) === true)) {
+      const onTrigger = target instanceof Element &&
+        target.closest(anyTrigger(current.popupId) + ":not([disabled])") !== null
+      if (target !== null && (node.contains(target) || anchor?.contains(target) === true || onTrigger)) {
         if (node.contains(target)) unblockParent()
         if (anchor?.contains(target) === true) leftAt = point
         if (away) {
@@ -1194,41 +1265,107 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
     let viewportKey = args.trigger
     let previousTrigger: DOMRect | null = null
     let lastCurrent: Element | null = null
-    let lastSize: { readonly width: number; readonly height: number } | null = null
+    let lastSize: Size | null = null
     const viewport = (): HTMLElement | null => node.querySelector<HTMLElement>("[data-menu-viewport]")
-    const remember = () => {
+    const sizeOf = (element: HTMLElement): Size => {
+      const style = view?.getComputedStyle(element)
+      const width = Number.parseFloat(style?.width ?? "") || 0
+      const height = Number.parseFloat(style?.height ?? "") || 0
+      return Math.round(width) !== element.offsetWidth || Math.round(height) !== element.offsetHeight
+        ? { width: element.offsetWidth, height: element.offsetHeight }
+        : { width, height }
+    }
+    const remember = (measured: boolean) => {
       const anchor = trigger()
       if (anchor !== null) previousTrigger = boxOf(anchor)
       const element = viewport()
       lastCurrent = element?.querySelector(":scope > [data-current]") ?? null
-      const r = boxOf(popup())
-      lastSize = { width: r.width, height: r.height }
+      if (element !== null && !measured) lastSize = sizeOf(popup())
     }
+
+    let unanchor: (() => void) | undefined
+    const anchorPopup = () => {
+      unanchor?.()
+      unanchor = undefined
+      if (!current.open || viewport() === null) return
+      const side = current.side
+      const top = side === "top"
+      const left = side === "left" || side === (current.rtl ? "inline-end" : "inline-start")
+      if (!top && !left) return
+      unanchor = override(popup(), {
+        position: "absolute",
+        [top ? "bottom" : "top"]: "0",
+        [left ? "right" : "left"]: "0"
+      })
+    }
+    const measure = (fresh: HTMLElement | null): Size => {
+      const element = popup()
+      setSize(element, "--popup", "auto")
+      const undo = [
+        override(element, { position: "static", transform: "none", scale: "1" }),
+        override(node, {
+          "--available-width": "max-content",
+          "--available-height": "max-content",
+          "--positioner-width": "max-content",
+          "--positioner-height": "max-content"
+        }),
+        ...(fresh === null ? [] : [override(fresh, { animation: "none", transition: "none" })])
+      ]
+      const size = sizeOf(element)
+      for (const restore of undo) restore()
+      return size
+    }
+    const fit = () => {
+      if (viewport() === null) return
+      anchorPopup()
+      setSize(node, "--positioner", measure(null))
+    }
+    let resizing: AbortController | undefined
+    const resize = (fresh: HTMLElement | null, previous: Size | null) => {
+      resizing?.abort()
+      if (previous === null) return fit()
+      const element = popup()
+      const next = measure(fresh)
+      lastSize = next
+      setSize(element, "--popup", previous)
+      setSize(node, "--positioner", next)
+      // Reading the width flushes styles, so the transition starts from the pinned size instead of auto.
+      void element.offsetWidth
+      const controller = new AbortController()
+      resizing = controller
+      frame(() => {
+        if (controller.signal.aborted) return
+        setSize(element, "--popup", next)
+        Promise.allSettled(element.getAnimations().map((animation) => animation.finished)).then(() => {
+          if (!controller.signal.aborted) setSize(element, "--popup", "auto")
+        })
+      })
+    }
+
     const morph = () => {
       const anchor = trigger()
       const element = viewport()
       const from = previousTrigger
       const old = lastCurrent
       const size = lastSize
+      const fresh = element?.querySelector<HTMLElement>(":scope > [data-current]") ?? null
+      if (element !== null) resize(fresh, size)
       if (anchor !== null && from !== null) {
         frame(() =>
-          Promise.allSettled(node.getAnimations().map((animation) => animation.finished)).then(() => {
+          Promise.allSettled(node.getAnimations({ subtree: true }).map((animation) => animation.finished)).then(() => {
             if (current.open) send(Message.SettledTriggerChange())
           })
         )
       }
-      if (element === null || old === null || old.isConnected || from === null || anchor === null) return
+      if (element === null) return
+      if (old === null || old.isConnected || from === null || anchor === null) return
       const wrapper = document.createElement("div")
       wrapper.setAttribute("data-previous", "")
       wrapper.inert = true
       wrapper.style.position = "absolute"
-      if (size !== null) {
-        wrapper.style.setProperty("--popup-width", size.width + "px")
-        wrapper.style.setProperty("--popup-height", size.height + "px")
-      }
+      if (size !== null) setSize(wrapper, "--popup", size)
       wrapper.append(...Array.from(old.childNodes))
       element.insertBefore(wrapper, element.firstChild)
-      const fresh = element.querySelector<HTMLElement>(":scope > [data-current]")
       fresh?.setAttribute("data-starting-style", "")
       send(Message.MovedViewport({ direction: activationDirection(from, boxOf(anchor)) }))
       frame(() => {
@@ -1257,13 +1394,15 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       if (previous.open && !next.open) closing()
       else if (!previous.open && next.open) opening()
       else if (next.open && next.active !== previous.active) focusActive(next.scroll)
-      if (next.open && next.trigger !== viewportKey && viewportKey !== null && next.trigger !== null) {
+      const switched = next.open && next.trigger !== viewportKey && viewportKey !== null && next.trigger !== null
+      if (switched) {
         viewportKey = next.trigger
         morph()
         found()
         cut()
       } else if (next.trigger !== null) viewportKey = next.trigger
-      if (next.open) remember()
+      if (next.open && (next.side !== previous.side || next.rtl !== previous.rtl)) anchorPopup()
+      if (next.open) remember(switched)
       transition.follow(previous, next)
     }
 
@@ -1281,6 +1420,8 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
         document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
         document.addEventListener("focusin", onFocusIn, { capture: true, signal })
         document.addEventListener("mousemove", onMouseMove, { capture: true, passive: true, signal })
+        // The window sees the capture phase before the document, where the host delegates item handlers.
+        view?.addEventListener("mouseenter", onMouseEnter, { capture: true, signal })
         document.addEventListener("mouseout", onTriggerLeave, { capture: true, passive: true, signal })
         node.addEventListener("keydown", onKeyDown, { capture: true, signal })
         node.addEventListener("mousedown", (event) => {
@@ -1290,7 +1431,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
         raiseAbove(node)
         if (current.open) {
           opening()
-          remember()
+          remember(false)
         } else node.inert = true
       }).pipe(
         Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
@@ -1302,6 +1443,8 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
           release?.()
           release = undefined
           cutUndo?.()
+          unanchor?.()
+          resizing?.abort()
           unblockParent()
           transition.cancel()
           node.inert = false
@@ -1355,10 +1498,25 @@ const HoverIntent = Mount.makeStream(
 
 const blocker = blockers("data-menu-blocker")
 
-
 const hiddenBox = "display:none"
 
 const MenuTriggerHoverDefault = 100
+
+/**
+ * The options of one `trigger` part, over the menu's props of the same
+ * name: `disabled` turns this trigger off, and `openOnHover`, `delay` and
+ * `closeDelay` set how the pointer opens and closes the menu from it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface MenuTriggerOptions {
+  readonly disabled?: boolean | undefined
+  readonly openOnHover?: boolean | undefined
+  readonly delay?: number | undefined
+  readonly closeDelay?: number | undefined
+}
 
 /**
  * A press or a hover on a `MenuTrigger`: the trigger's `id`, if it has one,
@@ -1589,6 +1747,8 @@ export const Menu = Component.define({
     trigger: null,
     hoverTrigger: null,
     hoverTriggerId: null,
+    hoverCloseDelay: 0,
+    closeDelay: 0,
     hovering: false,
     stick: false,
     active: null,
@@ -1620,16 +1780,14 @@ export const Menu = Component.define({
       $.props.open || disabledOf($.props, nestedOf($))
         ? model
         : open(model, $, "list-navigation", "keyboard", trigger, triggerId, key === "ArrowUp"),
-    EnteredTrigger: (model, { key, triggerId }, $) => enterTrigger(model, $, key, triggerId, nestedOf($) !== undefined),
+    EnteredTrigger: (model, message, $) => enterTrigger(model, $, message),
     LeftTrigger: (model, _message, $) =>
-      $.props.open ? model : $.set({ ...model, hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
+      $.set($.props.open ? model : { ...model, hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
     CompletedWaitBeforeHoverOpen: (model, _message, $) =>
-      $.props.open || !model.hovering || disabledOf($.props, nestedOf($))
-        ? model
-        : open(model, $, "trigger-hover", "mouse", model.hoverTrigger, model.hoverTriggerId),
+      $.props.open || !model.hovering || disabledOf($.props, nestedOf($)) ? model : hoverOpen(model, $),
     LeftHoverArea: (model, _message, $) =>
       $.props.open && model.reason === "trigger-hover"
-        ? $.set({ ...model, hovering: false }).run(WaitBeforeHoverClose.make({ delay: $.props.closeDelay ?? 0 }))
+        ? $.set({ ...model, hovering: false }).run(WaitBeforeHoverClose.make({ delay: model.closeDelay }))
         : model,
     ReturnedToHoverArea: (model, _message, $) =>
       $.set({ ...model, hovering: true }).run(Command.interrupt(WaitBeforeHoverClose)),
@@ -1824,14 +1982,17 @@ export const Menu = Component.define({
         .attr("data-menu-trigger", popupId)
         .attr("data-menu-active", flag(shown && active))
 
-    const triggerPart = p.part("button", (b, key: string, triggerId: string | null) => {
+    const triggerPart = p.part("button", (b, key: string, triggerId: string | null, options: MenuTriggerOptions) => {
       const active = activeTrigger === null ? key === p.id("trigger", 0) || triggers === 1 : activeTrigger === key ||
         activeTrigger === triggerId
       if (active) labelledBy = key
-      const own = triggerAttrs(b.attr("id", key).attr("type", "button"), active)
+      const off = disabled || options.disabled === true
+      const attributed = triggerAttrs(b.attr("id", key).attr("type", "button"), active)
         .attr("data-pressed", flag(open && active))
-        .attr("data-disabled", flag(disabled))
-        .disabled(disabled)
+        .attr("data-disabled", flag(off))
+        .disabled(off)
+      if (options.disabled === true) return attributed
+      const own = attributed
         .on(
           "mousedown",
           ({ button, pointerType }) =>
@@ -1852,16 +2013,24 @@ export const Menu = Component.define({
               : undefined,
           { preventDefault: true }
         )
-      return hover
-        ? own.on("mouseenter", Message.EnteredTrigger({ key, triggerId })).on("mouseleave", Message.LeftTrigger())
+      return options.openOnHover ?? hover
+        ? own.on(
+          "mouseenter",
+          Message.EnteredTrigger({
+            key,
+            triggerId,
+            delay: options.delay ?? props.delay ?? MenuTriggerHoverDefault,
+            closeDelay: options.closeDelay ?? props.closeDelay ?? 0
+          })
+        ).on("mouseleave", Message.LeftTrigger())
         : own
     })
     const trigger = View.wrapPart(
       triggerPart,
-      <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> => {
+      <B extends View.PartTarget<"button">>(element: B, options: MenuTriggerOptions = {}): ReturnType<B["attr"]> => {
         const id = idOf(element)
         triggers++
-        return triggerPart(element, id ?? p.id("trigger", triggers - 1), id)
+        return triggerPart(element, id ?? p.id("trigger", triggers - 1), id, options)
       }
     )
 
@@ -1883,8 +2052,15 @@ export const Menu = Component.define({
           { preventDefault: true }
         )
       return hover
-        ? own.on("mouseenter", Message.EnteredTrigger({ key: "submenu", triggerId: null }))
-          .on("mouseleave", Message.LeftTrigger())
+        ? own.on(
+          "mouseenter",
+          Message.EnteredTrigger({
+            key: "submenu",
+            triggerId: null,
+            delay: props.delay ?? MenuTriggerHoverDefault,
+            closeDelay: props.closeDelay ?? 0
+          })
+        ).on("mouseleave", Message.LeftTrigger())
         : own
     })
     const submenuTrigger = View.wrapPart(
@@ -1939,7 +2115,8 @@ export const Menu = Component.define({
           popupId,
           inputId: filtering ? inputId : null,
           orientation,
-          parentOrientation: parent?.orientation ?? "vertical"
+          parentOrientation: parent?.orientation ?? "vertical",
+          side
         })
       )
     })

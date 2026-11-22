@@ -131,7 +131,11 @@ const Page = Component.define({
         h.div(
           h.button.attr("id", "before").attr("type", "button").children("Before"),
           menu.trigger(h.button.attr("id", "trigger")).children("Edit"),
-          h.props.viewport ? menu.trigger(h.button.attr("id", "trigger-2")).children("View") : null,
+          h.props.viewport
+            ? menu.trigger(h.button.attr("id", "trigger-2"), { openOnHover: true, delay: 0, closeDelay: 300 })
+              .children("View")
+            : null,
+          h.props.viewport ? menu.trigger(h.button.attr("id", "trigger-3"), { disabled: true }).children("Off") : null,
           menu.positioner(h.div.attr("id", "positioner")).children(
             menu.popup(h.div).children(
               h.props.viewport
@@ -408,7 +412,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(item("copy").hidden)
       assert.isFalse(item("paste").hidden)
-      keydown(input, "ArrowDown")
+      assert.isTrue(keydown(input, "ArrowDown").defaultPrevented)
       yield* tick
       assert.strictEqual(document.activeElement, input)
       assert.strictEqual(input.getAttribute("aria-activedescendant"), item("paste").id)
@@ -517,6 +521,35 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.strictEqual(viewport.textContent, "Content")
     }))
 
+  it.effect("each trigger has its own hover settings, and hovering another trigger moves an open menu to it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ viewport: true })
+      byId("trigger").dispatchEvent(new MouseEvent("mouseenter"))
+      yield* TestClock.adjust("200 millis")
+      yield* tick
+      mousedown(byId("trigger-3"))
+      yield* tick
+      assert.isFalse(shown("positioner"))
+      assert.isTrue(byId("trigger-3").hasAttribute("disabled"))
+      mousedown(byId("trigger"))
+      yield* tick
+      byId("trigger-2").dispatchEvent(new MouseEvent("mouseenter"))
+      yield* tick
+      assert.strictEqual(byId("trigger-2").getAttribute("aria-expanded"), "true")
+      document.body.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 900, clientY: 700 }))
+      yield* TestClock.adjust("200 millis")
+      yield* tick
+      assert.isTrue(shown("positioner"))
+      yield* TestClock.adjust("100 millis")
+      yield* tick
+      assert.isFalse(shown("positioner"))
+      assert.deepStrictEqual(log(), [
+        "root Opened trigger-press",
+        "root Opened trigger-hover from trigger-2",
+        "root Dismissed trigger-hover"
+      ])
+    }))
+
   it.effect("hovering a submenu trigger opens it, and the pointer can cross to it through the safe triangle", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
@@ -536,6 +569,10 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("share-positioner"))
       assert.strictEqual(popupOf("positioner").style.pointerEvents, "none")
+      item("paste").dispatchEvent(new MouseEvent("mouseenter", { clientX: 250, clientY: 120 }))
+      yield* tick
+      assert.isFalse(item("paste").hasAttribute("data-highlighted"))
+      assert.isTrue(shown("share-positioner"))
       item("email").dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 320, clientY: 100 }))
       yield* tick
       assert.strictEqual(popupOf("positioner").style.pointerEvents, "")
