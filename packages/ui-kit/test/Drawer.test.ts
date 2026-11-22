@@ -17,10 +17,12 @@ const standIn = {
       drawer.viewport(h.div.class("viewport")).children(
         drawer.popup(
           h.div.class("popup")
-            .attr("data-swiping", "x")
-            .attr("data-swipe-direction", "sideways")
-            .attr("data-nested-drawer-open", "x")
-            .attr("style", "color:red")
+            .attrs({
+              "data-swiping": "x",
+              "data-swipe-direction": "sideways",
+              "data-nested-drawer-open": "x",
+              style: "color:red"
+            })
         ).children(drawer.content(h.div.class("content")))
       )
     )

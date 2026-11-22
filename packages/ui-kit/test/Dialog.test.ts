@@ -15,14 +15,14 @@ const standIn = {
   elements: Html,
   view: (dialog: Parts, h: H) =>
     h.div(
-      dialog.trigger(h.button.class("open").attr("aria-expanded", "mixed").attr("data-popup-open", "")).children(
+      dialog.trigger(h.button.class("open").attrs({ "aria-expanded": "mixed", "data-popup-open": "" })).children(
         "Open"
       ),
       dialog.trigger(h.button.attr("id", "other")).children("Other"),
-      dialog.portal(h.dialog.attr("id", "mine").attr("aria-describedby", "extra").attr("style", "z-index:2"))?.children(
-        dialog.backdrop(h.div.class("backdrop").attr("role", "none").attr("data-closed", "")),
+      dialog.portal(h.dialog.attrs({ id: "mine", "aria-describedby": "extra", style: "z-index:2" }))?.children(
+        dialog.backdrop(h.div.class("backdrop").attrs({ role: "none", "data-closed": "" })),
         dialog.viewport(h.div.class("viewport").attr("data-nested", "")).children(
-          dialog.popup(h.div.class("popup").attr("data-open", "").attr("tabindex", "0")).children(
+          dialog.popup(h.div.class("popup").attrs({ "data-open": "", tabindex: "0" })).children(
             dialog.title(h.h2.attr("id", "heading")).children("Settings"),
             dialog.description(h.p).children("For this workspace."),
             dialog.initialFocus(h.input),
@@ -327,7 +327,7 @@ describe("DialogTrigger", () => {
   it("draws a trigger for a dialog drawn elsewhere, and its attributes win", () => {
     const closed = View.build(
       DialogTrigger(h, {
-        element: h.button.attr("aria-expanded", "true").attr("data-popup-open", ""),
+        element: h.button.attrs({ "aria-expanded": "true", "data-popup-open": "" }),
         props: { open: false },
         onPress: "open"
       }),

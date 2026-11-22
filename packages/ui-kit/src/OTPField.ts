@@ -801,27 +801,31 @@ export const OTPField = Component.define({
     let inherited: string | undefined
     const state = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-disabled", flag(disabled))
-        .attr("data-readonly", flag(readOnly))
-        .attr("data-required", flag(required))
-        .attr("data-complete", flag(complete))
-        .attr("data-focused", flag(focused))
+        .attrs({
+          "data-disabled": flag(disabled),
+          "data-readonly": flag(readOnly),
+          "data-required": flag(required),
+          "data-complete": flag(complete),
+          "data-focused": flag(focused)
+        })
     const hiddenInput = p.part("input", (b) =>
       b.ref(HiddenInput)
-        .attr("type", "text")
-        .attr("id", props.id !== undefined && props.name === undefined ? props.id + "-hidden-input" : undefined)
-        .attr("name", props.name)
-        .attr("form", props.form)
-        .attr("autocomplete", autoComplete)
-        .attr("inputmode", inputMode)
-        .attr("minlength", String(length))
-        .attr("maxlength", String(length))
-        .attr("pattern", rule === undefined ? undefined : rule.accepted + "{" + length + "}")
-        .attr("readonly", flag(readOnly))
-        .attr("required", flag(required))
-        .attr("aria-hidden", "true")
-        .attr("tabindex", "-1")
-        .attr("style", visuallyHidden)
+        .attrs({
+          type: "text",
+          id: props.id !== undefined && props.name === undefined ? props.id + "-hidden-input" : undefined,
+          name: props.name,
+          form: props.form,
+          autocomplete: autoComplete,
+          inputmode: inputMode,
+          minlength: String(length),
+          maxlength: String(length),
+          pattern: rule === undefined ? undefined : rule.accepted + "{" + length + "}",
+          readonly: flag(readOnly),
+          required: flag(required),
+          "aria-hidden": "true",
+          tabindex: "-1",
+          style: visuallyHidden
+        })
         .disabled(disabled)
         .value(value)
         .onFocus(Message.FocusedHiddenInput())
@@ -838,20 +842,22 @@ export const OTPField = Component.define({
         : identified
       return state(first)
         .ref(Slot.at(index))
-        .attr("data-filled", flag(character !== ""))
-        .attr("inputmode", inputMode)
-        .attr("autocomplete", index === 0 ? autoComplete : "off")
-        .attr("autocorrect", "off")
-        .attr("spellcheck", "false")
-        .attr("enterkeyhint", index === last ? "done" : "next")
-        // Only the first slot, so a password manager doesn't offer to fill each of the others.
-        .attr("maxlength", index === 0 ? String(length) : undefined)
-        .attr("tabindex", index === active ? "0" : "-1")
-        .attr("form", props.form)
-        .attr("pattern", rule === undefined ? undefined : rule.accepted + "{1}")
-        .attr("readonly", flag(readOnly))
-        .attr("required", flag(required))
-        .attr("aria-disabled", undefined)
+        .attrs({
+          "data-filled": flag(character !== ""),
+          inputmode: inputMode,
+          autocomplete: index === 0 ? autoComplete : "off",
+          autocorrect: "off",
+          spellcheck: "false",
+          enterkeyhint: index === last ? "done" : "next",
+          // Only the first slot, so a password manager doesn't offer to fill each of the others.
+          maxlength: index === 0 ? String(length) : undefined,
+          tabindex: index === active ? "0" : "-1",
+          form: props.form,
+          pattern: rule === undefined ? undefined : rule.accepted + "{1}",
+          readonly: flag(readOnly),
+          required: flag(required),
+          "aria-disabled": undefined
+        })
         .disabled(disabled)
         .value(character)
         .onKeyDown(
@@ -894,8 +900,7 @@ export const OTPField = Component.define({
       required,
       root: p.part((b) =>
         state(b)
-          .attr("role", "group")
-          .attr("data-filled", flag(filled))
+          .attrs({ role: "group", "data-filled": flag(filled) })
           .forward((node) => {
             const root = View.build(node, [hiddenInput(input())])
             const label = root.attrs["aria-labelledby"] ?? model.label ?? undefined

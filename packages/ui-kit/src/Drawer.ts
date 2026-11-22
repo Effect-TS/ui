@@ -1421,9 +1421,11 @@ export const DrawerProvider = Component.define({
     const active = model.active
     const indentPart = p.part("div", (b, id: string) =>
       b
-        .attr("id", id)
-        .attr("data-active", flag(active))
-        .attr("data-inactive", flag(!active))
+        .attrs({
+          id,
+          "data-active": flag(active),
+          "data-inactive": flag(!active)
+        })
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, progressVar + ":0")))
         .onMount(ReportIndent({ id })))
     const indent = View.wrapPart(
@@ -1433,7 +1435,7 @@ export const DrawerProvider = Component.define({
     )
     const indentBackground = p.part(
       "div",
-      (b) => b.attr("data-active", flag(active)).attr("data-inactive", flag(!active))
+      (b) => b.attrs({ "data-active": flag(active), "data-inactive": flag(!active) })
     )
     return { active, indent, indentBackground }
   }
@@ -1591,13 +1593,15 @@ export const Drawer = Component.define({
 
     const popup = p.part("div", (b) =>
       b
-        .attr(popupAttribute, drawerId)
-        .attr("data-swiping", flag(swiping))
-        .attr("data-swipe-direction", swipeDirection)
-        .attr("data-swipe-dismiss", flag(swipeDismiss))
-        .attr("data-expanded", flag(expanded))
-        .attr("data-nested-drawer-open", flag(nestedDrawers > 0))
-        .attr("data-nested-drawer-swiping", flag(nestedDrawerSwiping))
+        .attrs({
+          [popupAttribute]: drawerId,
+          "data-swiping": flag(swiping),
+          "data-swipe-direction": swipeDirection,
+          "data-swipe-dismiss": flag(swipeDismiss),
+          "data-expanded": flag(expanded),
+          "data-nested-drawer-open": flag(nestedDrawers > 0),
+          "data-nested-drawer-swiping": flag(nestedDrawerSwiping)
+        })
         .forward((node) =>
           node.attr(
             "style",
@@ -1631,9 +1635,11 @@ export const Drawer = Component.define({
 
     const backdrop = p.part("div", (b) =>
       b
-        .attr("data-drawer-backdrop", drawerId)
-        .attr("data-swiping", flag(swiping))
-        .attr("data-swipe-dismiss", flag(swipeDismiss))
+        .attrs({
+          "data-drawer-backdrop": drawerId,
+          "data-swiping": flag(swiping),
+          "data-swipe-dismiss": flag(swipeDismiss)
+        })
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, progressVar + ":" + rest))))
 
     const viewport = p.part("div", (b) =>
@@ -1648,13 +1654,15 @@ export const Drawer = Component.define({
       (b, key: string, direction: DrawerSwipeDirection, disabled: boolean) => {
         const running = model.area === key
         return b
-          .attr("role", "presentation")
-          .attr("aria-hidden", "true")
-          .attr("data-open", flag(open))
-          .attr("data-closed", flag(!open))
-          .attr("data-disabled", flag(disabled))
-          .attr("data-swipe-direction", direction)
-          .attr("data-swiping", flag(running))
+          .attrs({
+            role: "presentation",
+            "aria-hidden": "true",
+            "data-open": flag(open),
+            "data-closed": flag(!open),
+            "data-disabled": flag(disabled),
+            "data-swipe-direction": direction,
+            "data-swiping": flag(running)
+          })
           .forward((node) =>
             node.attr(
               "style",

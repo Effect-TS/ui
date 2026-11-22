@@ -17,16 +17,20 @@ describe("Separator", () => {
     const built = Separator(h, {
       props: { orientation: "vertical" },
       element: h.div
-        .attr("role", "presentation")
-        .attr("aria-orientation", "horizontal")
-        .attr("data-orientation", "horizontal")
+        .attrs({
+          role: "presentation",
+          "aria-orientation": "horizontal",
+          "data-orientation": "horizontal"
+        })
         .onClick(Msg.Clicked())
     })
       .class("rule")
-      .attr("aria-label", "Section divider")
-      .attr("role", "none")
-      .attr("aria-orientation", "horizontal")
-      .attr("data-orientation", "horizontal")
+      .attrs({
+        "aria-label": "Section divider",
+        role: "none",
+        "aria-orientation": "horizontal",
+        "data-orientation": "horizontal"
+      })
 
     const node = View.build(built, [])
     assert.deepStrictEqual(node.attrs, {

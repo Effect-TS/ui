@@ -13,7 +13,7 @@ const standIn = {
     progress: Component.Headless.Parts<typeof Progress>,
     h: View.Helper<never, ProgressProps> & View.Tags<Html.Elements, never>
   ) =>
-    progress.root(h.div.attr("aria-labelledby", "heading").attr("aria-valuenow", "99").attr("data-complete", ""))
+    progress.root(h.div.attrs({ "aria-labelledby": "heading", "aria-valuenow": "99", "data-complete": "" }))
       .children(
         progress.label(h.span.class("label")).children("Uploading"),
         progress.value(h.span.class("value").attr("aria-hidden", "false")),

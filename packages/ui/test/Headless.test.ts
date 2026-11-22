@@ -341,9 +341,13 @@ describe("headless components", () => {
               props: { active },
               view: (control) =>
                 control.root(
-                  h.button.disabled(true).attr("aria-readonly", "true").attr("data-checked", "")
-                    .attr("data-removed", "consumer").attr("title", "consumer")
-                    .attr("aria-label", "Keep me").class("consumer")
+                  h.button.disabled(true).attrs({
+                    "aria-readonly": "true",
+                    "data-checked": "",
+                    "data-removed": "consumer",
+                    title: "consumer",
+                    "aria-label": "Keep me"
+                  }).class("consumer")
                 ).children("control")
             })
           )

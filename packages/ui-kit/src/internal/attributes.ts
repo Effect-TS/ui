@@ -29,6 +29,7 @@ export const idSelector = (id: string): string => attrSelector("id", id)
 
 export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B
+  readonly attrs: (attributes: Readonly<Record<string, string | undefined>>) => B
 }
 
 export const defaults = <B extends Attributed<B> & { readonly elementAttrs: Readonly<Record<string, string>> }>(
@@ -41,4 +42,4 @@ export const defaults = <B extends Attributed<B> & { readonly elementAttrs: Read
   )
 
 export const separatorAttrs = <B extends Attributed<B>>(builder: B, orientation: "horizontal" | "vertical"): B =>
-  builder.attr("role", "separator").attr("aria-orientation", orientation).attr("data-orientation", orientation)
+  builder.attrs({ role: "separator", "aria-orientation": orientation, "data-orientation": orientation })

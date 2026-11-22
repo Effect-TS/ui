@@ -1049,15 +1049,17 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const inside = <B extends Attributed<B>>(builder: B): B => builder.attr("data-combobox-inside", owner)
     const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
     const placed = <B extends Attributed<B>>(builder: B): B =>
-      states(builder).attr("data-side", side).attr("data-align", align)
+      states(builder).attrs({ "data-side": side, "data-align": align })
     const control = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-popup-open", flag(open))
-        .attr("data-pressed", flag(open))
-        .attr("data-popup-side", popupSide)
-        .attr("data-list-empty", flag(listEmpty))
-        .attr("data-disabled", flag(disabled))
-        .attr("data-readonly", flag(readOnly))
+        .attrs({
+          "data-popup-open": flag(open),
+          "data-pressed": flag(open),
+          "data-popup-side": popupSide,
+          "data-list-empty": flag(listEmpty),
+          "data-disabled": flag(disabled),
+          "data-readonly": flag(readOnly)
+        })
 
     const inputs = nativeField ? [] : formInputs(p, {
       name: props.name,
@@ -1074,10 +1076,12 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
 
     const dismissPart = p.part("span", (b) =>
       inside(b)
-        .attr("role", "button")
-        .attr("aria-label", "Dismiss")
-        .attr("hidden", flag(!open))
-        .attr("style", visuallyHidden)
+        .attrs({
+          role: "button",
+          "aria-label": "Dismiss",
+          hidden: flag(!open),
+          style: visuallyHidden
+        })
         .onClick(Message.PressedDismiss()))
 
     const label = p.part("div", (b) => {
@@ -1094,9 +1098,11 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
 
     const inputGroup = p.part("div", (b) =>
       inside(control(b))
-        .attr("role", "group")
-        .attr("data-combobox-group", owner)
-        .attr("data-placeholder", flag(placeholding))
+        .attrs({
+          role: "group",
+          "data-combobox-group": owner,
+          "data-placeholder": flag(placeholding)
+        })
         .on("mousedown", pressGroup, { preventDefault: true }))
 
     const keyHandled = (key: string, selectionStart: number | null): boolean => {
@@ -1125,23 +1131,27 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const input = p.part("input", (b) => {
       const decorated = inside(control(b))
         .ref(Input)
-        .attr("data-combobox-input", owner)
-        .attr("data-required", flag(required))
-        .attr("value", displayed)
+        .attrs({
+          "data-combobox-input": owner,
+          "data-required": flag(required),
+          value: displayed
+        })
         .value(displayed)
-        .attr("role", "combobox")
-        .attr("aria-expanded", String(navigable))
-        .attr("aria-haspopup", grid ? "grid" : "listbox")
-        .attr("aria-controls", navigable ? listId : undefined)
-        .attr("aria-autocomplete", readOnly ? "none" : props.mode ?? "list")
-        .attr("aria-activedescendant", navigable && highlighted !== null ? itemId(highlighted) : undefined)
-        .attr("aria-readonly", readOnly ? "true" : undefined)
-        .attr("aria-required", required ? "true" : undefined)
-        .attr("autocomplete", "off")
-        .attr("spellcheck", "false")
-        .attr("autocorrect", "off")
-        .attr("autocapitalize", "none")
-        .attr("readonly", flag(readOnly))
+        .attrs({
+          role: "combobox",
+          "aria-expanded": String(navigable),
+          "aria-haspopup": grid ? "grid" : "listbox",
+          "aria-controls": navigable ? listId : undefined,
+          "aria-autocomplete": readOnly ? "none" : props.mode ?? "list",
+          "aria-activedescendant": navigable && highlighted !== null ? itemId(highlighted) : undefined,
+          "aria-readonly": readOnly ? "true" : undefined,
+          "aria-required": required ? "true" : undefined,
+          autocomplete: "off",
+          spellcheck: "false",
+          autocorrect: "off",
+          autocapitalize: "none",
+          readonly: flag(readOnly)
+        })
         .disabled(disabled)
         .on(
           "mousedown",
@@ -1173,7 +1183,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         ? decorated.on("focusin", Message.FocusedInput()).on("focusout", Message.BlurredInput())
         : decorated
       const field = nativeField
-        ? focusable.attr("name", props.name).attr("form", props.form).attr("required", flag(required))
+        ? focusable.attrs({ name: props.name, form: props.form, required: flag(required) })
         : focusable
       return field.forward((node) => {
         const named = node.elementAttrs.id === undefined ? node.attr("id", inputId) : node
@@ -1184,13 +1194,15 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const trigger = p.part("button", (b) => {
       const decorated = inside(control(b))
         .ref(Trigger)
-        .attr("type", "button")
-        .attr("data-combobox-trigger", owner)
-        .attr("data-required", flag(required))
-        .attr("data-placeholder", flag(placeholding))
-        .attr("aria-expanded", String(open))
-        .attr("aria-haspopup", inPopup ? "dialog" : "listbox")
-        .attr("aria-controls", open ? (inPopup ? popupId : listId) : undefined)
+        .attrs({
+          type: "button",
+          "data-combobox-trigger": owner,
+          "data-required": flag(required),
+          "data-placeholder": flag(placeholding),
+          "aria-expanded": String(open),
+          "aria-haspopup": inPopup ? "dialog" : "listbox",
+          "aria-controls": open ? (inPopup ? popupId : listId) : undefined
+        })
         .disabled(disabled)
         .on(
           "mousedown",
@@ -1215,25 +1227,31 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         )
       if (!inPopup) return decorated.attr("tabindex", "-1")
       return (selectable ? decorated : decorated.attr("form", props.form))
-        .attr("role", "combobox")
-        .attr("aria-required", required ? "true" : undefined)
-        .attr("aria-readonly", readOnly ? "true" : undefined)
+        .attrs({
+          role: "combobox",
+          "aria-required": required ? "true" : undefined,
+          "aria-readonly": readOnly ? "true" : undefined
+        })
         .forward((node) => {
-          const named = node.attr("id", node.elementAttrs.id ?? triggerId)
-            .attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined))
+          const named = node.attrs({
+            id: node.elementAttrs.id ?? triggerId,
+            "aria-labelledby": node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined)
+          })
           return inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
         })
     })
 
-    const icon = p.part("span", (b) => b.attr("aria-hidden", "true").attr("data-popup-open", flag(open)))
+    const icon = p.part("span", (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) }))
 
     const clearPart = p.part("button", (b) =>
       inside(b)
-        .attr("type", "button")
-        .attr("tabindex", "-1")
-        .attr("data-popup-open", flag(open))
-        .attr("data-disabled", flag(disabled))
-        .attr("data-visible", flag(filled))
+        .attrs({
+          type: "button",
+          tabindex: "-1",
+          "data-popup-open": flag(open),
+          "data-disabled": flag(disabled),
+          "data-visible": flag(filled)
+        })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
         .onClick(Message.PressedClear()))
@@ -1246,26 +1264,29 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const chips = p.part("div", (b) => {
       chipsDrawn = true
       return inside(b)
-        .attr("role", values.length > 0 ? "toolbar" : undefined)
-        .attr("data-combobox-chips", owner)
+        .attrs({ role: values.length > 0 ? "toolbar" : undefined, "data-combobox-chips": owner })
         .on("mousedown", pressGroup, { preventDefault: true })
         .onMount(TrackChips({ owner, rtl: props.dir === "rtl", locked: disabled || readOnly }))
     })
 
     const chipPart = p.part("div", (b, value: string) =>
       b.ref(Chip.at(value))
-        .attr("tabindex", "-1")
-        .attr("data-combobox-chip", value)
-        .attr("aria-disabled", disabled ? "true" : undefined)
-        .attr("aria-readonly", readOnly ? "true" : undefined)
-        .attr("data-disabled", flag(disabled)))
+        .attrs({
+          tabindex: "-1",
+          "data-combobox-chip": value,
+          "aria-disabled": disabled ? "true" : undefined,
+          "aria-readonly": readOnly ? "true" : undefined,
+          "data-disabled": flag(disabled)
+        }))
     const chip = keyed(chipPart)
 
     const chipRemove = p.part("button", (b, value: string) =>
       inside(b)
-        .attr("type", "button")
-        .attr("tabindex", "-1")
-        .attr("data-disabled", flag(disabled))
+        .attrs({
+          type: "button",
+          tabindex: "-1",
+          "data-disabled": flag(disabled)
+        })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
         .onClick(Message.RemovedChip({ value, reason: "chip-remove-press" })))
@@ -1284,10 +1305,12 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
-        .attr("role", "presentation")
-        .attr("data-combobox-positioner", owner)
-        .attr("data-anchor-hidden", flag(shown && model.placement?.anchorHidden))
-        .attr("data-empty", flag(listEmpty))
+        .attrs({
+          role: "presentation",
+          "data-combobox-positioner": owner,
+          "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
+          "data-empty": flag(listEmpty)
+        })
         .popover("manual", shown)
         .forward((node) => {
           const styled = node.attr("style", withStyle(node.elementAttrs.style, positionerStyle))
@@ -1324,11 +1347,13 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
 
     const popup = p.part("div", (b) =>
       placed(b)
-        .attr("id", popupId)
-        .attr("role", inPopup ? "dialog" : "presentation")
-        .attr("tabindex", "-1")
-        .attr("data-anchor-hidden", flag(shown && model.placement?.anchorHidden))
-        .attr("data-empty", flag(listEmpty))
+        .attrs({
+          id: popupId,
+          role: inPopup ? "dialog" : "presentation",
+          tabindex: "-1",
+          "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
+          "data-empty": flag(listEmpty)
+        })
         .forward((node) =>
           inPopup && labelled
             ? node.attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelId)
@@ -1338,18 +1363,22 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       placed(b)
-        .attr("id", arrowId)
-        .attr("aria-hidden", "true")
-        .attr("data-uncentered", flag(model.placement?.arrowUncentered))
+        .attrs({
+          id: arrowId,
+          "aria-hidden": "true",
+          "data-uncentered": flag(model.placement?.arrowUncentered)
+        })
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
 
     const list = p.part("div", (b) => {
-      const decorated = b.attr("id", listId)
-        .attr("role", grid ? "grid" : "listbox")
-        .attr("tabindex", "-1")
-        .attr("aria-multiselectable", multiple ? "true" : undefined)
-        .attr("aria-readonly", !grid && readOnly ? "true" : undefined)
-        .attr("data-empty", flag(listEmpty))
+      const decorated = b.attrs({
+        id: listId,
+        role: grid ? "grid" : "listbox",
+        tabindex: "-1",
+        "aria-multiselectable": multiple ? "true" : undefined,
+        "aria-readonly": !grid && readOnly ? "true" : undefined,
+        "data-empty": flag(listEmpty)
+      })
       return inline ? decorated.onMount(TrackList({ list: listArgs })) : decorated
     })
 
@@ -1364,13 +1393,15 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       const active = highlighted === value
       const off = option.disabled === true
       return b
-        .attr("id", itemId(value))
-        .attr("role", grid ? "gridcell" : "option")
-        .attr("aria-selected", selectable ? String(selected) : undefined)
-        .attr("aria-disabled", off ? "true" : undefined)
-        .attr("data-selected", flag(selected))
-        .attr("data-highlighted", flag(active))
-        .attr("data-disabled", flag(off))
+        .attrs({
+          id: itemId(value),
+          role: grid ? "gridcell" : "option",
+          "aria-selected": selectable ? String(selected) : undefined,
+          "aria-disabled": off ? "true" : undefined,
+          "data-selected": flag(selected),
+          "data-highlighted": flag(active),
+          "data-disabled": flag(off)
+        })
         .on("mouseenter", () => hovers ? Message.EnteredItem({ value }) : undefined)
         .on("mouseleave", () => hovers ? Message.LeftItem() : undefined)
         .on("mousedown", Message.PressedItem({ value }), { preventDefault: "always" })
@@ -1395,13 +1426,13 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
 
     const group = p.part(
       "div",
-      (b, key: string) => b.attr("role", grid ? "rowgroup" : "group").attr("aria-labelledby", groupLabelId(key))
+      (b, key: string) => b.attrs({ role: grid ? "rowgroup" : "group", "aria-labelledby": groupLabelId(key) })
     )
-    const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)).attr("aria-hidden", "true"))
+    const groupLabel = p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const live = <B extends Attributed<B>>(builder: B): B =>
-      builder.attr("role", "status").attr("aria-live", "polite").attr("aria-atomic", "true")
+      builder.attrs({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
     const empty = p.part(
       "div",
       (b) => live(b).forward((node) => listEmpty ? node : { ...View.build(node, []), children: [] })

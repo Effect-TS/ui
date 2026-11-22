@@ -4,9 +4,11 @@ import { noSelect } from "./attributes.ts"
 
 export const blockers = (attribute: string) => {
   const blocker = new Html.Element<never>("div")
-    .attr("role", "presentation")
-    .attr(attribute, "")
-    .attr("style", "position:fixed;inset:0;z-index:-1;" + noSelect)
+    .attrs({
+      role: "presentation",
+      [attribute]: "",
+      style: "position:fixed;inset:0;z-index:-1;" + noSelect
+    })
   const is = (target: Node): boolean => target instanceof Element && target.hasAttribute(attribute)
   return {
     open: View.toNode(blocker),

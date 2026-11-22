@@ -142,7 +142,7 @@ export const Menu = Component.define({
     }),
   view: (model, h) =>
     h.div(
-      model.shown && h.div.attr("aria-label", "Menu").attr("role", "menu")
+      model.shown && h.div.attrs({ "aria-label": "Menu", role: "menu" })
         .popover(model.mode, model.open)
         .onToggle(({ newState, oldState, open }) => MenuMessage.Toggled({ open, newState, oldState }))
         .children(h.button("Rename"))

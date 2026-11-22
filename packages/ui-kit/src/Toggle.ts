@@ -155,13 +155,15 @@ export const Toggle = <Msg, R = never>(
       )
     }
     const button = node
-      // Inside a form a button submits by default.
-      .attr("type", "button")
-      .attr("aria-pressed", String(props.pressed))
-      // Never set: the native `disabled` reports it.
-      .attr("aria-disabled", undefined)
-      .attr("data-pressed", flag(props.pressed))
-      .attr("data-disabled", flag(disabled))
+      .attrs({
+        // Inside a form a button submits by default.
+        type: "button",
+        "aria-pressed": String(props.pressed),
+        // Never set: the native `disabled` reports it.
+        "aria-disabled": undefined,
+        "data-pressed": flag(props.pressed),
+        "data-disabled": flag(disabled)
+      })
       .disabled(disabled)
     return !disabled && onToggle !== undefined
       ? button.onClick(() => onToggle({ pressed: !props.pressed }))

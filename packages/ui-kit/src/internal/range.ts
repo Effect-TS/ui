@@ -40,5 +40,5 @@ export const fillValue = <Msg, R, Handlers, HostNode, Tag extends string>(
 // its own after the label, it reads the value alone. The root appends it
 // after all its children.
 export const nvdaLabel = View.toNode(
-  new Html.Element<never>("span").attr("role", "presentation").attr("style", visuallyHidden).children("x")
+  new Html.Element<never>("span").attrs({ role: "presentation", style: visuallyHidden }).children("x")
 )

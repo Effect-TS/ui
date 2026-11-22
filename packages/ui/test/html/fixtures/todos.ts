@@ -103,7 +103,7 @@ export const TodoApp = Component.define({
     return h.main(
       h.h1("Todos"),
       h.form.onSubmit(TodoAppMessage.Add()).children(
-        h.input.attr("aria-label", "New todo").attr("placeholder", "What needs doing?").value(model.draft)
+        h.input.attrs({ "aria-label": "New todo", placeholder: "What needs doing?" }).value(model.draft)
           .onInput(({ value }) => TodoAppMessage.Draft({ value })),
         h.button.attr("type", "submit").children("Add")
       ),

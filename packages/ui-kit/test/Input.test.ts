@@ -45,9 +45,11 @@ describe("Input", () => {
 
   it("the caller's attributes stay, but the input's own win, present or absent, before the call or after it", () => {
     const element = h.input
-      .attr("type", "email")
-      .attr("aria-disabled", "true")
-      .attr("data-disabled", "x")
+      .attrs({
+        type: "email",
+        "aria-disabled": "true",
+        "data-disabled": "x"
+      })
       .value("caller")
     const enabled = build(Input(h, { props: { value: "Ada" }, element: element.disabled(true) }))
     assert.deepStrictEqual(enabled.attrs, { type: "email" })

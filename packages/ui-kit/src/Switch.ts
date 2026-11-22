@@ -91,7 +91,7 @@
  */
 import type * as Html from "@effect/ui/html/Html"
 import type * as View from "@effect/ui/View"
-import { flag } from "./internal/attributes.ts"
+import { type Attributed, flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
 
 /**
@@ -176,16 +176,18 @@ export interface SwitchParts<Msg> {
 // The state attributes, the same on the root and the thumb so either one
 // can be styled on its own. Each is written in every state, as `undefined`
 // removes what the consumer set.
-const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(
+const state = <B extends Attributed<B>>(
   builder: B,
   props: SwitchProps
 ): B =>
   builder
-    .attr("data-checked", flag(props.checked))
-    .attr("data-unchecked", flag(!props.checked))
-    .attr("data-disabled", flag(props.disabled))
-    .attr("data-readonly", flag(props.readOnly))
-    .attr("data-required", flag(props.required))
+    .attrs({
+      "data-checked": flag(props.checked),
+      "data-unchecked": flag(!props.checked),
+      "data-disabled": flag(props.disabled),
+      "data-readonly": flag(props.readOnly),
+      "data-required": flag(props.required)
+    })
 
 /**
  * A switch. Call it with the consumer's `h`, the `props`, and a `view`
@@ -244,14 +246,16 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
           )
         }
         const root = state(node, props)
-          // Inside a form a button submits by default.
-          .attr("type", "button")
-          .attr("role", "switch")
-          .attr("aria-checked", String(props.checked))
-          .attr("aria-readonly", props.readOnly === true ? "true" : undefined)
-          .attr("aria-required", props.required === true ? "true" : undefined)
-          // Never set: the native `disabled` reports it.
-          .attr("aria-disabled", undefined)
+          .attrs({
+            // Inside a form a button submits by default.
+            type: "button",
+            role: "switch",
+            "aria-checked": String(props.checked),
+            "aria-readonly": props.readOnly === true ? "true" : undefined,
+            "aria-required": props.required === true ? "true" : undefined,
+            // Never set: the native `disabled` reports it.
+            "aria-disabled": undefined
+          })
           .disabled(props.disabled === true)
         return interactive && onToggle !== undefined
           ? root.onClick(() => onToggle({ checked: !props.checked }))

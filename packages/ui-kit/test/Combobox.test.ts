@@ -214,7 +214,7 @@ describe("Combobox", () => {
       const s = yield* HtmlScene.make(Combobox, base, {
         elements: Html,
         view: (combobox: Parts, h: H) =>
-          combobox.input(h.input.class("input").attr("name", "query").attr("form", "search").attr("required", ""))
+          combobox.input(h.input.class("input").attrs({ name: "query", form: "search", required: "" }))
       })
       assert.deepInclude(s.get(input).attrs, { name: "query", form: "search", required: "" })
     }))

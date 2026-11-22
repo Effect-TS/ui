@@ -135,7 +135,7 @@ describe("Html", () => {
 
     it("setting an attribute again moves it last, and removing one keeps the others in order", () => {
       const h = helper()
-      const base = h.button.attr("type", "button").attr("title", "Go").attr("name", "go")
+      const base = h.button.attrs({ type: "button", title: "Go", name: "go" })
       assert.deepStrictEqual(Object.entries(base.attr("type", "submit").elementAttrs), [
         ["title", "Go"],
         ["name", "go"],

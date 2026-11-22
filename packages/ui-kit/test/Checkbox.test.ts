@@ -92,18 +92,20 @@ describe("Checkbox", () => {
   it("the root keeps the consumer's attributes, but the checkbox's own win, present or absent", () => {
     const element = h.button
       .class("checkbox")
-      .attr("aria-label", "Terms")
-      .attr("type", "submit")
-      .attr("role", "switch")
-      .attr("aria-checked", "true")
-      .attr("aria-readonly", "true")
-      .attr("aria-disabled", "true")
-      .attr("aria-required", "true")
-      .attr("data-checked", "")
-      .attr("data-indeterminate", "")
-      .attr("data-disabled", "")
-      .attr("data-readonly", "")
-      .attr("data-required", "")
+      .attrs({
+        "aria-label": "Terms",
+        type: "submit",
+        role: "switch",
+        "aria-checked": "true",
+        "aria-readonly": "true",
+        "aria-disabled": "true",
+        "aria-required": "true",
+        "data-checked": "",
+        "data-indeterminate": "",
+        "data-disabled": "",
+        "data-readonly": "",
+        "data-required": ""
+      })
 
     // An enabled, optional, unchecked checkbox removes every state attribute
     // the consumer set, as it doesn't report those states.
@@ -118,11 +120,13 @@ describe("Checkbox", () => {
     // The indicator drops a state the checkbox doesn't have.
     const indicator = parts({ checked: false }).indicator(
       h.span.class("tick")
-        .attr("data-checked", "")
-        .attr("data-indeterminate", "")
-        .attr("data-disabled", "")
-        .attr("data-readonly", "")
-        .attr("data-required", "")
+        .attrs({
+          "data-checked": "",
+          "data-indeterminate": "",
+          "data-disabled": "",
+          "data-readonly": "",
+          "data-required": ""
+        })
     )
     assert.deepStrictEqual(View.build(indicator, []).attrs, { class: "tick", "data-unchecked": "" })
     // A disabled, indeterminate checkbox keeps its own `disabled` over the

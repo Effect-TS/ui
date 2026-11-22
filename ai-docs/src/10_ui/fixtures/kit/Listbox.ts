@@ -152,13 +152,15 @@ export const Listbox = Component.define({
       active,
       trigger: p.part("button", (b) =>
         b.ref(Trigger)
-          .attr("type", "button")
-          .attr("aria-haspopup", "dialog")
-          .attr("aria-expanded", String(model.open))
-          .attr("aria-controls", p.id("popup"))
-          // A `popovertarget` invoker: the browser toggles the popup, and a
-          // click on the trigger while it's open closes it.
-          .attr("popovertarget", p.id("popup"))
+          .attrs({
+            type: "button",
+            "aria-haspopup": "dialog",
+            "aria-expanded": String(model.open),
+            "aria-controls": p.id("popup"),
+            // A `popovertarget` invoker: the browser toggles the popup, and a
+            // click on the trigger while it's open closes it.
+            popovertarget: p.id("popup")
+          })
           .onKeyDown(
             ({ alt, ctrl, key, meta }) =>
               key === "ArrowDown" || (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
@@ -175,11 +177,13 @@ export const Listbox = Component.define({
           .onToggle(({ open }) => ListboxMessage.ToggledPopup({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
-          .attr("role", "combobox")
-          .attr("aria-autocomplete", "list")
-          .attr("aria-expanded", "true")
-          .attr("aria-controls", p.id("list"))
-          .attr("aria-activedescendant", active === null ? undefined : p.id("option", active))
+          .attrs({
+            role: "combobox",
+            "aria-autocomplete": "list",
+            "aria-expanded": "true",
+            "aria-controls": p.id("list"),
+            "aria-activedescendant": active === null ? undefined : p.id("option", active)
+          })
           .value(model.query)
           .onInput(({ value }) => ListboxMessage.UpdatedQuery({ value }))
           .onKeyDown(
@@ -195,9 +199,11 @@ export const Listbox = Component.define({
       option: p.part("li", (b, option: ListboxOption) =>
         b.id(p.id("option", option.id))
           .ref(Row.at(option.id))
-          .attr("role", "option")
-          .attr("aria-selected", String(active === option.id))
-          .attr("aria-disabled", option.disabled === true ? "true" : undefined)
+          .attrs({
+            role: "option",
+            "aria-selected": String(active === option.id),
+            "aria-disabled": option.disabled === true ? "true" : undefined
+          })
           .onClick(
             option.disabled === true ? () => undefined : ListboxMessage.ClickedOption({ id: option.id })
           ))

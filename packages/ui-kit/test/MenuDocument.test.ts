@@ -120,7 +120,7 @@ const Page = Component.define({
       },
       view: (menu) =>
         h.div(
-          h.button.attr("id", "before").attr("type", "button").children("Before"),
+          h.button.attrs({ id: "before", type: "button" }).children("Before"),
           menu.trigger(h.button.attr("id", "trigger")).children("Edit"),
           h.props.viewport
             ? menu.trigger(h.button.attr("id", "trigger-2"), { openOnHover: true, delay: 0, closeDelay: 300 })
@@ -166,7 +166,7 @@ const Page = Component.define({
               h.props.filter ? menu.empty(h.div.attr("data-testid", "empty"))?.children("No matches") : null
             )
           ),
-          h.button.attr("id", "after").attr("type", "button").children("After")
+          h.button.attrs({ id: "after", type: "button" }).children("After")
         )
     })
 })

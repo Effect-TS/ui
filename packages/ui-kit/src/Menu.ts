@@ -1449,12 +1449,14 @@ const MenuTriggerHoverDefault = 100
 
 const triggerAttrs = <B extends Attributed<B>>(builder: B, popupId: string, open: boolean, active: boolean): B =>
   builder
-    .attr("aria-haspopup", "menu")
-    .attr("aria-expanded", String(open))
-    .attr("aria-controls", open ? popupId : undefined)
-    .attr("data-popup-open", flag(open))
-    .attr("data-menu-trigger", popupId)
-    .attr("data-menu-active", flag(active))
+    .attrs({
+      "aria-haspopup": "menu",
+      "aria-expanded": String(open),
+      "aria-controls": open ? popupId : undefined,
+      "data-popup-open": flag(open),
+      "data-menu-trigger": popupId,
+      "data-menu-active": flag(active)
+    })
 
 type Handles<Msg> = Html.Element<Msg, any, Html.Events, any, any>
 
@@ -1590,8 +1592,7 @@ export const MenuTrigger = <Msg, R = never>(
         ? (handler as (press: MenuTriggerPress) => Msg)({ triggerId, method, reason })
         : handler
     const button = triggerAttrs(node.attr("type", "button"), popupId, open, open)
-      .attr("data-pressed", flag(open))
-      .attr("data-disabled", flag(disabled))
+      .attrs({ "data-pressed": flag(open), "data-disabled": flag(disabled) })
       .disabled(disabled === true)
     const pressed = onPress === undefined || disabled === true
       ? button
@@ -1924,7 +1925,7 @@ export const Menu = Component.define({
 
     const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
     const placed = <B extends Attributed<B>>(builder: B): B =>
-      states(builder).attr("data-side", side).attr("data-align", align)
+      states(builder).attrs({ "data-side": side, "data-align": align })
 
     const hoverOpens = <B extends Handles<Message>>(
       builder: B,
@@ -1948,13 +1949,12 @@ export const Menu = Component.define({
       if (active) labelledBy = key
       const off = disabled || options.disabled === true
       const attributed = triggerAttrs(
-        b.attr("id", key).attr("type", "button"),
+        b.attrs({ id: key, type: "button" }),
         popupId,
         open && active,
         shown && active
       )
-        .attr("data-pressed", flag(open && active))
-        .attr("data-disabled", flag(off))
+        .attrs({ "data-pressed": flag(open && active), "data-disabled": flag(off) })
         .disabled(off)
       if (options.disabled === true) return attributed
       const own = pressable(attributed, (pointerType) => Message.PressedTrigger({ key, triggerId, pointerType }))
@@ -2015,9 +2015,11 @@ export const Menu = Component.define({
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
-        .attr("role", "presentation")
-        .attr("data-anchor-hidden", flag(shown && model.placement?.anchorHidden))
-        .attr("data-instant", instant)
+        .attrs({
+          role: "presentation",
+          "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
+          "data-instant": instant
+        })
         .popover("manual", shown)
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       const layered = modal ? decorated.children(open ? blocker.open : blocker.closed) : decorated
@@ -2052,7 +2054,7 @@ export const Menu = Component.define({
     })
 
     const menuRole = <B extends Attributed<B>>(builder: B): B =>
-      builder.attr("role", "menu").attr("aria-orientation", orientation === "horizontal" ? "horizontal" : undefined)
+      builder.attrs({ role: "menu", "aria-orientation": orientation === "horizontal" ? "horizontal" : undefined })
 
     const keyMessage = (action: ItemAction | null) => ({ alt, composing, ctrl, key, meta }: Html.KeyPayload) =>
       composing || (key === "Enter" && action?.kind === "link")
@@ -2064,11 +2066,13 @@ export const Menu = Component.define({
 
     const popup = p.part("div", (b) =>
       placed(b)
-        .attr("id", popupId)
-        .attr("tabindex", "-1")
-        .attr("data-menu-popup", "")
-        .attr("data-nested", flag(nested))
-        .attr("data-instant", instant)
+        .attrs({
+          id: popupId,
+          tabindex: "-1",
+          "data-menu-popup": "",
+          "data-nested": flag(nested),
+          "data-instant": instant
+        })
         .onKeyDown(keyMessage(null), { preventDefault: true })
         .onKeyUp(({ key }) => key === " " ? Message.ReleasedSpace({ action: null }) : undefined)
         .forward((node) =>
@@ -2080,24 +2084,27 @@ export const Menu = Component.define({
     const list = p.part("div", (b) => {
       listed = true
       return menuRole(b)
-        .attr("id", listId)
-        .attr("tabindex", "-1")
+        .attrs({ id: listId, tabindex: "-1" })
         .forward((node) => node.attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelledBy))
     })
 
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       placed(b)
-        .attr("id", arrowId)
-        .attr("aria-hidden", "true")
-        .attr("data-uncentered", flag(model.placement?.arrowUncentered))
+        .attrs({
+          id: arrowId,
+          "aria-hidden": "true",
+          "data-uncentered": flag(model.placement?.arrowUncentered)
+        })
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
 
     const viewport = p.part("div", (b) =>
-      b.attr("data-menu-viewport", "")
-        .attr("data-activation-direction", model.direction ?? undefined)
-        .attr("data-transitioning", flag(model.transitioning))
-        .attr("data-instant", instant)
+      b.attrs({
+        "data-menu-viewport": "",
+        "data-activation-direction": model.direction ?? undefined,
+        "data-transitioning": flag(model.transitioning),
+        "data-instant": instant
+      })
         .forward((node) => {
           const built = View.build(node, [])
           const current = new Html.Element<never>("div").key("current-" + (activeTrigger ?? "")).attr(
@@ -2119,14 +2126,16 @@ export const Menu = Component.define({
       const off = item.disabled === true || disabled
       const submenuOpen = model.submenus.some((submenu) => submenu.open && submenu.item === value)
       const own = b
-        .attr("id", itemId(value))
-        .attr("role", role)
-        .attr("aria-disabled", off ? "true" : undefined)
-        .attr("tabindex", open && !filtering && (active || submenuOpen) ? "0" : "-1")
-        .attr("data-highlighted", flag(active))
-        .attr("data-disabled", flag(off))
-        .attr("hidden", flag(!shownItem))
-        .attr("data-menu-item", value)
+        .attrs({
+          id: itemId(value),
+          role,
+          "aria-disabled": off ? "true" : undefined,
+          tabindex: open && !filtering && (active || submenuOpen) ? "0" : "-1",
+          "data-highlighted": flag(active),
+          "data-disabled": flag(off),
+          hidden: flag(!shownItem),
+          "data-menu-item": value
+        })
         .on("mouseenter", () => hovers && !active ? Message.EnteredItem({ value }) : undefined)
         .on("mouseleave", () => hovers ? Message.LeftItem() : undefined)
         .on("mousedown", Message.PressedItem())
@@ -2142,9 +2151,11 @@ export const Menu = Component.define({
 
     const checkedAttrs = <B extends Attributed<B>>(builder: B, checked: boolean): B =>
       builder
-        .attr("aria-checked", String(checked))
-        .attr("data-checked", flag(checked))
-        .attr("data-unchecked", flag(!checked))
+        .attrs({
+          "aria-checked": String(checked),
+          "data-checked": flag(checked),
+          "data-unchecked": flag(!checked)
+        })
 
     const item = keyed(
       p.part(
@@ -2179,7 +2190,7 @@ export const Menu = Component.define({
 
     const radioGroup = p.part("div", (b, value: string | null) => {
       radio = value
-      return b.attr("role", "group").attr("data-disabled", flag(disabled))
+      return b.attrs({ role: "group", "data-disabled": flag(disabled) })
     })
 
     const radioItem = keyed(
@@ -2212,8 +2223,7 @@ export const Menu = Component.define({
     }
 
     const group = p.part("div", (b, key: string) =>
-      b.attr("role", "group")
-        .attr("aria-labelledby", groupLabelId(key))
+      b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
         .forward((node) => matches === null || hasShownItem(View.build(node, [])) ? node : node.attr("hidden", "")))
     const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
@@ -2222,18 +2232,20 @@ export const Menu = Component.define({
       inputDrawn = true
       const query = props.query ?? ""
       return b
-        .attr("id", inputId)
-        .attr("type", "text")
-        .attr("role", "searchbox")
-        .attr("inputmode", "search")
-        .attr("autocomplete", "off")
-        .attr("spellcheck", "false")
-        .attr("autocorrect", "off")
-        .attr("autocapitalize", "none")
-        .attr("aria-activedescendant", highlighted !== null && items.has(highlighted) ? itemId(highlighted) : undefined)
-        .attr("aria-controls", listId)
-        .attr("data-highlighted", flag(model.inputFocused && (!model.keyboard || highlighted === null)))
-        .attr("value", query)
+        .attrs({
+          id: inputId,
+          type: "text",
+          role: "searchbox",
+          inputmode: "search",
+          autocomplete: "off",
+          spellcheck: "false",
+          autocorrect: "off",
+          autocapitalize: "none",
+          "aria-activedescendant": highlighted !== null && items.has(highlighted) ? itemId(highlighted) : undefined,
+          "aria-controls": listId,
+          "data-highlighted": flag(model.inputFocused && (!model.keyboard || highlighted === null)),
+          value: query
+        })
         .value(query)
         .disabled(disabled)
         .on("input", ({ value }) => Message.ChangedInput({ value }))
@@ -2246,10 +2258,12 @@ export const Menu = Component.define({
     })
 
     const clearPart = p.part("button", (b) =>
-      b.attr("type", "button")
-        .attr("tabindex", "-1")
-        .attr("aria-hidden", "true")
-        .attr("data-disabled", flag(disabled))
+      b.attrs({
+        type: "button",
+        tabindex: "-1",
+        "aria-hidden": "true",
+        "data-disabled": flag(disabled)
+      })
         .disabled(disabled)
         .on("mousedown", Message.PressedInput(), { preventDefault: "always" })
         .onClick(Message.ClickedClear()))
@@ -2261,7 +2275,7 @@ export const Menu = Component.define({
 
     const emptyPart = p.part(
       "div",
-      (b) => b.attr("role", "status").attr("aria-live", "polite").attr("aria-atomic", "true")
+      (b) => b.attrs({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
     )
     const emptyState = View.wrapPart(
       emptyPart,

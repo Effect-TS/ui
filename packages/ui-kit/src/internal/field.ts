@@ -28,9 +28,11 @@ export const field = (props: FieldProps): View.Node<never> | undefined => {
     ? undefined
     : View.toNode(
       new Html.VoidElement<never>("input")
-        .attr("type", "hidden")
-        .attr("name", props.name)
-        .attr("value", value)
+        .attrs({
+          type: "hidden",
+          name: props.name,
+          value
+        })
     )
 }
 

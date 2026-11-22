@@ -63,11 +63,13 @@ describe("Toggle", () => {
     const own = (element: ToggleElement<typeof ToolbarMessage.Type>) =>
       element
         .class("tool")
-        .attr("type", "submit")
-        .attr("aria-pressed", "mixed")
-        .attr("aria-disabled", "true")
-        .attr("data-pressed", "x")
-        .attr("data-disabled", "x")
+        .attrs({
+          type: "submit",
+          "aria-pressed": "mixed",
+          "aria-disabled": "true",
+          "data-pressed": "x",
+          "data-disabled": "x"
+        })
         .disabled(true)
     // Set on the element before the call, the state leaves each one absent.
     const before = View.build(Toggle(h, { element: own(h.button), props: { pressed: false } }), [])

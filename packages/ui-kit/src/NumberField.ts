@@ -1291,25 +1291,29 @@ export const NumberField = Component.define({
     let inputId: string | undefined
     const state = <B extends Attributed<B>>(builder: B, off: boolean = disabled): B =>
       builder
-        .attr("data-disabled", flag(off))
-        .attr("data-readonly", flag(readOnly))
-        .attr("data-required", flag(required))
-        .attr("data-scrubbing", flag(model.scrubbing))
+        .attrs({
+          "data-disabled": flag(off),
+          "data-readonly": flag(readOnly),
+          "data-required": flag(required),
+          "data-scrubbing": flag(model.scrubbing)
+        })
     const formInput = p.part("input", (b) => {
       const value = s.value === null ? "" : String(s.value)
       return b
-        .attr("type", "number")
-        .attr("name", props.name)
-        .attr("form", props.form)
-        .attr("min", props.min === undefined ? undefined : String(props.min))
-        .attr("max", props.max === undefined ? undefined : String(props.max))
-        .attr("step", String(props.step ?? 1))
-        .attr("required", flag(required))
-        .attr("readonly", flag(readOnly))
-        .attr("aria-hidden", "true")
-        .attr("tabindex", "-1")
-        .attr("style", visuallyHidden)
-        .attr("value", value)
+        .attrs({
+          type: "number",
+          name: props.name,
+          form: props.form,
+          min: props.min === undefined ? undefined : String(props.min),
+          max: props.max === undefined ? undefined : String(props.max),
+          step: String(props.step ?? 1),
+          required: flag(required),
+          readonly: flag(readOnly),
+          "aria-hidden": "true",
+          tabindex: "-1",
+          style: visuallyHidden,
+          value
+        })
         .value(value)
         .disabled(disabled)
         .on("focus", Message.FocusedFormInput())
@@ -1320,14 +1324,16 @@ export const NumberField = Component.define({
     )
     const inputPart = p.part("input", (b, id: string) =>
       state(b)
-        .attr("id", id)
-        .attr("type", "text")
-        // The numeric keypad of iOS has no minus key, and no decimal key
-        // either unless it is asked for.
-        .attr("inputmode", !model.ios ? "numeric" : lowest(s) >= 0 ? "decimal" : "text")
-        .attr("form", props.form)
-        .attr("required", flag(required))
-        .attr("readonly", flag(readOnly))
+        .attrs({
+          id,
+          type: "text",
+          // The numeric keypad of iOS has no minus key, and no decimal key
+          // either unless it is asked for.
+          inputmode: !model.ios ? "numeric" : lowest(s) >= 0 ? "decimal" : "text",
+          form: props.form,
+          required: flag(required),
+          readonly: flag(readOnly)
+        })
         .disabled(disabled)
         .value(text)
         .onInput(({ value }) => Message.UpdatedInput({ value }))
@@ -1356,15 +1362,16 @@ export const NumberField = Component.define({
     const stepperPart = p.part("button", (b, direction: Direction, own: boolean) => {
       const off = own || disabled || atBound(s, direction)
       return state(b, off)
-        .attr("type", "button")
-        .attr("tabindex", "-1")
-        .attr("aria-disabled", off || readOnly ? "true" : undefined)
+        .attrs({
+          type: "button",
+          tabindex: "-1",
+          "aria-disabled": off || readOnly ? "true" : undefined
+        })
         .disabled(false)
         .onMount(TrackStepper({ direction, disabled: off || readOnly }))
         .forward((node) =>
           defaults(node, stepperDefaults[direction])
-            .attr("aria-controls", inputId ?? p.id("input"))
-            .attr("style", withStyle(node.elementAttrs.style, noSelect))
+            .attrs({ "aria-controls": inputId ?? p.id("input"), style: withStyle(node.elementAttrs.style, noSelect) })
         )
     })
     const stepper = (direction: Direction) =>
@@ -1392,9 +1399,11 @@ export const NumberField = Component.define({
     )
     const cursorPart = p.part((b) =>
       state(b)
-        .attr("id", cursorId)
-        .attr("role", "presentation")
-        .attr("popover", "manual")
+        .attrs({
+          id: cursorId,
+          role: "presentation",
+          popover: "manual"
+        })
         .prop("popoverOpen", true)
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, cursorBox)))
     )
