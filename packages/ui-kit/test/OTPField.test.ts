@@ -280,10 +280,10 @@ describe("OTPField", () => {
       assert.deepStrictEqual(commands(store(s, "9876").emitted(completed("9876"))), [submitted])
 
       for (const lock of [{ disabled: true, readOnly: false }, { disabled: false, readOnly: true }]) {
-        settle(s.props((props) => ({ ...props, value: "12", disabled: false, readOnly: false })))
+        settle(s.props((props) => ({ ...props, value: Redacted.make("12"), disabled: false, readOnly: false })))
         s.type(hidden, "5555").emitted(updated("5555"))
         commands(s)
-        settle(s.props((props) => ({ ...props, value: "5555", ...lock }))).emitted(completed("5555"))
+        settle(s.props((props) => ({ ...props, value: Redacted.make("5555"), ...lock }))).emitted(completed("5555"))
         assert.deepStrictEqual(commands(s), [])
       }
     }))
