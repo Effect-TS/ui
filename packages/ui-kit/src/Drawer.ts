@@ -105,13 +105,13 @@
  * import { Drawer } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ Opened: {}, Dismissed: {} })
+ * const PageMessage = UiSchema.TaggedEnum({ Opened: {}, Dismissed: {} })
  *
  * const Page = Component.define({
  *   name: "Page",
  *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean }),
- *   message: Message,
+ *   message: PageMessage,
  *   elements: Html
  * }).make({
  *   init: () => ({ open: true }),
@@ -123,8 +123,8 @@
  *     Drawer(h, {
  *       props: { open: model.open },
  *       onEmit: {
- *         Opened: () => Message.Opened(),
- *         Dismissed: () => Message.Dismissed(),
+ *         Opened: () => PageMessage.Opened(),
+ *         Dismissed: () => PageMessage.Dismissed(),
  *         Settled: () => undefined,
  *         Snapped: () => undefined
  *       },
@@ -465,7 +465,7 @@ const restingProgress = (snapping: Snapping | null): number =>
     ? 0
     : clamp((snapping.active.offset - snapping.min) / snapping.range, 0, 1)
 
-type Release = typeof Message.cases.ReleasedSwipe.Type
+type Release = typeof DrawerMessage.cases.ReleasedSwipe.Type
 
 type Decision =
   | { readonly _tag: "Dismiss"; readonly strength: number | null }
@@ -569,7 +569,7 @@ const ReleaseFields = {
 
 const NestedReport = Schema.Struct({ count: Schema.Number, swiping: Schema.Boolean, height: Schema.Number })
 
-const Message = UiSchema.TaggedEnum({
+const DrawerMessage = UiSchema.TaggedEnum({
   StartedSwipe: {},
   ReleasedSwipe: ReleaseFields,
   CancelledSwipe: {},
@@ -585,9 +585,9 @@ const Message = UiSchema.TaggedEnum({
   SettledDialog: { open: Schema.Boolean }
 })
 
-type Message = typeof Message.Type
+type DrawerMessage = typeof DrawerMessage.Type
 
-const Model = Schema.Struct({
+const DrawerModel = Schema.Struct({
   swiping: Schema.Boolean,
   area: Schema.NullOr(Schema.String),
   dismissed: Schema.Boolean,
@@ -601,9 +601,9 @@ const Model = Schema.Struct({
   nestedHeight: Schema.Number
 })
 
-type Model = typeof Model.Type
+type DrawerModel = typeof DrawerModel.Type
 
-const frontmostOf = (model: Model): number => model.nestedHeight > 0 ? model.nestedHeight : model.height
+const frontmostOf = (model: DrawerModel): number => model.nestedHeight > 0 ? model.nestedHeight : model.height
 
 interface Point {
   readonly x: number
@@ -851,7 +851,7 @@ const TrackSwipe = Mount.makeStream(
   "TrackSwipe",
   { args: TrackSwipeArgs },
   (node: HTMLElement, initial, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<DrawerMessage>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
         const view = document.defaultView
@@ -862,7 +862,7 @@ const TrackSwipe = Mount.makeStream(
         let touch: TouchState | null = null
         let lastPointer = ""
         let measured = ""
-        const send = (message: Message) => Queue.offerUnsafe(queue, message)
+        const send = (message: DrawerMessage) => Queue.offerUnsafe(queue, message)
         const portal = () => node.closest("dialog")
         const directions = (): ReadonlyArray<DrawerSwipeDirection> =>
           args.snapping ? [args.direction, opposite[args.direction]] : [args.direction]
@@ -887,7 +887,7 @@ const TrackSwipe = Mount.makeStream(
           const key = sizes.height + " " + sizes.viewport + " " + sizes.fontSize
           if (key === measured) return
           measured = key
-          send(Message.Measured(sizes))
+          send(DrawerMessage.Measured(sizes))
         }
         const progress = (value: number | null) => {
           writeProgress(document, args, value, node.offsetHeight)
@@ -926,7 +926,7 @@ const TrackSwipe = Mount.makeStream(
               (node.contains(elementOf(selection.anchorNode)) || node.contains(elementOf(selection.focusNode)))
             ) selection.removeAllRanges()
           }
-          send(Message.StartedSwipe())
+          send(DrawerMessage.StartedSwipe())
         }
         const move = (g: Gesture, point: Point, time: number, touched: boolean) => {
           if (g.first) {
@@ -985,7 +985,7 @@ const TrackSwipe = Mount.makeStream(
           const last = releaseVelocity(g.velocity, g.movement, time)
           held = g
           pending = args.releases + 1
-          send(Message.ReleasedSwipe({
+          send(DrawerMessage.ReleasedSwipe({
             direction: g.intended,
             reversed: g.reversed,
             deltaX: g.movement.x,
@@ -1006,13 +1006,13 @@ const TrackSwipe = Mount.makeStream(
           g.thaw?.()
           rest()
           progress(null)
-          send(Message.CancelledSwipe())
+          send(DrawerMessage.CancelledSwipe())
         }
         const takeBack = () =>
           frame(view, () => {
             if (!args.open || !args.dismissed) return
             rest()
-            send(Message.RefusedSwipe())
+            send(DrawerMessage.RefusedSwipe())
           })
         const decided = () => {
           pending = null
@@ -1163,7 +1163,7 @@ const TrackSwipe = Mount.makeStream(
               const area = viewport()
               if (area !== null) observer.observe(area)
             }
-            if (args.open && args.dismissed) send(Message.ShowedPopup())
+            if (args.open && args.dismissed) send(DrawerMessage.ShowedPopup())
             if (args.open && !args.area) writeProgress(document, args, null)
           }),
           () =>
@@ -1192,7 +1192,7 @@ const TrackSwipe = Mount.makeStream(
             }
             if (next.open && !previous.open) {
               if (!next.area) rest()
-              if (next.dismissed) send(Message.ShowedPopup())
+              if (next.dismissed) send(DrawerMessage.ShowedPopup())
             }
           })).pipe(Effect.forkScoped)
       })
@@ -1229,12 +1229,12 @@ const TrackSwipeArea = Mount.makeStream(
   "TrackSwipeArea",
   { args: TrackSwipeAreaArgs },
   (node: HTMLElement, initial, changes) =>
-    Stream.callback<Message>((queue) =>
+    Stream.callback<DrawerMessage>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
         let args: TrackSwipeAreaArgs = initial
         let gesture: AreaGesture | null = null
-        const send = (message: Message) => Queue.offerUnsafe(queue, message)
+        const send = (message: DrawerMessage) => Queue.offerUnsafe(queue, message)
         const apply = (g: AreaGesture) => {
           if (!args.open || !g.started) return
           if (g.popup === null) {
@@ -1282,14 +1282,14 @@ const TrackSwipeArea = Mount.makeStream(
           if (!g.started) {
             if (g.moved < minOpenDistance) return
             g.started = true
-            send(Message.StartedAreaSwipe({ key: args.key }))
+            send(DrawerMessage.StartedAreaSwipe({ key: args.key }))
           }
           apply(g)
         }
         const release = (g: AreaGesture, time: number) => {
           finish(g)
           if (!g.started) return
-          send(Message.ReleasedAreaSwipe({
+          send(DrawerMessage.ReleasedAreaSwipe({
             displacement: g.moved,
             velocity: releaseVelocity(g.velocity, { x: g.moved, y: 0 }, time).x,
             size: g.popup === null ? null : g.size
@@ -1346,7 +1346,7 @@ const TrackSwipeArea = Mount.makeStream(
             if (g === null) return
             if (next.disabled) {
               finish(g)
-              if (g.started) send(Message.CancelledAreaSwipe())
+              if (g.started) send(DrawerMessage.CancelledAreaSwipe())
               return
             }
             apply(g)
@@ -1357,7 +1357,7 @@ const TrackSwipeArea = Mount.makeStream(
 
 const TrackKeyboard = Mount.makeStream("TrackDrawerKeyboard", { args: TrackKeyboardArgs }, trackKeyboard)
 
-const ProviderMessage = UiSchema.TaggedEnum({
+const DrawerProviderMessage = UiSchema.TaggedEnum({
   ChangedOpen: { active: Schema.Boolean },
   MountedIndent: { id: Schema.String }
 })
@@ -1365,7 +1365,8 @@ const ProviderMessage = UiSchema.TaggedEnum({
 const ReportIndent = Mount.makeStream(
   "ReportIndent",
   { args: { id: Schema.String } },
-  (_node: HTMLElement, _args, changes) => changes.pipe(Stream.map(({ id }) => ProviderMessage.MountedIndent({ id })))
+  (_node: HTMLElement, _args, changes) =>
+    changes.pipe(Stream.map(({ id }) => DrawerProviderMessage.MountedIndent({ id })))
 )
 
 /**
@@ -1401,12 +1402,12 @@ export const DrawerProvider = Component.define({
   scoped: false,
   props: DrawerProviderProps,
   model: Schema.Struct({ active: Schema.Boolean, indent: Schema.NullOr(Schema.String) }),
-  message: ProviderMessage,
+  message: DrawerProviderMessage,
   shares: {
     value: (model) => ({ indent: model.indent }),
     collects: {
       schema: Schema.Boolean,
-      onChange: (reports) => ProviderMessage.ChangedOpen({ active: reports.some((open) => open) })
+      onChange: (reports) => DrawerProviderMessage.ChangedOpen({ active: reports.some((open) => open) })
     }
   },
   restore: false,
@@ -1475,15 +1476,15 @@ export const Drawer = Component.define({
   name: "Drawer",
   scoped: false,
   props: DrawerProps,
-  model: Model,
-  message: Message,
+  model: DrawerModel,
+  message: DrawerMessage,
   events: DrawerEvents,
   shares: {
     value: (_, props) => ({ open: props.open }),
     collects: {
       schema: NestedReport,
       onChange: (reports) =>
-        Message.ChangedNested({
+        DrawerMessage.ChangedNested({
           count: reports.reduce((sum, report) => sum + report.count, 0),
           swiping: reports.some((report) => report.swiping),
           height: reports.reduce((height, report) => report.height > 0 ? report.height : height, 0)
@@ -1696,9 +1697,9 @@ export const Drawer = Component.define({
     return p.child(Dialog, {
       props: dialogPropsOf(props),
       onEmit: {
-        Opened: ({ triggerId }) => Message.OpenedDialog({ triggerId }),
-        Dismissed: ({ reason }) => Message.DismissedDialog({ reason }),
-        Settled: ({ open }) => Message.SettledDialog({ open })
+        Opened: ({ triggerId }) => DrawerMessage.OpenedDialog({ triggerId }),
+        Dismissed: ({ reason }) => DrawerMessage.DismissedDialog({ reason }),
+        Settled: ({ open }) => DrawerMessage.SettledDialog({ open })
       },
       parts: (dialog) => ({
         ...dialog,

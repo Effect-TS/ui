@@ -414,7 +414,7 @@ const Hover = Schema.Struct({ delay: Schema.Number, closeDelay: Schema.Number })
 
 type Hover = typeof Hover.Type
 
-const Message = UiSchema.TaggedEnum({
+const PopoverMessage = UiSchema.TaggedEnum({
   OpenedDialog: { triggerId: Schema.NullOr(Schema.String) },
   DismissedDialog: { reason: DialogDismissReason },
   SettledDialog: { open: Schema.Boolean },
@@ -436,9 +436,9 @@ const Message = UiSchema.TaggedEnum({
   ChangedPlacement: { placement: Positioning.Placement }
 })
 
-type Message = typeof Message.Type
+type PopoverMessage = typeof PopoverMessage.Type
 
-const Model = Schema.Struct({
+const PopoverModel = Schema.Struct({
   onTrigger: Schema.Boolean,
   onPositioner: Schema.Boolean,
   hoverTrigger: Schema.NullOr(Schema.String),
@@ -455,9 +455,9 @@ const Model = Schema.Struct({
   placement: Schema.NullOr(Positioning.Placement)
 })
 
-type Model = typeof Model.Type
+type PopoverModel = typeof PopoverModel.Type
 
-type PopoverUpdate = Component.Update<Model, Message, PopoverEvents, PopoverProps>
+type PopoverUpdate = Component.Update<PopoverModel, PopoverMessage, PopoverEvents, PopoverProps>
 
 const patience = 500
 
@@ -474,31 +474,32 @@ const hoverOf = (options: {
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeOpening())
+  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), PopoverMessage.CompletedWaitBeforeOpening())
 )
 
 const WaitBeforeClosing = Command.make(
   "WaitBeforeClosing",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeClosing())
+  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), PopoverMessage.CompletedWaitBeforeClosing())
 )
 
 const WaitBeforeClosingOnPress = Command.make(
   "WaitBeforeClosingOnPress",
   { args: {}, mode: "switch" },
-  () => Effect.as(Effect.sleep(Duration.millis(patience)), Message.CompletedWaitBeforeClosingOnPress())
+  () => Effect.as(Effect.sleep(Duration.millis(patience)), PopoverMessage.CompletedWaitBeforeClosingOnPress())
 )
 
 type Keyed = View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }
 
-const activeOf = (model: Model, props: PopoverProps): string | null => props.triggerId ?? model.trigger
+const activeOf = (model: PopoverModel, props: PopoverProps): string | null => props.triggerId ?? model.trigger
 
-const reasonOf = (model: Model, open: boolean): PopoverOpenReason | null => open && model.stale ? null : model.reason
+const reasonOf = (model: PopoverModel, open: boolean): PopoverOpenReason | null =>
+  open && model.stale ? null : model.reason
 
-const hoverOpened = (model: Model, open: boolean): boolean => reasonOf(model, open) === "trigger-hover"
+const hoverOpened = (model: PopoverModel, open: boolean): boolean => reasonOf(model, open) === "trigger-hover"
 
 const openFor = (
-  model: Model,
+  model: PopoverModel,
   $: PopoverUpdate,
   triggerId: string | null,
   reason: PopoverOpenReason,
@@ -521,17 +522,17 @@ const openFor = (
     reason === "trigger-hover" ? WaitBeforeClosingOnPress.make({}) : Command.interrupt(WaitBeforeClosingOnPress)
   ).emit(PopoverEvents.Opened({ triggerId, reason }))
 
-const dismiss = (model: Model, $: PopoverUpdate, reason: PopoverDismissReason) =>
+const dismiss = (model: PopoverModel, $: PopoverUpdate, reason: PopoverDismissReason) =>
   $.set({ ...model, closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
     PopoverEvents.Dismissed({ reason })
   )
 
-const pressed = (model: Model, $: PopoverUpdate) =>
+const pressed = (model: PopoverModel, $: PopoverUpdate) =>
   model.patient
     ? openFor(model, $, activeOf(model, $.props), "trigger-press", model.method)
     : dismiss(model, $, "trigger-press")
 
-const left = (next: Model, $: PopoverUpdate) => {
+const left = (next: PopoverModel, $: PopoverUpdate) => {
   if (!$.props.open) return next.onTrigger ? next : $.set(next).run(Command.interrupt(WaitBeforeOpening))
   return hoverOpened(next, true) && !next.onTrigger && !next.onPositioner
     ? $.set(next).run(WaitBeforeClosing.make({ delay: next.closeDelay }))
@@ -541,25 +542,29 @@ const left = (next: Model, $: PopoverUpdate) => {
 const pointOf = ({ x, y }: Partial<Html.HoverPayload>): typeof Point.Type | null =>
   x === undefined || y === undefined ? null : { x, y }
 
-const detached = new Map<string, (message: Message) => void>()
+const detached = new Map<string, (message: PopoverMessage) => void>()
 
 const fromDetached = (popupId: string) =>
-  Subscription.make("detachedTriggers", popupId, (id) =>
-    Stream.callback<Message>((queue) =>
-      Effect.acquireRelease(
-        Effect.sync(() => {
-          const send = (message: Message) => {
-            Queue.offerUnsafe(queue, message)
-          }
-          detached.set(id, send)
-          return send
-        }),
-        (send) =>
+  Subscription.make(
+    "detachedTriggers",
+    popupId,
+    (id) =>
+      Stream.callback<PopoverMessage>((queue) =>
+        Effect.acquireRelease(
           Effect.sync(() => {
-            if (detached.get(id) === send) detached.delete(id)
-          })
+            const send = (message: PopoverMessage) => {
+              Queue.offerUnsafe(queue, message)
+            }
+            detached.set(id, send)
+            return send
+          }),
+          (send) =>
+            Effect.sync(() => {
+              if (detached.get(id) === send) detached.delete(id)
+            })
+        )
       )
-    ))
+  )
 
 const TrackDetachedTrigger = Mount.makeStream(
   "TrackDetachedTrigger",
@@ -567,21 +572,21 @@ const TrackDetachedTrigger = Mount.makeStream(
   (node: HTMLButtonElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
-      const send = (message: Message) => detached.get(current.popupId)?.(message)
+      const send = (message: PopoverMessage) => detached.get(current.popupId)?.(message)
       const triggerId = () => node.id === "" ? null : node.id
       const controller = new AbortController()
       const { signal } = controller
       return Effect.acquireRelease(
         Effect.sync(() => {
           node.addEventListener("click", (event) => {
-            send(Message.PressedDetachedTrigger({
+            send(PopoverMessage.PressedDetachedTrigger({
               triggerId: triggerId(),
               pointerType: (event as PointerEvent).pointerType ?? (event.detail === 0 ? "" : "mouse")
             }))
           }, { signal })
           node.addEventListener("pointerenter", (event) => {
             if (current.hover === null || event.pointerType !== "mouse") return
-            send(Message.EnteredTrigger({
+            send(PopoverMessage.EnteredTrigger({
               triggerId: triggerId(),
               ...current.hover,
               at: { x: event.clientX, y: event.clientY }
@@ -589,7 +594,7 @@ const TrackDetachedTrigger = Mount.makeStream(
           }, { signal })
           node.addEventListener("pointerleave", (event) => {
             if (current.hover === null || event.pointerType !== "mouse") return
-            send(Message.LeftTrigger({ triggerId: triggerId(), at: { x: event.clientX, y: event.clientY } }))
+            send(PopoverMessage.LeftTrigger({ triggerId: triggerId(), at: { x: event.clientX, y: event.clientY } }))
           }, { signal })
         }).pipe(
           Effect.tap(() =>
@@ -608,7 +613,7 @@ const TrackSwitch = Mount.makeStream(
   "TrackSwitch",
   { args: { open: Schema.Boolean, trigger: Schema.NullOr(Schema.String), positionerId: Schema.String } },
   (node: HTMLElement, args, changes) =>
-    Stream.callback<Message>((queue) => {
+    Stream.callback<PopoverMessage>((queue) => {
       const document = node.ownerDocument
       const frame = frameOf(document.defaultView)
       let current = args
@@ -616,20 +621,24 @@ const TrackSwitch = Mount.makeStream(
       const settle = (mine: number) =>
         frame(() =>
           whenFinished(() => [document.getElementById(current.positionerId)], frame, () => mine === generation, () => {
-            if (current.open) Queue.offerUnsafe(queue, Message.SettledSwitch())
+            if (current.open) Queue.offerUnsafe(queue, PopoverMessage.SettledSwitch())
           })
         )
       const onChange = (next: typeof args) => {
         const previous = current
         current = next
         if (!next.open) generation++
-        if (previous.open !== next.open) Queue.offerUnsafe(queue, next.open ? Message.Reopened() : Message.Closed())
-        if (!next.open || !previous.open || previous.trigger === null || next.trigger === null) return
+        if (previous.open !== next.open) {
+          Queue.offerUnsafe(queue, next.open ? PopoverMessage.Reopened() : PopoverMessage.Closed())
+        }
+        if (!next.open || !previous.open || previous.trigger === null || next.trigger === null) {
+          return
+        }
         if (next.trigger === previous.trigger) return
-        Queue.offerUnsafe(queue, Message.SwitchedTrigger())
+        Queue.offerUnsafe(queue, PopoverMessage.SwitchedTrigger())
         settle(++generation)
       }
-      if (args.open) Queue.offerUnsafe(queue, Message.Reopened())
+      if (args.open) Queue.offerUnsafe(queue, PopoverMessage.Reopened())
       return Effect.acquireRelease(
         Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))),
         () =>
@@ -703,10 +712,10 @@ const TrackViewport = Mount.makeStream(
     }
   },
   (node: HTMLElement, args, changes) =>
-    Stream.callback<Message>((queue) => {
+    Stream.callback<PopoverMessage>((queue) => {
       const document = node.ownerDocument
       const frame = frameOf(document.defaultView)
-      const send = (message: Message) => {
+      const send = (message: PopoverMessage) => {
         Queue.offerUnsafe(queue, message)
       }
       let current = args
@@ -782,8 +791,8 @@ const TrackViewport = Mount.makeStream(
         const moving = [content, previous]
         frame(() => {
           if (!live()) return
-          send(Message.AdvancedTransition())
-          frame(() => whenFinished(() => moving, frame, live, () => send(Message.EndedTransition())))
+          send(PopoverMessage.AdvancedTransition())
+          frame(() => whenFinished(() => moving, frame, live, () => send(PopoverMessage.EndedTransition())))
         })
       }
 
@@ -795,14 +804,14 @@ const TrackViewport = Mount.makeStream(
         if (!next.open) {
           outgoing = null
           transition++
-          if (previous.transitioning) send(Message.EndedTransition())
+          if (previous.transitioning) send(PopoverMessage.EndedTransition())
           return
         }
         const switched = previous.open && previous.trigger !== next.trigger && leaving !== content
         if (switched) outgoing = leaving
         if (switched || previous.side !== next.side) resize()
         if (switched) {
-          send(Message.StartedTransition({
+          send(PopoverMessage.StartedTransition({
             direction: directionOf(document.querySelector(previous.trigger), document.querySelector(next.trigger))
           }))
         } else if (next.transitioning) fill()
@@ -938,8 +947,8 @@ export const Popover = Component.define({
   name: "Popover",
   scoped: false,
   props: PopoverProps,
-  model: Model,
-  message: Message,
+  model: PopoverModel,
+  message: PopoverMessage,
   events: PopoverEvents,
   elements: Html
 }).make({
@@ -1047,11 +1056,12 @@ export const Popover = Component.define({
           .on(
             "mouseenter",
             (payload: Partial<Html.HoverPayload>) =>
-              Message.EnteredTrigger({ triggerId: key, ...hover, at: pointOf(payload) })
+              PopoverMessage.EnteredTrigger({ triggerId: key, ...hover, at: pointOf(payload) })
           )
           .on(
             "mouseleave",
-            (payload: Partial<Html.HoverPayload>) => Message.LeftTrigger({ triggerId: key, at: pointOf(payload) })
+            (payload: Partial<Html.HoverPayload>) =>
+              PopoverMessage.LeftTrigger({ triggerId: key, at: pointOf(payload) })
           )
       }
     )
@@ -1072,12 +1082,14 @@ export const Popover = Component.define({
         .attr("id", positionerId)
         .attr("role", "presentation")
         .attr("data-anchor-hidden", flag(open && placement?.anchorHidden))
-        .on("mouseenter", Message.EnteredPositioner())
-        .on("mouseleave", Message.LeftPositioner())
+        .on("mouseenter", PopoverMessage.EnteredPositioner())
+        .on("mouseleave", PopoverMessage.LeftPositioner())
         .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
       return open
         ? decorated.onMount(
-          Positioning.TrackPosition(tracked).pipe(Mount.map((placement) => Message.ChangedPlacement({ placement })))
+          Positioning.TrackPosition(tracked).pipe(
+            Mount.map((placement) => PopoverMessage.ChangedPlacement({ placement }))
+          )
         )
         : decorated
     })
@@ -1103,9 +1115,9 @@ export const Popover = Component.define({
         holdExit: props.holdExit
       },
       onEmit: {
-        Opened: ({ triggerId }) => Message.OpenedDialog({ triggerId }),
-        Dismissed: ({ reason }) => Message.DismissedDialog({ reason }),
-        Settled: ({ open }) => Message.SettledDialog({ open })
+        Opened: ({ triggerId }) => PopoverMessage.OpenedDialog({ triggerId }),
+        Dismissed: ({ reason }) => PopoverMessage.DismissedDialog({ reason }),
+        Settled: ({ open }) => PopoverMessage.SettledDialog({ open })
       },
       parts: (dialog) => {
         const instant: PopoverInstant | undefined = open

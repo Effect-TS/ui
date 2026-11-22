@@ -213,7 +213,7 @@ export const FieldProps = Schema.Struct({
  */
 export type FieldProps = typeof FieldProps.Type
 
-const Message = UiSchema.TaggedEnum({
+const FieldMessage = UiSchema.TaggedEnum({
   FocusedControl: {},
   BlurredControl: { disabled: Schema.Boolean },
   ChangedFieldset: { disabled: Schema.Boolean }
@@ -225,10 +225,11 @@ const disabledBy = (props: FieldProps, fieldset: { readonly disabled: boolean } 
 // A browser may send no blur event for a control disabled while it has
 // focus, so the field reports the blur itself. Otherwise the focus would
 // show again once the field is enabled.
-const lostFocus = Subscription.make("lostFocus", Stream.make(Message.BlurredControl({ disabled: true })))
+const lostFocus = Subscription.make("lostFocus", Stream.make(FieldMessage.BlurredControl({ disabled: true })))
 
 // A host other than the browser may leave `disabled` out of the payload.
-const blurred = ({ disabled }: Partial<Html.BlurPayload>) => Message.BlurredControl({ disabled: disabled === true })
+const blurred = ({ disabled }: Partial<Html.BlurPayload>) =>
+  FieldMessage.BlurredControl({ disabled: disabled === true })
 
 /**
  * A headless field. Call it with the consumer's `h`, the `props`, and a
@@ -296,12 +297,12 @@ export const Field = Component.define({
   scoped: false,
   props: FieldProps,
   model: Schema.Struct({ focused: Schema.Boolean, touched: Schema.Boolean }),
-  message: Message,
+  message: FieldMessage,
   shared: {
     fieldset: {
       owner: Fieldset,
       optional: true,
-      onChange: (value) => Message.ChangedFieldset({ disabled: value.disabled })
+      onChange: (value) => FieldMessage.ChangedFieldset({ disabled: value.disabled })
     }
   },
   restore: (model) => ({ ...model, focused: false }),
@@ -355,9 +356,9 @@ export const Field = Component.define({
     const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
     // The parts that use it take any element, so the payload isn't typed.
-    const trackFocus = (b: View.ContainerBuilder<typeof Message.Type>) =>
+    const trackFocus = (b: View.ContainerBuilder<typeof FieldMessage.Type>) =>
       state(b)
-        .on("focusin", Message.FocusedControl())
+        .on("focusin", FieldMessage.FocusedControl())
         .on("focusout", (payload) => {
           const left = payload as Html.FocusOutPayload
           return left.within ? undefined : blurred(left)
@@ -367,7 +368,7 @@ export const Field = Component.define({
     const formControl = (own: boolean) =>
       p.part(["input", "textarea", "select", "button"], (b) => {
         const control = (own
-          ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl()).onBlur(blurred)
+          ? flags(b).attr("id", controlId).onFocus(FieldMessage.FocusedControl()).onBlur(blurred)
           : flags(b))
           .attr("aria-invalid", showsError ? "true" : undefined)
           // A token list: added to the consumer's own.

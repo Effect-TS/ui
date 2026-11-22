@@ -143,12 +143,12 @@ type Report = typeof Report.Type
 // It reports every source, a missing one included, so a result never
 // outlives a change of source: going back to a source that loaded before is
 // loading until its new load settles. The fallback's delay passes once.
-const Model = Schema.Struct({
+const AvatarModel = Schema.Struct({
   report: Schema.NullOr(Report),
   delayElapsed: Schema.Boolean
 })
 
-const Message = UiSchema.TaggedEnum({
+const AvatarMessage = UiSchema.TaggedEnum({
   ChangedImageStatus: Report.fields,
   ElapsedFallbackDelay: {}
 })
@@ -176,7 +176,7 @@ const loadImage = (source: Source) =>
     "image",
     sourceFields.map((field) => source[field] ?? null),
     () => {
-      const report = (status: AvatarImageLoadingStatus) => Message.ChangedImageStatus({ source, status })
+      const report = (status: AvatarImageLoadingStatus) => AvatarMessage.ChangedImageStatus({ source, status })
       return hasImage(source)
         ? Stream.concat(
           Stream.make(report("loading")),
@@ -239,8 +239,8 @@ export const Avatar = Component.define({
   name: "Avatar",
   scoped: false,
   props: AvatarProps,
-  model: Model,
-  message: Message,
+  model: AvatarModel,
+  message: AvatarMessage,
   elements: Html
 }).make({
   init: ({ props }) => ({
@@ -257,7 +257,7 @@ export const Avatar = Component.define({
     Subscription.make(
       "fallbackDelay",
       props.fallbackDelay ?? 0,
-      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(Message.ElapsedFallbackDelay()))
+      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(AvatarMessage.ElapsedFallbackDelay()))
     )
   ],
   parts: (model, p) => {

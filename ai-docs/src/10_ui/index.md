@@ -183,6 +183,11 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
+A component's Schemas are `<Component>Props`, `<Component>Model`,
+`<Component>Message` and `<Component>Events`, exported or not, and the type
+alias has the same name. Import them by name. Never import a component's
+module as a namespace.
+
 Never write a no-op message, such as `Noop` or a tag added only so a result
 has something to send. A Command with nothing to report ends in `Component.noop`,
 usually through `Command.asNoop`. It sends nothing, and the log still records
@@ -237,7 +242,7 @@ can't know its caller's messages: one from a library, such as
 can't fail with `Command.map` or `Command.asNoop`:
 
 ```ts
-Router.replace(AppRoute, route).pipe(Command.map((outcome) => Message.CompletedReplace({ outcome })))
+Router.replace(AppRoute, route).pipe(Command.map((outcome) => AppMessage.CompletedReplace({ outcome })))
 Router.replace(AppRoute, route).pipe(Command.asNoop)
 ```
 
@@ -703,7 +708,7 @@ The `restore` option of `Component.define` changes what is saved:
 const LoginPage = Component.define({
   name: "LoginPage",
   model: Schema.Struct({ email: Schema.String, password: Schema.String, submitting: Schema.Boolean }),
-  message: LoginMessage,
+  message: LoginPageMessage,
   restore: (model) => ({ ...model, password: "", submitting: false })
 })
 ```

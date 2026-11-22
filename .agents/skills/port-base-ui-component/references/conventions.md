@@ -16,7 +16,7 @@ the components that already follow it.
   // In a view:
   Switch(h, {
     props: { checked: model.notify },
-    onToggle: ({ checked }) => Message.ToggledNotify({ checked }),
+    onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
     view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notify")
   })
   ```
@@ -35,7 +35,9 @@ the components that already follow it.
   - `<Name>Parts` for a view function that takes `view`
   - any other type the API needs (`SwitchButton`, `ListboxOption`)
 
-  A component's message Schema stays private.
+  A component's `<Name>Model` and `<Name>Message` Schemas, and their type
+  aliases, stay private and still take the component's name. Never import a
+  component's module as a namespace.
 - A public module that isn't a component, such as `Positioning`, has
   unprefixed exports (`Positioning.place`), so the barrel exports it as a
   namespace: `export * as Positioning from "./Positioning.ts"`.
@@ -287,7 +289,7 @@ model.advanced
   ```ts
   Button(h, {
     element: tooltip.trigger(h.button),
-    onPress: Message.PressedBold()
+    onPress: EditorMessage.PressedBold()
   }).class("tool").children("B")
   ```
 - **The kit's attributes win** over the consumer's. A part or view

@@ -432,7 +432,7 @@ export type SelectEvents = typeof SelectEvents.Type
  */
 export type SelectTransitionStatus = "starting" | "ending" | null
 
-const Message = UiSchema.TaggedEnum({
+const SelectMessage = UiSchema.TaggedEnum({
   PressedTrigger: { pointerType: Schema.String },
   ReleasedTrigger: {},
   ClickedTrigger: { pointerType: Schema.String },
@@ -464,9 +464,9 @@ const Message = UiSchema.TaggedEnum({
   DraggedPointer: {}
 })
 
-type Message = typeof Message.Type
+type SelectMessage = typeof SelectMessage.Type
 
-const Model = Schema.Struct({
+const SelectModel = Schema.Struct({
   mounted: Schema.Boolean,
   started: Schema.Boolean,
   openMethod: Schema.NullOr(SelectInteraction),
@@ -488,16 +488,16 @@ const Model = Schema.Struct({
   releaseUnselected: Schema.Boolean
 })
 
-type Model = typeof Model.Type
+type SelectModel = typeof SelectModel.Type
 
-type SelectUpdate = Component.Update<Model, Message, SelectEvents, SelectProps>
+type SelectUpdate = Component.Update<SelectModel, SelectMessage, SelectEvents, SelectProps>
 
 const Trigger = Html.ref("SelectTrigger", "button")
 
 const WaitBeforeResetTyping = Command.make(
   "WaitBeforeResetTyping",
   { args: {}, mode: "switch" },
-  () => Effect.as(Effect.sleep(Duration.millis(750)), Message.CompletedWaitBeforeResetTyping())
+  () => Effect.as(Effect.sleep(Duration.millis(750)), SelectMessage.CompletedWaitBeforeResetTyping())
 )
 
 const selectedIndexOf = (props: SelectProps): number => {
@@ -508,18 +508,18 @@ const selectedIndexOf = (props: SelectProps): number => {
 const indexOf = (props: SelectProps, value: string | null): number =>
   value === null ? -1 : props.items.findIndex((item) => item.value === value)
 
-const alignedOf = (model: Model, props: SelectProps): boolean =>
+const alignedOf = (model: SelectModel, props: SelectProps): boolean =>
   props.alignItemWithTrigger !== false && !model.fellBack && model.openMethod !== "touch"
 
-const typing = (model: Model): boolean => model.typed !== ""
+const typing = (model: SelectModel): boolean => model.typed !== ""
 
-const startOf = (model: Model, props: SelectProps): number => {
+const startOf = (model: SelectModel, props: SelectProps): number => {
   const selected = selectedIndexOf(props)
   return selected !== -1 ? selected : indexOf(props, model.active)
 }
 
 const open = (
-  model: Model,
+  model: SelectModel,
   $: SelectUpdate,
   reason: SelectChangeReason,
   method: SelectInteraction,
@@ -552,7 +552,7 @@ const open = (
 }
 
 const dismiss = (
-  model: Model,
+  model: SelectModel,
   $: SelectUpdate,
   reason: SelectChangeReason,
   method: SelectInteraction | null,
@@ -564,14 +564,14 @@ const dismiss = (
     )
     : model
 
-const toggle = (model: Model, $: SelectUpdate, method: SelectInteraction) =>
+const toggle = (model: SelectModel, $: SelectUpdate, method: SelectInteraction) =>
   $.props.disabled === true
     ? model
     : $.props.open
     ? dismiss(model, $, "trigger-press", method)
     : open(model, $, "trigger-press", method)
 
-const pick = (model: Model, $: SelectUpdate, value: string, method: SelectInteraction) => {
+const pick = (model: SelectModel, $: SelectUpdate, value: string, method: SelectInteraction) => {
   const props = $.props
   const item = props.items.find((candidate) => candidate.value === value)
   if (!available(item) || props.disabled === true || props.readOnly === true) return model
@@ -584,15 +584,15 @@ const pick = (model: Model, $: SelectUpdate, value: string, method: SelectIntera
     .emit(SelectEvents.Dismissed({ reason: "item-press" }))
 }
 
-const highlight = (model: Model, props: SelectProps, index: number): Model => {
+const highlight = (model: SelectModel, props: SelectProps, index: number): SelectModel => {
   const item = props.items[index]
   return item === undefined ? model : { ...model, active: item.value, activeByKey: true }
 }
 
-const hover = (model: Model, active: string | null): Model =>
+const hover = (model: SelectModel, active: string | null): SelectModel =>
   model.active === active ? model : { ...model, active, activeByKey: false }
 
-const typeKey = (model: Model, $: SelectUpdate, key: string) => {
+const typeKey = (model: SelectModel, $: SelectUpdate, key: string) => {
   const props = $.props
   const { index, next } = typeahead(model, key, props.items, startOf(model, props))
   const item = props.items[index]
@@ -603,7 +603,7 @@ const typeKey = (model: Model, $: SelectUpdate, key: string) => {
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = (_model: Model, _message: unknown, $: SelectUpdate) =>
+const focusTrigger = (_model: SelectModel, _message: unknown, $: SelectUpdate) =>
   $.run(DomCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
@@ -689,13 +689,13 @@ type TrackSelectArgs = Schema.Struct<typeof TrackSelectArgs>["Type"]
 const blocking = blockers("data-select-blocker")
 
 const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<TrackSelectArgs>) =>
-  Stream.callback<Message>((queue) => {
+  Stream.callback<SelectMessage>((queue) => {
     const document = node.ownerDocument
     const view = document.defaultView
     const html = document.documentElement
     const frame = frameOf(view)
     let current = args
-    const send = (message: Message) => Queue.offerUnsafe(queue, message)
+    const send = (message: SelectMessage) => Queue.offerUnsafe(queue, message)
     const trigger = (): HTMLElement | null => document.getElementById(current.triggerId)
     const popup = (): HTMLElement => document.getElementById(current.popupId) ?? node
     const scroller = (): HTMLElement => document.getElementById(current.listId) ?? popup()
@@ -729,7 +729,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (up === shownUp && down === shownDown) return
       shownUp = up
       shownDown = down
-      send(Message.ChangedScrollArrows({ up, down }))
+      send(SelectMessage.ChangedScrollArrows({ up, down }))
     }
 
     const cut = () => {
@@ -807,7 +807,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         const zoomed = (view.visualViewport?.scale ?? 1) !== 1 && webkit()
         if (fallBack || zoomed) {
           clear()
-          send(Message.FellBack())
+          send(SelectMessage.FellBack())
           return
         }
         if (fromTop) {
@@ -892,17 +892,17 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
 
     let timer: ReturnType<typeof setTimeout> | undefined
     const opening = () => {
-      send(Message.ShowedPopup())
+      send(SelectMessage.ShowedPopup())
       node.inert = false
       clear()
       clearTimeout(timer)
-      timer = setTimeout(() => send(Message.AllowedRelease()), 400)
+      timer = setTimeout(() => send(SelectMessage.AllowedRelease()), 400)
       cut()
       align()
       arrows()
       focusActive(false)
       if (!current.aligned) reveal()
-      if (!current.started) frame(() => frame(() => send(Message.RenderedFirstFrame())))
+      if (!current.started) frame(() => frame(() => send(SelectMessage.RenderedFirstFrame())))
     }
 
     const closing = () => {
@@ -924,7 +924,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       arrowTimer = undefined
     }
     const unhighlight = () => {
-      if (current.active !== null) send(Message.ScrolledByArrow())
+      if (current.active !== null) send(SelectMessage.ScrolledByArrow())
     }
     const scrollBy = (arrow: Element, up: boolean) => {
       const step = () => {
@@ -955,7 +955,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     }
     const onMouseUp = (event: MouseEvent) => {
       dragY = 0
-      if (current.pressing) send(Message.ReleasedPointer({ outside: releasedOutside(event, inside, trigger()) }))
+      if (current.pressing) send(SelectMessage.ReleasedPointer({ outside: releasedOutside(event, inside, trigger()) }))
     }
     let dragY = 0
     let dragged = false
@@ -965,7 +965,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       dragY += event.movementY
       if (dragY ** 2 >= 64) {
         dragged = true
-        send(Message.DraggedPointer())
+        send(SelectMessage.DraggedPointer())
       }
     }
     const onMouseMove = (event: MouseEvent) => {
@@ -979,7 +979,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (event.target instanceof Node && blocking.is(event.target)) event.preventDefault()
     }
     const onFocusIn = (event: FocusEvent) => {
-      if (current.open && current.aligned && event.target === trigger()) send(Message.FocusedTrigger())
+      if (current.open && current.aligned && event.target === trigger()) send(SelectMessage.FocusedTrigger())
     }
     const onScroll = (event: Event) => {
       if (event.target !== scroller()) return
@@ -987,10 +987,10 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       arrows()
     }
     const onResize = () => {
-      if (current.open && current.aligned) send(Message.ResizedWindow())
+      if (current.open && current.aligned) send(SelectMessage.ResizedWindow())
     }
 
-    const transition = settling(node, popup, frame, (open) => send(Message.FinishedTransition({ open })))
+    const transition = settling(node, popup, frame, (open) => send(SelectMessage.FinishedTransition({ open })))
 
     const onChange = (next: TrackSelectArgs) => {
       const previous = current
@@ -1017,8 +1017,8 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         listenOutside(document, signal, {
           open: () => current.open,
           inside,
-          pressed: (pointerType) => send(Message.PressedOutside({ pointerType })),
-          focused: () => send(Message.FocusedOutside())
+          pressed: (pointerType) => send(SelectMessage.PressedOutside({ pointerType })),
+          focused: () => send(SelectMessage.FocusedOutside())
         })
         document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
         document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
@@ -1057,7 +1057,7 @@ const TrackSelect = Mount.makeStream(
     Stream.merge(
       watch(node, args, changes),
       Positioning.trackPosition(node, args.position, Stream.map(changes, (next) => next.position)).pipe(
-        Stream.map((placement) => Message.ChangedPlacement({ placement }))
+        Stream.map((placement) => SelectMessage.ChangedPlacement({ placement }))
       )
     )
 )
@@ -1095,8 +1095,8 @@ export const Select = Component.define({
   name: "Select",
   scoped: false,
   props: SelectProps,
-  model: Model,
-  message: Message,
+  model: SelectModel,
+  message: SelectMessage,
   events: SelectEvents,
   elements: Html
 }).make({
@@ -1286,12 +1286,12 @@ export const Select = Component.define({
       multiple,
       values,
       filled
-    }, { focused: Message.FocusedInput(), autofilled: (value) => Message.Autofilled({ value }) })
-    const inputsBox = new Html.Element<Message>("span").attr("style", "display:contents")
+    }, { focused: SelectMessage.FocusedInput(), autofilled: (value) => SelectMessage.Autofilled({ value }) })
+    const inputsBox = new Html.Element<SelectMessage>("span").attr("style", "display:contents")
 
     const label = p.part("div", (b) => {
       labelled = true
-      return b.attr("id", labelId).onClick(Message.ClickedLabel())
+      return b.attr("id", labelId).onClick(SelectMessage.ClickedLabel())
     })
 
     const trigger = p.part("button", (b) =>
@@ -1313,10 +1313,10 @@ export const Select = Component.define({
         .attr("data-placeholder", flag(!filled))
         .disabled(disabled)
         .on("mousedown", ({ button, pointerType }) =>
-          button === 0 && pointerType !== "touch" ? Message.PressedTrigger({ pointerType }) : undefined)
-        .on("mouseup", Message.ReleasedTrigger())
+          button === 0 && pointerType !== "touch" ? SelectMessage.PressedTrigger({ pointerType }) : undefined)
+        .on("mouseup", SelectMessage.ReleasedTrigger())
         .onClick(({ pointerType }) =>
-          pointerType === "" || pointerType === "touch" ? Message.ClickedTrigger({ pointerType }) : undefined
+          pointerType === "" || pointerType === "touch" ? SelectMessage.ClickedTrigger({ pointerType }) : undefined
         )
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta }) =>
@@ -1324,7 +1324,7 @@ export const Select = Component.define({
               ? undefined
               : key === "ArrowDown" || key === "ArrowUp" ||
                   (printable(key, alt, ctrl, meta) && (key !== " " || typing(model)))
-              ? Message.PressedTriggerKey({ key })
+              ? SelectMessage.PressedTriggerKey({ key })
               : undefined,
           { preventDefault: true }
         )
@@ -1400,11 +1400,11 @@ export const Select = Component.define({
               ? undefined
               : key === "ArrowDown" || key === "ArrowUp" || key === "Home" || key === "End" ||
                   key === "Enter" || key === "Escape" || (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
-              ? Message.PressedPopupKey({ key })
+              ? SelectMessage.PressedPopupKey({ key })
               : undefined,
           { preventDefault: true }
         )
-        .onKeyUp(({ key }) => key === " " ? Message.ReleasedSpace() : undefined)
+        .onKeyUp(({ key }) => key === " " ? SelectMessage.ReleasedSpace() : undefined)
         .forward((node) => {
           const own = listed ? node.attr("role", "presentation") : listbox(node)
           return aligned && !listed ? own.attr("style", withStyle(node.attrs.style, scrolling)) : own
@@ -1443,14 +1443,14 @@ export const Select = Component.define({
         .attr("data-selected", flag(selected))
         .attr("data-highlighted", flag(active))
         .attr("data-disabled", flag(off))
-        .on("mouseenter", () => hovers ? Message.EnteredItem({ value }) : undefined)
-        .on("mouseleave", () => hovers ? Message.LeftItem() : undefined)
-        .on("mousedown", Message.PressedItem())
+        .on("mouseenter", () => hovers ? SelectMessage.EnteredItem({ value }) : undefined)
+        .on("mouseleave", () => hovers ? SelectMessage.LeftItem() : undefined)
+        .on("mousedown", SelectMessage.PressedItem())
         .on(
           "mouseup",
-          ({ pointerType }) => pointerType === "touch" ? undefined : Message.ReleasedItem({ value, pointerType })
+          ({ pointerType }) => pointerType === "touch" ? undefined : SelectMessage.ReleasedItem({ value, pointerType })
         )
-        .onClick(({ pointerType }) => Message.ClickedItem({ value, pointerType }))
+        .onClick(({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType }))
     })
     const item = keyed(itemPart)
 
