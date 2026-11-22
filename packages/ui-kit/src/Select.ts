@@ -3,10 +3,11 @@
  *
  * `Select` is headless: it owns the keyboard and pointer behaviour, focus,
  * placement, the data attributes and the form inputs, and the consumer draws
- * the markup. The consumer owns whether the popup is open and what's selected,
- * passes them as `open` and `value`, and stores what the `RequestedOpen`,
- * `RequestedClose` and `Picked` events ask for. Values are strings, and `items`
- * lists every option with its label, in the order they're drawn.
+ * the markup. The consumer owns whether the popup is open and what's
+ * selected, passes them as `open` and `value`, and stores what the
+ * `RequestedOpen`, `RequestedClose` and `Picked` events ask for. Values are
+ * strings, and `items` lists every option with its label, in the order
+ * they're drawn.
  *
  * **Anatomy**
  *

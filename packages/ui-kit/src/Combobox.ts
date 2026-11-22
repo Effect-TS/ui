@@ -3,13 +3,13 @@
  * or more of them.
  *
  * `Combobox` is headless: it owns the keyboard and pointer behaviour, the
- * filtering, focus, placement, the data attributes and the form inputs, and the
- * consumer draws the markup. The consumer owns whether the popup is open,
- * what's selected and the input's text, passes them as `open`, `value` and
- * `inputValue`, and stores what the `RequestedOpen`, `RequestedClose`, `Picked`
- * and `RequestedInputValue` events ask for. Values are strings, and `items`
- * lists every option with its label. The combobox filters them and hands back
- * `combobox.items`, the ones to draw.
+ * filtering, focus, placement, the data attributes and the form inputs, and
+ * the consumer draws the markup. The consumer owns whether the popup is
+ * open, what's selected and the input's text, passes them as `open`,
+ * `value` and `inputValue`, and stores what the `RequestedOpen`,
+ * `RequestedClose`, `Picked` and `RequestedInputValue` events ask for.
+ * Values are strings, and `items` lists every option with its label. The
+ * combobox filters them and hands back `combobox.items`, the ones to draw.
  *
  * **Anatomy**
  *
@@ -598,8 +598,8 @@ export interface ComboboxFilter extends TextFilter {}
 export const makeComboboxFilter = (locale?: string | undefined): ComboboxFilter => textFilter(locale)
 
 const emits: Engine.Emits<ComboboxEvents> = {
-  opened: (reason) => ComboboxEvents.RequestedOpen({ reason }),
-  dismissed: (reason) => ComboboxEvents.RequestedClose({ reason }),
+  requestedOpen: (reason) => ComboboxEvents.RequestedOpen({ reason }),
+  requestedClose: (reason) => ComboboxEvents.RequestedClose({ reason }),
   picked: (value, reason) => ComboboxEvents.Picked({ value, reason }),
   edited: (inputValue, reason) => ComboboxEvents.RequestedInputValue({ inputValue, reason }),
   highlighted: (value, index, reason) => ComboboxEvents.Highlighted({ value, index, reason }),

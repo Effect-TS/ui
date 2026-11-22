@@ -559,8 +559,8 @@ export interface AutocompleteFilter extends TextFilter {}
 export const makeAutocompleteFilter = (locale?: string | undefined): AutocompleteFilter => textFilter(locale)
 
 const emits: Engine.Emits<AutocompleteEvents> = {
-  opened: (reason) => AutocompleteEvents.RequestedOpen({ reason }),
-  dismissed: (reason) => AutocompleteEvents.RequestedClose({ reason }),
+  requestedOpen: (reason) => AutocompleteEvents.RequestedOpen({ reason }),
+  requestedClose: (reason) => AutocompleteEvents.RequestedClose({ reason }),
   edited: (value, reason) => AutocompleteEvents.Updated({ value, reason }),
   highlighted: (value, index, reason) => AutocompleteEvents.Highlighted({ value, index, reason }),
   settled: (open) => AutocompleteEvents.Settled({ open })

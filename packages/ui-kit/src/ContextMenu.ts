@@ -255,10 +255,11 @@ const handlers = <Msg>(
  * open is `trigger-press`, and `RequestedClose` carries `item-press`,
  * `outside-press`, `escape-key`, `focus-out` or `cancel-open`.
  *
- * Several triggers can open one context menu, such as one per row of a list:
- * give each an `id`, and `RequestedOpen` reports which one as `triggerId`. A
- * right click on another trigger while it's open opens it there. A context menu
- * drawn inside another one's trigger takes the right clicks on its own trigger.
+ * Several triggers can open one context menu, such as one per row of a
+ * list: give each an `id`, and `RequestedOpen` reports which one as
+ * `triggerId`. A right click on another trigger while it's open opens it
+ * there. A context menu drawn inside another one's trigger takes the right
+ * clicks on its own trigger.
  *
  * @stability experimental
  * @category components

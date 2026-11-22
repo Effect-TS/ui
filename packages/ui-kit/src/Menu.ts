@@ -3,11 +3,11 @@
  * and submenus.
  *
  * `Menu` is headless: it owns the keyboard and pointer behaviour, focus,
- * placement and the data attributes, and the consumer draws the markup. The
- * consumer owns whether the popup is open, passes it as `open`, and stores what
- * `RequestedOpen` and `RequestedClose` ask for. `Picked` reports the item the
- * user chose. `items` lists every item with its label, in the order they're
- * drawn, for navigation, typeahead and filtering.
+ * placement and the data attributes, and the consumer draws the markup.
+ * The consumer owns whether the popup is open, passes it as `open`, and
+ * stores what `RequestedOpen` and `RequestedClose` ask for. `Picked` reports
+ * the item the user chose. `items` lists every item with its label, in the
+ * order they're drawn, for navigation, typeahead and filtering.
  *
  * **Anatomy**
  *
@@ -1815,11 +1815,11 @@ export const menuFilter = (
  * `transitioning` and `activationDirection` for the viewport, and
  * `nothingMatches`, whether a filter matches no item.
  *
- * A trigger reports the `id` the consumer gave it in `RequestedOpen`: set it on
- * the builder before the part. One without gets a generated `id`. The menu
- * remembers the trigger that opened it, or follows `triggerId`: only that one
- * reports it open and anchors the popup. Pressing another one while the menu is
- * open asks it to open for that one.
+ * A trigger reports the `id` the consumer gave it in `RequestedOpen`: set it
+ * on the builder before the part. One without gets a generated `id`. The
+ * menu remembers the trigger that opened it, or follows `triggerId`: only
+ * that one reports it open and anchors the popup. Pressing another one while
+ * the menu is open asks it to open for that one.
  *
  * The popup, the list, the items, the group labels and the arrow set their
  * own `id`s, over any on the builder, for the ARIA attributes that point at

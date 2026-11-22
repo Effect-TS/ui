@@ -77,8 +77,8 @@ export const FilterMode = Schema.Literals(["contains", "startsWith", "endsWith",
 export type FilterMode = typeof FilterMode.Type
 
 export interface Emits<E> {
-  readonly opened: (reason: TextReason) => E
-  readonly dismissed: (reason: TextReason) => E
+  readonly requestedOpen: (reason: TextReason) => E
+  readonly requestedClose: (reason: TextReason) => E
   readonly picked?: ((value: string | ReadonlyArray<string> | null, reason: ChangeReason) => E) | undefined
   readonly edited: (inputValue: string, reason: TextReason) => E
   readonly highlighted: (value: string | null, index: number, reason: HighlightReason) => E
@@ -386,7 +386,7 @@ const open = <E>(
     pressedItem: null,
     typed: "",
     pressing: reason === "trigger-press" && props.inputInPopup === true && (method === "mouse" || method === "pen")
-  }).emit(props.emits.opened(reason))
+  }).emit(props.emits.requestedOpen(reason))
   const opened = { ...props, open: true, inputValue }
   const shown = shownOf(next.model, opened, true)
   let target: string | null = null
@@ -430,7 +430,7 @@ const dismiss = <E>(
     }
   }
   return next.evolve({ closeMethod: method, focusLeft, pressing: false, completion: null })
-    .emit(props.emits.dismissed(reason))
+    .emit(props.emits.requestedClose(reason))
 }
 
 const toggle = <E>(step: Step<E>, props: Settings<E>, method: Interaction): Step<E> =>

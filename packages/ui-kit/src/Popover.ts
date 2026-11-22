@@ -2,8 +2,8 @@
  * A popup anchored to a trigger, for content the user asks for and can act
  * on, such as a filter form, a profile card or a list of notifications.
  *
- * `Popover` is headless: it is a non-modal `Dialog` placed next to its trigger
- * by `Positioning`. It owns the ids, the ARIA, the data attributes, focus,
+ * `Popover` is headless: it is a non-modal `Dialog` placed next to its trigger by
+ * `Positioning`. It owns the ids, the ARIA, the data attributes, focus,
  * dismissal and the popup's position, and the consumer draws the markup. The
  * consumer owns whether the popover is open, passes it as `open`, and stores
  * what the `RequestedOpen` and `RequestedClose` events ask for. The popover
@@ -26,13 +26,13 @@
  * | `initialFocus` | any element, focused when the popover opens               |
  * | `finalFocus`   | any element, focused when the popover closes              |
  *
- * Each part takes the consumer's builder and returns it with the part applied,
- * and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part
+ * applied, and the consumer adds the children:
  * `popover.portal(h.dialog)?.children(popover.positioner(h.div).children(popover.popup(h.div).children("Saved")))`.
- * The trigger takes an options object, `popover.trigger({ element: h.button
- * })`, since each trigger has its own hover options. The portal returns
- * `undefined` while the popover is closed, unless `keepMounted`. `backdrop`,
- * `viewport` and `arrow` are optional.
+ * The trigger takes an options object, `popover.trigger({ element: h.button })`,
+ * since each trigger has its own hover options. The portal returns `undefined`
+ * while the popover is closed, unless `keepMounted`. `backdrop`, `viewport`
+ * and `arrow` are optional.
  *
  * The portal is a `<dialog>` shown as a manual popover, so the popup sits in
  * the top layer and needs no portal to another place in the document. The kit
@@ -706,8 +706,8 @@ export const PopoverTrigger = <Msg, R = never>(
  * open for or last was, `openReason`, `openMethod` and `closeMethod`, `side`
  * and `align`, where the popup is, and `instant`.
  *
- * The `trigger` part takes `{ element, openOnHover, delay, closeDelay, disabled
- * }`. It reports the `id` the consumer gave the element in `RequestedOpen`, and
+ * The `trigger` part takes `{ element, openOnHover, delay, closeDelay, disabled }`.
+ * It reports the `id` the consumer gave the element in `RequestedOpen`, and
  * gives a trigger without one a generated `id`. Pressing the trigger the
  * popover is open for asks it to close, and pressing another one asks it to
  * open for that one.

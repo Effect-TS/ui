@@ -183,14 +183,15 @@ implies a new value for a prop, it requests, and its name is `Requested` plus
 the change: `RequestedOpen`, `RequestedClose`, `RequestedQuery`.
 
 A request may take the name of the user's act instead, as
-`Toggled({ checked })` and `Picked({ value })` do, only when both hold: every
-message that leads to the emit is a user gesture on one of the component's
-parts, not a Command result, a timer, shared state or another component, and
-the payload carries the value asked for. The parent then has to read the payload, so nobody takes
-the tag for news. `Opened` fails both: a hover timer can emit it, and with
-nothing in its payload the tag reads as the state. Keep `Opened`, `Closed`
-and `Dismissed` for a component that owns that state, as `ToastProvider`
-owns its toasts.
+`Toggled({ checked })` and `Picked({ value })` do, only when both hold. First,
+every emit follows something the user did to the component: a gesture on one
+of its parts, at once, after a delay or repeated while held, or one a member
+component relays. An emit with another cause rules it out, as when `Menu`
+clears its query after closing. Second, the payload carries the value asked
+for, so the parent has to read it and nobody takes the tag for news. `Opened`
+fails the second: with nothing in its payload the tag reads as the state. Keep
+`Opened`, `Closed` and `Dismissed` for a component that owns that state, as
+`ToastProvider` owns its toasts.
 
 A message is one fact. The tag says which fact, and the payload holds what the
 event reported. Two events get two messages, even when their handlers differ
@@ -234,7 +235,8 @@ Effect UI differs from Foldkit in five places:
   child's events in `onEmit`, so its message is the event's verb and its
   name for the child.
 - A message listed in an owner's `receives` has no prefix of its own. It is
-  named like any other message, for the fact it reports.
+  named like any other message, for the fact it reports, or `Requested` plus
+  the change when the sender asks the owner to act.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
 - A parent can't send a child a message. When porting, Foldkit's
   `informOf*` InMessages become props, and `request*` InMessages have no

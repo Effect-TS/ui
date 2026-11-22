@@ -4,10 +4,10 @@
  *
  * `Drawer` is a headless component over a `Dialog`: the `Dialog` keeps the
  * `<dialog>`, focus, dismissal, transitions and nesting, and the drawer adds
- * the swipe. The consumer owns whether the drawer is open and where it rests,
- * passes them as `open` and `snapPoint`, and stores what `RequestedOpen`,
- * `RequestedClose` and `Snapped` ask for. A refused close keeps the drawer
- * open, and a swipe that asked for it slides back.
+ * the swipe. The consumer owns whether the drawer is open and where it
+ * rests, passes them as `open` and `snapPoint`, and stores what
+ * `RequestedOpen`, `RequestedClose` and `Snapped` ask for. A refused close
+ * keeps the drawer open, and a swipe that asked for it slides back.
  *
  * **Anatomy**
  *
@@ -29,20 +29,20 @@
  *
  * Style the popup's position from the variables below, so a swipe moves it:
  * `.popup { transform: translateY(var(--drawer-swipe-movement-y)) }`, and
- * `translateY(calc(var(--drawer-snap-point-offset) +
- * var(--drawer-swipe-movement-y)))` with snap points. While a swipe runs the
- * kit sets the popup's inline `transition` to `none`, and puts it back after.
+ * `translateY(calc(var(--drawer-snap-point-offset) + var(--drawer-swipe-movement-y)))`
+ * with snap points. While a swipe runs the kit sets the popup's inline
+ * `transition` to `none`, and puts it back after.
  *
  * **Swipes**
  *
  * A swipe starts from the popup with a mouse, a pen or a finger, in
  * `swipeDirection`. It doesn't start from a `button`, `a`, `input`, `select`,
  * `textarea`, `label` or `[role="button"]`, from `content` with a mouse or a
- * pen, or from an element with `data-swipe-ignore`. `data-swipe-ignore="x"` or
- * `"y"` ignores only touches along that axis. A touch on content that scrolls
- * scrolls it. One that starts with the content scrolled to its edge nearest the
- * drawer's, and moves toward the drawer's edge, swipes. A pinch, a selection of
- * text and a swipe while a nested drawer is open start nothing.
+ * pen, or from an element with `data-swipe-ignore`. `data-swipe-ignore="x"`
+ * or `"y"` ignores only touches along that axis. A touch on content that
+ * scrolls scrolls it. One that starts with the content scrolled to its edge
+ * nearest the drawer's, and moves toward the drawer's edge, swipes. A pinch, a selection of text and a swipe
+ * while a nested drawer is open start nothing.
  *
  * A release dismisses the drawer past half its size or faster than 0.5 px
  * per ms, and settles it back otherwise. With `snapPoints`, a release rests
@@ -71,16 +71,17 @@
  * The popup sets the CSS variables `--nested-drawers`, `--drawer-height`,
  * `--drawer-frontmost-height` (the height of the frontmost nested drawer),
  * `--drawer-snap-point-offset`, `--drawer-swipe-movement-x` and
- * `--drawer-swipe-movement-y`, and `--drawer-swipe-strength`, from `0.1` to
- * `1`: a faster swipe's close ends sooner, as in `transition-duration:
- * calc(var(--drawer-swipe-strength) * 400ms)`. The backdrop sets
- * `--drawer-swipe-progress`, from `0` when open to `1` when swiped away, so
- * `opacity: calc(1 - var(--drawer-swipe-progress))` fades it. With snap points
- * it runs from `0` at the tallest snap point to `1` at the next one, and rests
- * there, so the backdrop shows only while the drawer is expanded. With
- * `virtualKeyboard`, the viewport sets `--drawer-keyboard-inset` while the
- * software keyboard covers part of it: read it as `var(--drawer-keyboard-inset,
- * 0px)`.
+ * `--drawer-swipe-movement-y`, and `--drawer-swipe-strength`, from `0.1` to `1`:
+ * a faster swipe's close ends sooner, as in
+ * `transition-duration: calc(var(--drawer-swipe-strength) * 400ms)`. The
+ * backdrop sets `--drawer-swipe-progress`, from `0` when open to `1` when
+ * swiped away, so `opacity: calc(1 - var(--drawer-swipe-progress))` fades it.
+ * With snap points it runs from `0` at the tallest snap point to `1` at the
+ * next one, and rests there, so the backdrop shows only while the drawer is
+ * expanded.
+ * With `virtualKeyboard`, the viewport sets `--drawer-keyboard-inset` while
+ * the software keyboard covers part of it: read it as
+ * `var(--drawer-keyboard-inset, 0px)`.
  *
  * **Keyboard**
  *

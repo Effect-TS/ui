@@ -26,13 +26,13 @@
  * | `viewport`   | `<div>` around content that changes with the trigger |
  * | `arrow`      | `<div>` that points at the trigger                   |
  *
- * Each part takes the consumer's builder and returns it with the part applied,
- * and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part
+ * applied, and the consumer adds the children:
  * `previewCard.portal(h.div)?.children(previewCard.positioner(h.div).children(previewCard.popup(h.div).children("…")))`.
  * The trigger takes an options object, `previewCard.trigger({ element: h.a })`,
- * since each trigger has its own delays. The portal returns `undefined` while
- * the card is closed, unless `keepMounted`. `backdrop`, `viewport` and `arrow`
- * are optional.
+ * since each trigger has its own delays. The portal returns `undefined`
+ * while the card is closed, unless `keepMounted`. `backdrop`, `viewport`
+ * and `arrow` are optional.
  *
  * The portal is shown as a manual popover, so the card sits in the top layer.
  * The kit resets its box inline to an empty one with nothing visible of its
@@ -110,16 +110,16 @@
  * against that trigger, and the consumer draws the content for it. Hovering
  * another trigger while the card is open moves it there at once.
  *
- * To animate the content as the card moves from one trigger to another, draw it
- * inside `previewCard.viewport(h.div)`, in the popup. The viewport puts its
+ * To animate the content as the card moves from one trigger to another,
+ * draw it inside `previewCard.viewport(h.div)`, in the popup. The viewport puts its
  * children in a `<div data-current>`. While the card moves, it keeps what the
  * last trigger showed in a `<div data-previous>` before it, inert and out of
  * the flow, has `data-transitioning`, and names where the new trigger is from
- * the last one in `data-activation-direction`: `left` or `right`, a space, then
- * `up` or `down`, each left out within 5 pixels. The new content has
- * `data-starting-style` for the first frame and the old one `data-ending-style`
- * after it, and the old content is removed once the new content's transitions
- * finish.
+ * the last one in `data-activation-direction`: `left` or `right`, a space,
+ * then `up` or `down`, each left out within 5 pixels. The new content has
+ * `data-starting-style` for the first frame and the old one
+ * `data-ending-style` after it, and the old content is removed once the new
+ * content's transitions finish.
  *
  * With a viewport, the positioner's inline style also carries
  * `--positioner-width` and `--positioner-height`, the popup's size for the

@@ -9,7 +9,7 @@
  * transition ends, after the app has stopped caring about it.
  *
  * Any `update` below the provider adds, updates and closes toasts by
- * sending facts to it with `$.send(ToastProvider, message)`:
+ * sending requests to it with `$.send(ToastProvider, message)`:
  *
  * - `{ _tag: "RequestedAdd", toast }` shows `toast`. The sender picks its `id`,
  *   so it can update or close it later. A toast with an `id` that already
@@ -37,13 +37,13 @@
  * | `action`      | `<button>` for the consumer's own action           |
  * | `close`       | `<button>` that closes the toast                   |
  *
- * `viewport` takes the consumer's builder. Every other part takes `{ element,
- * toast }`, with a toast from the parts' `toasts`, and returns the builder for
- * the consumer to chain on and fill: `toastProvider.title({ element: h.strong,
- * toast }).children(toast.title)`. `root` sets the element's key to the toast's
- * `id`, so a toast keeps its element as the list changes. The viewport adds,
- * after the consumer's children, a visually hidden alert for each high-priority
- * toast.
+ * `viewport` takes the consumer's builder. Every other part takes
+ * `{ element, toast }`, with a toast from the parts' `toasts`, and returns
+ * the builder for the consumer to chain on and fill:
+ * `toastProvider.title({ element: h.strong, toast }).children(toast.title)`. `root` sets
+ * the element's key to the toast's `id`, so a toast keeps its element as
+ * the list changes. The viewport adds, after the consumer's children, a
+ * visually hidden alert for each high-priority toast.
  *
  * **Data attributes**
  *
@@ -610,8 +610,7 @@ const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem
 /**
  * Keeps the app's toasts, and draws them with the consumer's markup where it
  * places the viewport. Call it once near the root with a `view` closure that
- * holds the app's body and the toasts, drawn with `toastProvider.toasts` and
- * the parts.
+ * holds the app's body and the toasts, drawn with `toastProvider.toasts` and the parts.
  *
  * **Details**
  *

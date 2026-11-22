@@ -3,9 +3,10 @@
  * or focused.
  *
  * `Tooltip` is headless: it owns the hover and focus timing, the data
- * attributes and the popup's place in the top layer, and the consumer draws the
- * markup. The consumer owns whether the tooltip is open, passes it as `open`,
- * and stores what the `RequestedOpen` and `RequestedClose` events ask for.
+ * attributes and the popup's place in the top layer, and the consumer draws
+ * the markup. The consumer owns whether the tooltip is open, passes it as
+ * `open`, and stores what the `RequestedOpen` and `RequestedClose` events
+ * ask for.
  *
  * The tooltip asks to close when the pointer leaves, focus moves away, the
  * trigger is activated, Escape is pressed, or the mouse is pressed outside
@@ -25,12 +26,12 @@
  * | `popup`      | `<div>` inside the positioner                  |
  * | `arrow`      | `<div>` inside the popup                       |
  *
- * Each part takes the consumer's builder and returns it with the part applied,
- * and the consumer adds the children:
+ * Each part takes the consumer's builder and returns it with the part
+ * applied, and the consumer adds the children:
  * `tooltip.positioner(h.div).children(tooltip.popup(h.div).children("Bold"))`.
- * A part's result is a builder, so it can also be another kit call's `element`.
- * That puts a tooltip on a ui-kit Button: `Button(h, { element:
- * tooltip.trigger(h.button) }).class("tool").children("B")`.
+ * A part's result is a builder, so it can also be another kit call's
+ * `element`. That puts a tooltip on a ui-kit Button:
+ * `Button(h, { element: tooltip.trigger(h.button) }).class("tool").children("B")`.
  *
  * The positioner is a manual popover, so it renders in the top layer and
  * needs no portal. While it shows, the tooltip measures the trigger and
@@ -95,13 +96,12 @@
  * `@starting-style` and `transition-behavior: allow-discrete`. The
  * `Positioning` module does the placing, and a popup of your own can use it.
  *
- * Each tooltip has one trigger. On its own it waits its own `delay` on every
- * hover. Below a `TooltipProvider`, once one tooltip of the group has been
- * open, hovering another opens it at once, until `timeout` after the last one
- * closed. One tooltip of the group shows at a time: when another is shown, the
- * previous one asks to close. Wrap the group, with nothing to add to each
- * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div(Tooltip(h, ...),
- * Tooltip(h, ...)) })`.
+ * Each tooltip has one trigger. On its own it waits its own `delay` on
+ * every hover. Below a `TooltipProvider`, once one tooltip of the group
+ * has been open, hovering another opens it at once, until `timeout` after
+ * the last one closed. One tooltip of the group shows at a time: when another is
+ * shown, the previous one asks to close. Wrap the group, with nothing to add to each
+ * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div(Tooltip(h, ...), Tooltip(h, ...)) })`.
  *
  * Set `closeDelay` to give the pointer time to reach the popup when its
  * path takes it outside both the trigger and the positioner.
@@ -366,8 +366,8 @@ const dismissals = [
   DomSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
 ]
 
-const opened = TooltipEvents.RequestedOpen()
-const dismissed = TooltipEvents.RequestedClose()
+const requestedOpen = TooltipEvents.RequestedOpen()
+const requestedClose = TooltipEvents.RequestedClose()
 
 // The newest turn that shows in a provider's group: the highest, as turns
 // are taken in order. 0 is a tooltip that hasn't taken one yet.
@@ -386,7 +386,7 @@ type TooltipUpdate = Component.Update<typeof TooltipModel.Type, typeof TooltipMe
 // The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
 const dismiss = (model: typeof TooltipModel.Type, $: TooltipUpdate, instant = model.instant) =>
   shownBy($.props)
-    ? $.set({ ...model, instant }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
+    ? $.set({ ...model, instant }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
     : model
 
 // The pointer left the trigger or the positioner: a pending open stops, and
@@ -475,10 +475,11 @@ const WaitBeforeCooling = Command.make(
  * tooltip takes over, when its last tooltip closes and when the window
  * ends. Wrap a toolbar or a row group, not a whole table.
  *
- * One Model field for which tooltip is open, such as `tip: "bold" | "italic" |
- * null` with `open: model.tip === "bold"`, closes the previous tooltip in the
- * same update that accepts the next one's `RequestedOpen`. With a field per
- * tooltip, the previous one's `RequestedClose` closes it.
+ * One Model field for which tooltip is open, such as
+ * `tip: "bold" | "italic" | null` with `open: model.tip === "bold"`, closes
+ * the previous tooltip in the same update that accepts the next one's
+ * `RequestedOpen`. With a field per tooltip, the previous one's
+ * `RequestedClose` closes it.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
@@ -534,10 +535,9 @@ export const TooltipProvider = Component.define({
 })
 
 /**
- * A headless tooltip. Call it with the consumer's `h` and a `view` closure that
- * draws the button the tooltip describes with `tooltip.trigger`, and the
- * popup's markup with `tooltip.positioner`, `tooltip.popup` and
- * `tooltip.arrow`.
+ * A headless tooltip. Call it with the consumer's `h` and a `view` closure
+ * that draws the button the tooltip describes with `tooltip.trigger`, and the
+ * popup's markup with `tooltip.positioner`, `tooltip.popup` and `tooltip.arrow`.
  *
  * **Details**
  *
@@ -603,7 +603,7 @@ export const Tooltip = Component.define({
       if (shownBy($.props)) return $.set(next).run(Command.interrupt(WaitBeforeClosing))
       // A provider's group is open, or closed less than `timeout` ago.
       if ($.shared.provider?.instant === true) {
-        return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+        return $.set({ ...next, instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(requestedOpen)
       }
       return $.set(next).run(WaitBeforeOpening.make({ delay: $.props.delay ?? 600 }))
     },
@@ -614,11 +614,11 @@ export const Tooltip = Component.define({
     FocusedTrigger: (model, _message, $) => {
       const next = { ...model, focused: !model.pressed, pressed: false }
       if (model.pressed || $.props.disabled === true || shownBy($.props)) return next
-      return $.set({ ...next, instant: "focus" }).run(Command.interrupt(WaitBeforeOpening)).emit(opened)
+      return $.set({ ...next, instant: "focus" }).run(Command.interrupt(WaitBeforeOpening)).emit(requestedOpen)
     },
     BlurredTrigger: (model, _message, $) => {
       const next = { ...model, focused: false, pressed: false }
-      return shownBy($.props) && !model.hovered ? $.set(next).emit(dismissed) : next
+      return shownBy($.props) && !model.hovered ? $.set(next).emit(requestedClose) : next
     },
     // A mouse press only marks the focus that follows it, and stops a
     // pending open. The click that follows, or Enter or Space on the
@@ -634,11 +634,11 @@ export const Tooltip = Component.define({
     PressedDocument: (model, _message, $) => model.hovered ? model : dismiss(model, $),
     CompletedWaitBeforeOpening: (model, _message, $) =>
       $.props.disabled !== true && !$.props.open && model.hovered
-        ? $.set({ ...model, instant: null }).emit(opened)
+        ? $.set({ ...model, instant: null }).emit(requestedOpen)
         : model,
     CompletedWaitBeforeClosing: (model, _message, $) =>
       shownBy($.props) && !model.hovered && !model.focused
-        ? $.set({ ...model, instant: null }).emit(dismissed)
+        ? $.set({ ...model, instant: null }).emit(requestedClose)
         : model,
     // The shown tooltips of the group changed. Its turn follows whether it
     // is shown, as the consumer decided, not whether it asked: a closed
@@ -649,7 +649,7 @@ export const Tooltip = Component.define({
       if (!shownBy($.props)) return { ...model, turn: 0, yieldedTo: null }
       if (model.turn === 0) return { ...model, turn: next, yieldedTo: null }
       return newest !== null && newest !== model.turn && newest !== model.yieldedTo
-        ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(dismissed)
+        ? $.set({ ...model, yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
         : model
     },
     ChangedPlacement: (model, { placement }) => ({ ...model, placement })

@@ -403,8 +403,7 @@ model.advanced
   callback names are never event names: Switch has `onToggle` and a
   Checkbox emits `Toggled`, not `CheckedChange`.
 - Decide for each event whether it reports or requests, by the rule under
-  the naming table: an open or a close the consumer can refuse is
-  `RequestedOpen` or `RequestedClose`, never `Opened` or `Dismissed`.
+  the naming table. A Dialog emits `RequestedOpen`, not `Opened`.
 - `update` is a record with one function per message tag, even for a
   union with one member. A reader sees every message handled, and a new
   message is a type error until it has a key. Use the function form only
@@ -429,7 +428,7 @@ model.advanced
   toasts. Its items outlive the app's interest in them: a closing toast
   keeps its content on screen until its exit transition ends, and the
   limit, timers and focus hand-off all read the list. So the owner keeps
-  the list in its Model, and the components inside its closure post facts
+  the list in its Model, and the components inside its closure post requests
   to it with `$.send(Owner, message)` through `receives` (`RequestedAdd`,
   `RequestedUpdate`, `RequestedClose`), each naming an item by an id the
   sender picks. The owner emits an event for what the user did, such as

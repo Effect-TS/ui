@@ -686,8 +686,8 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  * - `list`: `role="tablist"`, and `aria-orientation`, written only for a
  *   vertical list
  * - `tab`: `role="tab"`, `id`, `aria-selected`, `aria-controls`, added only
- *   while the view draws its panel, `aria-disabled`, `tabindex`, `disabled`,
- *   which it never sets so a disabled tab keeps its focus, `type="button"` on a
+ *   while the view draws its panel, `aria-disabled`, `tabindex`, `disabled`, which it
+ *   never sets so a disabled tab keeps its focus, `type="button"` on a
  *   `<button>`, `data-active` and `data-disabled`
  * - `panel`: `role="tabpanel"`, `id`, `aria-labelledby`, `hidden`, `inert` on
  *   a panel that isn't active, `tabindex`, `data-index`, `data-hidden`,

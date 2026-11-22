@@ -201,7 +201,7 @@ export const OpenButton = Component.define({
 })
 
 // One message for both events: this host does the same thing for each.
-const ModalHostMessage = UiSchema.TaggedEnum({ ClosedDialog: {} })
+const ModalHostMessage = UiSchema.TaggedEnum({ RequestedCloseDialog: {} })
 
 // Convention: the reader is the dialog's parent, so the dialog still has one
 // source for `open`, its prop, and knows nothing about the provider.
@@ -216,14 +216,14 @@ export const ModalHost = Component.define({
   init: () => null,
   update: (_model, message, $) =>
     ModalHostMessage.match(message, {
-      ClosedDialog: () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
+      RequestedCloseDialog: () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
     }),
   view: (_, h) =>
     ConfirmDialog(h, {
       props: { open: h.shared.modal.open },
       onEmit: {
-        RequestedClose: () => ModalHostMessage.ClosedDialog(),
-        Confirmed: () => ModalHostMessage.ClosedDialog()
+        RequestedClose: () => ModalHostMessage.RequestedCloseDialog(),
+        Confirmed: () => ModalHostMessage.RequestedCloseDialog()
       }
     })
 })
