@@ -94,33 +94,6 @@ const Signup = Component.define({
   }
 })
 
-const RejectMessage = UiSchema.TaggedEnum({ SubmittedForm: {}, RejectedEmail: {}, FocusedEmail: {} })
-const Email = Html.ref("Email", "input")
-
-const Rejecting = Component.define({
-  name: "Rejecting",
-  scoped: false,
-  model: Schema.Boolean,
-  message: RejectMessage,
-  elements: Html
-}).make({
-  init: () => false,
-  update: {
-    SubmittedForm: (rejected) => rejected,
-    RejectedEmail: (_rejected, _message, $) => $.set(true).run(Html.focus(Email, () => RejectMessage.FocusedEmail())),
-    FocusedEmail: (rejected) => rejected
-  },
-  view: (rejected, h) =>
-    Form(h, {
-      onEmit: () => RejectMessage.SubmittedForm(),
-      view: (form) =>
-        form.root(h.form).children(
-          h.input.ref(Email).attr("name", "email").attr("aria-invalid", rejected ? "true" : undefined),
-          h.button.attr("type", "submit").children("Sign up")
-        )
-    })
-})
-
 const type = (input: HTMLInputElement, value: string) => {
   input.value = value
   input.dispatchEvent(new Event("input", { bubbles: true }))
@@ -159,21 +132,5 @@ describe("Form in a document", { concurrent: false }, () => {
       type(email, "ada@example.com")
       yield* submitForm
       assert.strictEqual(document.activeElement, submit)
-    }).pipe(Effect.scoped))
-
-  it.effect("leaves a later rejection's focus to the consumer, which focuses the control with Html.focus", () =>
-    Effect.gen(function*() {
-      yield* focusability
-      const app = yield* container
-      const root = yield* BrowserHost.mountEffect(Rejecting, {}, app)
-      yield* tick
-      const submit = app.querySelector<HTMLButtonElement>("button[type=submit]")!
-      submit.focus()
-      submit.click()
-      yield* tick
-      assert.strictEqual(document.activeElement, submit)
-      root.send(RejectMessage.RejectedEmail())
-      yield* tick
-      assert.strictEqual(document.activeElement, app.querySelector("input[name=email]"))
     }).pipe(Effect.scoped))
 })

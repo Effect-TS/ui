@@ -1074,7 +1074,6 @@ export const stub = <Self, Props, Events>(
   const name: string = feature[Feature.TypeId].name
   const seen: Array<Props> = []
   const listeners = new Set<(events: Events) => void>()
-  // What the test emits.
   const Emit = Schema.TaggedStruct("~@effect/ui/TestHost/Emit", { events: feature.events })
   const component = Component.define({
     name,

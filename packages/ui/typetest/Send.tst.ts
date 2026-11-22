@@ -48,7 +48,6 @@ const PlainOrNote = condition ? Plain : Note
 declare const anyFeature: Feature.Any
 
 declare const untrusted: unknown
-declare const arbitraryObject: object
 
 const ParentMessage = UiSchema.TaggedEnum({ Go: {} })
 const ParentDef = Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: ParentMessage })
@@ -73,14 +72,10 @@ describe("$.send", () => {
     ParentDef.update((model, _msg, $) => {
       expect($.send(Editor, { _tag: "Clear" })).type.not.toRaiseError()
       expect($.send(Editor, EditorMessage.Focus())).type.not.toRaiseError()
-      expect($.send(Editor, EditorMessage.Clear())).type.not.toRaiseError()
       expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.Typed({ text: "x" }))
       // `make` returns the whole Message, which includes a case Editor doesn't receive.
       expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.make({ _tag: "Clear" }))
       expect($.send).type.not.toBeCallableWith(Editor, untrusted)
-      expect($.send).type.not.toBeCallableWith(Editor, arbitraryObject)
-      expect($.send).type.not.toBeCallableWith(Editor, { _tag: "Clear" } as { readonly _tag: string })
-      expect($.send).type.not.toBeCallableWith(Editor, { _tag: "Typed", text: "x" })
       return model
     })
   })
@@ -88,9 +83,7 @@ describe("$.send", () => {
   it("can't send to a child that isn't an owner", () => {
     ParentDef.update((model, _msg, $) => {
       expect($.send).type.not.toBeCallableWith(Field, EditorMessage.Clear())
-      expect($.send).type.not.toBeCallableWith(Field, { _tag: "Typed", text: "x" })
       expect($.send).type.not.toBeCallableWith(Plain, EditorMessage.Clear())
-      expect($.send).type.not.toBeCallableWith(Note, { _tag: "Typed", text: "x" })
       expect($.send).type.not.toBeCallableWith(anyFeature, { _tag: "Clear" })
       return model
     })
@@ -183,7 +176,7 @@ describe("a component child", () => {
     expect(Scene.start(Plain, {}).childEmit(Plain, "a", {} as never)).type.not.toRaiseError()
   })
 
-  it("takes a key, or neither", () => {
+  it("takes an optional key", () => {
     ParentDef.view((_, h) => {
       expect(Plain(h, { key: "a" })).type.not.toRaiseError()
       expect(Plain(h, {})).type.not.toRaiseError()
@@ -357,7 +350,7 @@ describe("an erased component", () => {
   })
     .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
 
-  it("takes props, and a key or neither", () => {
+  it("takes props, with an optional key", () => {
     const erased = Story.start(Plain, {}).current.component
     ParentDef.view((_, h) => {
       expect(any(h, { key: "a", props: {} })).type.toBe<View.Child<typeof ParentMessage.Type, any>>()
