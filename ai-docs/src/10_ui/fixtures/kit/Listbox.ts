@@ -130,7 +130,10 @@ export const Listbox = Component.define({
           }
         }
       },
-      ClickedOption: ({ id }) => $.evolve({ open: false }).emit(ListboxEvents.Picked({ id }))
+      ClickedOption: ({ id }) =>
+        activeIn($.props.options, id) === null
+          ? model
+          : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id }))
     }),
   // `parts` returns plain values for the consumer to read, and parts to
   // apply to its elements. `p.part(tag, decorate)` takes only a builder of

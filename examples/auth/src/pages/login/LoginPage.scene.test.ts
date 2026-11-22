@@ -1,8 +1,8 @@
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
-import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
-import { LoginEvents, LoginMessage, LoginPage, SimulateAuthRequest } from "./LoginPage.ts"
+import { describe, it } from "@effect/vitest"
+import { Effect, Redacted } from "effect"
+import { LoginPage, LoginPageEvents, LoginPageMessage, SimulateAuthRequest } from "./LoginPage.ts"
 
 const alice = { userId: "1", email: "alice@example.com", name: "alice" }
 
@@ -40,10 +40,9 @@ describe("LoginPage", () => {
         .expect(submittingButton).toBeDisabled()
         .expect(emailField).toBeDisabled()
         .expect(passwordField).toBeDisabled()
-        .expectExact(SimulateAuthRequest)
-      assert.deepStrictEqual(s.pending[0].command.args, { email: alice.email, password: "password" })
-      s.resolve(SimulateAuthRequest, LoginMessage.SucceededSimulateAuthRequest({ session: alice }))
-        .emitted(LoginEvents.SignedIn({ session: alice }))
+        .expectExact(SimulateAuthRequest.make({ email: alice.email, password: Redacted.make("password") }))
+        .resolve(SimulateAuthRequest, LoginPageMessage.SucceededSimulateAuthRequest({ session: alice }))
+        .emitted(LoginPageEvents.SignedIn({ session: alice }))
     }))
 
   it.effect("failed auth shows the error and leaves submit disabled until the password changes", () =>
@@ -52,7 +51,7 @@ describe("LoginPage", () => {
       s.type(emailField, alice.email)
         .type(passwordField, "wrong")
         .submit(form)
-        .resolve(SimulateAuthRequest, LoginMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" }))
+        .resolve(SimulateAuthRequest, LoginPageMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" }))
         .expect(Locator.inside(form, Locator.text("Invalid credentials"))).toExist()
         .expect(submitButton).toBeDisabled()
         .type(passwordField, "correcthorse")

@@ -769,6 +769,7 @@ The `restore` option of `Component.define` changes what is saved:
 ```ts
 const LoginPage = Component.define({
   name: "LoginPage",
+  scoped: false,
   model: Schema.Struct({ email: Schema.String, password: Schema.String, submitting: Schema.Boolean }),
   message: LoginPageMessage,
   restore: (model) => ({ ...model, password: "", submitting: false })

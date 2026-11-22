@@ -30,16 +30,20 @@ it.layer(AppTest("/"), { buildPerTest: true })("App", (it) => {
         ["/", "Routing", "Welcome Home", "Home"],
         ["/nested/route/is/very/nested", "Nested | Routing", "Very Nested Route!", "Nested"],
         ["/people", "People | Routing", "People", "People"],
-        ["/people/1", "Person 1 | Routing", "Alice Johnson", "People"],
-        ["/people/99", "Person 99 | Routing", "Person Not Found", "People"],
+        ["/people/1", "Person 1 | Routing", "Alice Johnson", null],
+        ["/people/99", "Person 99 | Routing", "Person Not Found", null],
         ["/files", "Files | Routing", "Files", "Files"],
-        ["/files/documents/resume.pdf", "resume.pdf | Files | Routing", "resume.pdf", "Files"],
-        ["/files/documents/missing.txt", "missing.txt | Files | Routing", "Nothing Here", "Files"]
+        ["/files/documents/resume.pdf", "resume.pdf | Files | Routing", "resume.pdf", null],
+        ["/files/documents/missing.txt", "missing.txt | Files | Routing", "Nothing Here", null]
       ] as const
       for (const [url, title, name, current] of pages) {
         yield* navigate(url)
         yield* play.expect(heading(name)).toExist()
-        yield* play.expect(Locator.attr("aria-current", "page")).toHaveText(current)
+        if (current === null) {
+          yield* play.expect(Locator.attr("aria-current", "page")).toBeAbsent()
+        } else {
+          yield* play.expect(Locator.attr("aria-current", "page")).toHaveText(current)
+        }
         assert.strictEqual(play.root.head().title, title, url)
       }
     }))

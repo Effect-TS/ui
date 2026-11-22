@@ -19,7 +19,8 @@ export const NoteEditorMessage = UiSchema.TaggedEnum({
   ClickedDiscard: {},
   ToggledActions: { open: Schema.Boolean },
   SubmittedDiscardForm: { choice: Schema.String },
-  CancelledDiscardDialog: {}
+  CancelledDiscardDialog: {},
+  ClosedDiscardDialog: {}
 })
 
 // What the editor reports to its parent: what the user did, with no cause.
@@ -120,7 +121,8 @@ const clickedDiscard = NoteEditorDef.update(
 const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
   h.dialog.attr("aria-label", "Discard your changes?")
     .modal(open)
-    .onCancel(NoteEditorMessage.CancelledDiscardDialog()).children(
+    .onCancel(NoteEditorMessage.CancelledDiscardDialog())
+    .onClose(NoteEditorMessage.ClosedDiscardDialog()).children(
       h.h2("Discard your changes?"),
       h.form.onSubmit(({ entries }) =>
         NoteEditorMessage.SubmittedDiscardForm({
@@ -227,7 +229,10 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
       choice === "discard"
         ? $.evolve({ draft: model.saved, confirming: false })
         : $.evolve({ confirming: false }),
-    CancelledDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false })
+    CancelledDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false }),
+    // `close` also fires after the editor's own close. `confirming` is
+    // already false by then, so this changes nothing.
+    ClosedDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false })
   },
   // A Subscription is a keyed Stream that runs while it is listed. Use one
   // when you can say "while ...", and a Command for a single event. This one
