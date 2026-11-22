@@ -574,15 +574,19 @@ const TrackScrollArea = Mount.makeStream(
           } catch {}
         }
 
-        const endDrag = (event: PointerEvent) => {
-          if (drag === null || event.pointerId !== drag.pointerId) return
-          const { axis } = drag
+        const clearDrag = () => {
+          if (drag === null) return
+          const { axis, pointerId } = drag
           drag = null
           stopScrolling(axis)
           restoreViewportSnap()
-          if (axis.thumb?.hasPointerCapture?.(event.pointerId) === true) {
-            axis.thumb.releasePointerCapture(event.pointerId)
+          if (axis.thumb?.hasPointerCapture?.(pointerId) === true) {
+            axis.thumb.releasePointerCapture(pointerId)
           }
+        }
+
+        const endDrag = (event: PointerEvent) => {
+          if (drag !== null && event.pointerId === drag.pointerId) clearDrag()
         }
 
         const trackOf = (axis: Axis): Track | null => {
@@ -655,6 +659,10 @@ const TrackScrollArea = Mount.makeStream(
         const onViewportScroll = () => {
           measure()
           if (touchModality || !programmaticScroll) reportScroll()
+          else if (viewport !== null) {
+            lastLeft = viewport.scrollLeft
+            lastTop = viewport.scrollTop
+          }
           clearTimeout(scrollEndTimer)
           scrollEndTimer = setTimeout(() => {
             programmaticScroll = true
@@ -687,8 +695,12 @@ const TrackScrollArea = Mount.makeStream(
           if (nextContent !== content) content = observe(content, nextContent)
           corner = find(cornerAttr)
           for (const axis of [y, x]) {
-            axis.thumb = find(thumbAttr(axis.orientation))
+            const thumb = find(thumbAttr(axis.orientation))
             const scrollbar = find(scrollbarAttr(axis.orientation))
+            if (drag !== null && drag.axis === axis && (scrollbar !== axis.scrollbar || thumb !== axis.thumb)) {
+              clearDrag()
+            }
+            axis.thumb = thumb
             if (scrollbar === axis.scrollbar) continue
             axis.listening?.abort()
             axis.scrollbar = scrollbar

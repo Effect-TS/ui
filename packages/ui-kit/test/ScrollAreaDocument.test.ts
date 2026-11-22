@@ -127,8 +127,10 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
 
   it.effect("handles track press, thumb drag, missed-release fallback, scroll-snap restore, and wheel chaining", () =>
     Effect.gen(function*() {
-      const { barY, thumbY, viewport } = yield* mountArea({}, { keepMounted: true })
+      const { barY, thumbY, viewport } = yield* mountArea()
       stubMetrics(viewport, { clientHeight: 100, scrollHeight: 500, clientWidth: 100, scrollWidth: 100 })
+      viewport.dispatchEvent(new Event("scroll"))
+      yield* tick
       stubMetrics(barY()!, { offsetHeight: 100, offsetWidth: 12 })
       stubMetrics(thumbY()!, { offsetHeight: 20, offsetWidth: 12 })
       barY()!.getBoundingClientRect = () => ({
@@ -143,9 +145,6 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
         toJSON: () => ({})
       })
       viewport.style.scrollSnapType = "y mandatory"
-
-      viewport.dispatchEvent(new Event("scroll"))
-      yield* tick
 
       const mouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
       barY()!.dispatchEvent(mouseDown)
@@ -180,23 +179,36 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       const wheelEdge = new WheelEvent("wheel", { deltaY: 50, bubbles: true, cancelable: true })
       barY()!.dispatchEvent(wheelEdge)
       assert.isFalse(wheelEdge.defaultPrevented)
+
+      thumbY()!.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 2, clientY: 50, bubbles: true }))
+      yield* tick
+      assert.strictEqual(viewport.style.scrollSnapType, "none")
+
+      stubMetrics(viewport, { clientHeight: 100, scrollHeight: 100 })
+      viewport.dispatchEvent(new Event("scroll"))
+      yield* tick
+      assert.isNull(barY())
+      assert.strictEqual(viewport.style.scrollSnapType, "y mandatory")
     }))
 
   it.effect("tracks user scroll timer and ignores programmatic scrolls", () =>
     Effect.gen(function*() {
-      const { root, viewport } = yield* mountArea({}, { keepMounted: true })
-      stubMetrics(viewport, { clientHeight: 100, scrollHeight: 400, clientWidth: 100, scrollWidth: 100 })
+      const { barX, barY, root, viewport } = yield* mountArea({}, { keepMounted: true, horizontal: true })
+      stubMetrics(viewport, { clientHeight: 100, scrollHeight: 400, clientWidth: 100, scrollWidth: 400 })
 
-      viewport.scrollTop = 40
+      viewport.scrollLeft = 30
       viewport.dispatchEvent(new Event("scroll"))
       yield* tick
       assert.isFalse(root.hasAttribute("data-scrolling"))
+      assert.isFalse(barX()!.hasAttribute("data-scrolling"))
 
       viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
       viewport.scrollTop = 80
       viewport.dispatchEvent(new Event("scroll"))
       yield* tick
       assert.isTrue(root.hasAttribute("data-scrolling"))
+      assert.isTrue(barY()!.hasAttribute("data-scrolling"))
+      assert.isFalse(barX()!.hasAttribute("data-scrolling"))
 
       yield* wait(550)
       yield* tick

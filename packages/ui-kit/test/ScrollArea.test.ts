@@ -104,6 +104,23 @@ describe("ScrollArea", () => {
       s.mounted(
         tracked(s),
         sent("MeasuredOverflow", {
+          hasOverflowX: false,
+          hasOverflowY: false,
+          overflowXStart: false,
+          overflowXEnd: false,
+          overflowYStart: false,
+          overflowYEnd: false
+        })
+      )
+
+      assert.notInclude(s.get(thumbXLoc).attrs?.style ?? "", "visibility:hidden")
+      assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "-1")
+      assert.strictEqual(s.query(barYLoc), undefined)
+      assert.strictEqual(s.query(cornerLoc), undefined)
+
+      s.mounted(
+        tracked(s),
+        sent("MeasuredOverflow", {
           hasOverflowX: true,
           hasOverflowY: true,
           overflowXStart: false,
