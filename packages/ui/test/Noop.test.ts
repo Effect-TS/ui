@@ -28,12 +28,12 @@ const Queued = Command.make(
 )
 
 const commands: Record<string, () => Command.Command<Message | Component.Noop>> = {
-  Quiet: () => Quiet(),
-  Mixed: () => Mixed(),
-  AllQuiet: () => AllQuiet(),
-  Empty: () => Empty(),
-  Loud: () => Loud(),
-  LoudAsNoop: () => Loud().pipe(Command.asNoop)
+  Quiet: () => Quiet.make(),
+  Mixed: () => Mixed.make(),
+  AllQuiet: () => AllQuiet.make(),
+  Empty: () => Empty.make(),
+  Loud: () => Loud.make(),
+  LoudAsNoop: () => Loud.make().pipe(Command.asNoop)
 }
 
 /** Records every message it gets, and runs the Command a `Fire` names. */
@@ -50,7 +50,7 @@ const Recorder = Component.define({
       case "Fire":
         return $.set(next).run(commands[message.command]())
       case "Queue":
-        return $.set(next).run(Queued({ n: message.n, silent: message.silent }))
+        return $.set(next).run(Queued.make({ n: message.n, silent: message.silent }))
       case "Got":
         return next
     }
@@ -165,7 +165,7 @@ describe("Component.noop", () => {
     Effect.gen(function*() {
       const Silent = Component.define({ name: "Silent", scoped: false, model: Schema.Number, message: Schema.Never })
         .make({
-          init: ($) => $.set(0).run(Quiet()),
+          init: ($) => $.set(0).run(Quiet.make()),
           update: (model) => model,
           view: (model, h) => h.el("p", String(model))
         })

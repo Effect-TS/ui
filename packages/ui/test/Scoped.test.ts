@@ -54,7 +54,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
     update: (model, message, $) =>
       FormMsg.match(message, {
         Typed: () => ({ ...model, draft: model.draft + "a" }),
-        Save: () => $.run(Save({ text: model.draft })),
+        Save: () => $.run(Save.make({ text: model.draft })),
         Saved: ({ text }) => $.set({ ...model, saved: text }).emit(FormEvents.Saved({ text })),
         Clear: () => ({ ...model, draft: "" })
       }),
@@ -458,7 +458,7 @@ describe("scoped lifetimes", () => {
             init: () => null,
             update: (_, __, $) => {
               if (when !== "while kept") throw new Error("boom")
-              return $.run(Boom())
+              return $.run(Boom.make())
             },
             view: (_, h) => h.el("button").on("click", Msg.Break()).children("fine")
           })
@@ -1292,7 +1292,7 @@ describe("scoped children drawn by other children", () => {
         model: Schema.Null,
         message: FragileMsg,
         receives: ["Break"]
-      }).make({ init: () => null, update: (_, __, $) => $.run(Boom()), view: (_, h) => h.el("p", "fine") })
+      }).make({ init: () => null, update: (_, __, $) => $.run(Boom.make()), view: (_, h) => h.el("p", "fine") })
       const Ref = Fragile.ref("F")
       const Page = Component.define({
         name: "Page",

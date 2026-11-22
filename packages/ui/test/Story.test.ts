@@ -408,7 +408,7 @@ describe("Story", () => {
         s.send(SearchMessage.Query({ text: "a" }))
           .send(SearchMessage.Query({ text: "ab" }))
         assert.deepStrictEqual(s.interrupted.map((command) => command.args), [{ text: "a" }])
-        s.expectExact(Search({ text: "ab" }))
+        s.expectExact(Search.make({ text: "ab" }))
           .resolve(Search, SearchMessage.Results({ items: ["ab"] }))
         assert.deepStrictEqual(s.model.items, ["ab"])
       }))
@@ -454,7 +454,8 @@ describe("Story", () => {
       init: () => ({ url: "" }),
       update: (_model, message, $) =>
         Message.match(message, {
-          Upload: () => $.run(UploadFile({ name: "me.png" }).pipe(Command.map((url) => Message.Uploaded({ url })))),
+          Upload: () =>
+            $.run(UploadFile.make({ name: "me.png" }).pipe(Command.map((url) => Message.Uploaded({ url })))),
           Uploaded: ({ url }) => ({ url })
         }),
       view: (model, h) => h.el("img").attr("src", model.url)
@@ -464,14 +465,14 @@ describe("Story", () => {
       Effect.gen(function*() {
         const s = yield* Story.make(Avatar, {})
         s.send(Message.Upload())
-          .expectExact(UploadFile({ name: "me.png" }))
+          .expectExact(UploadFile.make({ name: "me.png" }))
           .resolve(UploadFile, "https://cdn/me.png")
         assert.strictEqual(s.model.url, "https://cdn/me.png")
       }))
 
     it.effect("a mapped Command as the target still takes the definition's own result", () =>
       Effect.gen(function*() {
-        const mapped = UploadFile({ name: "me.png" }).pipe(
+        const mapped = UploadFile.make({ name: "me.png" }).pipe(
           Command.map((url) => Message.Uploaded({ url }))
         )
         const s = yield* Story.make(Avatar, {})

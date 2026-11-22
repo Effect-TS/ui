@@ -147,7 +147,7 @@ const Linger = Command.make(
 )
 const Lingering = Component.define({ name: "Lingering", scoped: false, model: Schema.Null, message: Schema.Never })
   .make({
-    init: ($) => $.set(null).run(Linger()),
+    init: ($) => $.set(null).run(Linger.make()),
     update: (model) => model,
     view: (_, h) => h.el("span")
   })

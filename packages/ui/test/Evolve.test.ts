@@ -53,7 +53,7 @@ const Checkout = Component.define({
       return lines.length === 0 ? step.evolve({ notice: "Your basket is empty" }).emit(Events.Emptied()) : step
     },
     SubmittedOrder: (model, _message, $) =>
-      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(PlaceOrder({ lines: model.lines.length })),
+      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(PlaceOrder.make({ lines: model.lines.length })),
     // Keeps every field, so the Model stays the same object.
     FailedPlaceOrder: (model) => UiStruct.evolve(model, { submitting: false })
   },

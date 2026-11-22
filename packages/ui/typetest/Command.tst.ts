@@ -28,16 +28,16 @@ declare const $never: Component.Update<{}, never, never, {}>
 describe("Command", () => {
   describe("Issued", () => {
     it("only exposes the work field of its kind", () => {
-      expect(Fx().effect).type.toBe<Effect.Effect<string, never, never>>()
-      expect(Fx().stream).type.toBe<undefined>()
-      expect(St().stream).type.toBe<Stream.Stream<string, never, never>>()
-      expect(St().effect).type.toBe<undefined>()
-      expect(Effect.runSync).type.not.toBeCallableWith(St().effect)
-      expect(Stream.runCollect).type.not.toBeCallableWith(Fx().stream)
+      expect(Fx.make().effect).type.toBe<Effect.Effect<string, never, never>>()
+      expect(Fx.make().stream).type.toBe<undefined>()
+      expect(St.make().stream).type.toBe<Stream.Stream<string, never, never>>()
+      expect(St.make().effect).type.toBe<undefined>()
+      expect(Effect.runSync).type.not.toBeCallableWith(St.make().effect)
+      expect(Stream.runCollect).type.not.toBeCallableWith(Fx.make().stream)
     })
 
     it("narrows on _tag", () => {
-      const command: Command.Command<string> = condition ? Fx() : St()
+      const command: Command.Command<string> = condition ? Fx.make() : St.make()
       if (command._tag === "Effect") expect(command.effect).type.toBe<Effect.Effect<string, never, never>>()
       if (command._tag === "Stream") expect(command.stream).type.toBe<Stream.Stream<string, never, never>>()
     })
@@ -46,17 +46,17 @@ describe("Command", () => {
   describe("map", () => {
     it("keeps the kind and the source result", () => {
       const toMessage = (text: string) => Message.Got({ n: text.length })
-      expect(Fx().pipe(Command.map(toMessage))).type.toBe<
+      expect(Fx.make().pipe(Command.map(toMessage))).type.toBe<
         Command.Issued<typeof Message.Type, never, string, "Effect">
       >()
-      expect(St().pipe(Command.map(toMessage))).type.toBe<
+      expect(St.make().pipe(Command.map(toMessage))).type.toBe<
         Command.Issued<typeof Message.Type, never, string, "Stream">
       >()
       expect(Command.map(Command.interrupt(Fx), toMessage)).type.toBe<Command.Interrupt>()
     })
 
     it("maps a mixed-kind Command to a union the component can run", () => {
-      const input = condition ? Fx() : St()
+      const input = condition ? Fx.make() : St.make()
       const mapped = input.pipe(Command.map((text) => Message.Got({ n: text.length })))
       expect(mapped).type.toBe<
         | Command.Issued<typeof Message.Type, never, string, "Effect">
@@ -179,6 +179,10 @@ describe("Command", () => {
         () => Db.use((db) => db.save)
       )
     })
+
+    it("is not directly callable", () => {
+      expect(Fx).type.not.toBeAssignableTo<(...args: Array<any>) => any>()
+    })
   })
 
   describe("group", () => {
@@ -257,9 +261,9 @@ describe("Command", () => {
 
     it("rejects a Stream Command and a Command.make Command", () => {
       expect(Command.afterRefetch).type.not.toBeCallableWith(SB.make(), "1 second")
-      expect(Command.afterRefetch).type.not.toBeCallableWith(Fx(), "1 second")
-      expect(Command.afterRefetch).type.not.toBeCallableWith(St(), "1 second")
-      expect(Command.afterRefetch("1 second")).type.not.toBeCallableWith(Fx())
+      expect(Command.afterRefetch).type.not.toBeCallableWith(Fx.make(), "1 second")
+      expect(Command.afterRefetch).type.not.toBeCallableWith(St.make(), "1 second")
+      expect(Command.afterRefetch("1 second")).type.not.toBeCallableWith(Fx.make())
       expect(Command.afterRefetch("1 second")).type.not.toBeCallableWith(SB.make())
     })
   })
@@ -269,11 +273,11 @@ describe("Command", () => {
       const Hold = Command.make("Hold", { args: {} }, () => Effect.never)
       const Die = Command.make("Die", { args: {} }, () => Effect.die("boom"))
       const Watch = Command.make("Watch", { args: {}, stream: true }, () => Stream.never)
-      expect($.run).type.toBeCallableWith(Hold())
-      expect($.run).type.toBeCallableWith(Die())
-      expect($.run).type.toBeCallableWith(Watch())
+      expect($.run).type.toBeCallableWith(Hold.make())
+      expect($.run).type.toBeCallableWith(Die.make())
+      expect($.run).type.toBeCallableWith(Watch.make())
       expect($.run).type.toBeCallableWith(
-        Hold().pipe(Command.map((): typeof Message.Type => Message.Got({ n: 1 })))
+        Hold.make().pipe(Command.map((): typeof Message.Type => Message.Got({ n: 1 })))
       )
     })
   })
@@ -292,47 +296,49 @@ describe("Command", () => {
     const QuietStream = Command.make("QuietStream", { args: {}, stream: true }, () => Stream.make(Component.noop, got))
 
     it("a body, a generator and a mapper may end with it, and keep its type", () => {
-      expect(Quiet()).type.toBe<Command.Issued<Component.Noop, never, Component.Noop, "Effect">>()
-      expect(QuietAs()).type.toBe<Command.Issued<Component.Noop, never, Component.Noop, "Effect">>()
-      expect(QuietMap()).type.toBe<Command.Issued<Component.Noop, never, Component.Noop, "Effect">>()
+      expect(Quiet.make()).type.toBe<Command.Issued<Component.Noop, never, Component.Noop, "Effect">>()
+      expect(QuietAs.make()).type.toBe<Command.Issued<Component.Noop, never, Component.Noop, "Effect">>()
+      expect(QuietMap.make()).type.toBe<Command.Issued<Component.Noop, never, Component.Noop, "Effect">>()
       expect<Command.Issued<Msg | Component.Noop, never, Msg | Component.Noop, "Effect">>().type.toBeAssignableFrom(
-        Either()
+        Either.make()
       )
-      expect(Fx().pipe(Command.map(() => Component.noop))).type.toBe<
+      expect(Fx.make().pipe(Command.map(() => Component.noop))).type.toBe<
         Command.Issued<Component.Noop, never, string, "Effect">
       >()
     })
 
     it("$.run takes a Command ending in a message, Component.noop or either, in update and init", () => {
-      for (const command of [Quiet(), QuietAs(), QuietMap(), Either(), QuietStream()]) {
+      for (const command of [Quiet.make(), QuietAs.make(), QuietMap.make(), Either.make(), QuietStream.make()]) {
         expect($.run).type.toBeCallableWith(command)
         expect($init.set({}).run).type.toBeCallableWith(command)
       }
-      expect($.run).type.toBeCallableWith(Quiet(), Fx().pipe(Command.as(got)))
+      expect($.run).type.toBeCallableWith(Quiet.make(), Fx.make().pipe(Command.as(got)))
     })
 
     it("a component whose Message is Schema.Never runs a silent Command, and nothing else", () => {
-      expect($never.run).type.toBeCallableWith(Quiet())
-      expect($never.run).type.toBeCallableWith(Fx().pipe(Command.asNoop))
-      expect($never.run).type.not.toBeCallableWith(Either())
+      expect($never.run).type.toBeCallableWith(Quiet.make())
+      expect($never.run).type.toBeCallableWith(Fx.make().pipe(Command.asNoop))
+      expect($never.run).type.not.toBeCallableWith(Either.make())
     })
 
     it("$.run rejects the value itself, alone or in a union with a Command, and other results", () => {
       expect($.run).type.not.toBeCallableWith(Component.noop)
       expect($init.set({}).run).type.not.toBeCallableWith(Component.noop)
-      const maybe = condition ? Quiet() : Component.noop
+      const maybe = condition ? Quiet.make() : Component.noop
       expect($.run).type.not.toBeCallableWith(maybe)
       expect($init.set({}).run).type.not.toBeCallableWith(maybe)
-      expect($.run).type.not.toBeCallableWith(Command.make("V", { args: {} }, () => Effect.void)())
-      expect($.run).type.not.toBeCallableWith(Command.make("U", { args: {} }, () => Effect.succeed(undefined))())
-      expect($.run).type.not.toBeCallableWith(Command.make("S", { args: {} }, () => Effect.succeed(Symbol.for("x")))())
-      expect($.run).type.not.toBeCallableWith(Command.make("O", { args: {} }, () => Effect.succeed({}))())
-      expect($.run).type.not.toBeCallableWith(Fx())
+      expect($.run).type.not.toBeCallableWith(Command.make("V", { args: {} }, () => Effect.void).make())
+      expect($.run).type.not.toBeCallableWith(Command.make("U", { args: {} }, () => Effect.succeed(undefined)).make())
+      expect($.run).type.not.toBeCallableWith(
+        Command.make("S", { args: {} }, () => Effect.succeed(Symbol.for("x"))).make()
+      )
+      expect($.run).type.not.toBeCallableWith(Command.make("O", { args: {} }, () => Effect.succeed({})).make())
+      expect($.run).type.not.toBeCallableWith(Fx.make())
     })
 
     it("asNoop keeps the kind, source and requirements, in both forms, and takes no Unmatched Command", () => {
-      expect(Fx().pipe(Command.asNoop)).type.toBe<Command.Issued<Component.Noop, never, string, "Effect">>()
-      expect(Command.asNoop(St())).type.toBe<Command.Issued<Component.Noop, never, string, "Stream">>()
+      expect(Fx.make().pipe(Command.asNoop)).type.toBe<Command.Issued<Component.Noop, never, string, "Effect">>()
+      expect(Command.asNoop(St.make())).type.toBe<Command.Issued<Component.Noop, never, string, "Stream">>()
       expect(SA.make().pipe(Command.asNoop)).type.toBe<Command.Issued<Component.Noop, SA, string, "Effect">>()
       expect(Command.asNoop).type.not.toBeCallableWith(Save.make({ id: "t1", title: "milk" }))
       expect(Command.asNoop).type.not.toBeCallableWith(Component.noop)

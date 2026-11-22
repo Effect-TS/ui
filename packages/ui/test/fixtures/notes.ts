@@ -94,13 +94,13 @@ export const Note = Component.define({
   update: (model, message, $) =>
     NoteMessage.match(message, {
       Edit: ({ text }) => ({ ...model, text, saved: false }),
-      Save: () => $.run(SaveNote({ text: model.text })),
+      Save: () => $.run(SaveNote.make({ text: model.text })),
       Saved: () => $.set({ ...model, saved: true }).emit(NoteEvents.Saved({ text: model.text })),
-      Find: ({ text }) => $.run(FindNotes({ text })),
+      Find: ({ text }) => $.run(FindNotes.make({ text })),
       Found: ({ items }) => ({ ...model, items }),
-      Follow: () => $.run(FollowNotes({})),
+      Follow: () => $.run(FollowNotes.make({})),
       Line: () => ({ ...model, lines: model.lines + 1 }),
-      Sync: () => $.run(SyncNote({})),
+      Sync: () => $.run(SyncNote.make({})),
       Synced: () => model,
       Clear: () => $.send(BadgeRef, { _tag: "Clear" }),
       Opened: ({ count }) => ({ ...model, text: `opened ${count}` }),

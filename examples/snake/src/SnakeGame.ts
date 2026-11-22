@@ -31,7 +31,7 @@ export const GenerateApplePosition = Command.make(
 )
 
 const generateApplePosition = (snake: Snake.Snake) =>
-  GenerateApplePosition({ snake }).pipe(
+  GenerateApplePosition.make({ snake }).pipe(
     Command.map((position) => SnakeGameMessage.CompletedGenerateApplePosition({ position }))
   )
 

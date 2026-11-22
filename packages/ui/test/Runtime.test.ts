@@ -60,7 +60,7 @@ const Row = Component.define({
   model: Schema.Number,
   message: RowMessage
 }).make({
-  init: ($) => $.set(0).run(Hold()),
+  init: ($) => $.set(0).run(Hold.make()),
   update: (count) => count + 1,
   view: (count, h) => h.el("li").on("click", RowMessage.Bump()).children(`${h.props.id}:${count}`)
 })
@@ -730,7 +730,7 @@ describe("Runtime", () => {
           model: Schema.Number,
           message: Schema.String
         }).make({
-          init: ($) => $.set(0).run(Explode()),
+          init: ($) => $.set(0).run(Explode.make()),
           update: (model) => model,
           view: (_, h) => h.text("child")
         })
@@ -854,7 +854,7 @@ describe("Runtime", () => {
       init: () => "",
       update: (_, message, $) =>
         Msg.match(message, {
-          Query: ({ text }) => $.run(Search({ text })),
+          Query: ({ text }) => $.run(Search.make({ text })),
           Results: ({ text }) => text
         }),
       view: (model, h) => h.text(model)
@@ -905,10 +905,10 @@ describe("Runtime", () => {
           model: Schema.Struct({ shown: Schema.Boolean, found: Schema.optional(Schema.Boolean) }),
           message: RefMsg
         }).make({
-          init: ($) => $.set({ shown: false }).run(Look()),
+          init: ($) => $.set({ shown: false }).run(Look.make()),
           update: (model, message, $) =>
             RefMsg.match(message, {
-              Show: () => $.set({ shown: true }).run(Look()),
+              Show: () => $.set({ shown: true }).run(Look.make()),
               Found: ({ found }) => ({ ...model, found })
             }),
           view: (model, h) => h.el("form", model.shown ? h.el("input").ref(Field) : null)
@@ -937,7 +937,7 @@ describe("Runtime", () => {
         const next = Quiet.init({})
         for (const effects of [next.commands, next.events] as Array<Array<unknown>>) {
           try {
-            effects.push(Count())
+            effects.push(Count.make())
           } catch {
             // Refused, as it should be.
           }
@@ -1177,7 +1177,7 @@ describe("Runtime", () => {
         const Child = Component.provide(
           Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Null }).make({
             init: () => null,
-            update: (m, _, $) => $.set(m).run(Write()),
+            update: (m, _, $) => $.set(m).run(Write.make()),
             view: (_, h) => h.el("button").on("click", null).children("write")
           }),
           () =>
@@ -1252,7 +1252,7 @@ describe("Runtime", () => {
                 Effect.uninterruptible(
                   Effect.andThen(Deferred.await(gate), Effect.sync(() => events.push("body done")))
                 )
-            )().pipe(Command.map(() => Msg.Done()))
+            ).make().pipe(Command.map(() => Msg.Done()))
           ),
         update: (model) => model,
         view: (_, h) => h.text("holder")
@@ -1419,7 +1419,7 @@ describe("Runtime", () => {
           model: Schema.Boolean,
           message: Msg
         }).make({
-          init: ($) => $.set(true).run(Latest.make()).run(Watch.make()).run(Local()),
+          init: ($) => $.set(true).run(Latest.make()).run(Watch.make()).run(Local.make()),
           update: () => false,
           view: (open, h) =>
             h.el(
@@ -1431,7 +1431,7 @@ describe("Runtime", () => {
                   model: Schema.Null,
                   message: Schema.Never
                 }).make({
-                  init: ($) => $.set(null).run(Latest.make()).run(Watch.make()).run(Local()),
+                  init: ($) => $.set(null).run(Latest.make()).run(Watch.make()).run(Local.make()),
                   update: (model) => model,
                   view: (_, h) => h.text("inner")
                 })(h, { key: "inner", props: {} }) :
@@ -1469,7 +1469,7 @@ describe("Runtime", () => {
           model: Schema.Null,
           message: Schema.Null
         }).make({
-          init: ($) => $.set(null).run(Job({ name: $.props.name })),
+          init: ($) => $.set(null).run(Job.make({ name: $.props.name })),
           update: (model) => model,
           view: (_, h) => h.text(h.props.name),
           subscriptions: (_, props) => props.listen ? [Subscription.make("listen", Stream.never)] : []
@@ -1542,7 +1542,7 @@ describe("Runtime", () => {
         init: () => null,
         update: (model, message, $) =>
           Msg.match(message, {
-            Go: ({ n }) => $.set(model).run(Job({ n }).pipe(Command.asNoop)),
+            Go: ({ n }) => $.set(model).run(Job.make({ n }).pipe(Command.asNoop)),
             Stop: () => $.set(model).run(Command.interrupt(Job))
           }),
         view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
@@ -1589,7 +1589,7 @@ describe("Runtime", () => {
         const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Schema.Number }).make(
           {
             init: () => null,
-            update: (model, n, $) => $.set(model).run(Job({ n }).pipe(Command.asNoop)),
+            update: (model, n, $) => $.set(model).run(Job.make({ n }).pipe(Command.asNoop)),
             view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
           }
         )
@@ -2486,14 +2486,17 @@ describe("Runtime", () => {
         const Holder = Component.define({ name: "Holder", scoped: false, model: Schema.Null, message: Message }).make({
           init: ($) =>
             $.set(null).run(
-              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold)))().pipe(done)
+              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold))).make().pipe(
+                done
+              )
             ),
           update: (model) => model,
           view: (_, h) => h.text("holder")
         })
         const Middle = Component.define({ name: "Middle", scoped: false, model: Schema.Number, message: Message }).make(
           {
-            init: ($) => $.set(0).run(Command.make("test/Slow", { args: {} }, () => Deferred.await(slow))().pipe(done)),
+            init: ($) =>
+              $.set(0).run(Command.make("test/Slow", { args: {} }, () => Deferred.await(slow)).make().pipe(done)),
             update: (model, message) => message._tag === "Done" ? model + 1 : model,
             view: (model, h) => h.el("div", String(model), Holder(h, { key: "h", props: {} }))
           }
@@ -2539,7 +2542,7 @@ describe("Runtime", () => {
         },
         () => Effect.succeed(1)
       )
-      const command = Send({
+      const command = Send.make({
         channel: "general",
         token: Redacted.make("secret"),
         when: new Date(0),
@@ -2569,7 +2572,7 @@ describe("Runtime", () => {
         { args: { secret: Schema.RedactedFromValue(Schema.String), room: Schema.String }, group: ["secret", "room"] },
         () => Effect.succeed(1)
       )
-      const command = Sync({ secret: Redacted.make("secret-token"), room: "a" })
+      const command = Sync.make({ secret: Redacted.make("secret-token"), room: "a" })
       const interrupt = Command.interrupt(Sync, { secret: Redacted.make("secret-token"), room: "a" })
       // The scheduling key keeps the real encoding, so two secrets are two groups.
       assert.strictEqual(command.groupKey, interrupt.groupKey)
@@ -2605,7 +2608,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const command = Upload({
+      const command = Upload.make({
         items: [{ secret: "must-not-log", file, n: 2 }],
         pair: [3, file],
         choice: { file },
@@ -2653,7 +2656,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const command = Upload({
+      const command = Upload.make({
         tail: [file, "must-not-log"],
         middle: [1, file, file, "must-not-log", 2],
         keyed: { n: 3, "file-a": file, "secret-a": "must-not-log" },
@@ -2702,7 +2705,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const encoded = MessageLog.encodeCommand(Save({
+      const encoded = MessageLog.encodeCommand(Save.make({
         codec: { "secret-a": { a: "hidden-one", b: "hidden-two" }, plain: { a: "hidden-three", b: "shown" } },
         fallback: {
           "secret-a": { a: "hidden-one", b: "hidden-two", file },
@@ -2743,7 +2746,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const encoded = MessageLog.encodeCommand(Save({
+      const encoded = MessageLog.encodeCommand(Save.make({
         codec: { token: "hidden-one", other: 1, tokB: "hidden-two" },
         fallback: { token: "hidden-three", other: 2, file },
         reverse: { token: "hidden-four", note: "shown" }
@@ -2782,7 +2785,7 @@ describe("Runtime", () => {
           throw new Error("declared, and it throws")
         }
       })
-      const encoded = MessageLog.encodeCommand(Save({
+      const encoded = MessageLog.encodeCommand(Save.make({
         codec: unread({ id: 1 }),
         fallback: unread({ id: 2, file }),
         throws: throws as any
@@ -2824,7 +2827,7 @@ describe("Runtime", () => {
       list.push(list)
       const link: { next: unknown } = { next: null }
       link.next = link
-      const encoded = MessageLog.encodeCommand(Walk({ node: node as Node, link: link as Link, list }))
+      const encoded = MessageLog.encodeCommand(Walk.make({ node: node as Node, link: link as Link, list }))
       assert.deepStrictEqual(encoded.args, {
         node: { label: "a", secret: { "~redacted": true }, next: { "~unserialisable": "cycle" } },
         link: { next: { "~unserialisable": "cycle" } },
@@ -2839,7 +2842,7 @@ describe("Runtime", () => {
       assert.strictEqual(Schema.encodeSync(Renderer.Ref)(row), "Field[3]")
       const decoded = Schema.decodeSync(Renderer.Ref)("Field[3]")
       assert.deepStrictEqual([decoded.name, decoded.key, decoded.at(1).key], ["Field", "Field[3]", "Field[3][1]"])
-      assert.deepStrictEqual(MessageLog.encodeCommand(Html.Focus({ ref: row })).args, { ref: "Field[3]" })
+      assert.deepStrictEqual(MessageLog.encodeCommand(Html.Focus.make({ ref: row })).args, { ref: "Field[3]" })
     })
 
     it("truncates a Model over maxEntryBytes, and fromLog names the entry", () => {
@@ -4029,7 +4032,7 @@ describe("Runtime", () => {
           model: Schema.String,
           message: Schema.String
         }).make({
-          init: ($) => $.set("a").run(Hold()),
+          init: ($) => $.set("a").run(Hold.make()),
           update: (_, room) => room,
           view: (room, h) => h.el("div", room, Child(h, { key: "child", props: {} }))
         })
@@ -4295,7 +4298,7 @@ describe("Runtime", () => {
           model: Schema.String,
           message: Schema.String
         }).make({
-          init: ($) => $.set("a").run(Hold()),
+          init: ($) => $.set("a").run(Hold.make()),
           update: (_, room) => room,
           view: (room, h) => h.text(room)
         })
@@ -4450,7 +4453,7 @@ describe("Runtime", () => {
         })
           .make({
             init: () => 1,
-            update: (n, _, $) => $.set(n + 1).run(Write()).emit(null),
+            update: (n, _, $) => $.set(n + 1).run(Write.make()).emit(null),
             view: (n, h) => h.el("button").on("click", null).children(String(n))
           })
         const Child = Component.provide(Counter, {
@@ -4571,8 +4574,8 @@ describe("Runtime", () => {
         model: Schema.Number,
         message: Msg
       }).make({
-        init: ($) => $.set(0).run(Again()),
-        update: (n, _, $) => $.set(n + 1).run(Again()),
+        init: ($) => $.set(0).run(Again.make()),
+        update: (n, _, $) => $.set(n + 1).run(Again.make()),
         view: (n, h) => h.text(String(n))
       })
       yield* TestHost.mount(Loop, {})

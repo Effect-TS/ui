@@ -651,14 +651,14 @@ const typeKey = (model: Model, $: SelectUpdate, key: string) => {
   const { index, next } = typeahead(model, key, props.items, startOf(model, props))
   const item = props.items[index]
   const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.set({ ...model, ...next, ...moved }).run(WaitBeforeResetTyping({}))
+  const typed = $.set({ ...model, ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
   return item === undefined || props.open || valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
 const focusTrigger = (_model: Model, _message: unknown, $: SelectUpdate) =>
-  $.run(Html.Focus({ ref: Trigger }).pipe(Command.asNoop))
+  $.run(Html.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 

@@ -524,7 +524,7 @@ const timed = (entry: Entry, props: ToastProviderProps): boolean =>
   entry.transition !== "ending" && entry.type !== "loading" && timeoutOf(entry, props) > 0
 
 const wait = (entry: Entry, props: ToastProviderProps) =>
-  WaitBeforeDismissal({ id: entry.id, timeout: timeoutOf(entry, props) })
+  WaitBeforeDismissal.make({ id: entry.id, timeout: timeoutOf(entry, props) })
 
 const stop = (id: string) => Command.interrupt(WaitBeforeDismissal, { id })
 

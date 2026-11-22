@@ -760,10 +760,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         }
       }).make({
         // init's Command is dropped silently: the client runs it when it adopts.
-        init: ($) => $.set({ status: "loading" }).run(Track()),
+        init: ($) => $.set({ status: "loading" }).run(Track.make()),
         update: (model, message, $) =>
           message._tag === "Loaded"
-            ? $.set({ status: "loaded" }).run(Command.interrupt(Track)).run(Track()).emit(
+            ? $.set({ status: "loaded" }).run(Command.interrupt(Track)).run(Track.make()).emit(
               "loaded"
             )
             : { ...model, status: "tracked" },
@@ -858,8 +858,8 @@ describe("HtmlServer", { concurrent: false }, () => {
         message: Message,
         elements: Html
       }).make({
-        init: ($) => $.set(0).run(Log()),
-        update: (count, _, $) => $.set(count + 1).run(Log()),
+        init: ($) => $.set(0).run(Log.make()),
+        update: (count, _, $) => $.set(count + 1).run(Log.make()),
         view: (count, h) => h.p.onMount(mountSending("Go", Message.Go())).children(String(count))
       })
       // An event from a child drives the parent's update twice on the server.
@@ -883,7 +883,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: (count, _, $) => $.set(count + 1).run(Log()),
+        update: (count, _, $) => $.set(count + 1).run(Log.make()),
         view: (count, h) => h.div(h.p(String(count)), Child(h, { key: "c", props: {}, onEmit: () => Message.Go() }))
       })
       const problems: Array<Query.Problem.Any> = []
@@ -1270,7 +1270,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         }).make({
           init: () => false,
           update: (moved, message, $) =>
-            message._tag === "Look" ? $.set(moved).run(Look()) : message._tag === "Move" ? true : moved,
+            message._tag === "Look" ? $.set(moved).run(Look.make()) : message._tag === "Move" ? true : moved,
           view: (moved, h) => {
             const card = Card(h, {
               key: "c",

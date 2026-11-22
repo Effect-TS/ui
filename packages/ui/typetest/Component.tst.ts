@@ -129,14 +129,14 @@ describe("Component", () => {
       )
       // A case constructor returns just its case, so the Command issues that case.
       type Done = typeof Message.cases.Done.Type
-      expect(UsesScope()).type.toBe<Command.Issued<Done, never, Done, "Effect">>()
+      expect(UsesScope.make()).type.toBe<Command.Issued<Done, never, Done, "Effect">>()
       const C = Component.define({
         name: "C",
         scoped: false,
         model: Schema.Struct({}),
         message: Message
       }).make({
-        init: ($) => $.set({}).run(UsesScope()),
+        init: ($) => $.set({}).run(UsesScope.make()),
         update: (model) => model,
         view: (_, h) => h.el("div")
       })
