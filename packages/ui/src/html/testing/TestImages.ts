@@ -1,5 +1,5 @@
 /**
- * A fake `Html.Images` for whole-app tests, so a test decides how each
+ * A fake `DomImages.Images` for whole-app tests, so a test decides how each
  * image load settles, without a document, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`. Every load stays pending
@@ -10,7 +10,7 @@
  *
  * ```ts import.meta.vitest
  * import { Component, Subscription, UiSchema } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
+ * import { DomImages, Html } from "@effect/ui/html"
  * import { TestImages } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
  * import { Effect, Layer, Schema, Stream } from "effect"
@@ -30,7 +30,7 @@
  *   subscriptions: () => [
  *     Subscription.make(
  *       "photo",
- *       Stream.fromEffect(Html.Images.use((images) => images.load({ src: "/ada.png" }))).pipe(
+ *       Stream.fromEffect(DomImages.Images.use((images) => images.load({ src: "/ada.png" }))).pipe(
  *         Stream.map((status) => Message.Settled({ status }))
  *       )
  *     )
@@ -52,7 +52,7 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import * as Html from "../Html.ts"
+import * as DomImages from "../DomImages.ts"
 
 /**
  * The `TestImages` service: the fake's control.
@@ -67,7 +67,7 @@ export interface TestImages {
    * same fields are the same. Throws, listing the pending sources, when
    * none is of `source`.
    */
-  readonly settle: (source: Html.ImageSource, status: "loaded" | "error") => void
+  readonly settle: (source: DomImages.ImageSource, status: "loaded" | "error") => void
 }
 
 /**
@@ -86,7 +86,7 @@ interface Pending {
   readonly settle: (status: "loaded" | "error") => void
 }
 
-const encode = ({ crossOrigin, referrerPolicy, sizes, src, srcSet }: Html.ImageSource): string =>
+const encode = ({ crossOrigin, referrerPolicy, sizes, src, srcSet }: DomImages.ImageSource): string =>
   JSON.stringify({ src, srcSet, sizes, crossOrigin, referrerPolicy })
 
 /**
@@ -97,7 +97,7 @@ const encode = ({ crossOrigin, referrerPolicy, sizes, src, srcSet }: Html.ImageS
  * @category constructors
  * @since 0.1.0
  */
-export const make = (): Html.Images & TestImages => {
+export const make = (): DomImages.Images & TestImages => {
   const pending = new Set<Pending>()
   return {
     load: (source) =>
@@ -124,7 +124,7 @@ export const make = (): Html.Images & TestImages => {
 }
 
 /**
- * Provides a fake `Html.Images` with its control, `TestImages`.
+ * Provides a fake `DomImages.Images` with its control, `TestImages`.
  *
  * @stability experimental
  * @category layers
@@ -133,7 +133,7 @@ export const make = (): Html.Images & TestImages => {
 export const layer: Layer.Layer<TestImages> = Layer.effectContext(
   Effect.sync(() => {
     const images = make()
-    return Context.make(TestImages, images).pipe(Context.add(Html.Images, images))
+    return Context.make(TestImages, images).pipe(Context.add(DomImages.Images, images))
   })
 )
 
@@ -144,7 +144,7 @@ export const layer: Layer.Layer<TestImages> = Layer.effectContext(
  * @category testing
  * @since 0.1.0
  */
-export const load = (source: Html.ImageSource): Effect.Effect<void, never, TestImages> =>
+export const load = (source: DomImages.ImageSource): Effect.Effect<void, never, TestImages> =>
   TestImages.useSync((images) => images.settle(source, "loaded"))
 
 /**
@@ -154,5 +154,5 @@ export const load = (source: Html.ImageSource): Effect.Effect<void, never, TestI
  * @category testing
  * @since 0.1.0
  */
-export const fail = (source: Html.ImageSource): Effect.Effect<void, never, TestImages> =>
+export const fail = (source: DomImages.ImageSource): Effect.Effect<void, never, TestImages> =>
   TestImages.useSync((images) => images.settle(source, "error"))

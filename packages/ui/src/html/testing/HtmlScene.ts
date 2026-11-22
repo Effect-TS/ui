@@ -79,6 +79,7 @@ import * as engine from "../../internal/story.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
+import type * as DomSubscription from "../DomSubscription.ts"
 import type * as Html from "../Html.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
@@ -197,9 +198,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this
   /**
    * Fires `event` on the document, as the browser host delivers it to the
-   * component's `Html.onDocument` listeners. Missing payload fields default
-   * as `keydown` and `click` default them, and `defaultPrevented` to
-   * `false`.
+   * component's `DomSubscription.onDocument` listeners. Missing payload
+   * fields default as `keydown` and `click` default them, and
+   * `defaultPrevented` to `false`.
    *
    * **Details**
    *
@@ -213,14 +214,17 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * It throws when nothing listens for `event` on the document, listing
    * the active keys, and is ignored when no listener produced a message.
    */
-  fireDocument<K extends keyof Html.DocumentEvents>(
+  fireDocument<K extends keyof DomSubscription.DocumentEvents>(
     event: K,
-    payload?: Partial<Html.GlobalPayload<Html.DocumentEvents[K]>>
+    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.DocumentEvents[K]>>
   ): this
-  /** Fires `event` on the window, as `fireDocument` does for `Html.onWindow`'s listeners. */
-  fireWindow<K extends keyof Html.WindowEvents>(
+  /**
+   * Fires `event` on the window, as `fireDocument` does for
+   * `DomSubscription.onWindow`'s listeners.
+   */
+  fireWindow<K extends keyof DomSubscription.WindowEvents>(
     event: K,
-    payload?: Partial<Html.GlobalPayload<Html.WindowEvents[K]>>
+    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.WindowEvents[K]>>
   ): this
 
   /** Asserts on the elements `locator` matches in the current view. */

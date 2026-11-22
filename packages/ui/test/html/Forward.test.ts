@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema, View } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -226,7 +226,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
       Message.match(message, {
         Clicked: () => model,
         Reversed: () => ({ ...model, ids: [...model.ids].reverse() }),
-        Focus: () => $.run(Html.focus(First, ({ found }) => Message.Found({ found }))),
+        Focus: () => $.run(DomCommand.focus(First, ({ found }) => Message.Found({ found }))),
         Found: ({ found }) => ({ ...model, log: [...model.log, `found ${found}`] }),
         Mounted: ({ id, tag }) => ({ ...model, log: [...model.log, `mounted ${id} on ${tag}`] })
       }),

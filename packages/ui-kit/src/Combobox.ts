@@ -237,6 +237,7 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
+import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -789,7 +790,7 @@ const groupsOf = (items: ReadonlyArray<ComboboxItem>): ReadonlyArray<ComboboxGro
 type ComboboxStep = Component.Step<Model, Message, ComboboxEvents>
 
 const focus = (step: ComboboxStep, ref: typeof Input | typeof Trigger | typeof Chip): ComboboxStep =>
-  step.run(Html.Focus.make({ ref }).pipe(Command.asNoop))
+  step.run(DomCommand.Focus.make({ ref }).pipe(Command.asNoop))
 
 const focusInput = (_model: Model, _message: unknown, $: ComboboxUpdate) =>
   focus($, $.props.inputInPopup === true && !$.props.open ? Trigger : Input)

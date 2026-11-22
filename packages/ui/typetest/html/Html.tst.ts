@@ -1,5 +1,5 @@
 import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
@@ -475,7 +475,7 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (_model, _, $) => $.run(Html.focus(Field, ({ found }) => Msg.Focused({ found }))),
+      update: (_model, _, $) => $.run(DomCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
       view: (_, h) => h.input.ref(Field)
     })
     expect(Form).type.toBe<Component.Component<"Form", {}, string, Msg, never, never, Html.Elements>>()

@@ -157,6 +157,7 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
+import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -507,8 +508,8 @@ const TrackViewport = Mount.makeStream(
 
 // The window's focus, since the timers pause while it's elsewhere.
 const windowFocus = [
-  Html.onWindow("focus", Message.FocusedWindow()),
-  Html.onWindow("blur", Message.BlurredWindow())
+  DomSubscription.onWindow("focus", Message.FocusedWindow()),
+  DomSubscription.onWindow("blur", Message.BlurredWindow())
 ]
 
 // The stack is expanded while the pointer is on it or keyboard focus is in it.

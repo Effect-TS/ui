@@ -6,7 +6,7 @@ import {
   type ComboboxProps,
   makeComboboxFilter
 } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
+import { DomCommand, Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -204,7 +204,7 @@ describe("Combobox", () => {
       assert.deepInclude(s.get(clearButton).attrs, { type: "button", tabindex: "-1", "data-visible": "" })
       s.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
       s.fire(clearButton, "click", pointer("mouse")).emitted(edited("", "clear-press"), picked(null, "clear-press"))
-      s.resolve(Html.Focus, { found: true })
+      s.resolve(DomCommand.Focus, { found: true })
       s.props({ ...base, name: "fruit" })
       assert.isUndefined(s.query(clearButton))
     }))
@@ -274,11 +274,11 @@ describe("Combobox", () => {
       )
       s.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
       s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press")).expectDefaultPrevented()
-      s.resolve(Html.Focus, { found: true })
+      s.resolve(DomCommand.Focus, { found: true })
       s.props(base)
       s.fire(group, "mousedown", pointer("mouse")).emitted(opened("input-press"), highlighted(null, -1, "none"))
         .expectDefaultPrevented()
-      s.resolve(Html.Focus, { found: true })
+      s.resolve(DomCommand.Focus, { found: true })
       s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
       s.fire(trigger, "click", pointer("touch")).emitted(opened("trigger-press"))
       s.props({ ...base, open: true, highlightItemOnHover: false })
@@ -417,11 +417,11 @@ describe("Combobox", () => {
       assert.deepInclude(s.get(item("chip-apple")).attrs, { tabindex: "-1" })
       s.fire(input, "keydown", key("Backspace")).emitted(picked(["apple"], "none"))
       s.fire(input, "keydown", key("ArrowLeft", { selectionStart: 0, selectionEnd: 0 })).expectDefaultPrevented()
-      s.resolve(Html.Focus, { found: true })
+      s.resolve(DomCommand.Focus, { found: true })
       s.fire(input, "keydown", key("ArrowLeft", { selectionStart: 1, selectionEnd: 1 })).expectIgnored()
       s.fire(item("remove-apple"), "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
       s.fire(item("remove-apple"), "click", pointer("mouse")).emitted(picked(["grape"], "chip-remove-press"))
-      s.resolve(Html.Focus, { found: true })
+      s.resolve(DomCommand.Focus, { found: true })
       s.props({ ...base, multiple: true, value: ["apple"], inputValue: "a" })
       s.fire(input, "keydown", key("Backspace")).expectIgnored()
       s.props({ ...base, multiple: true, value: ["apple"], readOnly: true })

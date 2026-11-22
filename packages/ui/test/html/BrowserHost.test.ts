@@ -13,7 +13,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -2090,9 +2090,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: (log, message, $) =>
           Message.match(message, {
-            Focus: () => $.run(Html.focus(Field, ({ found }) => Message.Found({ found }))),
-            FocusMissing: () => $.run(Html.focus(Missing, ({ found }) => Message.Found({ found }))),
-            Measure: () => $.run(Html.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
+            Focus: () => $.run(DomCommand.focus(Field, ({ found }) => Message.Found({ found }))),
+            FocusMissing: () => $.run(DomCommand.focus(Missing, ({ found }) => Message.Found({ found }))),
+            Measure: () => $.run(DomCommand.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
             Found: ({ found }) => [...log, `found ${found}`],
             Measured: ({ some }) => [...log, `measured ${some}`],
             Mounted: ({ tag }) => [...log, `mounted ${tag}`]

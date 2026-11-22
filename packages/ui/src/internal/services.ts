@@ -195,8 +195,8 @@ export interface OnServer {
  *
  * `enter` renders the dirty ancestors, then calls `f` with the key's latest
  * declaration, unless the Subscription has stopped. `emit` enters the same
- * way. A source that calls user code, such as `Html.onDocument`'s handler,
- * does so inside `enter`, so a stale declaration never runs.
+ * way. A source that calls user code, such as `DomSubscription.onDocument`'s
+ * handler, does so inside `enter`, so a stale declaration never runs.
  *
  * `Router.subscription` uses it, so a navigation reaches the root inside the
  * flush whose Command made it.

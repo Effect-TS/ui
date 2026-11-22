@@ -155,6 +155,7 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
+import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -355,13 +356,13 @@ const WaitBeforeClosing = Command.make(
 // handler that stops the event can't hide it: `update` knows from `hovered`
 // whether the press was outside the tooltip.
 const dismissals = [
-  Html.onDocument(
+  DomSubscription.onDocument(
     "keydown",
     ({ composing, defaultPrevented, key }) =>
       key === "Escape" && !composing && !defaultPrevented ? Message.PressedEscape() : undefined,
     { preventDefault: true }
   ),
-  Html.onDocument("mousedown", Message.PressedDocument(), { capture: true })
+  DomSubscription.onDocument("mousedown", Message.PressedDocument(), { capture: true })
 ]
 
 const opened = TooltipEvents.Opened()

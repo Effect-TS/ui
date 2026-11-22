@@ -18,7 +18,7 @@
  * **Loading behavior**
  *
  * Set the image source and `fallbackDelay` on the avatar. The avatar loads
- * the source through `Html.Images` before the image part is rendered, so
+ * the source through `DomImages.Images` before the image part is rendered, so
  * `loading="lazy"` on that part does not defer the request. The delay
  * defaults to zero.
  *
@@ -71,6 +71,7 @@
  * @since 0.1.0
  */
 import * as Component from "@effect/ui/Component"
+import * as DomImages from "@effect/ui/html/DomImages"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -179,7 +180,7 @@ const loadImage = (source: Source) =>
       return hasImage(source)
         ? Stream.concat(
           Stream.make(report("loading")),
-          Stream.fromEffect(Html.Images.use((images) => images.load(source))).pipe(Stream.map(report))
+          Stream.fromEffect(DomImages.Images.use((images) => images.load(source))).pipe(Stream.map(report))
         )
         : Stream.make(report("error"))
     }
@@ -217,7 +218,7 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"
  *
  * **Details**
  *
- * The avatar loads the image through `Html.Images`, and the image shows
+ * The avatar loads the image through `DomImages.Images`, and the image shows
  * once it has loaded. Until then, or when it fails, the fallback shows,
  * after `fallbackDelay`. On the server, and on a host without a loader,
  * the image never loads, so the fallback shows. A `TestHost` test settles

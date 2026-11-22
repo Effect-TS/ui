@@ -10,7 +10,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { DomCommand } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -2842,7 +2842,7 @@ describe("Runtime", () => {
       assert.strictEqual(Schema.encodeSync(Renderer.Ref)(row), "Field[3]")
       const decoded = Schema.decodeSync(Renderer.Ref)("Field[3]")
       assert.deepStrictEqual([decoded.name, decoded.key, decoded.at(1).key], ["Field", "Field[3]", "Field[3][1]"])
-      assert.deepStrictEqual(MessageLog.encodeCommand(Html.Focus.make({ ref: row })).args, { ref: "Field[3]" })
+      assert.deepStrictEqual(MessageLog.encodeCommand(DomCommand.Focus.make({ ref: row })).args, { ref: "Field[3]" })
     })
 
     it("truncates a Model over maxEntryBytes, and fromLog names the entry", () => {
