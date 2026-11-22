@@ -1,12 +1,12 @@
 import { FileTreeEntry, findEntry, formatFileSize } from "#domain/FileTree"
 import type { View } from "@effect/ui"
-import { Option } from "effect"
+import { type Array, Option } from "effect"
 import { EntryList, filesUrl } from "../../files/components/EntryList.ts"
 import { AppRoute } from "../../routes.ts"
 
 const filesIndexUrl = AppRoute.print(AppRoute.FilesIndex())
 
-export const FilesPage = <M>(h: View.H<M>, path: ReadonlyArray<string>) =>
+export const FilesPage = <M>(h: View.H<M>, path: Array.NonEmptyReadonlyArray<string>) =>
   h.div.children(
     h.nav.attr("aria-label", "Breadcrumb").class("flex flex-wrap items-center gap-2 mb-6 text-sm").children(
       h.a.attr("href", filesIndexUrl).class("text-blue-500 hover:underline").children("Files"),

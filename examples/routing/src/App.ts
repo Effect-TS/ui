@@ -1,7 +1,7 @@
 import { addSearchToHistory } from "#domain/SearchHistory"
 import { Component, Head, Router, UiSchema } from "@effect/ui"
 import { NavigationMenu } from "@effect/ui-kit"
-import { Schema } from "effect"
+import { Array, Schema, String } from "effect"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
 import { FilesPage } from "./pages/files/FilesPage.ts"
 import { HomePage } from "./pages/HomePage.ts"
@@ -11,7 +11,7 @@ import { PeoplePage } from "./pages/people/PeoplePage.ts"
 import { PersonPage } from "./pages/people/PersonPage.ts"
 import { AppRoute } from "./routes.ts"
 
-const filesPathOf = (route: typeof AppRoute.cases.Files.Type): ReadonlyArray<string> => route.params["*"].split("/")
+const filesPathOf = (route: typeof AppRoute.cases.Files.Type) => String.split(route.params["*"], "/")
 
 const routeTitle = (route: AppRoute): string =>
   AppRoute.match(route, {
@@ -20,7 +20,7 @@ const routeTitle = (route: AppRoute): string =>
     People: () => "People | Routing",
     Person: ({ params }) => `Person ${params.personId} | Routing`,
     FilesIndex: () => "Files | Routing",
-    Files: (route) => `${filesPathOf(route).at(-1)} | Files | Routing`,
+    Files: (route) => `${Array.lastNonEmpty(filesPathOf(route))} | Files | Routing`,
     NotFound: () => "NotFound | Routing"
   })
 

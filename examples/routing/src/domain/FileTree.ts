@@ -39,18 +39,19 @@ export const fileTree: ReadonlyArray<FileTreeEntry> = [
 ]
 
 export const findEntry = (
-  path: ReadonlyArray<string>,
+  path: Array.NonEmptyReadonlyArray<string>,
   entries: ReadonlyArray<FileTreeEntry> = fileTree
 ): Option.Option<FileTreeEntry> => {
-  const [name, ...rest] = path
-  const entry = Array.findFirst(entries, (entry) => entry.name === name)
-  return rest.length === 0
-    ? entry
-    : Option.flatMap(entry, (entry) =>
-      FileTreeEntry.$match(entry, {
-        File: () => Option.none(),
-        Directory: ({ entries }) => findEntry(rest, entries)
-      }))
+  const entry = Array.findFirst(entries, (entry) => entry.name === Array.headNonEmpty(path))
+  return Array.match(Array.tailNonEmpty(path), {
+    onEmpty: () => entry,
+    onNonEmpty: (rest) =>
+      Option.flatMap(entry, (entry) =>
+        FileTreeEntry.$match(entry, {
+          File: () => Option.none(),
+          Directory: ({ entries }) => findEntry(rest, entries)
+        }))
+  })
 }
 
 const BYTES_PER_KILOBYTE = 1024
