@@ -41,8 +41,7 @@ export const fieldsetDisabled = Effect.acquireRelease(
 /**
  * happy-dom has no popover API. Showing one sends `beforetoggle`, and focuses
  * an `autofocus` element in it, or in a `<dialog>` the first field, as a
- * browser does before the dialog's own mount starts. Comes with
- * `fieldsetDisabled`.
+ * browser does before the dialog's own mount starts.
  */
 export const popovers = Effect.acquireRelease(
   Effect.sync(() => {
