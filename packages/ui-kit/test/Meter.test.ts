@@ -13,8 +13,17 @@ const standIn = {
     meter: Component.Headless.Parts<typeof Meter>,
     h: View.Helper<never, MeterProps> & View.Tags<Html.Elements, never>
   ) =>
-    meter.root(h.div.attrs({ role: "progressbar", "aria-labelledby": "heading" })).children(
-      meter.label(h.span.class("label")).children("Storage"),
+    meter.root(
+      h.div.attrs({
+        role: "progressbar",
+        "aria-labelledby": "heading",
+        "aria-valuemin": "9",
+        "aria-valuemax": "99",
+        "aria-valuenow": "99",
+        "aria-valuetext": "wrong"
+      })
+    ).children(
+      meter.label(h.span.class("label").attrs({ id: "custom-label", role: "heading" })).children("Storage"),
       meter.value(h.span.class("value").attr("aria-hidden", "false")),
       meter.track(h.div.class("track")).children(
         meter.indicator(h.div.class("fill")).attr("style", "background:red;width:1px")
@@ -42,6 +51,7 @@ describe("Meter", () => {
       assert.strictEqual(s.get(label).attrs?.role, "presentation")
       const labelId = s.get(label).attrs?.id
       assert.isString(labelId)
+      assert.notStrictEqual(labelId, "custom-label")
       assert.strictEqual(attrs?.["aria-labelledby"], `heading ${labelId}`)
       // NVDA needs visually hidden content after the consumer's children to read the label.
       const helper = s.get(root).children?.at(-1)

@@ -6,6 +6,8 @@ import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 
+const stale = { "data-progressing": "stale", "data-complete": "stale", "data-indeterminate": "stale" }
+
 // Every part, with the consumer's own name for the bar next to the label.
 const standIn = {
   elements: Html,
@@ -13,11 +15,25 @@ const standIn = {
     progress: Component.Headless.Parts<typeof Progress>,
     h: View.Helper<never, ProgressProps> & View.Tags<Html.Elements, never>
   ) =>
-    progress.root(h.div.attrs({ "aria-labelledby": "heading", "aria-valuenow": "99", "data-complete": "" }))
+    progress.root(
+      h.div.attrs({
+        ...stale,
+        role: "meter",
+        "aria-labelledby": "heading",
+        "aria-valuemin": "9",
+        "aria-valuemax": "99",
+        "aria-valuenow": "99",
+        "aria-valuetext": "wrong"
+      })
+    )
       .children(
-        progress.label(h.span.class("label")).children("Uploading"),
-        progress.value(h.span.class("value").attr("aria-hidden", "false")),
-        progress.track(h.div.class("track")).children(progress.indicator(h.div.class("fill")))
+        progress.label(h.span.class("label").attrs({ ...stale, id: "custom-label", role: "heading" })).children(
+          "Uploading"
+        ),
+        progress.value(h.span.class("value").attrs({ ...stale, "aria-hidden": "false" })),
+        progress.track(h.div.class("track").attrs(stale)).children(
+          progress.indicator(h.div.class("fill").attrs(stale))
+        )
       )
 }
 
@@ -30,8 +46,9 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const parts = (props: ProgressProps) => Story.parts(Progress, { model: {}, props })
 const build = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, [])
-const statesOf = (attrs: Readonly<Record<string, string | undefined>> | undefined) =>
-  ["data-progressing", "data-complete", "data-indeterminate"].filter((name) => attrs?.[name] === "")
+const expectState = (attrs: Locator.Node["attrs"], active: keyof typeof stale) => {
+  for (const name of Object.keys(stale)) assert.strictEqual(attrs?.[name], name === active ? "" : undefined, name)
+}
 const everyPart = [root, label, value, track, indicator]
 
 describe("Progress", () => {
@@ -40,6 +57,7 @@ describe("Progress", () => {
       const s = yield* Scene.make(Progress, { value: 1, max: 3 }, standIn)
       const id = s.get(label).attrs?.id
       assert.isString(id)
+      assert.notStrictEqual(id, "custom-label")
       assert.deepInclude(s.get(root).attrs, {
         "aria-valuemin": "0",
         "aria-valuemax": "3",
@@ -51,7 +69,7 @@ describe("Progress", () => {
       assert.strictEqual(s.get(label).attrs?.role, "presentation")
       assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
       assert.strictEqual(Locator.textOf(s.get(value)), "33%")
-      for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-progressing"])
+      for (const part of everyPart) expectState(s.get(part).attrs, "data-progressing")
 
       s.props({ value: 1, valueText: "One file uploaded" })
       assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "One file uploaded")
@@ -62,7 +80,7 @@ describe("Progress", () => {
       assert.strictEqual(s.get(root).attrs?.["aria-valuenow"], "100")
       assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "All files uploaded")
       assert.strictEqual(Locator.textOf(s.get(value)), "All files uploaded")
-      for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-complete"])
+      for (const part of everyPart) expectState(s.get(part).attrs, "data-complete")
 
       s.props({ value: null, valueText: undefined })
       const attrs = s.get(root).attrs
@@ -70,7 +88,7 @@ describe("Progress", () => {
       assert.isUndefined(attrs?.["aria-valuenow"])
       assert.strictEqual(attrs?.["aria-valuetext"], "indeterminate progress")
       assert.strictEqual(Locator.textOf(s.get(value)), "")
-      for (const part of everyPart) assert.deepStrictEqual(statesOf(s.get(part).attrs), ["data-indeterminate"])
+      for (const part of everyPart) expectState(s.get(part).attrs, "data-indeterminate")
 
       s.props({ value: null, valueText: "Preparing" })
       assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "Preparing")

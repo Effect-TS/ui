@@ -238,7 +238,9 @@ describe("Slider", () => {
       s.mounted(tracked(s), moved(0.8)).emitted({ _tag: "Moved", value: [60, 60] })
     }))
 
-  it("the thumb keeps the consumer's attributes on the input, but the slider's own win, present or absent", () => {
+  it("each part keeps the consumer's attributes, while the slider's own win, present or absent", () => {
+    const stale = { "data-dragging": "", "data-orientation": "vertical", "data-disabled": "" }
+    const slider = parts({ value: 40 })
     const element = h.input
       .class("range")
       .attrs({
@@ -247,12 +249,23 @@ describe("Slider", () => {
         "aria-valuetext": "Loud",
         type: "text",
         min: "5",
+        max: "50",
+        step: "5",
+        "aria-orientation": "vertical",
+        "aria-valuenow": "3",
         value: "3",
         "aria-disabled": "true",
         style: "color:red"
       })
+      .value("3")
       .disabled(true)
-    const built = View.build(parts({ value: 40 }).thumb({ element: h.div.class("thumb"), input: element }), [])
+    const built = View.build(
+      slider.thumb({
+        element: h.div.class("thumb").attrs({ ...stale, "data-index": "9", style: "color:blue" }),
+        input: element
+      }),
+      []
+    )
     const inner = built.children?.[0] as View.Element<unknown>
     assert.strictEqual(inner.tag, "input")
     const attrs = inner.attrs ?? {}
@@ -263,12 +276,37 @@ describe("Slider", () => {
       "aria-valuetext": "Loud",
       type: "range",
       min: "0",
-      max: "100"
+      max: "100",
+      step: "1",
+      "aria-orientation": "horizontal",
+      "aria-valuenow": "40"
     })
+    assert.strictEqual(inner.props.value, "40")
     assert.isUndefined(attrs["aria-disabled"])
     assert.isUndefined(attrs.disabled)
     assert.match(attrs.style ?? "", /^color:red;position:absolute/)
-    assert.deepInclude(built.attrs, { class: "thumb", "data-index": "0" })
+    const expectAttrs = (part: View.ElementBuilder<never, never, any, any>, attrs: Record<string, string>) =>
+      assert.deepStrictEqual(View.build(part, []).attrs, { "data-orientation": "horizontal", ...attrs })
+    expectAttrs(slider.root(h.div.class("slider").attrs({ ...stale, role: "region" })), {
+      class: "slider",
+      role: "group"
+    })
+    expectAttrs(slider.value(h.output.class("value").attrs({ ...stale, "aria-live": "polite" })), {
+      class: "value",
+      "aria-live": "off"
+    })
+    expectAttrs(slider.control(h.div.class("control").attrs(stale)), { class: "control" })
+    expectAttrs(slider.track(h.div.class("track").attrs(stale)), { class: "track" })
+    expectAttrs(slider.indicator(h.div.class("indicator").attrs({ ...stale, style: "color:blue" })), {
+      class: "indicator",
+      style: "color:blue;--slider-indicator-start:0%;--slider-indicator-size:40%"
+    })
+    assert.deepStrictEqual(built.attrs, {
+      class: "thumb",
+      "data-orientation": "horizontal",
+      "data-index": "0",
+      style: "color:blue;--slider-thumb-position:40%"
+    })
   })
 
   it("a thumb needs an index with an array value, and one that has a value", () => {

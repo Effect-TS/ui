@@ -1,16 +1,20 @@
-import { type Component, UiSchema, type View } from "@effect/ui"
+import { Component, Mount, UiSchema, type View } from "@effect/ui"
 import { Menu, type MenuEvents, MenuTrigger, type MenuTriggerPress } from "@effect/ui-kit"
 import type { Html } from "@effect/ui/html"
-import { Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
+
+class Clock extends Context.Service<Clock, {}>()("Clock") {}
+
+const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => Effect.succeed(Component.noop)))
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {}, Picked: { value: Schema.String } })
 type Msg = typeof Msg.Type
 
-type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
-type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Button<R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type Div<R = never> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
 type A = Html.Element<Msg, never, Html.EventsOf<"a">, HTMLAnchorElement, "a">
-type Span = Html.Element<Msg, never, Html.EventsOf<"span">, HTMLSpanElement, "span">
+type Span<R = never> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
 type Input = Html.VoidElement<Msg, never, Html.EventsOf<"input">, HTMLInputElement, "input">
 type Picked = Extract<MenuEvents, { readonly _tag: "Picked" }>
 
@@ -47,36 +51,73 @@ describe("Menu", () => {
   })
 
   it("each part returns the builder it was given, and rejects other tags", () => {
-    Menu(h, {
+    const child = Menu(h, {
       props: { open: false, items },
       onEmit,
       view: (menu) => {
-        expect(menu.trigger(h.button.onClick(Msg.Clicked()))).type.toBe<Button>()
+        const trigger = menu.trigger(h.button.onClick(Msg.Clicked()).onMount(NeedsClock()))
+        expect(trigger).type.toBe<Button<Clock>>()
         expect(menu.trigger(h.button, { openOnHover: true, delay: 0, closeDelay: 300 })).type.toBe<Button>()
+        expect(menu.contextTrigger(h.div)).type.toBe<Div>()
+        expect(menu.submenuTrigger(h.div)).type.toBe<Div>()
+        expect(menu.backdrop(h.div)).type.toBe<Div>()
         expect(menu.positioner(h.div)).type.toBe<Div>()
         expect(menu.popup(h.div)).type.toBe<Div>()
-        expect(menu.item(h.div, "copy")).type.toBe<Div>()
+        expect(menu.list(h.div)).type.toBe<Div>()
+        expect(menu.arrow(h.div)).type.toBe<Div>()
+        expect(menu.viewport(h.div)).type.toBe<Div>()
+        expect(menu.item(h.div.onMount(NeedsClock()), "copy")).type.toBe<Div<Clock>>()
         expect(menu.item(h.div, "copy", false)).type.toBe<Div>()
         expect(menu.linkItem(h.a.attr("href", "/copy"), "copy")).type.toBe<A>()
         expect(menu.checkboxItem(h.div, "copy", true)).type.toBe<Div>()
         expect(menu.checkboxItemIndicator(h.span, "copy")).type.toBe<Span | undefined>()
+        expect(menu.checkboxItemIndicator(h.span.onMount(NeedsClock()), "copy", true)).type.toBe<
+          Span<Clock> | undefined
+        >()
+        expect(menu.radioGroup(h.div, "copy")).type.toBe<Div>()
+        expect(menu.radioGroup(h.div, null)).type.toBe<Div>()
+        expect(menu.radioItem(h.div, "copy")).type.toBe<Div>()
+        expect(menu.radioItemIndicator).type.toBe<typeof menu.checkboxItemIndicator>()
+        expect(menu.group(h.div, "edit")).type.toBe<Div>()
+        expect(menu.groupLabel(h.div, "edit")).type.toBe<Div>()
+        expect(menu.separator(h.div)).type.toBe<Div>()
         expect(menu.input(h.input)).type.toBe<Input>()
-        expect(menu.clear(h.button)).type.toBe<Button | undefined>()
-        expect(menu.empty(h.div)).type.toBe<Div | undefined>()
+        expect(menu.clear(h.button.onMount(NeedsClock()))).type.toBe<Button<Clock> | undefined>()
+        expect(menu.empty(h.div.onMount(NeedsClock()))).type.toBe<Div<Clock> | undefined>()
+        expect(menu.finalFocus(h.button)).type.toBe<Button>()
         expect(menu.highlighted).type.toBe<string | null>()
         expect(menu.nothingMatches).type.toBe<boolean>()
 
         expect(menu.trigger).type.not.toBeCallableWith(h.div)
         expect(menu.trigger).type.not.toBeCallableWith(h.button, { delay: "0" })
+        expect(menu.contextTrigger).type.not.toBeCallableWith(h.span)
+        expect(menu.submenuTrigger).type.not.toBeCallableWith(h.button)
+        expect(menu.backdrop).type.not.toBeCallableWith(h.span)
+        expect(menu.positioner).type.not.toBeCallableWith(h.span)
+        expect(menu.popup).type.not.toBeCallableWith(h.span)
+        expect(menu.list).type.not.toBeCallableWith(h.ul)
+        expect(menu.arrow).type.not.toBeCallableWith(h.span)
+        expect(menu.viewport).type.not.toBeCallableWith(h.span)
         expect(menu.item).type.not.toBeCallableWith(h.span, "copy")
         expect(menu.item).type.not.toBeCallableWith(h.a, "copy")
         expect(menu.item).type.not.toBeCallableWith(h.div)
         expect(menu.linkItem).type.not.toBeCallableWith(h.div, "copy")
+        expect(menu.checkboxItem).type.not.toBeCallableWith(h.span, "copy", true)
+        expect(menu.checkboxItemIndicator).type.not.toBeCallableWith(h.div, "copy")
+        expect(menu.radioGroup).type.not.toBeCallableWith(h.span, "copy")
+        expect(menu.radioItem).type.not.toBeCallableWith(h.span, "copy")
+        expect(menu.radioItemIndicator).type.not.toBeCallableWith(h.div, "copy")
+        expect(menu.group).type.not.toBeCallableWith(h.span, "edit")
+        expect(menu.groupLabel).type.not.toBeCallableWith(h.span, "edit")
+        expect(menu.separator).type.not.toBeCallableWith(h.hr)
         expect(menu.input).type.not.toBeCallableWith(h.div)
         expect(menu.input).type.not.toBeCallableWith(h.textarea)
-        return menu.trigger(h.button)
+        expect(menu.clear).type.not.toBeCallableWith(h.div)
+        expect(menu.empty).type.not.toBeCallableWith(h.span)
+        return trigger
       }
     })
+    expect<View.Requirements<typeof child>>().type.toBe<Clock>()
   })
 })
 

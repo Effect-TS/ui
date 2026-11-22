@@ -70,13 +70,12 @@ describe("Input", () => {
     const handler = () => undefined
     const own = h.input.onInput(handler)
     const clash = /Input: the element already handles input/
-    assert.strictEqual(build(Input(h, { props: { value: "" }, element: own })).handlers.input, handler)
-    assert.throws(() => build(Input(h, { props: { value: "" }, element: own, onUpdate: handler })), clash)
-    assert.throws(() => build(Input(h, { props: { value: "" }, onUpdate: handler }).onInput(handler)), clash)
-    // A disabled input sets no handler, but it would once it's enabled.
-    assert.throws(
-      () => build(Input(h, { props: { value: "", disabled: true }, onUpdate: handler }).onInput(handler)),
-      clash
-    )
+    for (const disabled of [false, true]) {
+      const props = { value: "", disabled }
+      assert.strictEqual(build(Input(h, { props, element: own })).handlers.input, handler)
+      assert.strictEqual(build(Input(h, { props }).onInput(handler)).handlers.input, handler)
+      assert.throws(() => build(Input(h, { props, element: own, onUpdate: handler })), clash)
+      assert.throws(() => build(Input(h, { props, onUpdate: handler }).onInput(handler)), clash)
+    }
   })
 })
