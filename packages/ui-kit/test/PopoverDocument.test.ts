@@ -15,7 +15,11 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  props: Schema.Struct({ modal: Schema.optional(Schema.Boolean), anchor: Schema.optional(Schema.String) }),
+  props: Schema.Struct({
+    modal: Schema.optional(Schema.Boolean),
+    holdExit: Schema.optional(Schema.Boolean),
+    anchor: Schema.optional(Schema.String)
+  }),
   model: Schema.Struct({
     open: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
@@ -127,7 +131,7 @@ describe("Popover in a document", { concurrent: false }, () => {
 
   it.effect("hover opens without focus and closes once the pointer leaves, and a press or the consumer's open takes focus", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage({ modal: true })
+      const { log } = yield* mountPage({ modal: true, holdExit: true })
       const show = byId("show")
       const focusedInside = () => byId("popover").contains(document.activeElement)
       const positioner = () => document.querySelector("[data-positioner]")!

@@ -427,6 +427,7 @@ const Message = UiSchema.TaggedEnum({
   CompletedWaitBeforeClosingOnPress: {},
   SwitchedTrigger: {},
   SettledSwitch: {},
+  Closed: {},
   StartedTransition: { direction: Schema.NullOr(Schema.String) },
   AdvancedTransition: {},
   EndedTransition: {},
@@ -442,6 +443,7 @@ const Model = Schema.Struct({
   rest: Schema.NullOr(Schema.Struct({ triggerId: Schema.NullOr(Schema.String), ...Point.fields })),
   closeDelay: Schema.Number,
   reason: Schema.NullOr(PopoverOpenReason),
+  stale: Schema.Boolean,
   patient: Schema.Boolean,
   trigger: Schema.NullOr(Schema.String),
   method: Schema.NullOr(DialogInteraction),
@@ -489,7 +491,9 @@ type Keyed = View.PartTarget<"div"> & { readonly key: (key: string) => View.Part
 
 const activeOf = (model: Model, props: PopoverProps): string | null => props.triggerId ?? model.trigger
 
-const hoverOpened = (model: Model): boolean => model.reason === "trigger-hover"
+const reasonOf = (model: Model, open: boolean): PopoverOpenReason | null => open && model.stale ? null : model.reason
+
+const hoverOpened = (model: Model, open: boolean): boolean => reasonOf(model, open) === "trigger-hover"
 
 const openFor = (
   model: Model,
@@ -501,6 +505,7 @@ const openFor = (
   $.set({
     ...model,
     reason,
+    stale: false,
     patient: reason === "trigger-hover",
     trigger: triggerId,
     method,
@@ -526,7 +531,7 @@ const pressed = (model: Model, $: PopoverUpdate) =>
 
 const left = (next: Model, $: PopoverUpdate) => {
   if (!$.props.open) return next.onTrigger ? next : $.set(next).run(Command.interrupt(WaitBeforeOpening))
-  return hoverOpened(next) && !next.onTrigger && !next.onPositioner
+  return hoverOpened(next, true) && !next.onTrigger && !next.onPositioner
     ? $.set(next).run(WaitBeforeClosing.make({ delay: next.closeDelay }))
     : next
 }
@@ -616,6 +621,7 @@ const TrackSwitch = Mount.makeStream(
         const previous = current
         current = next
         if (!next.open) generation++
+        if (previous.open && !next.open) Queue.offerUnsafe(queue, Message.Closed())
         if (!next.open || !previous.open || previous.trigger === null || next.trigger === null) return
         if (next.trigger === previous.trigger) return
         Queue.offerUnsafe(queue, Message.SwitchedTrigger())
@@ -940,6 +946,7 @@ export const Popover = Component.define({
     rest: null,
     closeDelay: 0,
     reason: null,
+    stale: false,
     patient: false,
     trigger: null,
     method: null,
@@ -952,12 +959,11 @@ export const Popover = Component.define({
     OpenedDialog: (model, { triggerId }, $) => openFor(model, $, triggerId, "trigger-press"),
     DismissedDialog: (model, { reason }, $) => {
       if (reason === "trigger-press") return pressed(model, $)
-      if (reason === "focus-out" && hoverOpened(model)) return model
+      if (reason === "focus-out" && hoverOpened(model, $.props.open)) return model
       return dismiss(model, $, reason)
     },
     SettledDialog: (model, { open }, $) =>
-      $.set(open ? model : { ...model, reason: null, patient: false, method: null, switched: false, transition: null })
-        .emit(PopoverEvents.Settled({ open })),
+      $.set(open ? model : { ...model, switched: false, transition: null }).emit(PopoverEvents.Settled({ open })),
     EnteredTrigger: (model, { at, closeDelay, delay, triggerId }, $) => {
       // A layer drawn over the trigger takes the pointer off it, and gives it back where it was once
       // it is gone. The pointer didn't move, so that is no hover.
@@ -984,12 +990,13 @@ export const Popover = Component.define({
     CompletedWaitBeforeOpening: (model, _message, $) =>
       !$.props.open && model.onTrigger ? openFor(model, $, model.hoverTrigger, "trigger-hover") : model,
     CompletedWaitBeforeClosing: (model, _message, $) =>
-      $.props.open && hoverOpened(model) && !model.onTrigger && !model.onPositioner
+      $.props.open && hoverOpened(model, true) && !model.onTrigger && !model.onPositioner
         ? dismiss(model, $, "trigger-hover")
         : model,
     CompletedWaitBeforeClosingOnPress: (model) => ({ ...model, patient: false }),
     SwitchedTrigger: (model) => ({ ...model, switched: false }),
     SettledSwitch: (model, _message, $) => $.props.open ? { ...model, switched: true } : model,
+    Closed: (model) => ({ ...model, stale: true, patient: false, method: null }),
     StartedTransition: (model, { direction }, $) =>
       $.props.open ? { ...model, transition: { direction, entered: false } } : model,
     AdvancedTransition: (model) =>
@@ -1001,7 +1008,8 @@ export const Popover = Component.define({
   parts: (model, p) => {
     const props = p.props
     const open = props.open
-    const byHover = hoverOpened(model)
+    const reason = reasonOf(model, open)
+    const byHover = reason === "trigger-hover"
     const portalId = props.id ?? p.id("portal")
     const positionerId = p.id("positioner")
     const arrowId = p.id("arrow")
@@ -1027,7 +1035,7 @@ export const Popover = Component.define({
       "button",
       (b, key: string, hover: Hover | null, disabled: boolean) => {
         const button = b
-          .attr("data-pressed", flag(open && active === key && model.reason === "trigger-press"))
+          .attr("data-pressed", flag(open && active === key && reason === "trigger-press"))
           .attr("data-disabled", flag(disabled))
           .disabled(disabled)
         return hover === null ? button : button
@@ -1098,7 +1106,7 @@ export const Popover = Component.define({
         const instant: PopoverInstant | undefined = open
           ? model.switched
             ? "trigger-change"
-            : model.reason === "trigger-press" && dialog.openMethod === "keyboard"
+            : reason === "trigger-press" && dialog.openMethod === "keyboard"
             ? "click"
             : undefined
           : model.closeReason === "escape-key"
@@ -1153,7 +1161,7 @@ export const Popover = Component.define({
           mounted: dialog.mounted,
           transitionStatus,
           triggerId: dialog.triggerId,
-          openReason: open ? model.reason : null,
+          openReason: open ? reason : null,
           openMethod: dialog.openMethod,
           closeMethod: dialog.closeMethod,
           side,
