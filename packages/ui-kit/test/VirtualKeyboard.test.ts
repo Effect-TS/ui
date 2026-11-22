@@ -92,6 +92,7 @@ const Message = UiSchema.TaggedEnum({ ChangedBand: { band: Schema.NullOr(Virtual
 
 const Sheet = Component.define({
   name: "Sheet",
+  scoped: false,
   model: Schema.Struct({ bands: Schema.Array(Schema.NullOr(VirtualKeyboard.Band)) }),
   message: Message,
   elements: Html

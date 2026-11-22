@@ -60,6 +60,7 @@
  *
  * const Form = Component.define({
  *   name: "Form",
+ *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -86,6 +87,7 @@
  *
  * const Composer = Component.define({
  *   name: "Composer",
+ *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -794,6 +796,7 @@ const listenFor = (
  *
  * const Snake = Component.define({
  *   name: "Snake",
+ *   scoped: false,
  *   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
  *   message: Message,
  *   elements: Html
@@ -1796,6 +1799,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = m
  *
  * const Label = Component.define({
  *   name: "Label",
+ *   scoped: false,
  *   model: Schema.Void,
  *   message: Schema.Never,
  *   elements: Html.vocabulary
@@ -1959,7 +1963,7 @@ export const focus = <N extends HTMLElement | SVGElement, Msg>(
   f: (result: Found) => Msg,
   options?: { readonly preventScroll?: boolean | undefined }
 ): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(Focus(options === undefined ? { ref } : { ref, options }), f)
+  Command.map(Focus.make(options === undefined ? { ref } : { ref, options }), f)
 
 /**
  * Takes focus away from the element `ref` names, and sends `f`'s message.
@@ -1971,7 +1975,7 @@ export const focus = <N extends HTMLElement | SVGElement, Msg>(
 export const blur = <N extends HTMLElement | SVGElement, Msg>(
   ref: Renderer.Ref<N>,
   f: (result: Found) => Msg
-): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Blur({ ref }), f)
+): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Blur.make({ ref }), f)
 
 /**
  * Scrolls the element `ref` names into view, and sends `f`'s message.
@@ -1985,7 +1989,7 @@ export const scrollIntoView = <N extends globalThis.Element, Msg>(
   f: (result: Found) => Msg,
   options?: ScrollOptions
 ): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(ScrollIntoView(options === undefined ? { ref } : { ref, options }), f)
+  Command.map(ScrollIntoView.make(options === undefined ? { ref } : { ref, options }), f)
 
 /**
  * Measures the element `ref` names, and sends `f`'s message with its box, or
@@ -1999,4 +2003,4 @@ export const measure = <N extends globalThis.Element, Msg>(
   ref: Renderer.Ref<N>,
   f: (rect: Option.Option<Rect>) => Msg
 ): Command.Mapped<Command.Issued<Option.Option<Rect>, never, Option.Option<Rect>, "Effect">, Msg> =>
-  Command.map(Measure({ ref }), f)
+  Command.map(Measure.make({ ref }), f)

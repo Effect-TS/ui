@@ -12,7 +12,13 @@ import { popovers } from "./utils/document.ts"
 // The first post is a loading toast; Complete turns it into a timed success.
 const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {}, ClickedDrop: {}, CompletedUpload: {} })
 
-const Poster = Component.define({ name: "Poster", model: Schema.Number, message: PosterMessage, elements: Html })
+const Poster = Component.define({
+  name: "Poster",
+  scoped: false,
+  model: Schema.Number,
+  message: PosterMessage,
+  elements: Html
+})
   .make({
     init: () => 0,
     update: {
@@ -42,6 +48,7 @@ const PageMessage = UiSchema.TaggedEnum({ Dismissed: { id: Schema.String } })
 
 const Page = Component.define({
   name: "Page",
+  scoped: false,
   props: Schema.Struct({ timeout: Schema.Number }),
   model: Schema.String,
   message: PageMessage,
@@ -240,7 +247,13 @@ describe("ToastProvider", { concurrent: false }, () => {
 })
 
 const AboveMessage = UiSchema.TaggedEnum({ Opened: {} })
-const Above = Component.define({ name: "Above", model: Schema.Boolean, message: AboveMessage, elements: Html }).make({
+const Above = Component.define({
+  name: "Above",
+  scoped: false,
+  model: Schema.Boolean,
+  message: AboveMessage,
+  elements: Html
+}).make({
   init: () => false,
   update: { Opened: () => true },
   view: (open, h) =>

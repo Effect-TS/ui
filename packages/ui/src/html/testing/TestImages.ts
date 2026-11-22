@@ -19,6 +19,7 @@
  *
  * const Photo = Component.define({
  *   name: "Photo",
+ *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html

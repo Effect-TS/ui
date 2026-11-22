@@ -29,6 +29,7 @@ describe("Story", () => {
     const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Stop: {} })
     const Receiver = Component.define({
       name: "Receiver",
+      scoped: false,
       model: Schema.Number,
       message: Message,
       receives: ["Set"]
@@ -58,7 +59,7 @@ describe("Story", () => {
   })
 
   it("reports two Subscriptions that share a key, as the runtime does", () => {
-    const Twice = Component.define({ name: "Twice", model: Schema.Null, message: Schema.Null }).make({
+    const Twice = Component.define({ name: "Twice", scoped: false, model: Schema.Null, message: Schema.Null }).make({
       init: () => null,
       update: () => null,
       subscriptions: () => [
@@ -131,6 +132,7 @@ describe("Story", () => {
     const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Pressed: {} })
     const Form = Component.define({
       name: "Form",
+      scoped: false,
       model: Schema.Struct({ value: Schema.String, presses: Schema.Number }),
       message: Message
     }).make({
@@ -192,6 +194,7 @@ describe("Story", () => {
         const Sent = UiSchema.TaggedEnum({ Send: {} })
         const Composer = Component.define({
           name: "Composer",
+          scoped: false,
           model: Schema.Number,
           message: Sent
         }).make({
@@ -301,6 +304,7 @@ describe("Story", () => {
     const Msg = UiSchema.TaggedEnum({ Save: {}, Saved: {}, Failed: { reason: Schema.String }, Stop: {} })
     const Editor = Component.define({
       name: "Editor",
+      scoped: false,
       model: Schema.String,
       message: Msg
     }).make({
@@ -404,7 +408,7 @@ describe("Story", () => {
         s.send(SearchMessage.Query({ text: "a" }))
           .send(SearchMessage.Query({ text: "ab" }))
         assert.deepStrictEqual(s.interrupted.map((command) => command.args), [{ text: "a" }])
-        s.expectExact(Search({ text: "ab" }))
+        s.expectExact(Search.make({ text: "ab" }))
           .resolve(Search, SearchMessage.Results({ items: ["ab"] }))
         assert.deepStrictEqual(s.model.items, ["ab"])
       }))
@@ -443,13 +447,15 @@ describe("Story", () => {
     )
     const Avatar = Component.define({
       name: "Avatar",
+      scoped: false,
       model: Schema.Struct({ url: Schema.String }),
       message: Message
     }).make({
       init: () => ({ url: "" }),
       update: (_model, message, $) =>
         Message.match(message, {
-          Upload: () => $.run(UploadFile({ name: "me.png" }).pipe(Command.map((url) => Message.Uploaded({ url })))),
+          Upload: () =>
+            $.run(UploadFile.make({ name: "me.png" }).pipe(Command.map((url) => Message.Uploaded({ url })))),
           Uploaded: ({ url }) => ({ url })
         }),
       view: (model, h) => h.el("img").attr("src", model.url)
@@ -459,14 +465,14 @@ describe("Story", () => {
       Effect.gen(function*() {
         const s = yield* Story.make(Avatar, {})
         s.send(Message.Upload())
-          .expectExact(UploadFile({ name: "me.png" }))
+          .expectExact(UploadFile.make({ name: "me.png" }))
           .resolve(UploadFile, "https://cdn/me.png")
         assert.strictEqual(s.model.url, "https://cdn/me.png")
       }))
 
     it.effect("a mapped Command as the target still takes the definition's own result", () =>
       Effect.gen(function*() {
-        const mapped = UploadFile({ name: "me.png" }).pipe(
+        const mapped = UploadFile.make({ name: "me.png" }).pipe(
           Command.map((url) => Message.Uploaded({ url }))
         )
         const s = yield* Story.make(Avatar, {})
@@ -484,6 +490,7 @@ describe("Story", () => {
     })
     const Nav = Component.define({
       name: "Nav",
+      scoped: false,
       model: Schema.Struct({ outcome: Schema.String }),
       message: Message
     }).make({
@@ -519,6 +526,7 @@ describe("Story", () => {
         })
         const Box = Component.define({
           name: "Box",
+          scoped: false,
           props: Schema.Struct({ route: Routes }),
           model: Schema.Struct({ outcome: Schema.String }),
           message: BoxMessage
@@ -549,6 +557,7 @@ describe("Story", () => {
     const Message = UiSchema.TaggedEnum({ Bump: {} })
     const Broken = Component.define({
       name: "Broken",
+      scoped: false,
       model: Schema.Struct({ n: Schema.Number }),
       message: Message
     }).make({
@@ -573,6 +582,7 @@ describe("Story", () => {
         assert.throws(() => s.given({ n: 5 }), /view broke at 5/)
         const AlwaysBroken = Component.define({
           name: "AlwaysBroken",
+          scoped: false,
           model: Schema.Struct({}),
           message: Message
         }).make({
@@ -677,6 +687,7 @@ describe("Story", () => {
     const renders: Array<string> = []
     const Team = Component.define({
       name: "Team",
+      scoped: false,
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({ changes: Schema.Number }),
       message: TeamMessage,
@@ -773,6 +784,7 @@ describe("Story", () => {
         const Message = UiSchema.TaggedEnum({ FriendsChanged: {} })
         const Pals = Component.define({
           name: "Pals",
+          scoped: false,
           props: Schema.Struct({ id: Schema.String }),
           model: Schema.Struct({ changes: Schema.Number }),
           message: Message,
@@ -814,6 +826,7 @@ describe("Story", () => {
         const Message = UiSchema.TaggedEnum({ FriendsChanged: {} })
         const Circle = Component.define({
           name: "Circle",
+          scoped: false,
           props: Schema.Struct({}),
           model: Schema.Struct({ id: Schema.String, changes: Schema.Number }),
           message: Message,
@@ -870,6 +883,7 @@ describe("Story", () => {
       const Secret = Schema.RedactedFromValue(Schema.String)
       const Receiver = Component.define({
         name: "SecretReceiver",
+        scoped: false,
         model: Schema.Null,
         message: UiSchema.TaggedEnum({ Take: { token: Secret, at: Schema.Finite } }),
         receives: ["Take"],
@@ -878,6 +892,7 @@ describe("Story", () => {
       const ref = Receiver.ref("secret")
       const App = Component.define({
         name: "SecretOutputs",
+        scoped: false,
         model: Schema.Null,
         message: Schema.Struct({ kind: Schema.Literals(["emit", "send"]), at: Schema.Number }),
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),

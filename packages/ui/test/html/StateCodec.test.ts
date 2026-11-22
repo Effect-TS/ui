@@ -18,6 +18,7 @@ const Bumped = UiSchema.TaggedEnum({ Bumped: {} })
 
 const Upload = Component.define({
   name: "Upload",
+  scoped: false,
   model: Schema.Struct({ file: Schema.Option(Schema.File), label: Label, count: Schema.Number }),
   message: Bumped,
   elements: Html
@@ -55,6 +56,7 @@ describe("state codecs", () => {
     const { layer, messages } = warnings()
     const Callback = Component.define({
       name: "Callback",
+      scoped: false,
       model: Schema.Struct({
         extra: Schema.Struct({ value: Schema.declare((u): u is () => void => typeof u === "function") })
       }),
@@ -75,6 +77,7 @@ describe("state codecs", () => {
     const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes }, Go: {}, Went: {} })
     const App = Component.define({
       name: "App",
+      scoped: false,
       props: Schema.Struct({ route: Routes }),
       model: Routes,
       message: Message,

@@ -55,11 +55,12 @@ const RowMessage = UiSchema.TaggedEnum({ Bump: {} })
 const Hold = Command.make("Hold", { args: {} }, () => Effect.never)
 const Row = Component.define({
   name: "Row",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Number,
   message: RowMessage
 }).make({
-  init: ($) => $.set(0).run(Hold()),
+  init: ($) => $.set(0).run(Hold.make()),
   update: (count) => count + 1,
   view: (count, h) => h.el("li").on("click", RowMessage.Bump()).children(`${h.props.id}:${count}`)
 })
@@ -71,6 +72,7 @@ const ListMessage = UiSchema.TaggedEnum({
 })
 const List = Component.define({
   name: "List",
+  scoped: false,
   props: Schema.Struct({ ids: Schema.Array(Schema.String) }),
   model: Schema.Array(Schema.String),
   message: ListMessage
@@ -91,14 +93,17 @@ describe("Runtime", () => {
       const state = { model: Schema.Null, message: Schema.Never }
       const impl = { init: () => null, update: () => null }
       const provider = () =>
-        Component.define({ ...state, name: "Provider", shares: () => "value" }).make({ ...impl, parts: () => ({}) })
+        Component.define({ ...state, name: "Provider", scoped: false, shares: () => "value" }).make({
+          ...impl,
+          parts: () => ({})
+        })
       const Expected = provider()
       const Other = provider()
-      const Reader = Component.define({ ...state, name: "Reader", shared: { value: Expected } }).make({
+      const Reader = Component.define({ ...state, name: "Reader", scoped: false, shared: { value: Expected } }).make({
         ...impl,
         view: (_, h) => h.el("p", h.shared.value)
       })
-      const App = Component.define({ ...state, name: "App" }).make({
+      const App = Component.define({ ...state, name: "App", scoped: false }).make({
         ...impl,
         view: (_, h) => Other(h, { key: "other", view: () => Reader(h, { key: "reader" }) })
       })
@@ -128,6 +133,7 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Outer: {}, Inner: {} })
       const Nested = Component.define({
         name: "Nested",
+        scoped: false,
         model: Schema.Array(Schema.String),
         message: Msg
       }).make({
@@ -148,7 +154,7 @@ describe("Runtime", () => {
 
   it.effect("an event reaches a handler below thousands of elements", () =>
     provideHost(Effect.gen(function*() {
-      const Deep = Component.define({ name: "Deep", model: Schema.Number, message: Schema.Null }).make({
+      const Deep = Component.define({ name: "Deep", scoped: false, model: Schema.Number, message: Schema.Null }).make({
         init: () => 0,
         update: (count) => count + 1,
         view: (_, h) => {
@@ -196,7 +202,7 @@ describe("Runtime", () => {
     it.effect("a view wrapped by hand is called on its component with each row's path as a string, whatever its own call is", () =>
       provideHost(Effect.gen(function*() {
         const state = { model: Schema.Null, message: Schema.Never }
-        const Badge = Component.define({ ...state, name: "Badge" }).make({
+        const Badge = Component.define({ ...state, name: "Badge", scoped: false }).make({
           init: () => null,
           update: () => null,
           view: (_, h) => h.el("li", h.id("label"))
@@ -215,7 +221,7 @@ describe("Runtime", () => {
           { call: "metadata" }
         )
         const Wrapped = Object.assign(Object.create(Badge) as typeof Badge, { view })
-        const Rows = Component.define({ ...state, name: "Rows" }).make({
+        const Rows = Component.define({ ...state, name: "Rows", scoped: false }).make({
           init: () => null,
           update: () => null,
           view: (_, h) => h.el("ul", ["a", "b"].map((key) => ({ ...Badge(h, { key }), component: Wrapped })))
@@ -245,12 +251,13 @@ describe("Runtime", () => {
 
     it.effect("a child made again at its path before the old one closes is still its parent's child", () =>
       provideHost(Effect.gen(function*() {
-        const Wrap = Component.define({ name: "Wrap", model: Schema.Boolean, message: Schema.Boolean }).make({
-          init: () => false,
-          update: (_, changed) => changed,
-          // A wrapper with another tag is a new element: the row in it mounts before the old one closes.
-          view: (changed, h) => h.el(changed ? "section" : "div", Row(h, { key: "a", props: { id: "a" } }))
-        })
+        const Wrap = Component.define({ name: "Wrap", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
+          .make({
+            init: () => false,
+            update: (_, changed) => changed,
+            // A wrapper with another tag is a new element: the row in it mounts before the old one closes.
+            view: (changed, h) => h.el(changed ? "section" : "div", Row(h, { key: "a", props: { id: "a" } }))
+          })
         const root = yield* TestHost.mount(Wrap, {})
         yield* TestHost.settle
         assert.deepStrictEqual(root.pending().map((p) => p.path), ["/Wrap/Row[a]"])
@@ -274,6 +281,7 @@ describe("Runtime", () => {
     })
     const Rows = Component.define({
       name: "Rows",
+      scoped: false,
       model: Schema.Struct({ ids: Schema.Array(Schema.String), selected: Schema.String }),
       message: RowsMessage
     }).make({
@@ -393,7 +401,7 @@ describe("Runtime", () => {
     it.effect("a list with nothing after it grows and shrinks at its end", () =>
       provideHost(Effect.gen(function*() {
         const Msg = Schema.Array(Schema.String)
-        const Tail = Component.define({ name: "Tail", model: Msg, message: Msg }).make({
+        const Tail = Component.define({ name: "Tail", scoped: false, model: Msg, message: Msg }).make({
           init: () => ["a", "b"],
           update: (_, ids) => ids,
           view: (ids, h) => h.el("ul", ids.map((id) => h.el("li").key(id).children(id)))
@@ -436,7 +444,7 @@ describe("Runtime", () => {
     it.effect("an empty list filled with one key twice fails the instance", () =>
       provideHost(Effect.gen(function*() {
         const Msg = Schema.Array(Schema.String)
-        const Fill = Component.define({ name: "Fill", model: Msg, message: Msg }).make({
+        const Fill = Component.define({ name: "Fill", scoped: false, model: Msg, message: Msg }).make({
           init: (): ReadonlyArray<string> => [],
           update: (_, ids) => ids,
           view: (ids, h) => h.el("ul", ids.map((id) => h.el("li").key(id).children(id)))
@@ -454,16 +462,18 @@ describe("Runtime", () => {
 
     it.effect("a first render with one key twice fails the instance", () =>
       provideHost(Effect.gen(function*() {
-        const Twice = Component.define({ name: "Twice", model: Schema.Null, message: Schema.Never }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.el("ul", ["a", "b", "a"].map((id) => h.el("li").key(id).children(id)))
-        })
-        const Parent = Component.define({ name: "Parent", model: Schema.Null, message: Schema.Never }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.el("div", "before ", Twice(h, { key: "t", props: {}, fallback: () => h.text("down") }))
-        })
+        const Twice = Component.define({ name: "Twice", scoped: false, model: Schema.Null, message: Schema.Never })
+          .make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.el("ul", ["a", "b", "a"].map((id) => h.el("li").key(id).children(id)))
+          })
+        const Parent = Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: Schema.Never })
+          .make({
+            init: () => null,
+            update: (model) => model,
+            view: (_, h) => h.el("div", "before ", Twice(h, { key: "t", props: {}, fallback: () => h.text("down") }))
+          })
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "before down")
@@ -475,16 +485,17 @@ describe("Runtime", () => {
 
     it.effect("attributes that went are removed before the ones that changed are set", () =>
       provideHost(Effect.gen(function*() {
-        const Attrs = Component.define({ name: "Attrs", model: Schema.Number, message: Schema.Number }).make({
-          init: () => 0,
-          update: (_, step) => step,
-          view: (step, h) =>
-            step === 0
-              ? h.el("p").attr("id", "a").attr("title", "t").attr("constructor", "c").children("x")
-              : step === 1
-              ? h.el("p").attr("id", "b").attr("lang", "en").children("x")
-              : h.el("p").children("x")
-        })
+        const Attrs = Component.define({ name: "Attrs", scoped: false, model: Schema.Number, message: Schema.Number })
+          .make({
+            init: () => 0,
+            update: (_, step) => step,
+            view: (step, h) =>
+              step === 0
+                ? h.el("p").attr("id", "a").attr("title", "t").attr("constructor", "c").children("x")
+                : step === 1
+                ? h.el("p").attr("id", "b").attr("lang", "en").children("x")
+                : h.el("p").children("x")
+          })
         const root = yield* TestHost.mount(Attrs, {})
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
@@ -595,6 +606,7 @@ describe("Runtime", () => {
     const BombMessage = UiSchema.TaggedEnum({ Explode: {} })
     const Bomb = Component.define({
       name: "Bomb",
+      scoped: false,
       model: Schema.Number,
       message: BombMessage
     }).make({
@@ -607,6 +619,7 @@ describe("Runtime", () => {
     const PageMessage = UiSchema.TaggedEnum({ BombFailed: {}, Retry: {} })
     const Page = Component.define({
       name: "Page",
+      scoped: false,
       model: Schema.Struct({ failures: Schema.Number, attempt: Schema.Number }),
       message: PageMessage
     }).make({
@@ -656,6 +669,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Broken = Component.define({
           name: "Broken",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -667,6 +681,7 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -711,15 +726,17 @@ describe("Runtime", () => {
         const Explode = Command.make("Explode", { args: {} }, () => Effect.die("kaboom"))
         const Child = Component.define({
           name: "Child",
+          scoped: false,
           model: Schema.Number,
           message: Schema.String
         }).make({
-          init: ($) => $.set(0).run(Explode()),
+          init: ($) => $.set(0).run(Explode.make()),
           update: (model) => model,
           view: (_, h) => h.text("child")
         })
         const Parent = Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -739,6 +756,7 @@ describe("Runtime", () => {
   describe("a provided Layer factory and a fallback's child", () => {
     const Leaf = Component.define({
       name: "Leaf",
+      scoped: false,
       model: Schema.Number,
       message: Schema.String
     }).make({
@@ -755,6 +773,7 @@ describe("Runtime", () => {
         const Child = Component.provide(Leaf, broken)
         const Parent = Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -781,6 +800,7 @@ describe("Runtime", () => {
         let starts = 0
         const Counted = Component.define({
           name: "Counted",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -790,6 +810,7 @@ describe("Runtime", () => {
         })
         const Broken = Component.define({
           name: "Broken",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -801,6 +822,7 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Number
         }).make({
@@ -825,13 +847,14 @@ describe("Runtime", () => {
     )
     const Box = Component.define({
       name: "Box",
+      scoped: false,
       model: Schema.String,
       message: Msg
     }).make({
       init: () => "",
       update: (_, message, $) =>
         Msg.match(message, {
-          Query: ({ text }) => $.run(Search({ text })),
+          Query: ({ text }) => $.run(Search.make({ text })),
           Results: ({ text }) => text
         }),
       view: (model, h) => h.text(model)
@@ -878,13 +901,14 @@ describe("Runtime", () => {
           }))
         const Form = Component.define({
           name: "Form",
+          scoped: false,
           model: Schema.Struct({ shown: Schema.Boolean, found: Schema.optional(Schema.Boolean) }),
           message: RefMsg
         }).make({
-          init: ($) => $.set({ shown: false }).run(Look()),
+          init: ($) => $.set({ shown: false }).run(Look.make()),
           update: (model, message, $) =>
             RefMsg.match(message, {
-              Show: () => $.set({ shown: true }).run(Look()),
+              Show: () => $.set({ shown: true }).run(Look.make()),
               Found: ({ found }) => ({ ...model, found })
             }),
           view: (model, h) => h.el("form", model.shown ? h.el("input").ref(Field) : null)
@@ -904,6 +928,7 @@ describe("Runtime", () => {
         const Count = Command.make("Count", { args: {} }, () => Effect.andThen(Effect.sync(() => ran++), Effect.never))
         const Quiet = Component.define({
           name: "Quiet",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           events: Schema.String
@@ -912,13 +937,14 @@ describe("Runtime", () => {
         const next = Quiet.init({})
         for (const effects of [next.commands, next.events] as Array<Array<unknown>>) {
           try {
-            effects.push(Count())
+            effects.push(Count.make())
           } catch {
             // Refused, as it should be.
           }
         }
         const Parent = Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.Array(Schema.Unknown),
           message: Schema.Unknown
         })
@@ -991,6 +1017,7 @@ describe("Runtime", () => {
     const EditorMsg = UiSchema.TaggedEnum({ Save: {}, Rename: {}, Stop: {}, Saved: { n: Schema.Number } })
     const Editor = Component.define({
       name: "Editor",
+      scoped: false,
       model: Schema.Number,
       message: EditorMsg
     }).make({
@@ -1016,6 +1043,7 @@ describe("Runtime", () => {
     const page = <R>(editor: Component.Component<"Editor", {}, number, any, never, R, any>) =>
       Component.define({
         name: "Page",
+        scoped: false,
         model: Schema.Struct({ count: Schema.Number, editing: Schema.Boolean, watching: Schema.Boolean }),
         message: PageMsg
       }).make({
@@ -1088,14 +1116,15 @@ describe("Runtime", () => {
             ))
           )
         ) {}
-        const Queue = Component.define({ name: "Queue", model: Schema.Null, message: Schema.Never }).make({
-          init: ($) => $.set(null).run(Watch.make({ n: 1 })).run(Watch.make({ n: 2 })),
-          update: (m) => m,
-          view: (_, h) => h.text("")
-        })
+        const Queue = Component.define({ name: "Queue", scoped: false, model: Schema.Null, message: Schema.Never })
+          .make({
+            init: ($) => $.set(null).run(Watch.make({ n: 1 })).run(Watch.make({ n: 2 })),
+            update: (m) => m,
+            view: (_, h) => h.text("")
+          })
         // Closes before the queue, as it mounted after it, and holds the branch's close open.
         const Blocker = Component.provide(
-          Component.define({ name: "Blocker", model: Schema.Null, message: Schema.Never }).make({
+          Component.define({ name: "Blocker", scoped: false, model: Schema.Null, message: Schema.Never }).make({
             init: () => null,
             update: (m) => m,
             view: (_, h) => h.text("")
@@ -1105,13 +1134,15 @@ describe("Runtime", () => {
               Effect.addFinalizer(() => Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(gate)))
             )
         )
-        const Branch = Component.define({ name: "Branch", model: Schema.Null, message: Schema.Never }).make({
-          init: () => null,
-          update: (m) => m,
-          view: (_, h) => h.el("div", Queue(h, { key: "queue", props: {} }), Blocker(h, { key: "blocker", props: {} }))
-        })
+        const Branch = Component.define({ name: "Branch", scoped: false, model: Schema.Null, message: Schema.Never })
+          .make({
+            init: () => null,
+            update: (m) => m,
+            view: (_, h) =>
+              h.el("div", Queue(h, { key: "queue", props: {} }), Blocker(h, { key: "blocker", props: {} }))
+          })
         const Parent = Component.provide(
-          Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+          Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make({
             init: () => true,
             update: (_, shown) => shown,
             view: (shown, h) => shown ? Branch(h, { key: "branch", props: {} }) : h.text("gone")
@@ -1144,9 +1175,9 @@ describe("Runtime", () => {
             return Component.noop
           }))
         const Child = Component.provide(
-          Component.define({ name: "Child", model: Schema.Null, message: Schema.Null }).make({
+          Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Null }).make({
             init: () => null,
-            update: (m, _, $) => $.set(m).run(Write()),
+            update: (m, _, $) => $.set(m).run(Write.make()),
             view: (_, h) => h.el("button").on("click", null).children("write")
           }),
           () =>
@@ -1157,7 +1188,12 @@ describe("Runtime", () => {
               )
             ))
         )
-        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+        const Parent = Component.define({
+          name: "Parent",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
           init: () => true,
           update: (_, shown) => shown,
           view: (shown, h) => shown ? Child(h, { key: "child", props: {} }) : h.text("gone")
@@ -1192,6 +1228,7 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Close: {}, Stop: {}, Done: {} })
       const Child = Component.define({
         name: "Child",
+        scoped: false,
         model: Schema.Null,
         message: Msg
       }).make({
@@ -1202,6 +1239,7 @@ describe("Runtime", () => {
       // A child whose `Command.make` run ends with it.
       const Holder = Component.define({
         name: "Child",
+        scoped: false,
         model: Schema.Null,
         message: Msg
       }).make({
@@ -1214,7 +1252,7 @@ describe("Runtime", () => {
                 Effect.uninterruptible(
                   Effect.andThen(Deferred.await(gate), Effect.sync(() => events.push("body done")))
                 )
-            )().pipe(Command.map(() => Msg.Done()))
+            ).make().pipe(Command.map(() => Msg.Done()))
           ),
         update: (model) => model,
         view: (_, h) => h.text("holder")
@@ -1222,6 +1260,7 @@ describe("Runtime", () => {
       const parent = <R>(child: Component.Component<"Child", {}, null, any, never, R, any>) =>
         Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.Boolean,
           message: Msg
         }).make({
@@ -1333,7 +1372,7 @@ describe("Runtime", () => {
           })
         ) {}
         const Child = Component.provide(
-          Component.define({ name: "Child", model: Schema.Null, message: Schema.Never }).make({
+          Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Never }).make({
             init: ($) => $.set(null).run(Job.make().pipe(Command.asNoop)),
             update: (model) => model,
             view: (_, h) => h.text("child")
@@ -1342,7 +1381,7 @@ describe("Runtime", () => {
         )
         // The child's Layer builds only once the parent's is ready.
         const Parent = Component.provide(
-          Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+          Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make({
             init: () => true,
             update: (_, open) => open,
             view: (open, h) => open ? Child(h, { key: "child", props: {} }) : h.text("closed")
@@ -1376,10 +1415,11 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Close: {} })
         const Busy = Component.define({
           name: "Busy",
+          scoped: false,
           model: Schema.Boolean,
           message: Msg
         }).make({
-          init: ($) => $.set(true).run(Latest.make()).run(Watch.make()).run(Local()),
+          init: ($) => $.set(true).run(Latest.make()).run(Watch.make()).run(Local.make()),
           update: () => false,
           view: (open, h) =>
             h.el(
@@ -1387,10 +1427,11 @@ describe("Runtime", () => {
               open ?
                 Component.define({
                   name: "Inner",
+                  scoped: false,
                   model: Schema.Null,
                   message: Schema.Never
                 }).make({
-                  init: ($) => $.set(null).run(Latest.make()).run(Watch.make()).run(Local()),
+                  init: ($) => $.set(null).run(Latest.make()).run(Watch.make()).run(Local.make()),
                   update: (model) => model,
                   view: (_, h) => h.text("inner")
                 })(h, { key: "inner", props: {} }) :
@@ -1423,17 +1464,18 @@ describe("Runtime", () => {
         )
         const Worker = Component.define({
           name: "Worker",
+          scoped: false,
           props: Schema.Struct({ name: Schema.String, listen: Schema.Boolean }),
           model: Schema.Null,
           message: Schema.Null
         }).make({
-          init: ($) => $.set(null).run(Job({ name: $.props.name })),
+          init: ($) => $.set(null).run(Job.make({ name: $.props.name })),
           update: (model) => model,
           view: (_, h) => h.text(h.props.name),
           subscriptions: (_, props) => props.listen ? [Subscription.make("listen", Stream.never)] : []
         })
         const Step = Schema.Literals(["mounted", "listening", "dropped"])
-        const App = Component.define({ name: "App", model: Step, message: Step }).make({
+        const App = Component.define({ name: "App", scoped: false, model: Step, message: Step }).make({
           init: () => "mounted" as const,
           update: (_, step) => step,
           view: (step, h) =>
@@ -1496,11 +1538,11 @@ describe("Runtime", () => {
           )
       )
       const Msg = UiSchema.TaggedEnum({ Go: { n: Schema.Number }, Stop: {} })
-      const Jobs = Component.define({ name: "Jobs", model: Schema.Null, message: Msg }).make({
+      const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Msg }).make({
         init: () => null,
         update: (model, message, $) =>
           Msg.match(message, {
-            Go: ({ n }) => $.set(model).run(Job({ n }).pipe(Command.asNoop)),
+            Go: ({ n }) => $.set(model).run(Job.make({ n }).pipe(Command.asNoop)),
             Stop: () => $.set(model).run(Command.interrupt(Job))
           }),
         view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
@@ -1544,11 +1586,13 @@ describe("Runtime", () => {
               Effect.onInterrupt(() => Effect.die("cleanup broke"))
             )
         )
-        const Jobs = Component.define({ name: "Jobs", model: Schema.Null, message: Schema.Number }).make({
-          init: () => null,
-          update: (model, n, $) => $.set(model).run(Job({ n }).pipe(Command.asNoop)),
-          view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
-        })
+        const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Schema.Number }).make(
+          {
+            init: () => null,
+            update: (model, n, $) => $.set(model).run(Job.make({ n }).pipe(Command.asNoop)),
+            view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
+          }
+        )
         const root = yield* TestHost.mount(Jobs, {})
         root.send(1)
         yield* TestHost.settle
@@ -1589,7 +1633,7 @@ describe("Runtime", () => {
           onFailure: () => Msg.Done()
         })
         const Tx_ = Component.provide(
-          Component.define({ name: "Tx", model: Schema.Null, message: Msg }).make({
+          Component.define({ name: "Tx", scoped: false, model: Schema.Null, message: Msg }).make({
             init: () => null,
             update: (model, message, $) =>
               Msg.match(message, {
@@ -1665,6 +1709,7 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Room: { id: Schema.String }, Said: { text: Schema.String } })
         const Chat = Component.define({
           name: "Chat",
+          scoped: false,
           model: Schema.Struct({ room: Schema.String, said: Schema.Array(Schema.String) }),
           message: Msg
         }).make({
@@ -1703,7 +1748,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Msg = Schema.TaggedUnion({ Left: {}, Said: {} })
         const said = Msg.make({ _tag: "Said" })
-        const Chat = Component.define({ name: "Chat", model: Schema.Boolean, message: Msg }).make({
+        const Chat = Component.define({ name: "Chat", scoped: false, model: Schema.Boolean, message: Msg }).make({
           init: () => true,
           update: (inRoom, message) => message._tag === "Left" ? false : inRoom,
           view: (_, h) => h.text("chat"),
@@ -1757,16 +1802,17 @@ describe("Runtime", () => {
 
     it.effect("two entries with one key fail the instance", () =>
       provideHost(Effect.gen(function*() {
-        const Twice = Component.define({ name: "Twice", model: Schema.Boolean, message: Schema.Boolean }).make({
-          init: () => false,
-          update: (_, twice) => twice,
-          view: (_, h) => h.text("up"),
-          subscriptions: (twice) => [
-            Subscription.make("room", "42", () => Stream.never),
-            // A one-element tuple has the key of a single dep.
-            twice && Subscription.make("room", ["42"], () => Stream.never)
-          ]
-        })
+        const Twice = Component.define({ name: "Twice", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
+          .make({
+            init: () => false,
+            update: (_, twice) => twice,
+            view: (_, h) => h.text("up"),
+            subscriptions: (twice) => [
+              Subscription.make("room", "42", () => Stream.never),
+              // A one-element tuple has the key of a single dep.
+              twice && Subscription.make("room", ["42"], () => Stream.never)
+            ]
+          })
         const root = yield* TestHost.mount(Twice, {}, { fallback: (_, h) => h.el("h1", "down") })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "up")
@@ -1784,6 +1830,7 @@ describe("Runtime", () => {
         const feed = yield* Queue.unbounded<string>()
         const Receiver = Component.define({
           name: "Receiver",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: Schema.String,
           props: Schema.Struct({ listen: Schema.Boolean })
@@ -1793,7 +1840,12 @@ describe("Runtime", () => {
           view: (model, h) => h.text(model.join(",")),
           subscriptions: (_, props) => props.listen ? [Subscription.make("feed", Stream.fromQueue(feed))] : []
         })
-        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Boolean }).make({
+        const Parent = Component.define({
+          name: "Parent",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
           init: () => true,
           update: (_, listen) => listen,
           view: (listen, h) => Receiver(h, { key: "r", props: { listen } })
@@ -1822,6 +1874,7 @@ describe("Runtime", () => {
     provideHost(Effect.gen(function*() {
       const Child = Component.define({
         name: "Child",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never,
         events: Schema.String
@@ -1832,6 +1885,7 @@ describe("Runtime", () => {
       })
       const Parent = Component.define({
         name: "Parent",
+        scoped: false,
         model: Schema.Number,
         message: Schema.String
       }).make({
@@ -1850,6 +1904,7 @@ describe("Runtime", () => {
       const Events = UiSchema.TaggedEnum({ Renamed: { name: Schema.String }, Discarded: {} })
       const Child = Component.define({
         name: "Child",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never,
         events: Events
@@ -1860,6 +1915,7 @@ describe("Runtime", () => {
       })
       const Parent = Component.define({
         name: "Parent",
+        scoped: false,
         model: Schema.Array(Schema.String),
         message: Schema.String
       }).make({
@@ -1877,6 +1933,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Label = Component.define({
           name: "Label",
+          scoped: false,
           props: Schema.Struct({ text: Schema.String }),
           model: Schema.Number,
           message: Schema.Never
@@ -1888,6 +1945,7 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Rename: { text: Schema.String } })
         const Host = Component.define({
           name: "Host",
+          scoped: false,
           model: Schema.String,
           message: Msg
         }).make({
@@ -1916,6 +1974,7 @@ describe("Runtime", () => {
         const Row = Schema.Struct({ id: Schema.Number, label: Schema.String, tags: Schema.Array(Schema.String) })
         const Cell = Component.define({
           name: "Cell",
+          scoped: false,
           props: Schema.Struct({ row: Row, at: Schema.Option(Schema.Number), ratio: Schema.Number }),
           model: Schema.Null,
           message: Schema.Never
@@ -1925,7 +1984,7 @@ describe("Runtime", () => {
           view: (_, h) => h.el("span", `${h.props.row.label}:${h.props.row.tags.join()}`)
         })
         const Props = Schema.Struct({ row: Row, at: Schema.Option(Schema.Number), ratio: Schema.Number })
-        const Table = Component.define({ name: "Table", model: Props, message: Props }).make({
+        const Table = Component.define({ name: "Table", scoped: false, model: Props, message: Props }).make({
           init: () => ({ row: { id: 1, label: "one", tags: ["x"] }, at: Option.some(1), ratio: NaN }),
           update: (_, next) => next,
           view: (model, h) => h.el("div", Cell(h, { key: "c", props: model }))
@@ -1973,6 +2032,7 @@ describe("Runtime", () => {
     ) {}
     const Hello = Component.define({
       name: "Hello",
+      scoped: false,
       model: Schema.String,
       message: Schema.String
     }).make({
@@ -2021,6 +2081,7 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Drop: {} })
         const Two = Component.define({
           name: "Two",
+          scoped: false,
           model: Schema.Number,
           message: Msg
         }).make({
@@ -2046,6 +2107,7 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Failed: {} })
         const Status = Component.define({
           name: "Status",
+          scoped: false,
           model: Schema.String,
           message: Msg
         }).make({
@@ -2070,6 +2132,7 @@ describe("Runtime", () => {
       ) {}
       const StoreId = Component.define({
         name: "StoreId",
+        scoped: false,
         model: Schema.String,
         message: Schema.String
       }).make({
@@ -2082,6 +2145,7 @@ describe("Runtime", () => {
       const Siblings = (children: Record<string, Component.Mountable<{}, never, never>>) =>
         Component.define({
           name: "Siblings",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: DropMsg
         }).make({
@@ -2125,6 +2189,7 @@ describe("Runtime", () => {
           ) {}
           const ProjectId = Component.define({
             name: "ProjectId",
+            scoped: false,
             model: Schema.String,
             message: Schema.String
           }).make({
@@ -2136,6 +2201,7 @@ describe("Runtime", () => {
           const Task = Component.provide(ProjectId, ReadProject.layer)
           const PageView = Component.define({
             name: "PageView",
+            scoped: false,
             props: Schema.Struct({ id: Schema.String }),
             model: Schema.Null,
             message: Schema.Never
@@ -2147,6 +2213,7 @@ describe("Runtime", () => {
           const Page = Component.provide(PageView, (props) => Layer.succeed(Project, { id: props.id }))
           const Split = Component.define({
             name: "Split",
+            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -2287,6 +2354,7 @@ describe("Runtime", () => {
     }) {}
     const BadgeImpl = Component.define({
       name: "BadgeImpl",
+      scoped: false,
       props: Schema.Struct({ label: Schema.String }),
       model: Schema.Number,
       message: Schema.Never,
@@ -2299,6 +2367,7 @@ describe("Runtime", () => {
     const Msg = UiSchema.TaggedEnum({ Heard: { text: Schema.String } })
     const Shell = Component.define({
       name: "Shell",
+      scoped: false,
       model: Schema.Array(Schema.String),
       message: Msg
     }).make({
@@ -2363,6 +2432,7 @@ describe("Runtime", () => {
         assert.deepStrictEqual(Story.fromLog(Counter, wire).model, { count: 6 })
         const Changed = Component.define({
           name: "Counter",
+          scoped: false,
           props: Schema.Struct({ initial: Schema.Number }),
           model: Schema.Struct({ count: Schema.Number }),
           message: CounterMessage
@@ -2382,6 +2452,7 @@ describe("Runtime", () => {
         const Message = UiSchema.TaggedEnum({ Break: { why: Schema.String } })
         const Fragile = Component.define({
           name: "Fragile",
+          scoped: false,
           props: Schema.Struct({ id: Schema.String }),
           model: Schema.Null,
           message: Message
@@ -2412,20 +2483,25 @@ describe("Runtime", () => {
         const Message = UiSchema.TaggedEnum({ Close: {}, Done: {} })
         const done = Command.map(() => Message.Done())
         // Its Command can't be interrupted, so its close stays open until `hold` is done.
-        const Holder = Component.define({ name: "Holder", model: Schema.Null, message: Message }).make({
+        const Holder = Component.define({ name: "Holder", scoped: false, model: Schema.Null, message: Message }).make({
           init: ($) =>
             $.set(null).run(
-              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold)))().pipe(done)
+              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold))).make().pipe(
+                done
+              )
             ),
           update: (model) => model,
           view: (_, h) => h.text("holder")
         })
-        const Middle = Component.define({ name: "Middle", model: Schema.Number, message: Message }).make({
-          init: ($) => $.set(0).run(Command.make("test/Slow", { args: {} }, () => Deferred.await(slow))().pipe(done)),
-          update: (model, message) => message._tag === "Done" ? model + 1 : model,
-          view: (model, h) => h.el("div", String(model), Holder(h, { key: "h", props: {} }))
-        })
-        const Top = Component.define({ name: "Top", model: Schema.Boolean, message: Message }).make({
+        const Middle = Component.define({ name: "Middle", scoped: false, model: Schema.Number, message: Message }).make(
+          {
+            init: ($) =>
+              $.set(0).run(Command.make("test/Slow", { args: {} }, () => Deferred.await(slow)).make().pipe(done)),
+            update: (model, message) => message._tag === "Done" ? model + 1 : model,
+            view: (model, h) => h.el("div", String(model), Holder(h, { key: "h", props: {} }))
+          }
+        )
+        const Top = Component.define({ name: "Top", scoped: false, model: Schema.Boolean, message: Message }).make({
           init: () => true,
           update: (open, message) => message._tag === "Close" ? false : open,
           view: (open, h) => h.el("div", open ? Middle(h, { key: "m", props: {} }) : null)
@@ -2466,7 +2542,7 @@ describe("Runtime", () => {
         },
         () => Effect.succeed(1)
       )
-      const command = Send({
+      const command = Send.make({
         channel: "general",
         token: Redacted.make("secret"),
         when: new Date(0),
@@ -2496,7 +2572,7 @@ describe("Runtime", () => {
         { args: { secret: Schema.RedactedFromValue(Schema.String), room: Schema.String }, group: ["secret", "room"] },
         () => Effect.succeed(1)
       )
-      const command = Sync({ secret: Redacted.make("secret-token"), room: "a" })
+      const command = Sync.make({ secret: Redacted.make("secret-token"), room: "a" })
       const interrupt = Command.interrupt(Sync, { secret: Redacted.make("secret-token"), room: "a" })
       // The scheduling key keeps the real encoding, so two secrets are two groups.
       assert.strictEqual(command.groupKey, interrupt.groupKey)
@@ -2532,7 +2608,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const command = Upload({
+      const command = Upload.make({
         items: [{ secret: "must-not-log", file, n: 2 }],
         pair: [3, file],
         choice: { file },
@@ -2580,7 +2656,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const command = Upload({
+      const command = Upload.make({
         tail: [file, "must-not-log"],
         middle: [1, file, file, "must-not-log", 2],
         keyed: { n: 3, "file-a": file, "secret-a": "must-not-log" },
@@ -2629,7 +2705,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const encoded = MessageLog.encodeCommand(Save({
+      const encoded = MessageLog.encodeCommand(Save.make({
         codec: { "secret-a": { a: "hidden-one", b: "hidden-two" }, plain: { a: "hidden-three", b: "shown" } },
         fallback: {
           "secret-a": { a: "hidden-one", b: "hidden-two", file },
@@ -2670,7 +2746,7 @@ describe("Runtime", () => {
         () => Effect.succeed(1)
       )
       const file = new File(["x"], "a.txt")
-      const encoded = MessageLog.encodeCommand(Save({
+      const encoded = MessageLog.encodeCommand(Save.make({
         codec: { token: "hidden-one", other: 1, tokB: "hidden-two" },
         fallback: { token: "hidden-three", other: 2, file },
         reverse: { token: "hidden-four", note: "shown" }
@@ -2709,7 +2785,7 @@ describe("Runtime", () => {
           throw new Error("declared, and it throws")
         }
       })
-      const encoded = MessageLog.encodeCommand(Save({
+      const encoded = MessageLog.encodeCommand(Save.make({
         codec: unread({ id: 1 }),
         fallback: unread({ id: 2, file }),
         throws: throws as any
@@ -2751,7 +2827,7 @@ describe("Runtime", () => {
       list.push(list)
       const link: { next: unknown } = { next: null }
       link.next = link
-      const encoded = MessageLog.encodeCommand(Walk({ node: node as Node, link: link as Link, list }))
+      const encoded = MessageLog.encodeCommand(Walk.make({ node: node as Node, link: link as Link, list }))
       assert.deepStrictEqual(encoded.args, {
         node: { label: "a", secret: { "~redacted": true }, next: { "~unserialisable": "cycle" } },
         link: { next: { "~unserialisable": "cycle" } },
@@ -2766,7 +2842,7 @@ describe("Runtime", () => {
       assert.strictEqual(Schema.encodeSync(Renderer.Ref)(row), "Field[3]")
       const decoded = Schema.decodeSync(Renderer.Ref)("Field[3]")
       assert.deepStrictEqual([decoded.name, decoded.key, decoded.at(1).key], ["Field", "Field[3]", "Field[3][1]"])
-      assert.deepStrictEqual(MessageLog.encodeCommand(Html.Focus({ ref: row })).args, { ref: "Field[3]" })
+      assert.deepStrictEqual(MessageLog.encodeCommand(Html.Focus.make({ ref: row })).args, { ref: "Field[3]" })
     })
 
     it("truncates a Model over maxEntryBytes, and fromLog names the entry", () => {
@@ -2836,6 +2912,7 @@ describe("Runtime", () => {
       class User extends Schema.Class<User>("User")({ name: Schema.String, pin: Schema.Redacted(Schema.Number) }) {}
       const Secret = Component.define({
         name: "Secret",
+        scoped: false,
         props: Schema.Struct({ key: Schema.Redacted(Schema.String) }),
         model: Schema.Struct({
           token: Schema.Redacted(Schema.String),
@@ -2914,6 +2991,7 @@ describe("Runtime", () => {
       }
       const Secrets = Component.define({
         name: "Secrets",
+        scoped: false,
         model: Model,
         message: Schema.Never
       }).make({
@@ -2964,6 +3042,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Loose = Component.define({
           name: "Loose",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           elements: Tiny
@@ -2982,6 +3061,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Chained = Component.define({
           name: "Chained",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           elements: Tiny
@@ -2999,6 +3079,7 @@ describe("Runtime", () => {
       Effect.gen(function*() {
         const Inner = Component.define({
           name: "Inner",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           elements: Tiny
@@ -3009,6 +3090,7 @@ describe("Runtime", () => {
         })
         const Outer = Component.define({
           name: "Outer",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -3034,6 +3116,7 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Touch: {} })
         const Form = Component.define({
           name: "Form",
+          scoped: false,
           model: Schema.Struct({ value: Schema.String, touched: Schema.Number }),
           message: Msg,
           elements: Tiny
@@ -3074,6 +3157,7 @@ describe("Runtime", () => {
         const token = Redacted.make("secret")
         const Auto = Component.define({
           name: "Auto",
+          scoped: false,
           model: Schema.String,
           message: Msg,
           elements: Tiny
@@ -3129,6 +3213,7 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Auto = Component.define({
           name: "Auto",
+          scoped: false,
           model: Schema.String,
           message: Schema.String,
           elements: Tiny
@@ -3153,7 +3238,13 @@ describe("Runtime", () => {
           (_, { crash }) =>
             crash ? Effect.andThen(Deferred.await(gate), Effect.die("mount defect")) : Effect.succeed(Component.noop)
         )
-        const Box = Component.define({ name: "Box", model: Schema.Null, message: Schema.Never, elements: Tiny }).make({
+        const Box = Component.define({
+          name: "Box",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Tiny
+        }).make({
           init: () => null,
           update: (model) => model,
           view: (_, h) => h.box(h.field.onMount(Focus({ crash: true })), h.field.onMount(Focus({ crash: false })))
@@ -3197,6 +3288,7 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "Chart",
+          scoped: false,
           model: Schema.Struct({ n: Schema.Number, touches: Schema.Number, shown: Schema.Boolean }),
           message: Msg,
           elements: Tiny
@@ -3265,6 +3357,7 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "OutlivedReader",
+          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Tiny
@@ -3297,7 +3390,13 @@ describe("Runtime", () => {
             yield* Deferred.await(finishBody)
             return Component.noop
           }))
-        const Box = Component.define({ name: "Box", model: Schema.Boolean, message: Schema.String, elements: Tiny })
+        const Box = Component.define({
+          name: "Box",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Schema.String,
+          elements: Tiny
+        })
           .make({
             init: () => true,
             update: () => false,
@@ -3325,7 +3424,13 @@ describe("Runtime", () => {
       Effect.gen(function*() {
         const gate = yield* Deferred.make<void>()
         const Wait = Mount.make("Wait", { args: {} }, () => Effect.as(Deferred.await(gate), "done"))
-        const Late = Component.define({ name: "Late", model: Schema.String, message: Schema.String, elements: Tiny })
+        const Late = Component.define({
+          name: "Late",
+          scoped: false,
+          model: Schema.String,
+          message: Schema.String,
+          elements: Tiny
+        })
           .make({
             init: () => "first",
             update: (_, message) => message,
@@ -3357,6 +3462,7 @@ describe("Runtime", () => {
             })).pipe(Effect.as(Component.noop)))
         const Chart = Component.define({
           name: "SlowChart",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Tiny
@@ -3396,7 +3502,13 @@ describe("Runtime", () => {
             yield* read(changes, 1)
             return Component.noop
           }))
-        const Chart = Component.define({ name: "Reread", model: Schema.Number, message: Schema.Number, elements: Tiny })
+        const Chart = Component.define({
+          name: "Reread",
+          scoped: false,
+          model: Schema.Number,
+          message: Schema.Number,
+          elements: Tiny
+        })
           .make({
             init: () =>
               0,
@@ -3438,6 +3550,7 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "StartsReader",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Tiny
@@ -3469,7 +3582,13 @@ describe("Runtime", () => {
             }))
         const A = tracked("A")
         const B = tracked("B")
-        const Swap = Component.define({ name: "Swap", model: Schema.String, message: Schema.String, elements: Tiny })
+        const Swap = Component.define({
+          name: "Swap",
+          scoped: false,
+          model: Schema.String,
+          message: Schema.String,
+          elements: Tiny
+        })
           .make({
             init: () => "none",
             update: (_, message) => message,
@@ -3505,6 +3624,7 @@ describe("Runtime", () => {
         )
         const Widget = Component.define({
           name: "Widget",
+          scoped: false,
           model: Schema.Array(Schema.String),
           message: Schema.String,
           elements: Tiny
@@ -3544,6 +3664,7 @@ describe("Runtime", () => {
       const App = Component.provide(
         Component.define({
           name: "App",
+          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         }).make({
@@ -3579,6 +3700,7 @@ describe("Runtime", () => {
       const App = Component.provide(
         Component.define({
           name: "App",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -3690,6 +3812,7 @@ describe("Runtime", () => {
           const App = Component.provide(
             Component.define({
               name: "App",
+              scoped: false,
               model: Schema.Number,
               message: Schema.Never
             }).make({
@@ -3779,6 +3902,7 @@ describe("Runtime", () => {
       ) {}
       const RoomView = Component.define({
         name: "RoomView",
+        scoped: false,
         props: Schema.Struct({ room: Schema.String }),
         model: Schema.String,
         message: Schema.String
@@ -3790,6 +3914,7 @@ describe("Runtime", () => {
       const Room = Component.provide(RoomView, (props) => Show.layer.pipe(Layer.provideMerge(Rooms.get(props.room))))
       const Lobby = Component.define({
         name: "Lobby",
+        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -3820,6 +3945,7 @@ describe("Runtime", () => {
     /** Starts in room "a". Its text is its room, then the room each `Show` ran against, in order. */
     const RoomView = Component.define({
       name: "RoomView",
+      scoped: false,
       model: Schema.Struct({ room: Schema.String, shown: Schema.Array(Schema.String) }),
       message: Msg
     }).make({
@@ -3892,6 +4018,7 @@ describe("Runtime", () => {
         )
         const Child = Component.define({
           name: "Child",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -3901,10 +4028,11 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
+          scoped: false,
           model: Schema.String,
           message: Schema.String
         }).make({
-          init: ($) => $.set("a").run(Hold()),
+          init: ($) => $.set("a").run(Hold.make()),
           update: (_, room) => room,
           view: (room, h) => h.el("div", room, Child(h, { key: "child", props: {} }))
         })
@@ -3972,6 +4100,7 @@ describe("Runtime", () => {
       })
       const Lobby = Component.define({
         name: "Lobby",
+        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -4035,6 +4164,7 @@ describe("Runtime", () => {
       ) {}
       const Acting = Component.define({
         name: "Acting",
+        scoped: false,
         model: Schema.Struct({ room: Schema.String, done: Schema.String }),
         message: Act
       }).make({
@@ -4075,7 +4205,12 @@ describe("Runtime", () => {
       provideHost(
         Effect.gen(function*() {
           const started: Array<string> = []
-          const Watching = Component.define({ name: "Watching", model: Schema.String, message: Schema.String }).make({
+          const Watching = Component.define({
+            name: "Watching",
+            scoped: false,
+            model: Schema.String,
+            message: Schema.String
+          }).make({
             init: () => "a",
             update: (room, message) => message === "failed" ? room : message,
             subscriptions: (room) => [
@@ -4118,6 +4253,7 @@ describe("Runtime", () => {
           AsyncResult.isSuccess(result) ? result.value : "-"
         const Reading = Component.define({
           name: "Reading",
+          scoped: false,
           model: Schema.String,
           message: Schema.String,
           queries: {
@@ -4156,8 +4292,13 @@ describe("Runtime", () => {
         const gate = yield* Deferred.make<void>()
         const events: Array<string> = []
         const Hold = Command.make("test/KeyedHeld", { args: {} }, () => held(gate, events))
-        const Holding = Component.define({ name: "Holding", model: Schema.String, message: Schema.String }).make({
-          init: ($) => $.set("a").run(Hold()),
+        const Holding = Component.define({
+          name: "Holding",
+          scoped: false,
+          model: Schema.String,
+          message: Schema.String
+        }).make({
+          init: ($) => $.set("a").run(Hold.make()),
           update: (_, room) => room,
           view: (room, h) => h.text(room)
         })
@@ -4184,6 +4325,7 @@ describe("Runtime", () => {
         const events: Array<string> = []
         const Holder = Component.define({
           name: "Holder",
+          scoped: false,
           model: Schema.Struct({ holding: Schema.Boolean, room: Schema.String }),
           message: Schema.String
         }).make({
@@ -4216,7 +4358,7 @@ describe("Runtime", () => {
         const gate = yield* Deferred.make<void>()
         const events: Array<string> = []
         const Child = Component.provide(
-          Component.define({ name: "Child", model: Schema.Null, message: Schema.Never }).make({
+          Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Never }).make({
             init: () => null,
             update: (model) => model,
             view: (_, h) => h.text("child")
@@ -4224,7 +4366,7 @@ describe("Runtime", () => {
           { key: () => "a", layer: () => Layer.effectDiscard(held(gate, events)) }
         )
         const Parent = Component.provide(
-          Component.define({ name: "Parent", model: Schema.Null, message: Schema.Never }).make({
+          Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: Schema.Never }).make({
             init: () => null,
             update: (model) => model,
             view: (_, h) => h.el("div", Child(h, { key: "child", props: {} }))
@@ -4250,6 +4392,7 @@ describe("Runtime", () => {
         const events: Array<string> = []
         const Counter = Component.define({
           name: "Counter",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Null,
           events: Schema.Null
@@ -4272,11 +4415,12 @@ describe("Runtime", () => {
             ))
         })
         // The child's update changes its key and tells the parent, which removes it before it renders.
-        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Null }).make({
-          init: () => true,
-          update: () => false,
-          view: (shown, h) => shown ? Child(h, { key: "child", props: {}, onEmit: () => null }) : h.text("gone")
-        })
+        const Parent = Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Schema.Null })
+          .make({
+            init: () => true,
+            update: () => false,
+            view: (shown, h) => shown ? Child(h, { key: "child", props: {}, onEmit: () => null }) : h.text("gone")
+          })
         const scope = yield* Scope.make()
         const root = yield* TestHost.mount(Parent, {}).pipe(Scope.provide(scope))
         yield* TestHost.settle
@@ -4302,13 +4446,14 @@ describe("Runtime", () => {
           }))
         const Counter = Component.define({
           name: "Counter",
+          scoped: false,
           model: Schema.Number,
           message: Schema.Null,
           events: Schema.Null
         })
           .make({
             init: () => 1,
-            update: (n, _, $) => $.set(n + 1).run(Write()).emit(null),
+            update: (n, _, $) => $.set(n + 1).run(Write.make()).emit(null),
             view: (n, h) => h.el("button").on("click", null).children(String(n))
           })
         const Child = Component.provide(Counter, {
@@ -4317,7 +4462,7 @@ describe("Runtime", () => {
         })
         // Closes before the child, as it mounted after it, and holds the branch's close open.
         const Blocker = Component.provide(
-          Component.define({ name: "Blocker", model: Schema.Null, message: Schema.Never }).make({
+          Component.define({ name: "Blocker", scoped: false, model: Schema.Null, message: Schema.Never }).make({
             init: () => null,
             update: (m) => m,
             view: (_, h) => h.text("")
@@ -4329,6 +4474,7 @@ describe("Runtime", () => {
         )
         const Branch = Component.define({
           name: "Branch",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Null,
           events: Schema.Null
@@ -4344,11 +4490,12 @@ describe("Runtime", () => {
               )
           })
         // The child's update changes its key and tells the parent, which removes its branch before it renders.
-        const Parent = Component.define({ name: "Parent", model: Schema.Boolean, message: Schema.Null }).make({
-          init: () => true,
-          update: () => false,
-          view: (shown, h) => shown ? Branch(h, { key: "branch", props: {}, onEmit: () => null }) : h.text("gone")
-        })
+        const Parent = Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Schema.Null })
+          .make({
+            init: () => true,
+            update: () => false,
+            view: (shown, h) => shown ? Branch(h, { key: "branch", props: {}, onEmit: () => null }) : h.text("gone")
+          })
         const root = yield* TestHost.mount(Parent, {})
         yield* TestHost.settle
         Locator.fire(root.get(Locator.tag("button")), "click")
@@ -4368,6 +4515,7 @@ describe("Runtime", () => {
       const Inner = Component.provide(
         Component.define({
           name: "Inner",
+          scoped: false,
           props: Schema.Struct({ name: Schema.String }),
           model: Schema.Number,
           message: Schema.String
@@ -4386,6 +4534,7 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Add: { name: Schema.String } })
       const Shell = Component.define({
         name: "Shell",
+        scoped: false,
         model: Schema.Array(Schema.String),
         message: Msg
       }).make({
@@ -4421,11 +4570,12 @@ describe("Runtime", () => {
       const Again = Command.make("Again", { args: {} }, () => Effect.succeed(Msg.Again()))
       const Loop = Component.define({
         name: "Loop",
+        scoped: false,
         model: Schema.Number,
         message: Msg
       }).make({
-        init: ($) => $.set(0).run(Again()),
-        update: (n, _, $) => $.set(n + 1).run(Again()),
+        init: ($) => $.set(0).run(Again.make()),
+        update: (n, _, $) => $.set(n + 1).run(Again.make()),
         view: (n, h) => h.text(String(n))
       })
       yield* TestHost.mount(Loop, {})
@@ -4439,8 +4589,11 @@ describe("Runtime", () => {
     Effect.gen(function*() {
       const state = { model: Schema.Null, message: Schema.Never }
       const impl = { init: () => null, update: () => null }
-      const Leaf = Component.define({ name: "Leaf", ...state }).make({ ...impl, view: (_, h) => h.text("leaf") })
-      const Page = Component.define({ name: "Page", ...state }).make({
+      const Leaf = Component.define({ name: "Leaf", scoped: false, ...state }).make({
+        ...impl,
+        view: (_, h) => h.text("leaf")
+      })
+      const Page = Component.define({ name: "Page", scoped: false, ...state }).make({
         ...impl,
         view: (_, h) => h.el("p").attr("class", "a").prop("hidden", true).children("x", Leaf(h, { key: "k" }))
       })

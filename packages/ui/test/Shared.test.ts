@@ -17,6 +17,7 @@ const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
 /** An owner: which tip is open. Its `label` prop is shared too. */
 const TipsProvider = Component.define({
   name: "TipsProvider",
+  scoped: false,
   props: Schema.Struct({ label: Schema.optional(Schema.String) }),
   model: Schema.NullOr(Schema.String),
   message: TipMessage,
@@ -27,6 +28,7 @@ const TipsProvider = Component.define({
 /** A reader that opens its tip on click. */
 const Tip = Component.define({
   name: "Tip",
+  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
@@ -43,6 +45,7 @@ const Tip = Component.define({
 /** A headless reader: its part is the open tip. */
 const Trigger = Component.define({
   name: "Trigger",
+  scoped: false,
   model: Schema.Null,
   message: TipMessage,
   shared: { provider: TipsProvider }
@@ -56,6 +59,7 @@ const Trigger = Component.define({
 /** TipsProvider with a Tip and a Trigger in its closure. Its Model is the label it passes to TipsProvider. */
 const App = Component.define({
   name: "App",
+  scoped: false,
   model: Schema.String,
   message: UiSchema.TaggedEnum({ Label: { label: Schema.String } })
 }).make({
@@ -105,6 +109,7 @@ describe("shared state", () => {
       const Tick = UiSchema.TaggedEnum({ Tick: {} })
       const ClockProvider = Component.define({
         name: "ClockProvider",
+        scoped: false,
         model: Schema.Number,
         message: Tick,
         receives: ["Tick"],
@@ -113,6 +118,7 @@ describe("shared state", () => {
       let renders = 0
       const Face = Component.define({
         name: "Face",
+        scoped: false,
         model: Schema.Null,
         message: Tick,
         shared: { provider: ClockProvider }
@@ -125,12 +131,12 @@ describe("shared state", () => {
             return h.el("p", String(h.shared.provider.getTime()))
           }
         })
-      const Ticker = Component.define({ name: "Ticker", model: Schema.Null, message: Tick }).make({
+      const Ticker = Component.define({ name: "Ticker", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
         update: (model, message, $) => $.set(model).send(ClockProvider, message),
         view: (_, h) => h.el("button").on("click", Tick.Tick()).children("tick")
       })
-      const Host = Component.define({ name: "Host", model: Schema.Null, message: Tick }).make({
+      const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -153,13 +159,14 @@ describe("shared state", () => {
     provideHost(Effect.gen(function*() {
       const BrokenProvider = Component.define({
         name: "BrokenProvider",
+        scoped: false,
         model: Schema.Null,
         message: TipMessage,
         shares: (): string => {
           throw new Error("boom")
         }
       }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
-      const Host = Component.define({ name: "Host", model: Schema.Null, message: TipMessage }).make({
+      const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: TipMessage }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
@@ -186,6 +193,7 @@ describe("shared state", () => {
           restored.push(path)
           return undefined
         },
+        entry: () => undefined,
         prefetch: () => () => {}
       }
       yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
@@ -224,7 +232,13 @@ describe("shared state in a Scene", () => {
   // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
   it.effect("gives slot content the owner that places it", () =>
     Effect.gen(function*() {
-      const Frame = Component.define({ name: "Frame", model: Schema.Null, message: TipMessage, slots: ["body"] }).make({
+      const Frame = Component.define({
+        name: "Frame",
+        scoped: false,
+        model: Schema.Null,
+        message: TipMessage,
+        slots: ["body"]
+      }).make({
         init: () => null,
         update: (model) => model,
         view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
@@ -237,7 +251,7 @@ describe("shared state in a Scene", () => {
 
   it("gives the parts of a headless reader the shared value, from an owner declared with p.child too", () => {
     assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null, label: "" })
-    const Tagged = Component.define({ name: "Tagged", model: Schema.Null, message: TipMessage }).make({
+    const Tagged = Component.define({ name: "Tagged", scoped: false, model: Schema.Null, message: TipMessage }).make({
       init: () => null,
       update: (model) => model,
       parts: (_, p) =>
@@ -256,6 +270,7 @@ describe("shared state in a Scene", () => {
         const required = (name: string) =>
           Component.define({
             name,
+            scoped: false,
             props: Schema.Struct({ value: Schema.Number }),
             model: Schema.Number,
             message: TipMessage,
@@ -265,6 +280,7 @@ describe("shared state in a Scene", () => {
         const BProvider = required("BProvider")
         const Sum = Component.define({
           name: "Sum",
+          scoped: false,
           model: Schema.Null,
           message: TipMessage,
           shared: { a: AProvider, b: BProvider }
@@ -294,6 +310,7 @@ const GroupMessage = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean }, Bu
 /** An owner that is on while any reader reports `true`, and counts bumps. */
 const Group = Component.define({
   name: "Group",
+  scoped: false,
   model: Schema.Struct({ on: Schema.Boolean, bumps: Schema.Number }),
   message: GroupMessage,
   receives: ["Bumped"],
@@ -323,6 +340,7 @@ const ReaderMessage = UiSchema.TaggedEnum({
 const makeReader = (answer: (told: boolean) => boolean) =>
   Component.define({
     name: "Reader",
+    scoped: false,
     model: Schema.Boolean,
     message: ReaderMessage,
     shared: {
@@ -341,7 +359,7 @@ const makeReader = (answer: (told: boolean) => boolean) =>
 const GroupRef = Group.ref("Group")
 const PageMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
 const makePage = (Reader: ReturnType<typeof makeReader>) =>
-  Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+  Component.define({ name: "Page", scoped: false, model: Schema.Null, message: PageMessage }).make({
     init: () => null,
     update: (model, { times }, $) => {
       let next = $.set(model)
@@ -359,6 +377,7 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const Lone = Component.define({
         name: "Lone",
+        scoped: false,
         model: Schema.Null,
         message: TipMessage,
         shared: { provider: { owner: TipsProvider, optional: true } }
@@ -382,13 +401,14 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const Toggle = Component.define({
         name: "Toggle",
+        scoped: false,
         props: Schema.Struct({ open: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
         shared: { group: { owner: Group, report: (_, props) => props.open } }
       }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
       const Open = UiSchema.TaggedEnum({ Open: { which: Schema.String } })
-      const Bar = Component.define({ name: "Bar", model: Schema.String, message: Open }).make({
+      const Bar = Component.define({ name: "Bar", scoped: false, model: Schema.String, message: Open }).make({
         init: () => "a",
         update: (_, { which }) => which,
         view: (open, h) =>
@@ -465,6 +485,7 @@ describe("shared state in update", () => {
   const ClockMessage = UiSchema.TaggedEnum({ Ticked: {} })
   const Clock = Component.define({
     name: "Clock",
+    scoped: false,
     model: Schema.Number,
     message: ClockMessage,
     receives: ["Ticked"],
@@ -476,6 +497,7 @@ describe("shared state in update", () => {
   const WatchMessage = UiSchema.TaggedEnum({ Clicked: {} })
   const Watch = Component.define({
     name: "Watch",
+    scoped: false,
     model: Schema.Array(Schema.Number),
     message: WatchMessage,
     shared: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
@@ -490,7 +512,7 @@ describe("shared state in update", () => {
     view: (seen, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
   })
   const ClockRef = Clock.ref("clock")
-  const Face = Component.define({ name: "Face", model: Schema.Null, message: ClockMessage }).make({
+  const Face = Component.define({ name: "Face", scoped: false, model: Schema.Null, message: ClockMessage }).make({
     init: () => null,
     update: (model, message, $) => $.set(model).send(ClockRef, message),
     view: (_, h) => Clock(h, { ref: ClockRef, view: () => Watch(h, { key: "w" }) })
@@ -535,6 +557,7 @@ describe("onChange rounds and declarations", () => {
       // Answers the first bump with another, inside the round that tells it.
       const Replier = Component.define({
         name: "Replier",
+        scoped: false,
         model: Schema.Null,
         message: ReaderMessage,
         shared: { group: { owner: Group, onChange: (value) => ReaderMessage.ChangedGroup({ ...value }) } }
@@ -545,7 +568,7 @@ describe("onChange rounds and declarations", () => {
         view: (_, h) => h.text("")
       })
       const Reader = makeReader((told) => told)
-      const Page = Component.define({ name: "Page", model: Schema.Null, message: PageMessage }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: PageMessage }).make({
         init: () => null,
         update: (model, _, $) => $.set(model).send(GroupRef, { _tag: "Bumped" }),
         view: (_, h) =>
@@ -568,6 +591,7 @@ describe("onChange rounds and declarations", () => {
       () =>
         Component.define({
           name: "Twice",
+          scoped: false,
           model: Schema.Null,
           message: ReaderMessage,
           shared: { a: { owner: Group, onChange }, b: { owner: Group, optional: true, onChange } }
@@ -576,6 +600,7 @@ describe("onChange rounds and declarations", () => {
     )
     Component.define({
       name: "Aliased",
+      scoped: false,
       model: Schema.Null,
       message: ReaderMessage,
       shared: { a: { owner: Group, onChange }, b: Group, c: { owner: Group, report: () => true } }
@@ -586,6 +611,7 @@ describe("onChange rounds and declarations", () => {
 describe("optional owners, reports and onChange in a Story", () => {
   const OptionalReader = Component.define({
     name: "OptionalReader",
+    scoped: false,
     model: Schema.Boolean,
     message: ReaderMessage,
     shared: {
@@ -651,6 +677,7 @@ describe("a component that reads its own kind", () => {
   const NestMessage = UiSchema.TaggedEnum({ ChangedBelow: { open: Schema.Number } })
   const Nest = Component.define({
     name: "Nest",
+    scoped: false,
     props: Schema.Struct({ open: Schema.Boolean }),
     model: Schema.Number,
     message: NestMessage,
@@ -668,7 +695,7 @@ describe("a component that reads its own kind", () => {
     parts: (below, p) => ({ nested: p.shared.parent !== undefined, below })
   })
   const Toggle = UiSchema.TaggedEnum({ Toggled: {} })
-  const Nests = Component.define({ name: "Nests", model: Schema.Boolean, message: Toggle }).make({
+  const Nests = Component.define({ name: "Nests", scoped: false, model: Schema.Boolean, message: Toggle }).make({
     init: () => true,
     update: (open) => !open,
     view: (open, h) => {
@@ -717,13 +744,20 @@ describe("a component that reads its own kind", () => {
     const self = { owner: "self", optional: true } as const
     assert.throws(
       () =>
-        Component.define({ name: "Bare", model: Schema.Null, message: Schema.Never, shared: { parent: self } as any }),
+        Component.define({
+          name: "Bare",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          shared: { parent: self } as any
+        }),
       /Bare reads its own kind under parent, so it must share state: add shares/
     )
     assert.throws(
       () =>
         Component.define({
           name: "Required",
+          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           shares: () => null,

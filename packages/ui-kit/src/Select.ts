@@ -141,6 +141,7 @@
  *
  * const Settings = Component.define({
  *   name: "Settings",
+ *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, theme: Schema.String }),
  *   message: SettingsMessage,
  *   elements: Html
@@ -595,14 +596,14 @@ const typeKey = (model: Model, $: SelectUpdate, key: string) => {
   const { index, next } = typeahead(model, key, props.items, startOf(model, props))
   const item = props.items[index]
   const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.set({ ...model, ...next, ...moved }).run(WaitBeforeResetTyping({}))
+  const typed = $.set({ ...model, ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
   return item === undefined || props.open || valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
 const focusTrigger = (_model: Model, _message: unknown, $: SelectUpdate) =>
-  $.run(Html.Focus({ ref: Trigger }).pipe(Command.asNoop))
+  $.run(Html.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 
@@ -1109,6 +1110,7 @@ const scrolling = "position:relative;max-height:100%;overflow-x:hidden;overflow-
  */
 export const Select = Component.define({
   name: "Select",
+  scoped: false,
   props: SelectProps,
   model: Model,
   message: Message,

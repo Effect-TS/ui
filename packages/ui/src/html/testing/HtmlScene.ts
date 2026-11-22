@@ -32,6 +32,7 @@
  *
  * const Weather = Component.define({
  *   name: "Weather",
+ *   scoped: false,
  *   model: Schema.Struct({ zip: Schema.String, forecast: Schema.String }),
  *   message: Message,
  *   elements: Html
@@ -104,10 +105,10 @@ export interface Expect<S> extends Scene.Expect<S> {
 
 // The same union as `Scene.ts`'s.
 type AnyComponent =
-  | Component.Component<any, any, any, any, any, any, any, any, any>
-  | Component.Component<any, any, any, never, any, any, any, any, any>
-  | Component.Component<any, any, any, any, any, any, any, any, never>
-  | Component.Component<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any, any>
+  | Component.Members<any, any, any, any, any, any, any, any, never>
+  | Component.Members<any, any, any, never, any, any, any, any, never>
 
 type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
 

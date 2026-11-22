@@ -129,6 +129,7 @@ describe("Field", () => {
     Effect.gen(function*() {
       const Form = Component.define({
         name: "Form",
+        scoped: false,
         props: Schema.Struct({ disabled: Schema.Boolean }),
         model: Schema.Struct({}),
         message: Schema.Never,

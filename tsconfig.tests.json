@@ -14,7 +14,8 @@
     // Import `@effect/ui/html/register`, which would register the HTML vocabulary for every test in this program.
     // Vitest still runs the first and TSTyche still checks the second in its own program.
     "./packages/ui/test/html/register.test.ts",
-    "./packages/ui/typetest/html/register.tst.ts"
+    "./packages/ui/typetest/html/register.tst.ts",
+    "./packages/ui/benchmark/types/tmp/**"
   ],
   "compilerOptions": {
     "rootDir": ".",

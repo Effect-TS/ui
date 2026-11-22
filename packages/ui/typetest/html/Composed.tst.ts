@@ -11,7 +11,13 @@ class Tracker extends Context.Service<Tracker, { readonly seen: Effect.Effect<vo
 const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.now))
 const MarkSeen = Mount.make("MarkSeen", { args: {} }, () => Tracker.use((tracker) => tracker.seen))
 
-const Timed = Component.define({ name: "Timed", model: Schema.Number, message: Schema.Number, elements: Html }).make({
+const Timed = Component.define({
+  name: "Timed",
+  scoped: false,
+  model: Schema.Number,
+  message: Schema.Number,
+  elements: Html
+}).make({
   init: () => 0,
   update: (_, now) => now,
   parts: (now, p) => ({ now, clock: p.part("time", (b) => b.onMount(Tick())) })
@@ -24,6 +30,7 @@ type AppMsg = typeof AppMsg.Type
 const define = () =>
   Component.define({
     name: "Combo",
+    scoped: false,
     props: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String })) }),
     model: Schema.Number,
     message: Msg,
@@ -105,9 +112,21 @@ describe("p.child", () => {
   })
 
   it("a reader of the child's shared state in the consumer's closure leaves no requirement", () => {
-    const Tips = Component.define({ name: "Tips", model: Schema.Null, message: Msg, shares: () => ({ open: true }) })
+    const Tips = Component.define({
+      name: "Tips",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      shares: () => ({ open: true })
+    })
       .make({ init: () => null, update: (model) => model, parts: () => ({}) })
-    const Tip = Component.define({ name: "Tip", model: Schema.Null, message: Msg, shared: { tips: Tips } }).make({
+    const Tip = Component.define({
+      name: "Tip",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      shared: { tips: Tips }
+    }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => h.el("p")
@@ -117,11 +136,13 @@ describe("p.child", () => {
       update: (count) => count,
       parts: (_, p) => p.child(Tips, { parts: (tips) => tips })
     })
-    const App = Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) => Bar(h, { props: { items: [] }, view: () => Tip(h, {}) })
-    })
+    const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
+      {
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) => Bar(h, { props: { items: [] }, view: () => Tip(h, {}) })
+      }
+    )
     expect<Component.Requirements<typeof Tip>>().type.toBe<Component.Shared<"Tips">>()
     expect<Component.Requirements<typeof App>>().type.toBe<never>()
   })
@@ -155,12 +176,17 @@ describe("p.child", () => {
 
 describe("Scene.childEmit", () => {
   it("takes the events of a headless child that receives no messages", () => {
-    const Page = Component.define({ name: "Page", model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        Dialog(h, { props: { label: "Confirm" }, onEmit: () => Msg.Closed(), view: (dialog) => dialog.popup(h.dialog) })
-    })
+    const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html })
+      .make({
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Dialog(h, {
+            props: { label: "Confirm" },
+            onEmit: () => Msg.Closed(),
+            view: (dialog) => dialog.popup(h.dialog)
+          })
+      })
     const scene = Scene.start(Page, {})
     expect(scene.childEmit).type.toBeCallableWith(Dialog, DialogEvents.Closed())
     expect(scene.childEmit).type.not.toBeCallableWith(Dialog, { _tag: "Missing" })

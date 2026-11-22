@@ -31,7 +31,7 @@ export const GenerateApplePosition = Command.make(
 )
 
 const generateApplePosition = (snake: Snake.Snake) =>
-  GenerateApplePosition({ snake }).pipe(
+  GenerateApplePosition.make({ snake }).pipe(
     Command.map((position) => SnakeGameMessage.CompletedGenerateApplePosition({ position }))
   )
 
@@ -82,6 +82,7 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
 
 export const SnakeGame = Component.define({
   name: "SnakeGame",
+  scoped: false,
   model: SnakeGameModel,
   message: SnakeGameMessage
 }).make({

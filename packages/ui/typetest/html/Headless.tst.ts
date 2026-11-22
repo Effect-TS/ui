@@ -18,6 +18,7 @@ const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.n
 const MarkSeen = Mount.make("MarkSeen", { args: {} }, () => Tracker.use((tracker) => tracker.seen))
 const Timed = Component.define({
   name: "Timed",
+  scoped: false,
   model: Schema.Number,
   message: Schema.Number,
   elements: Html
@@ -31,7 +32,13 @@ const Timed = Component.define({
 })
 
 // A part that takes either of two headings.
-const Heading = Component.define({ name: "Heading", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+const Heading = Component.define({
+  name: "Heading",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
   init: () => null,
   update: (model) => model,
   parts: (_, p) => ({ heading: p.part(["h2", "h3"], (b) => b.attr("role", "heading")) })
@@ -39,7 +46,7 @@ const Heading = Component.define({ name: "Heading", model: Schema.Null, message:
 
 describe("headless components", () => {
   it("the consumer calls parts with no annotations", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -74,7 +81,7 @@ describe("headless components", () => {
   })
 
   it("a part returns the chain type, so the callable shorthand is gone", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -110,7 +117,13 @@ describe("headless components", () => {
     expect<Component.Headless.Requirements<typeof Menu>>().type.toBe<never>()
     // So do the requirements of a child the part adds, and of what its `forward` adds.
     const seen = () => new Html.Element<never>("i").onMount(MarkSeen().pipe(Mount.map(() => Component.noop)))
-    const Marked = Component.define({ name: "Marked", model: Schema.Null, message: Schema.Never, elements: Html })
+    const Marked = Component.define({
+      name: "Marked",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    })
       .make({
         init: () => null,
         update: (model) => model,
@@ -120,23 +133,26 @@ describe("headless components", () => {
         })
       })
     expect<Component.Headless.Requirements<typeof Marked>>().type.toBe<Tracker>()
-    const App = Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        Timed(h, {
-          key: "t",
-          view: (timed) =>
-            timed.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.Seen())))
-              .children(String(timed.now))
-        })
-    })
+    const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
+      {
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Timed(h, {
+            key: "t",
+            view: (timed) =>
+              timed.clock(h.time).onMount(MarkSeen().pipe(Mount.map(() => Msg.Seen())))
+                .children(String(timed.now))
+          })
+      }
+    )
     expect<Component.Requirements<typeof App>>().type.toBe<Clock | Tracker>()
   })
 
   it("wrapped parts keep their requirements and the wrapper's call signature", () => {
     const Wrapped = Component.define({
       name: "Wrapped",
+      scoped: false,
       model: Schema.Null,
       message: Schema.Number,
       elements: Html
@@ -161,31 +177,33 @@ describe("headless components", () => {
       }
     })
     expect<Component.Headless.Requirements<typeof Wrapped>>().type.toBe<Clock | Tracker>()
-    const App = Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        Wrapped(h, {
-          key: "wrapped",
-          view: (wrapped) => {
-            expect(wrapped.clock).type.not.toBeCallableWith(h.div)
-            expect(wrapped.seen).type.not.toBeCallableWith({ element: h.div })
-            expect(wrapped.seen).type.not.toBeCallableWith({ element: h.time, label: "Seen" })
-            expect(wrapped.clock(h.time)).type.toBe<
-              Html.Element<Msg, never, Html.EventsOf<"time">, HTMLTimeElement, "time">
-            >()
-            expect(wrapped.seen({ element: h.div, label: "Seen" })).type.toBe<
-              Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
-            >()
-            return h.div(wrapped.clock(h.time), wrapped.seen({ element: h.div, label: "Seen" }))
-          }
-        })
-    })
+    const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
+      {
+        init: () => null,
+        update: (model) => model,
+        view: (_, h) =>
+          Wrapped(h, {
+            key: "wrapped",
+            view: (wrapped) => {
+              expect(wrapped.clock).type.not.toBeCallableWith(h.div)
+              expect(wrapped.seen).type.not.toBeCallableWith({ element: h.div })
+              expect(wrapped.seen).type.not.toBeCallableWith({ element: h.time, label: "Seen" })
+              expect(wrapped.clock(h.time)).type.toBe<
+                Html.Element<Msg, never, Html.EventsOf<"time">, HTMLTimeElement, "time">
+              >()
+              expect(wrapped.seen({ element: h.div, label: "Seen" })).type.toBe<
+                Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+              >()
+              return h.div(wrapped.clock(h.time), wrapped.seen({ element: h.div, label: "Seen" }))
+            }
+          })
+      }
+    )
     expect<Component.Requirements<typeof App>>().type.toBe<Clock | Tracker>()
   })
 
   it("a part for one heading rejects another, and a part may list several tags", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) =>
@@ -213,11 +231,12 @@ describe("headless components", () => {
   it("a headless child takes a ref of what it receives, and no other", () => {
     const Other = Component.define({
       name: "Other",
+      scoped: false,
       model: Schema.Null,
       message: UiSchema.TaggedEnum({ Reset: {} }),
       receives: ["Reset"]
     }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {
@@ -240,7 +259,7 @@ describe("headless components", () => {
   })
 
   it("view is required for a headless child, and a normal child takes none", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: (model) => model,
       view: (_, h) => {

@@ -55,6 +55,7 @@
  *
  * const Upload = Component.define({
  *   name: "Upload",
+ *   scoped: false,
  *   model: Schema.Struct({ sent: Schema.Number }),
  *   message: Schema.Never,
  *   elements: Html
@@ -187,6 +188,7 @@ const resolve = (props: ProgressProps) => {
  */
 export const Progress = Component.define({
   name: "Progress",
+  scoped: false,
   props: ProgressProps,
   model: Schema.Struct({}),
   message: Schema.Never,
