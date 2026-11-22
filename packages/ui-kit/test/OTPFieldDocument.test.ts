@@ -1,15 +1,15 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { Component, MessageLog, UiSchema } from "@effect/ui"
 import { DirectionProvider, Field, OTPField } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Redacted, Schema } from "effect"
 import { container, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
-  Updated: { value: Schema.String },
-  Stored: { value: Schema.String },
+  Updated: { value: Schema.Redacted(Schema.String) },
+  Stored: { value: Schema.Redacted(Schema.String) },
   Logged: { entry: Schema.String }
 })
 
@@ -17,14 +17,16 @@ const Page = Component.define({
   name: "Page",
   scoped: false,
   props: Schema.Struct({ autoSubmit: Schema.Boolean, upper: Schema.Boolean, locked: Schema.Boolean }),
-  model: Schema.Struct({ code: Schema.String, log: Schema.Array(Schema.String) }),
+  model: Schema.Struct({ code: Schema.Redacted(Schema.String), log: Schema.Array(Schema.String) }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ code: "", log: [] }),
+  init: () => ({ code: Redacted.make(""), log: [] }),
   update: {
     Updated: (model, { value }, $) =>
-      $.props.locked ? model : { ...model, code: $.props.upper ? value.toUpperCase() : value },
+      $.props.locked
+        ? model
+        : { ...model, code: $.props.upper ? Redacted.make(Redacted.value(value).toUpperCase()) : value },
     Stored: (model, { value }) => ({ ...model, code: value }),
     Logged: (model, { entry }) => ({ ...model, log: [...model.log, entry] })
   },
@@ -34,7 +36,7 @@ const Page = Component.define({
         props: { direction: "rtl" },
         view: () =>
           Field(h, {
-            props: { described: true, filled: model.code !== "" },
+            props: { described: true, filled: Redacted.value(model.code) !== "" },
             view: (field) =>
               field.root(h.div.id("field")).children(
                 field.legend(h.div).children("Verification code"),
@@ -49,8 +51,9 @@ const Page = Component.define({
                   },
                   onEmit: {
                     Updated: ({ value }) => Message.Updated({ value }),
-                    Completed: ({ reason, value }) => Message.Logged({ entry: "completed " + value + " " + reason }),
-                    Rejected: ({ value }) => Message.Logged({ entry: "rejected " + value })
+                    Completed: ({ reason, value }) =>
+                      Message.Logged({ entry: "completed " + Redacted.value(value) + " " + reason }),
+                    Rejected: ({ value }) => Message.Logged({ entry: "rejected " + Redacted.value(value) })
                   },
                   view: (otpField) =>
                     otpField.root(field.group(h.div.id("otp"))).children(
@@ -68,6 +71,16 @@ const Page = Component.define({
     )
 })
 
+const enter = (slot: HTMLInputElement, text: string) => {
+  slot.value = text
+  slot.dispatchEvent(new InputEvent("input", { bubbles: true }))
+}
+
+const paste = (slot: HTMLInputElement, text: string) =>
+  slot.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+    clipboardData: { getData: () => text }
+  }))
+
 const mountPage = Effect.fnUntraced(function*(
   props: { readonly autoSubmit?: boolean; readonly upper?: boolean; readonly locked?: boolean } = {}
 ) {
@@ -75,11 +88,14 @@ const mountPage = Effect.fnUntraced(function*(
   const root = yield* BrowserHost.mountEffect(Page, { autoSubmit: false, upper: false, locked: false, ...props }, app)
   yield* tick
   const slots = Array.from(app.querySelectorAll<HTMLInputElement>(".slot"))
-  const enter = (index: number, text: string) => {
-    slots[index]!.value = text
-    slots[index]!.dispatchEvent(new InputEvent("input", { bubbles: true }))
+  return {
+    app,
+    root,
+    slots,
+    enter: (index: number, text: string) => enter(slots[index]!, text),
+    paste: (text: string) => paste(slots[0]!, text),
+    log: () => root.model()?.log ?? []
   }
-  return { app, root, slots, enter, log: () => root.model()?.log ?? [] }
 })
 
 const FrameMessage = UiSchema.TaggedEnum({ Pressed: {} })
@@ -112,7 +128,7 @@ const Labelled = Component.define({
       h.label.attr("for", "otp").children("Verification code"),
       h.p.id("own").children("Fourth digit"),
       OTPField(h, {
-        props: { value: "", length: 5, id: "otp" },
+        props: { value: Redacted.make(""), length: 5, id: "otp" },
         onEmit: { Updated: () => undefined, Completed: () => undefined, Rejected: () => undefined },
         view: (otpField) =>
           otpField.root(h.div).children(
@@ -196,38 +212,34 @@ describe("OTPField in a document", { concurrent: false }, () => {
 
   it.effect("delayed completion submits once on an exact match, and ignores mismatches or superseded edits", () =>
     Effect.gen(function*() {
-      const { enter, log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
-      const paste = (text: string) =>
-        slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
-          clipboardData: { getData: () => text }
-        }))
+      const { enter, log, paste, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
       paste("1234")
       yield* tick
-      root.send(Message.Stored({ value: "9876" }))
+      root.send(Message.Stored({ value: Redacted.make("9876") }))
       yield* tick
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["9", "8", "7", "6"])
       assert.deepStrictEqual(log(), [])
-      root.send(Message.Stored({ value: "1234" }))
+      root.send(Message.Stored({ value: Redacted.make("1234") }))
       yield* tick
       assert.deepStrictEqual(log(), [])
 
       paste("4321")
       yield* tick
       assert.deepStrictEqual(log(), [])
-      root.send(Message.Stored({ value: "4321" }))
+      root.send(Message.Stored({ value: Redacted.make("4321") }))
       yield* tick
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["4", "3", "2", "1"])
       assert.deepStrictEqual(log(), ["completed 4321 input-paste", "submitted 4321"])
       yield* tick
       assert.deepStrictEqual(log(), ["completed 4321 input-paste", "submitted 4321"])
 
-      root.send(Message.Stored({ value: "" }))
+      root.send(Message.Stored({ value: Redacted.make("") }))
       yield* tick
       paste("5678")
       yield* tick
       enter(0, "9")
       yield* tick
-      root.send(Message.Stored({ value: "5678" }))
+      root.send(Message.Stored({ value: Redacted.make("5678") }))
       yield* tick
       assert.deepStrictEqual(slots.map((slot) => slot.value), ["5", "6", "7", "8"])
       assert.deepStrictEqual(log(), ["completed 4321 input-paste", "submitted 4321"])
@@ -246,5 +258,77 @@ describe("OTPField in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(app.querySelector("span")!.getAttribute("data-presses"), "1")
       assert.deepStrictEqual(names(), expected)
+    }).pipe(Effect.scoped))
+
+  it.effect("message log Wire entries redact the code and use non-secret settled subscription deps", () =>
+    Effect.gen(function*() {
+      const typed = "Q7X"
+      const rejectedText = "!!!@@@"
+      const secret = "K9M4P2"
+      const memory = MessageLog.makeMemory()
+      const Msg = UiSchema.TaggedEnum({
+        Updated: { value: Schema.Redacted(Schema.String) },
+        Completed: { value: Schema.Redacted(Schema.String) },
+        Rejected: { value: Schema.Redacted(Schema.String) }
+      })
+      const RedactedPage = Component.define({
+        name: "RedactedPage",
+        scoped: false,
+        model: Schema.Struct({ code: Schema.Redacted(Schema.String), done: Schema.Boolean }),
+        message: Msg,
+        elements: Html
+      }).make({
+        init: () => ({ code: Redacted.make(""), done: false }),
+        update: {
+          Updated: (model, { value }) => ({ ...model, code: value }),
+          Completed: (model) => ({ ...model, done: true }),
+          Rejected: (model) => model
+        },
+        view: (model, h) =>
+          OTPField(h, {
+            props: { value: model.code, length: 6, validationType: "alphanumeric" },
+            onEmit: {
+              Updated: ({ value }) => Msg.Updated({ value }),
+              Completed: ({ value }) => Msg.Completed({ value }),
+              Rejected: ({ value }) => Msg.Rejected({ value })
+            },
+            view: (otpField) =>
+              otpField.root(h.div).children(
+                Array.from(
+                  { length: otpField.length },
+                  (_, index) => otpField.input({ element: h.input.class("slot"), index })
+                )
+              )
+          })
+      })
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(RedactedPage, {}, app).pipe(
+        Effect.provideService(MessageLog.MessageLog, memory)
+      )
+      yield* tick
+      const first = app.querySelector<HTMLInputElement>(".slot")!
+      enter(first, typed)
+      yield* tick
+      paste(first, rejectedText)
+      yield* tick
+      assert.isFalse(root.model()?.done)
+      assert.strictEqual(Redacted.value(root.model()!.code), typed)
+      paste(first, secret)
+      yield* tick
+      assert.isTrue(root.model()?.done)
+      assert.strictEqual(Redacted.value(root.model()!.code), secret)
+      const encoder = MessageLog.makeEncoder()
+      const wire = memory.entries().map((entry) => encoder.encode(entry))
+      const json = JSON.stringify(wire)
+      assert.notInclude(json, typed)
+      assert.notInclude(json, rejectedText)
+      assert.notInclude(json, secret)
+      const settled = wire.flatMap((entry) =>
+        entry._tag === "SubscriptionStarted" && entry.name === "settled" ? [entry.deps] : []
+      )
+      assert.isNotEmpty(settled)
+      for (const deps of settled) {
+        assert.deepStrictEqual(deps?.map((dep) => typeof dep), ["number", "number", "boolean"])
+      }
     }).pipe(Effect.scoped))
 })

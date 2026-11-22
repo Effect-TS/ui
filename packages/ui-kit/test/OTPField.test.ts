@@ -1,5 +1,5 @@
-import type { Component, Mount } from "@effect/ui"
-import { View } from "@effect/ui"
+import type { Mount } from "@effect/ui"
+import { Component, View } from "@effect/ui"
 import {
   DirectionProvider,
   OTPField,
@@ -8,11 +8,11 @@ import {
   type OTPFieldProps,
   type OTPFieldUpdateReason
 } from "@effect/ui-kit"
-import { DomCommand, Html } from "@effect/ui/html"
+import { DomCommand, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Redacted, Schema } from "effect"
 
 type Parts = Component.Headless.Parts<typeof OTPField>
 type H = View.Helper<never, OTPFieldProps> & View.Tags<Html.Elements, never>
@@ -43,22 +43,24 @@ const idle = {
   label: null,
   android: false
 }
-const parts = (props: OTPFieldProps) => Story.parts(OTPField, { model: idle, props })
+type Props = Omit<OTPFieldProps, "value"> & { readonly value: string }
+const redact = ({ value, ...rest }: Props): OTPFieldProps => ({ ...rest, value: Redacted.make(value) })
+const parts = (props: Props) => Story.parts(OTPField, { model: idle, props: redact(props) })
 
 type Issued = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 const mountOf = (s: Rendered, locator: Locator.Locator): Issued =>
   (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
     ?.mount as unknown as Issued
-const scene = (props: OTPFieldProps, android = false) =>
-  HtmlScene.make(OTPField, props, standIn).pipe(
+const scene = (props: Props, android = false) =>
+  HtmlScene.make(OTPField, redact(props), standIn).pipe(
     Effect.map((s) => s.mounted(mountOf(s, slot(0)), { label: null, android }))
   )
 type Scene = Effect.Success<ReturnType<typeof scene>>
 
 const settle = (s: Scene) =>
   s.subscription(s.subscriptions.find((key) => key.startsWith("settled"))!, { _tag: "Settled" })
-const store = (s: Scene, value: string) => settle(s.props((props) => ({ ...props, value })))
+const store = (s: Scene, value: string) => settle(s.props((props) => ({ ...props, value: Redacted.make(value) })))
 
 const commands = (s: Scene): ReadonlyArray<string> =>
   s.current.pending.map(({ command }) => {
@@ -73,9 +75,11 @@ const focusOn = (index: number) => [
 const submitted = "DomCommand.requestSubmit OTPFieldHiddenInput"
 
 const updated = (value: string, reason: OTPFieldUpdateReason = "input-change") =>
-  OTPFieldEvents.Updated({ value, reason })
+  OTPFieldEvents.Updated({ value: Redacted.make(value), reason })
 const completed = (value: string, reason: OTPFieldEntryReason = "input-change") =>
-  OTPFieldEvents.Completed({ value, reason })
+  OTPFieldEvents.Completed({ value: Redacted.make(value), reason })
+const rejected = (value: string, reason: OTPFieldEntryReason = "input-change") =>
+  OTPFieldEvents.Rejected({ value: Redacted.make(value), reason })
 const quiet = (s: Scene) => assert.deepStrictEqual(s.current.emitted, [])
 
 describe("OTPField", () => {
@@ -125,7 +129,9 @@ describe("OTPField", () => {
       assert.strictEqual(s.get(hidden).props?.value, "1234")
       assert.strictEqual(s.get(root).children?.at(-1), s.get(hidden))
 
-      s.props({ value: "a1", length: 4, validationType: "none", readOnly: true, disabled: true, form: "login" })
+      s.props(
+        redact({ value: "a1", length: 4, validationType: "none", readOnly: true, disabled: true, form: "login" })
+      )
       assert.deepStrictEqual([0, 1, 2].map((index) => s.get(slot(index)).props?.value), ["a", "1", ""])
       for (const part of [root, slot(0), slot(2)]) {
         assert.deepInclude(s.get(part).attrs, { "data-disabled": "", "data-readonly": "" })
@@ -137,9 +143,9 @@ describe("OTPField", () => {
       }
       assert.deepInclude(s.get(hidden).attrs, { disabled: "", readonly: "", form: "login" })
       assert.isUndefined(s.get(hidden).attrs?.pattern)
-      s.parts((otpField) =>
+      s.parts((otpField) => {
+        assert.strictEqual(Redacted.value(otpField.value), "a1")
         assert.deepInclude(otpField, {
-          value: "a1",
           length: 4,
           complete: false,
           filled: true,
@@ -148,7 +154,7 @@ describe("OTPField", () => {
           readOnly: true,
           required: false
         })
-      )
+      })
     }))
 
   it.effect("typing reports the code and moves focus on, and the stored code completes it", () =>
@@ -160,12 +166,12 @@ describe("OTPField", () => {
       s.type(slot(0), "1")
       quiet(s)
       assert.deepStrictEqual(commands(s), focusOn(1))
-      s.type(slot(1), "x").emitted({ _tag: "Rejected", value: "x", reason: "input-change" })
+      s.type(slot(1), "x").emitted(rejected("x"))
       assert.deepStrictEqual(commands(s), ["DomCommand.select OTPFieldSlot[1]"])
       s.type(slot(1), "23").emitted(updated("123"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       store(s, "123")
-      s.type(slot(3), "45678").emitted({ _tag: "Rejected", value: "45678", reason: "input-change" }, updated("1234"))
+      s.type(slot(3), "45678").emitted(rejected("45678"), updated("1234"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       quiet(s)
       store(s, "1234").emitted(completed("1234"))
@@ -257,7 +263,7 @@ describe("OTPField", () => {
     Effect.gen(function*() {
       const s = yield* scene({ value: "12", length: 4, autoSubmit: true })
       s.fire(slot(2), "paste", { text: " 3-4 9" }).expectDefaultPrevented().emitted(
-        { _tag: "Rejected", value: " 3-4 9", reason: "input-paste" },
+        rejected(" 3-4 9", "input-paste"),
         updated("1234", "input-paste")
       )
       assert.deepStrictEqual(commands(s), focusOn(3))
@@ -265,15 +271,11 @@ describe("OTPField", () => {
       assert.deepStrictEqual(commands(s), [submitted])
       s.fire(slot(0), "paste", { text: "1234" }).emitted(completed("1234", "input-paste"))
       assert.deepStrictEqual(commands(s), [...focusOn(3), submitted])
-      s.fire(slot(0), "paste", { text: "ab" }).expectDefaultPrevented().emitted({
-        _tag: "Rejected",
-        value: "ab",
-        reason: "input-paste"
-      })
+      s.fire(slot(0), "paste", { text: "ab" }).expectDefaultPrevented().emitted(rejected("ab", "input-paste"))
       assert.deepStrictEqual(commands(s), [])
 
       store(s, "12")
-      s.type(hidden, "98 76x").emitted({ _tag: "Rejected", value: "98 76x", reason: "input-change" }, updated("9876"))
+      s.type(hidden, "98 76x").emitted(rejected("98 76x"), updated("9876"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       assert.deepStrictEqual(commands(store(s, "9876").emitted(completed("9876"))), [submitted])
     }))
@@ -349,7 +351,7 @@ describe("OTPField", () => {
       s.keydown(slot(1), "Backspace")
       quiet(s)
 
-      s.props({ value: "12", length: 4, readOnly: true })
+      s.props(redact({ value: "12", length: 4, readOnly: true }))
       edits()
       s.keydown(slot(1), "Backspace").expectIgnored().expectDefaultPrevented(false)
       s.keydown(slot(1), "Delete").expectIgnored().expectDefaultPrevented(false)
@@ -386,7 +388,7 @@ describe("OTPField", () => {
       spellcheck: "false",
       enterkeyhint: "done"
     })
-    const typeOf = (props: Partial<OTPFieldProps>, input: typeof h.input = h.input) =>
+    const typeOf = (props: Partial<Props>, input: typeof h.input = h.input) =>
       View.build(parts({ value: "", length: 2, ...props }).input({ element: input, index: 0 }), []).attrs.type
     assert.strictEqual(typeOf({ mask: true }), "password")
     assert.strictEqual(typeOf({ mask: true }, h.input.attr("type", "tel") as never), "tel")
@@ -417,4 +419,35 @@ describe("OTPField", () => {
     assert.throws(() => parts({ value: "", length: 0 }), /length is the number of slots/)
     assert.throws(() => parts({ value: "", length: 2.5 }), /length is the number of slots/)
   })
+
+  it.effect("server-rendered page state and non-input markup do not leak the verification code", () =>
+    Effect.gen(function*() {
+      const secret = "847291"
+      const Page = Component.define({
+        name: "VerifyPage",
+        scoped: false,
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) =>
+          OTPField(h, {
+            key: "otp",
+            props: { value: Redacted.make(secret), length: 6, name: "code" },
+            view: (otpField) =>
+              otpField.root(h.div.class("otp")).children(
+                Array.from({ length: otpField.length }, (_, index) => otpField.input({ element: h.input, index }))
+              )
+          })
+      })
+      const { html, state } = yield* HtmlServer.renderToHtml(Page, {})
+      assert.deepStrictEqual(state["/VerifyPage"], {})
+      assert.deepStrictEqual(state["~deferred"], ["/VerifyPage/OTPField[otp]"])
+      assert.notInclude(JSON.stringify(state), secret)
+      assert.include(html, `value="${secret}"`)
+      const withoutInputValues = html.replace(/<input\b[^>]*>/g, (tag) => tag.replace(/\svalue="[^"]*"/g, ""))
+      assert.notInclude(withoutInputValues, secret)
+    }))
 })
