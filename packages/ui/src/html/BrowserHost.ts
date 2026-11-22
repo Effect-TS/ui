@@ -325,12 +325,9 @@ const containsTarget = (element: globalThis.Element, target: EventTarget | null)
   }
 }
 
-/**
- * Whether `target`, what lost focus, is disabled, by its own attribute or a
- * fieldset's. An event a script made can name a target that isn't an element.
- */
 const isDisabled = (target: EventTarget | null): boolean =>
-  target !== null && "matches" in target && (target as globalThis.Element).matches(":disabled")
+  typeof (target as globalThis.Element | null)?.matches === "function" &&
+  (target as globalThis.Element).matches(":disabled")
 
 /**
  * Builds the payload a handler gets: plain data, read from the event and the

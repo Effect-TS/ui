@@ -1024,21 +1024,28 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: (log, { disabled, event }) => [...log, `${event}${disabled ? " disabled" : ""}`],
           view: (_, h) =>
             h.div.on("focusout", ({ disabled }) => Left.Left({ event: "focusout", disabled })).children(
-              h.input.onBlur(({ disabled }) => Left.Left({ event: "blur", disabled }))
+              h.input.onBlur(({ disabled }) => Left.Left({ event: "blur", disabled })),
+              h.form.attr("tabindex", "0").onBlur(({ disabled }) => Left.Left({ event: "blur", disabled })).children(
+                h.input.attr("name", "matches")
+              )
             )
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Leaving, {}, app)
         const input = app.querySelector("input")!
-        const leave = () => {
-          input.dispatchEvent(new FocusEvent("blur"))
-          input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+        const form = app.querySelector("form")!
+        const leave = (element: Element) => {
+          element.dispatchEvent(new FocusEvent("blur"))
+          element.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
         }
-        leave()
+        leave(input)
         input.disabled = true
-        leave()
+        leave(input)
+        // A browser puts a form's named control over the form's own method of that name. happy-dom doesn't.
+        Object.defineProperty(form, "matches", { value: form.querySelector("input") })
+        leave(form)
         yield* tick
-        expect(root.model()).toEqual(["blur", "focusout", "blur disabled", "focusout disabled"])
+        expect(root.model()).toEqual(["blur", "focusout", "blur disabled", "focusout disabled", "blur", "focusout"])
       }).pipe(Effect.scoped))
 
     it.effect("payloads are plain data", () =>
