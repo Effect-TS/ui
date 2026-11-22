@@ -629,6 +629,9 @@ const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem
  * style. A handler the consumer adds to a part runs after the provider's
  * own.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -642,6 +645,7 @@ export const ToastProvider = Component.define({
   events: ToastProviderEvents,
   // Senders only post, so there's nothing for them to read.
   shares: { value: () => ({}), receives: ["AddedToast", "UpdatedToast", "ClosedToast"] },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ toasts: [], hovering: false, focused: false, windowFocused: true, closeFocused: null }),

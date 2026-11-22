@@ -607,7 +607,6 @@ interface Owning {
   round: boolean
   /** What `collects.onChange` last returned, read first as its message for no reports. */
   collected: { readonly message: unknown } | undefined
-  /** Hydration: `collected` is the server's, and no comparison has run on the client yet. */
   restored: boolean
 }
 
@@ -811,6 +810,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
 const warnedRedacted = new WeakSet<Component.Any>()
 const warnedUnencoded = new WeakSet<Component.Any>()
 const warnedLate = new WeakSet<Component.Any>()
+const warnedRestore = new WeakSet<Component.Any>()
 const formatIssue = SchemaIssue.makeFormatterDefault()
 
 const warnOnce = (
@@ -857,6 +857,14 @@ const warnLate = (inst: Instance, ctx: Context.Context<any>) =>
     () =>
       "its state encodes asynchronously, so history keeps it in memory only. Back and forward restore it, and " +
       "after a reload it starts from init."
+  )
+
+const warnRestore = (inst: Instance, ctx: Context.Context<any>, error: unknown) =>
+  warnOnce(
+    warnedRestore,
+    inst,
+    ctx,
+    () => "its restore threw, so history doesn't restore it. " + Cause.pretty(Cause.die(error))
   )
 
 /** An entry of the cache, by query name and args key: what a watch registered on, or a prefetch fetched. */
@@ -1015,13 +1023,10 @@ const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
   )
 }
 
-interface PageState {
-  readonly state: unknown
-  readonly reported: unknown
-}
+type PageState = services.PageState
 
-const encodePage = (inst: Instance): Effect.Effect<PageState, SchemaIssue.Issue> => {
-  const state = stateCodecOf(inst.component).encode(inst.model, inst.results)
+const encodePage = (inst: Instance, model = inst.model): Effect.Effect<PageState, SchemaIssue.Issue> => {
+  const state = stateCodecOf(inst.component).encode(model, inst.results)
   const last = inst.owning?.collected
   if (last === undefined) return Effect.mapEager(state, (state) => ({ state, reported: undefined }))
   const message = inst.component.definition.message
@@ -1390,6 +1395,7 @@ const setup = (
     claimed: new Set()
   }
   let popped: Saved | undefined
+  let navigated = false
   let replaced: Instance | undefined
   const lates: Array<() => void> = []
   let supply: Saved | undefined
@@ -1417,7 +1423,7 @@ const setup = (
   const subtree = (state: Saved, root: string): Saved => {
     const out: Saved = {}
     for (const path in state) if (below(path, root)) out[path] = state[path]
-    for (const key of ["~kept", "~scoped"]) {
+    for (const key of ["~kept", "~scoped", "~reported"]) {
       const all = state[key] as Saved | undefined
       for (const author in all) if (below(author, root)) ((out[key] ??= {}) as Saved)[author] = all[author]
     }
@@ -3139,16 +3145,17 @@ const setup = (
     const from = supply
     const own = supply = from === hydrating?.state ? undefined : from
     const served = own !== from
-    // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
-    const restored = hooks !== undefined && component.definition.shares === undefined
-      ? hooks.restore(inst.path)
-      : undefined
-    const hydrates = restored === undefined && hydrating !== undefined &&
+    const serves = hydrating !== undefined &&
       (scope !== undefined ? served : parent === undefined || parent.adoptsChildren) &&
       !hydrating.deferred.has(path!) &&
       Object.hasOwn(hydrating.state, path!)
+    const restored = hooks !== undefined && component.definition.restore !== false && (navigated || !serves)
+      ? hooks.restore(inst.path)
+      : undefined
+    const hydrates = restored === undefined && serves
     if (popped !== undefined) claimSaved(inst, popped)
-    const state = hydrates || restored !== undefined || own === undefined ? restored : own[inst.path]
+    const state = hydrates || restored !== undefined || own === undefined ? restored?.state : own[inst.path]
+    const reported = restored !== undefined ? restored.reported : (own?.["~reported"] as Saved | undefined)?.[inst.path]
     const stateless = !hydrates && state === undefined
     if (stateless && late === undefined) {
       if (own !== undefined) claimSaved(inst, own)
@@ -3168,14 +3175,17 @@ const setup = (
     const go = () => {
       const decoded = stateless ? unsaved : runCodec(
         hydrates
-          ? decodeServer(component, path!, hydrating!.state)
-          : decodeRestored(inst, state)
+          ? decodeStart(component, hydrating!.state[path!], hydrating!.state["~reported"]?.[path!], Option.some)
+          : decodeStart(component, state, reported, (decoded) => {
+            restoredState.set(inst, decoded)
+            return Option.none()
+          })
       )
       if (Exit.isExit(decoded)) return start(decoded)
       const resume = hold(
         inst,
         hydrates ? range : undefined,
-        hydrates ? undefined : restored === undefined ? from : { __proto__: popped, [inst.path]: restored }
+        hydrates ? undefined : restored === undefined ? from : { __proto__: popped, [inst.path]: restored.state }
       )
       interruptOnClose(inst.scope, decoded)
       decoded.addObserver((exit) =>
@@ -3195,34 +3205,27 @@ const setup = (
   }
   const fresh: ServerStart = { fromServer: Option.none(), collected: Option.none() }
   const unsaved = Exit.succeed(fresh)
-  const decodeServer = (
+  const restoredState = new WeakMap<Instance, Decoded>()
+  const decodeStart = (
     component: Component.Any,
-    path: string,
-    state: Renderer.State
+    state: unknown,
+    reported: unknown,
+    adopt: (decoded: Decoded) => Adopted
   ): Effect.Effect<ServerStart, SchemaIssue.Issue> =>
-    Effect.flatMapEager(stateCodecOf(component).decode(state[path]), (decoded) => {
-      // An owner adopting the server's Model starts from what its reports last sent there.
-      const reported = component.definition.collects === undefined ? undefined : state["~reported"]?.[path]
-      return Effect.mapEager(
-        reported === undefined
+    Effect.flatMapEager(stateCodecOf(component).decode(state), (decoded) =>
+      Effect.mapEager(
+        component.definition.collects === undefined || reported === undefined
           ? Effect.succeedNone
           : Effect.option(jsonCodecOf(component.definition.message).decode(reported)),
-        (collected) => ({ fromServer: Option.some(decoded), collected })
-      )
-    })
-  const restoredState = new WeakMap<Instance, Decoded>()
-  const decodeRestored = (inst: Instance, restored: unknown): Effect.Effect<ServerStart, SchemaIssue.Issue> =>
-    Effect.mapEager(stateCodecOf(inst.component).decode(restored), (state) => {
-      restoredState.set(inst, state)
-      return fresh
-    })
+        (collected) => ({ fromServer: adopt(decoded), collected })
+      ))
 
   const startInstance = (
     inst: Instance,
     parentEnv: Env,
     range: Range | undefined,
     fromServer: Adopted,
-    collectedOnServer: Option.Option<unknown>
+    savedCollected: Option.Option<unknown>
   ): void => {
     const component = inst.component
     // No closure is made here: an instance without a Layer, most of them, starts without one.
@@ -3240,7 +3243,7 @@ const setup = (
         selected = startLayer(inst, layer, parentEnv, fromServer)
       }
     }
-    if (layer === undefined) return begin(inst, range, fromServer, undefined, collectedOnServer, undefined)
+    if (layer === undefined) return begin(inst, range, fromServer, undefined, savedCollected, undefined)
 
     if (layer.failedEarly !== undefined) {
       layer.constructing = false
@@ -3254,8 +3257,8 @@ const setup = (
     // its failure message. One the server rendered while its Layer was pending adopts at once, as its
     // feature slots showed their fallbacks there too.
     if (layer.awaits && layer.pending && Option.isSome(fromServer)) {
-      awaitLayer(inst, layer, range!, fromServer, collectedOnServer)
-    } else begin(inst, range, fromServer, selected, collectedOnServer, layer)
+      awaitLayer(inst, layer, range!, fromServer, savedCollected)
+    } else begin(inst, range, fromServer, selected, savedCollected, layer)
     layer.constructing = false
   }
 
@@ -3437,7 +3440,7 @@ const setup = (
     range: Range | undefined,
     serverModel: Adopted,
     selected: Start | undefined,
-    collectedOnServer: Option.Option<unknown>,
+    savedCollected: Option.Option<unknown>,
     layer: LayerStart | undefined
   ) => {
     const { adopted, first } = selected ?? startFrom(inst, serverModel)
@@ -3448,8 +3451,8 @@ const setup = (
       inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
       inst.adoptsChildren = Option.isSome(serverModel)
       if (inst.adoptsChildren && hydrating !== undefined) claimSaved(inst, hydrating.state)
-      if (Option.isSome(serverModel) && Option.isSome(collectedOnServer)) {
-        inst.owning!.collected = { message: collectedOnServer.value }
+      if (Option.isSome(adopted) && Option.isSome(savedCollected)) {
+        inst.owning!.collected = { message: savedCollected.value }
         inst.owning!.restored = true
         // Compared once the pass settles and nothing below waits to adopt, readers or none: one that reported
         // on the server may not mount here.
@@ -3532,7 +3535,7 @@ const setup = (
     layer: LayerStart,
     range: Range,
     fromServer: Option.Some<Decoded>,
-    collectedOnServer: Option.Option<unknown>
+    savedCollected: Option.Option<unknown>
   ) => {
     const bound = queryCore.boundOf(inst.component)
     // Its first entry: `Mounted` comes when the Layer is ready, and the Layer's entries come as they happen.
@@ -3546,7 +3549,7 @@ const setup = (
     const resume = hold(inst, range)
     const start = (adopt: boolean) =>
       defer(() =>
-        resume(adopt, () => begin(inst, range, adopt ? fromServer : Option.none(), undefined, collectedOnServer, layer))
+        resume(adopt, () => begin(inst, range, adopt ? fromServer : Option.none(), undefined, savedCollected, layer))
       )
     whenReady(inst.env, () => start(true), () => {
       if (inst.component.layerFailure !== undefined) start(false)
@@ -7338,9 +7341,27 @@ const setup = (
     const homes = new Map<Instance, Saved>()
     let into: Saved = out
     const keptIn = (home: Saved): Saved => (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
-    const write = (inst: Instance, to: Saved, path: string, exit: Exit.Exit<unknown, SchemaIssue.Issue>) => {
-      if (Exit.isSuccess(exit)) to[path] = exit.value
-      else warnUnencoded(inst, ctx, exit.cause)
+    const write = (inst: Instance, to: Saved, path: string, exit: Exit.Exit<PageState, SchemaIssue.Issue>) => {
+      if (Exit.isFailure(exit)) return warnUnencoded(inst, ctx, exit.cause)
+      to[path] = exit.value.state
+      if (exit.value.reported !== undefined) ((to["~reported"] ??= {}) as Saved)[path] = exit.value.reported
+    }
+    const save = (inst: Instance, to: Saved) => {
+      const restore = inst.component.definition.restore
+      if (inst.component === outletComponent || restore === false) return
+      let model = inst.model
+      if (restore !== undefined) {
+        try {
+          model = restore(inst.model, inst.props)
+        } catch (error) {
+          return warnRestore(inst, ctx, error)
+        }
+      }
+      const path = inst.path
+      const encoded = runCodec(encodePage(inst, model))
+      if (Exit.isExit(encoded)) return write(inst, to, path, encoded)
+      warnLate(inst, ctx)
+      encoded.addObserver((exit) => write(inst, to, path, exit))
     }
     const visit = (inst: Instance) => {
       // A keyed query's pending writes go first, so the result holds only the declared keys. A
@@ -7366,9 +7387,10 @@ const setup = (
       }
       if (inst.waiting) {
         const all = subtree(restoring.get(inst) ?? hydrating!.state, inst.path)
-        const { "~kept": kept, "~scoped": drawn, ...state } = all as {
+        const { "~kept": kept, "~scoped": drawn, "~reported": reported, ...state } = all as {
           readonly "~kept"?: Record<string, Saved>
           readonly "~scoped"?: Record<string, ReadonlyArray<string>>
+          readonly "~reported"?: Saved
         }
         const cut = Object.values(drawn ?? {}).flat()
         const home = (author: string) =>
@@ -7381,20 +7403,10 @@ const setup = (
           }
         }
         Object.assign(into, state)
+        if (reported !== undefined) Object.assign((into["~reported"] ??= {}) as Saved, reported)
         return
       }
-      // An outlet has no state of its own, only the children of the content it places. An owner of shared
-      // state is left out: a reload would reopen what nobody hovers. Its subtree isn't.
-      if (inst.component !== outletComponent && inst.component.definition.shares === undefined) {
-        const path = inst.path
-        const to = into
-        const encoded = runCodec(stateCodecOf(inst.component).encode(inst.model, inst.results))
-        if (Exit.isExit(encoded)) write(inst, to, path, encoded)
-        else {
-          warnLate(inst, ctx)
-          encoded.addObserver((exit) => write(inst, to, path, exit))
-        }
-      }
+      save(inst, into)
       const table = keptLive > 0 ? keptTables.get(inst) : undefined
       if (table !== undefined) homes.set(inst, into)
       for (const child of inst.children) visit(child)
@@ -7414,11 +7426,13 @@ const setup = (
         return root.adoptsChildren
       },
       static: fromStatic,
+      path: root.path,
       flush: () => flushes,
       flushing: () => rendering,
       snapshot,
       // The first navigation closes the fetch-free window, if adoption hasn't yet.
       navigated: () => {
+        navigated = true
         closeWindow()
         restoreKept()
       },

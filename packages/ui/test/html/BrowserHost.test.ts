@@ -884,6 +884,29 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(HtmlLocator.getByRole(app, "button").textContent, "Hit 2")
       }).pipe(Effect.scoped))
 
+    it.effect("a hydrated instance starts from the server's state, not the history entry's snapshot", () =>
+      Effect.gen(function*() {
+        const LoginRoute = Route.union({ Login: Route.make("/") })
+        const Login = Component.define({
+          name: "Login",
+          scoped: false,
+          model: Schema.Struct({ email: Schema.String }),
+          message: Schema.Never,
+          elements: Html
+        }).make({ init: () => ({ email: "server" }), update: (model) => model, view: (model, h) => h.p(model.email) })
+        const history = Router.memoryHistory("/")
+        history.replace("/", { "@effect/ui": { index: 0, snapshot: { "/Login": { email: "saved" } } } })
+        const rendered = yield* HtmlServer.renderToHtml(Login, {})
+        const app = yield* container
+        app.innerHTML = rendered.html
+        const root = yield* BrowserHost.mountEffect(Login, {}, app, { state: rendered.state }).pipe(
+          Effect.provide(Router.memory({ routes: LoginRoute, history }))
+        )
+        yield* tick
+        assert.deepStrictEqual(root.model(), { email: "server" })
+        assert.strictEqual(app.textContent, "server")
+      }).pipe(Effect.scoped))
+
     it.effect("an element hydration rebuilds gets the events it fires as it goes in", () =>
       Effect.gen(function*() {
         const Page = logPage((_, h) =>

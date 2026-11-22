@@ -59,8 +59,9 @@ export const SignupValidation = Validation.make({
   // A secret is `Schema.Redacted(Schema.String)`. That keeps this
   // component's whole state out of `history.state` and the server's page
   // state, so no field of the form restores or hydrates: keep such a form a
-  // leaf component. `required` still sees an empty one, and a rule unwraps
-  // it with `Redacted.value`.
+  // leaf component. To keep a secret out of history only, use a plain string
+  // and clear it in the component's `restore`. `required` still sees an
+  // empty one, and a rule unwraps it with `Redacted.value`.
   password: {
     value: Schema.Redacted(Schema.String),
     required: "Password is required",

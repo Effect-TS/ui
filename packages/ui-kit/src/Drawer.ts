@@ -1389,6 +1389,9 @@ const ReportIndent = Mount.makeStream(
  * A drawer reports to the nearest provider above it. One without a provider
  * works as before.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -1406,6 +1409,7 @@ export const DrawerProvider = Component.define({
       onChange: (reports) => ProviderMessage.ChangedOpen({ active: reports.some((open) => open) })
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ active: false, indent: null }),
@@ -1460,6 +1464,9 @@ const dialogPropsOf = Struct.omit([
  * consumer gives `childEmit(Drawer, event)` every event. A `Scene` of the
  * `Drawer` stands in for the `Dialog` with `childEmit(Dialog, event)`.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -1499,6 +1506,7 @@ export const Drawer = Component.define({
       report: (_, props) => props.open
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({

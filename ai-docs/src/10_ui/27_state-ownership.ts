@@ -158,14 +158,15 @@ export const Host = Component.define({
 const ModalMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
 
 // The provider is the one writer of `open`. Descendants read it without
-// owning it. Guaranteed: an owner's Model isn't restored from history, so
-// after Back or a reload this starts closed.
+// owning it. `restore: false` starts it from `init` after Back or a reload,
+// so the modal starts closed.
 export const ModalProvider = Component.define({
   name: "ModalProvider",
   scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: ModalMessage,
   shares: { value: (model) => ({ open: model.open }), receives: ["RequestedOpen", "RequestedClose"] },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ open: false }),
