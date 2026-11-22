@@ -1443,6 +1443,7 @@ const setup = (
     claimed: new Set()
   }
   let popped: Saved | undefined
+  let unclaimed: Saved | undefined
   let replaced: Instance | undefined
   const lates: Array<() => void> = []
   let supply: Saved | undefined
@@ -1467,8 +1468,7 @@ const setup = (
     return from === hydrating?.state || from !== options?.state ? from : waits![child] = subtree(from!, child)
   }
   const below = (path: string, root: string) => (path + "/").startsWith(root + "/")
-  const subtree = (state: Saved, root: string): Saved => {
-    const out: Saved = {}
+  const subtree = (state: Saved, root: string, out: Saved = {}): Saved => {
     for (const path in state) if (below(path, root)) out[path] = state[path]
     for (const key of ["~kept", "~scoped"]) {
       const all = state[key] as Saved | undefined
@@ -1484,7 +1484,7 @@ const setup = (
   }
   const restoreKept = () => {
     const kept = hooks!.restore("~kept" + rootPath) as Saved | undefined
-    popped = kept === undefined ? undefined : { "~kept": { ...kept } }
+    popped = unclaimed = kept === undefined ? undefined : { "~kept": { ...kept } }
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -7472,11 +7472,10 @@ const setup = (
   if (reportPending) reportAdoption()
   host.commit?.()
 
-  const snapshot = (out: Record<string, unknown>): void => {
+  const snapshot = (out: Record<string, unknown>, left?: Saved): void => {
     const homes = new Map<Instance, Saved>()
     let into: Saved = out
     const keptIn = (home: Saved): Saved => (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
-    if (popped !== undefined) Object.assign(keptIn(out), popped["~kept"])
     const write = (inst: Instance, to: Saved, path: string, exit: Exit.Exit<unknown, SchemaIssue.Issue>) => {
       if (Exit.isSuccess(exit)) to[path] = exit.value
       else warnUnencoded(inst, ctx, exit.cause)
@@ -7504,7 +7503,11 @@ const setup = (
         }
       }
       if (inst.waiting) {
-        const all = subtree(restoring.get(inst) ?? hydrating!.state, inst.path)
+        const all = subtree(
+          restoring.get(inst) ?? hydrating!.state,
+          inst.path,
+          subtree({ ...left, ...unclaimed }, inst.path)
+        )
         const { "~kept": kept, "~scoped": drawn, ...state } = all as {
           readonly "~kept"?: Record<string, Saved>
           readonly "~scoped"?: Record<string, ReadonlyArray<string>>

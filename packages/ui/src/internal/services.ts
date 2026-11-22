@@ -36,7 +36,7 @@ export interface RootHandle {
    * Writes the JSON-encoded Model of every mounted instance into `out`, by path. One that encodes
    * asynchronously is written once encoded, after this returns. Models that don't encode are left out.
    */
-  readonly snapshot: (out: Record<string, unknown>) => void
+  readonly snapshot: (out: Record<string, unknown>, left?: Record<string, unknown>) => void
   /**
    * The Router navigated. It closes the cache's fetch-free window after hydration, if adoption
    * hasn't yet. The Router calls it first in `set`, before the route changes.

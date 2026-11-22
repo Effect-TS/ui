@@ -209,6 +209,7 @@ type Page =
   | "late card"
   | "open card"
   | "open contact"
+  | "late contact"
 const Routes = Route.union({ Home: Route.make("/"), Away: Route.make("/away") })
 const Msg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {} })
 const appOf = (page: Page) =>
@@ -247,7 +248,7 @@ const appOf = (page: Page) =>
           ? LateHolder(h, { key: "f" })
           : page === "late card" || page === "open card"
           ? CardHolder(h, { key: "f" })
-          : page === "open contact"
+          : page === "open contact" || page === "late contact"
           ? LateCard(h, { key: "f" })
           : SlowForm(h, { key: "f" })
       )
@@ -488,10 +489,14 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
   })
 
   it.effect.each(
-    [["late card", true], ["open card", true], ["open card", false], ["open contact", true], [
-      "open contact",
-      false
-    ]] as const
+    [
+      ["late card", true],
+      ["open card", true],
+      ["open card", false],
+      ["open contact", true],
+      ["open contact", false],
+      ["late contact", true]
+    ] as const
   )(
     "Back restores all the user typed below a form a push closed after an earlier Back (%s, whose state still decoded: %s)",
     ([page, decoding]) => {
@@ -519,6 +524,36 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
         history.go(-1)
         yield* tick
         assert.deepStrictEqual(fields().map((field) => field.value), typed)
+      }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+    }
+  )
+
+  it.effect.each([true, false])(
+    "Back restores none of a form its parent stopped drawing before a push after an earlier Back (still restoring: %s)",
+    (restoring) => {
+      const history = Router.memoryHistory("/")
+      return Effect.gen(function*() {
+        const { app, open, root } = yield* sit(false)
+        yield* open
+        yield* tick
+        const field = app.querySelector("input")!
+        field.value = "typed"
+        field.dispatchEvent(new Event("input", { bubbles: true }))
+        yield* tick
+        root.send(DeskMsg.Go())
+        yield* tick
+        root.send(DeskMsg.Show({ editor: "none" }))
+        const latch = yield* Deferred.make<void>()
+        if (restoring) gate = Deferred.await(latch)
+        history.go(-1)
+        yield* tick
+        root.send(DeskMsg.Go())
+        yield* tick
+        root.send(DeskMsg.Show({ editor: "open" }))
+        yield* Deferred.succeed(latch, undefined)
+        history.go(-1)
+        yield* tick
+        assert.strictEqual(app.querySelector("input")!.value, "subject")
       }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
     }
   )

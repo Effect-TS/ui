@@ -1298,6 +1298,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
     let restoring: Map<string, unknown> | undefined
+    let left: Map<string, unknown> | undefined
     let pending: {
       readonly location: Location
       readonly from: string
@@ -1316,8 +1317,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
 
     const primary = (): services.RootHandle | undefined => roots.values().next().value
     const snapshot = (): Record<string, unknown> => {
-      const out: Record<string, unknown> = Object.fromEntries(restoring ?? [])
-      for (const root of roots) root.snapshot(out)
+      const out: Record<string, unknown> = {}
+      const unclaimed = Object.fromEntries(left ?? [])
+      for (const root of roots) root.snapshot(out, unclaimed)
       return out
     }
     const leave = () => {
@@ -1451,7 +1453,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       mode: { readonly quiet: boolean; readonly scroll: boolean; readonly blocks?: ReadonlyArray<string> | undefined },
       saved?: Record<string, unknown> | undefined
     ) => {
-      restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
+      left = restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
       for (const root of roots) root.navigated()
       const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
