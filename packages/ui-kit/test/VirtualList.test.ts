@@ -186,8 +186,8 @@ describe("VirtualList", () => {
         .emitted(scrolled(0, 11))
       assert.deepStrictEqual(indices(s), span(0, 11))
       assert.include(s.get(listLoc).attrs?.style ?? "", "padding-block-end:9900px")
-      assert.isUndefined(s.get(Locator.attr("data-index", "0")).attrs?.style)
-      assert.isUndefined(s.get(Locator.attr("data-index", "1")).attrs?.style)
+      assert.strictEqual(s.get(Locator.attr("data-index", "0")).attrs?.style, "box-sizing:border-box;block-size:20px")
+      assert.strictEqual(s.get(Locator.attr("data-index", "1")).attrs?.style, "box-sizing:border-box;block-size:20px")
     }))
 
   it.effect("reports reaching and leaving either edge while the rows stay", () =>

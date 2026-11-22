@@ -1271,7 +1271,7 @@ export const VirtualList = Component.define({
   model: VirtualListModel,
   message: VirtualListMessage,
   events: VirtualListEvents,
-  restore: (model) => ({ ...model, focused: null, lead: 0, scrolling: false }),
+  restore: (model) => UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false }),
   elements: Html
 }).make({
   init: ($) => ({
@@ -1306,17 +1306,20 @@ export const VirtualList = Component.define({
       const before = restingBand(model, $.props, layout)
       const moved = scrolled === null && before !== null ? start - before.start : 0
       const lead = Math.abs(moved) <= height ? moved : 0
-      return announce($, {
-        ...model,
-        position,
-        height,
-        atStart,
-        atEnd,
-        offset: start,
-        length,
-        lead,
-        scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
-      }, layout)
+      return announce(
+        $,
+        UiStruct.evolve(model, {
+          position,
+          height,
+          atStart,
+          atEnd,
+          offset: start,
+          length,
+          lead,
+          scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
+        }),
+        layout
+      )
     },
     RequestedScroll: (model, { scrollTo }, $) =>
       sameRequest(scrollTo, latestOf(model)) ? model : $.evolve({ scroll: { scrollTo, done: false } }),
@@ -1329,11 +1332,11 @@ export const VirtualList = Component.define({
       const next = measured(model, $.props, message)
       return next === model ? stored : announce($, next)
     },
-    FocusedItem: (stored, { index, key }, $) => ({ ...current(stored, $.props), focused: { index, key } }),
-    BlurredItems: (stored, _message, $) => ({ ...current(stored, $.props), focused: null }),
+    FocusedItem: (stored, { index, key }, $) => UiStruct.evolve(current(stored, $.props), { focused: { index, key } }),
+    BlurredItems: (stored, _message, $) => UiStruct.evolve(current(stored, $.props), { focused: null }),
     ScrolledViewport: (stored, { height, length, offset, scrolling }, $) =>
-      announce($, { ...current(stored, $.props), offset, height, length, scrolling }),
-    EndedScroll: (stored, _message, $) => announce($, { ...current(stored, $.props), scrolling: false })
+      announce($, UiStruct.evolve(current(stored, $.props), { offset, height, length, scrolling })),
+    EndedScroll: (stored, _message, $) => announce($, UiStruct.evolve(current(stored, $.props), { scrolling: false }))
   },
   parts: (stored, p) => {
     const props = p.props
@@ -1357,7 +1360,7 @@ export const VirtualList = Component.define({
       ? Math.max(0, model.height - layout.total - reserve)
       : 0
     const inset = reserve + fill
-    const pushed = ranges.length === 1 ? -1 : ranges[1]![0]
+    const pushed = ranges[1]?.[0]
     const absolute = props.layout === "absolute"
     const first = props.firstPosition ?? 1
     const setSize = String(props.setSize ?? layout.count)
@@ -1371,7 +1374,9 @@ export const VirtualList = Component.define({
             inset + layout.offsets[rowOf(layout, index)]!
           }px)`
           : "",
-        !absolute && !row && index >= pushed && index < pushed + layout.lanes ? `margin-block-start:${between}px` : ""
+        !absolute && !row && pushed !== undefined && index >= pushed && index < pushed + layout.lanes
+          ? `margin-block-start:${between}px`
+          : ""
       ].filter((declarations) => declarations !== "").join(";")
       return (b as Div)
         .attrs({
@@ -1400,7 +1405,7 @@ export const VirtualList = Component.define({
       ]
 
     const withSpacers = (children: ReadonlyArray<View.Node<any>>): ReadonlyArray<View.Node<any>> => {
-      const at = pushed < 0 ?
+      const at = pushed === undefined ?
         -1 :
         children.findIndex((child) =>
           child._tag === "Element" && child.attrs[itemAttr] === id && child.attrs["data-index"] === String(pushed)
