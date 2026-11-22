@@ -1003,7 +1003,7 @@ const UpdateProto = {
   }
 }
 
-// `$` holds the message being handled, for `combine`, and the component, for `send("self", message)`.
+// `$` holds the message being handled, for `combine`.
 const makeUpdate = (
   model: unknown,
   props: unknown,

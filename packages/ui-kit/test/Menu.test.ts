@@ -16,6 +16,7 @@ const items = [
   { value: "cut", label: "Cut" },
   { value: "paste", label: "Paste" },
   { value: "wrap", label: "Wrap lines" },
+  { value: "minimap", label: "Minimap" },
   { value: "small", label: "Small" },
   { value: "large", label: "Large" },
   { value: "docs", label: "Docs" },
@@ -42,6 +43,7 @@ const standIn = {
         menu.checkboxItemIndicator(h.span.class("tick"), "wrap")?.children("✓"),
         "Wrap lines"
       ),
+      menu.checkboxItem(entry(h, "minimap"), "minimap", false).children("Minimap"),
       menu.radioGroup(h.div.class("sizes"), "small").children(
         menu.radioItem(entry(h, "small").attr("data-checked", "x"), "small").children("Small"),
         menu.radioItem(entry(h, "large"), "large").children("Large")
@@ -319,6 +321,10 @@ describe("Menu", () => {
       const s = yield* open()
       s.fire(item("cut"), "mouseenter").emitted(highlighted("cut", "pointer"))
       s.fire(item("cut"), "click", pointer("mouse")).emitted(picked("cut"))
+      s.fire(item("minimap"), "click", pointer("mouse")).emitted(
+        highlighted("minimap", "none"),
+        picked("minimap", true)
+      )
       s.fire(item("large"), "click", pointer("mouse")).emitted(highlighted("large", "none"), picked("large", true))
       s.fire(item("docs"), "click", pointer("mouse")).emitted(highlighted("docs", "none"), picked("docs"))
       s.fire(item("undo"), "click", pointer("mouse"))
@@ -374,6 +380,14 @@ describe("Menu", () => {
       assert.deepInclude(partsOf(s), { open: true, openMethod: "mouse", highlighted: null })
       s.fire(trigger, "mousedown", pointer("mouse"))
       assert.isTrue(partsOf(s).open)
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press"))
+      s.props({ open: false, items, openOnHover: true, delay: 200 })
+        .mounted(tracked(s), sent("FinishedTransition", { open: false }))
+        .emitted({ _tag: "Settled", open: false })
+      s.fire(trigger, "mouseenter")
+      yield* elapse(s, "WaitBeforeHoverOpen", 200)
+      s.emitted(opened("trigger-hover"))
+      s.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(tracked(s), sent("ShowedPopup"))
       yield* elapse(s, "WaitBeforeStickExpires", 500)
       s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press"))
     }))
