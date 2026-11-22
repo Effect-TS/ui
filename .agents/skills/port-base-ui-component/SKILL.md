@@ -6,7 +6,7 @@ description: Port one Base UI component into packages/ui-kit as an unstyled Effe
 # Port a Base UI component into ui-kit
 
 One run ports one component. If the port needs another ui-kit
-component that doesn't exist yet, such as a Form or a Popover, stop and open a
+component that doesn't exist yet, such as a Popover, stop and open a
 separate issue for it. When the missing piece only
 backs an optional feature, leave it out and document any resulting limitation in ui-kit terms.
 
