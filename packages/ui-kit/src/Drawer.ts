@@ -58,12 +58,13 @@
  *
  * **Data attributes**
  *
- * Each present with an empty value or absent, on top of the `Dialog`'s:
+ * On top of the `Dialog`'s. `data-swipe-direction` holds the direction,
+ * `up`, `down`, `left` or `right`, and each of the others is present with
+ * an empty value or absent:
  *
- * - `popup`: `data-swiping`, `data-swipe-direction` (`up`, `down`, `left`
- *   or `right`), `data-swipe-dismiss` while a swipe's close runs,
- *   `data-expanded` at the snap point `1`, `data-nested-drawer-open` and
- *   `data-nested-drawer-swiping`
+ * - `popup`: `data-swiping`, `data-swipe-direction`, `data-swipe-dismiss`
+ *   while a swipe's close runs, `data-expanded` at the snap point `1`,
+ *   `data-nested-drawer-open` and `data-nested-drawer-swiping`
  * - `backdrop`: `data-swiping` and `data-swipe-dismiss`
  * - `swipeArea`: `data-open` / `data-closed`, `data-disabled`,
  *   `data-swipe-direction` and `data-swiping`
@@ -1357,12 +1358,14 @@ const TrackSwipeArea = Mount.makeStream(
     )
 )
 
-const TrackKeyboard = Mount.makeStream("TrackDrawerKeyboard", { args: TrackKeyboardArgs }, trackKeyboard)
+const TrackDrawerKeyboard = Mount.makeStream("TrackDrawerKeyboard", { args: TrackKeyboardArgs }, trackKeyboard)
 
 const DrawerProviderMessage = UiSchema.TaggedEnum({
   ChangedOpen: { active: Schema.Boolean },
   MountedIndent: { id: Schema.String }
 })
+
+const DrawerProviderModel = Schema.Struct({ active: Schema.Boolean, indent: Schema.NullOr(Schema.String) })
 
 const ReportIndent = Mount.makeStream(
   "ReportIndent",
@@ -1374,7 +1377,7 @@ const ReportIndent = Mount.makeStream(
 /**
  * Scales the page behind the drawers below it, as a native sheet does.
  * Headless: call it with the consumer's `h` and a `view` closure that draws
- * the page with `provider.indent`.
+ * the page with `drawerProvider.indent`.
  *
  * **Details**
  *
@@ -1403,7 +1406,7 @@ export const DrawerProvider = Component.define({
   name: "DrawerProvider",
   scoped: false,
   props: DrawerProviderProps,
-  model: Schema.Struct({ active: Schema.Boolean, indent: Schema.NullOr(Schema.String) }),
+  model: DrawerProviderModel,
   message: DrawerProviderMessage,
   shares: {
     value: (model) => ({ indent: model.indent }),
@@ -1417,8 +1420,8 @@ export const DrawerProvider = Component.define({
 }).make({
   init: () => ({ active: false, indent: null }),
   update: {
-    ChangedOpen: (model, { active }) => ({ ...model, active }),
-    MountedIndent: (model, { id }) => model.indent === id ? model : { ...model, indent: id }
+    ChangedOpen: (_model, { active }, $) => $.evolve({ active }),
+    MountedIndent: (_model, { id }, $) => $.evolve({ indent: id })
   },
   parts: (model, p) => {
     const active = model.active
@@ -1528,45 +1531,41 @@ export const Drawer = Component.define({
     nestedHeight: 0
   }),
   update: {
-    StartedSwipe: (model) => ({ ...model, swiping: true }),
+    StartedSwipe: (_model, _message, $) => $.evolve({ swiping: true }),
     ReleasedSwipe: (model, release, $) => {
-      const next = { ...model, swiping: false, releases: model.releases + 1 }
-      if (!$.props.open) return next
+      const released = $.evolve({ swiping: false, releases: (releases) => releases + 1 })
+      if (!$.props.open) return released
       const decision = decide($.props, snappingOf($.props, model), release)
       switch (decision._tag) {
         case "Dismiss":
-          return $.set({ ...next, dismissed: true, strength: decision.strength }).emit(
+          return released.evolve({ dismissed: true, strength: decision.strength }).emit(
             DrawerEvents.RequestedClose({ reason: "swipe" })
           )
         case "Snap":
-          return $.set(next).emit(DrawerEvents.Snapped({ snapPoint: decision.snapPoint }))
+          return released.emit(DrawerEvents.Snapped({ snapPoint: decision.snapPoint }))
         case "Settle":
-          return next
+          return released
       }
     },
-    CancelledSwipe: (model) => ({ ...model, swiping: false }),
-    RefusedSwipe: (model) => ({ ...model, dismissed: false, strength: null }),
+    CancelledSwipe: (_model, _message, $) => $.evolve({ swiping: false }),
+    RefusedSwipe: (_model, _message, $) => $.evolve({ dismissed: false, strength: null }),
     ShowedPopup: (model, _message, $) =>
-      $.props.open && model.dismissed ? { ...model, dismissed: false, strength: null } : model,
-    Measured: (model, sizes) => ({ ...model, ...sizes }),
+      $.props.open && model.dismissed ? $.evolve({ dismissed: false, strength: null }) : model,
+    Measured: (_model, { fontSize, height, viewport }, $) => $.evolve({ fontSize, height, viewport }),
     StartedAreaSwipe: (model, { key }, $) =>
       $.props.open || model.area !== null
         ? model
-        : $.set({ ...model, area: key, dismissed: false, strength: null }).emit(
+        : $.evolve({ area: key, dismissed: false, strength: null }).emit(
           DrawerEvents.RequestedOpen({ triggerId: null, reason: "swipe" })
         ),
     ReleasedAreaSwipe: (model, { displacement: moved, size, velocity: speed }, $) => {
-      const next = { ...model, area: null }
-      if (!$.props.open || opensOnRelease(moved, speed, size) || model.area === null) return next
-      return $.set({ ...next, dismissed: true, strength: null }).emit(DrawerEvents.RequestedClose({ reason: "swipe" }))
+      const released = $.evolve({ area: null })
+      if (!$.props.open || opensOnRelease(moved, speed, size) || model.area === null) return released
+      return released.evolve({ dismissed: true, strength: null }).emit(DrawerEvents.RequestedClose({ reason: "swipe" }))
     },
-    CancelledAreaSwipe: (model) => ({ ...model, area: null }),
-    ChangedNested: (model, { count, height, swiping }) => ({
-      ...model,
-      nestedOpen: count,
-      nestedSwiping: swiping,
-      nestedHeight: height
-    }),
+    CancelledAreaSwipe: (_model, _message, $) => $.evolve({ area: null }),
+    ChangedNested: (_model, { count, height, swiping }, $) =>
+      $.evolve({ nestedOpen: count, nestedSwiping: swiping, nestedHeight: height }),
     RequestedOpenDialog: (model, { triggerId }, $) =>
       $.set(model).emit(DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })),
     RequestedCloseDialog: (model, { reason }, $) => $.set(model).emit(DrawerEvents.RequestedClose({ reason })),
@@ -1647,7 +1646,7 @@ export const Drawer = Component.define({
 
     const viewport = p.part("div", (b) =>
       props.virtualKeyboard === true
-        ? b.onMount(TrackKeyboard({ open, modal: props.modal ?? true, popupId: drawerId }))
+        ? b.onMount(TrackDrawerKeyboard({ open, modal: props.modal ?? true, popupId: drawerId }))
         : b)
 
     const content = p.part("div", (b) => b.attr(contentAttribute, ""))

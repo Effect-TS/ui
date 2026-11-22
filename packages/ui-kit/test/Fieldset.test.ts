@@ -39,16 +39,16 @@ const Billing = Component.define({
       Fieldset(h, {
         key: "billing",
         props: { disabled: model.locked },
-        view: (outer) =>
-          outer.root(h.fieldset.class("billing")).children(
-            outer.legend(h.div).children("Billing details"),
+        view: (outerFieldset) =>
+          outerFieldset.root(h.fieldset.class("billing")).children(
+            outerFieldset.legend(h.div).children("Billing details"),
             formField("company"),
             Fieldset(h, {
               key: "address",
-              props: { disabled: outer.disabled },
-              view: (inner) =>
-                inner.root(h.fieldset.class("address")).children(
-                  inner.legend(h.div.class("address-legend")).children("Address"),
+              props: { disabled: outerFieldset.disabled },
+              view: (innerFieldset) =>
+                innerFieldset.root(h.fieldset.class("address")).children(
+                  innerFieldset.legend(h.div.class("address-legend")).children("Address"),
                   formField("city")
                 )
             })

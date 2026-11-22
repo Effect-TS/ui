@@ -2,6 +2,8 @@
  * A native button that can stay focusable while disabled. An enabled press
  * sends the caller's `onPress` message to its `update` function.
  *
+ * `Button` is a view function. It keeps no state, so it takes no `key`.
+ *
  * **Anatomy**
  *
  * `Button` returns a single `<button>` builder. It uses `h.button` by
@@ -9,11 +11,17 @@
  * a tooltip trigger. Chain classes, attributes and children on the result:
  * `Button(h, { onPress }).class("save").children("Save")`.
  *
+ * **Data attributes**
+ *
+ * Present with an empty value or absent:
+ *
+ * - `data-disabled`
+ *
  * **Keyboard and disabled state**
  *
  * Space and Enter activate the button through the browser's native click
- * behavior. A disabled button sends no press message, has an empty
- * `data-disabled` attribute and normally leaves the tab order.
+ * behavior. A disabled button sends no press message and normally leaves
+ * the tab order.
  *
  * With `focusableWhenDisabled`, a disabled button uses `aria-disabled="true"`
  * instead of the native `disabled` attribute and stays in the tab order.
@@ -52,7 +60,7 @@
  * }).make({
  *   init: () => ({ saving: false }),
  *   update: {
- *     PressedSave: (model) => ({ ...model, saving: true })
+ *     PressedSave: (_model, _message, $) => $.evolve({ saving: true })
  *   },
  *   view: (model, h) =>
  *     Button(h, {

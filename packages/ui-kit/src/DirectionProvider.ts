@@ -10,8 +10,8 @@
  * **Anatomy**
  *
  * It has no parts. The `view` closure returns the content, and gets
- * `provider.direction` for markup that depends on it:
- * `DirectionProvider(h, { props: { direction: "rtl" }, view: (provider) => h.div.attr("dir", provider.direction).children(...) })`.
+ * `directionProvider.direction` for markup that depends on it:
+ * `DirectionProvider(h, { props: { direction: "rtl" }, view: (directionProvider) => h.div.attr("dir", directionProvider.direction).children(...) })`.
  *
  * **Data attributes**
  *
@@ -54,7 +54,7 @@
  *   view: (_model, h) =>
  *     DirectionProvider(h, {
  *       props: { direction: "rtl" },
- *       view: (provider) => h.main.attr("dir", provider.direction).children("مرحبا")
+ *       view: (directionProvider) => h.main.attr("dir", directionProvider.direction).children("مرحبا")
  *     })
  * })
  *

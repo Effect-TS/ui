@@ -17,7 +17,7 @@ Checkbox(h, {
 })
 ```
 
-A component that keeps no state, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`.
+A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 
 ## Components
 

@@ -138,7 +138,7 @@
  * }).make({
  *   init: () => ({ name: "" }),
  *   update: {
- *     UpdatedName: (model, { value }) => ({ ...model, name: value })
+ *     UpdatedName: (_model, { value }, $) => $.evolve({ name: value })
  *   },
  *   view: (model, h) =>
  *     Field(h, {
@@ -171,6 +171,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import type * as Validation from "@effect/ui/Validation"
 import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
@@ -266,6 +267,8 @@ export const fieldValidationProps = (
   filled: !field.empty
 })
 
+const FieldModel = Schema.Struct({ focused: Schema.Boolean, touched: Schema.Boolean })
+
 const FieldMessage = UiSchema.TaggedEnum({
   FocusedControl: {},
   BlurredControl: { disabled: Schema.Boolean },
@@ -349,7 +352,7 @@ export const Field = Component.define({
   name: "Field",
   scoped: false,
   props: FieldProps,
-  model: Schema.Struct({ focused: Schema.Boolean, touched: Schema.Boolean }),
+  model: FieldModel,
   message: FieldMessage,
   shared: {
     fieldset: {
@@ -358,22 +361,22 @@ export const Field = Component.define({
       onChange: (value) => FieldMessage.ChangedFieldset({ disabled: value.disabled })
     }
   },
-  restore: (model) => ({ ...model, focused: false }),
+  restore: (model) => UiStruct.evolve(model, { focused: false }),
   elements: Html
 }).make({
   init: () => ({ focused: false, touched: false }),
   update: {
-    FocusedControl: (model) => ({ ...model, focused: true }),
+    FocusedControl: (_model, _message, $) => $.evolve({ focused: true }),
     // Losing focus doesn't count as a visit while the field is disabled. A
     // browser can send the blur of a control a fieldset disabled before the
     // field hears of it, so the event says so too.
-    BlurredControl: (model, { disabled }, $) =>
+    BlurredControl: (_model, { disabled }, $) =>
       disabled || disabledBy($.props, $.shared.fieldset)
-        ? { ...model, focused: false }
+        ? $.evolve({ focused: false })
         : { focused: false, touched: true },
     // `subscriptions` gets no shared value, so `lostFocus` can't report the
     // blur of a control its fieldset disabled.
-    ChangedFieldset: (model, { disabled }) => (disabled ? { ...model, focused: false } : model)
+    ChangedFieldset: (model, { disabled }, $) => (disabled ? $.evolve({ focused: false }) : model)
   },
   subscriptions: (model, props) => [model.focused && props.disabled === true && lostFocus],
   parts: (model, p) => {

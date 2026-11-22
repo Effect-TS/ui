@@ -14,7 +14,7 @@
  * | `root` | `<div>`, `role="presentation"`, `position: relative` |
  * | `viewport` | `<div>`, scrollable container (`overflow: scroll; scrollbar-width: none`) |
  * | `content` | `<div>`, `role="presentation"`, `min-width: fit-content` |
- * | `scrollbar` | `<div>` track with its `thumb` `<div>` placed inside as its first child |
+ * | `scrollbar` | `<div>` track with its `thumb` `<div>` placed inside, after the track's existing children |
  * | `corner` | `<div>` at the intersection of both scrollbars |
  *
  * `scrollbar` takes `{ element, thumb, orientation?, keepMounted? }`:
@@ -798,9 +798,10 @@ const overflowData = <B extends Attributed<B>>(builder: B, model: ScrollAreaMode
  * markup that depends on state.
  *
  * `scrollbar({ element, thumb, orientation?, keepMounted? })` returns
- * `element` with `thumb` placed inside as its first child, or `undefined` when
- * that axis does not overflow unless `keepMounted` is `true`. `corner` returns
- * `undefined` unless both axes overflow. Both validate their element tags
+ * `element` with `thumb` placed inside, or `undefined` when that axis does
+ * not overflow unless `keepMounted` is `true`. The thumb comes after the
+ * children already on `element` and before any chained on the result.
+ * `corner` returns `undefined` unless both axes overflow. Both validate their element tags
  * before deciding whether to return `undefined`.
  *
  * The component's own attributes win over those set on a builder before the
@@ -827,22 +828,22 @@ export const ScrollArea = Component.define({
 }).make({
   init: () => ({ measured: false, hovering: false, scrollingX: false, scrollingY: false, ...noOverflow }),
   update: {
-    MeasuredOverflow: (model, overflow) => ({
-      ...model,
-      measured: true,
-      hasOverflowX: overflow.hasOverflowX,
-      hasOverflowY: overflow.hasOverflowY,
-      overflowXStart: overflow.overflowXStart,
-      overflowXEnd: overflow.overflowXEnd,
-      overflowYStart: overflow.overflowYStart,
-      overflowYEnd: overflow.overflowYEnd
-    }),
-    StartedScrolling: (model, { orientation }) =>
-      orientation === "vertical" ? { ...model, scrollingY: true } : { ...model, scrollingX: true },
-    StoppedScrolling: (model, { orientation }) =>
-      orientation === "vertical" ? { ...model, scrollingY: false } : { ...model, scrollingX: false },
-    EnteredPointer: (model) => ({ ...model, hovering: true }),
-    LeftPointer: (model) => ({ ...model, hovering: false })
+    MeasuredOverflow: (_model, overflow, $) =>
+      $.evolve({
+        measured: true,
+        hasOverflowX: overflow.hasOverflowX,
+        hasOverflowY: overflow.hasOverflowY,
+        overflowXStart: overflow.overflowXStart,
+        overflowXEnd: overflow.overflowXEnd,
+        overflowYStart: overflow.overflowYStart,
+        overflowYEnd: overflow.overflowYEnd
+      }),
+    StartedScrolling: (_model, { orientation }, $) =>
+      $.evolve(orientation === "vertical" ? { scrollingY: true } : { scrollingX: true }),
+    StoppedScrolling: (_model, { orientation }, $) =>
+      $.evolve(orientation === "vertical" ? { scrollingY: false } : { scrollingX: false }),
+    EnteredPointer: (_model, _message, $) => $.evolve({ hovering: true }),
+    LeftPointer: (_model, _message, $) => $.evolve({ hovering: false })
   },
   parts: (model, p) => {
     const id = p.id("scroll-area")

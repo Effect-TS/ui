@@ -200,12 +200,14 @@ describe("ScrollArea", () => {
   it.effect("rejects non-div tags on every part even when hidden", () =>
     Effect.gen(function*() {
       const cases: ReadonlyArray<(scrollArea: Parts, h: H) => View.Content<never>> = [
-        (sa, h) => sa.root(h.span as never),
-        (sa, h) => sa.root(h.div).children(sa.viewport(h.span as never)),
-        (sa, h) => sa.root(h.div).children(sa.content(h.span as never)),
-        (sa, h) => sa.root(h.div).children(sa.scrollbar({ element: h.span as never, thumb: h.div })),
-        (sa, h) => sa.root(h.div).children(sa.scrollbar({ element: h.div, thumb: h.span as never })),
-        (sa, h) => sa.root(h.div).children(sa.corner(h.span as never))
+        (scrollArea, h) => scrollArea.root(h.span as never),
+        (scrollArea, h) => scrollArea.root(h.div).children(scrollArea.viewport(h.span as never)),
+        (scrollArea, h) => scrollArea.root(h.div).children(scrollArea.content(h.span as never)),
+        (scrollArea, h) =>
+          scrollArea.root(h.div).children(scrollArea.scrollbar({ element: h.span as never, thumb: h.div })),
+        (scrollArea, h) =>
+          scrollArea.root(h.div).children(scrollArea.scrollbar({ element: h.div, thumb: h.span as never })),
+        (scrollArea, h) => scrollArea.root(h.div).children(scrollArea.corner(h.span as never))
       ]
       for (const render of cases) {
         const exit = yield* Effect.exit(Scene.make(ScrollArea, {}, { elements: Html, view: render }))

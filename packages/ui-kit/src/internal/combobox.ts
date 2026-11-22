@@ -792,7 +792,7 @@ const TrackCombobox = Mount.makeStream(
     )
 )
 
-const TrackList = Mount.makeStream(
+const TrackComboboxList = Mount.makeStream(
   "TrackComboboxList",
   { args: { list: ListArgs } },
   (node: HTMLElement, args, changes) =>
@@ -804,7 +804,7 @@ const TrackList = Mount.makeStream(
     })
 )
 
-const TrackChips = Mount.makeStream(
+const TrackComboboxChips = Mount.makeStream(
   "TrackComboboxChips",
   { args: { owner: Schema.String, rtl: Schema.Boolean, locked: Schema.Boolean } },
   (node: HTMLElement, args, changes) =>
@@ -1272,7 +1272,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       return inside(b)
         .attrs({ role: values.length > 0 ? "toolbar" : undefined, "data-combobox-chips": owner })
         .on("mousedown", pressGroup, { preventDefault: true })
-        .onMount(TrackChips({ owner, rtl: props.dir === "rtl", locked: disabled || readOnly }))
+        .onMount(TrackComboboxChips({ owner, rtl: props.dir === "rtl", locked: disabled || readOnly }))
     })
 
     const chipPart = p.part("div", (b, value: string) =>
@@ -1386,7 +1386,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         "aria-readonly": !grid && readOnly ? "true" : undefined,
         "data-empty": flag(listEmpty)
       })
-      return inline ? decorated.onMount(TrackList({ list: listArgs })) : decorated
+      return inline ? decorated.onMount(TrackComboboxList({ list: listArgs })) : decorated
     })
 
     const row = p.part("div", (b) => b.attr("role", "row"))

@@ -160,8 +160,8 @@
  * }).make({
  *   init: () => ({ preview: true }),
  *   update: {
- *     RequestedOpenPreview: (model) => ({ ...model, preview: true }),
- *     RequestedClosePreview: (model) => ({ ...model, preview: false })
+ *     RequestedOpenPreview: (_model, _message, $) => $.evolve({ preview: true }),
+ *     RequestedClosePreview: (_model, _message, $) => $.evolve({ preview: false })
  *   },
  *   view: (model, h) =>
  *     PreviewCard(h, {
@@ -172,10 +172,12 @@
  *         Settled: () => undefined
  *       },
  *       view: (previewCard) =>
- *         h.p(
- *           "Good ",
- *           previewCard.trigger({ element: h.a.attr("href", "/typography") }).children("typography"),
- *           " makes text easy to read.",
+ *         h.div(
+ *           h.p(
+ *             "Good ",
+ *             previewCard.trigger({ element: h.a.attr("href", "/typography") }).children("typography"),
+ *             " makes text easy to read."
+ *           ),
  *           previewCard.portal(h.div)?.children(
  *             previewCard.positioner(h.div).children(
  *               previewCard.popup(h.div.class("card")).children("Typography is the art of arranging type.")
@@ -200,6 +202,7 @@ import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
@@ -512,8 +515,7 @@ const openFor = (
   triggerId: string | null,
   reason: PreviewCardOpenReason
 ) =>
-  $.set({
-    ...model,
+  $.set(model).evolve({
     away: !model.onTrigger,
     pending: null,
     pendingTrigger: null,
@@ -529,14 +531,14 @@ const openFor = (
 
 const dismiss = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
   $.props.open
-    ? $.set({ ...model, closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
+    ? $.set(model).evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
       PreviewCardEvents.RequestedClose({ reason })
     )
     : model
 
 const cancelled = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardOpenReason) =>
   !$.props.open && model.pending === reason
-    ? $.set({ ...model, pending: null, pendingTrigger: null }).run(Command.interrupt(WaitBeforeOpening))
+    ? $.set(model).evolve({ pending: null, pendingTrigger: null }).run(Command.interrupt(WaitBeforeOpening))
     : model
 
 const watchLines = (
@@ -559,7 +561,7 @@ const watchLines = (
   }, { signal })
 }
 
-const TrackTrigger = Mount.makeStream(
+const TrackPreviewCardTrigger = Mount.makeStream(
   "TrackPreviewCardTrigger",
   { args: { triggerId: Schema.String } },
   (node: HTMLElement, args, changes) =>
@@ -584,7 +586,7 @@ const TrackTrigger = Mount.makeStream(
     })
 )
 
-const TrackDetachedTrigger = Mount.makeStream(
+const TrackDetachedPreviewCardTrigger = Mount.makeStream(
   "TrackDetachedPreviewCardTrigger",
   { args: { popupId: Schema.String, ...Delays.fields } },
   (node: HTMLElement, args, changes) =>
@@ -739,7 +741,7 @@ const watchPointer = (node: HTMLElement, args: TrackPositionerArgs, changes: Str
     )
   })
 
-const TrackPositioner = Mount.makeStream(
+const TrackPreviewCard = Mount.makeStream(
   "TrackPreviewCard",
   { args: TrackPositionerArgs },
   (node: HTMLElement, args, changes) =>
@@ -751,7 +753,7 @@ const TrackPositioner = Mount.makeStream(
     )
 )
 
-const TrackPresence = Mount.makeStream(
+const TrackPreviewCardPresence = Mount.makeStream(
   "TrackPreviewCardPresence",
   {
     args: {
@@ -888,7 +890,7 @@ export const PreviewCardTrigger = <Msg, R = never>(
   const { open, popupId } = options.props
   return element
     .forward((node) => node.attrs({ "data-popup-open": flag(open), "data-preview-card-trigger": popupId }))
-    .onMount(TrackDetachedTrigger({ popupId, ...delaysOf(options.props) }))
+    .onMount(TrackDetachedPreviewCardTrigger({ popupId, ...delaysOf(options.props) }))
 }
 
 /**
@@ -969,68 +971,65 @@ export const PreviewCard = Component.define({
     EnteredTrigger: (model, { at, closeDelay, delay, triggerId }, $) => {
       const uncovered = at !== null && model.rest !== null && model.rest.triggerId === triggerId &&
         at.x === model.rest.x && at.y === model.rest.y
-      const next = {
-        ...model,
+      const next = UiStruct.evolve(model, {
         onTrigger: true,
         hoverTrigger: triggerId,
         point: at === null ? null : { ...at, line: null },
         rest: null,
         away: false
-      }
+      })
       if (!$.props.open) {
         return uncovered || model.touched
           ? next
-          : $.set({ ...next, closeDelay, pending: "trigger-hover", pendingTrigger: triggerId }).run(
+          : $.set(next).evolve({ closeDelay, pending: "trigger-hover", pendingTrigger: triggerId }).run(
             WaitBeforeOpening.make({ delay })
           )
       }
       const active = activeOf(model, $.props)
       return uncovered || model.touched || active === null || active === triggerId
         ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
-        : openFor({ ...next, closeDelay }, $, triggerId, "trigger-hover")
+        : openFor(UiStruct.evolve(next, { closeDelay }), $, triggerId, "trigger-hover")
     },
     LeftTrigger: (model, { at, triggerId }, $) =>
       cancelled(
-        {
-          ...model,
+        UiStruct.evolve(model, {
           onTrigger: false,
           hoverTrigger: null,
           rest: at === null ? null : { triggerId, ...at },
           touched: false
-        },
+        }),
         $,
         "trigger-hover"
       ),
     MovedToLine: (model, { at, line, triggerId }, $) =>
-      model.hoverTrigger === triggerId && !$.props.open ? { ...model, point: { ...at, line } } : model,
-    TouchedTrigger: (model, _message, $) => cancelled({ ...model, touched: true }, $, "trigger-hover"),
+      model.hoverTrigger === triggerId && !$.props.open ? $.evolve({ point: { ...at, line } }) : model,
+    TouchedTrigger: (model, _message, $) => cancelled(UiStruct.evolve(model, { touched: true }), $, "trigger-hover"),
     FocusedTrigger: (model, { closeDelay, delay, triggerId, visible }, $) => {
       if (!visible) return model
-      const next = { ...model, focused: true, focusTrigger: triggerId }
+      const next = UiStruct.evolve(model, { focused: true, focusTrigger: triggerId })
       if (!$.props.open) {
-        return $.set({ ...next, closeDelay, pending: "trigger-focus", pendingTrigger: triggerId }).run(
+        return $.set(next).evolve({ closeDelay, pending: "trigger-focus", pendingTrigger: triggerId }).run(
           WaitBeforeOpening.make({ delay })
         )
       }
       const active = activeOf(model, $.props)
       return active === null || active === triggerId
         ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
-        : openFor({ ...next, closeDelay }, $, triggerId, "trigger-focus")
+        : openFor(UiStruct.evolve(next, { closeDelay }), $, triggerId, "trigger-focus")
     },
     BlurredTrigger: (model, _message, $) =>
-      cancelled({ ...model, focused: false, focusTrigger: null }, $, "trigger-focus"),
-    FocusedPopup: (model) => ({ ...model, focusInside: true }),
-    BlurredPopup: (model) => ({ ...model, focusInside: false }),
+      cancelled(UiStruct.evolve(model, { focused: false, focusTrigger: null }), $, "trigger-focus"),
+    FocusedPopup: (_model, _message, $) => $.evolve({ focusInside: true }),
+    BlurredPopup: (_model, _message, $) => $.evolve({ focusInside: false }),
     FocusedOutside: (model, _message, $) => dismiss(model, $, "trigger-focus"),
     LeftHoverArea: (model, _message, $) => {
       if (model.away) return model
-      const next = { ...model, away: true }
+      const next = UiStruct.evolve(model, { away: true })
       return $.props.open && !held(next)
         ? $.set(next).run(WaitBeforeClosing.make({ delay: model.closeDelay }))
         : next
     },
-    ReturnedToHoverArea: (model, _message, $) =>
-      $.set({ ...model, away: false }).run(Command.interrupt(WaitBeforeClosing)),
+    ReturnedToHoverArea: (_model, _message, $) => $.evolve({ away: false }).run(Command.interrupt(WaitBeforeClosing)),
     PressedOutside: (model, _message, $) => dismiss(model, $, "outside-press"),
     PressedEscape: (model, _message, $) => dismiss(model, $, "escape-key"),
     RemovedTrigger: (model, _message, $) => dismiss(model, $, "trigger-removed"),
@@ -1041,34 +1040,33 @@ export const PreviewCard = Component.define({
         : model.focused && model.focusTrigger === model.pendingTrigger
       return ready
         ? openFor(model, $, model.pendingTrigger, model.pending)
-        : { ...model, pending: null, pendingTrigger: null }
+        : $.evolve({ pending: null, pendingTrigger: null })
     },
     CompletedWaitBeforeClosing: (model, _message, $) =>
       !hovering(model) && !held(model) ? dismiss(model, $, "trigger-hover") : model,
     ShowedPortal: (model, _message, $) =>
       $.props.open
-        ? {
-          ...model,
+        ? $.evolve({
           mounted: true,
           focusInside: false,
           asked: false,
           reason: model.asked ? model.reason : null,
           anchorHit: model.asked ? model.anchorHit : null,
           closeReason: null
-        }
-        : { ...model, mounted: true },
-    RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? { ...model, started: true } : model,
+        })
+        : $.evolve({ mounted: true }),
+    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model
       if (open) return $.set(model).emit(PreviewCardEvents.Settled({ open }))
       return model.mounted && $.props.holdExit !== true
-        ? $.set({ ...model, mounted: false, started: false, transition: null }).emit(
+        ? $.evolve({ mounted: false, started: false, transition: null }).emit(
           PreviewCardEvents.Settled({ open })
         )
         : model
     },
     ChangedViewport: (model, { change }, $) => stepViewport(model, change, $.props.open),
-    ChangedPlacement: (model, { placement }) => ({ ...model, placement })
+    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement })
   },
   subscriptions: (_model, props) => [
     ...(props.open ? [escape] : []),
@@ -1140,7 +1138,7 @@ export const PreviewCard = Component.define({
               : PreviewCardMessage.FocusedTrigger({ triggerId: key, ...delays, visible: focusVisible })
           )
           .onBlur(PreviewCardMessage.BlurredTrigger())
-          .onMount(TrackTrigger({ triggerId: key }))
+          .onMount(TrackPreviewCardTrigger({ triggerId: key }))
     )
     const trigger = View.wrapPart(
       triggerPart,
@@ -1163,7 +1161,7 @@ export const PreviewCard = Component.define({
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, portalStyle)))
       return shown
         ? portal.onMount(
-          TrackPresence({
+          TrackPreviewCardPresence({
             open,
             mounted: model.mounted,
             started: model.started,
@@ -1203,7 +1201,7 @@ export const PreviewCard = Component.define({
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       return open
         ? decorated.onMount(
-          TrackPositioner({ position: tracked, triggers, active: active === null ? null : triggerSelector })
+          TrackPreviewCard({ position: tracked, triggers, active: active === null ? null : triggerSelector })
         )
         : decorated
     })

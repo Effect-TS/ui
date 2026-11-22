@@ -298,7 +298,7 @@ export const ToggleGroup = Component.define({
   update: {
     ClickedItem: (model, { value }, $) =>
       enabled($.props, value) ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) })) : model,
-    FocusedItem: (model, { value }) => model.active === value ? model : { ...model, active: value },
+    FocusedItem: (_model, { value }, $) => $.evolve({ active: value }),
     PressedKey: (model, { key, value }, $) => {
       const items = enabledOf($.props)
       const last = items.length - 1
@@ -316,7 +316,7 @@ export const ToggleGroup = Component.define({
           )
       ]
       if (target === undefined || target.value === value) return model
-      return $.set({ ...model, active: target.value }).run(
+      return $.evolve({ active: target.value }).run(
         DomCommand.Focus.make({ ref: Item.at(target.value) }).pipe(Command.asNoop)
       )
     }

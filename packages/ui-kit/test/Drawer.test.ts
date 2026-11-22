@@ -255,10 +255,10 @@ const Page = Component.define({
   },
   view: (model, h) =>
     DrawerProvider(h, {
-      view: (provider) =>
+      view: (drawerProvider) =>
         h.div(
-          provider.indentBackground(h.div.class("background")),
-          provider.indent(h.div.class("indent")),
+          drawerProvider.indentBackground(h.div.class("background")),
+          drawerProvider.indent(h.div.class("indent")),
           Drawer(h, {
             props: { open: model.open },
             onEmit: {

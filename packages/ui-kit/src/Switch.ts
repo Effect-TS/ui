@@ -15,10 +15,10 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining: `parts.root(h.button.class("switch")).children(...)`.
- * `root` adds the hidden `<input>` that carries the form value as the
- * button's first child, before the consumer's children, so a switch with a
- * `name` can't be drawn without it. A part's result is also another kit
- * call's `element`.
+ * `root` adds the hidden `<input>` that carries the form value to the
+ * button, after the children already on the builder it gets and before those
+ * chained on its result, so a switch with a `name` can't be drawn without
+ * it. A part's result is also another kit call's `element`.
  *
  * Naming the switch is the consumer's job: a `<label>` around the root or
  * one pointing at its `id`, an `aria-label` or `aria-labelledby` on the
@@ -67,7 +67,7 @@
  * }).make({
  *   init: () => ({ notify: false }),
  *   update: {
- *     ToggledNotify: (model, { checked }) => ({ ...model, notify: checked })
+ *     ToggledNotify: (_model, { checked }, $) => $.evolve({ notify: checked })
  *   },
  *   view: (model, h) =>
  *     Switch(h, {
@@ -167,7 +167,10 @@ export interface SwitchParts<Msg> {
   readonly disabled: boolean
   readonly readOnly: boolean
   readonly required: boolean
-  /** The consumer's `h.button`. The form field is its first child. */
+  /**
+   * The consumer's `h.button`. The form field follows the children already
+   * on it and comes before those chained on the result.
+   */
   readonly root: <R = never>(element: SwitchButton<Msg, R>) => SwitchButton<Msg, R>
   /** The consumer's `h.span`, usually a child of the root. */
   readonly thumb: <R = never>(element: SwitchSpan<Msg, R>) => SwitchSpan<Msg, R>
@@ -234,9 +237,6 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
     readOnly: props.readOnly === true,
     required: props.required === true,
     root: (element) =>
-      // The field goes in first, so the consumer's children come after it.
-      // The attributes and the handler wait for the finished button: they
-      // are written after whatever the consumer chains on the root.
       element.children(hidden).forward((node) => {
         // By `onToggle` alone, not by the state: a read-only switch sets no
         // handler now, but the clash would only show once it became editable.

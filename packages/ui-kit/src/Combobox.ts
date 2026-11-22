@@ -182,17 +182,24 @@
  * }).make({
  *   init: () => ({ open: false, fruit: "banana", text: "Banana" }),
  *   update: {
- *     RequestedOpenFruit: (model) => ({ ...model, open: true }),
- *     RequestedCloseFruit: (model) => ({ ...model, open: false }),
- *     PickedFruit: (model, { fruit }) => ({ ...model, fruit }),
- *     RequestedInputValueFruit: (model, { text }) => ({ ...model, text })
+ *     RequestedOpenFruit: (_model, _message, $) => $.evolve({ open: true }),
+ *     RequestedCloseFruit: (_model, _message, $) => $.evolve({ open: false }),
+ *     PickedFruit: (_model, { fruit }, $) => $.evolve({ fruit }),
+ *     RequestedInputValueFruit: (_model, { text }, $) => $.evolve({ text })
  *   },
  *   view: (model, h) =>
  *     Field(h, {
  *       props: { filled: model.fruit !== null },
  *       view: (field) =>
  *         Combobox(h, {
- *           props: { open: model.open, value: model.fruit, inputValue: model.text, items: fruits, name: "fruit" },
+ *           props: {
+ *             open: model.open,
+ *             value: model.fruit,
+ *             inputValue: model.text,
+ *             items: fruits,
+ *             name: "fruit",
+ *             disabled: field.disabled
+ *           },
  *           onEmit: {
  *             RequestedOpen: () => PickerMessage.RequestedOpenFruit(),
  *             RequestedClose: () => PickerMessage.RequestedCloseFruit(),
@@ -623,10 +630,77 @@ const engine = Engine.make("Combobox", (props: ComboboxProps): Engine.Settings<C
  * which is `null` once the popup closes, `items` (the filtered items to
  * draw), `groups` and `listEmpty`.
  *
- * The input, the popup, the list, the arrow, the items and the group labels
- * set their own `id`s for the ARIA attributes that point at them. The
- * input keeps an `id` already on its builder, as from `field.control`,
- * and the `id` prop sets it otherwise.
+ * Each part's attributes win over the ones the consumer set on the builder
+ * before the part, including the ones a state leaves absent. Besides the
+ * ones under **Data attributes** in the module docs, they are:
+ *
+ * - `input`: `role="combobox"`, `aria-expanded`, `aria-haspopup`
+ *   (`"grid"` with `grid`, otherwise `"listbox"`), `aria-controls` and
+ *   `aria-activedescendant` while the list can be navigated,
+ *   `aria-autocomplete`, `aria-readonly`, `aria-required`, `readonly`,
+ *   `disabled`, `value`, and `autocomplete="off"`, `spellcheck`,
+ *   `autocorrect` and `autocapitalize`. Its `id` is the one already on
+ *   the builder, as from `field.control`. Otherwise it's the `id` prop, or
+ *   a generated one with `inputInPopup`.
+ * - `trigger`: `type="button"`, `aria-expanded`, `aria-haspopup`,
+ *   `aria-controls` while open, `disabled`, and `tabindex="-1"` without
+ *   `inputInPopup`. With `inputInPopup` it takes focus and is a combobox
+ *   as well as the input: `role="combobox"`, `aria-required`,
+ *   `aria-readonly`, an `id`, the one on the builder or else the `id`
+ *   prop, and `aria-labelledby` pointing at `label` when the builder has
+ *   none.
+ * - `inputGroup`: `role="group"`
+ * - `clear`, `chipRemove`: `type="button"`, `tabindex="-1"`, `disabled`
+ * - `chips`: `role="toolbar"` while a value is selected
+ * - `chip`: `tabindex="-1"`, `aria-disabled`, `aria-readonly`
+ * - `label`: `id`
+ * - `backdrop`, `positioner`: `role="presentation"` and
+ *   `popover="manual"`
+ * - `popup`: `id`, `tabindex="-1"` and `role="presentation"`, or with
+ *   `inputInPopup` `role="dialog"` and `aria-labelledby` pointing at
+ *   `label` unless the builder has one
+ * - `list`: `id`, `role="listbox"`, or `"grid"` with `grid`,
+ *   `tabindex="-1"`, `aria-multiselectable`, `aria-readonly`
+ * - `row`: `role="row"`
+ * - `item`: `id`, `role="option"`, or `"gridcell"` with `grid`,
+ *   `aria-selected`, `aria-disabled`
+ * - `group`: `role="group"`, or `"rowgroup"` with `grid`, and
+ *   `aria-labelledby` pointing at its `groupLabel`
+ * - `groupLabel`: `id` and `aria-hidden="true"`
+ * - `icon`, `arrow`, `itemIndicator`: `aria-hidden="true"`, and `id` on
+ *   the arrow
+ * - `separator`: `role="separator"`, `aria-orientation="horizontal"`
+ * - `empty`, `status`: `role="status"`, `aria-live="polite"`,
+ *   `aria-atomic="true"`
+ *
+ * A part adds the ids it lists in `aria-controls`, and a group's
+ * `aria-labelledby`, to the consumer's. The `aria-labelledby` of the
+ * trigger and the popup is a fallback instead: it points at `label` only
+ * when the builder has none, and the consumer's wins. Except with `inline`,
+ * or with `inputInPopup` and not `modal`, the positioner also holds a
+ * visually hidden Dismiss button for screen readers.
+ *
+ * The parts handle these events on a layer of their own, so the
+ * consumer's handlers for them still run:
+ *
+ * - `input`: `input`, `compositionend`, `keydown`, `keyup` and
+ *   `mousedown`, and `focusin` and `focusout` with `inline`
+ * - `trigger`: `mousedown`, `mouseup`, `click` and `keydown`
+ * - `inputGroup`, `chips`: `mousedown`, and the chips' `keydown` through
+ *   the mount on `chips`
+ * - `clear`, `chipRemove`: `mousedown` and `click`
+ * - `label`: `click`
+ * - `item`: `mouseenter`, `mouseleave`, `mousedown`, `mouseup` and
+ *   `click`
+ *
+ * They cancel the keys they handle, and the `mousedown` on the input
+ * group, the chips, the clear and remove buttons, the trigger without
+ * `inputInPopup` and the items, so focus stays in the input. The
+ * positioner's mount places the popup and listens for presses and focus
+ * outside it.
+ *
+ * It emits `RequestedOpen`, `RequestedClose`, `Picked`,
+ * `RequestedInputValue`, `Highlighted` and `Settled`.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.

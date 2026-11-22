@@ -12,7 +12,7 @@ type H = View.Helper<never, PreviewCardProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (previewCard: Parts, h: H) =>
-    h.p(
+    h.div(
       previewCard.trigger({
         element: h.a.attr("id", "typography").attr("href", "/typography").attr("data-popup-open", "x")
       }).children("Typography"),

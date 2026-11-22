@@ -166,9 +166,9 @@
  * }).make({
  *   init: () => ({ open: false, query: "str" }),
  *   update: {
- *     RequestedOpenSuggestions: (model) => ({ ...model, open: true }),
- *     RequestedCloseSuggestions: (model) => ({ ...model, open: false }),
- *     UpdatedQuery: (model, { query }) => ({ ...model, query })
+ *     RequestedOpenSuggestions: (_model, _message, $) => $.evolve({ open: true }),
+ *     RequestedCloseSuggestions: (_model, _message, $) => $.evolve({ open: false }),
+ *     UpdatedQuery: (_model, { query }, $) => $.evolve({ query })
  *   },
  *   view: (model, h) =>
  *     h.form(
@@ -215,6 +215,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import * as Struct from "effect/Struct"
+import type { Combobox } from "./Combobox.ts"
 import * as Engine from "./internal/combobox.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import * as Positioning from "./Positioning.ts"
@@ -585,10 +586,14 @@ const engine = Engine.make("Autocomplete", (props: AutocompleteProps): Engine.Se
  * popup closes, `items` (the filtered items to draw), `groups` and
  * `listEmpty`.
  *
- * The input, the popup, the list, the arrow, the items and the group labels
- * set their own `id`s for the ARIA attributes that point at them. The
- * input keeps an `id` already on its builder, as from `field.control`,
- * and the `id` prop sets it otherwise.
+ * Each part writes the attributes and handles the events that the
+ * `Combobox` part of the same name does, listed under {@link Combobox},
+ * over the ones the consumer set on the builder before the part. As
+ * nothing is selected, the items have no `aria-selected`. Without
+ * `inputInPopup`, the input also takes `name`, `form` and `required`.
+ *
+ * It emits `RequestedOpen`, `RequestedClose`, `Updated`, `Highlighted`
+ * and `Settled`.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.

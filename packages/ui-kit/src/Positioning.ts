@@ -1490,10 +1490,13 @@ export const trackPosition = (
  * A `Scene` has no layout, so send a `Placement` there with
  * `mounted(Positioning.TrackPosition, placement)`.
  *
+ * A `Placement` is a measurement, so a Model that stores one clears it in
+ * `restore`: after Back the mount reports it again.
+ *
  * **Example** (A hint that stays next to its button)
  *
  * ```ts import.meta.vitest
- * import { Component, Mount, UiSchema } from "@effect/ui"
+ * import { Component, Mount, UiSchema, UiStruct } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Positioning } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -1506,11 +1509,12 @@ export const trackPosition = (
  *   props: Schema.Struct({ open: Schema.Boolean, ...Positioning.PositionerFields }),
  *   model: Schema.Struct({ placement: Schema.NullOr(Positioning.Placement) }),
  *   message: HintMessage,
+ *   restore: (model) => UiStruct.evolve(model, { placement: null }),
  *   elements: Html
  * }).make({
  *   init: () => ({ placement: null }),
  *   update: {
- *     ChangedPlacement: (model, { placement }) => ({ ...model, placement })
+ *     ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement })
  *   },
  *   view: (model, h) => {
  *     const anchorId = h.id("anchor")

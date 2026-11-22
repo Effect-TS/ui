@@ -134,6 +134,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
@@ -373,7 +374,7 @@ const current = (model: VirtualListModel, props: VirtualListProps): VirtualListM
   const dataset = props.dataset ?? null
   return dataset === model.dataset
     ? model
-    : { ...model, dataset, sizes: {}, focused: null, epoch: model.epoch + 1 }
+    : UiStruct.evolve(model, { dataset, sizes: {}, focused: null, epoch: (epoch) => epoch + 1 })
 }
 
 const resolve = (props: VirtualListProps, ref: typeof ItemRef.Type, fallback: boolean): number | null => {
@@ -622,7 +623,7 @@ const measured = (
     const live = new Set(props.keys)
     sizes = Object.fromEntries(Object.entries(sizes).filter(([key]) => live.has(key)))
   }
-  return { ...model, gap, lanes, width, sizes, epoch: reset ? model.epoch + 1 : model.epoch }
+  return UiStruct.evolve(model, { gap, lanes, width, sizes, epoch: reset ? model.epoch + 1 : model.epoch })
 }
 
 const TrackVirtualListArgs = {
@@ -917,7 +918,7 @@ const announce = ($: VirtualListUpdate, next: VirtualListModel, layout = layoutO
   const announced = { first: visible[0], last: visible[1], atStart: next.atStart, atEnd: next.atEnd }
   return next.announced !== null && sameVisible(next.announced, announced)
     ? $.set(next)
-    : $.set({ ...next, announced }).emit(VirtualListEvents.Scrolled(announced))
+    : $.set(next).evolve({ announced }).emit(VirtualListEvents.Scrolled(announced))
 }
 
 type ItemOf<B extends View.PartTarget<"div" | "li">> = ReturnType<B["attr"]>
@@ -960,7 +961,7 @@ export const VirtualList = Component.define({
   model: VirtualListModel,
   message: VirtualListMessage,
   events: VirtualListEvents,
-  restore: (model) => ({ ...model, focused: null }),
+  restore: (model) => UiStruct.evolve(model, { focused: null }),
   elements: Html
 }).make({
   init: ($) => ({
@@ -988,26 +989,31 @@ export const VirtualList = Component.define({
         key: keyOf($.props, row * layout.lanes),
         offset: start - (layout.offsets[row] ?? 0)
       }
-      return announce($, {
-        ...model,
-        position,
-        height,
-        atStart,
-        atEnd,
-        scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
-      }, layout)
+      return announce(
+        $,
+        UiStruct.evolve(model, {
+          position,
+          height,
+          atStart,
+          atEnd,
+          scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
+        }),
+        layout
+      )
     },
-    RequestedScroll: (model, { scrollTo }) =>
-      sameRequest(scrollTo, latestOf(model)) ? model : { ...model, scroll: { scrollTo, done: false } },
-    ScrolledByUser: (model) =>
-      model.scroll === null || model.scroll.done ? model : { ...model, scroll: { ...model.scroll, done: true } },
+    RequestedScroll: (model, { scrollTo }, $) =>
+      sameRequest(scrollTo, latestOf(model)) ? model : $.evolve({ scroll: { scrollTo, done: false } }),
+    ScrolledByUser: (model, _message, $) =>
+      model.scroll === null || model.scroll.done
+        ? model
+        : $.evolve({ scroll: UiStruct.evolve(model.scroll, { done: true }) }),
     MeasuredItems: (stored, message, $) => {
       const model = current(stored, $.props)
       const next = measured(model, $.props, message)
       return next === model ? stored : announce($, next)
     },
-    FocusedItem: (stored, { index, key }, $) => ({ ...current(stored, $.props), focused: { index, key } }),
-    BlurredItems: (stored, _message, $) => ({ ...current(stored, $.props), focused: null })
+    FocusedItem: (stored, { index, key }, $) => UiStruct.evolve(current(stored, $.props), { focused: { index, key } }),
+    BlurredItems: (stored, _message, $) => UiStruct.evolve(current(stored, $.props), { focused: null })
   },
   parts: (stored, p) => {
     const props = p.props

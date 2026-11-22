@@ -73,7 +73,7 @@
  * }).make({
  *   init: () => ({ fruits: ["apple"] }),
  *   update: {
- *     UpdatedFruits: (model, { value }) => ({ ...model, fruits: value })
+ *     UpdatedFruits: (_model, { value }, $) => $.evolve({ fruits: value })
  *   },
  *   view: (model, h) =>
  *     CheckboxGroup(h, {
@@ -82,7 +82,7 @@
  *       view: (checkboxGroup) =>
  *         checkboxGroup.root(h.div.class("fruits").attr("aria-label", "Fruit")).children(
  *           h.label.children(
- *             Checkbox(h, { props: { parent: true }, view: (checkbox) => checkbox.root(h.button) }),
+ *             Checkbox(h, { key: "all", props: { parent: true }, view: (checkbox) => checkbox.root(h.button) }),
  *             "All fruit"
  *           ),
  *           ...fruits.map((fruit) =>
@@ -276,17 +276,17 @@ export const CheckboxGroup = Component.define({
 }).make({
   init: ($) => ({ remembered: $.props.value, items: [] }),
   update: {
-    ToggledItem: (model, { value }, $) => {
+    ToggledItem: (_model, { value }, $) => {
       const next = toggled($.props.value, value)
-      return $.set({ ...model, remembered: next }).emit(CheckboxGroupEvents.Updated({ value: next }))
+      return $.evolve({ remembered: next }).emit(CheckboxGroupEvents.Updated({ value: next }))
     },
     ToggledParent: (model, _message, $) => {
       const next = cycle(model, $.props)
       return next === undefined
         ? model
-        : $.set({ ...model, remembered: next.remembered }).emit(CheckboxGroupEvents.Updated({ value: next.value }))
+        : $.evolve({ remembered: next.remembered }).emit(CheckboxGroupEvents.Updated({ value: next.value }))
     },
-    ChangedItems: (model, { items }) => ({ ...model, items })
+    ChangedItems: (_model, { items }, $) => $.evolve({ items })
   },
   parts: (_model, p) => {
     const disabled = p.props.disabled === true
