@@ -764,9 +764,14 @@ describe("BrowserHost", { concurrent: false }, () => {
             .on("focusin", ({ within }) => Message.FocusMoved({ event: "focusin", within }))
             .on("focusout", ({ within }) => Message.FocusMoved({ event: "focusout", within }))
             .children(h.input.attr("aria-label", "First"), h.input.attr("aria-label", "Second")),
-          h.button.onClick(({ pointerType }) => Message.PointerClicked({ pointerType })).children("Pointer"),
+          h.button.onClick(({ pointerType }) => Message.PointerClicked({ pointerType }))
+            .on("pointerdown", ({ button, pointerType }) =>
+              Message.PointerClicked({ pointerType: `down ${button} ${pointerType}` }))
+            .children("Pointer"),
           h.input.attr("aria-label", "Keys")
-            .onKeyDown(({ key, shift }) => Message.Key({ key, shift }))
+            .onKeyDown(({ key, shift }) =>
+              Message.Key({ key, shift })
+            )
             .on("mouseenter", ({ x, y }) => Message.Hovered({ x, y }))
             .onFocus(Message.Focused({ where: "keys" })),
           h.form.onSubmit(({ entries, fields }) =>
@@ -999,7 +1004,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(app.querySelectorAll("p").length, 2)
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
-    it.effect("a click reports the pointer of the pointerdown before it, and none for a click from the keyboard", () =>
+    it.effect("a pointerdown reports its button and pointer, and a click the pointer of the pointerdown before it, or none from the keyboard", () =>
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
@@ -1012,10 +1017,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         click(1)
         // Enter on the button: a click with no pointer, whatever pressed last.
         click(0)
-        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "pen" }))
+        button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 2, pointerType: "pen" }))
         click(1)
         yield* tick
-        expect(root.model()).toEqual(["mouse", "touch", "", "pen"])
+        expect(root.model()).toEqual(["mouse", "down 0 touch", "touch", "", "down 2 pen", "pen"])
       }).pipe(Effect.scoped))
 
     it.effect("a handler a render takes away no longer gets the event: the next element out does", () =>

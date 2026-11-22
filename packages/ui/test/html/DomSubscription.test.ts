@@ -74,7 +74,11 @@ const Phases = Component.define({
       "mousedown",
       ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })
     ),
-    DomSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" }))
+    DomSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" })),
+    DomSubscription.onDocument(
+      "pointercancel",
+      ({ button, pointerType }) => PhaseMessage.Heard({ what: `cancel ${button} ${pointerType}` })
+    )
   ]
 })
 
@@ -249,9 +253,12 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       yield* tick
       press()
       window.dispatchEvent(new FocusEvent("focus"))
+      inner.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, button: 2, pointerType: "pen" }))
       yield* tick
       // The stopped press reached capture; only the second press bubbled.
-      assert.deepStrictEqual(root.model(), ["capture", "bubble false", "focus"])
+      assert.deepStrictEqual(root.model(), ["capture", "bubble false", "focus", "cancel 2 pen"])
+      const s = yield* HtmlScene.make(Phases, {})
+      s.fireDocument("pointercancel", { button: 1 }).expect(Locator.tag("output")).toHaveText("cancel 1 mouse")
     }).pipe(Effect.scoped))
 })
 

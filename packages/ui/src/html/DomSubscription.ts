@@ -24,6 +24,12 @@ import * as globalEvents from "./internal/globalEvents.ts"
  * The events `onDocument` listens for, with their payloads: the same ones
  * an element's handler gets.
  *
+ * **Details**
+ *
+ * `pointerup` and `pointercancel` get the pointer payload. Together they
+ * end every press, including one the browser cancels, such as a touch that
+ * turns into a scroll, which sends no `mouseup`.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -34,6 +40,8 @@ export interface DocumentEvents {
   readonly mousedown: Html.PointerPayload
   readonly mouseup: Html.PointerPayload
   readonly click: Html.PointerPayload
+  readonly pointerup: Html.PointerPayload
+  readonly pointercancel: Html.PointerPayload
 }
 
 /**

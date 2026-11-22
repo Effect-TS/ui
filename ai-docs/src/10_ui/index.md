@@ -730,9 +730,9 @@ server's page state included, and `restore` when only history is the
 concern.
 
 In `@effect/ui-kit`, `Tooltip`, `TooltipProvider`, `ToastProvider`,
-`Dialog`, `Drawer` and `DrawerProvider` set `restore: false`, and `Field`
-saves `touched` without `focused`. Their props are the consumer's, so a
-consumer's `open` field still restores. A page that wants its dialog closed
+`Dialog`, `Drawer`, `DrawerProvider` and `Tabs` set `restore: false`, and
+`Field` saves `touched` without `focused`. Their props are the consumer's, so
+a consumer's `open` field or active tab still restores. A page that wants its dialog closed
 after Back clears that field in its own `restore`.
 
 ### Organizing an app
