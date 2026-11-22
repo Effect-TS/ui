@@ -478,6 +478,9 @@ const WaitBeforeCooling = Command.make(
  * `Opened`. With a field per tooltip, the previous one's `Dismissed` closes
  * it.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -508,6 +511,7 @@ export const TooltipProvider = Component.define({
         })
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ open: false, instant: false, turns: [], next: 1 }),
@@ -553,6 +557,9 @@ export const TooltipProvider = Component.define({
  * attributes the consumer chains after a part are the consumer's. A
  * handler the consumer adds to a part runs after the tooltip's own.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -574,6 +581,7 @@ export const Tooltip = Component.define({
       onChange: (value) => Message.ChangedGroup({ newest: newestOf(value.turns), next: value.next })
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({

@@ -49,6 +49,10 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      `<Name>Events` for a component
    - for a component, the Model, which holds only interaction state the
      consumer never stores
+   - for a component, its `restore`: `false` when the Model depends on a
+     Command an `update` started or on DOM state such as hover, focus or a
+     measurement, a function that clears those fields when the rest should
+     come back after Back, or left out
    - the message and event names, as past-tense facts
    - the Base UI features you leave out, and why
 4. **Implement** `packages/ui-kit/src/<Name>.ts`, unstyled, and add

@@ -1225,7 +1225,11 @@ const commandLayers = Layer.mergeAll(
  * after it. On back and forward, an instance created for the entry adopts its
  * saved state, so only the re-keyed subtree is restored, and an instance that
  * stayed mounted keeps its own. As with hydration, `init` is replayed and
- * every one of its Commands runs.
+ * every one of its Commands runs. A component's `restore` option in
+ * `Component.define` keeps it out of the snapshot, or saves another Model in
+ * place of its own. An owner of shared state whose `shares` has `collects`
+ * also saves the message its readers' reports last sent, and a restored owner
+ * compares their reports with it.
  *
  * A restored query result seeds the cache when its entry is cold, as after a
  * reload: the entry is stored stale, so the first frame shows the data with
@@ -1241,12 +1245,23 @@ const commandLayers = Layer.mergeAll(
  * fetch afresh.
  *
  * The snapshot is kept in memory per entry. When a push leaves an entry, it's
- * also written into that entry's `state`, so it survives a reload. When back
- * or forward leaves an entry, the host has already moved to the other entry,
- * so the snapshot stays in memory only. After a reload, that entry restores
- * the snapshot written when a push last left it, or starts fresh. When that
+ * also written into that entry's `state`, so it survives a reload. When that
  * write throws, the entry is written with its index only and
- * `SnapshotWriteFailed` is reported.
+ * `SnapshotWriteFailed` is reported. When back or forward leaves an entry,
+ * the host has already moved to the other entry, so the snapshot stays in
+ * memory only. After a reload, each root's first mount restores its part of
+ * the snapshot written when a push last left the entry, or starts fresh. Once
+ * that mount settles, the rest of its part is dropped, so a later remount
+ * starts from `init`. An instance that hydrates server-rendered HTML starts
+ * from the server's state instead.
+ *
+ * The snapshot holds server-rendered state only of components the client has
+ * built, since only a built component's `restore` option is known. One built
+ * but still waiting for its Layer or for its state to decode has the server's
+ * state saved through its `restore` option. One not built yet, such as a
+ * component below a waiting one, or a scoped child the server kept but the
+ * client hasn't drawn, has none of its server state saved, even after
+ * hydration has settled: after Back or forward it starts from `init`.
  *
  * A state whose Schema encodes asynchronously, as `Schema.File` does, joins
  * the snapshot in memory once it is encoded, after the push has written the
@@ -1299,7 +1314,19 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const blocks = new Map<string, number>()
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
-    let restoring: Record<string, unknown> | undefined
+    let restoring: Record<string, unknown> | undefined = readState(start.state)?.snapshot
+    restoring &&= { ...restoring }
+    const forgetRestoring = (root: services.RootHandle) => {
+      if (pending !== undefined) return
+      root.restored()
+      if (restoring === undefined) return
+      for (const path in restoring) {
+        if (path === root.path || path.startsWith(root.path + "/") || path === "~kept" + root.path) {
+          delete restoring[path]
+        }
+      }
+      if (Object.keys(restoring).every((key) => key === "~reported")) restoring = undefined
+    }
     let pending: {
       readonly location: Location
       readonly from: string
@@ -1648,16 +1675,19 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         roots.add(root)
         return () => {
           roots.delete(root)
+          forgetRestoring(root)
         }
       },
       restore: (path) => {
         const found = restoring?.[path]
-        delete restoring?.[path]
-        return found
+        if (found === undefined) return undefined
+        delete restoring![path]
+        return { state: found, reported: (restoring!["~reported"] as Record<string, unknown> | undefined)?.[path] }
       },
       entry: () => restoring,
       prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
       afterFlush: (root, info) => {
+        if (info.buildsPendingSince(0) === 0) forgetRestoring(root)
         if (pending === undefined || pending.since === undefined || root !== primary()) return
         if (info.flush < pending.since || info.buildsPendingSince(pending.since) > 0) return
         const done = pending

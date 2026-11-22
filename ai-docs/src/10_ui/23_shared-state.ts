@@ -24,8 +24,9 @@ const ProviderMessage = UiSchema.TaggedEnum({
 // The state is the owner's ordinary Model, so every change to it is an
 // `Update` in the log. `shares` picks what the readers below it see. Only a
 // headless component can share state: its `view` closure is the subtree it
-// shares with. An owner is never restored from history, so a reload doesn't
-// reopen a tooltip nobody is focused on.
+// shares with. An owner restores from history like any other component.
+// `restore: false` starts this one from `init` after Back or a reload, so it
+// doesn't reopen a tooltip nobody is focused on.
 export const TooltipProvider = Component.define({
   name: "TooltipProvider",
   scoped: false,
@@ -36,6 +37,7 @@ export const TooltipProvider = Component.define({
   // `receives` lists what `$.send(TooltipProvider, message)` takes. They are
   // facts, named like any other message.
   shares: { value: (model) => ({ open: model.open }), receives: ["FocusedTooltip", "BlurredTooltip"] },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({ open: null }),

@@ -284,6 +284,9 @@ const blurred = ({ disabled }: Partial<Html.BlurPayload>) => Message.BlurredCont
  * The field reads the nearest `Fieldset` above it, if there is one, and is
  * disabled while that fieldset or its own `disabled` prop says so.
  *
+ * History restore saves `touched` and not `focused`, so after Back, forward
+ * or a reload the field shows as touched and unfocused.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -301,6 +304,7 @@ export const Field = Component.define({
       onChange: (value) => Message.ChangedFieldset({ disabled: value.disabled })
     }
   },
+  restore: (model) => ({ ...model, focused: false }),
   elements: Html
 }).make({
   init: () => ({ focused: false, touched: false }),

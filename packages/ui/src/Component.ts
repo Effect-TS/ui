@@ -2135,6 +2135,8 @@ export interface Definition<
   readonly sharesSchema: Schema.Codec<SV, any> | undefined
   /** What an owner collects from the readers below it: the `collects` of `shares`. */
   readonly collects: SharesCollects<Msg, Rp> | undefined
+  /** What history restore saves of an instance: `false` for nothing, or the Model to save. */
+  readonly restore: false | ((model: Model, props: Props) => Model) | undefined
   /**
    * A slice for one tag: `msg` is that tag's member, and so is the message
    * `$.combine` takes functions over. The slice returned takes any `$`, so
@@ -2354,6 +2356,8 @@ export declare namespace Definition {
     readonly collects:
       | { readonly schema: Schema.Codec<any, any>; readonly onChange: (collected: ReadonlyArray<never>) => unknown }
       | undefined
+    /** What history restore saves of an instance: `false` for nothing, or the Model to save. */
+    readonly restore: false | ((model: any, props: any) => unknown) | undefined
   }
 
   /**
@@ -2577,7 +2581,8 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * JSON. The server defers it and its subtree to the client, and logs a
  * warning once per component, and the Router keeps no history entry for it.
  * Keep a secret in a leaf component, or in a service, so the rest of the
- * page still hydrates and restores.
+ * page still hydrates and restores. When only history is the concern, clear
+ * the field with `restore` instead: the server still sends it.
  *
  * **Example** (A counter)
  *
@@ -2863,6 +2868,20 @@ export const define = <
         }
       }
       | undefined
+    /**
+     * What Back, forward and a reload bring back of the component. Left out, the Router saves the
+     * instance's Model and query results when it leaves a history entry, and an instance mounted for
+     * that entry again starts from them. `false` saves nothing, so the instance starts from `init`,
+     * even from an entry an older build saved it in; the components below it are saved and restored
+     * as usual. A function returns the Model to save from the current Model and props. It runs
+     * when the Router saves, not on Back, so a field it clears is never written to `history.state`.
+     * One that throws leaves the instance out, with a warning logged once per component.
+     *
+     * Leave out what depends on a Command an `update` started, such as a timer or a request, and
+     * what only the DOM knew, such as hover, focus or a measurement: restore replays `init`'s
+     * Commands only. Hydration doesn't read it: the server sends the whole Model.
+     */
+    readonly restore?: false | ((model: Model, props: Props) => NoInfer<Model>) | undefined
   }
 ): Definition<
   Name,
@@ -2911,6 +2930,7 @@ export const define = <
     collects: shares !== undefined && typeof shares !== "function" && "collects" in shares
       ? shares.collects
       : undefined,
+    restore: options.restore,
     // A slice is the function given, with `$` bound to the Model and message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]

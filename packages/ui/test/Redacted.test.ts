@@ -155,7 +155,7 @@ const historyHooks = (stored: Record<string, unknown> = {}) => {
       return () => {}
     },
     afterFlush: () => {},
-    restore: (path) => stored[path],
+    restore: (path) => Object.hasOwn(stored, path) ? { state: stored[path], reported: undefined } : undefined,
     entry: () => stored,
     prefetch: () => () => {}
   }

@@ -1,6 +1,5 @@
 import { Component, MessageLog, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import * as services from "@effect/ui/internal/services"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
@@ -177,34 +176,6 @@ describe("shared state", () => {
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
       assert.deepStrictEqual(failed.map((entry) => entry.in), ["shares"])
     })))
-
-  it.effect("leaves an owner out of the history snapshot and never restores it", () =>
-    Effect.gen(function*() {
-      let handle: services.RootHandle | undefined
-      const restored: Array<string> = []
-      const hooks: services.RootHooks = {
-        attach: (root) => {
-          handle = root
-          return () => {}
-        },
-        afterFlush: () => {},
-        restore: (path) => {
-          restored.push(path)
-          return undefined
-        },
-        entry: () => undefined,
-        prefetch: () => () => {}
-      }
-      yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))
-      yield* TestHost.settle
-      const out: Record<string, unknown> = {}
-      handle!.snapshot(out)
-      const snapshot = Object.keys(out)
-      assert.notInclude(snapshot, "/App/TipsProvider[tips]")
-      assert.include(snapshot, "/App/TipsProvider[tips]/Tip[a]")
-      assert.notInclude(restored, "/App/TipsProvider[tips]")
-      assert.include(restored, "/App/TipsProvider[tips]/Tip[a]")
-    }).pipe(provideHost))
 })
 
 describe("shared state in a Scene", () => {

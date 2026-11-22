@@ -1004,6 +1004,9 @@ export const DialogTrigger = <Msg, R = never>(
  * closed, stays at `data-starting-style` and closes without waiting for a
  * transition.
  *
+ * History restore saves nothing of it: after Back, forward or a reload it
+ * starts from `init`.
+ *
  * @stability experimental
  * @category components
  * @since 0.1.0
@@ -1029,6 +1032,7 @@ export const Dialog = Component.define({
       report: (model, props) => (props.open ? 1 + model.nestedOpen : 0)
     }
   },
+  restore: false,
   elements: Html
 }).make({
   init: () => ({

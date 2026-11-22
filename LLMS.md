@@ -525,8 +525,9 @@ requirement from the component, use
 The state is the owner's Model, so the log records every change, and each
 reader's `Update` records what `$.shared` held, so `Story.fromLog` replays
 it. On the Wire the value is encoded through the `schema` of the owner's
-`shares`, `{ value, schema }`, or best effort without one. An owner's Model
-isn't restored from history. In a `Scene`,
+`shares`, `{ value, schema }`, or best effort without one. An owner
+restores from history like any other component, as **History restore**
+describes. In a `Scene`,
 `s.shared(TooltipProvider, value)` or
 `s.given(model, {}, [[TooltipProvider, value]])` gives readers a value, and
 each send to the owner is acknowledged with
@@ -693,9 +694,54 @@ A form's values live in the Model, so history restore writes them into
 field such as a password with `value: Schema.Redacted(Schema.String)`. A
 component whose state holds a `Schema.Redacted` anywhere is left out of
 both, so none of the form's fields restore or hydrate: keep the form a leaf
-component. Carry the secret as `Schema.Redacted(Schema.String)` in messages
-and Command args too, so the message log redacts it. The default `isEmpty`
-unwraps a `Redacted`, and a rule or the view reads it with `Redacted.value`.
+component. When only history is the concern, keep the field a plain string
+and clear it with `restore`, as **History restore** shows. Carry the secret
+as `Schema.Redacted(Schema.String)` in messages and Command args too, so the
+message log redacts it. The default `isEmpty` unwraps a `Redacted`, and a
+rule or the view reads it with `Redacted.value`.
+
+### History restore
+
+Before the Router leaves a history entry, it saves the state of every mounted
+instance: its Model and query results. On Back and forward, and on a reload of
+an entry a push left, an instance mounted for that entry starts from its saved
+state, and `init` runs again only for its Commands. An owner of shared state
+restores like any other component. One whose `shares` has `collects` also
+saves the message its readers' reports last sent, and compares their reports
+with it after Back.
+
+The `restore` option of `Component.define` changes what is saved:
+
+```ts
+const LoginPage = Component.define({
+  name: "LoginPage",
+  model: Schema.Struct({ email: Schema.String, password: Schema.String, submitting: Schema.Boolean }),
+  message: LoginMessage,
+  restore: (model) => ({ ...model, password: "", submitting: false })
+})
+```
+
+A function gets the Model and props and returns the Model to save. It runs
+when the Router saves, not on Back, so a field it clears is never written:
+here the password never reaches `history.state`, and no submit is left
+running. `restore: false` saves nothing, so the instance starts from `init`.
+The components below it are saved as usual. Hydration doesn't read
+`restore`: the server still sends the whole Model, and an instance the server
+rendered starts from it, not from the saved one.
+
+Leave a field out when it depends on a Command an `update` started, such as
+a timer or a request, or on something only the DOM knew, such as hover, focus
+or a measurement. Restore runs `init`'s Commands and no others, so after Back
+`submitting: true` would wait for a request that isn't running. A secret goes
+too. Use `Schema.Redacted` when a value must never be serialised, the
+server's page state included, and `restore` when only history is the
+concern.
+
+In `@effect/ui-kit`, `Tooltip`, `TooltipProvider`, `ToastProvider`,
+`Dialog`, `Drawer` and `DrawerProvider` set `restore: false`, and `Field`
+saves `touched` without `focused`. Their props are the consumer's, so a
+consumer's `open` field still restores. A page that wants its dialog closed
+after Back clears that field in its own `restore`.
 
 ### Organizing an app
 
