@@ -90,7 +90,6 @@ describe("Collapsible", () => {
         s.get(panel).attrs?.style,
         "--collapsible-panel-height:auto;--collapsible-panel-width:auto;animation-name:none"
       )
-      s.mounted(tracked(s), sent("ShowedPanel")).expectMount(tracked(s))
       s.mounted(tracked(s), sent("MeasuredPanel", size)).expectMount(tracked(s))
       assert.strictEqual(s.get(panel).attrs?.style, "--collapsible-panel-height:120px;--collapsible-panel-width:200px")
       s.mounted(tracked(s), sent("RenderedFirstFrame")).expectMount(tracked(s))

@@ -118,8 +118,9 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, withStyle } from "./internal/attributes.ts"
-import { frameOf, type Phase, settling, transitionAttrs } from "./internal/transition.ts"
+import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
+import { override } from "./internal/dom.ts"
+import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while
@@ -218,7 +219,6 @@ type Size = typeof Size.Type
 
 const Message = UiSchema.TaggedEnum({
   ClickedTrigger: {},
-  ShowedPanel: {},
   MeasuredPanel: { size: Size },
   RenderedFirstFrame: {},
   RenderedSize: {},
@@ -240,9 +240,6 @@ const Model = Schema.Struct({
 
 type Model = typeof Model.Type
 
-const statusOf = (model: Model, open: boolean): CollapsibleTransitionStatus =>
-  open ? (model.started ? null : "starting") : model.mounted && model.ending ? "ending" : null
-
 const px = (value: number | undefined): string => value === undefined ? "auto" : value + "px"
 
 const panelStyle = (model: Model, open: boolean): string =>
@@ -253,20 +250,19 @@ const panelStyle = (model: Model, open: boolean): string =>
     ...(model.instant ? ["transition-duration:0s", "animation-duration:0s"] : [])
   ].join(";")
 
-const layoutStyles = ["justify-content", "align-items", "align-content", "justify-items"]
+const layoutReset = {
+  "justify-content": "initial",
+  "align-items": "initial",
+  "align-content": "initial",
+  "justify-items": "initial"
+}
 
 // A panel that aligns its content to the end, as a slide-down panel does,
 // reports less than its content's size unless the alignment is reset.
 const measure = (panel: HTMLElement): Size => {
-  const saved = layoutStyles.map((name) =>
-    [name, panel.style.getPropertyValue(name), panel.style.getPropertyPriority(name)] as const
-  )
-  for (const name of layoutStyles) panel.style.setProperty(name, "initial", "important")
+  const restore = override(panel, layoutReset, "important")
   const size = { height: panel.scrollHeight, width: panel.scrollWidth }
-  for (const [name, value, priority] of saved) {
-    if (value === "") panel.style.removeProperty(name)
-    else panel.style.setProperty(name, value, priority)
-  }
+  restore()
   return size
 }
 
@@ -274,19 +270,11 @@ const TrackPanelArgs = {
   open: Schema.Boolean,
   mounted: Schema.Boolean,
   started: Schema.Boolean,
-  ending: Schema.Boolean,
   holdExit: Schema.Boolean,
   hiddenUntilFound: Schema.Boolean
 }
 
 type TrackPanelArgs = Schema.Struct<typeof TrackPanelArgs>["Type"]
-
-const phaseOf = (args: TrackPanelArgs): Phase => ({
-  open: args.open,
-  mounted: args.mounted && args.ending,
-  started: args.started,
-  holdExit: args.holdExit
-})
 
 const TrackPanel = Mount.makeStream(
   "TrackPanel",
@@ -307,7 +295,6 @@ const TrackPanel = Mount.makeStream(
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
 
       const opened = () => {
-        send(Message.ShowedPanel())
         send(Message.MeasuredPanel({ size: measure(node) }))
         twoFrames(() => {
           if (current.open && !current.started) send(Message.RenderedFirstFrame())
@@ -353,7 +340,7 @@ const TrackPanel = Mount.makeStream(
         if (next.open) cancelReveal()
         if (!previous.open && next.open) opened()
         else if (previous.open && !next.open) closed()
-        transition.follow(phaseOf(previous), phaseOf(next))
+        transition.follow(previous, next)
       }
 
       const controller = new AbortController()
@@ -430,16 +417,16 @@ export const Collapsible = Component.define({
       $.props.disabled === true
         ? model
         : $.emit(CollapsibleEvents.Toggled({ open: !$.props.open, reason: "trigger-press" })),
-    ShowedPanel: (model, _message, $) =>
-      $.props.open ? { ...model, mounted: true, ending: false } : model.mounted ? model : { ...model, mounted: true },
     MeasuredPanel: (model, { size }, $) =>
-      $.props.open ? { ...model, size } : { ...model, size, ending: false, instant: false, openOnLoad: false },
+      $.props.open
+        ? { ...model, size, mounted: true, ending: false }
+        : { ...model, size, mounted: true, ending: false, instant: false, openOnLoad: false },
     RenderedFirstFrame: (model, _message, $) => $.props.open && !model.started ? { ...model, started: true } : model,
     RenderedSize: (model, _message, $) => !$.props.open && model.mounted ? { ...model, ending: true } : model,
     FinishedTransition: (model, { open }, $) => {
       if (open !== $.props.open) return model
       if (open) return $.set({ ...model, size: null, instant: false }).emit(CollapsibleEvents.Settled({ open }))
-      return model.mounted && model.ending && $.props.holdExit !== true
+      return model.ending && $.props.holdExit !== true
         ? $.set({ ...model, mounted: false, started: false, ending: false, size: null }).emit(
           CollapsibleEvents.Settled({ open })
         )
@@ -459,7 +446,10 @@ export const Collapsible = Component.define({
     const disabled = props.disabled === true
     const hiddenUntilFound = props.hiddenUntilFound === true
     const mounted = open || model.mounted
-    const transitionStatus = statusOf(model, open)
+    const transitionStatus: CollapsibleTransitionStatus = statusOf(
+      { mounted: model.ending, started: model.started },
+      props
+    )
     let panelId = p.id("panel")
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus).attr("data-disabled", flag(disabled))
@@ -468,32 +458,35 @@ export const Collapsible = Component.define({
 
     const trigger = p.part("button", (b) =>
       b
-        .attr("data-panel-open", flag(open))
-        .attr("data-disabled", flag(disabled))
-        .attr("data-starting-style", flag(transitionStatus === "starting"))
-        .attr("data-ending-style", flag(transitionStatus === "ending"))
-        .attr("type", "button")
-        .attr("aria-expanded", open ? "true" : "false")
-        .attr("aria-disabled", undefined)
+        .attrs({
+          "data-panel-open": flag(open),
+          "data-disabled": flag(disabled),
+          "data-starting-style": flag(transitionStatus === "starting"),
+          "data-ending-style": flag(transitionStatus === "ending"),
+          type: "button",
+          "aria-expanded": open ? "true" : "false",
+          "aria-disabled": undefined
+        })
         .disabled(disabled)
         .onClick(Message.ClickedTrigger())
         .forward((node) => node.attr("aria-controls", open ? panelId : undefined)))
 
     const panelPart = p.part("div", (b, id: string) =>
       states(b)
-        .attr("id", id)
-        .attr("hidden", mounted ? undefined : hiddenUntilFound ? "until-found" : "")
-        .attr("data-starting-style", flag(transitionStatus === "starting" || (!mounted && hiddenUntilFound)))
+        .attrs({
+          id,
+          hidden: mounted ? undefined : hiddenUntilFound ? "until-found" : "",
+          "data-starting-style": flag(transitionStatus === "starting" || (!mounted && hiddenUntilFound))
+        })
         .forward((node) => {
-          panelId = node.attrs.id ?? id
-          return node.attr("style", withStyle(node.attrs.style, panelStyle(model, open)))
+          panelId = node.elementAttrs.id ?? id
+          return ownStyle(panelStyle(model, open))(node)
         })
         .onMount(
           TrackPanel({
             open,
-            mounted: model.mounted,
+            mounted: model.ending,
             started: model.started,
-            ending: model.ending,
             holdExit: props.holdExit === true,
             hiddenUntilFound
           })
