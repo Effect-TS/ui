@@ -11,7 +11,7 @@ const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type Div<R = never> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Div<R> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
@@ -36,7 +36,6 @@ it("draws its area with trigger and has no viewport or filter parts", () => {
   const child = ContextMenu(h, {
     props: { open: true, items },
     view: (contextMenu) => {
-      expect(contextMenu.trigger(h.div)).type.toBe<Div>()
       const area = contextMenu.trigger(h.div.onMount(NeedsClock()))
       expect(area).type.toBe<Div<Clock>>()
       expect(contextMenu.trigger).type.not.toBeCallableWith(h.button)

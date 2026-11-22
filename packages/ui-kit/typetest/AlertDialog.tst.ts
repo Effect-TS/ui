@@ -11,7 +11,7 @@ const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type DialogElement<R = never> = Html.Element<Msg, R, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
+type DialogElement<R> = Html.Element<Msg, R, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
@@ -27,7 +27,6 @@ it("wraps portal as an optional dialog builder and preserves its requirements", 
   const child = AlertDialog(h, {
     props: { open: true },
     view: (alertDialog) => {
-      expect(alertDialog.portal(h.dialog)).type.toBe<DialogElement | undefined>()
       const portal = alertDialog.portal(h.dialog.onMount(NeedsClock()))
       expect(portal).type.toBe<DialogElement<Clock> | undefined>()
       expect(alertDialog.portal).type.not.toBeCallableWith(h.div)

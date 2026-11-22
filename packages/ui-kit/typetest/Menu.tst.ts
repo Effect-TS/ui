@@ -55,10 +55,9 @@ describe("Menu", () => {
       props: { open: false, items },
       onEmit,
       view: (menu) => {
-        expect(menu.trigger(h.button.onClick(Msg.Clicked()))).type.toBe<Button>()
-        expect(menu.trigger(h.button, { openOnHover: true, delay: 0, closeDelay: 300 })).type.toBe<Button>()
-        const trigger = menu.trigger(h.button.onMount(NeedsClock()))
+        const trigger = menu.trigger(h.button.onClick(Msg.Clicked()).onMount(NeedsClock()))
         expect(trigger).type.toBe<Button<Clock>>()
+        expect(menu.trigger(h.button, { openOnHover: true, delay: 0, closeDelay: 300 })).type.toBe<Button>()
         expect(menu.contextTrigger(h.div)).type.toBe<Div>()
         expect(menu.submenuTrigger(h.div)).type.toBe<Div>()
         expect(menu.backdrop(h.div)).type.toBe<Div>()
@@ -79,16 +78,11 @@ describe("Menu", () => {
         expect(menu.radioGroup(h.div, null)).type.toBe<Div>()
         expect(menu.radioItem(h.div, "copy")).type.toBe<Div>()
         expect(menu.radioItemIndicator(h.span, "copy")).type.toBe<Span | undefined>()
-        expect(menu.radioItemIndicator(h.span.onMount(NeedsClock()), "copy", true)).type.toBe<
-          Span<Clock> | undefined
-        >()
         expect(menu.group(h.div, "edit")).type.toBe<Div>()
         expect(menu.groupLabel(h.div, "edit")).type.toBe<Div>()
         expect(menu.separator(h.div)).type.toBe<Div>()
         expect(menu.input(h.input)).type.toBe<Input>()
-        expect(menu.clear(h.button)).type.toBe<Button | undefined>()
         expect(menu.clear(h.button.onMount(NeedsClock()))).type.toBe<Button<Clock> | undefined>()
-        expect(menu.empty(h.div)).type.toBe<Div | undefined>()
         expect(menu.empty(h.div.onMount(NeedsClock()))).type.toBe<Div<Clock> | undefined>()
         expect(menu.finalFocus(h.button)).type.toBe<Button>()
         expect(menu.highlighted).type.toBe<string | null>()

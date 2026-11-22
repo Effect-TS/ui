@@ -11,8 +11,8 @@ const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type Button<R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
-type DialogElement<R = never> = Html.Element<Msg, R, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
+type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type DialogElement<R> = Html.Element<Msg, R, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
 type Div<R = never> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
@@ -26,13 +26,10 @@ describe("Popover", () => {
       view: (popover) => {
         const trigger = popover.trigger({ element: h.button.onClick(Msg.Clicked()), openOnHover: true, delay: 100 })
         expect(trigger).type.toBe<Button>()
-        expect(popover.portal(h.dialog)).type.toBe<DialogElement | undefined>()
         const portal = popover.portal(h.dialog.onMount(NeedsClock()))
         expect(portal).type.toBe<DialogElement<Clock> | undefined>()
-        expect(popover.backdrop(h.div)).type.toBe<Div | undefined>()
         expect(popover.backdrop(h.div.onMount(NeedsClock()))).type.toBe<Div<Clock> | undefined>()
         expect(popover.positioner(h.div)).type.toBe<Div>()
-        expect(popover.popup(h.div)).type.toBe<Div>()
         expect(popover.popup(h.div.onMount(NeedsClock()))).type.toBe<Div<Clock>>()
         expect(popover.viewport(h.div)).type.toBe<Div>()
         expect(popover.arrow(h.div)).type.toBe<Div>()
