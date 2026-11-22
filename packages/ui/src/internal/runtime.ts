@@ -5191,9 +5191,8 @@ const setup = (
     }
     const active: Array<Pick<View.Owned, "eventOptions">> = []
     for (const layer of owned) {
-      const target = strict ? ownerInstance(inst, layer.owner) : owners.get(layer.owner)
-      if (target === undefined || target.closed) continue
-      add(target, layer)
+      if (!strict && owners.get(layer.owner)?.closed) continue
+      add(ownerInstance(inst, layer.owner), layer)
       active.push(layer)
     }
     add(inst.author, view)

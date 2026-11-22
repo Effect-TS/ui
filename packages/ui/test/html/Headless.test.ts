@@ -555,7 +555,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
 
   it.effect("removing a focused headless part during synchronous blur does not throw or dispatch to the closed owner", () =>
     Effect.gen(function*() {
-      let frameBlurs = 0
+      let frameFocusOuts = 0
       const Frame = Component.define({
         name: "Frame",
         scoped: false,
@@ -564,11 +564,14 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => {
-          frameBlurs++
-          return model
-        },
-        parts: (_, p) => ({ root: p.part("div", (b) => b.onBlur("blurred")) })
+        update: (model) => model,
+        parts: (_, p) => ({
+          root: p.part("div", (b) =>
+            b.on("focusout", () => {
+              frameFocusOuts++
+              return "blurred" as const
+            }))
+        })
       })
       const Page = Component.define({
         name: "Page",
@@ -592,11 +595,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       yield* BrowserHost.mountEffect(Page, {}, app)
       yield* tick
       const main = app.querySelector("main")!
-      const root = main.querySelector("div")!
       const button = main.querySelector("button")!
-      root.dispatchEvent(new FocusEvent("blur"))
+      button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
       yield* tick
-      assert.strictEqual(frameBlurs, 1)
+      assert.strictEqual(frameFocusOuts, 1)
       const errors: Array<unknown> = []
       const removeChild = main.removeChild.bind(main)
       main.removeChild = ((child: Node) => {
@@ -612,7 +614,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       HtmlLocator.click(button)
       yield* tick
       assert.deepStrictEqual(errors, [])
-      assert.strictEqual(frameBlurs, 1)
+      assert.strictEqual(frameFocusOuts, 1)
       assert.strictEqual(app.querySelector("button")!.textContent, "Show")
     }).pipe(Effect.scoped))
 })
