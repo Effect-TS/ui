@@ -548,6 +548,25 @@ export interface FocusWithinPayload {
 }
 
 /**
+ * The payload of `focus`: whether the element shows a focus ring, as
+ * `:focus-visible` matches it as the event fires.
+ *
+ * **Details**
+ *
+ * A browser shows the ring for focus that came from the keyboard, and not
+ * for focus that came from a press, on the element or on another one whose
+ * handler moved focus. A component that opens on keyboard focus only reads
+ * it here. `focusVisible` is `true` where the browser can't tell.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface FocusPayload {
+  readonly focusVisible: boolean
+}
+
+/**
  * The payload of `blur`: whether the element that lost focus is disabled
  * as the event fires.
  *
@@ -607,7 +626,7 @@ export interface Events {
   readonly mouseleave: HoverPayload
   readonly keydown: KeyPayload
   readonly keyup: KeyPayload
-  readonly focus: {}
+  readonly focus: FocusPayload
   readonly blur: BlurPayload
   readonly focusin: FocusWithinPayload
   readonly focusout: FocusOutPayload
@@ -940,7 +959,7 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onFocus(handler: View.Handler<Msg, {}>): this {
+  onFocus(handler: View.Handler<Msg, FocusPayload>): this {
     return this.on("focus" as any, handler as any)
   }
   /**

@@ -43,6 +43,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
 - [OTPField](src/OTPField.ts): a one-time code field, a row of one-character inputs whose code lives in your Model. It moves focus as the user types, takes a pasted or autofilled code whole, and submits it as one form value.
 - [Popover](src/Popover.ts): a `Dialog` anchored to its trigger, opened by a press or by hover. It has several triggers, with `PopoverTrigger` for one drawn elsewhere, and a `viewport` part that animates the content and the popup's size as it moves between them.
+- [PreviewCard](src/PreviewCard.ts): a card that previews what a link leads to while the link is hovered or focused, placed against the line of a wrapped link the pointer rested on. The pointer can cross diagonally from the link to the card, and `PreviewCardTrigger` opens it from a link drawn elsewhere.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [RadioGroup](src/RadioGroup.ts): a controlled group of radio buttons with roving focus, arrow-key navigation, animated indicators and a hidden form input.
 - [ScrollArea](src/ScrollArea.ts): a native scroll container with custom scrollbars, overflow state, and edge-fade CSS variables.

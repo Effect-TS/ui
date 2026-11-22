@@ -178,7 +178,7 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * fields read from the view. No button counts as the submitter.
    */
   submit(locator: Locator.Locator): this
-  /** Sends `focus`. */
+  /** Sends `focus` as the keyboard would, with `focusVisible` true. */
   focus(locator: Locator.Locator): this
   /** Sends `blur`. */
   blur(locator: Locator.Locator): this
@@ -546,7 +546,7 @@ class StepsImpl extends internal.SceneCursor {
     })
   }
   focus(locator: Locator.Locator): this {
-    return this.one("focus", locator, "focus", () => ({}))
+    return this.one("focus", locator, "focus", () => ({ focusVisible: true }))
   }
   blur(locator: Locator.Locator): this {
     return this.one("blur", locator, "blur", () => ({}))

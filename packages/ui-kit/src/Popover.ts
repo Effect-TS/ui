@@ -208,7 +208,6 @@ import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
-import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
@@ -226,10 +225,18 @@ import {
   DialogTrigger,
   type DialogTriggerElement
 } from "./Dialog.ts"
-import { type Attributed, attrSelector, flag, idOf, idSelector, withStyle } from "./internal/attributes.ts"
-import { override } from "./internal/dom.ts"
-import { methodOf } from "./internal/interaction.ts"
+import { type Attributed, attrSelector, flag, idOf, idSelector, type Keyed, withStyle } from "./internal/attributes.ts"
+import { detachedChannel } from "./internal/detached.ts"
+import { methodOf, Point, pointOf } from "./internal/interaction.ts"
+import { atDocumentOrigin } from "./internal/topLayer.ts"
 import { frameOf, whenFinished } from "./internal/transition.ts"
+import {
+  stepViewport,
+  TrackViewport,
+  ViewportChange,
+  viewportContent,
+  ViewportTransition
+} from "./internal/viewport.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -303,8 +310,8 @@ export type PopoverAlign = typeof PopoverAlign.Type
  * - `positionMethod`: `"absolute"`, the default, which scrolls with the page,
  *   or `"fixed"`, which is placed again on every scroll and doesn't make the
  *   page taller when the popup reaches past its end.
- * - `anchor`: the id of an element to place the popup against instead of
- *   the trigger.
+ * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
+ *   the popup against instead of the trigger.
  *
  * @stability experimental
  * @category schemas
@@ -408,8 +415,6 @@ export type PopoverEvents = typeof PopoverEvents.Type
  */
 export type PopoverInstant = "click" | "dismiss" | "focus" | "trigger-change"
 
-const Point = Schema.Struct({ x: Schema.Number, y: Schema.Number })
-
 const Hover = Schema.Struct({ delay: Schema.Number, closeDelay: Schema.Number })
 
 type Hover = typeof Hover.Type
@@ -430,9 +435,7 @@ const PopoverMessage = UiSchema.TaggedEnum({
   SettledSwitch: {},
   Closed: {},
   Reopened: {},
-  StartedTransition: { direction: Schema.NullOr(Schema.String) },
-  AdvancedTransition: {},
-  EndedTransition: {},
+  ChangedViewport: { change: ViewportChange },
   ChangedPlacement: { placement: Positioning.Placement }
 })
 
@@ -451,7 +454,7 @@ const PopoverModel = Schema.Struct({
   method: Schema.NullOr(DialogInteraction),
   closeReason: Schema.NullOr(PopoverDismissReason),
   switched: Schema.Boolean,
-  transition: Schema.NullOr(Schema.Struct({ direction: Schema.NullOr(Schema.String), entered: Schema.Boolean })),
+  transition: Schema.NullOr(ViewportTransition),
   placement: Schema.NullOr(Positioning.Placement)
 })
 
@@ -488,8 +491,6 @@ const WaitBeforeClosingOnPress = Command.make(
   { args: {}, mode: "switch" },
   () => Effect.as(Effect.sleep(Duration.millis(patience)), PopoverMessage.CompletedWaitBeforeClosingOnPress())
 )
-
-type Keyed = View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }
 
 const activeOf = (model: PopoverModel, props: PopoverProps): string | null => props.triggerId ?? model.trigger
 
@@ -539,32 +540,7 @@ const left = (next: PopoverModel, $: PopoverUpdate) => {
     : next
 }
 
-const pointOf = ({ x, y }: Partial<Html.HoverPayload>): typeof Point.Type | null =>
-  x === undefined || y === undefined ? null : { x, y }
-
-const detached = new Map<string, (message: PopoverMessage) => void>()
-
-const fromDetached = (popupId: string) =>
-  Subscription.make(
-    "detachedTriggers",
-    popupId,
-    (id) =>
-      Stream.callback<PopoverMessage>((queue) =>
-        Effect.acquireRelease(
-          Effect.sync(() => {
-            const send = (message: PopoverMessage) => {
-              Queue.offerUnsafe(queue, message)
-            }
-            detached.set(id, send)
-            return send
-          }),
-          (send) =>
-            Effect.sync(() => {
-              if (detached.get(id) === send) detached.delete(id)
-            })
-        )
-      )
-  )
+const detached = detachedChannel<PopoverMessage>("detachedTriggers")
 
 const TrackDetachedTrigger = Mount.makeStream(
   "TrackDetachedTrigger",
@@ -572,7 +548,7 @@ const TrackDetachedTrigger = Mount.makeStream(
   (node: HTMLButtonElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
-      const send = (message: PopoverMessage) => detached.get(current.popupId)?.(message)
+      const send = (message: PopoverMessage) => detached.send(current.popupId, message)
       const triggerId = () => node.id === "" ? null : node.id
       const controller = new AbortController()
       const { signal } = controller
@@ -644,191 +620,6 @@ const TrackSwitch = Mount.makeStream(
         () =>
           Effect.sync(() => {
             generation++
-          })
-      )
-    })
-)
-
-interface Size {
-  readonly width: number
-  readonly height: number
-}
-
-const sizeOf = (element: HTMLElement): Size => {
-  const style = element.ownerDocument.defaultView?.getComputedStyle(element)
-  const width = parseFloat(style?.width ?? "")
-  const height = parseFloat(style?.height ?? "")
-  return {
-    width: Number.isFinite(width) ? width : element.offsetWidth,
-    height: Number.isFinite(height) ? height : element.offsetHeight
-  }
-}
-
-const sized = (element: HTMLElement, prefix: string, size: Size | string): void => {
-  element.style.setProperty(prefix + "-width", typeof size === "string" ? size : size.width + "px")
-  element.style.setProperty(prefix + "-height", typeof size === "string" ? size : size.height + "px")
-}
-
-const unsized = (element: HTMLElement | null, prefix: string): void => {
-  element?.style.removeProperty(prefix + "-width")
-  element?.style.removeProperty(prefix + "-height")
-}
-
-const toward = (offset: number, after: string, before: string): string => offset > 5 ? after : offset < -5 ? before : ""
-
-const directionOf = (from: Element | null, to: Element | null): string | null => {
-  if (from === null || to === null) return null
-  const a = from.getBoundingClientRect()
-  const b = to.getBoundingClientRect()
-  const x = b.left + b.width / 2 - (a.left + a.width / 2)
-  const y = b.top + b.height / 2 - (a.top + a.height / 2)
-  return toward(x, "right", "left") + " " + toward(y, "down", "up")
-}
-
-const containerOf = (viewport: HTMLElement, name: string): HTMLElement | null => {
-  for (const child of viewport.children) {
-    if (child.hasAttribute(name)) return child as HTMLElement
-  }
-  return null
-}
-
-const container = new Html.Element<never>("div")
-const previousContainer = container.key("previous").attrs({
-  "data-previous": "",
-  inert: "",
-  style: "position:absolute"
-})
-const previousNode = View.toNode(previousContainer)
-const endingNode = View.toNode(previousContainer.attr("data-ending-style", ""))
-
-const TrackViewport = Mount.makeStream(
-  "TrackViewport",
-  {
-    args: {
-      open: Schema.Boolean,
-      trigger: Schema.String,
-      side: Schema.String,
-      positionerId: Schema.String,
-      transitioning: Schema.Boolean
-    }
-  },
-  (node: HTMLElement, args, changes) =>
-    Stream.callback<PopoverMessage>((queue) => {
-      const document = node.ownerDocument
-      const frame = frameOf(document.defaultView)
-      const send = (message: PopoverMessage) => {
-        Queue.offerUnsafe(queue, message)
-      }
-      let current = args
-      let content = containerOf(node, "data-current")
-      let outgoing: HTMLElement | null = null
-      let committed: Size | null = null
-      let outgoingSize: Size | null = null
-      let anchored = (): void => {}
-      let resizing = 0
-      let transition = 0
-      let released = false
-
-      const positionerOf = () => document.getElementById(current.positionerId)
-      const popupOf = (positioner: HTMLElement): HTMLElement | null => {
-        let element: HTMLElement | null = node
-        while (element !== null && element.parentElement !== positioner) element = element.parentElement
-        return element
-      }
-
-      const anchoring = (popup: HTMLElement): () => void => {
-        const rtl = document.defaultView?.getComputedStyle(popup).direction === "rtl"
-        const top = current.side === "top"
-        const left = current.side === "left" || current.side === (rtl ? "inline-end" : "inline-start")
-        if (!top && !left) return () => {}
-        return override(popup, { position: "absolute", [top ? "bottom" : "top"]: "0", [left ? "right" : "left"]: "0" })
-      }
-
-      const resize = (): void => {
-        const positioner = positionerOf()
-        const popup = positioner === null ? null : popupOf(positioner)
-        if (positioner === null || popup === null) return
-        const mine = ++resizing
-        anchored()
-        anchored = anchoring(popup)
-        sized(popup, "--popup", "auto")
-        const previous = containerOf(node, "data-previous")
-        const restores = [
-          override(popup, { position: "static", transform: "none", scale: "1" }),
-          override(positioner, { "--available-width": "max-content", "--available-height": "max-content" }),
-          ...(content === null ? [] : [override(content, { animation: "none", transition: "none" })]),
-          ...(previous === null ? [] : [override(previous, { display: "none" })])
-        ]
-        sized(positioner, "--positioner", "max-content")
-        const before = committed
-        const next = sizeOf(popup)
-        committed = next
-        if (before !== null) sized(popup, "--popup", before)
-        restores.reverse().forEach((restore) => restore())
-        sized(positioner, "--positioner", next)
-        if (before === null) return
-        outgoingSize = before
-        const live = () => mine === resizing && !released
-        frame(() => {
-          if (!live()) return
-          sized(popup, "--popup", next)
-          whenFinished(() => [popup], frame, live, () => sized(popup, "--popup", "auto"))
-        })
-      }
-
-      const fill = (): void => {
-        const previous = containerOf(node, "data-previous")
-        if (previous === null || outgoing === null) return
-        previous.replaceChildren(...outgoing.childNodes)
-        if (outgoingSize !== null) sized(previous, "--popup", outgoingSize)
-        outgoing = null
-        // The new content's style was computed when it was measured, so reaching the starting style would
-        // itself transition. This computes it with no transition, for the frame below to transition out of.
-        const restore = content === null ? undefined : override(content, { transition: "none" })
-        void node.offsetWidth
-        restore?.()
-        const mine = ++transition
-        const live = () => mine === transition && !released
-        const moving = [content, previous]
-        frame(() => {
-          if (!live()) return
-          send(PopoverMessage.AdvancedTransition())
-          frame(() => whenFinished(() => moving, frame, live, () => send(PopoverMessage.EndedTransition())))
-        })
-      }
-
-      const onChange = (next: typeof args): void => {
-        const previous = current
-        current = next
-        const leaving = content
-        content = containerOf(node, "data-current")
-        if (!next.open) {
-          outgoing = null
-          transition++
-          if (previous.transitioning) send(PopoverMessage.EndedTransition())
-          return
-        }
-        const switched = previous.open && previous.trigger !== next.trigger && leaving !== content
-        if (switched) outgoing = leaving
-        if (switched || previous.side !== next.side) resize()
-        if (switched) {
-          send(PopoverMessage.StartedTransition({
-            direction: directionOf(document.querySelector(previous.trigger), document.querySelector(next.trigger))
-          }))
-        } else if (next.transitioning) fill()
-      }
-
-      return Effect.acquireRelease(
-        Effect.sync(resize).pipe(
-          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
-        ),
-        () =>
-          Effect.sync(() => {
-            released = true
-            anchored()
-            const positioner = positionerOf()
-            unsized(positioner, "--positioner")
-            unsized(positioner === null ? null : popupOf(positioner), "--popup")
           })
       )
     })
@@ -1011,14 +802,10 @@ export const Popover = Component.define({
     SettledSwitch: (model, _message, $) => $.props.open ? { ...model, switched: true } : model,
     Closed: (model) => ({ ...model, stale: true, patient: false, method: null }),
     Reopened: (model) => model.stale ? { ...model, reason: null, stale: false } : model,
-    StartedTransition: (model, { direction }, $) =>
-      $.props.open ? { ...model, transition: { direction, entered: false } } : model,
-    AdvancedTransition: (model) =>
-      model.transition === null ? model : { ...model, transition: { ...model.transition, entered: true } },
-    EndedTransition: (model) => ({ ...model, transition: null }),
+    ChangedViewport: (model, { change }, $) => stepViewport(model, change, $.props.open),
     ChangedPlacement: (model, { placement }) => ({ ...model, placement })
   },
-  subscriptions: (_model, props) => props.id === undefined ? [] : [fromDetached(props.id)],
+  subscriptions: (_model, props) => props.id === undefined ? [] : [detached.subscription(props.id)],
   parts: (model, p) => {
     const props = p.props
     const open = props.open
@@ -1070,7 +857,7 @@ export const Popover = Component.define({
     const portalPart = p.part("dialog", (b) =>
       b.forward((node) =>
         tracked.positionMethod === "absolute"
-          ? node.attr("style", withStyle(node.elementAttrs.style, "position:absolute;inset:0 auto auto 0"))
+          ? node.attr("style", withStyle(node.elementAttrs.style, atDocumentOrigin))
           : node
       ))
     const backdropPart = p.part(
@@ -1150,33 +937,17 @@ export const Popover = Component.define({
               "data-transitioning": flag(transition !== null),
               "data-instant": instant
             })
-            .forward((node) => {
-              const built = View.build(node, [])
-              const current = {
-                ...View.build(
-                  container
-                    .key("current:" + (active ?? ""))
-                    .attrs({
-                      "data-current": "",
-                      "data-starting-style": flag(transition !== null && !transition.entered)
-                    }),
-                  []
-                ),
-                children: built.children
-              }
-              return {
-                ...built,
-                children: transition === null ? [current] : [transition.entered ? endingNode : previousNode, current]
-              }
-            })
+            .forward((node) => viewportContent(node, active ?? "", transition))
           return dialog.mounted
-            ? viewport.onMount(TrackViewport({
-              open,
-              trigger: triggerSelector,
-              side,
-              positionerId,
-              transitioning: transition !== null
-            }))
+            ? viewport.onMount(
+              TrackViewport({
+                open,
+                trigger: triggerSelector,
+                side,
+                positionerId,
+                transitioning: transition !== null
+              }).pipe(Mount.map((change) => PopoverMessage.ChangedViewport({ change })))
+            )
             : viewport
         })
         const popupPart = p.part("div", (b) => {
@@ -1221,13 +992,13 @@ export const Popover = Component.define({
             }
           ),
           portal: <B extends View.PartTarget<"dialog">>(element: B) => dialog.portal(portalPart(element)),
-          backdrop: <B extends Keyed>(element: B): ReturnType<B["attr"]> | undefined => {
+          backdrop: <B extends Keyed<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
             const out = dialog.backdrop(element.key(backdropKey))
             return out === undefined ? undefined : backdropPart(out)
           },
           positioner: View.wrapPart(
             positioner,
-            <B extends Keyed>(element: B): ReturnType<B["attr"]> =>
+            <B extends Keyed<"div">>(element: B): ReturnType<B["attr"]> =>
               positioner(element.key(positionerId)).attr("data-instant", instant)
           ),
           popup: <B extends View.PartTarget<"div">>(element: B) => popupPart(dialog.popup(element)),

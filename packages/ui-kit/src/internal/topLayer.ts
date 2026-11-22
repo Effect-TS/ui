@@ -29,3 +29,20 @@ export const raiseAbove = (shown: Element): void => {
     element.showPopover()
   }
 }
+
+export const portalBox = [
+  "position:fixed",
+  "inset:0",
+  "width:0",
+  "height:0",
+  "max-width:none",
+  "max-height:none",
+  "margin:0",
+  "padding:0",
+  "border:0",
+  "overflow:visible",
+  "background:transparent",
+  "color:inherit"
+].join(";")
+
+export const atDocumentOrigin = "position:absolute;inset:0 auto auto 0"

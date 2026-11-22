@@ -1,3 +1,5 @@
+import type * as View from "@effect/ui/View"
+
 // A data attribute is present, with an empty value, or absent.
 export const flag = (on: boolean | undefined): string | undefined => on === true ? "" : undefined
 
@@ -29,6 +31,8 @@ export const noSelect = "user-select:none;-webkit-user-select:none"
 export const attrSelector = (name: string, value: string): string => `[${name}="${value.replace(/["\\]/g, "\\$&")}"]`
 
 export const idSelector = (id: string): string => attrSelector("id", id)
+
+export type Keyed<Tag extends string> = View.PartTarget<Tag> & { readonly key: (key: string) => View.PartTarget<Tag> }
 
 export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B

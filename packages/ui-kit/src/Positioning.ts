@@ -73,8 +73,9 @@
  *   as the point a context menu opened at, instead of an element. Nothing
  *   moves it, so use `"fixed"` as the `positionMethod`.
  * - An arrow needs an id, passed as `arrowId`, and a size of its own.
- * - There's no placing against one line of an inline anchor and no
- *   function-valued offsets.
+ * - `inline` places the popup against one line of a link that wraps,
+ *   instead of the box around all its lines.
+ * - There are no function-valued offsets.
  *
  * **Example** (A popup below its anchor, and above it when it doesn't fit)
  *
@@ -116,6 +117,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { idSelector } from "./internal/attributes.ts"
+import { inlineEdges, lineAt, type Lines, linesOf } from "./internal/inlineRect.ts"
 
 /**
  * The side of the anchor a popup shows on. `"inline-start"` and
@@ -209,6 +211,30 @@ export const Rect = Schema.Struct({ x: Schema.Number, y: Schema.Number, width: S
  * @since 0.1.0
  */
 export type Rect = typeof Rect.Type
+
+/**
+ * Where the pointer rested on an inline anchor: the point, in viewport
+ * coordinates, and `line`, the index of the line under it among the
+ * anchor's lines from the top, or `null` when it was on none.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const InlineHit = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  line: Schema.NullOr(Schema.Number)
+})
+
+/**
+ * Where the pointer rested on an inline anchor.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type InlineHit = typeof InlineHit.Type
 
 /**
  * The area a popup keeps inside: `"clipping-ancestors"`, which is the
@@ -955,6 +981,15 @@ export type Placement = typeof Placement.Type
  *   without leaving the popup.
  * - `leaveCoordinates`: don't write `left` and `top`, and leave whatever
  *   is there. False when left out.
+ * - `inline`: the anchor is inline text, such as a link, that can wrap over
+ *   several lines. The popup is placed against one line instead of the box
+ *   around all of them: the line `inlineHit` names, or else the line under
+ *   its point. Without a hit for the anchor, or when no line is under the
+ *   point, it is placed against the first line for `"top"`, the last line
+ *   for `"bottom"`, and the lines that reach furthest toward the side for
+ *   `"left"` and `"right"`. An anchor on one line is measured as a whole.
+ *   False when left out.
+ * - `inlineHit`: where the pointer rested on the anchor, for `inline`.
  *
  * @stability experimental
  * @category schemas
@@ -969,7 +1004,9 @@ export const TrackPositionArgs = Schema.Struct({
   anchorRect: Schema.optional(Schema.NullOr(Rect)),
   arrowId: Schema.NullOr(Schema.String),
   offsetAsPadding: Schema.Boolean,
-  leaveCoordinates: Schema.optional(Schema.Boolean)
+  leaveCoordinates: Schema.optional(Schema.Boolean),
+  inline: Schema.optional(Schema.Boolean),
+  inlineHit: Schema.optional(Schema.NullOr(InlineHit))
 })
 
 /**
@@ -1002,6 +1039,10 @@ const arrowY = "--ui-kit-arrow-y"
  * - `arrowId`: the id of its arrow, when it draws one.
  * - `offsetAsPadding`: see `TrackPositionArgs`. False when left out.
  * - `leaveCoordinates`: see `TrackPositionArgs`. False when left out.
+ * - `inline` and `inlineHit`: see `TrackPositionArgs`. False and `null`
+ *   when left out. `inlineHit` is dropped while `props.anchor` gives
+ *   another anchor, an element or a rectangle, since the pointer rested on
+ *   the popup's own.
  *
  * The result is plain data, so a view can also read the defaults from it:
  * `args.options.side` is the side to render before the mount first reports.
@@ -1021,6 +1062,8 @@ export const trackArgs = (
     readonly arrowId?: string | null | undefined
     readonly offsetAsPadding?: boolean | undefined
     readonly leaveCoordinates?: boolean | undefined
+    readonly inline?: boolean | undefined
+    readonly inlineHit?: InlineHit | null | undefined
   }
 ): TrackPositionArgs => ({
   options: resolveOptions(props, popup),
@@ -1035,7 +1078,9 @@ export const trackArgs = (
     : null,
   arrowId: popup.arrowId ?? null,
   offsetAsPadding: popup.offsetAsPadding === true,
-  leaveCoordinates: popup.leaveCoordinates === true
+  leaveCoordinates: popup.leaveCoordinates === true,
+  inline: popup.inline === true,
+  inlineHit: props.anchor === undefined ? popup.inlineHit ?? null : null
 })
 
 /**
@@ -1284,22 +1329,47 @@ export const trackPosition = (
       height: Math.max(0, node.offsetHeight - bridged("top") - bridged("bottom"))
     })
 
+    const inlineLines = (anchor: Element): Lines | null => {
+      if (current.inline !== true) return null
+      const lines = linesOf(anchor.getClientRects())
+      return lines.lines.length < 2 ? null : lines
+    }
+
+    const lineRect = (lines: Lines, side: Physical): Rect => {
+      const hit = current.inlineHit ?? null
+      const line = hit === null
+        ? null
+        : hit.line !== null && hit.line < lines.lines.length
+        ? hit.line
+        : lineAt(lines.lines, hit)
+      const { bottom, left, right, top } = inlineEdges(lines, side, line, hit !== null)
+      return { x: left, y: top, width: right - left, height: bottom - top }
+    }
+
     const pass = (popup: Size): void => {
       const virtual = current.anchorRect ?? null
       const anchor = virtual === null ? document.querySelector(current.anchorSelector) : null
       const arrow = current.arrowId === null ? null : document.getElementById(current.arrowId)
       const viewport = viewportOf()
-      const anchorRect = virtual ?? (anchor === null ? zero : clientRect(anchor))
       const rtl = view.getComputedStyle(node).direction === "rtl"
-      const placed = place({
-        anchor: anchorRect,
+      const lines = anchor === null ? null : inlineLines(anchor)
+      const input = {
         popup,
         arrow: arrow === null ? null : { width: arrow.offsetWidth, height: arrow.offsetHeight },
         boundary: boundaryOf(viewport),
         anchorClip: anchor === null ? viewport : clipOf(anchor, viewport),
         rtl,
         options: current.options
-      })
+      }
+      const requested = physicalSide(current.options.side, rtl)
+      let anchorRect = virtual ??
+        (anchor === null ? zero : lines === null ? clientRect(anchor) : lineRect(lines, requested))
+      let placed = place({ ...input, anchor: anchorRect })
+      const flipped = physicalSide(placed.side, rtl)
+      if (lines !== null && flipped !== requested) {
+        anchorRect = lineRect(lines, flipped)
+        placed = place({ ...input, anchor: anchorRect })
+      }
       const side = physicalSide(placed.side, rtl)
       const bridge = current.offsetAsPadding ? Math.max(0, current.options.sideOffset) : 0
       const scrolled = current.positionMethod === "absolute"

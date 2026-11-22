@@ -3,6 +3,14 @@ export const isHTMLElement = (node: unknown): node is HTMLElement => {
   return view != null && node instanceof view.HTMLElement
 }
 
+export const focusVisible = (element: Element): boolean => {
+  try {
+    return element.matches(":focus-visible")
+  } catch {
+    return true
+  }
+}
+
 export const activeOf = (document: Document): Element | null => {
   let active = document.activeElement
   while (active?.shadowRoot?.activeElement != null) active = active.shadowRoot.activeElement

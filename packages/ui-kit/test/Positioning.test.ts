@@ -204,7 +204,9 @@ describe("trackArgs", () => {
       anchorRect: null,
       arrowId: null,
       offsetAsPadding: false,
-      leaveCoordinates: false
+      leaveCoordinates: false,
+      inline: false,
+      inlineHit: null
     })
     assert.isTrue(
       trackArgs({}, { side: "bottom", anchorSelector: "#save", leaveCoordinates: true }).leaveCoordinates
