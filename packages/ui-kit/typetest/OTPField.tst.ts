@@ -1,7 +1,7 @@
 import { Component, Mount, UiSchema, View } from "@effect/ui"
 import { type DirectionProvider, Field, OTPField, type OTPFieldEvents } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Context, Effect } from "effect"
+import { Context, Effect, Redacted } from "effect"
 import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
@@ -28,18 +28,23 @@ describe("OTPField", () => {
     Field(h, {
       view: (field) => {
         const child = OTPField(h, {
-          props: { value: "12", length: 6, disabled: field.disabled },
+          props: { value: Redacted.make("12"), length: 6, disabled: field.disabled },
           onEmit: {
             Updated: (event) => {
+              expect(event.value).type.toBe<Redacted.Redacted<string>>()
               expect(event.reason).type.toBe<"input-change" | "input-clear" | "input-paste" | "keyboard">()
               return Msg.Clicked()
             },
             Completed: (event) => {
               expect(event).type.toBe<Extract<OTPFieldEvents, { readonly _tag: "Completed" }>>()
+              expect(event.value).type.toBe<Redacted.Redacted<string>>()
               expect(event.reason).type.toBe<"input-change" | "input-paste">()
               return undefined
             },
-            Rejected: () => undefined
+            Rejected: (event) => {
+              expect(event.value).type.toBe<Redacted.Redacted<string>>()
+              return undefined
+            }
           },
           view: (otpField) => {
             expect(otpField.root(h.div.onClick(Msg.Clicked()))).type.toBe<Div<never>>()
@@ -47,7 +52,7 @@ describe("OTPField", () => {
             expect(otpField.input({ element: h.input, index: 0 })).type.toBe<Input<never>>()
             expect(otpField.input({ element: field.member(h.input.onMount(NeedsClock())), index: 1 }))
               .type.toBe<Input<Clock>>()
-            expect(otpField.value).type.toBe<string>()
+            expect(otpField.value).type.toBe<Redacted.Redacted<string>>()
             expect(otpField.length).type.toBe<number>()
             expect(otpField.complete).type.toBe<boolean>()
             return otpField.root(h.div).children(
@@ -61,15 +66,16 @@ describe("OTPField", () => {
     })
   })
 
-  it("requires a string value, a length, an input for each slot and its index", () => {
+  it("requires a redacted string value, a length, an input for each slot and its index", () => {
+    expect(OTPField).type.not.toBeCallableWith(h, { props: { value: "123456", length: 6 }, view: () => h.div })
     expect(OTPField).type.not.toBeCallableWith(h, { props: { value: 123456, length: 6 }, view: () => h.div })
-    expect(OTPField).type.not.toBeCallableWith(h, { props: { value: "" }, view: () => h.div })
+    expect(OTPField).type.not.toBeCallableWith(h, { props: { value: Redacted.make("") }, view: () => h.div })
     expect(OTPField).type.not.toBeCallableWith(h, {
-      props: { value: "", length: 6, validationType: "hex" },
+      props: { value: Redacted.make(""), length: 6, validationType: "hex" },
       view: () => h.div
     })
     OTPField(h, {
-      props: { value: "", length: 6 },
+      props: { value: Redacted.make(""), length: 6 },
       view: (otpField) => {
         expect(otpField.input).type.not.toBeCallableWith({ element: h.div, index: 0 })
         expect(otpField.input).type.not.toBeCallableWith({ element: h.textarea, index: 0 })
