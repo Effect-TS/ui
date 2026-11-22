@@ -23,7 +23,7 @@ const SignupForm = Form.ref("Signup")
 
 describe("Form", () => {
   it("the root returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({ name: "App", model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
       update: {
         SubmittedForm: (model, _message, $) => {
