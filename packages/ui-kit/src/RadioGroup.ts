@@ -222,6 +222,7 @@ const Model = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
   current: Schema.NullOr(Schema.String),
   settled: Schema.NullOr(Schema.String),
+  mounted: Schema.Array(Schema.String),
   leaving: Schema.Array(Schema.String)
 })
 
@@ -231,6 +232,7 @@ const Message = UiSchema.TaggedEnum({
   PressedArrow: { value: Schema.String, direction: Schema.Literals([1, -1]) },
   PressedEnter: {},
   SyncedValue: { value: Schema.NullOr(Schema.String) },
+  MountedIndicator: { value: Schema.String },
   StartedIndicator: { value: Schema.String },
   EndedIndicator: { value: Schema.String }
 })
@@ -290,6 +292,7 @@ const TrackIndicator = Mount.makeStream(
       }
       return Effect.acquireRelease(
         Effect.sync(() => {
+          send(Message.MountedIndicator({ value: current.value }))
           if (current.checked && current.starting) start()
           else if (!current.checked && current.ending) leave()
         }).pipe(
@@ -381,6 +384,7 @@ export const RadioGroup = Component.define({
     highlighted: null,
     current: props.value,
     settled: props.value,
+    mounted: [],
     leaving: []
   }),
   update: {
@@ -405,10 +409,14 @@ export const RadioGroup = Component.define({
     SyncedValue: (model, { value }) => {
       if (model.current === value) return model.highlighted === null ? model : { ...model, highlighted: null }
       const prev = model.current
-      let leaving = prev !== null ? withValue(model.leaving, prev) : model.leaving
+      let leaving = prev !== null && model.mounted.includes(prev) ? withValue(model.leaving, prev) : model.leaving
       if (value !== null) leaving = without(leaving, value)
       const settled = model.settled === value ? value : null
-      return { highlighted: null, current: value, settled, leaving }
+      return { ...model, highlighted: null, current: value, settled, leaving }
+    },
+    MountedIndicator: (model, { value }) => {
+      const mounted = withValue(model.mounted, value)
+      return mounted === model.mounted ? model : { ...model, mounted }
     },
     StartedIndicator: (model, { value }, $) => {
       if ($.props.value !== value) return model
@@ -418,8 +426,11 @@ export const RadioGroup = Component.define({
     EndedIndicator: (model, { value }, $) => {
       if ($.props.value === value) return model
       const leaving = without(model.leaving, value)
+      const mounted = without(model.mounted, value)
       const settled = model.settled === value ? null : model.settled
-      return leaving === model.leaving && settled === model.settled ? model : { ...model, settled, leaving }
+      return leaving === model.leaving && mounted === model.mounted && settled === model.settled
+        ? model
+        : { ...model, settled, mounted, leaving }
     }
   },
   subscriptions: (_model, props) => [synced(props.value)],
@@ -440,7 +451,10 @@ export const RadioGroup = Component.define({
         disabled: disabled || item.disabled === true,
         readOnly: readOnly || item.readOnly === true,
         starting: checked && model.settled !== value,
-        ending: !checked && (model.leaving.includes(value) || model.current === value || model.settled === value)
+        ending: !checked && (
+          model.leaving.includes(value) ||
+          (model.mounted.includes(value) && (model.current === value || model.settled === value))
+        )
       }
     }
     const tabStop = disabled

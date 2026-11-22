@@ -36,7 +36,7 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const parts = (props: RadioGroupProps) =>
   Story.parts(RadioGroup, {
-    model: { highlighted: null, current: props.value, settled: props.value, leaving: [] },
+    model: { highlighted: null, current: props.value, settled: props.value, mounted: [], leaving: [] },
     props
   })
 

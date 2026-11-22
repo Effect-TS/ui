@@ -15,20 +15,27 @@ const items = [
 
 const Message = UiSchema.TaggedEnum({
   SetValue: { value: Schema.NullOr(Schema.String) },
-  SetReadOnly: { readOnly: Schema.Boolean }
+  SetReadOnly: { readOnly: Schema.Boolean },
+  SetShowIndicators: { show: Schema.Boolean }
 })
 
 const Host = Component.define({
   name: "RadioGroupHost",
   scoped: false,
-  model: Schema.Struct({ value: Schema.NullOr(Schema.String), readOnly: Schema.Boolean }),
+  props: Schema.Struct({ showIndicators: Schema.optional(Schema.Boolean) }),
+  model: Schema.Struct({
+    value: Schema.NullOr(Schema.String),
+    readOnly: Schema.Boolean,
+    showIndicators: Schema.Boolean
+  }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ value: "ssd", readOnly: false }),
+  init: ({ props }) => ({ value: "ssd", readOnly: false, showIndicators: props.showIndicators ?? true }),
   update: {
     SetValue: (model, { value }) => ({ ...model, value }),
-    SetReadOnly: (model, { readOnly }) => ({ ...model, readOnly })
+    SetReadOnly: (model, { readOnly }) => ({ ...model, readOnly }),
+    SetShowIndicators: (model, { show }) => ({ ...model, showIndicators: show })
   },
   view: (model, h) =>
     h.div(
@@ -39,7 +46,9 @@ const Host = Component.define({
           radioGroup.root(h.div).children(
             ...items.map(({ value }) =>
               radioGroup.radio({ element: h.button.attr("data-value", value), value }).children(
-                radioGroup.indicator({ element: h.span.attr("data-dot", value), value })
+                model.showIndicators
+                  ? radioGroup.indicator({ element: h.span.attr("data-dot", value), value })
+                  : undefined
               )
             )
           )
@@ -49,6 +58,9 @@ const Host = Component.define({
       ),
       h.button.attr("type", "button").attr("data-readonly-toggle", "").onClick(
         Message.SetReadOnly({ readOnly: !model.readOnly })
+      ),
+      h.button.attr("type", "button").attr("data-indicators-toggle", "").onClick(
+        Message.SetShowIndicators({ show: !model.showIndicators })
       )
     )
 })
@@ -154,5 +166,27 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(btn("tape").getAttribute("tabindex"), "0")
       assert.strictEqual(btn("nvme").getAttribute("tabindex"), "-1")
+    }).pipe(Effect.scoped))
+
+  it.effect("does not animate an exit for a value whose indicator was never mounted", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Host, { showIndicators: false }, app)
+      yield* tick
+
+      const dot = (value: string) => app.querySelector(`[data-dot="${value}"]`)
+      assert.isNull(dot("ssd"))
+
+      app.querySelector<HTMLButtonElement>("[data-set=\"nvme\"]")!.click()
+      yield* tick
+      assert.isNull(dot("ssd"))
+      assert.isNull(dot("nvme"))
+
+      app.querySelector<HTMLButtonElement>("[data-indicators-toggle]")!.click()
+      yield* tick
+      assert.isNull(dot("ssd"))
+      assert.isNotNull(dot("nvme"))
+      assert.isNull(dot("nvme")!.getAttribute("data-ending-style"))
     }).pipe(Effect.scoped))
 })
