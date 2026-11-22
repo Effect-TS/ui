@@ -167,6 +167,9 @@ export const ScrollAreaOrientation = Schema.Literals(["vertical", "horizontal"])
  */
 export type ScrollAreaOrientation = typeof ScrollAreaOrientation.Type
 
+const otherAxis = (orientation: ScrollAreaOrientation): ScrollAreaOrientation =>
+  orientation === "vertical" ? "horizontal" : "vertical"
+
 const scrollbarAttr = (orientation: ScrollAreaOrientation): string =>
   orientation === "vertical" ? "data-scroll-area-scrollbar-y" : "data-scroll-area-scrollbar-x"
 
@@ -845,9 +848,6 @@ export const ScrollArea = Component.define({
       flag(orientation === "vertical" ? model.scrollingY : model.scrollingX)
     const areaState = <B extends Attributed<B>>(builder: B): B =>
       overflowData(builder, model).attr("data-scrolling", flag(scrolling))
-
-    const otherAxis = (orientation: ScrollAreaOrientation): ScrollAreaOrientation =>
-      orientation === "vertical" ? "horizontal" : "vertical"
 
     const thumbPart = p.part("div", (b, orientation: ScrollAreaOrientation) =>
       b

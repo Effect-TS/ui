@@ -1023,7 +1023,7 @@ export const VirtualList = Component.define({
     const inset = props.contentAlignment === "end" && model.position !== null && model.height > layout.total
       ? model.height - layout.total
       : 0
-    const pushed = ranges.length > 1 ? ranges[1]![0] : null
+    const pushed = ranges[1]?.[0]
 
     const itemPart = p.part(["div", "li"], (b, index: number) =>
       (b as Div)
@@ -1036,7 +1036,7 @@ export const VirtualList = Component.define({
         })
         .forward((node) => {
           const item = defaults(node, { role: "listitem" })
-          return pushed !== null && index >= pushed && index < pushed + layout.lanes
+          return pushed !== undefined && index >= pushed && index < pushed + layout.lanes
             ? ownStyle(`margin-block-start:${between}px`)(item)
             : item
         }))

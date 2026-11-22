@@ -551,13 +551,13 @@ describe("Combobox", () => {
           )
       })
       assert.strictEqual(Locator.textOf(s.get(Locator.attr("class", "custom-value"))), "Chosen")
-      const clearLoc = Locator.attr("class", "clear")
-      for (const loc of [input, trigger, clearLoc, Locator.attr("class", "chip-remove")]) {
+      const controls = [input, trigger, clearButton, Locator.attr("class", "chip-remove")]
+      for (const loc of controls) {
         assert.strictEqual(s.get(loc).attrs?.disabled, "")
         assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
       }
       s.props({ ...base, multiple: true, value: ["apple"], inputValue: "ap", disabled: false })
-      for (const loc of [input, trigger, clearLoc, Locator.attr("class", "chip-remove")]) {
+      for (const loc of controls) {
         assert.isUndefined(s.get(loc).attrs?.disabled)
         assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
       }

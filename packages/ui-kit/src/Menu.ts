@@ -2468,9 +2468,7 @@ export const Menu = Component.define({
 
     const group = p.part("div", (b, key: string) =>
       b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
-        .forward((node) =>
-          node.attr("hidden", matches === null || hasShownItem(View.build(node, [])) ? undefined : "")
-        ))
+        .forward((node) => node.attr("hidden", flag(matches !== null && !hasShownItem(View.build(node, []))))))
     const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 

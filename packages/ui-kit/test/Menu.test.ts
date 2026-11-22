@@ -516,7 +516,7 @@ describe("Menu", () => {
       assert.isUndefined(s.get(Locator.attr("class", "group")).attrs?.hidden)
 
       s.props({ open: true, items, query: "co", disabled: false })
-      for (const loc of [Locator.attr("class", "trigger"), input, clear]) {
+      for (const loc of [trigger, input, clear]) {
         assert.isUndefined(s.get(loc).attrs?.disabled)
         assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
       }
