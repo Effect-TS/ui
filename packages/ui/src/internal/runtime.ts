@@ -362,6 +362,7 @@ interface RScoped {
   v: View.Child<any, any>
   inner: RChild | RFallback | RText
   gone?: boolean
+  late?: (() => void) | undefined
 }
 
 interface Kept {
@@ -1442,10 +1443,10 @@ const setup = (
     claimed: new Set()
   }
   let popped: Saved | undefined
-  let replaced: { readonly inst: Instance; readonly late: Array<() => void> } | undefined
+  let replaced: Instance | undefined
+  const lates: Array<() => void> = []
   let supply: Saved | undefined
-  let late: true | (() => void) | undefined
-  let claims = false
+  let late: RScoped | undefined
   const claimSaved = (author: Instance, from: Saved) => {
     const path = author.path
     const all = from["~kept"] as Record<string, Record<string, Saved>> | undefined
@@ -1453,11 +1454,13 @@ const setup = (
     const drawn = (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)?.[path]
     if (kept === undefined && drawn === undefined) return
     if (from === popped) delete all![path]
-    else if (from === hydrating?.state && hydrating.claimed.has(path) && !author.component.definition.scoped) return
+    else if (from === hydrating?.state) {
+      if (hydrating.claimed.has(path) && !author.component.definition.scoped) return
+      hydrating.claimed.add(path)
+    }
     const waits = { ...kept }
     if (drawn !== undefined) { for (const child of drawn) waits[child] = from }
     waitingOf.set(author, waits)
-    claims = true
   }
   const waitingAt = (waits: Record<string, Saved> | undefined, child: string): Saved | undefined => {
     const from = waits?.[child]
@@ -2234,7 +2237,7 @@ const setup = (
     }
     // Its reports go with it.
     markReports(inst)
-    hydrating?.claimed.add(inst.path)
+    if (hydrating !== undefined) claimSaved(inst, hydrating.state)
     for (const child of inst.children) leave(child)
     if (keptLive > 0) leaveKept(inst)
     // An outlet is a place in its receiver's view, not an instance the log knows.
@@ -3189,8 +3192,8 @@ const setup = (
 
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const from = supply
-    const served = from !== undefined && from === hydrating?.state
-    if (served) supply = undefined
+    const own = supply = from === hydrating?.state ? undefined : from
+    const served = own !== from
     // An owner of shared state isn't restored from history: a reload would reopen what nobody hovers.
     const restored = hooks !== undefined && component.definition.shares === undefined
       ? hooks.restore(inst.path)
@@ -3200,27 +3203,30 @@ const setup = (
       !hydrating.deferred.has(path!) &&
       Object.hasOwn(hydrating.state, path!)
     if (popped !== undefined) claimSaved(inst, popped)
-    const state = hydrates || restored !== undefined || from === undefined || served ? restored : from[inst.path]
-    if (!hydrates && state === undefined) {
-      if (supply !== undefined) claimSaved(inst, supply)
+    const state = hydrates || restored !== undefined || own === undefined ? restored : own[inst.path]
+    const stateless = !hydrates && state === undefined
+    if (stateless && late === undefined) {
+      if (own !== undefined) claimSaved(inst, own)
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
       return inst
     }
-    const decoded = runCodec(
-      hydrates
-        ? decodeServer(component, path!, hydrating!.state)
-        : decodeRestored(inst, state)
-    )
     const start = (exit: Exit.Exit<ServerStart, SchemaIssue.Issue>) => {
-      const { collected, fromServer } = Exit.isSuccess(exit) ? exit.value : fresh
+      const ok = Exit.isSuccess(exit)
+      const { collected, fromServer } = ok ? exit.value : fresh
       const was = supply
-      supply = served || Exit.isFailure(exit) ? undefined : from
+      supply = ok ? own : undefined
       if (supply !== undefined) claimSaved(inst, supply)
+      else if (!ok && scope !== undefined) takeSaved(parent!.author, inst.path)
       startInstance(inst, parentEnv, range, fromServer, collected)
       supply = was
     }
-    if (Exit.isExit(decoded)) start(decoded)
-    else {
+    const go = () => {
+      const decoded = stateless ? unsaved : runCodec(
+        hydrates
+          ? decodeServer(component, path!, hydrating!.state)
+          : decodeRestored(inst, state)
+      )
+      if (Exit.isExit(decoded)) return start(decoded)
       const resume = hold(
         inst,
         hydrates ? range : undefined,
@@ -3231,6 +3237,10 @@ const setup = (
         resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit))
       )
     }
+    if (late !== undefined) {
+      const resume = hold(inst, range)
+      late.late = () => resume(hydrates && "late", go)
+    } else go()
     return inst
   }
 
@@ -3239,6 +3249,7 @@ const setup = (
     readonly collected: Option.Option<unknown>
   }
   const fresh: ServerStart = { fromServer: Option.none(), collected: Option.none() }
+  const unsaved = Exit.succeed(fresh)
   const decodeServer = (
     component: Component.Any,
     path: string,
@@ -3268,12 +3279,6 @@ const setup = (
     fromServer: Adopted,
     collectedOnServer: Option.Option<unknown>
   ): void => {
-    if (late === true) {
-      const resume = hold(inst, range)
-      late = () =>
-        resume(Option.isSome(fromServer), () => startInstance(inst, parentEnv, range, fromServer, collectedOnServer))
-      return
-    }
     const component = inst.component
     // No closure is made here: an instance without a Layer, most of them, starts without one.
     let layer: LayerStart | undefined
@@ -3610,7 +3615,7 @@ const setup = (
       range.claimed = true
       inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
     } else inst.rendered = new TextRecord(emptyText, host.createText(""))
-    const resume = (adopt: boolean, start: () => void) => {
+    const resume = (adopt: boolean | "late", start: () => void) => {
       if (inst.closed || !inst.waiting) return
       inst.waiting = false
       restoring.delete(inst)
@@ -3623,17 +3628,16 @@ const setup = (
       // The placement its parent rendered while it waited: it adopts with the one it was placed with, the
       // server's, and its subtree's head is recorded from that. The latest comes after. Built fresh, it
       // starts from the latest.
-      const held = heldPlacement.get(inst)
+      const placed = heldPlacement.get(inst)
       heldPlacement.delete(inst)
-      if (held !== undefined && !adopt) {
-        inst.props = held.props
-        setPlacement(inst, held)
+      const held = adopt === true ? placed : undefined
+      if (held !== placed) {
+        inst.props = placed!.props
+        setPlacement(inst, placed!)
       }
-      const was = replaced
-      const late: Array<() => void> = []
-      if (held !== undefined && adopt) replaced = { inst, late }
+      if (held !== undefined) replaced = inst
       start()
-      replaced = was
+      replaced = undefined
       if (inst.waiting) {
         if (held !== undefined) heldPlacement.set(inst, held)
         return settleWaiting()
@@ -3643,12 +3647,13 @@ const setup = (
       if (range === undefined || !range.claimed) { for (const node of nodes) host.remove(node) }
       if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
       if (adopt) recordAdopted(inst)
-      if (held !== undefined && adopt && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
-      for (const draw of late) draw()
+      if (held !== undefined && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
+      if (lates.length > 0 && dirty.delete(inst)) renderDirty(inst)
+      for (const draw of lates.splice(0)) draw()
       viewChanged = true
       settleWaiting()
     }
-    return (adopt: boolean, start: () => void) => defer(() => resume(adopt, start))
+    return (adopt: boolean | "late", start: () => void) => defer(() => resume(adopt, start))
   }
 
   const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
@@ -6930,7 +6935,7 @@ const setup = (
     const table = tableOf(author)
     let byKey = table.children.get(view.component)
     const entry = byKey?.get(view.key)
-    const stale = replaced !== undefined && within(inst, replaced.inst) && !within(author, replaced.inst)
+    const stale = replaced !== undefined && within(inst, replaced) && !within(author, replaced)
     if (stale ? entry !== undefined : isOld(inst, table) && entry?.inner.v !== view) return blankText(range)
     const alive = aliveOf(view)
     if (!stale && alive !== undefined && !askAlive(author, table, alive, view)) {
@@ -6962,14 +6967,13 @@ const setup = (
       }
     }
     const named = `${author.path}/${segment(view)}`
-    const waits = claims ? waitingOf.get(author) : undefined
+    const waits = waitingOf.get(author)
     const saved = waitingAt(waits, named)
     const was = supply
     supply = saved
-    if (stale) late = true
+    if (stale) late = at
     const inner = makeChild(inst, view, env, range, named, Scope.forkUnsafe(author.scope, "sequential"))
     supply = was
-    const start = late
     late = undefined
     if (saved !== undefined && !(inner._tag === "Child" && inner.inst.waiting)) delete waits![named]
     const made: Kept = {
@@ -6989,10 +6993,9 @@ const setup = (
     if (inst !== author) {
       for (const child of author.children) if (child.key === view.key && child.path === named) failShared(child, made)
     }
-    if (stale) {
-      replaced!.late.push(() => {
-        if (!at.gone && !inst.closed) patchScoped(inst, at, at.v, env)
-        if (start !== true) start!()
+    if (at.late !== undefined) {
+      lates.push(() => {
+        if (at.late !== undefined && !at.gone && !inst.closed) patchScoped(inst, at, at.v, env)
       })
     }
     return inner
@@ -7017,8 +7020,7 @@ const setup = (
   const isOld = (inst: Instance, table: KeptTable): boolean =>
     inst.component === outletComponent && roundAt(inst) !== table.round
   const endWrite = (author: Instance, view: View.Child<any, any>, entry: Kept | undefined) => {
-    const waits = claims ? waitingOf.get(author) : undefined
-    if (waits !== undefined) delete waits[`${author.path}/${segment(view)}`]
+    takeSaved(author, `${author.path}/${segment(view)}`)
     if (entry !== undefined) endKept(entry)
   }
 
@@ -7270,6 +7272,8 @@ const setup = (
 
   const patchScoped = (inst: Instance, at: RScoped, view: View.Child<any, any>, env: Env): RScoped => {
     at.v = view
+    at.late?.()
+    at.late = undefined
     const old = at.inner
     const entry = old._tag === "Text" ? undefined : entryAt(inst.author, view)
     if (entry !== undefined && entry.at === at) {
@@ -7484,7 +7488,7 @@ const setup = (
         const author = entry.author
         into = ((keptIn(homes.get(author)!)[author.path] ??= {}) as Saved)[inst.path] = {}
       }
-      const waits = claims ? waitingOf.get(inst) : undefined
+      const waits = waitingOf.get(inst)
       if (waits !== undefined) {
         for (const child in waits) {
           const saved = waits[child]
