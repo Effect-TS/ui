@@ -137,7 +137,7 @@ export const toSteps = (entry: MessageLog.Entry): ReadonlyArray<FlowStep> => {
         at,
         name: entry.name,
         where,
-        caption: "The <dialog> leaves the document. The mount ends and gives focus back to the trigger.",
+        caption: "The <dialog> leaves the document and its mount ends.",
         line: "dialog.portal("
       })]
     default:

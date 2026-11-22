@@ -18,7 +18,7 @@ describe("LaunchPage", () => {
         .expect(Locator.text("// Where state lives", { exact: true })).toExist()
         .expect(heading("Every child's state went through its parent")).toExist()
         .expect(heading("Each component holds its own state")).toExist()
-        .expect(heading("State lasts as long as the component is rendered")).toExist()
+        .expect(heading("By default, state lasts as long as the component is rendered")).toExist()
         .expect(heading("Moving from Foldkit 0.x")).toExist()
         .expect(Locator.text("Tests run no effects", { exact: true })).toExist()
     }))
