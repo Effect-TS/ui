@@ -4,7 +4,7 @@ import { NumberField, type NumberFieldProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, tick } from "./utils/document.ts"
+import { container, popovers, tick } from "./utils/document.ts"
 
 const Value = Schema.NullOr(Schema.Number)
 const Message = UiSchema.TaggedEnum({
@@ -12,7 +12,17 @@ const Message = UiSchema.TaggedEnum({
   Committed: { value: Value, reason: Schema.String }
 })
 
-const mount = Effect.fnUntraced(function*(props: Omit<NumberFieldProps, "value">, value: number | null = 5) {
+interface Parent {
+  readonly vertical?: boolean
+  readonly accepts?: (value: number | null) => boolean
+  readonly scrubs?: (value: number | null) => boolean
+}
+
+const mount = Effect.fnUntraced(function*(
+  props: Omit<NumberFieldProps, "value">,
+  value: number | null = 5,
+  { accepts = () => true, scrubs = () => true, vertical = false }: Parent = {}
+) {
   const log: Array<string> = []
   const Amount = Component.define({
     name: "Amount",
@@ -22,9 +32,9 @@ const mount = Effect.fnUntraced(function*(props: Omit<NumberFieldProps, "value">
   }).make({
     init: () => ({ value }),
     update: {
-      Updated: (_, { reason, value }) => {
+      Updated: (model, { reason, value }) => {
         log.push("updated " + value + " " + reason)
-        return { value }
+        return accepts(value) ? { value } : model
       },
       Committed: (model, { reason, value }) => {
         log.push("committed " + value + " " + reason)
@@ -40,7 +50,10 @@ const mount = Effect.fnUntraced(function*(props: Omit<NumberFieldProps, "value">
         },
         view: (numberField) =>
           numberField.root(h.div).children(
-            numberField.scrubArea({ element: h.span.class("scrub") }).children(
+            scrubs(model.value) && numberField.scrubArea({
+              element: h.span.class("scrub"),
+              direction: vertical ? "vertical" : "horizontal"
+            }).children(
               numberField.scrubAreaCursor(h.span.class("cursor"))
             ),
             numberField.decrement({ element: h.button.class("decrement") }),
@@ -87,6 +100,47 @@ const pointer = (target: EventTarget, type: string, init: PointerEventInit = {})
   target.dispatchEvent(
     new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerType: "mouse", ...init })
   )
+
+const type = (input: HTMLInputElement, text: string) => {
+  input.focus()
+  input.value = text
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+// happy-dom supports every CSS declaration, which is how WebKit is told
+// apart, and WebKit is never asked for the lock.
+const pointerLock = Effect.acquireRelease(
+  Effect.sync(() => {
+    let held: Element | null = null
+    const css = Object.getOwnPropertyDescriptor(window, "CSS")!
+    Object.defineProperty(window, "CSS", { configurable: true, value: { supports: () => false } })
+    const change = (element: Element | null) => {
+      held = element
+      document.dispatchEvent(new Event("pointerlockchange"))
+    }
+    Object.defineProperty(document, "pointerLockElement", { configurable: true, get: () => held })
+    Object.assign(document, { exitPointerLock: () => held !== null && change(null) })
+    Object.assign(document.body, { requestPointerLock: () => Promise.resolve().then(() => change(document.body)) })
+    return { css, held: () => held, lose: () => change(null) }
+  }),
+  ({ css }) =>
+    Effect.sync(() => {
+      Object.defineProperty(window, "CSS", css)
+      Reflect.deleteProperty(document, "pointerLockElement")
+      Reflect.deleteProperty(document, "exitPointerLock")
+      Reflect.deleteProperty(document.body, "requestPointerLock")
+    })
+).pipe(Effect.tap(popovers))
+
+const firefox = Effect.acquireRelease(
+  Effect.sync(() =>
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 Gecko/20100101 Firefox/157.0"
+    })
+  ),
+  () => Effect.sync(() => Reflect.deleteProperty(navigator, "userAgent"))
+)
 
 describe("NumberField in a document", { concurrent: false }, () => {
   it.effect("the input takes only the keys that can be part of a number in its locale", () =>
@@ -227,9 +281,9 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isTrue(root.hasAttribute("data-scrubbing"))
       assert.strictEqual(document.activeElement, input)
       assert.isNull(app.querySelector(".cursor"))
-      pointer(window, "pointermove", { movementX: 4 })
-      pointer(window, "pointermove", { movementX: 1 })
-      pointer(window, "pointermove", { movementX: -3, shiftKey: true })
+      pointer(window, "pointermove", { clientX: 14, clientY: 30 })
+      pointer(window, "pointermove", { clientX: 15, clientY: 30 })
+      pointer(window, "pointermove", { clientX: 12, clientY: 30, shiftKey: true })
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 9 scrub", "updated -21 scrub"])
       pointer(window, "pointerup")
@@ -237,9 +291,126 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), ["committed -21 scrub"])
       assert.isFalse(root.hasAttribute("data-scrubbing"))
       assert.strictEqual(input.value, "-21")
-      pointer(window, "pointermove", { movementX: 9 })
+      pointer(window, "pointermove", { clientX: 40, clientY: 30 })
       yield* tick
       assert.deepStrictEqual(taken(), [])
+    }))
+
+  it.effect("a vertical drag without the lock steps by how far the pointer rose", () =>
+    Effect.gen(function*() {
+      const { app, taken } = yield* mount({ locale: "en-US" }, 5, { vertical: true })
+      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 40 })
+      pointer(window, "pointermove", { clientX: 90, clientY: 36 })
+      pointer(window, "pointerup")
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 9 scrub", "committed 9 scrub"])
+    }))
+
+  it.effect("a locked pointer steps by its movement and shows the cursor, until the lock is lost", () =>
+    Effect.gen(function*() {
+      const lock = yield* pointerLock
+      const { app, taken } = yield* mount({ locale: "en-US" })
+      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
+      yield* tick
+      assert.strictEqual(lock.held(), document.body)
+      assert.isNotNull(app.querySelector(".cursor"))
+      pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 4 })
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 9 scrub"])
+      lock.lose()
+      yield* tick
+      assert.isNull(app.querySelector(".cursor"))
+      assert.isTrue(app.firstElementChild!.hasAttribute("data-scrubbing"))
+      pointer(window, "pointermove", { clientX: 13, clientY: 10, movementX: 50 })
+      pointer(window, "pointerup")
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 12 scrub", "committed 12 scrub"])
+    }))
+
+  it.effect("a move after the release changes nothing while Firefox still holds the lock", () =>
+    Effect.gen(function*() {
+      yield* firefox
+      const lock = yield* pointerLock
+      const { app, taken } = yield* mount({ locale: "en-US" })
+      const area = app.querySelector<HTMLElement>(".scrub")!
+      let clicks = 0
+      area.addEventListener("click", () => clicks++)
+      pointer(area, "pointerdown", { clientX: 10, clientY: 10 })
+      yield* tick
+      pointer(window, "pointerup")
+      assert.strictEqual(lock.held(), document.body)
+      pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 10, buttons: 0 })
+      yield* tick
+      assert.isNull(lock.held())
+      assert.deepStrictEqual(taken(), ["committed 5 scrub"])
+      assert.strictEqual(clicks, 1)
+    }))
+
+  it.effect("removing the scrub area in the middle of a drag ends it without a commit", () =>
+    Effect.gen(function*() {
+      const lock = yield* pointerLock
+      const { app, taken } = yield* mount({ locale: "en-US" }, 5, { scrubs: (value) => value === 5 })
+      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
+      yield* tick
+      pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 4 })
+      yield* tick
+      assert.isNull(app.querySelector(".scrub"))
+      assert.isNull(app.querySelector(".cursor"))
+      assert.isNull(lock.held())
+      assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
+      pointer(window, "pointerup")
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 9 scrub"])
+    }))
+
+  it.effect("a cancelled pointer ends a hold and a drag", () =>
+    Effect.gen(function*() {
+      const { app, taken } = yield* mount({ locale: "en-US" })
+      const increment = app.querySelector<HTMLButtonElement>(".increment")!
+      const touch = { pointerType: "touch", pointerId: 7 }
+      pointer(increment, "pointerdown", touch)
+      pointer(window, "pointercancel", touch)
+      yield* wait(600)
+      assert.deepStrictEqual(taken(), [])
+      pointer(increment, "pointerdown", touch)
+      yield* wait(560)
+      pointer(window, "pointercancel", { pointerType: "touch", pointerId: 8 })
+      pointer(window, "pointercancel", touch)
+      yield* tick
+      const steps = taken()
+      assert.isAbove(steps.length, 2)
+      assert.strictEqual(steps.at(-1), "committed " + (5 + steps.length - 1) + " increment-press")
+      yield* wait(200)
+      assert.deepStrictEqual(taken(), [])
+      pointer(app.querySelector(".scrub")!, "pointerdown", { ...touch, clientX: 10, clientY: 10 })
+      pointer(window, "pointermove", { ...touch, clientX: 14, clientY: 10 })
+      pointer(window, "pointercancel", touch)
+      pointer(window, "pointermove", { ...touch, clientX: 30, clientY: 10 })
+      yield* tick
+      const value = 5 + steps.length - 1 + 4
+      assert.deepStrictEqual(taken(), ["updated " + value + " scrub", "committed " + value + " scrub"])
+      assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
+    }))
+
+  it.effect("a parent that declines what was typed sees no commit of it, and the text goes back on blur", () =>
+    Effect.gen(function*() {
+      const { app, input, taken } = yield* mount({ locale: "en-US" }, 5, { accepts: () => false })
+      type(input, "19")
+      yield* tick
+      input.blur()
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 19 input-change", "updated 19 input-blur"])
+      assert.strictEqual(input.value, "5")
+      type(input, "")
+      yield* tick
+      input.blur()
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated null input-clear", "updated null input-clear"])
+      assert.strictEqual(input.value, "5")
+      pointer(app.querySelector(".increment")!, "pointerdown")
+      pointer(window, "pointerup")
+      yield* tick
+      assert.deepStrictEqual(taken(), ["updated 6 increment-press", "committed 5 increment-press"])
     }))
 
   it.effect("a disabled field takes no press, drag or wheel", () =>

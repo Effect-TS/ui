@@ -474,6 +474,7 @@ const Message = UiSchema.TaggedEnum({
   ClickedStepper: { direction: Direction, ...Modifiers },
   StartedScrub: { focus: Schema.Boolean },
   LockedPointer: {},
+  UnlockedPointer: {},
   MovedScrub: { amount: Schema.Number, ...Modifiers },
   EndedScrub: { commit: Schema.Boolean },
   FocusedFormInput: {},
@@ -485,7 +486,6 @@ type Message = typeof Message.Type
 const Model = Schema.Struct({
   text: Schema.NullOr(Schema.String),
   pending: Schema.Boolean,
-  last: Schema.NullOr(Schema.Number),
   scrubbing: Schema.Boolean,
   cursor: Schema.Boolean,
   focus: Schema.Number,
@@ -550,7 +550,7 @@ const setValue = (
   const fired = value !== s.value || (entered && (asked !== s.value || options.typed === true))
   const direction = options.step === undefined ? undefined : options.step < 0 ? -1 : 1
   return {
-    model: { ...model, last: value, pending: model.pending || fired },
+    model: { ...model, pending: model.pending || fired },
     events: fired
       ? [NumberFieldEvents.Updated(direction === undefined ? { value, reason } : { value, reason, direction })]
       : [],
@@ -586,14 +586,14 @@ const commit = (
   change: Pick<Change, "model" | "events" | "value">,
   reason: NumberFieldCommitReason
 ) =>
-  $.set({ ...change.model, pending: false, last: null }).emit(
+  $.set({ ...change.model, pending: false }).emit(
     ...change.events,
     NumberFieldEvents.Committed({ value: change.value, reason })
   )
 
 const press = (model: Model, s: Settings, direction: Direction, modifiers: Modifiers): Change =>
   stepBy(
-    { ...model, text: null, last: null },
+    { ...model, text: null },
     s,
     direction,
     modifiers,
@@ -716,6 +716,7 @@ const TrackStepper = Mount.makeStream(
         let ignoreClick = false
         let pointerType = ""
         let moves = 0
+        let pointerId = -1
         let down = { x: 0, y: 0 }
         let modifiers: Modifiers = { shift: false, alt: false }
         let check: ReturnType<typeof setTimeout> | undefined
@@ -731,6 +732,14 @@ const TrackStepper = Mount.makeStream(
           moves = 0
         }
         const held = () => Queue.offerUnsafe(queue, Message.HeldStepper({ direction, ...modifiers }))
+        const finish = (event: PointerEvent) => {
+          if (event.pointerId !== pointerId) return
+          release?.abort()
+          release = undefined
+          pressed = false
+          stop()
+          Queue.offerUnsafe(queue, Message.ReleasedStepper({ direction }))
+        }
         const start = (first: boolean, focus: boolean) => {
           stop()
           menu = new AbortController()
@@ -738,11 +747,7 @@ const TrackStepper = Mount.makeStream(
           view.addEventListener("contextmenu", (event) => event.preventDefault(), { signal: menu.signal })
           release?.abort()
           release = new AbortController()
-          view.addEventListener("pointerup", () => {
-            pressed = false
-            stop()
-            Queue.offerUnsafe(queue, Message.ReleasedStepper({ direction }))
-          }, { once: true, signal: release.signal })
+          view.addEventListener("pointerup", finish, { signal: release.signal })
           if (first) Queue.offerUnsafe(queue, Message.PressedStepper({ direction, focus, ...modifiers }))
           else held()
           delay = setTimeout(() => {
@@ -753,6 +758,7 @@ const TrackStepper = Mount.makeStream(
           if (event.defaultPrevented || event.button !== 0 || disabled) return
           modifiers = { shift: event.shiftKey, alt: event.altKey }
           pointerType = event.pointerType
+          pointerId = event.pointerId
           ignoreClick = false
           pressed = true
           down = { x: event.clientX, y: event.clientY }
@@ -777,6 +783,12 @@ const TrackStepper = Mount.makeStream(
         }
         const onPointerUp = (event: PointerEvent) => {
           if (touchLike(event.pointerType)) pressed = false
+        }
+        const onPointerCancel = (event: PointerEvent) => {
+          if (event.pointerId !== pointerId) return
+          if (release !== undefined) return finish(event)
+          pressed = false
+          stop()
         }
         const onPointerMove = (event: PointerEvent) => {
           if (disabled || !touchLike(event.pointerType) || !pressed) return
@@ -808,6 +820,8 @@ const TrackStepper = Mount.makeStream(
             const { signal } = listening
             node.addEventListener("touchstart", onTouch, { passive: true, signal })
             node.addEventListener("touchend", onTouch, { passive: true, signal })
+            node.addEventListener("touchcancel", onTouch, { passive: true, signal })
+            view.addEventListener("pointercancel", onPointerCancel, { signal })
             node.addEventListener("pointerdown", onPointerDown, { signal })
             node.addEventListener("pointerup", onPointerUp, { signal })
             node.addEventListener("pointermove", onPointerMove, { signal })
@@ -836,6 +850,10 @@ const TrackStepper = Mount.makeStream(
     )
 )
 
+const liveScrubs = new Set<string>()
+// A mount that is closing can't send, so a removed scrub area notifies the root's mount.
+const scrubRoots = new Map<string, () => void>()
+
 const TrackScrub = Mount.makeStream(
   "TrackScrub",
   {
@@ -863,11 +881,13 @@ const TrackScrub = Mount.makeStream(
         let clicked = false
         let target: EventTarget | null = null
         let travelled = 0
+        let pointerId = -1
+        let asked = false
+        let client = { x: 0, y: 0 }
         let pointer = { x: 0, y: 0 }
         let listening: AbortController | undefined
         let exit: ReturnType<typeof setTimeout> | undefined
         let click: ReturnType<typeof setTimeout> | undefined
-        // The Model of an area removed in the middle of a drag still holds it.
         if (args.scrubbing) Queue.offerUnsafe(queue, Message.EndedScrub({ commit: false }))
         const unlock = () => {
           try {
@@ -912,47 +932,58 @@ const TrackScrub = Mount.makeStream(
         }
         const wrap = (coordinate: number, low: number, high: number): number =>
           coordinate < low ? high : coordinate > high ? low : coordinate
-        const moveCursor = (event: PointerEvent) => {
-          const rect = bounds()
-          pointer = {
-            x: wrap(Math.round(pointer.x + event.movementX), rect.left, rect.right),
-            y: wrap(Math.round(pointer.y + event.movementY), rect.top, rect.bottom)
-          }
-          place()
-        }
-        const end = (commit: boolean) => {
+        const stop = (commit: boolean) => {
           scrubbing = false
           listening?.abort()
-          unlock()
           Queue.offerUnsafe(queue, Message.EndedScrub({ commit }))
         }
-        const onUp = () => {
-          const finish = () => {
-            end(true)
-            const pressedOn = target
+        const onUp = (event: PointerEvent) => {
+          if (!scrubbing || event.pointerId !== pointerId) return
+          const pressedOn = moved ? null : target
+          stop(true)
+          const release = () => {
+            unlock()
             // The click of a locked pointer goes to the element that holds
             // the lock, so one that didn't move is sent on to what it pressed.
-            if (!moved && pressedOn !== null) {
+            if (pressedOn !== null) {
               click = setTimeout(() => {
                 if (!clicked) pressedOn.dispatchEvent(new view.MouseEvent("click", { bubbles: true, cancelable: true }))
               }, 0)
             }
-            moved = false
-            target = null
           }
           // Firefox keeps the lock of a short click unless it is given a moment.
-          if (isGecko(view)) exit = setTimeout(finish, 20)
-          else finish()
+          if (isGecko(view)) exit = setTimeout(release, 20)
+          else release()
+        }
+        const onCancel = (event: PointerEvent) => {
+          if (!scrubbing || event.pointerId !== pointerId) return
+          stop(true)
+          unlock()
         }
         const onMove = (event: PointerEvent) => {
-          if (!scrubbing) return
+          if (!scrubbing || event.pointerId !== pointerId) return
           event.preventDefault()
-          moveCursor(event)
-          travelled += current.vertical ? event.movementY : event.movementX
+          // A locked pointer reports only how far it moved. Without the lock
+          // WebKit reports no movement, so the positions are compared.
+          const locked = document.pointerLockElement != null
+          const x = locked ? event.movementX : event.clientX - client.x
+          const y = locked ? event.movementY : event.clientY - client.y
+          client = { x: event.clientX, y: event.clientY }
+          if (locked) {
+            const rect = bounds()
+            pointer = {
+              x: wrap(Math.round(pointer.x + x), rect.left, rect.right),
+              y: wrap(Math.round(pointer.y + y), rect.top, rect.bottom)
+            }
+            place()
+          } else {
+            pointer = client
+          }
+          travelled += current.vertical ? y : x
           if (Math.abs(travelled) < current.pixelSensitivity) return
           travelled = 0
           moved = true
-          const amount = current.vertical ? -event.movementY : event.movementX
+          const amount = current.vertical ? -y : x
           if (amount !== 0) {
             Queue.offerUnsafe(queue, Message.MovedScrub({ amount, shift: event.shiftKey, alt: event.altKey }))
           }
@@ -968,25 +999,37 @@ const TrackScrub = Mount.makeStream(
           clearTimeout(exit)
           target = event.composedPath()[0] ?? event.target
           travelled = 0
-          pointer = { x: event.clientX, y: event.clientY }
+          pointerId = event.pointerId
+          client = { x: event.clientX, y: event.clientY }
+          pointer = client
           listening?.abort()
           listening = new AbortController()
           const options = { capture: true, signal: listening.signal }
           view.addEventListener("pointerup", onUp, options)
+          view.addEventListener("pointercancel", onCancel, options)
           view.addEventListener("pointermove", onMove, options)
           Queue.offerUnsafe(queue, Message.StartedScrub({ focus: mouse }))
           // WebKit shifts the page for the notice it shows with the lock.
           if (event.pointerType === "touch" || isWebKit(view)) return
-          let asked: unknown
+          if (document.pointerLockElement != null) return Queue.offerUnsafe(queue, Message.LockedPointer())
+          asked = true
           try {
-            asked = document.body.requestPointerLock()
+            Promise.resolve(document.body.requestPointerLock()).catch(onLockError)
           } catch {
-            return
+            asked = false
           }
-          Promise.resolve(asked).then(() => {
+        }
+        const onLockError = () => {
+          asked = false
+        }
+        const onLockChange = () => {
+          if (document.pointerLockElement == null) {
+            asked = false
+            if (scrubbing) Queue.offerUnsafe(queue, Message.UnlockedPointer())
+          } else if (asked) {
             if (scrubbing) Queue.offerUnsafe(queue, Message.LockedPointer())
             else unlock()
-          }, () => undefined)
+          }
         }
         const onTouchStart = (event: TouchEvent) => {
           if (!current.locked && event.touches.length === 1) event.preventDefault()
@@ -996,33 +1039,62 @@ const TrackScrub = Mount.makeStream(
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
+            liveScrubs.add(args.cursorId)
             node.addEventListener("pointerdown", onDown)
             node.addEventListener("touchstart", onTouchStart, { passive: false })
             node.addEventListener("click", onClick, { capture: true })
+            document.addEventListener("pointerlockchange", onLockChange)
+            document.addEventListener("pointerlockerror", onLockError)
           }),
           () =>
             Effect.sync(() => {
+              liveScrubs.delete(args.cursorId)
               node.removeEventListener("pointerdown", onDown)
               node.removeEventListener("touchstart", onTouchStart)
               node.removeEventListener("click", onClick, { capture: true })
+              document.removeEventListener("pointerlockchange", onLockChange)
+              document.removeEventListener("pointerlockerror", onLockError)
               clearTimeout(exit)
               clearTimeout(click)
               listening?.abort()
-              if (scrubbing) unlock()
+              if (!scrubbing) return
+              unlock()
+              scrubRoots.get(args.cursorId)?.()
             })
         )
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             current = next
             if (!scrubbing) return
-            if (next.locked) end(false)
-            else if (next.cursor) {
+            if (next.locked) {
+              stop(false)
+              unlock()
+            } else if (next.cursor) {
               place()
               // The cursor has no size until the popover shows.
               view.requestAnimationFrame(place)
             }
           })).pipe(Effect.forkScoped)
       })
+    )
+)
+
+const WatchScrub = Mount.makeStream(
+  "WatchScrub",
+  { args: { cursorId: Schema.String } },
+  (_node: unknown, args) =>
+    Stream.callback<Message>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const end = () => Queue.offerUnsafe(queue, Message.EndedScrub({ commit: false }))
+          scrubRoots.set(args.cursorId, end)
+          if (!liveScrubs.has(args.cursorId)) end()
+        }),
+        () =>
+          Effect.sync(() => {
+            scrubRoots.delete(args.cursorId)
+          })
+      )
     )
 )
 
@@ -1080,7 +1152,7 @@ export const NumberField = Component.define({
   events: NumberFieldEvents,
   elements: Html
 }).make({
-  init: () => ({ text: null, pending: false, last: null, scrubbing: false, cursor: false, focus: 0, ios: false }),
+  init: () => ({ text: null, pending: false, scrubbing: false, cursor: false, focus: 0, ios: false }),
   update: {
     UpdatedInput: (model, { value }, $) => {
       const s = settingsOf($.props)
@@ -1106,17 +1178,20 @@ export const NumberField = Component.define({
       const typed = model.text !== null
       const text = model.text ?? formatNumber(s.value, s.locale, s.format)
       const synced: Model = typed ? { ...model, text: null } : model
-      if (text.trim() === "") {
-        const change = setValue(synced, s, null, "input-clear")
-        return typed || model.pending || s.value !== null ? commit($, change, "input-clear") : apply($, change)
-      }
-      const read = typed ? parse(s, text) : s.value
-      if (read === null) return synced
-      const value = rounded(read, s.format)
+      const empty = text.trim() === ""
+      const read = empty ? null : typed ? parse(s, text) : s.value
+      if (read === null && !empty) return synced
+      const reason = empty ? "input-clear" : "input-blur"
+      const value = read === null ? null : rounded(read, s.format)
       const change = value === s.value
         ? { model: synced, events: [], value, fired: false }
-        : setValue(synced, s, value, "input-blur")
-      return typed || model.pending || value !== s.value ? commit($, change, "input-blur") : apply($, change)
+        : setValue(synced, s, value, reason)
+      // The parent was asked for the typed value as it was typed. One that
+      // didn't store it is asked once more, with no commit of a value it may
+      // decline again.
+      const declined = typed && change.fired && s.value !== setValue(synced, s, read, "input-change").value
+      if (declined) return apply($, { ...change, model: { ...change.model, pending: false } })
+      return typed || model.pending || change.fired ? commit($, change, reason) : apply($, change)
     },
     PressedKey: (model, { key, ...modifiers }, $) => {
       const s = settingsOf($.props)
@@ -1153,7 +1228,7 @@ export const NumberField = Component.define({
       const s = settingsOf($.props)
       return s.locked
         ? model
-        : commit($, { model, events: [], value: model.last ?? s.value }, reasonOf(direction))
+        : commit($, { model, events: [], value: s.value }, reasonOf(direction))
     },
     ClickedStepper: (model, { direction, ...modifiers }, $) => {
       const s = settingsOf($.props)
@@ -1165,8 +1240,9 @@ export const NumberField = Component.define({
     StartedScrub: (model, { focus }, $) =>
       settingsOf($.props).locked
         ? model
-        : { ...model, scrubbing: true, cursor: false, last: null, focus: focus ? model.focus + 1 : model.focus },
+        : { ...model, scrubbing: true, cursor: false, focus: focus ? model.focus + 1 : model.focus },
     LockedPointer: (model) => (model.scrubbing ? { ...model, cursor: true } : model),
+    UnlockedPointer: (model) => (model.cursor ? { ...model, cursor: false } : model),
     MovedScrub: (model, { amount, ...modifiers }, $) => {
       const s = settingsOf($.props)
       return !model.scrubbing || s.locked || amount * amountOf(s, modifiers) === 0
@@ -1177,7 +1253,7 @@ export const NumberField = Component.define({
       if (!model.scrubbing) return model
       const s = settingsOf($.props)
       const next = { ...model, scrubbing: false, cursor: false }
-      return done && !s.locked ? commit($, { model: next, events: [], value: model.last ?? s.value }, "scrub") : next
+      return done && !s.locked ? commit($, { model: next, events: [], value: s.value }, "scrub") : next
     },
     FocusedFormInput: (model) => ({ ...model, focus: model.focus + 1 }),
     Autofilled: (model, { value }, $) => {
@@ -1320,7 +1396,10 @@ export const NumberField = Component.define({
       readOnly,
       required,
       scrubbing: model.scrubbing,
-      root: p.part((b) => state(b).forward((node) => node.children(form))),
+      root: p.part((b) => {
+        const wired = state(b).forward((node) => node.children(form))
+        return model.scrubbing ? wired.onMount(WatchScrub({ cursorId })) : wired
+      }),
       group: p.part((b) => state(b).attr("role", "group")),
       input: View.wrapPart(
         inputPart,

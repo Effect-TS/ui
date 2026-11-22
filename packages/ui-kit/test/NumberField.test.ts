@@ -35,12 +35,11 @@ const increment = Locator.attr("class", "increment")
 const formInput = Locator.attr("type", "number")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const idle = { text: null, pending: false, last: null, scrubbing: false, cursor: false, focus: 0, ios: false }
+const idle = { text: null, pending: false, scrubbing: false, cursor: false, focus: 0, ios: false }
 const parts = (props: NumberFieldProps) => Story.parts(NumberField, { model: idle, props })
 
 type Tracked = Mount.Issued<unknown, never, never, unknown> & { readonly args: Record<string, unknown> }
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-// The mounts are private, so a test reads each off the rendered element.
 const tracked = (s: Rendered, locator: Locator.Locator): Tracked =>
   (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
     ?.mount as unknown as Tracked
@@ -347,7 +346,7 @@ describe("NumberField", () => {
       const s = yield* scene({ value: 5, locale: "en-US" })
       s.type(input, "12").emitted(updated(12, "input-change"))
       assert.strictEqual(text(s), "12")
-      s.blur(input).emitted(updated(12, "input-blur"), committed(12, "input-blur"))
+      s.blur(input).emitted(updated(12, "input-blur"))
       assert.strictEqual(text(s), "5")
     }))
 
@@ -384,7 +383,7 @@ describe("NumberField", () => {
       s.type(input, "2.345,75").emitted(updated(2345.75, "input-change"))
       s.type(input, "0,5").emitted(updated(0.5, "input-change"))
       s.props({ value: 1234.5, locale: "fr-FR" })
-      s.blur(input).emitted(updated(0.5, "input-blur"), committed(0.5, "input-blur"))
+      s.blur(input).emitted(updated(0.5, "input-blur"))
       assert.match(text(s) as string, /^1\s234,5$/)
       s.type(input, "9 876,5").emitted(updated(9876.5, "input-change"))
       s.type(input, "9 876,25").emitted(updated(9876.25, "input-change"))
@@ -403,7 +402,7 @@ describe("NumberField", () => {
       s.type(input, "一二三").emitted(updated(123, "input-change"))
       s.type(input, "−4").emitted(updated(-4, "input-change"))
       s.props({ value: 1234.5, locale: "ar-EG" })
-      s.blur(input).emitted(updated(-4, "input-blur"), committed(-4, "input-blur"))
+      s.blur(input).emitted(updated(-4, "input-blur"))
       assert.strictEqual(text(s), "١٬٢٣٤٫٥")
       s.type(input, "٢٬٣٤٥٫٧٥").emitted(updated(2345.75, "input-change"))
       s.type(input, "12.5").emitted(updated(12.5, "input-change"))
@@ -426,7 +425,7 @@ describe("NumberField", () => {
       s.props({ value: 0.5, locale: "en-US", format: { style: "percent", maximumFractionDigits: 1 } })
       s.type(input, "5‰").emitted(updated(0.005, "input-change"))
       s.props({ value: 1234.5, locale: "de-DE", format: { style: "currency", currency: "EUR" } })
-      s.blur(input).emitted(updated(0.005, "input-blur"), committed(0.005, "input-blur"))
+      s.blur(input).emitted(updated(0.005, "input-blur"))
       assert.match(text(s) as string, /^1\.234,50\s€$/)
       s.type(input, "99,90 €").emitted(updated(99.9, "input-change"))
       const speed = yield* scene({ value: 12, locale: "en-US", format: { style: "unit", unit: "kilometer-per-hour" } })
@@ -467,8 +466,9 @@ describe("NumberField", () => {
       s.mounted(tracked(s, decrement), pressed(-1, { shift: true, focus: false }))
         .emitted(updated(-3, "decrement-press", -1))
       assert.strictEqual(tracked(s, input).args.focus, 1)
-      s.mounted(tracked(s, decrement), released(-1)).emitted(committed(-3, "decrement-press"))
       s.mounted(tracked(s, decrement), released(-1)).emitted(committed(7, "decrement-press"))
+      s.props({ value: -3, max: 7 })
+      s.mounted(tracked(s, decrement), released(-1)).emitted(committed(-3, "decrement-press"))
     }))
 
   it.effect("a click without a press, as a tap or a screen reader sends, steps and commits", () =>
@@ -489,12 +489,13 @@ describe("NumberField", () => {
       s.type(input, "12").emitted(updated(12, "input-change"))
       s.mounted(tracked(s, increment), pressed(1)).emitted(updated(13, "increment-press", 1))
       assert.strictEqual(text(s), "5")
+      s.props({ value: 13, locale: "en-US" })
       s.mounted(tracked(s, increment), released(1)).emitted(committed(13, "increment-press"))
       s.type(input, "20").emitted(updated(20, "input-change"))
       s.keydown(input, "ArrowDown").emitted(...keyed(19, -1))
-      assert.strictEqual(text(s), "5")
+      assert.strictEqual(text(s), "13")
       s.type(input, "-").expectHandled()
-      s.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
+      s.keydown(input, "ArrowUp").emitted(...keyed(14, 1))
     }))
 
   it.effect("the wheel steps and commits, only when allowWheelScrub is set", () =>
@@ -518,6 +519,7 @@ describe("NumberField", () => {
       const s = yield* scene({ value: 5 })
       const all = [root, group, input, decrement, increment, scrub]
       s.mounted(tracked(s, scrub), sent("StartedScrub", { focus: true }))
+      s.expectMount(tracked(s, root))
       for (const part of all) assert.strictEqual(s.get(part).attrs?.["data-scrubbing"], "")
       assert.strictEqual(tracked(s, input).args.focus, 1)
       assert.strictEqual(tracked(s, scrub).args.scrubbing, true)
@@ -526,13 +528,15 @@ describe("NumberField", () => {
       s.mounted(tracked(s, scrub), scrubbed(-2, { shift: true })).emitted(updated(-12, "scrub", -1))
       s.props({ value: -12 })
       s.mounted(tracked(s, scrub), scrubbed(5, { alt: true })).emitted(updated(-11.5, "scrub", 1))
+      s.props({ value: -11.5 })
       s.mounted(tracked(s, scrub), sent("EndedScrub", { commit: true })).emitted(committed(-11.5, "scrub"))
       for (const part of all) assert.isUndefined(s.get(part).attrs?.["data-scrubbing"])
       s.mounted(tracked(s, scrub), scrubbed(3))
       quiet(s)
       s.mounted(tracked(s, scrub), sent("StartedScrub", { focus: false }))
+      s.expectMount(tracked(s, root))
       assert.strictEqual(tracked(s, input).args.focus, 1)
-      s.mounted(tracked(s, scrub), sent("EndedScrub", { commit: true })).emitted(committed(-12, "scrub"))
+      s.mounted(tracked(s, scrub), sent("EndedScrub", { commit: true })).emitted(committed(-11.5, "scrub"))
     }))
 
   it.effect("the cursor is drawn only while a drag holds the pointer lock, as a popover", () =>
@@ -541,6 +545,7 @@ describe("NumberField", () => {
       s.mounted(tracked(s, scrub), sent("LockedPointer"))
       assert.strictEqual(s.query(cursor), undefined)
       s.mounted(tracked(s, scrub), sent("StartedScrub", { focus: true }))
+      s.expectMount(tracked(s, root))
       assert.strictEqual(s.query(cursor), undefined)
       s.mounted(tracked(s, scrub), sent("LockedPointer"))
       assert.deepInclude(s.get(cursor).attrs, {
@@ -553,6 +558,9 @@ describe("NumberField", () => {
       })
       assert.strictEqual(s.get(cursor).props?.popoverOpen, true)
       assert.strictEqual(tracked(s, scrub).args.cursor, true)
+      s.mounted(tracked(s, scrub), sent("UnlockedPointer"))
+      assert.strictEqual(s.query(cursor), undefined)
+      assert.strictEqual(tracked(s, scrub).args.cursor, false)
       s.mounted(tracked(s, scrub), sent("EndedScrub", { commit: false }))
       quiet(s)
       assert.strictEqual(s.query(cursor), undefined)
@@ -607,6 +615,7 @@ describe("NumberField", () => {
       }
       const s = yield* scene({ value: 5 })
       s.mounted(tracked(s, scrub), sent("StartedScrub", { focus: false }))
+      s.expectMount(tracked(s, root))
       s.mounted(tracked(s, scrub), scrubbed(3)).emitted(updated(8, "scrub", 1))
       s.props({ value: 8, disabled: true })
       s.mounted(tracked(s, scrub), sent("EndedScrub", { commit: false }))
