@@ -96,6 +96,7 @@ export default defineConfig({
       ...example("counters"),
       ...example("file-preview"),
       ...example("interrupting-commands"),
+      ...example("launch"),
       ...example("routing"),
       ...example("snake"),
       ...project("snake-tui", path.join("examples", "snake-tui"), true, {
