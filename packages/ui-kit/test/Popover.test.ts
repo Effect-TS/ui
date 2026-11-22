@@ -13,9 +13,14 @@ const standIn = {
   elements: Html,
   view: (popover: Parts, h: H) =>
     h.div(
-      popover.trigger({ element: h.button.attrs({ id: "press", "data-pressed": "x" }) }).children("Press"),
+      popover.trigger({ element: h.button.attrs({ id: "press", "data-pressed": "x", "aria-disabled": "true" }) })
+        .children("Press"),
       popover.trigger({ element: h.button.attr("id", "hover"), openOnHover: true, closeDelay: 50 }).children("Hover"),
-      popover.trigger({ element: h.button.attr("id", "off"), openOnHover: true, disabled: true }).children("Off"),
+      popover.trigger({
+        element: h.button.attrs({ id: "off", "aria-disabled": "true" }),
+        openOnHover: true,
+        disabled: true
+      }).children("Off"),
       popover.portal(h.dialog.attr("style", "z-index:2"))?.children(
         popover.backdrop(h.div.class("backdrop")),
         popover.positioner(h.div.class("positioner").attrs({ role: "none", style: "color:red" })).children(
@@ -60,7 +65,10 @@ describe("Popover", () => {
       const s = yield* HtmlScene.make(Popover, { open: false, sideOffset: 8 }, standIn)
       assert.isUndefined(s.query(portal))
       assert.deepInclude(s.get(off).attrs, { "data-disabled": "", disabled: "" })
+      assert.isUndefined(s.get(off).attrs?.["aria-disabled"])
       assert.isUndefined(s.get(press).attrs?.["data-pressed"])
+      assert.isUndefined(s.get(press).attrs?.disabled)
+      assert.isUndefined(s.get(press).attrs?.["aria-disabled"])
       s.childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "press" }).emitted(opened("press", "trigger-press"))
       s.props({ open: true, sideOffset: 8 })
       assert.deepInclude(s.get(press).attrs, { "aria-expanded": "true", "data-pressed": "" })
@@ -164,35 +172,19 @@ describe("Popover", () => {
       s.childEmit(Dialog, { _tag: "Settled", open: false }).emitted({ _tag: "Settled", open: false })
     }))
 
-  it.effect("clears contradictory consumer aria-disabled on triggers", () =>
-    Effect.gen(function*() {
-      const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)
-      const detached = (disabled: boolean) =>
-        View.build(
-          PopoverTrigger(helper, {
-            element: helper.button.attr("aria-disabled", "true").disabled(!disabled),
-            props: { open: false, popupId: "pop", disabled }
-          }),
-          []
-        )
-      assert.strictEqual(detached(true).attrs.disabled, "")
-      assert.isUndefined(detached(true).attrs["aria-disabled"])
-      assert.isUndefined(detached(false).attrs.disabled)
-      assert.isUndefined(detached(false).attrs["aria-disabled"])
-
-      const s = yield* HtmlScene.make(Popover, { open: false }, {
-        elements: Html,
-        view: (popover, h) =>
-          h.div(
-            popover.trigger({ element: h.button.attr("id", "on").attr("aria-disabled", "true") }),
-            popover.trigger({ element: h.button.attr("id", "off").attr("aria-disabled", "true"), disabled: true })
-          )
-      })
-      const onLoc = Locator.attr("id", "on")
-      const offLoc = Locator.attr("id", "off")
-      assert.isUndefined(s.get(onLoc).attrs?.disabled)
-      assert.isUndefined(s.get(onLoc).attrs?.["aria-disabled"])
-      assert.strictEqual(s.get(offLoc).attrs?.disabled, "")
-      assert.isUndefined(s.get(offLoc).attrs?.["aria-disabled"])
-    }))
+  it("PopoverTrigger clears contradictory consumer aria-disabled", () => {
+    const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)
+    const detached = (disabled: boolean) =>
+      View.build(
+        PopoverTrigger(helper, {
+          element: helper.button.attr("aria-disabled", "true").disabled(!disabled),
+          props: { open: false, popupId: "pop", disabled }
+        }),
+        []
+      )
+    assert.strictEqual(detached(true).attrs.disabled, "")
+    assert.isUndefined(detached(true).attrs["aria-disabled"])
+    assert.isUndefined(detached(false).attrs.disabled)
+    assert.isUndefined(detached(false).attrs["aria-disabled"])
+  })
 })

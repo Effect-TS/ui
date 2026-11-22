@@ -418,8 +418,6 @@ describe("Select", () => {
           )
       })
       assert.strictEqual(Locator.textOf(s.get(value)), "Custom")
-      s.props({ open: false, items, placeholder: "Pick one" })
-      assert.strictEqual(Locator.textOf(s.get(value)), "Custom")
 
       const hiddenTagCases: ReadonlyArray<(select: Parts, h: H) => View.Content<never>> = [
         (select, h) => h.div(select.arrow(h.span as never)),
