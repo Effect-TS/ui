@@ -125,8 +125,8 @@
  * the input isn't always drawn, so the trigger is wrapped in a
  * `display: contents` span that holds a visually hidden input with them
  * and the text instead. With
- * `submitOnItemClick`, picking an item submits the input's form once the
- * picked label is drawn.
+ * `submitOnItemClick`, picking an item submits that form, the one named
+ * by `form` or around the autocomplete, once the picked label is drawn.
  *
  * **Limits**
  *
@@ -408,8 +408,8 @@ export type AutocompleteMode = typeof AutocompleteMode.Type
  *   True when left out.
  * - `openOnInputClick`: a press on the input opens the popup. False when
  *   left out.
- * - `submitOnItemClick`: picking an item submits the input's form. False
- *   when left out.
+ * - `submitOnItemClick`: picking an item submits the autocomplete's form.
+ *   False when left out.
  * - `inline`: the list is drawn without a popup and is always expanded.
  *   False when left out.
  * - `inputInPopup`: the input is drawn inside the popup, and the trigger

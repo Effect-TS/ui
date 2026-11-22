@@ -447,7 +447,7 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
     method
   )
   return props.submitOnItemClick === true
-    ? closed.run(Html.RequestSubmit.make({ ref: Input }).pipe(Command.asNoop))
+    ? closed.run(Html.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop))
     : closed
 }
 
@@ -707,9 +707,10 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
       const target = event.target
       const owner = list()
       if (!(target instanceof Element)) return
+      const marked = target.closest("[data-combobox-inside],[data-combobox-positioner]")
       const own = target === popup() ||
         (owner !== null && owner.contains(target) && target.closest("[role=listbox],[role=grid]") === owner &&
-          target.closest("[data-combobox-input],[data-combobox-positioner]") === node)
+          (marked === node || marked?.getAttribute("data-combobox-inside") === current.owner))
       if (own) find("data-combobox-input")?.focus({ preventScroll: true })
     }
     const onMouseDown = (event: MouseEvent) => {
@@ -1194,7 +1195,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           { preventDefault: true }
         )
       if (!inPopup) return decorated.attr("tabindex", "-1")
-      return decorated
+      return (selectable ? decorated : decorated.attr("form", props.form))
         .attr("role", "combobox")
         .attr("aria-required", required ? "true" : undefined)
         .attr("aria-readonly", readOnly ? "true" : undefined)

@@ -251,7 +251,7 @@ describe("Autocomplete", () => {
 
   it.effect("with inputInPopup, the trigger shows the picked label and one hidden input holds the form value", () =>
     Effect.gen(function*() {
-      const props = { ...base, open: true, value: "ba", name: "q", required: true, inputInPopup: true }
+      const props = { ...base, open: true, value: "ba", name: "q", form: "search", required: true, inputInPopup: true }
       const s = yield* shown(props)
       s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("banana", 0))
       s.fire(input, "keydown", key("Enter")).emitted(updated("Banana", "item-press"), dismissed("item-press"))
@@ -259,7 +259,8 @@ describe("Autocomplete", () => {
       assert.strictEqual(Locator.textOf(s.get(Locator.attr("class", "value"))), "Banana")
       const named = s.all(Locator.attr("name", "q"))
       assert.strictEqual(named.length, 1)
-      assert.deepInclude(named[0].attrs, { value: "Banana", required: "", "aria-hidden": "true" })
+      assert.deepInclude(named[0].attrs, { value: "Banana", form: "search", required: "", "aria-hidden": "true" })
+      assert.strictEqual(s.get(trigger).attrs?.form, "search")
       assert.isUndefined(s.get(input).attrs?.name)
       assert.isUndefined(s.get(input).attrs?.required)
     }))

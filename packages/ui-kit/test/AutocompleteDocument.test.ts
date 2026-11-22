@@ -89,9 +89,18 @@ const InPopup = Component.define({
     Submitted: (model, { query }) => ({ ...model, log: [...model.log, "Submitted " + JSON.stringify(query)] })
   },
   view: (model, h) =>
-    h.form.attr("id", "form").onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })).children(
+    h.div(
+      h.form.attr("id", "search").onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })),
       Autocomplete(h, {
-        props: { open: model.open, value: model.value, items, name: "q", inputInPopup: true },
+        props: {
+          open: model.open,
+          value: model.value,
+          items,
+          name: "q",
+          form: "search",
+          inputInPopup: true,
+          submitOnItemClick: true
+        },
         onEmit: {
           Opened: ({ reason }) => Message.Opened({ reason }),
           Dismissed: ({ reason }) => Message.Dismissed({ reason }),
@@ -118,17 +127,22 @@ const InPopup = Component.define({
 })
 
 const NestedMessage = UiSchema.TaggedEnum({
-  Toggled: { which: Schema.Literals(["outer", "inner"]), open: Schema.Boolean, reason: Schema.String }
+  Toggled: { which: Schema.Literals(["outer", "inner", "picker"]), open: Schema.Boolean, reason: Schema.String }
 })
 
 const Nested = Component.define({
   name: "Nested",
   scoped: false,
-  model: Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, log: Schema.Array(Schema.String) }),
+  model: Schema.Struct({
+    outer: Schema.Boolean,
+    inner: Schema.Boolean,
+    picker: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
   message: NestedMessage,
   elements: Html
 }).make({
-  init: () => ({ outer: true, inner: true, log: [] }),
+  init: () => ({ outer: true, inner: true, picker: false, log: [] }),
   update: {
     Toggled: (model, { open, reason, which }) => ({
       ...model,
@@ -154,6 +168,7 @@ const Nested = Component.define({
             combobox.popup(h.div).children(
               combobox.list(h.div).children(
                 Autocomplete(h, {
+                  key: "inner",
                   props: { open: model.inner, value: "", items, modal: true },
                   onEmit: {
                     Opened: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: true, reason }),
@@ -172,6 +187,27 @@ const Nested = Component.define({
                               autocomplete.item(h.div, value).children(label)
                             )
                           )
+                        )
+                      )
+                    )
+                }),
+                Autocomplete(h, {
+                  key: "picker",
+                  props: { open: model.picker, value: "", items, inputInPopup: true },
+                  onEmit: {
+                    Opened: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: true, reason }),
+                    Dismissed: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: false, reason }),
+                    Updated: () => undefined,
+                    Highlighted: () => undefined,
+                    Settled: () => undefined
+                  },
+                  view: (autocomplete) =>
+                    h.div(
+                      autocomplete.trigger(h.button.class("picker")),
+                      autocomplete.positioner(h.div.attr("id", "picker")).children(
+                        autocomplete.popup(h.div).children(
+                          autocomplete.input(h.input.class("picker-input")),
+                          autocomplete.list(h.div)
                         )
                       )
                     )
@@ -227,7 +263,7 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       ])
     }).pipe(Effect.scoped))
 
-  it.effect("with inputInPopup, the trigger shows the picked label and a hidden input submits it", () =>
+  it.effect("with inputInPopup, picking submits a form named by form once, with the picked label", () =>
     Effect.gen(function*() {
       yield* popovers
       const root = yield* BrowserHost.mountEffect(InPopup, {}, yield* container)
@@ -237,17 +273,13 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       yield* tick
       type("ba")
       yield* tick
-      input().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
-      yield* tick
-      input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+      item("banana").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
       yield* tick
       assert.strictEqual(trigger.textContent, "Banana")
       const named = document.querySelectorAll<HTMLInputElement>("[name=q]")
       assert.strictEqual(named.length, 1)
       assert.strictEqual(named[0].value, "Banana")
-      assert.notStrictEqual(named[0], input())
-      document.querySelector<HTMLFormElement>("#form")!.requestSubmit()
-      yield* tick
+      assert.strictEqual(named[0].form, document.getElementById("search"))
       assert.deepStrictEqual(root.model()?.log, [
         "Opened list-navigation",
         "Updated \"ba\" input-change",
@@ -257,7 +289,7 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       ])
     }).pipe(Effect.scoped))
 
-  it.effect("an autocomplete in another's popup keeps its blocker and its input's focus to itself", () =>
+  it.effect("an autocomplete in another's popup keeps its blocker and its controls' focus to itself", () =>
     Effect.gen(function*() {
       yield* popovers
       const root = yield* BrowserHost.mountEffect(Nested, {}, yield* container)
@@ -269,5 +301,14 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       press(document.querySelector("#inner > [data-combobox-blocker]")!)
       yield* tick
       assert.deepStrictEqual(root.model()?.log, ["inner Dismissed outside-press"])
+      const picker = document.querySelector<HTMLButtonElement>(".picker")!
+      picker.focus()
+      yield* tick
+      assert.strictEqual(document.activeElement, picker)
+      picker.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
+      yield* tick
+      assert.deepStrictEqual(root.model()?.log, ["inner Dismissed outside-press", "picker Opened list-navigation"])
+      assert.isTrue(document.getElementById("picker")!.matches(":popover-open"))
+      assert.strictEqual(document.activeElement, document.querySelector(".picker-input"))
     }).pipe(Effect.scoped))
 })
