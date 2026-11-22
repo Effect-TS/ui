@@ -12,8 +12,7 @@ const Log = Component.define({
   scoped: false,
   model: Schema.Array(Schema.String),
   message: LogMessage,
-  receives: ["Add"],
-  shares: (ids) => ids
+  shares: { value: (ids) => ids, receives: ["Add"] }
 }).make({ init: () => [], update: (ids, { id }) => [...ids, id], parts: () => ({}) })
 
 const ItemMessage = UiSchema.TaggedEnum({ Adds: { ids: Schema.NonEmptyArray(Schema.String) } })
@@ -73,14 +72,6 @@ describe("$.send to an owner", () => {
         ])
       )
     })))
-
-  it("is the only send: define throws for a component that receives and shares nothing", () => {
-    const options = { name: "Field", scoped: false, model: Schema.Null, message: LogMessage, receives: ["Add"] }
-    assert.throws(
-      () => Component.define(options as any),
-      /^Field: only an owner receives messages, so give it shares or remove receives$/
-    )
-  })
 })
 
 describe("Story and sends", () => {

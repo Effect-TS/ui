@@ -8,14 +8,13 @@ import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import * as users from "./users.ts"
 
-export const BadgeMessage = UiSchema.TaggedEnum({ Clear: {} })
 export const BadgeEvents = UiSchema.TaggedEnum({ Opened: { count: Schema.Number } })
 
 export const Badge = Component.define({
   name: "Badge",
   scoped: false,
   model: Schema.Number,
-  message: BadgeMessage,
+  message: Schema.Never,
   events: BadgeEvents,
   elements: Html
 }).make({

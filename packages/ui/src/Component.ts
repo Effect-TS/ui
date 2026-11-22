@@ -344,8 +344,7 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Receives<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv, infer Sh>
-    ? [Sh] extends [never] ? never : Rcv
+  export type Receives<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv> ? Rcv
     : never
 
   /**
@@ -1983,10 +1982,6 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
   readonly "Only a headless component can share state: finish it with parts in place of view": never
 }
 
-type OwnersReceive<Rcv, SV> = [Rcv] extends [never] ? unknown
-  : [SV] extends [never] ? { readonly "Only an owner receives messages: add shares, or remove receives": never }
-  : unknown
-
 // The owners `shared` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
 // a string index of its own is kept.
 type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
@@ -2225,7 +2220,6 @@ export interface Definition<
           ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
-      & OwnersReceive<Rcv, SV>
       & SelfShares<SR, SV>
   ): Headless<
     Props,
@@ -2282,7 +2276,6 @@ export interface Definition<
           | undefined
       }
       & OwnersAreHeadless<SV>
-      & OwnersReceive<Rcv, SV>
       & SelfShares<SR, SV>
   ): ComponentOf<
     Sc,
@@ -2571,9 +2564,8 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * `slots: { name: content }` when it declares the child, written with its own
  * `h`, and the view places each one with `h.slots.<name>`, once per render.
  * The content belongs to the parent: its handlers send the parent's
- * messages, its children's events and failures map to them, `$.send` and
- * refs reach into it from the parent, and it resolves services where the
- * parent declared the child. A parent's re-render patches only the content,
+ * messages, its children's events and failures map to them, and it
+ * resolves services where the parent declared the child. A parent's re-render patches only the content,
  * without running the child's view. Content the view doesn't place is not
  * mounted, and a slot placed again starts over. A definition with slots
  * finishes with `view`, not `parts`.
@@ -2786,11 +2778,6 @@ export const define = <
     readonly model: Schema.Codec<Model, any>
     readonly message: Schema.Codec<Msg, any>
     readonly events?: Schema.Codec<Events, any> | undefined
-    /**
-     * The tags of `message` the components below an owner may send it with `$.send(Owner, message)`. None by
-     * default. Only an owner, a headless component with `shares`, takes it.
-     */
-    readonly receives?: ReadonlyArray<Tags> | undefined
     /** The queries the component shows, by name. */
     readonly queries?:
       | (
@@ -2853,10 +2840,16 @@ export const define = <
         readonly value: (model: Model, props: Props) => SV
         /** The Schema of the value. */
         readonly schema?: Schema.Codec<SV, any> | undefined
+        /**
+         * The tags of `message` the components below may send the owner with `$.send(Owner, message)`.
+         * None by default.
+         */
+        readonly receives?: ReadonlyArray<Tags> | undefined
       }
       | {
         readonly value: (model: Model, props: Props) => SV
         readonly schema?: Schema.Codec<SV, any> | undefined
+        readonly receives?: ReadonlyArray<Tags> | undefined
         /** What the owner collects from the readers below it. */
         readonly collects: {
           /** The Schema of what each reader below reports with `report`. */
@@ -2908,7 +2901,7 @@ export const define = <
     model: options.model,
     message: options.message,
     events: options.events ?? (Schema.Never as any),
-    receives: receivesOf(options.message, options.receives ?? []) as Schema.Codec<any, any>,
+    receives: receivesOf(options.message, typeof shares === "object" ? shares.receives ?? [] : []),
     queries: options.queries,
     elements: options.elements,
     slots: options.slots ?? [],
@@ -2929,9 +2922,6 @@ export const define = <
     // The type of `shared` names the component in each `"self"` entry. The value keeps `"self"`, which `finish`
     // resolves once the component exists.
     make: (rest: any) => finish(definition as any, rest) as any
-  }
-  if (shares === undefined && (options.receives?.length ?? 0) > 0) {
-    throw new Error(`${options.name}: only an owner receives messages, so give it shares or remove receives`)
   }
   sharedReads.check(definition as any)
   return definition

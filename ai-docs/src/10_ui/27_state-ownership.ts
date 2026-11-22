@@ -165,8 +165,7 @@ export const ModalProvider = Component.define({
   scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: ModalMessage,
-  receives: ["RequestedOpen", "RequestedClose"],
-  shares: (model) => ({ open: model.open }),
+  shares: { value: (model) => ({ open: model.open }), receives: ["RequestedOpen", "RequestedClose"] },
   elements: Html
 }).make({
   init: () => ({ open: false }),

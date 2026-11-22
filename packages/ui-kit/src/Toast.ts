@@ -640,9 +640,8 @@ export const ToastProvider = Component.define({
   model: Model,
   message: Message,
   events: ToastProviderEvents,
-  receives: ["AddedToast", "UpdatedToast", "ClosedToast"],
   // Senders only post, so there's nothing for them to read.
-  shares: () => ({}),
+  shares: { value: () => ({}), receives: ["AddedToast", "UpdatedToast", "ClosedToast"] },
   elements: Html
 }).make({
   init: () => ({ toasts: [], hovering: false, focused: false, windowFocused: true, closeFocused: null }),

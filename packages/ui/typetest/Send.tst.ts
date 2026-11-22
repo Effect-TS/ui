@@ -13,8 +13,7 @@ const Editor = Component.define({
   scoped: false,
   model: Schema.String,
   message: EditorMessage,
-  receives: ["Clear", "Focus"],
-  shares: (text) => ({ text })
+  shares: { value: (text) => ({ text }), receives: ["Clear", "Focus"] }
 }).make({
   init: () => "",
   update: (text, message) => message._tag === "Typed" ? message.text : message._tag === "Clear" ? "" : text,
@@ -64,22 +63,8 @@ describe("Component receives", () => {
       name: "Bad",
       model: Schema.Null,
       message: EditorMessage,
-      receives: ["Delete"],
-      shares: () => null
+      shares: { value: () => null, receives: ["Delete"] }
     })
-  })
-
-  it("is only for an owner: a component that receives and shares nothing doesn't make", () => {
-    const options = { name: "NotOwner", scoped: false as const, model: Schema.Null, message: EditorMessage }
-    const drawn = { init: () => null, update: (model: null) => model, view: (_: null, h: any) => h.el("p") }
-    const headless = { init: () => null, update: (model: null) => model, parts: () => ({}) }
-    expect(Component.define({ ...options, receives: ["Clear"] }).make).type.not.toBeCallableWith(drawn)
-    expect(Component.define({ ...options, receives: ["Clear"] }).make).type.not.toBeCallableWith(headless)
-    expect(Component.define(options).make).type.toBeCallableWith(drawn)
-    expect(Component.define(options).make).type.toBeCallableWith(headless)
-    expect(Component.define({ ...options, receives: ["Clear"], shares: () => null }).make).type.toBeCallableWith(
-      headless
-    )
   })
 })
 
@@ -131,8 +116,7 @@ const NestDef = Component.define({
   scoped: false,
   model: Schema.Number,
   message: NestMessage,
-  receives: ["Picked"],
-  shares: (picked) => picked,
+  shares: { value: (picked) => picked, receives: ["Picked"] },
   shared: { parent: { owner: "self", optional: true } }
 })
 
@@ -141,8 +125,7 @@ const FlatDef = Component.define({
   scoped: false,
   model: Schema.Number,
   message: NestMessage,
-  receives: ["Picked"],
-  shares: (picked) => picked
+  shares: { value: (picked) => picked, receives: ["Picked"] }
 })
 
 describe("$.send to self", () => {

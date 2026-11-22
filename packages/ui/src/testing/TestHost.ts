@@ -1035,7 +1035,7 @@ const formatEntry = (entry: MessageLog.Entry): string => {
     case "CommandDropped":
       return `${head} ${entry.name} (${entry.reason})`
     case "SendDropped":
-      return `${head} ${entry.owner} (${entry.reason})`
+      return `${head} ${entry.owner}`
     case "FetchStarted":
       return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
     default:

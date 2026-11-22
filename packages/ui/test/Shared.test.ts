@@ -22,8 +22,7 @@ const TipsProvider = Component.define({
   props: Schema.Struct({ label: Schema.optional(Schema.String) }),
   model: Schema.NullOr(Schema.String),
   message: TipMessage,
-  receives: ["Enter"],
-  shares: (open, props) => ({ open, label: props.label ?? "" })
+  shares: { value: (open, props) => ({ open, label: props.label ?? "" }), receives: ["Enter"] }
 }).make({ init: () => null, update: (_, message) => message.id, parts: () => ({}) })
 
 /** A reader that opens its tip on click. */
@@ -113,8 +112,7 @@ describe("shared state", () => {
         scoped: false,
         model: Schema.Number,
         message: Tick,
-        receives: ["Tick"],
-        shares: (ticks) => new Date(Math.floor(ticks / 2))
+        shares: { value: (ticks) => new Date(Math.floor(ticks / 2)), receives: ["Tick"] }
       }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
       let renders = 0
       const Face = Component.define({
@@ -314,9 +312,9 @@ const Group = Component.define({
   scoped: false,
   model: Schema.Struct({ on: Schema.Boolean, bumps: Schema.Number }),
   message: GroupMessage,
-  receives: ["Bumped"],
   shares: {
     value: (model) => ({ on: model.on, bumps: model.bumps }),
+    receives: ["Bumped"],
     collects: {
       schema: Schema.Boolean,
       onChange: (collected) => GroupMessage.ChangedOn({ on: collected.includes(true) })
@@ -413,7 +411,7 @@ describe("optional owners, reports and onChange", () => {
       click(root, "alone")
       yield* TestHost.settle
       const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
-      assert.deepStrictEqual(dropped.map((entry) => [entry.owner, entry.reason]), [["TipsProvider", "absent"]])
+      assert.deepStrictEqual(dropped.map((entry) => entry.owner), ["TipsProvider"])
     })))
 
   it.effect("an owner reads its readers' reports once the pass settles: a swap in one render sends nothing, an unmount does", () =>
@@ -507,9 +505,9 @@ describe("shared state in update", () => {
     scoped: false,
     model: Schema.Number,
     message: ClockMessage,
-    receives: ["Ticked"],
     shares: {
       value: (ticks) => ({ at: new Date(ticks), "~redacted": false }),
+      receives: ["Ticked"],
       schema: Schema.Struct({ at: Schema.Date, "~redacted": Schema.Boolean })
     }
   }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
@@ -784,9 +782,8 @@ describe("a component that reads its own kind", () => {
     scoped: false,
     model: Schema.Number,
     message: MenuMessage,
-    receives: ["Picked"],
     elements: Html,
-    shares: (picked) => picked,
+    shares: { value: (picked) => picked, receives: ["Picked"] },
     shared: { parent: { owner: "self", optional: true } }
   }).make({
     init: () => 0,
@@ -825,7 +822,7 @@ describe("a component that reads its own kind", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "outer 1inner 0")
       const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
-      assert.deepStrictEqual(dropped.map((entry) => [entry.owner, entry.reason]), [["Menu", "absent"]])
+      assert.deepStrictEqual(dropped.map((entry) => entry.owner), ["Menu"])
       const [sent] = updatesAt(root.log(), "/Menus/Menu[outer]/Menu[inner]")
       assert.strictEqual(sent.sends[0].owner, Menu)
       const [received] = updatesAt(root.log(), "/Menus/Menu[outer]")

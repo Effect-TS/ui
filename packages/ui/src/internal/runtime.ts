@@ -3681,20 +3681,6 @@ const setup = (
     onceSelected(inst, go)
   }
   /**
-   * Counts one more round of sends by `inst` in this flush, and fails it past the limit: a reader and
-   * its owner whose updates answer each other would never leave `drainLoop`.
-   */
-  const countSends = (inst: Instance, to: string): boolean => {
-    const passes = (sendPasses.get(inst) ?? 0) + 1
-    sendPasses.set(inst, passes)
-    if (passes <= maxSendPasses) return true
-    const error = new Error(
-      `${inst.path} sent to ${to} ${maxSendPasses} times in one flush. Updates that answer each other loop: answer a send with state, or send from a user event.`
-    )
-    failInstance(inst, Cause.die(error), "send")
-    return false
-  }
-  /**
    * The nearest instance of `definition` from `from` up: a definition, since `provide` and stories copy
    * components.
    */
@@ -3889,18 +3875,23 @@ const setup = (
   /**
    * Delivers `$.send(Owner, message)`s to the nearest owner of each above `inst`, in order. A send to an
    * owner the sender reads as optional, with none above, is dropped. A send to another owner that
-   * isn't above fails the sender.
+   * isn't above fails the sender. Past `maxSendPasses` rounds in one flush it fails the sender too: a
+   * reader and its owner whose updates answer each other would never leave `drainLoop`.
    */
   const sendToOwners = (inst: Instance, sends: ReadonlyArray<Component.Send>, entrySeq: number) => {
-    let counted = false
-    for (const [index, send] of sends.entries()) {
-      if (send.owner === undefined) continue
+    if (inst.closed) return
+    const passes = (sendPasses.get(inst) ?? 0) + 1
+    sendPasses.set(inst, passes)
+    if (passes > maxSendPasses) {
+      const error = new Error(
+        `${inst.path} sent to its owners ${maxSendPasses} times in one flush. Updates that answer each other loop: answer a send with state, or send from a user event.`
+      )
+      failInstance(inst, Cause.die(error), "send")
+      return
+    }
+    for (let index = 0; index < sends.length; index++) {
       if (inst.closed) return
-      const definition = send.owner.definition
-      if (!counted) {
-        counted = true
-        if (!countSends(inst, definition.name)) return
-      }
+      const definition = sends[index].owner.definition
       const owner = nearestOwner(inst.parent, definition)
       if (
         owner === undefined &&
@@ -3908,12 +3899,7 @@ const setup = (
           read.optional && read.owner.definition === definition
         )
       ) {
-        record(inst, {
-          _tag: "SendDropped",
-          owner: definition.name,
-          issued: { seq: entrySeq, index },
-          reason: "absent"
-        })
+        record(inst, { _tag: "SendDropped", owner: definition.name, issued: { seq: entrySeq, index } })
         continue
       }
       if (owner === undefined) {
@@ -3921,7 +3907,7 @@ const setup = (
         failInstance(inst, Cause.die(error), "send")
         return
       }
-      owner.dispatch(send.message, { _tag: "Send", path: inst.path, seq: entrySeq })
+      owner.dispatch(sends[index].message, { _tag: "Send", path: inst.path, seq: entrySeq })
     }
   }
   const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {

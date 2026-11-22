@@ -883,8 +883,7 @@ describe("Story", () => {
         scoped: false,
         model: Schema.Null,
         message: UiSchema.TaggedEnum({ Take: { token: Secret, at: Schema.Finite } }),
-        receives: ["Take"],
-        shares: () => null
+        shares: { value: () => null, receives: ["Take"] }
       }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
       const App = Component.define({
         name: "SecretOutputs",

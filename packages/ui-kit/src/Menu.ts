@@ -1672,9 +1672,9 @@ export const Menu = Component.define({
   model: Model,
   message: Message,
   events: MenuEvents,
-  receives: ["ClosedByChild"],
   shares: {
     value: shares,
+    receives: ["ClosedByChild"],
     collects: {
       schema: Submenu,
       onChange: (submenus) => Message.ChangedSubmenus({ submenus: submenus.filter((submenu) => submenu.item !== "") })

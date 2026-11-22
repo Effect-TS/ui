@@ -144,8 +144,7 @@ const Provider = Component.define({
   scoped: false,
   model: Schema.Struct({ open: Schema.NullOr(Schema.String), touches: Schema.Number }),
   message: ProviderMessage,
-  receives: ["Touch", "Open"],
-  shares: (model) => ({ open: model.open }),
+  shares: { value: (model) => ({ open: model.open }), receives: ["Touch", "Open"] },
   elements: Html
 }).make({
   init: () => ({ open: null, touches: 0 }),

@@ -498,9 +498,8 @@ value in that `update`. An `onChange` message can be older than `$.shared`,
 when another reader changed the owner within the same round.
 
 A descendant's `update` can call `$.send(TooltipProvider, message)` without a
-`shared` entry. The owner lists the tags it takes in `receives`, and can't
-tell which descendant sent a message. Only an owner has `receives`: a
-component that lists it without `shares` doesn't compile. A read or a send
+`shared` entry. The owner lists the tags it takes in `shares.receives`, and
+can't tell which descendant sent a message. A read or a send
 puts `Component.Shared<"TooltipProvider">` in a component's requirements,
 unless the owner's entry is optional, and the owner's closure removes it. The
 component compiles on its own: with no owner of that name above it, the type

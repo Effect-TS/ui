@@ -12,8 +12,7 @@ const TipsProvider = Component.define({
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: TipsMessage,
-  receives: ["Enter"],
-  shares: (model) => ({ open: model.open })
+  shares: { value: (model) => ({ open: model.open }), receives: ["Enter"] }
 }).make({
   init: () => ({ open: null }),
   update: (model) => model,

@@ -423,12 +423,11 @@ const expandRoot = <Msg>(
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const placed: Array<Occurrence> = []
-  // As the runtime does: two children at one path fail the view or the closure that holds them, and
-  // so do two children with one ref key across the view and the closures it gives its headless children.
-  // Nor can two of them place one slot.
+  // As the runtime does: two children at one path fail the view or the closure that holds them, and the
+  // view and the closures it gives its headless children can't place one slot twice between them.
   const written = [checkChildPaths("/" + name, view)]
   // Content is shown under `children`, where a query looks, at the path the runtime gives it.
-  // `own`: the story's component wrote it, so its refs count with the component's. Content the story
+  // `own`: the story's component wrote it, so its slots count with the component's. Content the story
   // passed for its slots was written by a parent, and so were the closures in it.
   // `reads`: what the feature slots there read, if their services aren't ready. See `Fields.slotStatus`.
   const content = (
@@ -1808,7 +1807,7 @@ export const acknowledgeSent = <Props, Model, Msg, Events>(
     Schema.toEquivalence(receives)(oldest.message, message)
   if (!matched) {
     throw new Error(
-      `${step}: expected ${show(receives, message)} to the owner ${owner.definition.name}; unacknowledged: ${
+      `${step}: expected ${describeSend({ owner, message })}; unacknowledged: ${
         story.sent.length === 0 ? "nothing" : story.sent.map(describeSend).join(", ")
       }`
     )

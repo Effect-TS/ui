@@ -710,14 +710,10 @@ export interface CommandDropped extends InstanceBase {
 }
 
 /**
- * A `$.send` that reached no owner: `path` is the sender's, `owner` the
- * name of the owner, and `issued` the sender's `Update` entry and the
- * send's index in its `sends`.
- *
- * **Details**
- *
- * The reason is `absent`: the sender's `shared` lists the owner as
- * `optional`, and no instance of it is above the sender.
+ * A `$.send` that reached no owner: the sender's `shared` lists the owner
+ * as `optional`, and no instance of it is above the sender. `path` is the
+ * sender's, `owner` the name of the owner, and `issued` the sender's
+ * `Update` entry and the send's index in its `sends`.
  *
  * @stability experimental
  * @category models
@@ -727,7 +723,6 @@ export interface SendDropped extends InstanceBase {
   readonly _tag: "SendDropped"
   readonly owner: string
   readonly issued: Issued
-  readonly reason: "absent"
 }
 
 /**
@@ -1142,8 +1137,7 @@ export const Wire = Schema.Union([
   Schema.TaggedStruct("SendDropped", {
     ...InstanceWire,
     owner: Schema.String,
-    issued: IssuedWire,
-    reason: Schema.Literal("absent")
+    issued: IssuedWire
   }),
   Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, ...SubscriptionWire }),
   Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, ...SubscriptionWire })
@@ -1415,8 +1409,7 @@ export const makeEncoder = (options?: {
             _tag: "SendDropped",
             ...instanceBase(entry),
             owner: entry.owner,
-            issued: entry.issued,
-            reason: entry.reason
+            issued: entry.issued
           }
         case "SubscriptionStarted":
         case "SubscriptionStopped":
