@@ -5,7 +5,7 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { byId, container, popovers, press, tick } from "./utils/document.ts"
+import { byId, container, focusVisibility, holdExits, popovers, press, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
   Opened: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
@@ -140,6 +140,26 @@ describe("PreviewCard in a document", { concurrent: false }, () => {
       document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
       yield* tick
       assert.deepStrictEqual(log().slice(2), ["Opened a trigger-focus", "Dismissed escape-key"])
+    }))
+
+  it.effect("Escape with focus in the card gives it back to the link without opening the card, and the card is inert", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const { calls } = yield* focusVisibility
+      const { log } = yield* mountPage()
+      byId("a").focus()
+      yield* tick
+      byId("inner").focus()
+      yield* tick
+      assert.isNull(byId("card").getAttribute("inert"))
+      byId("inner").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log(), ["Opened a trigger-focus", "Dismissed escape-key"])
+      assert.strictEqual(document.activeElement?.id, "a")
+      assert.deepStrictEqual(calls.at(-1), ["a", true])
+      assert.isTrue(byId("card").isConnected)
+      assert.isTrue(byId("card").inert)
     }))
 
   it.effect("a press on the link keeps it open, and a press outside closes it", () =>

@@ -82,9 +82,11 @@
  * `delay` as a hover, and focus leaving the trigger and the card closes it.
  * Only focus that shows a focus ring, as `:focus-visible` tells, opens it,
  * so focus from a press, on the trigger or on a button that moves focus to
- * it, doesn't. Escape closes
- * an open card wherever focus is. The card's own links follow the trigger
- * in the tab order when the portal is drawn right after it.
+ * it, doesn't. Escape closes an open card wherever focus is. With focus in
+ * the card, focus goes back to the trigger as the close starts, without
+ * opening the card again, and the card is `inert` through its exit. The
+ * card's own links follow the trigger in the tab order when the portal is
+ * drawn right after it.
  *
  * **Hover**
  *
@@ -488,6 +490,16 @@ const escape = DomSubscription.onDocument(
 
 const detached = detachedChannel<PreviewCardMessage>("detachedPreviewCardTriggers")
 
+let returning = 0
+const returnFocus = (element: HTMLElement): void => {
+  returning++
+  try {
+    element.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
+  } finally {
+    returning--
+  }
+}
+
 const activeOf = (model: PreviewCardModel, props: PreviewCardProps): string | null => props.triggerId ?? model.trigger
 
 const hovering = (model: PreviewCardModel): boolean => model.onTrigger || !model.away
@@ -601,6 +613,7 @@ const TrackDetachedTrigger = Mount.makeStream(
             if (event.pointerType !== "mouse") send(PreviewCardMessage.TouchedTrigger())
           }, { signal })
           node.addEventListener("focus", () => {
+            if (returning > 0) return
             send(
               PreviewCardMessage.FocusedTrigger({ triggerId: triggerId(), ...delays(), visible: focusVisible(node) })
             )
@@ -746,7 +759,8 @@ const TrackPresence = Mount.makeStream(
       mounted: Schema.Boolean,
       started: Schema.Boolean,
       holdExit: Schema.Boolean,
-      popupId: Schema.String
+      popupId: Schema.String,
+      trigger: Schema.String
     }
   },
   (node: HTMLElement, args, changes) =>
@@ -763,10 +777,21 @@ const TrackPresence = Mount.makeStream(
           if (current.open && !current.started) frame(() => send(PreviewCardMessage.RenderedFirstFrame()))
         })
       const transition = settling(node, popup, frame, (open) => send(PreviewCardMessage.FinishedTransition({ open })))
+      const closing = () => {
+        const focused = document.activeElement
+        if (focused instanceof HTMLElement && node.contains(focused)) {
+          const trigger = document.querySelector<HTMLElement>(current.trigger)
+          if (trigger === null) focused.blur()
+          else returnFocus(trigger)
+        }
+        node.inert = true
+      }
       const onChange = (next: typeof args) => {
         const previous = current
         current = next
+        if (previous.open && !next.open) closing()
         if (!previous.open && next.open) {
+          node.inert = false
           raiseAbove(node)
           send(PreviewCardMessage.ShowedPortal())
           opening()
@@ -776,12 +801,17 @@ const TrackPresence = Mount.makeStream(
       return Effect.acquireRelease(
         Effect.sync(() => {
           raiseAbove(node)
+          node.inert = !current.open
           if (!current.mounted) send(PreviewCardMessage.ShowedPortal())
           if (current.open) opening()
         }).pipe(
           Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
         ),
-        () => Effect.sync(() => transition.cancel())
+        () =>
+          Effect.sync(() => {
+            transition.cancel()
+            node.inert = false
+          })
       )
     })
 )
@@ -1020,6 +1050,7 @@ export const PreviewCard = Component.define({
         ? {
           ...model,
           mounted: true,
+          focusInside: false,
           asked: false,
           reason: model.asked ? model.reason : null,
           anchorHit: model.asked ? model.anchorHit : null,
@@ -1104,7 +1135,9 @@ export const PreviewCard = Component.define({
               pointerType === "mouse" ? undefined : PreviewCardMessage.TouchedTrigger()
           )
           .onFocus(({ focusVisible }: Html.FocusPayload) =>
-            PreviewCardMessage.FocusedTrigger({ triggerId: key, ...delays, visible: focusVisible })
+            returning > 0
+              ? undefined
+              : PreviewCardMessage.FocusedTrigger({ triggerId: key, ...delays, visible: focusVisible })
           )
           .onBlur(PreviewCardMessage.BlurredTrigger())
           .onMount(TrackTrigger({ triggerId: key }))
@@ -1135,7 +1168,8 @@ export const PreviewCard = Component.define({
             mounted: model.mounted,
             started: model.started,
             holdExit: props.holdExit === true,
-            popupId
+            popupId,
+            trigger: triggerSelector
           })
         )
         : portal

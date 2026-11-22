@@ -11,6 +11,36 @@ export const container = Effect.acquireRelease(
 
 export const byId = (id: string) => document.getElementById(id)!
 
+export const holdExits = Effect.acquireRelease(
+  Effect.sync(() => {
+    const original = Element.prototype.getAnimations
+    let finish = () => {}
+    const running = {
+      effect: { getComputedTiming: () => ({ endTime: 200 }) },
+      finished: new Promise<void>((resolve) => (finish = resolve))
+    } as unknown as Animation
+    Element.prototype.getAnimations = function(this: Element) {
+      return this.hasAttribute("data-ending-style") ? [running] : []
+    }
+    return { original, finish: () => finish() }
+  }),
+  ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
+)
+
+export const focusVisibility = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.HTMLElement.prototype
+    const focus = proto.focus
+    const calls: Array<readonly [string, boolean]> = []
+    proto.focus = function(this: HTMLElement, options?: FocusOptions) {
+      calls.push([this.id, (options as { readonly focusVisible?: boolean } | undefined)?.focusVisible === true])
+      focus.call(this, options)
+    }
+    return { calls, focus }
+  }),
+  ({ focus }) => Effect.sync(() => (window.HTMLElement.prototype.focus = focus))
+)
+
 /** A primary-button `pointerdown`, which is what an outside press listens for. */
 export const press = (target: Element, pointerType = "mouse") =>
   target.dispatchEvent(

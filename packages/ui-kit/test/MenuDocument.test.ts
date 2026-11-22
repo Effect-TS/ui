@@ -5,7 +5,7 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { byId, container, popovers, tick } from "./utils/document.ts"
+import { byId, container, holdExits, popovers, tick } from "./utils/document.ts"
 
 type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 
@@ -224,6 +224,20 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(log(), ["root Opened list-navigation", "root Picked paste", "root Dismissed item-press"])
       assert.strictEqual(document.activeElement, trigger)
+    }))
+
+  it.effect("Escape gives focus back to the trigger as the close starts, and the popup is inert through its exit", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      yield* mountPage()
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      assert.isNull(popupOf("positioner").closest("[inert]"))
+      keydown(item("copy"), "Escape")
+      yield* tick
+      assert.isTrue(shown("positioner"))
+      assert.isNotNull(popupOf("positioner").closest("[inert]"))
+      assert.strictEqual(document.activeElement, byId("trigger"))
     }))
 
   it.effect("Escape, outside press and Tab close it, and mouse open focuses the popup", () =>

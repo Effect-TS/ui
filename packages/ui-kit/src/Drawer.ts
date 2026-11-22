@@ -85,10 +85,12 @@
  *
  * **Keyboard**
  *
- * As a `Dialog`'s. With `virtualKeyboard` and the `viewport` part, the
- * viewport follows the software keyboard: the focused field scrolls into the
- * part of the screen the keyboard leaves, and a modal drawer keeps the page
- * from scrolling under it.
+ * As a `Dialog`'s: as the close starts, focus goes back and the popup
+ * becomes `inert`. A close that comes during a swipe ends the swipe. With
+ * `virtualKeyboard` and the `viewport` part, the viewport follows the
+ * software keyboard: the focused field scrolls into the part of the screen
+ * the keyboard leaves, and a modal drawer keeps the page from scrolling
+ * under it.
  *
  * **Limits**
  *

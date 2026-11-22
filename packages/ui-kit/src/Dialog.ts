@@ -81,11 +81,17 @@
  * where it is. When the focused element inside is removed or hidden, focus
  * moves to the popup.
  *
- * Once the exit ends, focus moves to the `finalFocus` element, unless the
- * dialog closed because focus left it. Otherwise, if focus was inside the
+ * As soon as the close starts, focus moves to the `finalFocus` element,
+ * unless the dialog closed because focus left it, or because a press outside
+ * gave focus to an element of the page. Otherwise, if focus was inside the
  * dialog, it moves to the trigger that opened it, or else to what had focus
- * before it opened. Tab stays inside a dialog with `modal: true` or
- * `modal: "trap-focus"`.
+ * before it opened. Focus that a press outside gave to the page or to
+ * another dialog stays there. A dialog removed while focus is inside gives
+ * focus back the same way. A touch that closes the dialog moves focus
+ * once the finger lifts, so a tap on a field of the page keeps the field
+ * focused. The popup is `inert` while the dialog closes, so during the exit
+ * transition Tab skips it and screen readers don't reach it. Tab stays
+ * inside a dialog with `modal: true` or `modal: "trap-focus"`.
  *
  * **Modes**
  *
@@ -210,7 +216,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
-import { radioGroup } from "./internal/dom.ts"
+import { byAttribute, radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
@@ -474,6 +480,7 @@ const TrackDialogArgs = {
   openMethod: Schema.NullOr(DialogInteraction),
   closeMethod: Schema.NullOr(DialogInteraction),
   closedByFocusOut: Schema.Boolean,
+  closedByOutsidePress: Schema.Boolean,
   triggerId: Schema.NullOr(Schema.String),
   holdExit: Schema.Boolean,
   portalId: Schema.String,
@@ -688,6 +695,7 @@ const TrackDialog = Mount.makeStream(
         node.querySelector(`[data-dialog-backdrop="${CSS.escape(args.portalId)}"]`) !== null
       const touches = new Set<number>()
       let pressed: string | undefined
+      let dismissing: number | undefined
       let ignored: Node | null = null
       const listens = (): boolean => current.open && current.dismissible && topmost()
       // A touch dismisses on pointerdown, so the dialog has left the top
@@ -717,6 +725,7 @@ const TrackDialog = Mount.makeStream(
         if (!out || (event.pointerType !== "touch" && onScrollbar(target, event))) return
         if (event.pointerType === "touch" || (current.modal === "trap-focus" && !hasBackdrop())) {
           if (event.pointerType === "touch") swallowClick(event)
+          dismissing = event.pointerId
           send(DialogMessage.PressedOutside({ pointerType: event.pointerType }))
         } else {
           pressed = event.pointerType
@@ -724,6 +733,7 @@ const TrackDialog = Mount.makeStream(
       }
       const onPointerEnd = (event: PointerEvent) => {
         touches.delete(event.pointerId)
+        if (event.pointerId === dismissing) dismissing = undefined
         ignored = null
         const target = event.target as Node | null
         if (event.type === "pointercancel" || target === null || !outside(target)) pressed = undefined
@@ -769,6 +779,49 @@ const TrackDialog = Mount.makeStream(
           if (current.open && !current.started) frame(() => send(DialogMessage.RenderedFirstFrame()))
         })
 
+      const parentsOf = () => showing.filter((other) => other.node.contains(node))
+      const restoreFocus = (parents: ReadonlyArray<typeof entry>, held: boolean) => {
+        const { closedByFocusOut, closedByOutsidePress, closeMethod, finalFocus, portalId } = current
+        const focused = document.activeElement as HTMLElement | null
+        const away = !held && focused !== null && focused !== document.body && !node.contains(focused)
+        if (
+          focused !== null &&
+          showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
+        ) return
+        if (!finalFocus) {
+          if (focusInside && node.contains(focused)) focused?.blur()
+          return
+        }
+        const visible = closeMethod === "keyboard"
+        const marked = closedByFocusOut || (closedByOutsidePress && away)
+          ? null
+          : byAttribute(document, "data-final-focus", portalId)
+        if (marked?.isConnected === true) return handOff(marked, visible)
+        if (away) return
+        const back = [trigger, before, ...[...visited].reverse()].find((element) =>
+          element?.isConnected === true && !node.contains(element)
+        )
+        handOff(back, visible)
+      }
+      const restore = (parents: ReadonlyArray<typeof entry>) =>
+        frame(() => {
+          if (!current.open) restoreFocus(parents, false)
+        })
+      const closing = () => {
+        const parents = parentsOf()
+        const press = dismissing
+        if (press === undefined) return restore(parents)
+        const done = new AbortController()
+        const options = { capture: true, signal: done.signal }
+        const end = (event: PointerEvent) => {
+          if (event.pointerId !== press) return
+          done.abort()
+          restore(parents)
+        }
+        document.addEventListener("pointerup", end, options)
+        document.addEventListener("pointercancel", end, options)
+      }
+
       const transition = settling(node, popup, frame, (open) => send(DialogMessage.FinishedTransition({ open })))
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
@@ -779,6 +832,7 @@ const TrackDialog = Mount.makeStream(
         if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch()
         if (previous.open && !next.open) {
           pressed = undefined
+          closing()
         } else if (!previous.open && next.open) {
           send(DialogMessage.ShowedPortal())
           page.takeRecords()
@@ -828,30 +882,11 @@ const TrackDialog = Mount.makeStream(
             page.disconnect()
             release?.()
             transition.cancel()
-            const { closedByFocusOut, closeMethod, finalFocus, portalId } = current
-            const lost = focusInside
-            const parents = showing.filter((other) => other.node.contains(node))
-            frame(() => {
-              const focused = document.activeElement as HTMLElement | null
-              if (
-                focused !== null &&
-                showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
-              ) return
-              if (!finalFocus) {
-                if (lost && focused !== null && focused !== document.body) focused.blur()
-                return
-              }
-              const visible = closeMethod === "keyboard"
-              const marked = closedByFocusOut ? null : document.querySelector<HTMLElement>(
-                `[data-final-focus="${CSS.escape(portalId)}"]`
-              )
-              if (marked?.isConnected === true) return handOff(marked, visible)
-              if (!lost && focused !== null && focused !== document.body) return
-              const back = [trigger, before, ...visited.reverse()].find((element) =>
-                element?.isConnected === true && !node.contains(element)
-              )
-              handOff(back, visible)
-            })
+            if (current.open) {
+              const parents = parentsOf()
+              const held = focusInside
+              frame(() => restoreFocus(parents, held))
+            }
           })
       )
     })
@@ -983,7 +1018,7 @@ export const DialogTrigger = <Msg, R = never>(
  * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
  * portal `id`, `popover` and `open`; `role` on the backdrop and the viewport; the
  * data attributes on the backdrop (including `data-dialog-backdrop`), viewport
- * and popup; `id` and `tabindex` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
+ * and popup; `id`, `tabindex` and `inert` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
  * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
  * The title and description keep an `id` the consumer gives them, and get a
  * generated one otherwise. The portal's `aria-labelledby` and `aria-describedby`
@@ -1141,6 +1176,7 @@ export const Dialog = Component.define({
           openMethod,
           closeMethod: model.closeMethod,
           closedByFocusOut: model.reason === "focus-out",
+          closedByOutsidePress: model.reason === "outside-press",
           triggerId: activeTrigger,
           holdExit: props.holdExit === true,
           portalId,
@@ -1175,7 +1211,7 @@ export const Dialog = Component.define({
         .forward((node) => open ? node : node.attr("style", withStyle(node.elementAttrs.style, passThrough))))
     const popup = p.part("div", (b) =>
       nesting(b)
-        .attrs({ id: popupId, tabindex: "-1" })
+        .attrs({ id: popupId, tabindex: "-1", inert: flag(!open) })
         .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, `--nested-dialogs:${nestedDialogs}`))))
 
     const titlePart = p.part(

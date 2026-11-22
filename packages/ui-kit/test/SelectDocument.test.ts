@@ -4,7 +4,7 @@ import { Dialog, Field, Select } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, popovers, press, tick } from "./utils/document.ts"
+import { byId, container, holdExits, popovers, press, tick } from "./utils/document.ts"
 
 type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 
@@ -414,6 +414,20 @@ describe("Select in a document", { concurrent: false }, () => {
         "Picked dark",
         "Dismissed item-press"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("Escape gives focus back to the trigger as the close starts, and the popup is inert through its exit", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      yield* mountPage()
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      assert.isNull(item("light").closest("[inert]"))
+      keydown(item("light"), "Escape")
+      yield* tick
+      assert.isTrue(shown())
+      assert.isNotNull(item("light").closest("[inert]"))
+      assert.strictEqual(document.activeElement, byId("trigger"))
     }).pipe(Effect.scoped))
 
   it.effect("Space picks on keyup, so the trigger doesn't open again", () =>
