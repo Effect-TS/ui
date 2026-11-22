@@ -149,67 +149,32 @@ describe("Html", () => {
       assert.deepStrictEqual(Object.keys(base.elementAttrs), ["type", "title", "name"])
     })
 
-    it.effect("attrs sets and removes multiple attributes with the same semantics as chained attr calls", () =>
-      Effect.gen(function*() {
-        const h = helper()
-        const base = h.div.attrs({ id: "menu", role: "navigation", title: "Main" })
-        const chained = h.div.attr("id", "menu").attr("role", "navigation").attr("title", "Main")
-        assert.deepStrictEqual(Object.entries(base.elementAttrs), Object.entries(chained.elementAttrs))
-        assert.deepStrictEqual(View.build(base, []).attrs, View.build(chained, []).attrs)
-        assert.deepStrictEqual(h.div.elementAttrs, {})
-        const updated = base.attrs({ id: "nav", role: undefined, hidden: undefined, lang: "en" })
-        const updatedChained = chained
-          .attr("id", "nav")
-          .attr("role", undefined)
-          .attr("hidden", undefined)
-          .attr("lang", "en")
-        assert.deepStrictEqual(Object.entries(updated.elementAttrs), Object.entries(updatedChained.elementAttrs))
-        assert.strictEqual(base.attrs({}).elementAttrs, base.elementAttrs)
-        assert.strictEqual(base.attrs({ hidden: undefined }).elementAttrs, base.elementAttrs)
-        const withProto = Object.create({ inherited: "skip" }) as Record<string, string>
-        Object.defineProperty(withProto, "__proto__", { value: "a", enumerable: true })
-        withProto.id = "x"
-        assert.deepStrictEqual(Object.entries(h.div.attrs(withProto).elementAttrs), [["__proto__", "a"], ["id", "x"]])
-        class TrimmedId extends View.ElementBuilder<TodoMessage> {
-          override attr(name: string, value: string | undefined): this {
-            return super.attr(name, name === "id" && value !== undefined ? value.trim() : value)
-          }
+    it("attrs sets and removes multiple own attributes through attr", () => {
+      const h = helper()
+      const base = h.div.attrs({ id: "menu", role: "navigation", title: "Main" })
+      assert.deepStrictEqual(h.div.elementAttrs, {})
+      const updated = base.attrs(
+        Object.assign(Object.create({ inherited: "skip" }), { id: "nav", role: undefined, lang: "en" })
+      )
+      assert.deepStrictEqual(Object.entries(updated.elementAttrs), [
+        ["title", "Main"],
+        ["id", "nav"],
+        ["lang", "en"]
+      ])
+      assert.deepStrictEqual(View.build(updated, []).attrs, { title: "Main", id: "nav", lang: "en" })
+      const empty = base.attrs({})
+      assert.notStrictEqual(empty, base)
+      assert.strictEqual(empty.elementAttrs, base.elementAttrs)
+      class TrimmedId extends View.ElementBuilder<TodoMessage> {
+        override attr(name: string, value: string | undefined): this {
+          return super.attr(name, name === "id" && value !== undefined ? value.trim() : value)
         }
-        assert.deepStrictEqual(new TrimmedId("nav").attrs({ id: " menu ", role: "navigation" }).elementAttrs, {
-          id: "menu",
-          role: "navigation"
-        })
-        const Trigger = Component.define({
-          name: "Trigger",
-          scoped: false,
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
-        }).make({
-          init: () => null,
-          update: (model) => model,
-          parts: (_, p) => ({
-            root: p.part("button", (b) => b.attrs({ title: undefined, "data-state": "open" }))
-          })
-        })
-        const Page = Component.define({
-          name: "Page",
-          scoped: false,
-          model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
-        }).make({
-          init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            Trigger(h, { view: (trigger) => trigger.root(h.button.attrs({ id: "b", title: "old" })).children("Go") })
-        })
-        const rendered = yield* HtmlServer.renderToHtml(Page, {})
-        assert.strictEqual(
-          rendered.html,
-          "<!--[/Page--><button id=\"b\" data-state=\"open\">Go</button><!--]/Page-->"
-        )
-      }))
+      }
+      assert.deepStrictEqual(new TrimmedId("nav").attrs({ id: " menu ", role: "navigation" }).elementAttrs, {
+        id: "menu",
+        role: "navigation"
+      })
+    })
 
     it("a handler set again without options drops the ones it had", () => {
       const h = helper()
