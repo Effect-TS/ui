@@ -36,6 +36,10 @@ describe("VirtualList", () => {
             readonly last: number
             readonly atStart: boolean
             readonly atEnd: boolean
+            readonly offset: number
+            readonly height: number
+            readonly length: number
+            readonly scrolling: boolean
           }>()
           return Msg.Scrolled({ first: event.first, last: event.last })
         }
@@ -45,6 +49,7 @@ describe("VirtualList", () => {
         expect(virtualList.count).type.toBe<number>()
         expect(virtualList.atStart).type.toBe<boolean>()
         expect(virtualList.atEnd).type.toBe<boolean>()
+        expect(virtualList.scrolling).type.toBe<boolean>()
 
         expect(virtualList.viewport(h.div).children(needsClock)).type.toBe<Div<Clock>>()
         expect(virtualList.list(h.ul)).type.toBe<Ul<never>>()
@@ -87,44 +92,29 @@ describe("VirtualList", () => {
     })
   })
 
-  it("takes the scroll events only when trackScroll may be true", () => {
+  it("takes the same events whatever trackScroll is", () => {
     const props = { count: 1, itemSize: 20 }
     const view = () => h.div
-    const scrolled = { Scrolled: () => undefined }
-    const all = { ...scrolled, ScrolledTo: () => undefined, StoppedScrolling: () => undefined }
-    expect(VirtualList).type.toBeCallableWith(h, { props: { ...props, trackScroll: false }, onEmit: scrolled, view })
-    expect(VirtualList).type.not.toBeCallableWith(h, { props: { ...props, trackScroll: true }, onEmit: scrolled, view })
-    expect(VirtualList).type.not.toBeCallableWith(h, {
-      props: { ...props, trackScroll: tracking },
-      onEmit: scrolled,
-      view
-    })
-    expect(VirtualList).type.toBeCallableWith(h, { props: { ...props, trackScroll: tracking }, onEmit: all, view })
+    const onEmit = { Scrolled: () => undefined }
+    expect(VirtualList).type.toBeCallableWith(h, { props, onEmit, view })
+    expect(VirtualList).type.toBeCallableWith(h, { props: { ...props, trackScroll: false }, onEmit, view })
+    expect(VirtualList).type.toBeCallableWith(h, { props: { ...props, trackScroll: true }, onEmit, view })
+    expect(VirtualList).type.toBeCallableWith(h, { props: { ...props, trackScroll: tracking }, onEmit, view })
     VirtualList(h, {
-      props,
+      props: { ...props, trackScroll: tracking },
       onEmit: (event) => {
         expect(event).type.toBe<VirtualListEvents>()
         return undefined
       },
       view
     })
-    VirtualList(h, {
-      props: { ...props, trackScroll: true },
-      onEmit: {
-        Scrolled: () => undefined,
-        ScrolledTo: (event) => {
-          expect(event).type.toBe<{
-            readonly _tag: "ScrolledTo"
-            readonly offset: number
-            readonly height: number
-            readonly length: number
-          }>()
-          return undefined
-        },
-        StoppedScrolling: () => undefined
-      },
-      view
-    })
+  })
+
+  it("takes keys in place of a count", () => {
+    const view = () => h.div
+    expect(VirtualList).type.toBeCallableWith(h, { props: { keys: ["a", "b"], itemSize: 20 }, view })
+    expect(VirtualList).type.toBeCallableWith(h, { props: { keys: ["a"], count: 5, itemSize: 20 }, view })
+    expect(VirtualList).type.not.toBeCallableWith(h, { props: { keys: ["a"] }, view })
   })
 
   it("takes every scroll target", () => {

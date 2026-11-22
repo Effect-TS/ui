@@ -55,9 +55,8 @@ const ChatDemoNoDeps = Component.define({
       ),
       VirtualList(h, {
         props: {
-          count: ids.length,
           itemSize: 48,
-          // Keyed items stay in place on screen when a page lands before them.
+          // One key per message sets the count, and keyed items stay in place on screen when a page lands before them.
           keys: ids,
           reserveStart: model.start === 0 ? 0 : reserve,
           contentAlignment: "end",
