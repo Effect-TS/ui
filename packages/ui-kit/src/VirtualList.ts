@@ -1136,6 +1136,7 @@ const TrackVirtualList = Mount.makeStream(
             capture()
             report(null)
           }
+          track()
           measure()
         }
 
