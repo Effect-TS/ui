@@ -357,14 +357,8 @@ describe("DialogTrigger", () => {
       const props = { open }
       assert.throws(() => View.build(DialogTrigger(h, { props, element: own, onPress: "open" }), []), clash)
       assert.throws(() => View.build(DialogTrigger(h, { props, onPress: "open" }).onClick("mine"), []), clash)
-      assert.strictEqual(
-        (View.build(DialogTrigger(h, { props, element: own }), []) as View.Element<string>).handlers.click,
-        "mine"
-      )
-      assert.strictEqual(
-        (View.build(DialogTrigger(h, { props }).onClick("mine"), []) as View.Element<string>).handlers.click,
-        "mine"
-      )
+      assert.strictEqual(View.build(DialogTrigger(h, { props, element: own }), []).handlers.click, "mine")
+      assert.strictEqual(View.build(DialogTrigger(h, { props }).onClick("mine"), []).handlers.click, "mine")
     }
   })
 })

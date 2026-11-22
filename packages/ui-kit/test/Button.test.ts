@@ -90,14 +90,14 @@ describe("Button", () => {
     const own = h.button.onClick(click)
     const clash = /already handles click/
     for (const disabled of [false, true]) {
-      assert.deepStrictEqual(View.build(Button(h, { props: { disabled }, element: own }), []).handlers, { click })
-      assert.deepStrictEqual(View.build(Button(h, { props: { disabled } }).onClick(click), []).handlers, { click })
-      for (
-        const options of [
-          { props: { disabled }, onPress: CardMessage.PressedSave() },
-          { props: { disabled, focusableWhenDisabled: true } }
-        ]
-      ) {
+      const props = { disabled }
+      assert.deepStrictEqual(View.build(Button(h, { props, element: own }), []).handlers, { click })
+      assert.deepStrictEqual(View.build(Button(h, { props }).onClick(click), []).handlers, { click })
+      const reserving = [
+        { props, onPress: CardMessage.PressedSave() },
+        { props: { disabled, focusableWhenDisabled: true } }
+      ]
+      for (const options of reserving) {
         assert.throws(() => View.build(Button(h, { ...options, element: own }), []), clash)
         assert.throws(() => View.build(Button(h, options).onClick(click), []), clash)
       }

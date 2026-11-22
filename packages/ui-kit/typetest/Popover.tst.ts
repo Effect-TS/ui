@@ -1,7 +1,7 @@
 import { Component, Mount, UiSchema, type View } from "@effect/ui"
 import { Popover, type PopoverDismissReason, type PopoverInstant, type PopoverOpenReason } from "@effect/ui-kit"
-import { Html } from "@effect/ui/html"
-import { Context, Effect, Schema } from "effect"
+import type { Html } from "@effect/ui/html"
+import { Context, Effect } from "effect"
 import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
@@ -51,37 +51,32 @@ describe("Popover", () => {
   })
 
   it("the trigger takes only a button, and reports why the popover opened and closed", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        Popover(h, {
-          key: "p",
-          props: { open: false },
-          onEmit: {
-            RequestedOpen: ({ reason, triggerId }) => {
-              expect(reason).type.toBe<PopoverOpenReason>()
-              expect(triggerId).type.toBe<string | null>()
-              return Msg.Clicked()
-            },
-            RequestedClose: ({ reason }) => {
-              expect(reason).type.toBe<PopoverDismissReason>()
-              return Msg.Clicked()
-            },
-            Settled: () => Msg.Clicked()
-          },
-          view: (popover) => {
-            expect(popover.trigger).type.not.toBeCallableWith({ element: h.a })
-            expect(popover.portal).type.not.toBeCallableWith(h.div)
-            expect(popover.backdrop).type.not.toBeCallableWith(h.span)
-            expect(popover.positioner).type.not.toBeCallableWith(h.span)
-            expect(popover.popup).type.not.toBeCallableWith(h.span)
-            expect(popover.arrow).type.not.toBeCallableWith(h.span)
-            expect(popover.viewport).type.not.toBeCallableWith(h.span)
-            expect(popover).type.not.toHaveProperty("nestedDialogs")
-            return popover.trigger({ element: h.button })
-          }
-        })
+    Popover(h, {
+      key: "p",
+      props: { open: false },
+      onEmit: {
+        RequestedOpen: ({ reason, triggerId }) => {
+          expect(reason).type.toBe<PopoverOpenReason>()
+          expect(triggerId).type.toBe<string | null>()
+          return Msg.Clicked()
+        },
+        RequestedClose: ({ reason }) => {
+          expect(reason).type.toBe<PopoverDismissReason>()
+          return Msg.Clicked()
+        },
+        Settled: () => Msg.Clicked()
+      },
+      view: (popover) => {
+        expect(popover.trigger).type.not.toBeCallableWith({ element: h.a })
+        expect(popover.portal).type.not.toBeCallableWith(h.div)
+        expect(popover.backdrop).type.not.toBeCallableWith(h.span)
+        expect(popover.positioner).type.not.toBeCallableWith(h.span)
+        expect(popover.popup).type.not.toBeCallableWith(h.span)
+        expect(popover.arrow).type.not.toBeCallableWith(h.span)
+        expect(popover.viewport).type.not.toBeCallableWith(h.span)
+        expect(popover).type.not.toHaveProperty("nestedDialogs")
+        return popover.trigger({ element: h.button })
+      }
     })
   })
 })

@@ -6,9 +6,9 @@ import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 
-// Every part, with the consumer's own name for the bar next to the label.
 const stale = { "data-progressing": "stale", "data-complete": "stale", "data-indeterminate": "stale" }
 
+// Every part, with the consumer's own name for the bar next to the label.
 const standIn = {
   elements: Html,
   view: (
@@ -46,22 +46,9 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const parts = (props: ProgressProps) => Story.parts(Progress, { model: {}, props })
 const build = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, [])
-const expectState = (
-  attrs: Readonly<Record<string, string | undefined>> | undefined,
-  active: "data-progressing" | "data-complete" | "data-indeterminate"
-) =>
-  assert.deepStrictEqual(
-    {
-      "data-progressing": attrs?.["data-progressing"],
-      "data-complete": attrs?.["data-complete"],
-      "data-indeterminate": attrs?.["data-indeterminate"]
-    },
-    {
-      "data-progressing": active === "data-progressing" ? "" : undefined,
-      "data-complete": active === "data-complete" ? "" : undefined,
-      "data-indeterminate": active === "data-indeterminate" ? "" : undefined
-    }
-  )
+const expectState = (attrs: Locator.Node["attrs"], active: keyof typeof stale) => {
+  for (const name of Object.keys(stale)) assert.strictEqual(attrs?.[name], name === active ? "" : undefined, name)
+}
 const everyPart = [root, label, value, track, indicator]
 
 describe("Progress", () => {

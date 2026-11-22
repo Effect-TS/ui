@@ -13,9 +13,9 @@ type Msg = typeof Msg.Type
 
 type Button<R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
 type Div<R = never> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
-type A<R = never> = Html.Element<Msg, R, Html.EventsOf<"a">, HTMLAnchorElement, "a">
+type A = Html.Element<Msg, never, Html.EventsOf<"a">, HTMLAnchorElement, "a">
 type Span<R = never> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
-type Input<R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"input">, HTMLInputElement, "input">
+type Input = Html.VoidElement<Msg, never, Html.EventsOf<"input">, HTMLInputElement, "input">
 type Picked = Extract<MenuEvents, { readonly _tag: "Picked" }>
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>

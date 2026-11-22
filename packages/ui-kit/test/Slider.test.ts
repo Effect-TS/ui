@@ -241,14 +241,6 @@ describe("Slider", () => {
   it("each part keeps the consumer's attributes, while the slider's own win, present or absent", () => {
     const stale = { "data-dragging": "", "data-orientation": "vertical", "data-disabled": "" }
     const slider = parts({ value: 40 })
-    const root = View.build(slider.root(h.div.class("slider").attrs({ ...stale, role: "region" })), [])
-    const value = View.build(slider.value(h.output.class("value").attrs({ ...stale, "aria-live": "polite" })), [])
-    const control = View.build(slider.control(h.div.class("control").attrs(stale)), [])
-    const track = View.build(slider.track(h.div.class("track").attrs(stale)), [])
-    const indicator = View.build(
-      slider.indicator(h.div.class("indicator").attrs({ ...stale, style: "color:blue" })),
-      []
-    )
     const element = h.input
       .class("range")
       .attrs({
@@ -293,21 +285,25 @@ describe("Slider", () => {
     assert.isUndefined(attrs["aria-disabled"])
     assert.isUndefined(attrs.disabled)
     assert.match(attrs.style ?? "", /^color:red;position:absolute/)
-    for (const part of [root, value, control, track, indicator, built]) {
-      assert.strictEqual(part.attrs["data-orientation"], "horizontal")
-      assert.isUndefined(part.attrs["data-dragging"])
-      assert.isUndefined(part.attrs["data-disabled"])
-    }
-    assert.deepInclude(root.attrs, { class: "slider", role: "group" })
-    assert.deepInclude(value.attrs, { class: "value", "aria-live": "off" })
-    assert.strictEqual(control.attrs.class, "control")
-    assert.strictEqual(track.attrs.class, "track")
-    assert.strictEqual(
-      indicator.attrs.style,
-      "color:blue;--slider-indicator-start:0%;--slider-indicator-size:40%"
-    )
-    assert.deepInclude(built.attrs, {
+    const expectAttrs = (part: View.ElementBuilder<never, never, any, any>, attrs: Record<string, string>) =>
+      assert.deepStrictEqual(View.build(part, []).attrs, { "data-orientation": "horizontal", ...attrs })
+    expectAttrs(slider.root(h.div.class("slider").attrs({ ...stale, role: "region" })), {
+      class: "slider",
+      role: "group"
+    })
+    expectAttrs(slider.value(h.output.class("value").attrs({ ...stale, "aria-live": "polite" })), {
+      class: "value",
+      "aria-live": "off"
+    })
+    expectAttrs(slider.control(h.div.class("control").attrs(stale)), { class: "control" })
+    expectAttrs(slider.track(h.div.class("track").attrs(stale)), { class: "track" })
+    expectAttrs(slider.indicator(h.div.class("indicator").attrs({ ...stale, style: "color:blue" })), {
+      class: "indicator",
+      style: "color:blue;--slider-indicator-start:0%;--slider-indicator-size:40%"
+    })
+    assert.deepStrictEqual(built.attrs, {
       class: "thumb",
+      "data-orientation": "horizontal",
       "data-index": "0",
       style: "color:blue;--slider-thumb-position:40%"
     })
