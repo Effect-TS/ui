@@ -48,6 +48,8 @@ export * from "./Button.ts"
  */
 export * from "./Checkbox.ts"
 
+export * from "./Collapsible.ts"
+
 /**
  * @stability experimental
  * @since 0.1.0
