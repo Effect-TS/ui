@@ -154,7 +154,7 @@ describe("CheckboxGroup", { concurrent: false }, () => {
       assert.deepStrictEqual(member.get(Locator.tag("input")).attrs, { type: "hidden", name: "fruit", value: "pear" })
       member.click(Locator.tag("button"))
         .emitted({ _tag: "Toggled", checked: false })
-        .sent(CheckboxGroup, { _tag: "ToggledItem", value: "pear", checked: false })
+        .sent(CheckboxGroup, { _tag: "ToggledItem", value: "pear" })
 
       const parent = yield* Scene.make(Checkbox, { parent: true, name: "all", checked: true }, view)
       parent.shared(CheckboxGroup, {

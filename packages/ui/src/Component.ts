@@ -1989,7 +1989,7 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
 // a string index of its own is kept.
 type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
 
-type ReportId = (name: string, key?: string | number | undefined) => string
+type ReportId = PartsHelper<never, unknown, any>["id"]
 
 // One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `SR` holds what's written, and `optional` with it, and this checks it against the owner. An entry for

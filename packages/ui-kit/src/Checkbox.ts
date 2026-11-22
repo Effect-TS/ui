@@ -211,29 +211,55 @@ const CheckboxMessage = UiSchema.TaggedEnum({ ClickedRoot: {}, PressedEnter: {} 
 
 type GroupShared = Component.Shared.Value<typeof CheckboxGroup>
 
+const isMember = (props: CheckboxProps): props is CheckboxProps & { readonly value: string } =>
+  props.parent !== true && props.value !== undefined
+
+const memberId = (props: CheckboxProps, id: (name: string) => string): string => props.id ?? id("root")
+
+// What the checkbox shows and submits: the group decides for its parent and
+// its members, and the props for any other checkbox.
 const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
-  const parent = props.parent === true ? group?.parent ?? undefined : undefined
-  const member = group !== undefined && props.parent !== true && props.value !== undefined
-  const checked = parent !== undefined
-    ? parent.checked
-    : member
-    ? group.value.includes(props.value!)
-    : props.checked === true
   const disabled = props.disabled === true || group?.disabled === true
-  return {
-    checked,
-    indeterminate: props.indeterminate === true || parent?.indeterminate === true,
+  const own = {
+    indeterminate: props.indeterminate === true,
     disabled,
     readOnly: props.readOnly === true,
-    required: props.required === true,
-    role: parent !== undefined ? "parent" as const : member ? "member" as const : undefined,
-    controls: parent?.controls ?? undefined,
+    required: props.required === true
+  }
+  if (props.parent === true && group?.parent != null) {
+    const { checked, controls, indeterminate } = group.parent
+    return {
+      ...own,
+      role: "parent" as const,
+      checked,
+      indeterminate: own.indeterminate || indeterminate,
+      controls: controls === "" ? undefined : controls,
+      field: { checked, disabled }
+    }
+  }
+  if (group !== undefined && isMember(props)) {
+    const checked = group.value.includes(props.value)
+    return {
+      ...own,
+      role: "member" as const,
+      value: props.value,
+      checked,
+      controls: undefined,
+      field: { checked, disabled, name: props.name ?? group.name ?? undefined, value: props.value }
+    }
+  }
+  const checked = props.checked === true
+  return {
+    ...own,
+    role: undefined,
+    checked,
+    controls: undefined,
     field: {
       checked,
       disabled,
-      name: props.parent === true ? undefined : member ? props.name ?? group.name ?? undefined : props.name,
+      name: props.parent === true ? undefined : props.name,
       value: props.value,
-      uncheckedValue: member ? undefined : props.uncheckedValue
+      uncheckedValue: props.uncheckedValue
     }
   }
 }
@@ -306,9 +332,7 @@ export const Checkbox = Component.define({
       owner: CheckboxGroup,
       optional: true,
       report: (_model, props, id) =>
-        props.parent === true || props.value === undefined
-          ? null
-          : { value: props.value, disabled: props.disabled === true, id: props.id ?? id("root") }
+        isMember(props) ? { value: props.value, disabled: props.disabled === true, id: memberId(props, id) } : null
     }
   },
   elements: Html
@@ -319,14 +343,14 @@ export const Checkbox = Component.define({
       const resolved = resolve($.props, $.shared.group)
       if (!interactive(resolved)) return model
       const toggled = $.emit(CheckboxEvents.Toggled({ checked: !resolved.checked }))
-      return resolved.role === "member"
-        ? toggled.send(
-          CheckboxGroup,
-          CheckboxGroupMessage.ToggledItem({ value: $.props.value!, checked: !resolved.checked })
-        )
-        : resolved.role === "parent"
-        ? toggled.send(CheckboxGroup, CheckboxGroupMessage.ToggledParent())
-        : toggled
+      switch (resolved.role) {
+        case "member":
+          return toggled.send(CheckboxGroup, CheckboxGroupMessage.ToggledItem({ value: resolved.value }))
+        case "parent":
+          return toggled.send(CheckboxGroup, CheckboxGroupMessage.ToggledParent())
+        default:
+          return toggled
+      }
     },
     // Enter means nothing to a checkbox: the message only cancels it.
     PressedEnter: (model) => model
@@ -334,7 +358,7 @@ export const Checkbox = Component.define({
   parts: (_model, p) => {
     const resolved = resolve(p.props, p.shared.group)
     const hidden = field(resolved.field)
-    const id = resolved.role === "member" ? p.props.id ?? p.id("root") : p.props.id
+    const id = resolved.role === "member" ? memberId(p.props, p.id) : p.props.id
     return {
       checked: resolved.checked,
       indeterminate: resolved.indeterminate,

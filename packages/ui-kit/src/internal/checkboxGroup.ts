@@ -10,7 +10,7 @@ export const CheckboxGroupItem = Schema.Struct({
 export type CheckboxGroupItem = typeof CheckboxGroupItem.Type
 
 export const CheckboxGroupMessage = UiSchema.TaggedEnum({
-  ToggledItem: { value: Schema.String, checked: Schema.Boolean },
+  ToggledItem: { value: Schema.String },
   ToggledParent: {},
   ChangedItems: { items: Schema.Array(CheckboxGroupItem) }
 })
