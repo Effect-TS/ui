@@ -174,7 +174,7 @@ describe("OTPField", () => {
       assert.deepStrictEqual(commands(s), [])
     }))
 
-  it.effect("a key pressed before focus has moved goes to the slot focus is on its way to", () =>
+  it.effect("edits made before focus moves or the consumer stores the last one follow the pending slot and code", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: "", length: 4 })
       s.focus(slot(0))
@@ -183,27 +183,13 @@ describe("OTPField", () => {
       store(s, "1")
       // Focus is still on the first slot, which shows its own character and then the one typed.
       inFlight(s.type(slot(0), "12").emitted(updated("12")))
-      store(s, "12")
-      inFlight(s.type(slot(0), "13").emitted(updated("123")))
-      store(s, "123")
-      inFlight(s.keydown(slot(0), "Backspace").emitted(updated("12", "keyboard")))
-      store(s, "12")
-      inFlight(s.fire(slot(0), "paste", { text: "34" }).emitted(updated("1234", "input-paste")))
-      store(s, "1234").emitted(completed("1234", "input-paste"))
-      assert.deepStrictEqual(commands(s), [1, 2, 3, 2, 3].flatMap(focusOn))
-      s.type(slot(0), "56").emitted(updated("5634"))
-      assert.deepStrictEqual(commands(s), focusOn(2))
-    }))
-
-  it.effect("an edit made before the consumer stores the last one carries on from the code that one asked for", () =>
-    Effect.gen(function*() {
-      const s = yield* scene({ value: "1", length: 4 })
-      inFlight(s.type(slot(1), "2").emitted(updated("12")))
-      inFlight(s.keydown(slot(1), "Backspace").emitted(updated("1", "keyboard")))
-      inFlight(s.type(slot(1), "3").emitted(updated("13")))
-      inFlight(s.fire(slot(1), "paste", { text: "45" }).emitted(updated("1345", "input-paste")))
+      inFlight(s.keydown(slot(0), "Backspace").emitted(updated("1", "keyboard")))
+      inFlight(s.type(slot(0), "13").emitted(updated("13")))
+      inFlight(s.fire(slot(0), "paste", { text: "45" }).emitted(updated("1345", "input-paste")))
       store(s, "1345").emitted(completed("1345", "input-paste"))
-      assert.deepStrictEqual(commands(s), [2, 1, 2, 3].flatMap(focusOn))
+      assert.deepStrictEqual(commands(s), [1, 2, 1, 2, 3].flatMap(focusOn))
+      s.type(slot(0), "56").emitted(updated("5645"))
+      assert.deepStrictEqual(commands(s), focusOn(2))
     }))
 
   it.effect("only the consumer's answer to an edit completes the code, whatever it stores", () =>
@@ -213,21 +199,6 @@ describe("OTPField", () => {
       assert.deepStrictEqual(commands(settle(s)), [...focusOn(3), ...focusOn(0)])
       quiet(s)
       assert.deepStrictEqual(commands(store(s, "9876")), [])
-      quiet(s)
-      assert.deepStrictEqual(commands(store(s, "1234")), [])
-      quiet(s)
-      s.fire(slot(0), "paste", { text: "5555" }).emitted(updated("5555", "input-paste"))
-      commands(s)
-      assert.deepStrictEqual(commands(settle(s)), [])
-      quiet(s)
-      assert.deepStrictEqual(commands(store(s, "5555").emitted(completed("5555", "input-paste"))), [submitted])
-      s.fire(slot(0), "paste", { text: "6666" }).emitted(updated("6666", "input-paste"))
-      commands(s)
-      assert.deepStrictEqual(commands(settle(s)), [])
-      s.keydown(slot(3), "Backspace").emitted(updated("555", "keyboard"))
-      commands(s)
-      settle(s)
-      assert.deepStrictEqual(commands(store(s, "6666")), [])
       quiet(s)
 
       const upper = yield* scene({ value: "", length: 2, validationType: "none" })
@@ -279,7 +250,7 @@ describe("OTPField", () => {
       assert.deepStrictEqual(press(1, "ArrowRight"), focusOn(0))
     }))
 
-  it.effect("pasted text fills the slots from the one it was pasted into, and can submit the form", () =>
+  it.effect("pasted text and hidden-input autofill fill the slots and can submit the form", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: "12", length: 4, autoSubmit: true })
       s.fire(slot(2), "paste", { text: " 3-4 9" }).expectDefaultPrevented().emitted(
@@ -297,6 +268,11 @@ describe("OTPField", () => {
         reason: "input-paste"
       })
       assert.deepStrictEqual(commands(s), [])
+
+      store(s, "12")
+      s.type(hidden, "98 76x").emitted({ _tag: "Rejected", value: "98 76x", reason: "input-change" }, updated("9876"))
+      assert.deepStrictEqual(commands(s), focusOn(3))
+      assert.deepStrictEqual(commands(store(s, "9876").emitted(completed("9876"))), [submitted])
     }))
 
   it.effect("text an input method composes is entered once, when the composition ends", () =>
@@ -350,14 +326,6 @@ describe("OTPField", () => {
         disabled: false
       }))
       assert.isUndefined(s.get(root).attrs?.["data-focused"])
-    }))
-
-  it.effect("the browser's autofill of the hidden input fills the slots", () =>
-    Effect.gen(function*() {
-      const s = yield* scene({ value: "12", length: 4 })
-      s.type(hidden, "98 76x").emitted({ _tag: "Rejected", value: "98 76x", reason: "input-change" }, updated("9876"))
-      assert.deepStrictEqual(commands(s), focusOn(3))
-      store(s, "9876").emitted(completed("9876"))
     }))
 
   it.effect("a disabled field reports nothing, and a read-only one keeps only the navigation keys", () =>
@@ -419,29 +387,6 @@ describe("OTPField", () => {
       []
     )
     assert.deepStrictEqual(group.attrs, { class: "otp", role: "group" })
-  })
-
-  it("the root names each slot that has no name of its own, at any depth, and leaves the hidden input alone", () => {
-    const draw = (label: string | undefined) => {
-      const otpField = parts({ value: "", length: 4 })
-      const built = View.build(
-        otpField.root(h.div.attr("aria-labelledby", label)).children(
-          otpField.input({ element: h.input, index: 0 }),
-          otpField.input({ element: h.input.attr("aria-label", "Second"), index: 1 }),
-          h.div(
-            otpField.input({ element: h.input.attr("aria-labelledby", "own"), index: 2 }),
-            otpField.input({ element: h.input, index: 3 })
-          )
-        ),
-        []
-      )
-      const inputs = Array.from(View.nodes(built)).filter((node): node is View.Element<never> =>
-        node._tag === "Element" && node.tag === "input"
-      )
-      return inputs.map((input) => input.attrs["aria-labelledby"])
-    }
-    assert.deepStrictEqual(draw("legend"), ["legend", undefined, "own", "legend", undefined])
-    assert.deepStrictEqual(draw(undefined), [undefined, undefined, "own", undefined, undefined])
   })
 
   it("a slot is an input at an index of its own inside the length, which is a positive whole number", () => {

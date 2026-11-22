@@ -117,7 +117,7 @@ const Labelled = Component.define({
           otpField.root(h.div).children(
             otpField.input({ element: h.input, index: 0 }),
             otpField.input({ element: h.input.attr("aria-label", "Second digit"), index: 1 }),
-            otpField.input({ element: h.input, index: 2 }),
+            h.div(otpField.input({ element: h.input, index: 2 })),
             Frame(h, {
               view: (frame) => frame.root(h.span).children(otpField.input({ element: h.input, index: 3 }))
             })
@@ -192,9 +192,9 @@ describe("OTPField in a document", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
-  it.effect("a code the consumer stores after it declined an edit completes nothing", () =>
+  it.effect("delayed completion submits once on an exact match, and ignores mismatches or superseded edits", () =>
     Effect.gen(function*() {
-      const { log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
+      const { enter, log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
       const paste = (text: string) =>
         slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
           clipboardData: { getData: () => text }
@@ -208,15 +208,9 @@ describe("OTPField in a document", { concurrent: false }, () => {
       root.send(Message.Stored({ value: "1234" }))
       yield* tick
       assert.deepStrictEqual(log(), [])
-    }).pipe(Effect.scoped))
 
-  it.effect("a delayed exact match completes and submits once, unless another edit supersedes it", () =>
-    Effect.gen(function*() {
-      const { enter, log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
-      const paste = (text: string) =>
-        slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
-          clipboardData: { getData: () => text }
-        }))
+      root.send(Message.Stored({ value: "" }))
+      yield* tick
       paste("1234")
       yield* tick
       assert.deepStrictEqual(log(), [])
