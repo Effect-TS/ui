@@ -67,7 +67,7 @@ describe("Menu", () => {
         expect(menu.list(h.div)).type.toBe<Div>()
         expect(menu.arrow(h.div)).type.toBe<Div>()
         expect(menu.viewport(h.div)).type.toBe<Div>()
-        expect(menu.item(h.div, "copy")).type.toBe<Div>()
+        expect(menu.item(h.div.onMount(NeedsClock()), "copy")).type.toBe<Div<Clock>>()
         expect(menu.item(h.div, "copy", false)).type.toBe<Div>()
         expect(menu.linkItem(h.a.attr("href", "/copy"), "copy")).type.toBe<A>()
         expect(menu.checkboxItem(h.div, "copy", true)).type.toBe<Div>()

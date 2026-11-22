@@ -78,6 +78,8 @@ describe("VirtualList", () => {
       assert.strictEqual(first.attrs?.["data-index"], "0")
       assert.strictEqual(first.attrs?.["data-key"], undefined)
       assert.strictEqual(first.attrs?.["data-virtual-list-item"], viewportId)
+      s.props({ ...base, keys: ["row-0"] })
+      assert.strictEqual(s.all(itemLoc)[0]!.attrs?.["data-key"], "row-0")
     }))
 
   it.effect("keeps a role the consumer sets", () =>
