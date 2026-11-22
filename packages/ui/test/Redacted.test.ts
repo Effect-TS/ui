@@ -156,6 +156,7 @@ const historyHooks = (stored: Record<string, unknown> = {}) => {
     },
     afterFlush: () => {},
     restore: (path) => stored[path],
+    entry: () => stored,
     prefetch: () => () => {}
   }
   return {

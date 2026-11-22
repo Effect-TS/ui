@@ -128,6 +128,9 @@ Known limits:
 - While a moved child's server-rendered copy sits in a waiting component, the
   form shows twice, with the same ids and field names.
 - A child moved while it waits for its own Layer builds that Layer again.
+- After Back, saved state for a part of the page the view doesn't draw again
+  is gone once a push leaves the entry. Only a push made while a component
+  still waits to start carries what the entry saved below it.
 
 ### Naming
 

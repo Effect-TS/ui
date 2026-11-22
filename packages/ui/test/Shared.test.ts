@@ -193,6 +193,7 @@ describe("shared state", () => {
           restored.push(path)
           return undefined
         },
+        entry: () => undefined,
         prefetch: () => () => {}
       }
       yield* TestHost.mount(App, {}).pipe(Effect.provideService(services.RootHooks, hooks))

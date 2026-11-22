@@ -718,9 +718,9 @@ describe("saved state of scoped children", () => {
       let asked = 0
       const counting: services.RootHooks = {
         ...hooks,
-        restore: (path) => {
-          if (path.startsWith("~kept")) asked++
-          return hooks.restore(path)
+        entry: () => {
+          asked++
+          return hooks.entry()
         }
       }
       const root = yield* TestHost.mount(TabsApp, Router.props(TabsRoute)).pipe(

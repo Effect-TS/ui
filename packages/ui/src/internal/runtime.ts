@@ -1443,7 +1443,6 @@ const setup = (
     claimed: new Set()
   }
   let popped: Saved | undefined
-  let unclaimed: Saved | undefined
   let replaced: Instance | undefined
   const lates: Array<() => void> = []
   let supply: Saved | undefined
@@ -1468,7 +1467,8 @@ const setup = (
     return from === hydrating?.state || from !== options?.state ? from : waits![child] = subtree(from!, child)
   }
   const below = (path: string, root: string) => (path + "/").startsWith(root + "/")
-  const subtree = (state: Saved, root: string, out: Saved = {}): Saved => {
+  const subtree = (state: Saved, root: string): Saved => {
+    const out: Saved = {}
     for (const path in state) if (below(path, root)) out[path] = state[path]
     for (const key of ["~kept", "~scoped"]) {
       const all = state[key] as Saved | undefined
@@ -1483,8 +1483,8 @@ const setup = (
     return from === hydrating?.state ? undefined : from
   }
   const restoreKept = () => {
-    const kept = hooks!.restore("~kept" + rootPath) as Saved | undefined
-    popped = unclaimed = kept === undefined ? undefined : { "~kept": { ...kept } }
+    const left = hooks!.entry()
+    popped = left && { __proto__: left, "~kept": { ...left["~kept" + rootPath] as Saved | undefined } }
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -3230,7 +3230,7 @@ const setup = (
       const resume = hold(
         inst,
         hydrates ? range : undefined,
-        hydrates ? undefined : restored === undefined ? from : { [inst.path]: restored }
+        hydrates ? undefined : restored === undefined ? from : { __proto__: popped, [inst.path]: restored }
       )
       interruptOnClose(inst.scope, decoded)
       decoded.addObserver((exit) =>
@@ -3608,10 +3608,10 @@ const setup = (
     })
   }
 
-  const restoring = new WeakMap<Instance, Saved>()
+  const restoring = new WeakMap<Instance, Saved | undefined>()
   const hold = (inst: Instance, range: Range | undefined, restored?: Saved) => {
     inst.waiting = true
-    if (restored !== undefined) restoring.set(inst, restored)
+    restoring.set(inst, restored)
     waiting++
     if (range !== undefined) {
       range.claimed = true
@@ -7472,7 +7472,7 @@ const setup = (
   if (reportPending) reportAdoption()
   host.commit?.()
 
-  const snapshot = (out: Record<string, unknown>, left?: Saved): void => {
+  const snapshot = (out: Record<string, unknown>): void => {
     const homes = new Map<Instance, Saved>()
     let into: Saved = out
     const keptIn = (home: Saved): Saved => (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
@@ -7503,11 +7503,7 @@ const setup = (
         }
       }
       if (inst.waiting) {
-        const all = subtree(
-          restoring.get(inst) ?? hydrating!.state,
-          inst.path,
-          subtree({ ...left, ...unclaimed }, inst.path)
-        )
+        const all = subtree(restoring.get(inst) ?? hydrating!.state, inst.path)
         const { "~kept": kept, "~scoped": drawn, ...state } = all as {
           readonly "~kept"?: Record<string, Saved>
           readonly "~scoped"?: Record<string, ReadonlyArray<string>>

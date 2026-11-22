@@ -210,8 +210,8 @@ type Page =
   | "open card"
   | "open contact"
   | "late contact"
-const Routes = Route.union({ Home: Route.make("/"), Away: Route.make("/away") })
-const Msg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {} })
+const Routes = Route.union({ Home: Route.make("/"), Next: Route.make("/next"), Away: Route.make("/away") })
+const Msg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Next: {}, Went: {} })
 const appOf = (page: Page) =>
   Component.define({
     name: "App",
@@ -226,6 +226,7 @@ const appOf = (page: Page) =>
       Msg.match(message, {
         Changed: (changed) => changed.route,
         Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => Msg.Went()))),
+        Next: () => $.run(Router.push(Routes, Routes.Next()).pipe(Command.map(() => Msg.Went()))),
         Went: () => route
       }),
     subscriptions: (route) => [Router.subscription(Routes, route, (changed) => Msg.Changed({ route: changed }))],
@@ -523,6 +524,44 @@ describe("history restore of a page whose hydration hasn't settled", { concurren
         yield* Deferred.succeed(latch, undefined)
         history.go(-1)
         yield* tick
+        assert.deepStrictEqual(fields().map((field) => field.value), typed)
+      }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
+    }
+  )
+
+  it.effect.each(["push", "Back"] as const)(
+    "Back restores all the user typed below a form that crossed a %s to another entry while its state decoded",
+    (crossing) => {
+      const history = Router.memoryHistory("/")
+      return Effect.gen(function*() {
+        const { app, open, root } = yield* visit("late contact")
+        yield* open
+        yield* tick
+        const fields = () => Array.from(app.querySelectorAll("input"))
+        const type = (typed: ReadonlyArray<string>) =>
+          Effect.suspend(() => {
+            fields().forEach((field, at) => {
+              field.value = typed[at]
+              field.dispatchEvent(new Event("input", { bubbles: true }))
+            })
+            return tick
+          })
+        const go = (message: typeof Msg.Type) => Effect.suspend(() => (root.send(message), tick))
+        const back = Effect.suspend(() => (history.go(-1), tick))
+        yield* type(["phone", "name", "email"])
+        const typed = crossing === "Back" ? ["", "Mira", "mira"] : ["phone", "name", "email"]
+        if (crossing === "Back") {
+          yield* go(Msg.Next())
+          yield* type(typed)
+        }
+        yield* go(Msg.Go())
+        const latch = yield* Deferred.make<void>()
+        gate = Deferred.await(latch)
+        yield* back
+        yield* crossing === "Back" ? back : go(Msg.Next())
+        yield* go(Msg.Go())
+        yield* Deferred.succeed(latch, undefined)
+        yield* back
         assert.deepStrictEqual(fields().map((field) => field.value), typed)
       }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: Routes, history })))
     }

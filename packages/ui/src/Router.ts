@@ -1297,8 +1297,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const blocks = new Map<string, number>()
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
-    let restoring: Map<string, unknown> | undefined
-    let left: Map<string, unknown> | undefined
+    let restoring: Record<string, unknown> | undefined
     let pending: {
       readonly location: Location
       readonly from: string
@@ -1318,8 +1317,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const primary = (): services.RootHandle | undefined => roots.values().next().value
     const snapshot = (): Record<string, unknown> => {
       const out: Record<string, unknown> = {}
-      const unclaimed = Object.fromEntries(left ?? [])
-      for (const root of roots) root.snapshot(out, unclaimed)
+      for (const root of roots) root.snapshot(out)
       return out
     }
     const leave = () => {
@@ -1453,7 +1451,7 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       mode: { readonly quiet: boolean; readonly scroll: boolean; readonly blocks?: ReadonlyArray<string> | undefined },
       saved?: Record<string, unknown> | undefined
     ) => {
-      left = restoring = saved === undefined ? undefined : new Map(Object.entries(saved))
+      restoring = saved && { ...saved }
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
       for (const root of roots) root.navigated()
       const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
@@ -1651,11 +1649,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         }
       },
       restore: (path) => {
-        if (restoring === undefined) return undefined
-        const found = restoring.get(path)
-        restoring.delete(path)
+        const found = restoring?.[path]
+        delete restoring?.[path]
         return found
       },
+      entry: () => restoring,
       prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
       afterFlush: (root, info) => {
         if (pending === undefined || pending.since === undefined || root !== primary()) return
