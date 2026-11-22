@@ -1,0 +1,59 @@
+import type * as Component from "@effect/ui/Component"
+import * as Html from "@effect/ui/html/Html"
+import { flag, visuallyHidden } from "./attributes.ts"
+
+export interface FormField {
+  readonly name?: string | undefined
+  readonly form?: string | undefined
+  readonly autoComplete?: string | undefined
+  readonly required: boolean
+  readonly readOnly: boolean
+  readonly disabled: boolean
+  readonly multiple: boolean
+  readonly values: ReadonlyArray<string>
+  readonly filled: boolean
+}
+
+export interface FormFieldMessages<Msg> {
+  readonly focused: Msg
+  readonly autofilled: (value: string) => Msg
+}
+
+const input = () => new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
+
+export const formInputs = <Msg>(
+  p: Pick<Component.PartsHelper<Msg, unknown, Html.Elements>, "part">,
+  field: FormField,
+  messages: FormFieldMessages<Msg>
+) => {
+  const real = field.name !== undefined || field.required || field.autoComplete !== undefined
+  const main = p.part("input", (b) => {
+    const value = field.multiple ? "" : (field.values[0] ?? "")
+    return b
+      .attr("name", field.multiple ? undefined : field.name)
+      .attr("form", field.form)
+      .attr("value", value)
+      .value(value)
+      .disabled(field.disabled)
+      .attr("type", real ? "text" : "hidden")
+      .attr("autocomplete", field.autoComplete)
+      .attr("required", flag(field.required && !(field.multiple && field.filled)))
+      .attr("readonly", flag(field.readOnly && real))
+      .attr("tabindex", real ? "-1" : undefined)
+      .attr("aria-hidden", real ? "true" : undefined)
+      .attr("style", real ? visuallyHidden : undefined)
+      .on("focus", messages.focused)
+      .on("change", ({ value }) => messages.autofilled(value))
+  })
+  const each = p.part("input", (b, value: string) =>
+    b.attr("type", "hidden")
+      .attr("name", field.name)
+      .attr("form", field.form)
+      .attr("value", value)
+      .value(value)
+      .disabled(field.disabled))
+  return [
+    ...(field.form !== undefined || real ? [main(input())] : []),
+    ...(field.multiple && field.name !== undefined ? field.values.map((value) => each(input().key(value), value)) : [])
+  ]
+}

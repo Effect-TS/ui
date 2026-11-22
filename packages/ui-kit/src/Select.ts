@@ -203,21 +203,18 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import {
-  type Attributed,
-  flag,
-  idSelector,
-  noSelect,
-  separatorAttrs,
-  visuallyHidden,
-  withStyle
-} from "./internal/attributes.ts"
+import { type Attributed, flag, idSelector, noSelect, separatorAttrs, withStyle } from "./internal/attributes.ts"
+import { blockers, cutPath } from "./internal/blocker.ts"
 import { byAttribute } from "./internal/dom.ts"
-import { methodOf, onScrollbar } from "./internal/interaction.ts"
-import { lockScroll } from "./internal/modal.ts"
+import { formInputs } from "./internal/formInputs.ts"
+import { methodOf } from "./internal/interaction.ts"
+import { stepped } from "./internal/list.ts"
+import { holdScroll } from "./internal/modal.ts"
+import { listenOutside } from "./internal/outside.ts"
 import { clamp } from "./internal/range.ts"
-import { inKept, raiseAbove } from "./internal/topLayer.ts"
+import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
+import { available, printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -518,51 +515,7 @@ const indexOf = (props: SelectProps, value: string | null): number =>
 const alignedOf = (model: Model, props: SelectProps): boolean =>
   props.alignItemWithTrigger !== false && !model.fellBack && model.openMethod !== "touch"
 
-const available = (item: SelectItem | undefined): boolean => item !== undefined && item.disabled !== true
-
-const matchOf = (items: ReadonlyArray<SelectItem>, text: string, start: number): number => {
-  if (items.length === 0) return -1
-  const lower = text.toLowerCase()
-  const from = ((start % items.length) + items.length) % items.length
-  for (let offset = 0; offset < items.length; offset++) {
-    const index = (from + offset) % items.length
-    const item = items[index]!
-    if (available(item) && item.label.toLowerCase().startsWith(lower)) return index
-  }
-  return -1
-}
-
-interface Typed {
-  readonly typed: string
-  readonly typedFrom: number
-  readonly matched: number
-}
-
-const typeahead = (
-  state: Typed,
-  key: string,
-  items: ReadonlyArray<SelectItem>,
-  from: number
-): { readonly next: Typed; readonly index: number } => {
-  let typed = state.typed
-  let typedFrom = typed === "" ? from : state.typedFrom
-  const cycles = items.every((item) =>
-    !available(item) || item.label[0]?.toLowerCase() !== item.label[1]?.toLowerCase()
-  )
-  if (cycles && typed === key) {
-    typed = ""
-    typedFrom = state.matched
-  }
-  typed += key
-  const index = matchOf(items, typed, typedFrom + 1)
-  if (index !== -1) return { next: { typed, typedFrom, matched: index }, index }
-  return { next: { typed: key === " " ? typed : "", typedFrom, matched: state.matched }, index }
-}
-
 const typing = (model: Model): boolean => model.typed !== ""
-
-const printable = (key: string, alt: boolean, ctrl: boolean, meta: boolean): boolean =>
-  key.length === 1 && !alt && !ctrl && !meta
 
 const startOf = (model: Model, props: SelectProps): number => {
   const selected = selectedIndexOf(props)
@@ -806,15 +759,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       const layer = Array.from(node.children).find(blocking) as HTMLElement | undefined
       const anchor = trigger()
       if (layer === undefined || anchor === null) return
-      const r = anchor.getBoundingClientRect()
-      write(
-        layer,
-        "clip-path",
-        "polygon(0% 0%,100% 0%,100% 100%,0% 100%,0% 0%," +
-          [[r.left, r.top], [r.left, r.bottom], [r.right, r.bottom], [r.right, r.top], [r.left, r.top]]
-            .map(([x, y]) => x + "px " + y + "px").join(",") +
-          ")"
-      )
+      write(layer, "clip-path", cutPath([anchor.getBoundingClientRect()]))
     }
 
     const gaps = (style: CSSStyleDeclaration): readonly [top: number, bottom: number] => {
@@ -965,8 +910,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     let release: (() => void) | undefined
     const hold = () => {
       release?.()
-      const wide = !current.touch || (html.clientWidth > 0 && node.offsetWidth >= html.clientWidth - 20)
-      release = current.open && current.lock && wide ? lockScroll(document) : undefined
+      release = current.open && current.lock ? holdScroll(node, current.touch) : undefined
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -1033,21 +977,8 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       arrowTimer = setTimeout(step, 40)
     }
 
-    let touchPress = false
-    const onPointerDown = (event: PointerEvent) => {
-      touchPress = false
+    const onPointerDown = () => {
       dragY = 0
-      const target = event.target as Node | null
-      if (!current.open || target === null || event.button !== 0 || !event.isPrimary || inside(target)) return
-      if (inKept(target)) return
-      if (event.pointerType === "touch") touchPress = true
-      else if (!onScrollbar(target, event)) send(Message.PressedOutside({ pointerType: event.pointerType }))
-    }
-    const onClick = (event: MouseEvent) => {
-      if (!touchPress) return
-      touchPress = false
-      const target = event.target as Node | null
-      if (current.open && target !== null && !inside(target)) send(Message.PressedOutside({ pointerType: "touch" }))
     }
     const onMouseUp = (event: MouseEvent) => {
       dragY = 0
@@ -1087,14 +1018,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (event.target instanceof Node && blocking(event.target)) event.preventDefault()
     }
     const onFocusIn = (event: FocusEvent) => {
-      const target = event.target as Node | null
-      if (!current.open || target === null) return
-      const anchor = trigger()
-      if (anchor !== null && anchor.contains(target)) {
-        if (target === anchor && current.aligned) send(Message.FocusedTrigger())
-        return
-      }
-      if (!node.contains(target)) send(Message.FocusedOutside())
+      if (current.open && current.aligned && event.target === trigger()) send(Message.FocusedTrigger())
     }
     const onScroll = (event: Event) => {
       if (event.target !== scroller()) return
@@ -1129,8 +1053,13 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
 
     return Effect.acquireRelease(
       Effect.sync(() => {
+        listenOutside(document, signal, {
+          open: () => current.open,
+          inside,
+          pressed: (pointerType) => send(Message.PressedOutside({ pointerType })),
+          focused: () => send(Message.FocusedOutside())
+        })
         document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
-        document.addEventListener("click", onClick, { capture: true, signal })
         document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
         document.addEventListener("focusin", onFocusIn, { capture: true, signal })
         node.addEventListener("pointermove", onPointerMove, { signal })
@@ -1172,12 +1101,7 @@ const TrackSelect = Mount.makeStream(
     )
 )
 
-const blocker = new Html.Element<never>("div")
-  .attr("role", "presentation")
-  .attr("data-select-blocker", "")
-  .attr("style", "position:fixed;inset:0;z-index:-1;" + noSelect)
-const blocking = View.toNode(blocker)
-const blockingClosed = View.toNode(blocker.attr("inert", ""))
+const blocking = blockers("data-select-blocker")
 
 const alignedBox =
   "position:fixed;inset:auto;margin-left:0;margin-right:0;--available-width:100vw;--available-height:100vh"
@@ -1271,9 +1195,9 @@ export const Select = Component.define({
       const at = indexOf(props, model.active)
       switch (key) {
         case "ArrowDown":
-          return highlight(model, props, at === -1 ? 0 : Math.min(at + 1, last))
+          return highlight(model, props, stepped(at, last, 1, "none"))
         case "ArrowUp":
-          return highlight(model, props, at === -1 ? last : Math.max(at - 1, 0))
+          return highlight(model, props, stepped(at, last, -1, "none"))
         case "Home":
           return highlight(model, props, 0)
         case "End":
@@ -1396,37 +1320,17 @@ export const Select = Component.define({
     const placed = <B extends Attributed<B>>(builder: B): B =>
       states(builder).attr("data-side", shownSide).attr("data-align", align)
 
-    const real = props.name !== undefined || required || props.autoComplete !== undefined
-    const input = () => new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
-    const mainInput = p.part("input", (b) => {
-      const value = multiple ? "" : (values[0] ?? "")
-      return b
-        .attr("name", multiple ? undefined : props.name)
-        .attr("form", props.form)
-        .attr("value", value)
-        .value(value)
-        .disabled(disabled)
-        .attr("type", real ? "text" : "hidden")
-        .attr("autocomplete", props.autoComplete)
-        .attr("required", flag(required && !(multiple && filled)))
-        .attr("readonly", flag(readOnly && real))
-        .attr("tabindex", real ? "-1" : undefined)
-        .attr("aria-hidden", real ? "true" : undefined)
-        .attr("style", real ? visuallyHidden : undefined)
-        .on("focus", Message.FocusedInput())
-        .on("change", ({ value }) => Message.Autofilled({ value }))
-    })
-    const valueInput = p.part("input", (b, value: string) =>
-      b.attr("type", "hidden")
-        .attr("name", props.name)
-        .attr("form", props.form)
-        .attr("value", value)
-        .value(value)
-        .disabled(disabled))
-    const inputs = [
-      ...(props.form !== undefined || real ? [mainInput(input())] : []),
-      ...(multiple && props.name !== undefined ? values.map((value) => valueInput(input().key(value), value)) : [])
-    ]
+    const inputs = formInputs(p, {
+      name: props.name,
+      form: props.form,
+      autoComplete: props.autoComplete,
+      required,
+      readOnly,
+      disabled,
+      multiple,
+      values,
+      filled
+    }, { focused: Message.FocusedInput(), autofilled: (value) => Message.Autofilled({ value }) })
     const inputsBox = new Html.Element<Message>("span").attr("style", "display:contents")
 
     const label = p.part("div", (b) => {
@@ -1497,7 +1401,7 @@ export const Select = Component.define({
         .attr("data-anchor-hidden", flag(shown && !aligned && model.placement?.anchorHidden))
         .popover("manual", shown)
         .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
-      const layered = modal ? decorated.children(open ? blocking : blockingClosed) : decorated
+      const layered = modal ? decorated.children(open ? blocking.open : blocking.closed) : decorated
       if (!shown) return layered
       const alignItem = props.items.find((item) => chosen.has(item.value)) ?? props.items[0]
       return layered.onMount(
