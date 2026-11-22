@@ -35,7 +35,6 @@ export const make = (
   return {
     _tag: "Child",
     component: component as Component.Any,
-    // Without a key, the empty key: the child's segment is `Name[]`.
     key: options.key ?? "",
     props: options.props ?? {},
     onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,

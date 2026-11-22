@@ -7,7 +7,6 @@ const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Eff
 
 const LogMessage = UiSchema.TaggedEnum({ Add: { id: Schema.String } })
 
-/** An owner that keeps the ids it receives, in order. */
 const Log = Component.define({
   name: "Log",
   scoped: false,
@@ -19,7 +18,6 @@ const Log = Component.define({
 
 const ItemMessage = UiSchema.TaggedEnum({ Adds: { ids: Schema.NonEmptyArray(Schema.String) } })
 
-/** A reader that counts the ids it sends to its log, and shows the log. */
 const ItemDef = Component.define({
   name: "Item",
   scoped: false,
@@ -113,7 +111,6 @@ describe("Story and sends", () => {
       const [sent] = updates(log, "/Page/Log[log]/Item[i]")
       const recorded = ["b", "a", "b"].map((id) => ({ owner: "Log", message: { _tag: "Add", id } }))
       assert.deepStrictEqual((wire.find((frame) => frame.seq === sent.seq) as any).sends, recorded)
-      // Sends one id, whatever the message says.
       const Changed = ItemDef.make({
         init: () => 0,
         update: (count, { ids }, $) => $.set(count + ids.length).send(Log, LogMessage.Add({ id: "z" })),

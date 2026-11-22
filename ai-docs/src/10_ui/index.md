@@ -30,9 +30,12 @@ key when it has one: `s.childEmit(Listbox, event)`,
 A parent passes a child state through props, and a child answers through
 `events`. A parent can't send a child a message. To restart a child, such as
 a wizard, stop rendering it or change its key, and it mounts fresh. A
-control that should trigger the child's own work, such as a Save button
-that the parent lays out, is a part of a headless child:
-`editor.save(h.button)`. See **Who owns the state** below.
+control that the parent lays out but that starts the child's own work is a
+part of a headless child. TagPicker's remove button is one: the consumer
+draws `tagPicker.remove(h.button, tag)`, and the click goes through
+TagPicker's `update` (see "Composing headless components"). NoteEditor
+draws its own view and has no parts, so the note page hears its `Saved` but
+can't start a save. See **Who owns the state** below.
 
 ### Scoped children
 
@@ -468,8 +471,9 @@ outside a closure follow the same rule:
 A headless component can build on another: `parts` returns
 `p.child(Listbox, { props, onEmit, parts: (listbox) => ({ ...listbox, tags }) })`,
 and the consumer's closure gets what that `parts` returns. The component owns
-the child: the child's events and failures go through its `update`. A child that fails shows nothing, the consumer's closure with it,
-and the failure goes no further than its `onFailure`. A `Scene` of the
+the child: the child's events and failures go through its `update`. A child
+that fails shows nothing, the consumer's closure with it, and the failure
+goes no further than its `onFailure`. A `Scene` of the
 component stands in for the child with `childEmit`, and a `Scene` of a
 consumer refuses to, because it doesn't run the component's `update`.
 

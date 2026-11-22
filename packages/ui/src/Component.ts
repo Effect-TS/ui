@@ -1983,7 +1983,6 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
   readonly "Only a headless component can share state: finish it with parts in place of view": never
 }
 
-// Only an owner takes messages from other components: the ones below it send them with `$.send(Owner, message)`.
 type OwnersReceive<Rcv, SV> = [Rcv] extends [never] ? unknown
   : [SV] extends [never] ? { readonly "Only an owner receives messages: add shares, or remove receives": never }
   : unknown

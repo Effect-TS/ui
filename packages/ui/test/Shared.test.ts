@@ -359,7 +359,6 @@ const makeReader = (answer: (told: boolean) => boolean) =>
 
 const BumperMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
 
-/** Sends `times` bumps to its group on a click. */
 const Bumper = Component.define({
   name: "Bumper",
   scoped: false,
@@ -826,7 +825,7 @@ describe("a component that reads its own kind", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "outer 1inner 0")
       const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
-      assert.deepStrictEqual(dropped.map((entry) => [entry.ref, entry.reason]), [["Menu", "absent"]])
+      assert.deepStrictEqual(dropped.map((entry) => [entry.owner, entry.reason]), [["Menu", "absent"]])
       const [sent] = updatesAt(root.log(), "/Menus/Menu[outer]/Menu[inner]")
       assert.strictEqual(sent.sends[0].owner, Menu)
       const [received] = updatesAt(root.log(), "/Menus/Menu[outer]")

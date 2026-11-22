@@ -8,7 +8,6 @@ const EditorMessage = UiSchema.TaggedEnum({ Clear: {}, Focus: {}, Typed: { text:
 type EditorMessage = typeof EditorMessage.Type
 type Received = Extract<EditorMessage, { readonly _tag: "Clear" | "Focus" }>
 
-// An owner: it shares its text, and receives Clear and Focus from the components below it.
 const Editor = Component.define({
   name: "Editor",
   scoped: false,
@@ -22,7 +21,6 @@ const Editor = Component.define({
   parts: () => ({})
 })
 
-// Headless with the same messages, but not an owner.
 const Field = Component.define({ name: "Field", scoped: false, model: Schema.String, message: EditorMessage }).make({
   init: () => "",
   update: (text) => text,
@@ -43,7 +41,6 @@ const Note = Component.define({ name: "Note", scoped: false, model: Schema.Strin
 
 class Store extends Context.Service<Store, { readonly draft: string }>()("typetest/send/Store") {}
 
-// Requires Store.
 declare const NeedsStore: Component.Component<"NeedsStore", {}, string, EditorMessage, never, Store, never, {}>
 
 declare const condition: boolean
@@ -202,7 +199,6 @@ describe("a component child", () => {
       expect(Scene.fallback(Plain(h, { key: "a" }), Plain, "a", AsyncResult.initial())).type.not.toRaiseError()
       return h.el("p")
     })
-    // Plain emits nothing, so its events are `never`: only the key is under test.
     expect(Scene.start(Plain, {}).childEmit(Plain, "a", {} as never)).type.not.toRaiseError()
   })
 
