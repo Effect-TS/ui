@@ -537,7 +537,8 @@ describe("Menu", () => {
             { elements: Html, view: render }
           )
         )
-        assert.strictEqual(exit._tag, "Failure")
+        if (exit._tag !== "Failure") assert.fail("expected failure")
+        assert.include(String(exit.cause), "a part for")
       }
     }))
 })

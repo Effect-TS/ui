@@ -9,10 +9,14 @@ export const flag = (on: boolean | undefined): string | undefined => on === true
 export const withStyle = (consumer: string | undefined, own: string): string =>
   consumer === undefined || consumer.trim() === "" ? own : consumer.replace(/;\s*$/, "") + ";" + own
 
+const asciiSpace = /[ \t\n\f\r]+/
+
 export const withTokens = (consumer: string | undefined, own: string | undefined): string | undefined => {
   if (own === undefined) return consumer
-  if (consumer === undefined || consumer.trim() === "") return own
-  return consumer.trim().split(/\s+/).includes(own) ? consumer : consumer + " " + own
+  if (consumer === undefined) return own
+  const tokens = consumer.split(asciiSpace).filter((token) => token !== "")
+  if (tokens.length === 0) return own
+  return tokens.includes(own) ? consumer : consumer + " " + own
 }
 
 export const ownStyle =
