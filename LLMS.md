@@ -587,6 +587,15 @@ A query keeps its result per args, so an answer about an earlier value is
 never shown. Forms set `novalidate`, so the browser's own checks stay out of
 the way.
 
+A form's values live in the Model, so history restore writes them into
+`history.state` and the server ships them in the page state. Declare a secret
+field such as a password with `value: Schema.Redacted(Schema.String)`. A
+component whose state holds a `Schema.Redacted` anywhere is left out of
+both, so none of the form's fields restore or hydrate: keep the form a leaf
+component. Carry the secret as `Schema.Redacted(Schema.String)` in messages
+and Command args too, so the message log redacts it. The default `isEmpty`
+unwraps a `Redacted`, and a rule or the view reads it with `Redacted.value`.
+
 ### Organizing an app
 
 The examples below are one notes app. Each example is an entry module, for
