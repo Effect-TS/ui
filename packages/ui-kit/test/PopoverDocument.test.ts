@@ -4,10 +4,14 @@ import { Popover, PopoverTrigger } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { byId, click, container, popovers, tick } from "./utils/document.ts"
+
+const Third = Schema.Literals(["on", "off", "gone"])
 
 const Message = UiSchema.TaggedEnum({
   Shown: {},
+  Changed: { third: Third },
   RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: Schema.String },
   RequestedClose: { reason: Schema.String },
   Settled: { open: Schema.Boolean }
@@ -25,15 +29,18 @@ const Page = Component.define({
     open: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
     hovered: Schema.Boolean,
+    third: Third,
     log: Schema.Array(Schema.String)
   }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: false, triggerId: null, hovered: false, log: [] }),
+  init: () => ({ open: false, triggerId: null, hovered: false, third: "on" as const, log: [] }),
   update: {
     Shown: (model) => ({ ...model, open: true, hovered: false }),
+    Changed: (model, { third }) => ({ ...model, third }),
     RequestedOpen: (model, { reason, triggerId }) => ({
+      ...model,
       open: true,
       triggerId,
       hovered: reason === "trigger-hover",
@@ -64,6 +71,12 @@ const Page = Component.define({
           h.div(
             popover.trigger({ element: h.button.attr("id", "a"), openOnHover: true, delay: 0 }).children("A"),
             popover.trigger({ element: h.button.attr("id", "b"), openOnHover: true, delay: 0 }).children("B"),
+            model.third === "gone" ? null : popover.trigger({
+              element: h.button.attr("id", "c"),
+              openOnHover: true,
+              delay: 30,
+              disabled: model.third === "off"
+            }).children("C"),
             popover.finalFocus(h.button.attr("id", "final")).children("Final"),
             popover.portal(h.dialog)?.children(
               popover.positioner(h.div.attr("data-positioner", "")).children(
@@ -79,17 +92,40 @@ const Page = Component.define({
       PopoverTrigger(h, {
         element: h.button.attr("id", "detached"),
         props: { open: model.open && model.triggerId === "detached", popupId: "popover" }
-      }).children("Detached")
+      }).children("Detached"),
+      model.third === "gone" ? null : PopoverTrigger(h, {
+        element: h.button.attr("id", model.third === "off" ? "replacement" : "detached-c"),
+        props: {
+          open: model.open && model.triggerId === "detached-c",
+          popupId: "popover",
+          openOnHover: true,
+          delay: 30,
+          disabled: model.third === "off"
+        }
+      }).children("Detached C")
     )
 })
 
-const mountPage = Effect.fnUntraced(function*(props: typeof Page.props.Type = {}) {
-  yield* popovers
-  const app = yield* container
+const mountPage = Effect.fnUntraced(function*(props: typeof Page.props.Type = {}, into?: Element) {
+  if (into === undefined) yield* popovers
+  const app = into ?? (yield* container)
   const root = yield* BrowserHost.mountEffect(Page, props, app)
   yield* tick
-  return { log: () => root.model()!.log }
+  return { log: () => root.model()!.log, send: root.send }
 })
+
+const elsewhere = Effect.acquireRelease(
+  Effect.sync(() => {
+    const other = document.implementation.createHTMLDocument()
+    return other.body.appendChild(other.createElement("div"))
+  }),
+  (element) => Effect.sync(() => element.remove())
+)
+
+const hover = (target: Element) => {
+  target.dispatchEvent(new MouseEvent("mouseenter", { clientX: 10, clientY: 10 }))
+  target.dispatchEvent(new PointerEvent("pointerenter", { clientX: 10, clientY: 10, pointerType: "mouse" }))
+}
 
 const mouse = (target: Element, type: "mouseenter" | "mouseleave", clientX = 0, clientY = 0) =>
   target.dispatchEvent(new MouseEvent(type, { clientX, clientY }))
@@ -185,5 +221,50 @@ describe("Popover in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.strictEqual(document.activeElement, byId("final"))
+    }))
+
+  it.effect("a trigger drawn elsewhere reaches the popover with its id in its own document", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      const app = yield* elsewhere
+      const second = yield* mountPage({}, app)
+      click(byId("detached"))
+      yield* tick
+      assert.deepStrictEqual(log(), ["RequestedOpen detached trigger-press"])
+      assert.deepStrictEqual(second.log(), [])
+      click(app.ownerDocument.getElementById("detached")!)
+      yield* tick
+      assert.deepStrictEqual(second.log(), ["RequestedOpen detached trigger-press"])
+    }))
+
+  it.effect("a disabled trigger asks for nothing, and one disabled or removed while the mouse rests on it opens nothing", () =>
+    Effect.gen(function*() {
+      const { log, send } = yield* mountPage()
+      const change = (third: "on" | "off" | "gone") =>
+        Effect.andThen(Effect.sync(() => send(Message.Changed({ third }))), tick)
+      yield* change("off")
+      for (const id of ["c", "replacement"]) {
+        const icon = byId(id).appendChild(document.createElement("span"))
+        icon.click()
+        yield* tick
+        assert.deepStrictEqual(log(), [], id)
+      }
+      for (const id of ["c", "detached-c"]) {
+        for (const third of ["off", "gone"] as const) {
+          yield* change("on")
+          hover(byId(id))
+          yield* tick
+          yield* change(third)
+          yield* TestClock.adjust("30 millis")
+          yield* tick
+          assert.deepStrictEqual(log(), [], `${id} ${third}`)
+        }
+      }
+      yield* change("on")
+      hover(byId("detached-c"))
+      yield* tick
+      yield* TestClock.adjust("30 millis")
+      yield* tick
+      assert.deepStrictEqual(log(), ["RequestedOpen detached-c trigger-hover"])
     }))
 })

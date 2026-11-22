@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as VirtualKeyboard from "../VirtualKeyboard.ts"
-import { activeOf, byAttribute, isHTMLElement, onRange, saved } from "./dom.ts"
+import { activeOf, byAttribute, isElement, isHTMLElement, onRange, saved } from "./dom.ts"
 import { isAndroid } from "./platform.ts"
 import { clamp } from "./range.ts"
 
@@ -49,8 +49,6 @@ interface Pin {
   readonly left: number
   readonly top: number
 }
-
-const isElement = (node: unknown): node is Element => (node as Node | null)?.nodeType === 1
 
 const parentOf = (node: Node): Node | null => {
   const slot = isElement(node) ? node.assignedSlot : null

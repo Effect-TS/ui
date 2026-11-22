@@ -198,7 +198,6 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -213,7 +212,7 @@ import { type Attributed, attrSelector, flag, idOf, idSelector, type Keyed, with
 import { detachedChannel } from "./internal/detached.ts"
 import { focusVisible } from "./internal/dom.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
-import { Point, pointOf } from "./internal/interaction.ts"
+import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
 import { inSafeArea } from "./internal/safeArea.ts"
 import { atDocumentOrigin, portalBox, raiseAbove } from "./internal/topLayer.ts"
@@ -484,12 +483,7 @@ const WaitBeforeClosing = Command.make(
   ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), PreviewCardMessage.CompletedWaitBeforeClosing())
 )
 
-const escape = DomSubscription.onDocument(
-  "keydown",
-  ({ composing, defaultPrevented, key }) =>
-    key === "Escape" && !composing && !defaultPrevented ? PreviewCardMessage.PressedEscape() : undefined,
-  { preventDefault: true }
-)
+const escape = onEscape(PreviewCardMessage.PressedEscape())
 
 const detached = detachedChannel<PreviewCardMessage>("detachedPreviewCardTriggers")
 
@@ -592,7 +586,7 @@ const TrackDetachedPreviewCardTrigger = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
-      const send = (message: PreviewCardMessage) => detached.send(current.popupId, message)
+      const send = (message: PreviewCardMessage) => detached.send(node.ownerDocument, current.popupId, message)
       const triggerId = () => node.id === "" ? null : node.id
       const delays = () => ({ delay: current.delay, closeDelay: current.closeDelay })
       const controller = new AbortController()

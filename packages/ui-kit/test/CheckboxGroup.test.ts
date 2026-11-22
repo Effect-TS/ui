@@ -15,6 +15,21 @@ const BasketMessage = UiSchema.TaggedEnum({
   ToggledFreeze: {}
 })
 
+const SenderMessage = UiSchema.TaggedEnum({ Clicked: {} })
+
+const Sender = Component.define({
+  name: "Sender",
+  scoped: false,
+  model: Schema.Struct({}),
+  message: SenderMessage,
+  shared: { group: { owner: CheckboxGroup } },
+  elements: Html
+}).make({
+  init: () => ({}),
+  update: { Clicked: (_model, _message, $) => $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" }) },
+  view: (_model, h) => h.button.class("sender").attr("type", "button").onClick(SenderMessage.Clicked())
+})
+
 const Basket = Component.define({
   name: "Basket",
   scoped: false,
@@ -65,6 +80,7 @@ const Basket = Component.define({
                       }),
                       "Extra"
                     ),
+                    Sender(h, { key: "sender" }),
                     ...fruits.map((fruit) =>
                       h.label.children(
                         Checkbox(h, {
@@ -166,6 +182,14 @@ describe("CheckboxGroup", { concurrent: false }, () => {
         button("pear").dispatchEvent(new MouseEvent("click", { bubbles: true }))
       })
       yield* tick
+      assert.deepStrictEqual(ticked(), ["apple", "fig"])
+    }).pipe(Effect.scoped))
+
+  it.effect("a disabled group ignores a toggle sent to it", () =>
+    Effect.gen(function*() {
+      const { click, ticked } = yield* mount
+      yield* click("lock")
+      yield* click("sender")
       assert.deepStrictEqual(ticked(), ["apple", "fig"])
     }).pipe(Effect.scoped))
 })

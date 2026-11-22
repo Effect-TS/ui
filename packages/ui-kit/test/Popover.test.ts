@@ -106,7 +106,7 @@ describe("Popover", () => {
       assert.throws(() => s.fire(off, "mouseenter"))
       s.fire(hover, "mouseenter")
       const [opening] = s.current.pending
-      assert.deepStrictEqual(opening?.command.args, { delay: 300 })
+      assert.deepStrictEqual(opening?.command.args, { delay: 300, drawn: "hover" })
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening")).emitted(opened("hover", "trigger-hover"))
       s.props({ open: true, modal: true })
       assert.isUndefined(s.get(hover).attrs?.["data-pressed"])

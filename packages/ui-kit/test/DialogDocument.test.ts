@@ -224,9 +224,9 @@ const Page = Component.define({
   }
 })
 
-const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config>) {
-  yield* popovers
-  const app = yield* container
+const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config>, into?: Element) {
+  if (into === undefined) yield* popovers
+  const app = into ?? (yield* container)
   const root = yield* BrowserHost.mountEffect(Page, config(overrides), app)
   yield* tick
   return { app, log: () => root.model()!.log, send: root.send }
@@ -240,6 +240,35 @@ const tab = () => {
   return event.defaultPrevented
 }
 const layerOf = (dialog: Element) => dialog.firstElementChild!
+
+const elsewhere = Effect.acquireRelease(
+  Effect.sync(() => {
+    const other = document.implementation.createHTMLDocument()
+    return other.body.appendChild(other.createElement("div"))
+  }),
+  (element) => Effect.sync(() => element.remove())
+)
+
+const inIframe = Effect.acquireRelease(
+  Effect.sync(() => {
+    const iframe = document.createElement("iframe")
+    iframe.srcdoc = "<!doctype html><html><body></body></html>"
+    document.body.appendChild(iframe)
+    const doc = iframe.contentDocument!
+    const view = iframe.contentWindow!
+    const RealHTMLElement = globalThis.HTMLElement
+    // happy-dom shares HTMLElement across frames; give the parent realm its own constructor.
+    class ParentHTMLElement extends RealHTMLElement {}
+    Object.defineProperty(view, "HTMLElement", { value: RealHTMLElement, configurable: true })
+    Object.defineProperty(globalThis, "HTMLElement", { value: ParentHTMLElement, configurable: true })
+    return { app: doc.body.appendChild(doc.createElement("div")), iframe, RealHTMLElement }
+  }),
+  ({ RealHTMLElement, iframe }) =>
+    Effect.sync(() => {
+      Object.defineProperty(globalThis, "HTMLElement", { value: RealHTMLElement, configurable: true })
+      iframe.remove()
+    })
+)
 
 const closeWatchers = (platform: { readonly android: boolean; readonly closeWatcher: boolean }) =>
   Effect.acquireRelease(
@@ -932,5 +961,48 @@ describe("Dialog in a document", { concurrent: false }, () => {
           assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"])
         }))
       }
+    }))
+
+  it.effect("a dialog in another document leaves this one's topmost dialog, hidden page and scroll lock alone", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({})
+      const app = yield* elsewhere
+      const other = app.ownerDocument
+      const second = yield* mountPage({}, app)
+      assert.strictEqual(byId("page").getAttribute("aria-hidden"), "true")
+      assert.strictEqual(other.getElementById("page")!.getAttribute("aria-hidden"), "true")
+      escape()
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"])
+      assert.isNull(byId("page").getAttribute("aria-hidden"))
+      assert.strictEqual(document.body.style.overflowY, "")
+      assert.strictEqual(other.getElementById("page")!.getAttribute("aria-hidden"), "true")
+      escape({}, other)
+      yield* tick
+      assert.deepStrictEqual(dismissals(second.log()), ["RequestedClose a escape-key"])
+    }))
+
+  it.effect("focus goes back to what had it before the open, and stays there without initialFocus, in an iframe", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const { app } = yield* inIframe
+      const other = app.ownerDocument
+      yield* mountPage({ detached: true, a: false }, app)
+      other.getElementById("page")!.focus()
+      other.getElementById("detached")!.click()
+      yield* tick
+      assert.strictEqual(other.activeElement?.id, "first")
+      other.getElementById("detached")!.remove()
+      escape({}, other)
+      yield* tick
+      yield* tick
+      assert.strictEqual(other.activeElement?.id, "page")
+
+      const app2 = other.body.appendChild(other.createElement("div"))
+      yield* mountPage({ detached: true, a: false, initialFocus: false }, app2)
+      app2.querySelector<HTMLElement>("#page")!.focus()
+      app2.querySelector<HTMLElement>("#detached")!.click()
+      yield* tick
+      assert.strictEqual(other.activeElement, app2.querySelector("#page"))
     }))
 })

@@ -4,7 +4,7 @@ import { Autocomplete, Combobox, NumberField, OTPField, Popover, ScrollArea, Sel
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Redacted, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { container, tick } from "./utils/document.ts"
 
@@ -129,7 +129,7 @@ const Page = Component.define({
             view: (nf) => nf.root(h.div).children(nf.input(h.input.attr("data-testid", "nf-input")))
           }),
           OTPField(h, {
-            props: { value: "12", length: 2 },
+            props: { value: Redacted.make("12"), length: 2 },
             view: (otp) =>
               otp.root(h.div).children(
                 Array.from(

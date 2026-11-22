@@ -264,7 +264,7 @@ import {
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
-import { methodOf } from "./internal/interaction.ts"
+import { methodOf, onEscape } from "./internal/interaction.ts"
 import { arrowKeys, available, keyed, type Orientation, stepped } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
@@ -331,7 +331,7 @@ export type MenuInteraction = typeof MenuInteraction.Type
  * - `"item-press"`: an item was picked
  * - `"outside-press"`: a press outside the trigger and the popup, other
  *   than on a scrollbar
- * - `"escape-key"`: Escape in the popup
+ * - `"escape-key"`: Escape in the popup, or on the page while it's open
  * - `"focus-out"`: focus left the trigger and the popup, or Tab in the
  *   popup
  * - `"sibling-open"`: another item of the parent menu was highlighted while
@@ -1164,6 +1164,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
     let before: HTMLElement | null = null
     const returnTo = () => current.context ? before : trigger()
     let timer: ReturnType<typeof setTimeout> | undefined
+    let tabbing: ReturnType<typeof setTimeout> | undefined
     const opening = () => {
       const focused = document.activeElement
       before = current.context && focused instanceof HTMLElement && !node.contains(focused) ? focused : null
@@ -1218,7 +1219,13 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       if (!current.open || event.defaultPrevented) return
       if (event.key === "Tab" && !current.nested && !event.altKey && !event.ctrlKey && !event.metaKey) {
         const anchor = returnTo()
+        // Inert only until the browser has moved focus on from the anchor, so a refused close leaves it usable.
         node.inert = true
+        clearTimeout(tabbing)
+        tabbing = setTimeout(() => {
+          tabbing = undefined
+          if (current.open) node.inert = false
+        })
         if (anchor !== null) anchor.focus({ preventScroll: true })
         if (current.context || event.shiftKey || anchor === null) event.preventDefault()
         send(MenuMessage.TabbedOut())
@@ -1226,6 +1233,8 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       }
       const field = input()
       if (field === null || event.target !== field || event.isComposing) return
+      // The input's handler takes every key, so its Escape is cancelled here for the document listener to skip.
+      if (event.key === "Escape") return event.preventDefault()
       const item = current.active === null ? null : document.getElementById(current.active)
       const hasValue = field.value !== ""
       const plain = !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey
@@ -1479,7 +1488,9 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
           anyButton: () => current.context,
           inside,
           pressed: (pointerType) => send(MenuMessage.PressedOutside({ pointerType })),
-          focused: () => send(MenuMessage.FocusedOutside())
+          focused: () => {
+            if (tabbing === undefined) send(MenuMessage.FocusedOutside())
+          }
         })
         document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
         document.addEventListener("mousemove", onMouseMove, { capture: true, passive: true, signal })
@@ -1506,6 +1517,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
         Effect.sync(() => {
           controller.abort()
           clearTimeout(timer)
+          clearTimeout(tabbing)
           release?.()
           release = undefined
           cutUndo?.()
@@ -1607,6 +1619,8 @@ const MenuLongPress = Mount.makeStream(
 )
 
 const blocker = blockers("data-menu-blocker")
+
+const escapes = [onEscape(MenuMessage.PressedKey({ key: "Escape", action: null }))]
 
 const hiddenBox = "display:none"
 
@@ -2111,7 +2125,7 @@ export const Menu = Component.define({
     SettledTriggerChange: (model, _message, $) => $.props.open ? $.evolve({ instant: "trigger-change" }) : model,
     ChangedInput: (model, { value }, $) => {
       const props = $.props
-      if (!props.open) return model
+      if (!props.open || disabledOf($)) return model
       const reason = value === "" ? "input-clear" : "input-change"
       const next = UiStruct.evolve(model, { active: autoHighlighted(props, value), activeByKey: false })
       return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: value, reason }))
@@ -2137,11 +2151,12 @@ export const Menu = Component.define({
     PressedInput: (model, _message, $) => model.keyboard ? $.evolve({ keyboard: false }) : model,
     ClickedClear: (model, _message, $) => {
       const props = $.props
-      if (!props.open || (props.query ?? "") === "") return model
+      if (!props.open || disabledOf($) || (props.query ?? "") === "") return model
       const next = UiStruct.evolve(model, { active: autoHighlighted(props, ""), activeByKey: false })
       return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: "", reason: "clear-press" }))
     }
   },
+  subscriptions: (_model, props) => props.open && props.parentItem === undefined ? escapes : [],
   parts: (model, p) => {
     const props = p.props
     const parent = parentOf(p)
@@ -2460,7 +2475,10 @@ export const Menu = Component.define({
           "mouseup",
           ({ pointerType }) => pointerType === "touch" ? undefined : MenuMessage.ReleasedItem({ action, pointerType })
         )
-        .onClick(({ pointerType }) => MenuMessage.ClickedItem({ action, pointerType }))
+        .onClick(
+          ({ pointerType }) => MenuMessage.ClickedItem({ action, pointerType }),
+          { preventDefault: off && action.kind === "link" }
+        )
         .onKeyDown(keyMessage(action), { preventDefault: true })
         .onKeyUp(({ key }) => key === " " ? MenuMessage.ReleasedSpace({ action }) : undefined)
       return shownItem ? own : own.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, hiddenBox)))

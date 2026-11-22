@@ -420,13 +420,16 @@ export const RadioGroup = Component.define({
     FocusedRadio: (model, { value }, $) =>
       $.props.disabled === true || !available(itemOf($.props.items, value)) ? model : $.evolve({ highlighted: value }),
     PressedArrow: (model, { direction, value }, $) => {
-      if ($.props.disabled === true) return model
+      const source = itemOf($.props.items, value)
+      if ($.props.disabled === true || !available(source)) return model
       const enabled = $.props.items.filter(available)
-      const at = enabled.findIndex((item) => item.value === value)
+      const at = enabled.indexOf(source)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
       if (target === undefined) return model
       const moved = $.evolve({ highlighted: target.value }).run(focusRadio(target.value))
-      return picks($.props, target) ? moved.emit(RadioGroupEvents.Picked({ value: target.value })) : moved
+      return source.readOnly !== true && picks($.props, target)
+        ? moved.emit(RadioGroupEvents.Picked({ value: target.value }))
+        : moved
     },
     PressedEnter: (model) => model,
     SyncedValue: (model, { value }, $) => {

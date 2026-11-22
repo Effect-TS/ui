@@ -163,6 +163,7 @@ import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
+import { onEscape } from "./internal/interaction.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -356,12 +357,7 @@ const WaitBeforeClosing = Command.make(
 // handler that stops the event can't hide it: `update` knows from `hovered`
 // whether the press was outside the tooltip.
 const dismissals = [
-  DomSubscription.onDocument(
-    "keydown",
-    ({ composing, defaultPrevented, key }) =>
-      key === "Escape" && !composing && !defaultPrevented ? TooltipMessage.PressedEscape() : undefined,
-    { preventDefault: true }
-  ),
+  onEscape(TooltipMessage.PressedEscape()),
   DomSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
 ]
 

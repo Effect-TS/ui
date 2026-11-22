@@ -511,6 +511,9 @@ describe("Combobox", () => {
       s.props({ ...props, inputValue: "Apple", value: "apple" })
       s.fire(input, "keydown", key("Escape")).expectIgnored()
       s.fire(input, "keyup", key("Escape")).emitted(edited("", "escape-key"), picked(null, "escape-key"))
+      s.props({ ...props, inputValue: "Apple", value: "apple", disabled: true })
+      s.fire(input, "keyup", key("Escape"))
+      assert.deepStrictEqual(s.current.emitted, [])
     }))
 
   it.effect("disabled ignores input, and readOnly browses without picking", () =>
@@ -525,6 +528,9 @@ describe("Combobox", () => {
       s.props({ ...base, readOnly: true, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
       s.fire(item("apple"), "click", pointer("mouse")).expectHandled()
+      s.props({ ...base, name: "fruit" })
+      s.fire(Locator.attr("name", "fruit"), "change", { value: "Cherry", checked: false })
+      assert.deepStrictEqual(s.current.emitted, [])
     }))
 
   it.effect("clears consumer aria-disabled on native controls, keeps custom value content, and validates hidden part tags", () =>

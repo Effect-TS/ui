@@ -17,7 +17,7 @@ const PageMessage = UiSchema.TaggedEnum({
 const Page = Component.define({
   name: "Page",
   scoped: false,
-  props: Schema.Struct({ disabled: Schema.Boolean }),
+  props: Schema.Struct({ disabled: Schema.Boolean, refuseClose: Schema.Boolean }),
   model: Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, log: Schema.Array(Schema.String) }),
   message: PageMessage,
   elements: Html
@@ -29,9 +29,9 @@ const Page = Component.define({
       [menu]: true,
       log: [...model.log, menu + " RequestedOpen " + reason]
     }),
-    RequestedClose: (model, { menu, reason }) => ({
+    RequestedClose: (model, { menu, reason }, $) => ({
       ...model,
-      [menu]: false,
+      [menu]: $.props.refuseClose && model[menu as "outer" | "inner"],
       log: [...model.log, menu + " RequestedClose " + reason]
     }),
     Picked: (model, { menu, value }) => ({ ...model, log: [...model.log, menu + " Picked " + value] })
@@ -151,13 +151,15 @@ const withPlatform = (platform: string) =>
     (restore) => Effect.sync(restore)
   )
 
-const mountPage = Effect.fnUntraced(function*(disabled = false) {
-  yield* popovers
-  const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, { disabled }, app)
-  yield* tick
-  return () => root.model()?.log ?? []
-})
+const mountPage = Effect.fnUntraced(
+  function*(config: { readonly disabled?: boolean; readonly refuseClose?: boolean } = {}) {
+    yield* popovers
+    const app = yield* container
+    const root = yield* BrowserHost.mountEffect(Page, { disabled: false, refuseClose: false, ...config }, app)
+    yield* tick
+    return () => root.model()?.log ?? []
+  }
+)
 
 const contextmenu = (target: Element, init: MouseEventInit = { clientX: 100, clientY: 50 }) => {
   const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, ...init })
@@ -187,6 +189,28 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), ["outer RequestedOpen trigger-press", "outer RequestedClose focus-out"])
     }))
 
+  it.effect("Tab that the consumer refuses to close on leaves the popup open and interactive", () =>
+    Effect.gen(function*() {
+      const log = yield* mountPage({ refuseClose: true })
+      byId("before").focus()
+      contextmenu(byId("outer"))
+      yield* tick
+      popupOf("outer").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))
+      yield* tick
+      assert.deepStrictEqual(log(), ["outer RequestedOpen trigger-press", "outer RequestedClose focus-out"])
+      assert.isTrue(shown("outer-positioner"))
+      assert.isNull(popupOf("outer").closest("[inert]"))
+      const copy = document.querySelector<HTMLElement>("[data-testid=outer-copy]")!
+      copy.focus()
+      copy.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+      yield* tick
+      assert.isTrue(shown("outer-positioner"))
+      assert.deepStrictEqual(log().slice(-2), [
+        "outer Picked copy",
+        "outer RequestedClose item-press"
+      ])
+    }))
+
   it.effect("a context menu inside another's trigger takes the right clicks on its own trigger", () =>
     Effect.gen(function*() {
       const log = yield* mountPage()
@@ -210,7 +234,7 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
 
   it.effect("disabled, it leaves the browser's menu alone", () =>
     Effect.gen(function*() {
-      const log = yield* mountPage(true)
+      const log = yield* mountPage({ disabled: true })
       assert.isFalse(contextmenu(byId("outer")).defaultPrevented)
       yield* tick
       assert.deepStrictEqual(log(), [])

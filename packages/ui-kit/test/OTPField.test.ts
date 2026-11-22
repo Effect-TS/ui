@@ -259,7 +259,7 @@ describe("OTPField", () => {
       assert.deepStrictEqual(press(1, "ArrowRight"), focusOn(0))
     }))
 
-  it.effect("pasted text and hidden-input autofill fill the slots and can submit the form", () =>
+  it.effect("pasted text and hidden-input autofill fill the slots and can submit the form, unless it was locked as the code completed", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: "12", length: 4, autoSubmit: true })
       s.fire(slot(2), "paste", { text: " 3-4 9" }).expectDefaultPrevented().emitted(
@@ -278,6 +278,14 @@ describe("OTPField", () => {
       s.type(hidden, "98 76x").emitted(rejected("98 76x"), updated("9876"))
       assert.deepStrictEqual(commands(s), focusOn(3))
       assert.deepStrictEqual(commands(store(s, "9876").emitted(completed("9876"))), [submitted])
+
+      for (const lock of [{ disabled: true, readOnly: false }, { disabled: false, readOnly: true }]) {
+        settle(s.props((props) => ({ ...props, value: Redacted.make("12"), disabled: false, readOnly: false })))
+        s.type(hidden, "5555").emitted(updated("5555"))
+        commands(s)
+        settle(s.props((props) => ({ ...props, value: Redacted.make("5555"), ...lock }))).emitted(completed("5555"))
+        assert.deepStrictEqual(commands(s), [])
+      }
     }))
 
   it.effect("text an input method composes is entered once, when the composition ends", () =>

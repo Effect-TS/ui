@@ -110,7 +110,7 @@ describe("RadioGroup", () => {
       assert.deepStrictEqual(s.current.emitted, [])
     }))
 
-  it.effect("arrow keys navigate wrapping around disabled items, respect readOnly and RTL, and cancel Enter", () =>
+  it.effect("arrow keys navigate wrapping around disabled items, pick nothing from or onto a read-only radio, follow RTL, and cancel Enter", () =>
     Effect.gen(function*() {
       const s = yield* openScene()
 
@@ -144,7 +144,14 @@ describe("RadioGroup", () => {
       assert.deepStrictEqual(s.current.emitted, [])
       assert.strictEqual(s.get(radio("nvme")).attrs?.tabindex, "0")
 
+      s.props({ value: "nvme", items })
+      s.expectMount(mountOf(s, indicator("nvme")))
+      s.fire(radio("tape"), "keydown", { key: "ArrowDown" }).expectDefaultPrevented()
+      expectFocus(s, "ssd")
+      assert.deepStrictEqual(s.current.emitted, [])
+
       s.props({ value: "ssd", items })
+      s.expectMount(mountOf(s, indicator("ssd")))
       s.shared(DirectionProvider, { direction: "rtl" })
       s.fire(radio("ssd"), "keydown", { key: "ArrowLeft" })
         .expectDefaultPrevented()

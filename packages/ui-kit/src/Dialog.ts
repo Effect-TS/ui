@@ -215,8 +215,8 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
-import { byAttribute, radioGroup } from "./internal/dom.ts"
+import { type Attributed, attrOf, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
+import { byAttribute, isElement, isHTMLElement, perDocument, radioGroup } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
@@ -446,16 +446,17 @@ const tabbableSelector = [
 ].join(",")
 
 const closestOf = (target: Node, selector: string): Element | null | undefined =>
-  (target instanceof Element ? target : target.parentElement)?.closest(selector)
+  (isElement(target) ? target : target.parentElement)?.closest(selector)
 
 const inNested = (dialog: Element, element: Element): boolean => element.parentElement?.closest("dialog") !== dialog
 
 const radioOut = (element: HTMLElement): boolean => {
-  if (!(element instanceof HTMLInputElement) || element.type !== "radio" || element.name === "" || element.checked) {
+  const radio = element as HTMLInputElement
+  if (radio.localName !== "input" || radio.type !== "radio" || radio.name === "" || radio.checked) {
     return false
   }
-  const group = radioGroup(element)
-  return group.some((radio) => radio.checked) || group[0] !== element
+  const group = radioGroup(radio)
+  return group.some((other) => other.checked) || group[0] !== radio
 }
 
 const tabbables = (dialog: Element, root: Element): Array<HTMLElement> => {
@@ -497,19 +498,22 @@ type Showing = {
   readonly watch: () => CloseWatcher | undefined
 }
 
-const showing: Array<Showing> = []
-let watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
-const rewatch = () => {
-  const top = showing.find((entry) => entry.top())
-  if (watched?.entry === top) return
-  watched?.watcher.destroy()
-  const watcher = top?.watch()
-  watched = top !== undefined && watcher !== undefined ? { entry: top, watcher } : undefined
+interface Stack {
+  readonly showing: Array<Showing>
+  watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
 }
-const orderOf = (node: Element): number => showing.findIndex((entry) => entry.node === node)
-const onTop = (node: HTMLDialogElement): boolean => {
-  const mine = orderOf(node)
-  return showing.every((other, index) =>
+const stackOf = perDocument((): Stack => ({ showing: [], watched: undefined }))
+const rewatch = (stack: Stack) => {
+  const top = stack.showing.find((entry) => entry.top())
+  if (stack.watched?.entry === top) return
+  stack.watched?.watcher.destroy()
+  const watcher = top?.watch()
+  stack.watched = top !== undefined && watcher !== undefined ? { entry: top, watcher } : undefined
+}
+const orderOf = ({ showing }: Stack, node: Element): number => showing.findIndex((entry) => entry.node === node)
+const onTop = (stack: Stack, node: HTMLDialogElement): boolean => {
+  const mine = orderOf(stack, node)
+  return stack.showing.every((other, index) =>
     other.node === node || !other.open() ||
     !(node.contains(other.node) || (!other.node.contains(node) && index > mine))
   )
@@ -526,25 +530,16 @@ const handOff = (element: HTMLElement | null | undefined, focusVisible = false):
   }
 }
 
-const inDialogAbove = (node: HTMLDialogElement, target: Node): boolean => {
+const inDialogAbove = (stack: Stack, node: HTMLDialogElement, target: Node): boolean => {
   const other = closestOf(target, "dialog")
   if (other == null || other === node || other.contains(node)) return false
-  const index = orderOf(other)
-  return index === -1 || index > orderOf(node)
+  const index = orderOf(stack, other)
+  return index === -1 || index > orderOf(stack, node)
 }
 
 const inOtherLayer = (node: HTMLDialogElement, target: Node): boolean => {
   const other = closestOf(target, "[popover]")
   return other != null && other !== node && !other.contains(node) && !node.contains(other)
-}
-
-const focusedBefore = new WeakMap<Element, Element | null>()
-if (typeof document !== "undefined") {
-  document.addEventListener("beforetoggle", (event) => {
-    if (event.target instanceof HTMLDialogElement && (event as ToggleEvent).newState === "open") {
-      focusedBefore.set(event.target, document.activeElement)
-    }
-  }, true)
 }
 
 const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined =>
@@ -560,10 +555,11 @@ const TrackDialog = Mount.makeStream(
       const document = node.ownerDocument
       const view = document.defaultView
       const frame = frameOf(view)
+      const stack = stackOf(document)
       let current: TrackDialogArgs = args
       const send = (message: DialogMessage) => Queue.offerUnsafe(queue, message)
       const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
-      const topmost = () => current.topmost && onTop(node)
+      const topmost = () => current.topmost && onTop(stack, node)
       const Watcher = closeWatcherOf(view)
       const entry: Showing = {
         node,
@@ -578,9 +574,9 @@ const TrackDialog = Mount.makeStream(
             send(DialogMessage.CancelledCloseWatcher())
           })
           watcher.addEventListener("close", () => {
-            if (watched?.watcher !== watcher) return
-            watched = undefined
-            frame(rewatch)
+            if (stack.watched?.watcher !== watcher) return
+            stack.watched = undefined
+            frame(() => rewatch(stack))
           })
           return watcher
         }
@@ -591,15 +587,14 @@ const TrackDialog = Mount.makeStream(
         closestOf(target, anyTrigger) != null || trigger?.contains(target) === true
       const findTrigger = (): HTMLElement | null =>
         (current.triggerId === null ? null : document.getElementById(current.triggerId)) ??
-          (document.activeElement instanceof HTMLElement && document.activeElement.matches(controls)
+          (isHTMLElement(document.activeElement) && document.activeElement.matches(controls)
             ? document.activeElement
             : document.querySelector<HTMLElement>(controls))
       let trigger = findTrigger()
-      const active = focusedBefore.has(node) ? focusedBefore.get(node)! : document.activeElement
-      focusedBefore.delete(node)
+      const active = document.activeElement
       let focusInside = node.contains(active)
       let lastFocused: HTMLElement | null = focusInside ? active as HTMLElement : null
-      let before: HTMLElement | null = active instanceof HTMLElement && !focusInside ? active : null
+      let before: HTMLElement | null = isHTMLElement(active) && !focusInside ? active : null
       const visited: Array<HTMLElement> = []
       let added = new WeakSet<Node>()
       const record = (records: ReadonlyArray<MutationRecord>) => {
@@ -620,7 +615,7 @@ const TrackDialog = Mount.makeStream(
         if (!current.initialFocus) {
           const focused = document.activeElement
           if (focused === null || !node.contains(focused)) return
-          if (from instanceof HTMLElement && from !== document.body && from.isConnected) handOff(from)
+          if (isHTMLElement(from) && from !== document.body && from.isConnected) handOff(from)
           else (focused as HTMLElement).blur()
           return
         }
@@ -685,7 +680,7 @@ const TrackDialog = Mount.makeStream(
         const root = popup()
         if (root.contains(target) || onTrigger(target)) return false
         if (current.modal === true) {
-          return target instanceof Element && target !== node && target.closest("dialog") === node &&
+          return isElement(target) && target !== node && target.closest("dialog") === node &&
             (target.contains(root) || target.getAttribute("role") === "presentation")
         }
         return node.contains(target) || inKept(target) || !addedSince(target)
@@ -751,9 +746,9 @@ const TrackDialog = Mount.makeStream(
         const target = event.target as Node | null
         focusInside = target !== null && node.contains(target)
         if (focusInside) lastFocused = target as HTMLElement
-        else if (target instanceof HTMLElement && visited.push(target) > 20) visited.shift()
-        if (focusInside || target === null || current.modal !== false || !current.open) return
-        if (!topmost() || inDialogAbove(node, target) || (ignored !== null && target.contains(ignored))) return
+        else if (isHTMLElement(target) && visited.push(target) > 20) visited.shift()
+        if (focusInside || target === null || current.modal !== false || !current.open || !showed) return
+        if (!topmost() || inDialogAbove(stack, node, target) || (ignored !== null && target.contains(ignored))) return
         if (current.dismissible && handingOff === 0 && !onTrigger(target)) send(DialogMessage.FocusedOutside())
       }
 
@@ -778,14 +773,14 @@ const TrackDialog = Mount.makeStream(
           if (current.open && !current.started) frame(() => send(DialogMessage.RenderedFirstFrame()))
         })
 
-      const parentsOf = () => showing.filter((other) => other.node.contains(node))
+      const parentsOf = () => stack.showing.filter((other) => other.node.contains(node))
       const restoreFocus = (parents: ReadonlyArray<typeof entry>, held: boolean) => {
         const { closedByFocusOut, closedByOutsidePress, closeMethod, finalFocus, portalId } = current
         const focused = document.activeElement as HTMLElement | null
         const away = !held && focused !== null && focused !== document.body && !node.contains(focused)
         if (
           focused !== null &&
-          showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
+          stack.showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
         ) return
         if (!finalFocus) {
           if (focusInside && node.contains(focused)) focused?.blur()
@@ -825,10 +820,11 @@ const TrackDialog = Mount.makeStream(
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
         current = next
+        if (next.mounted && !previous.mounted) shows()
         if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
         if (next.open && previous.open && next.initialFocus && !previous.initialFocus) opening(document.activeElement)
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
-        if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch()
+        if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch(stack)
         if (previous.open && !next.open) {
           pressed = undefined
           closing()
@@ -837,7 +833,7 @@ const TrackDialog = Mount.makeStream(
           page.takeRecords()
           added = new WeakSet()
           const focused = document.activeElement
-          if (focused instanceof HTMLElement && !node.contains(focused)) before = focused
+          if (isHTMLElement(focused) && !node.contains(focused)) before = focused
           opening(focused)
         }
         transition.follow(previous, next)
@@ -845,10 +841,17 @@ const TrackDialog = Mount.makeStream(
 
       const controller = new AbortController()
       const { signal } = controller
+      let showed = false
+      const shows = () => {
+        if (showed || signal.aborted) return
+        showed = true
+        raiseAbove(node)
+        opening(active)
+      }
 
       return Effect.acquireRelease(
         Effect.sync(() => {
-          showing.push(entry)
+          stack.showing.push(entry)
           document.addEventListener("keydown", onKeyDown, { signal })
           document.addEventListener("compositionend", onCompositionEnd, { capture: true, signal })
           document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
@@ -865,18 +868,17 @@ const TrackDialog = Mount.makeStream(
             attributeFilter: ["class", "style", "hidden"]
           })
           hold()
-          rewatch()
-          raiseAbove(node)
-          if (!current.mounted) send(DialogMessage.ShowedPortal())
-          opening(active)
+          rewatch(stack)
+          if (current.mounted) shows()
+          else send(DialogMessage.ShowedPortal())
         }).pipe(
           Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
         ),
         () =>
           Effect.sync(() => {
-            showing.splice(showing.indexOf(entry), 1)
+            stack.showing.splice(stack.showing.indexOf(entry), 1)
             controller.abort()
-            rewatch()
+            rewatch(stack)
             observer.disconnect()
             page.disconnect()
             release?.()
@@ -1144,15 +1146,23 @@ export const Dialog = Component.define({
 
     const triggerPart = p.part(
       "button",
-      (b, triggerId: string | null, key: string) =>
-        triggerAttrs(b.attr("id", key), open && (activeTrigger === null || activeTrigger === key), portalId)
-          .onClick(({ pointerType }) => DialogMessage.ClickedTrigger({ triggerId, key, pointerType }))
+      (b, triggerId: string | null, key: string, disabled: boolean) => {
+        const button = triggerAttrs(
+          b.attr("id", key),
+          open && (activeTrigger === null || activeTrigger === key),
+          portalId
+        )
+        // A click can still reach a disabled button from an element inside it.
+        return disabled
+          ? button
+          : button.onClick(({ pointerType }) => DialogMessage.ClickedTrigger({ triggerId, key, pointerType }))
+      }
     )
     const trigger = View.wrapPart(
       triggerPart,
       <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> => {
         const id = idOf(element)
-        return triggerPart(element, id, id ?? p.id("trigger", triggers++))
+        return triggerPart(element, id, id ?? p.id("trigger", triggers++), attrOf(element, "disabled") !== undefined)
       }
     )
 
@@ -1160,7 +1170,8 @@ export const Dialog = Component.define({
       const dialog = b
         .attr("id", portalId)
         .open(false)
-        .popover("manual", shown)
+        // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
+        .popover("manual", model.mounted)
         .forward((node) =>
           node
             .attrs({

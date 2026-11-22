@@ -804,7 +804,7 @@ export const OTPField = Component.define({
       const back = !s.disabled && at !== null && at > s.characters.length
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next
       return $.set(next)
-        .run(...($.props.autoSubmit === true ? [submit] : []))
+        .run(...($.props.autoSubmit === true && !locked($.props) ? [submit] : []))
         .emit(OTPFieldEvents.Completed({ value: Redacted.make(s.stored), reason: complete }))
     },
     DisabledWhileFocused: (_model, _message, $) =>

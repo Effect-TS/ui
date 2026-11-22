@@ -107,6 +107,8 @@ describe("Dialog", () => {
       const s = yield* Scene.make(Dialog, { open: true, openMethod: "touch" }, standIn)
       s.expectMount(tracked(s))
       assert.strictEqual(partsOf(s).openMethod, "touch")
+      assert.deepInclude(s.get(portal).props, { open: false, popoverOpen: false })
+      s.mounted(tracked(s), sent("ShowedPortal"))
       const dialog = s.get(portal)
       assert.deepInclude(dialog.props, { open: false, popoverOpen: true })
       assert.strictEqual(dialog.attrs?.popover, "manual")
@@ -223,7 +225,7 @@ describe("Dialog", () => {
   it.effect("the other modes draw no layer and no aria-modal", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: true, modal: "trap-focus" }, standIn)
-      s.expectMount(tracked(s))
+      s.expectMount(tracked(s)).mounted(tracked(s), sent("ShowedPortal"))
       assert.deepInclude(s.get(portal).attrs, { popover: "manual" })
       assert.isUndefined(s.get(portal).attrs?.["aria-modal"])
       assert.deepInclude(s.get(portal).props, { open: false, popoverOpen: true })

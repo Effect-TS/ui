@@ -4,7 +4,7 @@ import { Combobox, Dialog, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, holdExits, popovers, press, tick } from "./utils/document.ts"
+import { byId, click, container, holdExits, popovers, press, tick } from "./utils/document.ts"
 
 type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 
@@ -360,6 +360,20 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.isTrue(shown())
       assert.isNotNull(input().closest("[inert]"))
       assert.strictEqual(document.activeElement, byId("trigger"))
+    }).pipe(Effect.scoped))
+
+  it.effect("with the input in the popup, a touch opens with focus on the popup, and Escape there closes it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ inputInPopup: true })
+      click(byId("trigger"), "touch")
+      yield* tick
+      const popup = document.querySelector("[role=dialog]")!
+      assert.strictEqual(document.activeElement, popup)
+      const escape = keydown(popup, "Escape")
+      assert.isTrue(escape.defaultPrevented)
+      yield* tick
+      assert.isFalse(shown())
+      assert.deepStrictEqual(log(), ["RequestedOpen trigger-press", "RequestedClose escape-key"])
     }).pipe(Effect.scoped))
 
   it.effect("in a modal dialog, Escape closes only the combobox", () =>
