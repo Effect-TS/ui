@@ -35,7 +35,7 @@ const geometry = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
-const track = Effect.fnUntraced(function*(leaveCoordinates: boolean) {
+const track = Effect.fnUntraced(function*(leaveCoordinates: boolean, props: Positioning.PositionerOptions = {}) {
   yield* geometry
   document.body.innerHTML = `<button id="anchor"></button><div id="positioner"><div id="list"></div></div>`
   rects.set("anchor", { x: 100, y: 100, width: 80, height: 20 })
@@ -43,7 +43,7 @@ const track = Effect.fnUntraced(function*(leaveCoordinates: boolean) {
   const node = document.getElementById("positioner")!
   node.style.left = "7px"
   node.style.top = "9px"
-  const args = Positioning.trackArgs({}, { side: "bottom", anchorSelector: "#anchor", leaveCoordinates })
+  const args = Positioning.trackArgs(props, { side: "bottom", anchorSelector: "#anchor", leaveCoordinates })
   const placements: Array<Positioning.Placement> = []
   yield* Positioning.trackPosition(node, args, Stream.never).pipe(
     Stream.runForEach((placement) => Effect.sync(() => placements.push(placement))),
@@ -69,6 +69,15 @@ describe("trackPosition in a document", () => {
       const { node } = yield* track(false)
       assert.strictEqual(node.style.left, "140px")
       assert.strictEqual(node.style.top, "120px")
+    }).pipe(Effect.scoped))
+
+  it.effect("a rectangle given as the anchor takes the element's place", () =>
+    Effect.gen(function*() {
+      const { node, placements } = yield* track(false, { anchor: { x: 300, y: 200, width: 0, height: 0 } })
+      assert.strictEqual(node.style.left, "300px")
+      assert.strictEqual(node.style.top, "200px")
+      assert.strictEqual(node.style.getPropertyValue("--anchor-width"), "0px")
+      assert.isFalse(placements[0]?.anchorHidden)
     }).pipe(Effect.scoped))
 
   it.effect("a scroll inside the positioner doesn't place it again, and one outside does", () =>

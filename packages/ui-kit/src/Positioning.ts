@@ -69,9 +69,12 @@
  *   `anchorSelector`, so build the selector from `h.id` to keep two
  *   instances apart. While nothing matches, the mount reports
  *   `anchorHidden`.
+ * - `anchorRect` places the popup against a rectangle in the viewport, such
+ *   as the point a context menu opened at, instead of an element. Nothing
+ *   moves it, so use `"fixed"` as the `positionMethod`.
  * - An arrow needs an id, passed as `arrowId`, and a size of its own.
- * - There are no virtual anchors, no placing against one line of an inline
- *   anchor and no function-valued offsets.
+ * - There's no placing against one line of an inline anchor and no
+ *   function-valued offsets.
  *
  * **Example** (A popup below its anchor, and above it when it doesn't fit)
  *
@@ -304,8 +307,8 @@ export type PositionMethod = typeof PositionMethod.Type
  * - `disableAnchorTracking`: the popup is placed only when it opens, when
  *   the window resizes and when its own size changes, not when the page
  *   scrolls or the anchor moves or changes size.
- * - `anchor`: the id of an element to place the popup against instead of
- *   the component's own anchor.
+ * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
+ *   the popup against instead of the component's own anchor.
  *
  * @stability experimental
  * @category schemas
@@ -323,7 +326,7 @@ export const PositionerFields = {
   arrowPadding: Schema.optional(Schema.Number),
   positionMethod: Schema.optional(PositionMethod),
   disableAnchorTracking: Schema.optional(Schema.Boolean),
-  anchor: Schema.optional(Schema.String)
+  anchor: Schema.optional(Schema.Union([Schema.String, Rect]))
 }
 
 /**
@@ -393,7 +396,8 @@ export const PlaceOptions = Schema.Struct({
     left: Schema.Number
   }),
   sticky: Schema.Boolean,
-  arrowPadding: Schema.Number
+  arrowPadding: Schema.Number,
+  shiftCrossAxis: Schema.Boolean
 })
 
 /**
@@ -412,8 +416,11 @@ type Sides = PlaceOptions["collisionPadding"]
  * **Details**
  *
  * `defaults` holds what differs between components: the `side` a popup shows
- * on when its props name none, and its `collisionAvoidance`, which is
- * `popupCollisionAvoidance` when left out.
+ * on when its props name none, its `collisionAvoidance`, which is
+ * `popupCollisionAvoidance` when left out, and `shiftCrossAxis`, false when
+ * left out. With `shiftCrossAxis`, unless `collisionAvoidance.side` is
+ * `"flip"`, the popup keeps its side and slides toward the anchor to stay
+ * inside the boundary, as with `sticky`, so it can cover the anchor.
  *
  * @stability experimental
  * @category constructors
@@ -421,9 +428,14 @@ type Sides = PlaceOptions["collisionPadding"]
  */
 export const resolveOptions = (
   options: PositionerOptions,
-  defaults: { readonly side: Side; readonly collisionAvoidance?: CollisionAvoidance | undefined }
+  defaults: {
+    readonly side: Side
+    readonly collisionAvoidance?: CollisionAvoidance | undefined
+    readonly shiftCrossAxis?: boolean | undefined
+  }
 ): PlaceOptions => {
   const avoidance = options.collisionAvoidance ?? defaults.collisionAvoidance ?? popupCollisionAvoidance
+  const shiftCrossAxis = defaults.shiftCrossAxis === true && avoidance.side !== "flip"
   const padding = options.collisionPadding ?? 5
   return {
     side: options.side ?? defaults.side,
@@ -438,8 +450,9 @@ export const resolveOptions = (
     collisionPadding: typeof padding === "number"
       ? { top: padding, right: padding, bottom: padding, left: padding }
       : { top: padding.top ?? 0, right: padding.right ?? 0, bottom: padding.bottom ?? 0, left: padding.left ?? 0 },
-    sticky: options.sticky ?? false,
-    arrowPadding: options.arrowPadding ?? 5
+    sticky: options.sticky === true || shiftCrossAxis,
+    arrowPadding: options.arrowPadding ?? 5,
+    shiftCrossAxis
   }
 }
 
@@ -482,8 +495,8 @@ export interface PlaceInput {
  *   options after a flip. A logical side stays logical.
  * - `availableWidth`, `availableHeight`: the space between the anchor and
  *   the boundary's edge on that side.
- * - `anchorHidden`: the anchor is outside `anchorClip`, or has no size and
- *   no position.
+ * - `anchorHidden`: the anchor is outside `anchorClip`. An anchor with no
+ *   width or height is outside only past the clip's edge, not on it.
  * - `arrow`: `null` without an arrow. Otherwise its offset from the popup's
  *   left edge as `x` or from its top edge as `y`, the other being `null`,
  *   and `uncentered` when it can't point at the anchor's middle.
@@ -674,7 +687,7 @@ export const place = (input: PlaceInput): PlaceResult => {
     bottom: biased("bottom"),
     left: biased("left")
   }
-  const flipMainAxis = avoidSide === "flip"
+  const flipMainAxis = avoidSide === "flip" && !options.shiftCrossAxis
   const flipCrossAxis = avoidAlign === "flip"
   const initialSideAxis = sideAxisOf(initialPlacement)
   const placements: Array<FloatingPlacement> = [
@@ -868,9 +881,9 @@ export const place = (input: PlaceInput): PlaceResult => {
   }
 
   const anchorOverflow = overflowOf(anchor, anchorClip, { top: 0, right: 0, bottom: 0, left: 0 })
-  const anchorEmpty = anchor.width === 0 && anchor.height === 0 && anchor.x === 0 && anchor.y === 0
-  const anchorClipped = anchorOverflow.top - anchor.height >= 0 || anchorOverflow.right - anchor.width >= 0 ||
-    anchorOverflow.bottom - anchor.height >= 0 || anchorOverflow.left - anchor.width >= 0
+  const outside = (overflow: number, length: number) => length === 0 ? overflow > 0 : overflow - length >= 0
+  const anchorClipped = outside(anchorOverflow.top, anchor.height) || outside(anchorOverflow.right, anchor.width) ||
+    outside(anchorOverflow.bottom, anchor.height) || outside(anchorOverflow.left, anchor.width)
 
   return {
     x,
@@ -879,7 +892,7 @@ export const place = (input: PlaceInput): PlaceResult => {
     align: alignment ?? "center",
     availableWidth,
     availableHeight,
-    anchorHidden: anchorClipped || anchorEmpty,
+    anchorHidden: anchorClipped,
     arrow: arrow === null || arrowData === undefined ? null : {
       x: arrowData.x ?? null,
       y: arrowData.y ?? null,
@@ -933,6 +946,8 @@ export type Placement = typeof Placement.Type
  * - `collisionBoundary`: the area the popup keeps inside.
  * - `disableAnchorTracking`: don't follow scrolling or the anchor.
  * - `anchorSelector`: a CSS selector for the anchor.
+ * - `anchorRect`: a rectangle in the viewport to place against instead of
+ *   the element `anchorSelector` matches, or `null`.
  * - `arrowId`: the id of the arrow, or `null` without one.
  * - `offsetAsPadding`: write `sideOffset` as padding on the positioner's
  *   side facing the anchor, and move the positioner up against the anchor.
@@ -951,6 +966,7 @@ export const TrackPositionArgs = Schema.Struct({
   collisionBoundary: CollisionBoundary,
   disableAnchorTracking: Schema.Boolean,
   anchorSelector: Schema.String,
+  anchorRect: Schema.optional(Schema.NullOr(Rect)),
   arrowId: Schema.NullOr(Schema.String),
   offsetAsPadding: Schema.Boolean,
   leaveCoordinates: Schema.optional(Schema.Boolean)
@@ -980,6 +996,9 @@ const arrowY = "--ui-kit-arrow-y"
  *   out.
  * - `anchorSelector`: a CSS selector for its anchor, which the `anchor` prop
  *   overrides.
+ * - `anchorRect`: a rectangle in the viewport to place against instead of
+ *   that anchor, which the `anchor` prop also overrides.
+ * - `shiftCrossAxis`: see `resolveOptions`. False when left out.
  * - `arrowId`: the id of its arrow, when it draws one.
  * - `offsetAsPadding`: see `TrackPositionArgs`. False when left out.
  * - `leaveCoordinates`: see `TrackPositionArgs`. False when left out.
@@ -997,6 +1016,8 @@ export const trackArgs = (
     readonly side: Side
     readonly collisionAvoidance?: CollisionAvoidance | undefined
     readonly anchorSelector: string
+    readonly anchorRect?: Rect | null | undefined
+    readonly shiftCrossAxis?: boolean | undefined
     readonly arrowId?: string | null | undefined
     readonly offsetAsPadding?: boolean | undefined
     readonly leaveCoordinates?: boolean | undefined
@@ -1006,7 +1027,12 @@ export const trackArgs = (
   positionMethod: props.positionMethod ?? "absolute",
   collisionBoundary: props.collisionBoundary ?? "clipping-ancestors",
   disableAnchorTracking: props.disableAnchorTracking === true,
-  anchorSelector: props.anchor === undefined ? popup.anchorSelector : idSelector(props.anchor),
+  anchorSelector: typeof props.anchor === "string" ? idSelector(props.anchor) : popup.anchorSelector,
+  anchorRect: typeof props.anchor === "object"
+    ? props.anchor
+    : props.anchor === undefined
+    ? popup.anchorRect ?? null
+    : null,
   arrowId: popup.arrowId ?? null,
   offsetAsPadding: popup.offsetAsPadding === true,
   leaveCoordinates: popup.leaveCoordinates === true
@@ -1145,7 +1171,7 @@ const clipOf = (element: Element, viewport: Rect): Rect => {
   return clip
 }
 
-const sameRect = (a: DOMRect, b: DOMRect): boolean =>
+const sameRect = (a: Rect, b: Rect): boolean =>
   a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
 const observeMove = (element: Element, onMove: () => void): () => void => {
@@ -1259,10 +1285,11 @@ export const trackPosition = (
     })
 
     const pass = (popup: Size): void => {
-      const anchor = document.querySelector(current.anchorSelector)
+      const virtual = current.anchorRect ?? null
+      const anchor = virtual === null ? document.querySelector(current.anchorSelector) : null
       const arrow = current.arrowId === null ? null : document.getElementById(current.arrowId)
       const viewport = viewportOf()
-      const anchorRect = anchor === null ? zero : clientRect(anchor)
+      const anchorRect = virtual ?? (anchor === null ? zero : clientRect(anchor))
       const rtl = view.getComputedStyle(node).direction === "rtl"
       const placed = place({
         anchor: anchorRect,
@@ -1304,7 +1331,7 @@ export const trackPosition = (
       const report: Placement = {
         side: placed.side,
         align: placed.align,
-        anchorHidden: placed.anchorHidden,
+        anchorHidden: placed.anchorHidden || (virtual === null && sameRect(anchorRect, zero)),
         arrowUncentered: placed.arrow?.uncentered ?? false
       }
       if (reported === null || !sameReport(reported, report)) {
@@ -1325,9 +1352,11 @@ export const trackPosition = (
     }
 
     const observe = (): () => void => {
-      const anchor = current.disableAnchorTracking ? null : document.querySelector(current.anchorSelector)
+      const anchor = current.disableAnchorTracking || current.anchorRect != null
+        ? null
+        : document.querySelector(current.anchorSelector)
       view.addEventListener("resize", update)
-      if (!current.disableAnchorTracking) {
+      if (!current.disableAnchorTracking && current.anchorRect == null) {
         document.addEventListener("scroll", onScroll, { capture: true, passive: true })
       }
       let frame = -1
