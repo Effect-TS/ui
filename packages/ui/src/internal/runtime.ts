@@ -3843,7 +3843,12 @@ const setup = (
       if (reader.left || reader.closed || reader.failure !== undefined) continue
       for (const read of sharedReads.readsOf(reader.component.definition)) {
         if (read.report === undefined || reader.owners?.get(read.owner.definition) !== owner) continue
-        const report = guard(reader, "shared", () => read.report!(reader.model, reader.props), read.name)
+        const report = guard(
+          reader,
+          "shared",
+          () => read.report!(reader.model, reader.props, (name, key) => View.idOf(reader.path, name, key)),
+          read.name
+        )
         // The reader failed, and leaving marked the owner again.
         if (reader.failure !== undefined) return
         reports.push(report)

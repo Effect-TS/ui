@@ -393,9 +393,10 @@ export const withReports = (
 export const reportsOf = (story: State<any, any, any, any>): { readonly [name: string]: unknown } => {
   const out: { [name: string]: unknown } = {}
   const given = sharedGiven.get(story)
+  const own = "/" + story.component.definition.name
   for (const read of sharedReads.readsOf(story.component.definition)) {
     if (read.report === undefined || (read.optional && !given?.has(read.owner.definition))) continue
-    out[read.name] = read.report(story.model, story.props)
+    out[read.name] = read.report(story.model, story.props, (name, key) => View.idOf(own, name, key))
   }
   return out
 }

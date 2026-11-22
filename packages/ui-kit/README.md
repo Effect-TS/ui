@@ -26,6 +26,7 @@ A component that keeps no state, such as `Switch`, is a plain view function inst
 - [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
+- [CheckboxGroup](src/CheckboxGroup.ts): one list of ticked values shared by the checkboxes inside it, with a parent checkbox that ticks or unticks them all.
 - [Combobox](src/Combobox.ts): an input that filters a list of options as the user types, whose open state, value and text live in your Model, with single or multiple selection, chips, an input inside the popup, grids, inline lists and inputs for a form.
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
 - [DirectionProvider](src/DirectionProvider.ts): tells the components inside it whether text runs left to right or right to left, so their arrow keys follow it.
