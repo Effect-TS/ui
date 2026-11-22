@@ -4,7 +4,7 @@ import { DirectionProvider, Field, OTPField } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Redacted, Schema } from "effect"
+import { Effect, Redacted, Schema } from "effect"
 import { container, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
@@ -71,6 +71,16 @@ const Page = Component.define({
     )
 })
 
+const enter = (slot: HTMLInputElement, text: string) => {
+  slot.value = text
+  slot.dispatchEvent(new InputEvent("input", { bubbles: true }))
+}
+
+const paste = (slot: HTMLInputElement, text: string) =>
+  slot.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+    clipboardData: { getData: () => text }
+  }))
+
 const mountPage = Effect.fnUntraced(function*(
   props: { readonly autoSubmit?: boolean; readonly upper?: boolean; readonly locked?: boolean } = {}
 ) {
@@ -78,11 +88,14 @@ const mountPage = Effect.fnUntraced(function*(
   const root = yield* BrowserHost.mountEffect(Page, { autoSubmit: false, upper: false, locked: false, ...props }, app)
   yield* tick
   const slots = Array.from(app.querySelectorAll<HTMLInputElement>(".slot"))
-  const enter = (index: number, text: string) => {
-    slots[index]!.value = text
-    slots[index]!.dispatchEvent(new InputEvent("input", { bubbles: true }))
+  return {
+    app,
+    root,
+    slots,
+    enter: (index: number, text: string) => enter(slots[index]!, text),
+    paste: (text: string) => paste(slots[0]!, text),
+    log: () => root.model()?.log ?? []
   }
-  return { app, root, slots, enter, log: () => root.model()?.log ?? [] }
 })
 
 const FrameMessage = UiSchema.TaggedEnum({ Pressed: {} })
@@ -199,11 +212,7 @@ describe("OTPField in a document", { concurrent: false }, () => {
 
   it.effect("delayed completion submits once on an exact match, and ignores mismatches or superseded edits", () =>
     Effect.gen(function*() {
-      const { enter, log, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
-      const paste = (text: string) =>
-        slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
-          clipboardData: { getData: () => text }
-        }))
+      const { enter, log, paste, root, slots } = yield* mountPage({ autoSubmit: true, locked: true })
       paste("1234")
       yield* tick
       root.send(Message.Stored({ value: Redacted.make("9876") }))
@@ -294,24 +303,19 @@ describe("OTPField in a document", { concurrent: false }, () => {
       })
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(RedactedPage, {}, app).pipe(
-        Effect.provide(Layer.succeed(MessageLog.MessageLog, memory))
+        Effect.provideService(MessageLog.MessageLog, memory)
       )
       yield* tick
-      const slots = Array.from(app.querySelectorAll<HTMLInputElement>(".slot"))
-      const paste = (text: string) =>
-        slots[0]!.dispatchEvent(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
-          clipboardData: { getData: () => text }
-        }))
-      slots[0]!.value = typed
-      slots[0]!.dispatchEvent(new InputEvent("input", { bubbles: true }))
+      const first = app.querySelector<HTMLInputElement>(".slot")!
+      enter(first, typed)
       yield* tick
       assert.isFalse(root.model()?.done)
       assert.strictEqual(Redacted.value(root.model()!.code), typed)
-      paste(rejectedText)
+      paste(first, rejectedText)
       yield* tick
       assert.isFalse(root.model()?.done)
       assert.strictEqual(Redacted.value(root.model()!.code), typed)
-      paste(secret)
+      paste(first, secret)
       yield* tick
       assert.isTrue(root.model()?.done)
       assert.strictEqual(Redacted.value(root.model()!.code), secret)
@@ -321,16 +325,12 @@ describe("OTPField in a document", { concurrent: false }, () => {
       assert.notInclude(json, typed)
       assert.notInclude(json, rejectedText)
       assert.notInclude(json, secret)
-      const settledEntries = wire.filter((entry) => entry._tag === "SubscriptionStarted" && entry.name === "settled")
-      assert.isNotEmpty(settledEntries)
-      for (const entry of settledEntries) {
-        if (entry._tag === "SubscriptionStarted") {
-          assert.isArray(entry.deps)
-          assert.strictEqual(entry.deps?.length, 3)
-          assert.isNumber(entry.deps?.[0])
-          assert.isNumber(entry.deps?.[1])
-          assert.isBoolean(entry.deps?.[2])
-        }
+      const settled = wire.flatMap((entry) =>
+        entry._tag === "SubscriptionStarted" && entry.name === "settled" ? [entry.deps] : []
+      )
+      assert.isNotEmpty(settled)
+      for (const deps of settled) {
+        assert.deepStrictEqual(deps?.map((dep) => typeof dep), ["number", "number", "boolean"])
       }
     }).pipe(Effect.scoped))
 })

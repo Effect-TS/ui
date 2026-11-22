@@ -74,10 +74,9 @@
  * were typed. So the consumer's `update` is where a code is changed on the way
  * in: store `Redacted.make(Redacted.value(value).toUpperCase())` to show
  * capitals, or use `validationType: "none"` and drop the characters a rule of
- * your own rejects. When the field submits with a form, the form's `submit`
- * event hands the code over as a plain string in `fields[name]` — wrap it
- * with `Redacted.make` before putting it into a message, or read the redacted
- * code from your Model instead.
+ * your own rejects. A form's `submit` event hands the code over as a plain
+ * string in `fields[name]`. Wrap it with `Redacted.make` before it goes into
+ * a message, or read the code from your Model.
  *
  * The consumer usually answers an edit in the `update` that handles
  * `Updated`. If `value` is another code on the render that follows, the edit
@@ -177,6 +176,8 @@ import { input } from "./internal/formInputs.ts"
 import { isAndroid } from "./internal/platform.ts"
 import { clamp } from "./internal/range.ts"
 
+const Code = Schema.Redacted(Schema.String)
+
 /**
  * Which characters a one-time code field accepts: digits, letters, both, or
  * anything that isn't whitespace.
@@ -229,7 +230,7 @@ export type OTPFieldInputMode = typeof OTPFieldInputMode.Type
  *
  * **Details**
  *
- * - `value`: the redacted code (`Redacted<string>`). The slots show it with
+ * - `value`: the code, a `Redacted<string>`. The slots show it with
  *   whitespace and the characters `validationType` rejects removed, cut to
  *   `length`.
  * - `length`: the number of slots, a positive whole number.
@@ -260,7 +261,7 @@ export type OTPFieldInputMode = typeof OTPFieldInputMode.Type
  * @since 0.1.0
  */
 export const OTPFieldProps = Schema.Struct({
-  value: Schema.Redacted(Schema.String),
+  value: Code,
   length: Schema.Number,
   id: Schema.optional(Schema.String),
   validationType: Schema.optional(OTPFieldValidationType),
@@ -328,30 +329,32 @@ export type OTPFieldEntryReason = typeof OTPFieldEntryReason.Type
  *
  * **Details**
  *
- * - `Updated`: asks for the redacted code in `value`. Store `value` and pass
- *   it back as the `value` prop, changed if need be, such as in upper case.
- *   Until then the slots go on showing the old code.
+ * - `Updated`: asks for the code in `value`. Store `value` and pass it back
+ *   as the `value` prop, changed if need be, such as in upper case. Until
+ *   then the slots go on showing the old code.
  * - `Completed`: the consumer answered text the user typed or pasted by
- *   storing a code that fills every slot. `value` is the redacted stored code,
- *   so a consumer that synchronously changes or shortens what it stores gets
- *   the code it kept, or no event. If `value` doesn't change right away, the
+ *   storing a code that fills every slot. `value` is the stored code, so a
+ *   consumer that synchronously changes or shortens what it stores gets the
+ *   code it kept, or no event. If `value` doesn't change right away, the
  *   field still completes if the next `value` change stores the exact
  *   complete code it asked for before another edit arrives; an unrelated
  *   code or a newer edit discards it. A complete code pasted over the same
  *   code reports it again. Backspace and Delete never complete a code.
  * - `Rejected`: the text the user typed or pasted held characters the
  *   field dropped, or more characters than the field has slots. `value` is
- *   that text as entered, redacted. The accepted part, if any, is reported by
+ *   that text as entered. The accepted part, if any, is reported by
  *   `Updated`.
+ *
+ * Every `value` is a `Redacted<string>`.
  *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const OTPFieldEvents = UiSchema.TaggedEnum({
-  Updated: { value: Schema.Redacted(Schema.String), reason: OTPFieldUpdateReason },
-  Completed: { value: Schema.Redacted(Schema.String), reason: OTPFieldEntryReason },
-  Rejected: { value: Schema.Redacted(Schema.String), reason: OTPFieldEntryReason }
+  Updated: { value: Code, reason: OTPFieldUpdateReason },
+  Completed: { value: Code, reason: OTPFieldEntryReason },
+  Rejected: { value: Code, reason: OTPFieldEntryReason }
 })
 
 /**
@@ -364,15 +367,15 @@ export const OTPFieldEvents = UiSchema.TaggedEnum({
 export type OTPFieldEvents = typeof OTPFieldEvents.Type
 
 const OTPFieldMessage = UiSchema.TaggedEnum({
-  UpdatedSlot: { index: Schema.Number, value: Schema.Redacted(Schema.String), composing: Schema.Boolean },
-  EndedComposition: { index: Schema.Number, value: Schema.Redacted(Schema.String) },
-  PastedText: { index: Schema.Number, text: Schema.Redacted(Schema.String) },
+  UpdatedSlot: { index: Schema.Number, value: Code, composing: Schema.Boolean },
+  EndedComposition: { index: Schema.Number, value: Code },
+  PastedText: { index: Schema.Number, text: Code },
   PressedKey: { index: Schema.Number, key: Schema.String, boundary: Schema.Boolean },
   PressedSlot: { index: Schema.Number },
   FocusedSlot: { index: Schema.Number },
   BlurredSlot: { index: Schema.Number },
   FocusedHiddenInput: {},
-  UpdatedHiddenInput: { value: Schema.Redacted(Schema.String) },
+  UpdatedHiddenInput: { value: Code },
   Settled: {},
   DisabledWhileFocused: {},
   CompletedSelectSlot: {},
@@ -387,10 +390,10 @@ const OTPFieldModel = Schema.Struct({
   target: Schema.NullOr(Schema.Number),
   moving: Schema.Number,
   composing: Schema.NullOr(Schema.Number),
-  composed: Schema.NullOr(Schema.Struct({ index: Schema.Number, text: Schema.Redacted(Schema.String) })),
+  composed: Schema.NullOr(Schema.Struct({ index: Schema.Number, text: Code })),
   edit: Schema.NullOr(Schema.Struct({
-    before: Schema.Redacted(Schema.String),
-    asked: Schema.Redacted(Schema.String),
+    before: Code,
+    asked: Code,
     reason: Schema.NullOr(OTPFieldEntryReason),
     settled: Schema.Boolean
   })),
@@ -444,17 +447,21 @@ interface Settings {
 const storedOf = (props: OTPFieldProps): ReadonlyArray<string> =>
   normalize(Redacted.value(props.value), props.length, props.validationType ?? "numeric")[0]
 
+type Edit = NonNullable<OTPFieldModel["edit"]>
+
+const startedFrom = (edit: Edit, stored: string): boolean => Redacted.value(edit.before) === stored
+
 const settingsOf = (props: OTPFieldProps, edit: OTPFieldModel["edit"] = null): Settings => {
   const characters = storedOf(props)
   const stored = characters.join("")
-  const unanswered = edit !== null && !edit.settled && Redacted.value(edit.before) === stored
-  const asked = unanswered ? Redacted.value(edit.asked) : stored
+  const unanswered = edit !== null && !edit.settled && startedFrom(edit, stored)
+  const value = unanswered ? Redacted.value(edit.asked) : stored
   return {
     length: props.length,
     type: props.validationType ?? "numeric",
     stored,
-    characters: unanswered ? Array.from(asked) : characters,
-    value: asked,
+    characters: unanswered ? Array.from(value) : characters,
+    value,
     disabled: props.disabled === true,
     readOnly: props.readOnly === true
   }
@@ -462,21 +469,18 @@ const settingsOf = (props: OTPFieldProps, edit: OTPFieldModel["edit"] = null): S
 
 const locked = (props: OTPFieldProps): boolean => props.disabled === true || props.readOnly === true
 
-type Edit = NonNullable<OTPFieldModel["edit"]>
-
 const completes = (edit: Edit, length: number): boolean =>
   edit.reason === "input-paste" || Array.from(Redacted.value(edit.before)).length !== length
 
 const completed = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldEntryReason | null =>
-  edit === null || edit.reason === null || Redacted.value(edit.before) === s.stored ||
-    s.characters.length !== s.length
+  edit === null || edit.reason === null || startedFrom(edit, s.stored) || s.characters.length !== s.length
     ? null
     : (edit.settled ? Redacted.value(edit.asked) === s.stored : completes(edit, s.length))
     ? edit.reason
     : null
 
 const settle = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldModel["edit"] => {
-  if (edit === null || Redacted.value(edit.before) !== s.stored) return null
+  if (edit === null || !startedFrom(edit, s.stored)) return null
   if (edit.settled) return edit
   return edit.reason !== null && Array.from(Redacted.value(edit.asked)).length === s.length &&
       completes(edit, s.length)
@@ -528,8 +532,16 @@ const InspectFirstSlot = Mount.make(
     })
 )
 
-const settled = (edits: number, filled: number, changed: boolean) =>
-  Subscription.make("settled", [edits, filled, changed], () => Stream.make(OTPFieldMessage.Settled()))
+const settled = (model: OTPFieldModel, props: OTPFieldProps) => {
+  const stored = storedOf(props)
+  const edit = model.edit
+  const stale = edit !== null && edit.settled && !startedFrom(edit, stored.join(""))
+  return Subscription.make(
+    "settled",
+    [model.edits, stored.length, stale],
+    () => Stream.make(OTPFieldMessage.Settled())
+  )
+}
 
 // A browser may send no blur event for an input disabled while it has
 // focus, so the field reports the blur itself.
@@ -553,7 +565,7 @@ const setValue = (
   const value = characters.join("")
   const entry = reason === "input-change" || reason === "input-paste" ? reason : null
   const edit = model.edit
-  const unanswered = edit !== null && !edit.settled && Redacted.value(edit.before) === s.stored
+  const unanswered = edit !== null && !edit.settled && startedFrom(edit, s.stored)
   const unchanged = value === s.value
   const earlier = completed(edit, s)
   const again = unchanged && !unanswered && entry === "input-paste" && characters.length === s.length
@@ -674,8 +686,8 @@ const checked = (
  *
  * **Details**
  *
- * The parts also return `value`, the redacted code (`Redacted<string>`) the
- * slots show, `length`, and `complete`, `filled`, `focused`, `disabled`,
+ * The parts also return `value`, a `Redacted<string>` of the code the slots
+ * show, `length`, and `complete`, `filled`, `focused`, `disabled`,
  * `readOnly` and `required` as booleans, for markup that depends on them.
  *
  * The field's own attributes win over the ones the consumer set on the
@@ -801,14 +813,10 @@ export const OTPField = Component.define({
     CompletedInspectFirstSlot: (model, { android, label }) =>
       model.android === android && model.label === label ? model : { ...model, android, label }
   },
-  subscriptions: (model, props) => {
-    const stored = storedOf(props)
-    const changed = model.edit !== null && model.edit.settled && Redacted.value(model.edit.before) !== stored.join("")
-    return [
-      settled(model.edits, stored.length, changed),
-      model.focused && props.disabled === true && disabledWhileFocused
-    ]
-  },
+  subscriptions: (model, props) => [
+    settled(model, props),
+    model.focused && props.disabled === true && disabledWhileFocused
+  ],
   parts: (model, p) => {
     const props = p.props
     if (!Number.isInteger(props.length) || props.length <= 0) {
