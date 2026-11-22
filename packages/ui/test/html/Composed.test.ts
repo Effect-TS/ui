@@ -5,7 +5,7 @@ import { ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
-import { Dialog, DialogEvents, Item, Menu, MenuMessage } from "./fixtures/headless.ts"
+import { Dialog, DialogEvents, Item, Menu } from "./fixtures/headless.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
 
@@ -36,9 +36,8 @@ const WrappedDialog = Component.define({
   parts: (_, p) => p.child(Dialog, { props: p.props, onEmit: (event) => event, parts: (dialog) => dialog })
 })
 
-const ComboMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Closed: {}, Toggle: {} })
+const ComboMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Closed: {} })
 const ComboEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
-const MenuRef = Menu.ref("menu")
 
 const Combo = Component.define({
   name: "Combo",
@@ -47,15 +46,13 @@ const Combo = Component.define({
   model: Schema.Array(Schema.String),
   message: ComboMessage,
   events: ComboEvents,
-  receives: ["Toggle"],
   elements: Html
 }).make({
   init: () => [],
   update: (log, message, $) =>
     ComboMessage.match(message, {
       Picked: ({ id }) => $.set([...log, "picked " + id]).emit(ComboEvents.Picked({ id })),
-      Closed: () => [...log, "closed"],
-      Toggle: () => $.set(log).send(MenuRef, MenuMessage.Toggle())
+      Closed: () => [...log, "closed"]
     }),
   parts: (log, p) => {
     const badge = p.part("output", (b) => b.attr("data-count", String(log.length)))
@@ -64,7 +61,7 @@ const Combo = Component.define({
       onEmit: () => ComboMessage.Closed(),
       parts: (dialog) =>
         p.child(Menu, {
-          ref: MenuRef,
+          key: "menu",
           props: { items: p.props.items },
           onEmit: (event) => ComboMessage.Picked({ id: event.id }),
           parts: (menu) => ({ dialog, menu, badge, log })
@@ -73,14 +70,7 @@ const Combo = Component.define({
   }
 })
 
-const AppMessage = UiSchema.TaggedEnum({
-  Picked: { id: Schema.String },
-  Clicked: { id: Schema.String },
-  ToggledCombo: {},
-  ToggledOwn: {}
-})
-const ComboRef = Combo.ref("combo")
-const OwnMenuRef = Menu.ref("menu")
+const AppMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Clicked: { id: Schema.String } })
 
 const App = Component.define({
   name: "App",
@@ -91,16 +81,14 @@ const App = Component.define({
 })
   .make({
     init: () => [],
-    update: (log, message, $) =>
+    update: (log, message) =>
       AppMessage.match(message, {
         Picked: ({ id }) => [...log, "picked " + id],
-        Clicked: ({ id }) => [...log, "clicked " + id],
-        ToggledCombo: () => $.set(log).send(ComboRef, ComboMessage.Toggle()),
-        ToggledOwn: () => $.set(log).send(OwnMenuRef, MenuMessage.Toggle())
+        Clicked: ({ id }) => [...log, "clicked " + id]
       }),
     view: (log, h) =>
       Combo(h, {
-        ref: ComboRef,
+        key: "combo",
         props: { items },
         onEmit: (event) => AppMessage.Picked({ id: event.id }),
         view: (combo) =>
@@ -113,11 +101,6 @@ const App = Component.define({
                   .children(item.label)
               ))
             ),
-            Menu(h, {
-              ref: OwnMenuRef,
-              props: { items: [] },
-              view: (menu) => menu.trigger(h.button).children("Own menu")
-            }),
             combo.badge(h.output).children(log.join(", "))
           )
       })
@@ -254,20 +237,6 @@ describe("p.child", () => {
       assert.deepStrictEqual(failures(refused), ["/App/Owner[] view"])
       assert.strictEqual(refused.text(), "owner down")
     }).pipe(provideHost))
-
-  it.effect("refs stay in their owner's namespace: declarer's send reaches its child, consumer's same-key ref does not", () =>
-    Effect.gen(function*() {
-      const root = yield* TestHost.mount(App, {})
-      assert.deepStrictEqual(failures(root), [])
-      root.send(AppMessage.ToggledOwn())
-      yield* TestHost.settle
-      assert.strictEqual(element(root, "Own menu").attrs["aria-expanded"], "true")
-      assert.strictEqual(element(root, "Combo menu").attrs["aria-expanded"], "false")
-      root.send(AppMessage.ToggledCombo())
-      yield* TestHost.settle
-      assert.strictEqual(element(root, "Combo menu").attrs["aria-expanded"], "true")
-      assert.isFalse(root.log().some((entry) => entry._tag === "SendDropped"))
-    }).pipe(provideHost))
 })
 
 describe("p.child on the server", () => {
@@ -289,7 +258,7 @@ describe("p.child in a Scene", () => {
       elements: Html,
       view: (combo, h) => h.div(combo.dialog.popup(h.dialog), combo.badge(h.output).children(combo.log.join(", ")))
     })
-    s.childEmit(Menu, MenuRef, { _tag: "Picked", id: "a" })
+    s.childEmit(Menu, "menu", { _tag: "Picked", id: "a" })
       .emitted(ComboEvents.Picked({ id: "a" }))
       .childEmit(WrappedDialog, { _tag: "Closed" })
       .givenChild(Dialog, { open: true })

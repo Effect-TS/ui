@@ -15,9 +15,9 @@ const Provider = Component.define({
   props: Schema.Struct({ timeout: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.Boolean, instant: Schema.Boolean }),
   message: ProviderMessage,
-  receives: ["Completed"],
   shares: {
     value: (model) => ({ open: model.open, instant: model.instant }),
+    receives: ["Completed"],
     collects: {
       schema: Schema.Boolean,
       onChange: (collected) => ProviderMessage.ChangedOpen({ open: collected.includes(true) })
@@ -106,8 +106,7 @@ describe("reports", () => {
       scoped: false,
       model: Schema.Null,
       message: TipMessage,
-      receives: ["Entered"],
-      shares: () => 1
+      shares: { value: () => 1, receives: ["Entered"] }
     }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
     const sender = Component.define({
       name: "Sender",

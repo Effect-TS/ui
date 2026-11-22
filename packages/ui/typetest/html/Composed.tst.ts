@@ -175,7 +175,7 @@ describe("p.child", () => {
 })
 
 describe("Scene.childEmit", () => {
-  it("takes the events of a headless child that receives no messages", () => {
+  it("takes the events of a headless child", () => {
     const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html })
       .make({
         init: () => null,

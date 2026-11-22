@@ -135,8 +135,8 @@ export interface Issued {
  * `onChange`, pointing at the `QueryChanged` entry it saw. `Emit` is a
  * child's emit, pointing at the child's entry. `Failure` is a parent's
  * `onFailure` for a child that failed, pointing at the child's `Failed`
- * entry. `Send` is a parent's `$.send`, or a descendant's `$.send` to an
- * owner of shared state, pointing at the sender's entry. `Shared` is a
+ * entry. `Send` is a descendant's `$.send` to an owner of shared state,
+ * pointing at the sender's entry. `Shared` is a
  * reader's `onChange` for its owner's shared value: the name the reader's
  * `shared` lists the owner under, the owner's path, and the owner's entry
  * that last changed the value. `Collected` is an owner's `collects.onChange` for
@@ -710,19 +710,10 @@ export interface CommandDropped extends InstanceBase {
 }
 
 /**
- * A `$.send` that reached no child or owner: `path` is the sender's, `ref`
- * the key of the child it named or the name of the owner, and `issued` the
- * sender's `Update` entry and the send's index in its `sends`.
- *
- * **Details**
- *
- * The reason is `unrendered` when no child of the sender's last render has
- * the ref, `failed` when that child failed, `fallback` when the child
- * shows a feature's `fallback` because its Layer is building or failed, and
- * `waiting` when the child waits for its Layer before it adopts the server's
- * nodes. The message isn't kept for a later instance at that child's path.
- * The reason is `absent` for a send to an owner the sender's `shared` lists
- * as `optional`, when no instance of it is above the sender.
+ * A `$.send` that reached no owner: the sender's `shared` lists the owner
+ * as `optional`, and no instance of it is above the sender. `path` is the
+ * sender's, `owner` the name of the owner, and `issued` the sender's
+ * `Update` entry and the send's index in its `sends`.
  *
  * @stability experimental
  * @category models
@@ -730,9 +721,8 @@ export interface CommandDropped extends InstanceBase {
  */
 export interface SendDropped extends InstanceBase {
   readonly _tag: "SendDropped"
-  readonly ref: string
+  readonly owner: string
   readonly issued: Issued
-  readonly reason: "unrendered" | "failed" | "fallback" | "waiting" | "absent"
 }
 
 /**
@@ -948,7 +938,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 6
+export const wireVersion = 7
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -1019,7 +1009,7 @@ const RunWire = {
  * **Details**
  *
  * Models, messages, props and events are encoded through the component's
- * Schemas, and a send's message through its ref's or its owner's `receives`.
+ * Schemas, and a send's message through its owner's `receives`.
  * A shared value a reader's `Update` holds is encoded through the
  * `schema` of its owner's `shares`, or structurally without one. Command
  * args and a mount's args are encoded through the definition's `args`
@@ -1091,10 +1081,7 @@ export const Wire = Schema.Union([
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
     lists: Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) })),
-    sends: Schema.Array(Schema.Union([
-      Schema.Struct({ ref: Schema.String, message: Schema.Json }),
-      Schema.Struct({ owner: Schema.String, message: Schema.Json })
-    ])),
+    sends: Schema.Array(Schema.Struct({ owner: Schema.String, message: Schema.Json })),
     boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
@@ -1149,9 +1136,8 @@ export const Wire = Schema.Union([
   }),
   Schema.TaggedStruct("SendDropped", {
     ...InstanceWire,
-    ref: Schema.String,
-    issued: IssuedWire,
-    reason: Schema.Literals(["unrendered", "failed", "fallback", "waiting", "absent"])
+    owner: Schema.String,
+    issued: IssuedWire
   }),
   Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, ...SubscriptionWire }),
   Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, ...SubscriptionWire })
@@ -1422,9 +1408,8 @@ export const makeEncoder = (options?: {
           return {
             _tag: "SendDropped",
             ...instanceBase(entry),
-            ref: entry.ref,
-            issued: entry.issued,
-            reason: entry.reason
+            owner: entry.owner,
+            issued: entry.issued
           }
         case "SubscriptionStarted":
         case "SubscriptionStopped":
@@ -1503,9 +1488,8 @@ const encodeGroup = (command: Command.Command<any, any>): string | null => {
 }
 
 /**
- * Encodes a `$.send` as the ref's key, or for a send to an owner of shared
- * state the owner's definition name, and the message. The message goes
- * through the ref's or the owner's `receives` Schema the way `encodeArgs`
+ * Encodes a `$.send` as the owner's definition name and the message. The
+ * message goes through the owner's `receives` Schema the way `encodeArgs`
  * encodes Command args: redacted, with a structural fallback for what doesn't
  * encode.
  *
@@ -1515,12 +1499,10 @@ const encodeGroup = (command: Command.Command<any, any>): string | null => {
  */
 export const encodeSend = (
   send: Component.Send
-):
-  | { readonly ref: string; readonly message: Schema.Json }
-  | { readonly owner: string; readonly message: Schema.Json } =>
-  send.ref !== undefined
-    ? { ref: send.ref.key, message: encodeArgs(send.ref.receives, send.message) }
-    : { owner: send.owner.definition.name, message: encodeArgs(send.owner.receives, send.message) }
+): { readonly owner: string; readonly message: Schema.Json } => ({
+  owner: send.owner.definition.name,
+  message: encodeArgs(send.owner.receives, send.message)
+})
 
 /** The redacting codec of `ast`, or `null` when it has none. */
 const encoderOf = memoize((ast: SchemaAST.AST): ((value: unknown) => unknown) | null => {

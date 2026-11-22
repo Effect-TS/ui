@@ -659,10 +659,9 @@ export const mount = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly fallback?:
@@ -1008,11 +1007,7 @@ const formatEntry = (entry: MessageLog.Entry): string => {
       const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
       const sends = entry.sends.length === 0
         ? ""
-        : ` sends ${
-          entry.sends.map((send) =>
-            `${send.ref !== undefined ? send.ref.key : send.owner.definition.name} ${summary(send.message)}`
-          ).join(", ")
-        }`
+        : ` sends ${entry.sends.map((send) => `${send.owner.definition.name} ${summary(send.message)}`).join(", ")}`
       return `${head} ${summary(entry.message)} (${from})${commands}${events}${sends}`
     }
     case "Mounted":
@@ -1040,7 +1035,7 @@ const formatEntry = (entry: MessageLog.Entry): string => {
     case "CommandDropped":
       return `${head} ${entry.name} (${entry.reason})`
     case "SendDropped":
-      return `${head} ${entry.ref} (${entry.reason})`
+      return `${head} ${entry.owner}`
     case "FetchStarted":
       return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
     default:
@@ -1055,51 +1050,41 @@ const formatEntry = (entry: MessageLog.Entry): string => {
  * @category models
  * @since 0.1.0
  */
-export interface Stub<Self, Props, Events, Receives = never> {
+export interface Stub<Self, Props, Events> {
   /** Provides the stub as the feature's implementation. */
   readonly layer: Layer.Layer<Self>
   /** The props the stub rendered with, in order, without repeats. */
   readonly props: () => ReadonlyArray<Props>
-  /** The messages parents sent the stubs with `$.send`, in order. */
-  readonly received: () => ReadonlyArray<Receives>
   /** Makes every mounted stub emit, as the real feature would. Settle first, so it's listening. */
   readonly emit: (events: Events) => void
 }
 
 /**
  * Stands in for a feature in a runtime test: it renders a `<stub>` element
- * with a `data-stub` attribute naming the feature, records the props it gets
- * and the messages a parent sends it, and emits what the test sends.
+ * with a `data-stub` attribute naming the feature, records the props it gets,
+ * and emits what the test sends.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const stub = <Self, Props, Events, Receives = never>(
-  feature: Feature.Service<Self, Props, Events, Receives>
-): Stub<Self, Props, Events, Receives> => {
+export const stub = <Self, Props, Events>(
+  feature: Feature.Service<Self, Props, Events>
+): Stub<Self, Props, Events> => {
   const name: string = feature[Feature.TypeId].name
   const seen: Array<Props> = []
-  const received: Array<Receives> = []
   const listeners = new Set<(events: Events) => void>()
-  // What the test emits, tagged so it can't be mistaken for a message a parent sent.
   const Emit = Schema.TaggedStruct("~@effect/ui/TestHost/Emit", { events: feature.events })
-  const isEmit = Schema.is(Emit)
-  const Message = Schema.Union([Emit, feature.receives])
   const component = Component.define({
     name,
     scoped: false,
     props: feature.props,
     model: Schema.Number,
-    message: Message,
+    message: Emit,
     events: feature.events
   }).make({
     init: () => 0,
-    update: (count, message, $) => {
-      if (isEmit(message)) return $.set(count + 1).emit(message.events)
-      received.push(message as Receives)
-      return count
-    },
+    update: (count, message, $) => $.set(count + 1).emit(message.events),
     view: (_, h) => {
       if (seen.length === 0 || seen[seen.length - 1] !== h.props) seen.push(h.props)
       return h.el("stub").attr("data-stub", name)
@@ -1125,7 +1110,6 @@ export const stub = <Self, Props, Events, Receives = never>(
   return {
     layer: feature.toLayer(component as any),
     props: () => seen,
-    received: () => received,
     emit: (events) => {
       for (const listener of listeners) listener(events)
     }

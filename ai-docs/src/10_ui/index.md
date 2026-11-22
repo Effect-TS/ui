@@ -24,15 +24,18 @@ row arrives. Two children at one path are one instance: in
 `cond ? Listbox(h, { props: a }) : Listbox(h, { props: b })` the Listbox
 keeps its Model when `cond` changes, so key each branch when that state
 shouldn't carry over. A `Scene` names a child by its component, then by its
-key or ref when it has one: `s.childEmit(Listbox, event)`,
-`s.childFailure(NoteEditor, Editor.at(id), cause)`.
+key when it has one: `s.childEmit(Listbox, event)`,
+`s.childFailure(NoteEditor, note.id, cause)`.
 
 A parent passes a child state through props, and a child answers through
-`events`. A one-shot instruction, such as "save now" or "clear your draft",
-is a send: the child lists the tags it accepts in `receives`, the parent
-renders the child with a ref from `Child.ref("Name")`, and its `update` calls
-`$.send(ref, message)`. Don't send a current value that the parent
-controls: pass it as a prop. See **Who owns the state** below.
+`events`. A parent can't send a child a message. To restart a child, such as
+a wizard, stop rendering it or change its key, and it mounts fresh. A
+control that the parent lays out but that starts the child's own work is a
+part of a headless child. TagPicker's remove button is one: the consumer
+draws `tagPicker.remove(h.button, tag)`, and the click goes through
+TagPicker's `update` (see "Composing headless components"). NoteEditor
+draws its own view and has no parts, so the note page hears its `Saved` but
+can't start a save. See **Who owns the state** below.
 
 ### Scoped children
 
@@ -68,9 +71,7 @@ props, write it inside a `hidden` element instead. Subscriptions keep
 running while it's kept, so gate those on the Model.
 
 Without a predicate, a scope's children live as long as the author, and
-their keys must be literals. So must the keys of their refs: a ref made
-from a string, or with `at` given one, needs a predicate. A function that
-forwards a ref to such a scope takes `Component.Ref.Within<Rcv, false>`. A list needs a predicate, `h.scoped(alive,
+their keys must be literals. A list needs a predicate, `h.scoped(alive,
 content)`, which the runtime asks about each live child on every render of
 the author, whether that render wrote the child or not. It ends the child
 once the predicate returns false. Destructure the Model from the argument
@@ -100,8 +101,7 @@ draft and the next render writes a fresh one.
 A scoped child starts the first time it's placed in the tree while its
 predicate holds. One written into a slot that nothing places, such as a
 closed Collapsible's, or into the slot of a component still waiting for its
-Layer, hasn't started: it runs nothing, and a `$.send` to it is dropped and
-logged as `SendDropped`.
+Layer, hasn't started: it runs nothing.
 
 A scoped component mounted as the root needs no scope and behaves like any
 other. Saved state from the server or from a history entry holds the Model
@@ -158,8 +158,8 @@ A Command result takes `Succeeded` and `Failed` when the Command can fail,
 and `Completed` otherwise. Name a Command for what its body does, not for
 what `update` does with its result: a timer that waits before a toast is
 dismissed is `WaitBeforeDismissal`, not `DismissAfter`. `RequestedSave` in
-`NoteEditor` comes from the form, Ctrl+S, the autosave Subscription and a
-parent's send, so it names what all four report.
+`NoteEditor` comes from the form, Ctrl+S and the autosave Subscription, so
+it names what all three report.
 
 A message is one fact. The tag says which fact, and the payload holds what the
 event reported. Two events get two messages, even when their handlers differ
@@ -190,16 +190,19 @@ its `CommandEnded` with `silent: true`. A mount that returns `Component.noop`
 likewise sends no message and logs `MountEnded` with `silent: true`. A
 component with no messages takes `message: Schema.Never`.
 
-Effect UI differs from Foldkit in four places:
+Effect UI differs from Foldkit in five places:
 
 - A child declares what it tells its parent in `events`. Foldkit calls these
   OutMessages.
 - There is no `Got*`. A parent never wraps a child's messages: it maps the
   child's events in `onEmit`, so its message is the event's verb and its
   name for the child.
-- A message listed in `receives` has no prefix of its own. It is named like
-  any other message, for the fact it reports.
+- A message listed in an owner's `receives` has no prefix of its own. It is
+  named like any other message, for the fact it reports.
 - A Command or mount with nothing to report needs no `Completed*` message. `Component.noop` is enough.
+- A parent can't send a child a message. When porting, Foldkit's
+  `informOf*` InMessages become props, and `request*` InMessages have no
+  equivalent yet. See **Who owns the state**.
 
 ### Command results
 
@@ -420,20 +423,19 @@ Collapsible(h, {
   key: "note",
   slots: {
     summary: h.h2(note.title),
-    body: NoteEditor(h, { ref: Editor.at(note.id), props: { note }, onEmit: { Saved: () => SavedNote } })
+    body: NoteEditor(h, { key: note.id, props: { note }, onEmit: { Saved: () => SavedNote } })
   }
 })
 ```
 
 The content is the parent's. Its handlers send the parent's messages, its
-children's events and failures map to the parent's messages, the parent's
-`$.send` and refs reach into it, and its services come from where the
-parent declared the child, not from the child's Layers. A parent re-render
+children's events and failures map to the parent's messages, and its
+services come from where the parent declared the child, not from the child's Layers. A parent re-render
 updates the content without running the child's view. The child decides
 whether and where each slot shows. A slot it doesn't place isn't mounted,
 and a slot it places again mounts fresh. A slot the parent leaves out shows
 nothing. A child in a slot gets a path under the slot, such as
-`/NotePage/Collapsible[note]/[body]/NoteEditor[Editor[n1]]`.
+`/NotePage/Collapsible[note]/[body]/NoteEditor[n1]`.
 
 Use slots when the child owns the frame and its state, and the parent owns
 what goes inside. Use a headless component when the parent draws all the
@@ -469,10 +471,9 @@ outside a closure follow the same rule:
 A headless component can build on another: `parts` returns
 `p.child(Listbox, { props, onEmit, parts: (listbox) => ({ ...listbox, tags }) })`,
 and the consumer's closure gets what that `parts` returns. The component owns
-the child: the child's events and failures go through its `update`, its
-`$.send` reaches the child by ref, and a consumer's ref of the same key never
-matches it. A child that fails shows nothing, the consumer's closure with it,
-and the failure goes no further than its `onFailure`. A `Scene` of the
+the child: the child's events and failures go through its `update`. A child
+that fails shows nothing, the consumer's closure with it, and the failure
+goes no further than its `onFailure`. A `Scene` of the
 component stands in for the child with `childEmit`, and a `Scene` of a
 consumer refuses to, because it doesn't run the component's `update`.
 
@@ -497,8 +498,8 @@ value in that `update`. An `onChange` message can be older than `$.shared`,
 when another reader changed the owner within the same round.
 
 A descendant's `update` can call `$.send(TooltipProvider, message)` without a
-`shared` entry. One `receives` list serves both the parent's ref and every
-descendant, so the owner can't tell which sent a message. A read or a send
+`shared` entry. The owner lists the tags it takes in `shares.receives`, and
+can't tell which descendant sent a message. A read or a send
 puts `Component.Shared<"TooltipProvider">` in a component's requirements,
 unless the owner's entry is optional, and the owner's closure removes it. The
 component compiles on its own: with no owner of that name above it, the type
@@ -543,19 +544,30 @@ As a convention, give each value one authoritative source:
 
 | Direction            | A current value                | A request or something that happened |
 | -------------------- | ------------------------------ | ------------------------------------ |
-| Parent to child      | props                          | `receives` and `$.send(ref)`         |
+| Parent to child      | props                          | props                                |
 | Child to parent      | a headless child's part values | `events`                             |
 | Owner to descendants | `shares`                       | `shared.onChange`                    |
 | Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`       |
 
-The columns differ in how long they last. A send happens once. If its target
-is absent, the log records `SendDropped` and nothing is queued, and `init`
-can't send. Unmounting the sender doesn't withdraw a send, while a report
-goes away with the reader that made it. So if a fact should stop being true
-when the sender unmounts, or would need sending again when the receiver
-remounts, use the current-value column. "Open the import wizard" can be a
-send if the wizard decides what happens next. "The dialog must stay open" is
-a value, even if it rarely changes.
+The columns differ in how long they last. A send happens once. If an
+optional owner is absent, the log records `SendDropped` and nothing is
+queued, and `init` can't send. Unmounting the sender doesn't withdraw a
+send, while a report goes away with the reader that made it. So if a fact
+should stop being true when the sender unmounts, or would need sending
+again when the receiver remounts, use the current-value column.
+
+A parent has only props, so a request to a child is a prop too, or a
+mount. "Open the import wizard" renders the wizard
+(`model.importing && Wizard(h, ...)`): each mount starts it over, and it
+emits `Finished` or `Cancelled` for the parent to stop rendering it. "The
+dialog must stay open" is an `open` prop, even if it rarely changes.
+
+Not supported yet: a parent asking a child to act on state only the child
+holds, such as scrolling to a row or saving a private draft. Lifting that
+state into the parent works for a draft, not for scroll position or
+selection inside a widget. A counter prop that the child watches replays
+when the child remounts, so don't use one. The child's own controls,
+Subscriptions or parts have to trigger the work.
 
 A component with a controlled value reads it from props and emits what the
 user asked for, instead of updating a second copy. Its Model holds only

@@ -48,12 +48,7 @@
  * skipped. With no invalid element the focus stays where it was.
  *
  * The consumer's `update` for `Submitted` runs before that render, so the
- * errors it records are the ones the form reads. Errors that arrive later,
- * such as a server's, need a send: render the form with a ref from
- * `Form.ref("Signup")` and call `$.send(ref, { _tag: "RejectedSubmit" })`
- * in the `update` that records them. The form then focuses the first
- * invalid control again, which matters when the controls were disabled
- * while the request ran and the focus was lost.
+ * errors it records are the ones the form reads.
  *
  * The message log records `Submitted` with every value in it. Leave `name`
  * off a secret control such as a password, so the form doesn't report it,
@@ -64,6 +59,12 @@
  * A control outside the `<form>` that names it with a `form` attribute is
  * submitted with it, but isn't focused. Document order decides which
  * element comes first, so a positive `tabindex` moves none ahead.
+ *
+ * Errors that arrive after the render that follows the submit, such as a
+ * server's, aren't focused: a parent can't ask the form to act. The
+ * consumer draws the controls, so it can focus one itself: give the field
+ * or an error summary an `Html.ref`, and run `Html.focus` from the
+ * `update` that records the rejection.
  *
  * To send focus somewhere else after a failed submit, such as to an error
  * summary, draw a plain `h.form` with `novalidate` and `onSubmit`.
@@ -154,7 +155,7 @@ export const FormEvents = UiSchema.TaggedEnum({
  */
 export type FormEvents = typeof FormEvents.Type
 
-const Message = UiSchema.TaggedEnum({ SubmittedRoot: Submission, RejectedSubmit: {} })
+const Message = UiSchema.TaggedEnum({ SubmittedRoot: Submission })
 
 const Root = Html.ref("FormRoot", "form")
 
@@ -203,9 +204,6 @@ const FocusInvalid = Command.make(
  *
  * Every submit emits `Submitted`, and then, once the render is committed,
  * the form focuses the first control inside it with `aria-invalid="true"`.
- * It accepts one message from the component that renders it, through a ref:
- * `{ _tag: "RejectedSubmit" }`, for errors that arrived after the submit,
- * which focuses the first invalid control again and emits nothing.
  *
  * @stability experimental
  * @category components
@@ -217,15 +215,11 @@ export const Form = Component.define({
   model: Schema.Struct({}),
   message: Message,
   events: FormEvents,
-  receives: ["RejectedSubmit"],
   elements: Html
 }).make({
   init: () => ({}),
-  update: {
-    SubmittedRoot: (_model, { entries, fields }, $) =>
-      $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
-    RejectedSubmit: (_model, _message, $) => $.run(FocusInvalid.make())
-  },
+  update: (_model, { entries, fields }, $) =>
+    $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
   parts: (_model, p) => ({
     root: p.part("form", (b) =>
       b.ref(Root)

@@ -59,9 +59,7 @@ export const TagPicker = Component.define({
   // The consumer's closure runs inside the Listbox, so the Listbox's path is
   // `TagPicker[]/Listbox[]` and its ids are derived from it. What the
   // Listbox emits goes to `onEmit` here and through this component's
-  // `update`, never to the consumer. A `ref` on it would let this
-  // `update` reach it with `$.send`, and a consumer's ref of the same key
-  // never matches it.
+  // `update`, never to the consumer.
   //
   // If the Listbox fails, it shows nothing, the closure with it, and an
   // `onFailure` here hears of it. The failure stops there: this component

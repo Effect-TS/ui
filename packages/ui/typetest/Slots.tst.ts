@@ -103,7 +103,7 @@ describe("slots", () => {
 
   it("keeps a slotted component a Component.Any", () => {
     expect<typeof Panel>().type.toBeAssignableTo<Component.Any>()
-    expect<typeof Panel>().type.not.toBeAssignableTo<Component.Mountable<{}, never, never, never, "body" | "header">>()
+    expect<typeof Panel>().type.not.toBeAssignableTo<Component.Mountable<{}, never, never, "body" | "header">>()
   })
 
   it("takes a slots map from a variable, an interface's included, and rejects its undeclared names", () => {

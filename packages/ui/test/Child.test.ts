@@ -2,7 +2,7 @@ import { Component, Feature, UiSchema, View } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
 import { Layer, Schema } from "effect"
 
-const RowMessage = UiSchema.TaggedEnum({ Clear: {}, Typed: { text: Schema.String } })
+const RowMessage = UiSchema.TaggedEnum({ Typed: { text: Schema.String } })
 const RowEvents = UiSchema.TaggedEnum({ Changed: { text: Schema.String } })
 
 const RowDef = Component.define({
@@ -11,8 +11,7 @@ const RowDef = Component.define({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.String,
   message: RowMessage,
-  events: RowEvents,
-  receives: ["Clear"]
+  events: RowEvents
 })
 
 const Row = RowDef.make({
@@ -44,7 +43,6 @@ describe("a component call", () => {
     assert.isTrue(Component.isComponent(Row))
     assert.isFalse(Component.isHeadless(Row))
     assert.strictEqual(Row.pipe((c) => c.definition.name), "Row")
-    assert.strictEqual(Row.ref("Draft").key, "Draft")
     // `call`, `apply` and `bind` are Function.prototype's.
     assert.strictEqual(Row.call, Function.prototype.call)
     assert.strictEqual(Row.apply, Function.prototype.apply)
@@ -65,7 +63,6 @@ describe("a component call", () => {
     assert.strictEqual(child._tag, "Child")
     assert.strictEqual(child.component, Row)
     assert.strictEqual(child.key, "a")
-    assert.isUndefined(child.ref)
     assert.deepStrictEqual(child.props, { id: "a" })
     assert.strictEqual(child.onEmit, onEmit)
     assert.isUndefined(child.fallback)
@@ -73,20 +70,11 @@ describe("a component call", () => {
     assert.isUndefined(child.view)
   })
 
-  it("takes the ref's key with a ref, and defaults props and onEmit", () => {
-    const Draft = Row.ref("Draft").at(1)
-    const child = Listbox(h, { ref: Listbox.ref("Menu"), view: () => h.el("ul") })
+  it("defaults props and onEmit, and has the empty key without one", () => {
+    const child = Listbox(h, { key: "Menu", view: () => h.el("ul") })
     assert.strictEqual(child.key, "Menu")
     assert.deepStrictEqual(child.props, {})
     assert.isUndefined(child.onEmit({}))
-    const row = Row(h, { ref: Draft, props: { id: "a" } })
-    assert.strictEqual(row.key, "Draft[1]")
-    assert.strictEqual(row.ref, Draft)
-  })
-
-  it("rejects both a key and a ref, and has the empty key with neither", () => {
-    const Draft = Row.ref("Draft")
-    assert.throws(() => Row(h, { key: "a", ref: Draft, props: { id: "a" } } as any), /a key or a ref, not both/)
     assert.strictEqual(Row(h, { props: { id: "a" } }).key, "")
   })
 
@@ -123,8 +111,6 @@ describe("a feature's render", () => {
     assert.strictEqual(child.component, Todos)
     assert.strictEqual(child.key, "t")
     assert.strictEqual(child.fallback, fallback)
-    const Main = Todos.ref("Main")
-    assert.strictEqual(Todos.render(h, { ref: Main, fallback }).key, "Main")
     assert.strictEqual(Todos.render(h, { fallback }).key, "")
     // Detached, it still builds a child for the feature.
     const render = Todos.render

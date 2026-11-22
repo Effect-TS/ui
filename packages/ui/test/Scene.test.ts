@@ -5,7 +5,7 @@ import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { Badge, BadgeRef, Note, NoteEvents, NoteMessage, SaveNote } from "./fixtures/notes.ts"
+import { Badge, Note, NoteEvents, NoteMessage, SaveNote } from "./fixtures/notes.ts"
 import { defect } from "./utils/scoped.ts"
 
 const save = HtmlLocator.role("button", { name: "save" })
@@ -38,7 +38,7 @@ describe("Scene", () => {
         /^Scene\.click: earlier work isn't settled or acknowledged:\n {2}- notes\/SaveNote\(\{"text":""\}\) \[running\] is pending: settle it with resolve or fail, or keep it with keepPending/
       )
       s.keepPending(SaveNote).click(saveAgain).expectExact(SaveNote.make({ text: "" }), SaveNote.make({ text: "" }))
-      assert.throws(() => s.childEmit(Badge, BadgeRef, { _tag: "Opened", count: 1 }), /^Scene\.childEmit: earlier work/)
+      assert.throws(() => s.childEmit(Badge, "Badge", { _tag: "Opened", count: 1 }), /^Scene\.childEmit: earlier work/)
       // Kept or not, the end of make checks it.
       const message = yield* defect(Effect.gen(function*() {
         const s = yield* Scene.make(Note, {})
@@ -93,15 +93,10 @@ describe("Scene", () => {
   it.effect("childEmit is typed by the child, and finds only a child of that component", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Note, {})
-      s.childEmit(Badge, BadgeRef, { _tag: "Opened", count: 2 }).expect(status).toHaveText("opened 2")
+      s.childEmit(Badge, "Badge", { _tag: "Opened", count: 2 }).expect(status).toHaveText("opened 2")
       assert.throws(
-        () => Scene.start(Note, {}).childEmit(Note, BadgeRef, { _tag: "Saved", text: "" }),
-        /^Scene\.childEmit: no child Note with the ref Badge; children: Badge\[Badge\] \(ref\)$/
-      )
-      // A string names a keyed child, never one rendered with a ref.
-      assert.throws(
-        () => Scene.start(Note, {}).childEmit(Badge, BadgeRef.key, { _tag: "Opened", count: 1 }),
-        /^Scene\.childEmit: no child Badge with key "Badge"/
+        () => Scene.start(Note, {}).childEmit(Note, "Badge", { _tag: "Saved", text: "" }),
+        /^Scene\.childEmit: no child Note with key "Badge"; children: Badge\[Badge\]$/
       )
     }))
 
@@ -173,11 +168,9 @@ describe("Scene", () => {
         update: (open) => !open,
         parts: (open) => ({ open })
       })
-    const Outer = Disclosure.ref("D")
     const state = (open: boolean) => (open ? "open" : "closed")
 
     it("givenChild sets the Model of the child it selects, and no other at another path", () => {
-      // The ref child's key is "D", and so is the keyed child in its closure.
       const Page = Component.define({
         name: "Page",
         scoped: false,
@@ -189,17 +182,17 @@ describe("Scene", () => {
         update: (model) => model,
         view: (_, h) =>
           Disclosure(h, {
-            ref: Outer,
+            key: "outer",
             view: (outerDisclosure) =>
               h.div(
                 h.p(state(outerDisclosure.open)),
-                Disclosure(h, { key: "D", view: (innerDisclosure) => h.p(state(innerDisclosure.open)) })
+                Disclosure(h, { key: "inner", view: (innerDisclosure) => h.p(state(innerDisclosure.open)) })
               )
           })
       })
       const texts = (s: Scene.Steps.Any) => s.all(Locator.tag("p")).map((node) => Locator.textOf(node))
-      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, Outer, true)), ["open", "closed"])
-      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "D", true)), ["closed", "open"])
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "outer", true)), ["open", "closed"])
+      assert.deepStrictEqual(texts(Scene.start(Page, {}).givenChild(Disclosure, "inner", true)), ["closed", "open"])
     })
 
     it("Scene.fallback checks a child's paths in the view that declared it", () => {
@@ -258,7 +251,7 @@ describe("Scene", () => {
   it.effect("childFailure sends what onFailure maps, and does nothing without one", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Note, {})
-      s.childFailure(Badge, BadgeRef, Cause.fail("boom")).expect(status).toHaveText("")
+      s.childFailure(Badge, "Badge", Cause.fail("boom")).expect(status).toHaveText("")
     }))
 
   describe("mounts", () => {

@@ -154,28 +154,6 @@ describe("duplicate child paths", () => {
       )
     })))
 
-  it("fail a parent that renders one ref on two components", () => {
-    const Other = Component.define({
-      name: "Other",
-      scoped: false,
-      props: Schema.Struct({ label: Schema.String }),
-      model: Schema.Null,
-      message: Schema.Never
-    }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.label) })
-    const Shared = Row.ref("Shared")
-    const Both = Component.define({ name: "Both", scoped: false, model: Schema.Null, message: Schema.Never }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
-        h.el(
-          "div",
-          Row(h, { ref: Shared, props: { label: "a" } }),
-          Other(h, { ref: Shared, props: { label: "b" } })
-        )
-    })
-    assert.throws(() => Scene.start(Both, {}), /\/Both renders two children with the ref Shared/)
-  })
-
   it("fail a Scene step whose view renders two children at one path", () => {
     const steps = Scene.start(makeList("nested"), { keys: ["a"] })
     assert.lengthOf(Scene.children(steps.current.view()), 1)
@@ -362,14 +340,12 @@ describe("duplicate child paths", () => {
       },
       view: (_, h) => h.el("button").on("click", Go.Go()).children("faulty")
     })
-    const RowRef = Row.ref("a")
-
-    const Props = Schema.Struct({ nested: Schema.Array(Schema.String), ref: Schema.Boolean })
+    const Props = Schema.Struct({ nested: Schema.Array(Schema.String) })
     const ParentMessage = UiSchema.TaggedEnum({ Bump: {} })
 
     /**
-     * `Broken[b]`'s fallback shows `Faulty` at `Row[a]`, by key or by ref, and
-     * `Faulty`'s fallback shows a `Row` per `nested` key, the same way.
+     * `Broken[b]`'s fallback shows `Faulty` at `Row[a]`, and `Faulty`'s
+     * fallback shows a `Row` per `nested` key.
      */
     const Parent = Component.define({
       name: "Parent",
@@ -385,18 +361,8 @@ describe("duplicate child paths", () => {
           Broken(h, {
             key: "b",
             fallback: () => {
-              const rows = () =>
-                h.el(
-                  "ul",
-                  h.props.nested.map((key) =>
-                    h.props.ref
-                      ? Row(h, { ref: Row.ref(key), props: { label: key } })
-                      : Row(h, { key, props: { label: key } })
-                  )
-                )
-              return h.props.ref
-                ? Faulty(h, { ref: RowRef, fallback: rows })
-                : Faulty(h, { key: "a", fallback: rows })
+              const rows = () => h.el("ul", h.props.nested.map((key) => Row(h, { key, props: { label: key } })))
+              return Faulty(h, { key: "a", fallback: rows })
             }
           })
       })
@@ -418,45 +384,35 @@ describe("duplicate child paths", () => {
         entry._tag === "Failed" && entry.path === "/Root/Parent[p]"
       )
 
-    for (const ref of [false, true]) {
-      const by = ref ? "ref" : "key"
-      it.effect(`let a failed child's fallback reuse the child's own ${by}, render after render`, () =>
-        provideHost(Effect.gen(function*() {
-          const root = yield* TestHost.mount(Parent, { nested: ["a"], ref })
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), "faulty")
-          Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), "a")
-          root.send(ParentMessage.Bump())
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), "a")
-          assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
-        })))
+    it.effect("let a failed child's fallback reuse the child's own key, render after render", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Parent, { nested: ["a"] })
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "faulty")
+        Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a")
+        root.send(ParentMessage.Bump())
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a")
+        assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
+      })))
 
-      it.effect(`fail the parent when a nested fallback renders two children with one ${by}`, () =>
-        provideHost(Effect.gen(function*() {
-          const root = yield* TestHost.mount(Root, { nested: ["a", "a"], ref })
-          yield* TestHost.settle
-          Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
-          yield* TestHost.settle
-          console.log(
-            JSON.stringify(
-              root.log().filter((e) => e._tag === "Failed").map((
-                e: any
-              ) => [e.path, e.source, Cause.pretty(e.cause).split("\n")[0]])
-            )
-          )
-          assert.strictEqual(root.text(), "parent-failed")
-          const failed = parentFailures(root)
-          assert.lengthOf(failed, 1)
-          assert.strictEqual(failed[0].in, "view")
-          assert.include(
-            Cause.pretty(failed[0].cause),
-            "/Root/Parent[p] renders two children at Row[a], in the fallback of Row[a]"
-          )
-        })))
-    }
+    it.effect("fail the parent when a nested fallback renders two children with one key", () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Root, { nested: ["a", "a"] })
+        yield* TestHost.settle
+        Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "parent-failed")
+        const failed = parentFailures(root)
+        assert.lengthOf(failed, 1)
+        assert.strictEqual(failed[0].in, "view")
+        assert.include(
+          Cause.pretty(failed[0].cause),
+          "/Root/Parent[p] renders two children at Row[a], in the fallback of Row[a]"
+        )
+      })))
   })
 })
 

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Query, UiSchema } from "@effect/ui"
+import { Component, Query } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -372,18 +372,16 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).pipe(Effect.scoped)
   )
 
-  const NoteMsg = UiSchema.TaggedEnum({ Typed: { text: Schema.String }, Add: { text: Schema.String } })
   const Note = Component.define({
     name: "Note",
     scoped: true,
     model: Schema.String,
-    message: NoteMsg,
-    receives: ["Add"],
+    message: Schema.String,
     elements: Html
   }).make({
     init: () => "server",
-    update: (note, message) => message._tag === "Typed" ? message.text : note + message.text,
-    view: (note, h) => h.input.value(note).onInput(({ value }) => NoteMsg.Typed({ text: value }))
+    update: (_, text) => text,
+    view: (note, h) => h.input.value(note).onInput(({ value }) => value)
   })
   const Bare = Component.define({
     name: "Bare",
@@ -394,18 +392,15 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     slots: ["body"]
   }).make({ init: () => null, update: (model) => model, view: (_, h) => h.slots.body })
     .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
-  const RowMsg = UiSchema.TaggedEnum({ Add: { text: Schema.String } })
   const Row = Component.define({
     name: "Row",
     scoped: true,
     model: Schema.String,
-    message: RowMsg,
-    receives: ["Add"],
-    events: Schema.String,
+    message: Schema.Never,
     elements: Html
   }).make({
     init: () => "",
-    update: (row, { text }, $) => $.set(row + text).emit(text),
+    update: (row) => row,
     view: (row, h) => h.p(row)
   })
   let drafts = 0

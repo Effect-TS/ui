@@ -21,7 +21,7 @@ import * as engine from "./story.ts"
 const findDeclared = (
   state: engine.State<any, any, any, any>,
   child: ChildTarget,
-  key: string | Component.Ref.Any | undefined,
+  key: string | undefined,
   step: string
 ): engine.Occurrence => {
   const found = engine.findChild(state.view(), child, key, step)
@@ -90,10 +90,10 @@ const withSlot = (
   return engine.update(state, { childStatus: statuses })
 }
 
-/** The arguments after a child step's component: an optional key or ref, then the step's value. */
-type KeyAnd<A> = readonly [value: A] | readonly [key: string | Component.Ref.Any, value: A]
+/** The arguments after a child step's component: an optional key, then the step's value. */
+type KeyAnd<A> = readonly [value: A] | readonly [key: string, value: A]
 
-const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | Component.Ref.Any | undefined, value: A] =>
+const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | undefined, value: A] =>
   args.length === 1 ? [undefined, args[0]] : args
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ export class SceneCursor extends Cursor {
       return engine.dispatch(withSlot(state, found, failure), found.child.onFailure?.(failure))
     })
   }
-  childPending(child: ChildTarget, key?: string | Component.Ref.Any): this {
+  childPending(child: ChildTarget, key?: string): this {
     const step = this.name("childPending")
     return this.act("childPending", "acting", (state) => {
       const found = findDeclared(state, child, key, step)

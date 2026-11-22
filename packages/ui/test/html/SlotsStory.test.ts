@@ -75,26 +75,6 @@ describe("slots in a story", () => {
       assert.strictEqual(Locator.textOf(s.get(Locator.tag("section"))), "hellopanel's ownthe body")
       assert.deepStrictEqual(Scene.children(s.view, Note).map((child) => child.key), ["n"])
     }))
-
-  it("a ref key in the view and in content fails the story, as it fails the parent", () => {
-    const Twice = Component.define({
-      name: "Twice",
-      scoped: false,
-      model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
-    })
-      .make({
-        init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
-          h.div(
-            Note(h, { ref: Note.ref("N") }),
-            Panel(h, { key: "p", slots: { body: Note(h, { ref: Note.ref("N") }) } })
-          )
-      })
-    assert.throws(() => Scene.start(Twice, {}).current.view(), /N/)
-  })
 })
 
 describe("View queries", () => {
@@ -143,7 +123,7 @@ describe("headless closures in slot content", () => {
         .expect(Locator.tag("output")).toHaveText("hi")
     }))
 
-  it.effect("refs in content a parent passed don't clash with the receiver's own", () =>
+  it.effect("keys in content a parent passed don't clash with the receiver's own", () =>
     Effect.gen(function*() {
       const Receiver = Component.define({
         name: "Receiver",
@@ -155,10 +135,10 @@ describe("headless closures in slot content", () => {
       }).make({
         init: () => null,
         update: (model) => model,
-        view: (_, h) => h.div(Note(h, { ref: Note.ref("N") }), h.slots.body)
+        view: (_, h) => h.div(Note(h, { key: "N" }), h.slots.body)
       })
       const s = yield* Scene.make(Receiver, {}, {
-        slots: (h) => ({ body: Headless(h, { key: "ext", view: () => Note(h, { ref: Note.ref("N") }) }) })
+        slots: (h) => ({ body: Headless(h, { key: "ext", view: () => Note(h, { key: "N" }) }) })
       })
       assert.strictEqual(Scene.children(s.view, Note).length, 2)
     }))

@@ -11,8 +11,6 @@ import type * as View from "../View.ts"
 /** @internal */
 export interface Options {
   readonly key?: string | undefined
-  // Every ref fits `Ref.Any`; the call's type has checked what it receives.
-  readonly ref?: Component.Ref.Any | undefined
   readonly props?: unknown
   readonly onEmit?: ((event: any) => unknown) | Readonly<Record<string, (event: any) => unknown>> | undefined
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
@@ -33,17 +31,11 @@ export const make = (
   alive?: View.Child<any, any>["alive"],
   owner?: View.Owner
 ): View.Child<any, any> => {
-  // A child with a key and a ref would have two identities that can disagree.
-  if (options.key !== undefined && options.ref !== undefined) {
-    throw new Error("A child takes a key or a ref, not both")
-  }
   const { onEmit } = options
   return {
     _tag: "Child",
     component: component as Component.Any,
-    // Without a key or a ref, the empty key: the child's segment is `Name[]`.
-    key: options.ref !== undefined ? options.ref.key : options.key ?? "",
-    ref: options.ref,
+    key: options.key ?? "",
     props: options.props ?? {},
     onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
     fallback: options.fallback,

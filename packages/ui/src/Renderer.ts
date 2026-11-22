@@ -557,10 +557,9 @@ export const mount: <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: unknown,
   options?: {
@@ -638,10 +637,9 @@ export const prerender: <
   Events,
   R,
   V extends View.Elements,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined

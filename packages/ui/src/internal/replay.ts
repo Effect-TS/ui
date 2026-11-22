@@ -115,9 +115,9 @@ const findPlaceholder = (value: unknown): string | undefined => {
  *
  * @internal
  */
-export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements, Rcv>(
+export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
   label: string,
-  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  component: Component.Component<Name, Props, Model, Msg, Events, R, V, any>,
   entries: ReadonlyArray<MessageLog.Entry | MessageLog.Wire>,
   options?: { readonly path?: string | undefined }
 ): Replay<Model, Msg, Events, any, any> => {

@@ -175,46 +175,6 @@ const Tip = Component.define({
 
 const flaky = { throws: false }
 
-// The closure's second child takes the ref `Actions` on the client only, at the path the server gave it.
-const twin = { client: false }
-const TwinActions = Menu.ref("Actions")
-const Twin = Component.define({
-  name: "Twin",
-  scoped: false,
-  model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
-}).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
-    Menu(h, {
-      ref: TwinActions,
-      props: { items },
-      view: (menu) =>
-        h.div(
-          menu.trigger(h.button).children("Actions"),
-          Menu(h, {
-            ...(twin.client ? { ref: TwinActions } : { key: "Actions" }),
-            props: { items },
-            view: () => h.span("again")
-          })
-        )
-    })
-})
-const TwinShell = Component.define({
-  name: "Shell",
-  scoped: false,
-  model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
-})
-  .make({
-    init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.main(Twin(h, { key: "t", props: {}, fallback: () => h.p("twin down") }))
-  })
-
 const Page = Component.define({
   name: "Page",
   scoped: false,
@@ -520,20 +480,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.notInclude(app.textContent, "menu down")
       assert.strictEqual(app.querySelectorAll("button")[1]!.textContent, "More")
     }).pipe(Effect.scoped))
-
-  it.effect("an adopted render fails whoever gives a ref to a child in its view and one in a closure", () =>
-    Effect.gen(function*() {
-      twin.client = false
-      const rendered = yield* HtmlServer.renderToHtml(TwinShell, {})
-      assert.include(rendered.html, "again")
-      const app = yield* container
-      app.innerHTML = rendered.html
-      twin.client = true
-      const root = yield* BrowserHost.mountEffect(TwinShell, {}, app, { state: rendered.state })
-      yield* root.adopted
-      yield* tick
-      assert.strictEqual(app.textContent, "twin down")
-    }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => twin.client = false))))
 
   it.effect("a layer's preventDefault false leaves another layer's prevention in place", () =>
     Effect.gen(function*() {

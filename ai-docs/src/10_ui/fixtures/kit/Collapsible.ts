@@ -15,8 +15,8 @@ export const Collapsible = Component.define({
   model: Schema.Struct({ open: Schema.Boolean }),
   message: CollapsibleMessage,
   elements: Html,
-  // The slot names, as `receives` lists message tags. A parent can pass
-  // content for any of them, and a slot it leaves out shows nothing.
+  // The slot names. A parent can pass content for any of them, and a slot
+  // it leaves out shows nothing.
   slots: ["summary", "body"]
 }).make({
   init: () => ({ open: true }),

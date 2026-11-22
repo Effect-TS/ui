@@ -1,5 +1,5 @@
 import { Component, Feature, UiSchema, type View } from "@effect/ui"
-import { Scene, Story, TestHost } from "@effect/ui/testing"
+import { Scene, Story } from "@effect/ui/testing"
 import { Context, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
@@ -13,24 +13,17 @@ const Editor = Component.define({
   scoped: false,
   model: Schema.String,
   message: EditorMessage,
-  receives: ["Clear", "Focus"]
+  shares: { value: (text) => ({ text }), receives: ["Clear", "Focus"] }
 }).make({
   init: () => "",
   update: (text, message) => message._tag === "Typed" ? message.text : message._tag === "Clear" ? "" : text,
-  view: (text, h) => h.el("p", text)
+  parts: () => ({})
 })
 
-// Receives Clear only.
-const Note = Component.define({
-  name: "Note",
-  scoped: false,
-  model: Schema.String,
-  message: EditorMessage,
-  receives: ["Clear"]
-}).make({
+const Field = Component.define({ name: "Field", scoped: false, model: Schema.String, message: EditorMessage }).make({
   init: () => "",
   update: (text) => text,
-  view: (text, h) => h.el("p", text)
+  parts: () => ({})
 })
 
 const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Null, message: EditorMessage }).make({
@@ -39,53 +32,29 @@ const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Nul
   view: (_, h) => h.el("p")
 })
 
-const Draft = Editor.ref("Draft")
-const Rows = Note.ref("Row")
+const Note = Component.define({ name: "Note", scoped: false, model: Schema.String, message: EditorMessage }).make({
+  init: () => "",
+  update: (text) => text,
+  view: (text, h) => h.el("p", text)
+})
 
 class Store extends Context.Service<Store, { readonly draft: string }>()("typetest/send/Store") {}
-const ProvidedEditor = Component.provide(Editor, Layer.succeed(Store, { draft: "" }))
 
-// Receives Clear, and requires Store.
-declare const NeedsStore: Component.Component<
-  "NeedsStore",
-  {},
-  string,
-  EditorMessage,
-  never,
-  Store,
-  never,
-  {},
-  Extract<EditorMessage, { readonly _tag: "Clear" }>
->
-
-const TodosMessage = UiSchema.TaggedEnum({ Clear: {} })
-class Todos extends Feature.Service<Todos>()("Todos", {
-  props: Schema.Struct({}),
-  receives: TodosMessage
-}) {}
+declare const NeedsStore: Component.Component<"NeedsStore", {}, string, EditorMessage, never, Store, never, {}>
 
 declare const condition: boolean
-// Either one of two components, and only Editor receives Clear and Focus.
-const EditorOrPlain = condition ? Editor : Plain
-const EditorOrNote = condition ? Editor : Note
+const PlainOrNote = condition ? Plain : Note
 
-// Erased: its receives are `any`, which grants nothing.
-declare const ErasedPlain: Component.Component<"ErasedPlain", {}, null, EditorMessage, never, never, never, {}, any>
 declare const anyFeature: Feature.Any
 
 declare const untrusted: unknown
-declare const arbitraryObject: object
 
 const ParentMessage = UiSchema.TaggedEnum({ Go: {} })
 const ParentDef = Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: ParentMessage })
 
 describe("Component receives", () => {
-  it("is the Schema of the listed cases, and a ref carries them", () => {
+  it("is the Schema of the listed cases", () => {
     expect(Editor.receives).type.toBe<Schema.Codec<Received, any>>()
-    expect<Component.Receives<typeof Editor>>().type.toBe<Received>()
-    expect(Draft).type.toBe<Component.Ref<Received, false>>()
-    expect(Draft.at(1)).type.toBe<Component.Ref<Received, false>>()
-    expect<Component.Receives<typeof Plain>>().type.toBe<never>()
   })
 
   it("rejects a tag that isn't one of the message's", () => {
@@ -93,143 +62,31 @@ describe("Component receives", () => {
       name: "Bad",
       model: Schema.Null,
       message: EditorMessage,
-      receives: ["Delete"]
+      shares: { value: () => null, receives: ["Delete"] }
     })
-  })
-
-  it("keeps what a provided component receives", () => {
-    expect<Component.Receives<typeof ProvidedEditor>>().type.toBe<Received>()
   })
 })
 
 describe("$.send", () => {
-  it("takes a message the ref's component receives, and rejects any other", () => {
+  it("takes a message the owner receives, and rejects any other", () => {
     ParentDef.update((model, _msg, $) => {
-      expect($.send(Draft, { _tag: "Clear" })).type.not.toRaiseError()
-      expect($.send(Draft, EditorMessage.Focus())).type.not.toRaiseError()
-      expect($.send(Todos.ref("Main"), { _tag: "Clear" })).type.not.toRaiseError()
-      // A case constructor returns just its case, so it fits a ref that receives that case.
-      expect($.send(Draft, EditorMessage.Clear())).type.not.toRaiseError()
-      expect($.send).type.not.toBeCallableWith(Draft, EditorMessage.Typed({ text: "x" }))
+      expect($.send(Editor, { _tag: "Clear" })).type.not.toRaiseError()
+      expect($.send(Editor, EditorMessage.Focus())).type.not.toRaiseError()
+      expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.Typed({ text: "x" }))
       // `make` returns the whole Message, which includes a case Editor doesn't receive.
-      expect($.send).type.not.toBeCallableWith(Draft, EditorMessage.make({ _tag: "Clear" }))
-      expect($.send).type.not.toBeCallableWith(Plain.ref("P"), EditorMessage.Clear())
-      // Wider than the child's Message: nothing says the value is one.
-      expect($.send).type.not.toBeCallableWith(Draft, untrusted)
-      expect($.send).type.not.toBeCallableWith(Draft, arbitraryObject)
-      expect($.send).type.not.toBeCallableWith(Draft, { _tag: "Clear" } as { readonly _tag: string })
-      expect($.send).type.not.toBeCallableWith(Draft, { _tag: "Typed", text: "x" })
-      expect($.send).type.not.toBeCallableWith(Plain.ref("P"), { _tag: "Clear" })
-      expect($.send).type.not.toBeCallableWith(Rows.at(1), { _tag: "Focus" })
+      expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.make({ _tag: "Clear" }))
+      expect($.send).type.not.toBeCallableWith(Editor, untrusted)
       return model
     })
   })
 
-  it("takes nothing through an erased ref, from any public output, and keeps concrete refs", () => {
-    ParentDef.view((_, h) => {
-      // A child's `component` is `Component.Any | Feature.Any`, and `Feature.Any`'s ref receives `any`.
-      const target = Todos.render(h, { ref: Todos.ref("Main"), fallback: () => h.el("p") }).component
-      if (Feature.isService(target)) {
-        const erased = target.ref("Main")
-        ParentDef.update((model, _msg, $) => {
-          expect($.send).type.not.toBeCallableWith(erased, { _tag: "Clear" })
-          expect($.send).type.not.toBeCallableWith(erased, { arbitrary: 1 })
-          expect($.send).type.not.toBeCallableWith(erased.at("t1"), { arbitrary: 1 })
-          return model
-        })
-      }
-      // A child's `ref` receives `unknown`.
-      const childRef = Editor(h, { ref: Draft }).ref!
-      ParentDef.update((model, _msg, $) => {
-        expect($.send).type.not.toBeCallableWith(childRef, { _tag: "Clear" })
-        expect($.send).type.not.toBeCallableWith(childRef.at(1), { arbitrary: 1 })
-        return model
-      })
-      return h.el("p")
-    })
+  it("can't send to a child that isn't an owner", () => {
     ParentDef.update((model, _msg, $) => {
-      // What a step sent, and what `isRef` narrows to.
-      const sent = $.send(Draft, { _tag: "Clear" }).sends[0]!.ref
-      expect($.send).type.not.toBeCallableWith(sent, { arbitrary: 1 })
-      if (Component.isRef(untrusted)) expect($.send).type.not.toBeCallableWith(untrusted.at("x"), { _tag: "Clear" })
-      // A component whose receives are `any`.
-      expect($.send).type.not.toBeCallableWith(ErasedPlain.ref("E"), { arbitrary: 1 })
-      expect($.send).type.not.toBeCallableWith(ErasedPlain.ref("E").at(1), { _tag: "Clear" })
-      // Concrete refs, and their rows, still infer.
-      expect($.send(Draft.at("a"), { _tag: "Focus" })).type.not.toRaiseError()
-      expect($.send(Rows.at(1), EditorMessage.Clear())).type.not.toRaiseError()
-      expect($.send(Todos.ref("Main").at(2), { _tag: "Clear" })).type.not.toRaiseError()
+      expect($.send).type.not.toBeCallableWith(Field, EditorMessage.Clear())
+      expect($.send).type.not.toBeCallableWith(Plain, EditorMessage.Clear())
+      expect($.send).type.not.toBeCallableWith(anyFeature, { _tag: "Clear" })
       return model
     })
-  })
-
-  it("can't widen a ref by assigning it, erased or concrete", () => {
-    type Claimed = Component.Ref<{ readonly _tag: "Clear" }>
-    ParentDef.view((_, h) => {
-      const target = Todos.render(h, { ref: Todos.ref("Main"), fallback: () => h.el("p") }).component
-      if (Feature.isService(target)) {
-        expect(target.ref("Main")).type.toBe<Component.Ref.Any>()
-        expect(target.ref("Main")).type.not.toBeAssignableTo<Component.Ref<unknown>>()
-        expect(target.ref("Main")).type.not.toBeAssignableTo<Claimed>()
-        expect(target.ref("Main").at(1)).type.not.toBeAssignableTo<Claimed>()
-      }
-      expect(Editor(h, { ref: Draft }).ref!).type.not.toBeAssignableTo<Claimed>()
-      expect(Editor(h, { ref: Draft }).ref!.at(1)).type.not.toBeAssignableTo<Claimed>()
-      return h.el("p")
-    })
-    ParentDef.update((model, _msg, $) => {
-      expect($.send(Draft, { _tag: "Clear" }).sends[0]!.ref).type.not.toBeAssignableTo<Claimed>()
-      return model
-    })
-    if (Component.isRef(untrusted)) expect(untrusted.at(1)).type.not.toBeAssignableTo<Claimed>()
-    expect(anyFeature.ref("Main")).type.not.toBeAssignableTo<Claimed>()
-    expect(anyFeature.ref("Main").at(1)).type.not.toBeAssignableTo<Claimed>()
-    expect(ErasedPlain.ref("E")).type.not.toBeAssignableTo<Claimed>()
-    expect(ErasedPlain.ref("E").at(1)).type.not.toBeAssignableTo<Claimed>()
-    expect(Story.start(Plain, {}).current.component.ref("P")).type.not.toBeAssignableTo<Claimed>()
-    // Concrete: a ref for fewer messages, or for none, can't claim more, and a ref for more can't claim fewer.
-    expect(Plain.ref("P")).type.not.toBeAssignableTo<Claimed>()
-    expect(Rows.at(1)).type.not.toBeAssignableTo<Component.Ref<EditorMessage>>()
-    expect(Draft).type.not.toBeAssignableTo<Claimed>()
-    expect(Rows.at(1)).type.toBeAssignableTo<Claimed>()
-    expect(Todos.ref("Main").at(1)).type.toBeAssignableTo<Claimed>()
-  })
-
-  it("stores and inspects features, components and refs in their erased forms", () => {
-    class Panel extends Feature.Service<Panel>()("Panel", {
-      props: Schema.Struct({}),
-      events: UiSchema.TaggedEnum({ Changed: {} })
-    }) {}
-    // Every feature fits `Feature.Any`, whatever it receives, and every ref fits `Ref.Any`.
-    class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
-    expect([Panel, Todos, Bare]).type.toBeAssignableTo<ReadonlyArray<Feature.Any>>()
-    expect([Editor, Plain, ErasedPlain]).type.toBeAssignableTo<ReadonlyArray<Component.Any>>()
-    expect([Draft, Rows.at(1), Plain.ref("P"), Todos.ref("Main"), anyFeature.ref("M")]).type.toBeAssignableTo<
-      ReadonlyArray<Component.Ref.Any>
-    >()
-    ParentDef.view((_, h) => {
-      const child = Panel.render(h, { key: "p", fallback: () => h.el("p") })
-      expect(child.component).type.toBeAssignableFrom(Panel)
-      expect(child.component).type.toBeAssignableFrom(Todos)
-      expect(child.component).type.toBeAssignableFrom(Bare)
-      expect(child.ref).type.toBeAssignableFrom(Draft)
-      // An erased ref names no child: a typed ref stored as one would slip past the receives check.
-      const stored: Component.Ref.Any = Draft
-      expect(Plain).type.not.toBeCallableWith(h, { ref: stored })
-      expect(Editor).type.not.toBeCallableWith(h, { ref: stored })
-      expect(Todos.render).type.not.toBeCallableWith(h, { ref: stored, fallback: () => h.el("p") })
-      expect(Editor).type.not.toBeCallableWith(h, { ref: anyFeature.ref("M") })
-      expect(Scene.fallback(Editor(h, { ref: Draft }), Editor, anyFeature.ref("M"), AsyncResult.initial())).type
-        .not.toRaiseError()
-      return h.el("p")
-    })
-    ParentDef.update((model, _msg, $) => {
-      expect($.send).type.not.toBeCallableWith(anyFeature.ref("M"), { _tag: "Clear" })
-      expect($.send).type.not.toBeCallableWith(anyFeature.ref("M").at(1), { _tag: "Clear" })
-      return model
-    })
-    // Editor emits nothing, so its events are `never`: only the key is under test.
-    expect(Scene.start(Editor, {}).childEmit(Editor, anyFeature.ref("M"), {} as never)).type.not.toRaiseError()
   })
 
   it("isn't available in init", () => {
@@ -252,8 +109,7 @@ const NestDef = Component.define({
   scoped: false,
   model: Schema.Number,
   message: NestMessage,
-  receives: ["Picked"],
-  shares: (picked) => picked,
+  shares: { value: (picked) => picked, receives: ["Picked"] },
   shared: { parent: { owner: "self", optional: true } }
 })
 
@@ -262,8 +118,7 @@ const FlatDef = Component.define({
   scoped: false,
   model: Schema.Number,
   message: NestMessage,
-  receives: ["Picked"],
-  shares: (picked) => picked
+  shares: { value: (picked) => picked, receives: ["Picked"] }
 })
 
 describe("$.send to self", () => {
@@ -302,109 +157,71 @@ describe("$.send to self", () => {
   })
 })
 
-describe("a component child with a ref", () => {
-  it("takes a ref in place of a key, or neither, and rejects both", () => {
+describe("a component child", () => {
+  it("stores and inspects features and components in their erased forms", () => {
+    class Panel extends Feature.Service<Panel>()("Panel", {
+      props: Schema.Struct({}),
+      events: UiSchema.TaggedEnum({ Changed: {} })
+    }) {}
+    class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
+    expect([Panel, Bare]).type.toBeAssignableTo<ReadonlyArray<Feature.Any>>()
+    expect([Plain, Note, NeedsStore]).type.toBeAssignableTo<ReadonlyArray<Component.Any>>()
     ParentDef.view((_, h) => {
-      expect(Editor(h, { ref: Draft })).type.not.toRaiseError()
-      expect(Note(h, { ref: Rows.at("t1") })).type.not.toRaiseError()
-      expect(Editor).type.not.toBeCallableWith(h, { key: "a", ref: Draft })
-      expect(Editor(h, {})).type.not.toRaiseError()
+      const child = Panel.render(h, { key: "p", fallback: () => h.el("p") })
+      expect(child.component).type.toBeAssignableFrom(Panel)
+      expect(child.component).type.toBeAssignableFrom(Bare)
+      expect(Scene.fallback(Plain(h, { key: "a" }), Plain, "a", AsyncResult.initial())).type.not.toRaiseError()
       return h.el("p")
     })
+    expect(Scene.start(Plain, {}).childEmit(Plain, "a", {} as never)).type.not.toRaiseError()
   })
 
-  it("checks the ref against what the component receives", () => {
+  it("takes an optional key", () => {
     ParentDef.view((_, h) => {
-      // A provided copy receives what the component does.
-      expect(ProvidedEditor(h, { ref: Draft })).type.not.toRaiseError()
-      // Editor receives Clear, so a ref for Clear only fits it.
-      expect(Editor(h, { ref: Rows })).type.not.toRaiseError()
-      // Note doesn't receive Focus.
-      expect(Note).type.not.toBeCallableWith(h, { ref: Draft })
-      expect(Plain).type.not.toBeCallableWith(h, { ref: Draft })
-      return h.el("p")
-    })
-  })
-
-  it("takes a feature's ref, on the feature or on an implementation", () => {
-    const Main = Todos.ref("Main")
-    expect(Main).type.toBe<Component.Ref<typeof TodosMessage.Type, false>>()
-    ParentDef.view((_, h) => {
-      expect(Todos.render(h, { ref: Main, fallback: () => h.el("p") })).type.not.toRaiseError()
-      expect(Editor(h, { ref: Main })).type.not.toRaiseError()
-      expect(Plain).type.not.toBeCallableWith(h, { ref: Main })
+      expect(Plain(h, { key: "a" })).type.not.toRaiseError()
+      expect(Plain(h, {})).type.not.toRaiseError()
       return h.el("p")
     })
   })
 
   it("checks a union of components against each member", () => {
     ParentDef.view((_, h) => {
-      expect((condition ? Editor : Note)(h, { key: "e" })).type.not.toRaiseError()
-      expect(EditorOrNote(h, { ref: Rows })).type.not.toRaiseError()
-      expect(EditorOrNote).type.not.toBeCallableWith(h, { ref: Draft })
-      expect(EditorOrPlain).type.not.toBeCallableWith(h, { ref: Rows })
-      expect(EditorOrPlain(h, { key: "p" })).type.toBe<View.Child<typeof ParentMessage.Type, never>>()
+      expect((condition ? Plain : Note)(h, { key: "e" })).type.not.toRaiseError()
+      expect(PlainOrNote(h, { key: "p" })).type.toBe<View.Child<typeof ParentMessage.Type, never>>()
       return h.el("p")
     })
   })
 
-  it("checks a ref against the component when the type arguments are explicit", () => {
+  it("takes the parent's message as an explicit type argument", () => {
     type Msg = typeof ParentMessage.Type
+    class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
     ParentDef.view((_, h) => {
       expect(Plain<Msg>(h, { key: "a" })).type.not.toRaiseError()
-      expect(Plain<Msg>).type.not.toBeCallableWith(h, { ref: Rows })
-      expect(Editor<Msg>(h, { ref: Draft })).type.not.toRaiseError()
-      expect(Note<Msg>).type.not.toBeCallableWith(h, { ref: Draft })
+      expect(Bare.render<Msg>(h, { key: "b", fallback: () => h.el("p") })).type.not.toRaiseError()
       // `Msg` comes from `h`: a different one is rejected.
-      expect(Editor<Received>).type.not.toBeCallableWith(h, { ref: Draft })
-      return h.el("p")
-    })
-  })
-
-  it("takes only a complete ref", () => {
-    const full = Plain.ref("p")
-    const partial = { [Component.RefTypeId]: full[Component.RefTypeId], key: full.key }
-    expect(partial).type.not.toBeAssignableTo<Component.Ref.Within<never>>()
-    ParentDef.view((_, h) => {
-      expect(Plain).type.not.toBeCallableWith(h, { ref: partial })
-      expect(Plain(h, { ref: full }).ref).type.toBe<Component.Ref.Any | undefined>()
-      return h.el("p")
-    })
-  })
-
-  it("checks a feature child's ref with explicit type arguments", () => {
-    class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
-    type Msg = typeof ParentMessage.Type
-    ParentDef.view((_, h) => {
-      const fallback = () => h.el("p")
-      expect(Bare.render<Msg>).type.not.toBeCallableWith(h, { ref: Draft, fallback })
-      expect(Bare.render<Msg>).type.not.toBeCallableWith(h, { ref: Rows, fallback })
-      expect(Todos.render<Msg>(h, { ref: Todos.ref("M"), fallback })).type.not.toRaiseError()
-      expect(Todos.render<Msg>(h, { ref: Rows, fallback })).type.not.toRaiseError()
-      expect(Todos.render<Msg>).type.not.toBeCallableWith(h, { ref: Draft, fallback })
-      expect(Bare.render<Msg>(h, { key: "b", fallback })).type.not.toRaiseError()
+      expect(Plain<Received>).type.not.toBeCallableWith(h, { key: "a" })
       return h.el("p")
     })
   })
 
   it("keeps requirements and provided components", () => {
     ParentDef.view((_, h) => {
-      expect(NeedsStore(h, { ref: Rows })).type.toBe<View.Child<typeof ParentMessage.Type, Store>>()
-      expect(Editor.pipe(Component.provide(Layer.succeed(Store, { draft: "" })))(h, { ref: Draft })).type
+      expect(NeedsStore(h, { key: "a" })).type.toBe<View.Child<typeof ParentMessage.Type, Store>>()
+      expect(Plain.pipe(Component.provide(Layer.succeed(Store, { draft: "" })))(h, { key: "a" })).type
         .not.toRaiseError()
       // Provided inline, data-first.
-      expect(Component.provide(Editor, Layer.succeed(Store, { draft: "" }))(h, { ref: Draft })).type.toBe<
+      expect(Component.provide(Plain, Layer.succeed(Store, { draft: "" }))(h, { key: "a" })).type.toBe<
         View.Child<typeof ParentMessage.Type, never>
       >()
-      expect(Component.provide(NeedsStore, Layer.empty)(h, { ref: Rows })).type.toBe<
+      expect(Component.provide(NeedsStore, Layer.empty)(h, { key: "a" })).type.toBe<
         View.Child<typeof ParentMessage.Type, Store>
       >()
-      expect(Component.provide(Note, Layer.empty)).type.not.toBeCallableWith(h, { ref: Draft })
-      expect(Component.provide(Plain, Layer.empty)).type.not.toBeCallableWith(h, { ref: Rows })
       return h.el("p")
     })
   })
+})
 
+describe("Component.provide", () => {
   it("infers an inline component given to provide with a failing Layer", () => {
     const make = () =>
       Component.define({
@@ -519,18 +336,6 @@ describe("a component child with a ref", () => {
       onFailure
     })
   })
-
-  it("rejects a ref for an erased component or feature", () => {
-    const erased = Story.start(Plain, {}).current.component
-    ParentDef.view((_, h) => {
-      expect(erased).type.not.toBeCallableWith(h, { ref: Rows })
-      expect(ErasedPlain).type.not.toBeCallableWith(h, { ref: Rows })
-      expect(anyFeature.render).type.not.toBeCallableWith(h, { ref: Rows, fallback: () => h.el("p") })
-      expect(erased(h, { key: "a" })).type.not.toRaiseError()
-      expect(ErasedPlain(h, { key: "a" })).type.not.toRaiseError()
-      return h.el("p")
-    })
-  })
 })
 
 describe("an erased component", () => {
@@ -545,23 +350,15 @@ describe("an erased component", () => {
   })
     .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
 
-  it("takes props, and a key, a ref or neither", () => {
+  it("takes props, with an optional key", () => {
+    const erased = Story.start(Plain, {}).current.component
     ParentDef.view((_, h) => {
       expect(any(h, { key: "a", props: {} })).type.toBe<View.Child<typeof ParentMessage.Type, any>>()
       expect(AnyProps(h, { key: "a", props: 1 })).type.not.toRaiseError()
       expect(any).type.not.toBeCallableWith(h, { key: "a" })
       expect(AnyProps).type.not.toBeCallableWith(h, { key: "a" })
       expect(any(h, { props: {} })).type.not.toRaiseError()
-      expect(any).type.not.toBeCallableWith(h, { key: "a", ref: Plain.ref("p"), props: {} })
-      return h.el("p")
-    })
-  })
-
-  it("takes only a ref that receives nothing", () => {
-    ParentDef.view((_, h) => {
-      expect(any(h, { ref: Plain.ref("p"), props: {} })).type.not.toRaiseError()
-      expect(any).type.not.toBeCallableWith(h, { ref: Draft, props: {} })
-      expect(AnyProps).type.not.toBeCallableWith(h, { ref: Draft, props: {} })
+      expect(erased(h, { key: "a" })).type.not.toRaiseError()
       return h.el("p")
     })
   })
@@ -575,80 +372,5 @@ describe("an erased component", () => {
       expect(AnyProps).type.not.toBeCallableWith(h, { key: "a", props: 1, onEmit: () => 1 })
       return h.el("p")
     })
-  })
-})
-
-describe("Mountable", () => {
-  it("can't claim a message the component doesn't receive", () => {
-    expect<Component.Mountable<{}, never, never, Received>>().type.not.toBeAssignableFrom(Plain)
-    expect<Component.Mountable<{}, never, never, Received>>().type.not.toBeAssignableFrom(Note)
-  })
-
-  it("takes a component that receives more, or anything with Rcv left out", () => {
-    expect<Component.Mountable<{}, never, never, Received>>().type.toBeAssignableFrom(Editor)
-    expect<Component.Mountable<{}, never, never, Extract<Received, { readonly _tag: "Clear" }>>>().type
-      .toBeAssignableFrom(Editor)
-    expect<Component.Mountable<{}, never, never>>().type.toBeAssignableFrom(Plain)
-    expect<Component.Mountable<{}, never, never>>().type.toBeAssignableFrom(Editor)
-  })
-})
-
-describe("Feature receives", () => {
-  it("toLayer takes an implementation that receives every case, or more", () => {
-    expect(Todos.toLayer(Note)).type.toBe<Layer.Layer<Todos, never, never>>()
-    expect(Todos.toLayer(Editor)).type.toBe<Layer.Layer<Todos, never, never>>()
-  })
-
-  it("toLayer rejects an implementation that misses a case", () => {
-    expect(Todos.toLayer).type.not.toBeCallableWith(Plain)
-    // Each member of a union must receive every case.
-    expect(Todos.toLayer).type.not.toBeCallableWith(EditorOrPlain)
-    expect(Todos.toLayer(EditorOrNote)).type.toBe<Layer.Layer<Todos, never, never>>()
-    // Explicit type arguments leave Rcv out, and that receives nothing.
-    expect(Todos.toLayer<never>).type.not.toBeCallableWith(Plain)
-    expect(Todos.toLayer<never>).type.not.toBeCallableWith(Note)
-    expect(Todos.toLayer(NeedsStore)).type.toBe<Layer.Layer<Todos, never, Store>>()
-    expect(Todos.toLayer(Component.provide(NeedsStore, Layer.succeed(Store, { draft: "" })))).type.toBe<
-      Layer.Layer<Todos, never, never>
-    >()
-  })
-
-  it("toLayer rejects an erased component", () => {
-    expect(Todos.toLayer).type.not.toBeCallableWith(Story.start(Plain, {}).current.component)
-    expect(Todos.toLayer).type.not.toBeCallableWith(ErasedPlain)
-  })
-
-  it("can't send to or implement a feature whose receives are unknown", () => {
-    class Open extends Feature.Service<Open>()("Open", { props: Schema.Struct({}), receives: Schema.Unknown }) {}
-    expect(Open.toLayer).type.not.toBeCallableWith(Editor)
-    expect(Open.toLayer).type.not.toBeCallableWith(Plain)
-    ParentDef.update((model, _msg, $) => {
-      expect($.send).type.not.toBeCallableWith(Open.ref("O"), { _tag: "Clear" })
-      expect($.send).type.not.toBeCallableWith(Open.ref("O").at(1), { _tag: "Clear" })
-      return model
-    })
-  })
-
-  it("treats receives of any as erased: nothing to send, nothing to implement", () => {
-    class Erased extends Feature.Service<Erased>()("Erased", { props: Schema.Struct({}), receives: Schema.Any }) {}
-    expect(Erased.ref("E")).type.toBe<Component.Ref.Any>()
-    expect(Erased.toLayer(Plain)).type.toBe<Layer.Layer<Erased, never, never>>()
-    ParentDef.update((model, _msg, $) => {
-      expect($.send).type.not.toBeCallableWith(Erased.ref("E"), { _tag: "Clear" })
-      expect($.send).type.not.toBeCallableWith(Erased.ref("E").at(1), { _tag: "Clear" })
-      return model
-    })
-  })
-})
-
-describe("a component that receives", () => {
-  it("mounts, and runs in a story and a scene", () => {
-    expect(TestHost.mount(Editor, {})).type.not.toRaiseError()
-    expect(Effect.gen(function*() {
-      const s = yield* Story.make(Editor, {})
-      s.send(EditorMessage.Clear())
-    })).type.not.toRaiseError()
-    expect(Scene.start(Editor, {}).childEmit(Editor, Draft, {} as never)).type.not.toRaiseError()
-    expect(Scene.start(Editor, {}).childEmit(Plain, Plain.ref("P"), {} as never)).type.not.toRaiseError()
   })
 })

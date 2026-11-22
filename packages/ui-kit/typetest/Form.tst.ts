@@ -19,22 +19,13 @@ type Element<K extends keyof HTMLElementTagNameMap, R = never> = Html.Element<
   K
 >
 
-const SignupForm = Form.ref("Signup")
-
 describe("Form", () => {
   it("the root returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: {
-        SubmittedForm: (model, _message, $) => {
-          expect($.send).type.toBeCallableWith(SignupForm, { _tag: "RejectedSubmit" })
-          expect($.send).type.not.toBeCallableWith(SignupForm, { _tag: "SubmittedRoot", fields: {}, entries: [] })
-          return model
-        }
-      },
+      update: (model) => model,
       view: (_, h) =>
         Form(h, {
-          ref: SignupForm,
           onEmit: (event) => {
             expect(event).type.toBe<FormEvents>()
             return Msg.SubmittedForm()

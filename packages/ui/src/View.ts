@@ -379,10 +379,8 @@ export interface Child<out Msg, out R = never> {
   readonly _tag: "Child"
   /** A component value, or a feature service resolved from the instance's context when it mounts. */
   readonly component: Component.Any | Feature.Any
-  /** The child's key: the ref's key for a child rendered with a ref. */
+  /** The child's key. */
   readonly key: string
-  /** The ref the parent sends to this child with, if it was rendered with one. */
-  readonly ref: Component.Ref.Any | undefined
   readonly props: unknown
   readonly onEmit: (events: any) => Msg | undefined
   /** What shows in the child's place while it can't be shown. Required for a feature child. */
@@ -419,15 +417,8 @@ export declare namespace Child {
    *
    * **Details**
    *
-   * A child takes a `key`, a `ref` or neither, never both. Without either,
-   * its key is the empty string, so `key: ""` and no key name the same child.
-   * With a ref, the ref's key is the child's key, and the parent can
-   * `$.send` to the child. `Rcv` is
-   * what the component receives, and the ref must be a `Component.Ref.For`
-   * of it: a ref made from a component also fits a provided copy of it or a
-   * feature implementation. An erased `Component.Ref.Any` names no child:
-   * every typed ref fits it, so a child that took it would take a ref the
-   * component doesn't receive.
+   * Without a `key`, the child's key is the empty string, so `key: ""` and
+   * no key name the same child.
    *
    * A component call adds one rule: a component whose props are erased,
    * such as a `Component.Any`, takes `props` even when it needs none.
@@ -435,20 +426,10 @@ export declare namespace Child {
    * @category models
    * @since 0.1.0
    */
-  export type Options<Props, Events, Msg, Rcv = never> =
-    & (
-      | {
-        /** The child's identity among its parent's children of one component. The empty string by default. */
-        readonly key?: string | undefined
-        readonly ref?: undefined
-      }
-      | {
-        /** Names the child, so the parent can send it messages. Its key is the child's key. */
-        readonly ref: Component.Ref.For<Receives<Rcv>>
-        readonly key?: undefined
-      }
-    )
+  export type Options<Props, Events, Msg> =
     & {
+      /** The child's identity among its parent's children of one component. The empty string by default. */
+      readonly key?: string | undefined
       /**
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
@@ -467,45 +448,25 @@ export declare namespace Child {
    */
   export type EmitHandlers<Events, Msg> = [Events] extends [never] ? never
     : [Events] extends [{ readonly _tag: string }]
-    // Reject a wide tag without testing against a type that depends on Events (see ErasedReceives).
+    // Reject a wide tag with a conditional on a fixed type: one on a type that depends on Events wouldn't relate
+    // for two Events, and would fail a variance check.
       ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ? never
       : { readonly [T in EventTag<Events>]: (event: Extract<Events, { readonly _tag: T }>) => Msg | undefined }
     : never
 
   /**
-   * What a component or feature receives, as a child checks a ref against
-   * it: `Rcv`, or nothing when `Rcv` is `any`, as for an erased component or
-   * `Feature.Any`.
+   * The options of a scoped child: `Options`, with the key checked against
+   * the scope. `K` is the key as written, and `Ends` is `true` in a scope
+   * with a predicate. Without one, the key's type must be a literal, so the
+   * source fixes how many children the scope can keep.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Receives<Rcv> = [Rcv] extends [ErasedReceives] ? never : Rcv
-
-  /**
-   * The options of a scoped child: `Options`, with the key and ref checked
-   * against the scope. `K` is the key as written, and `Ends` is `true`
-   * in a scope with a predicate. Without one, the key's type must be a
-   * literal, so the source fixes how many children the scope can keep, and a
-   * ref must not come from `at` with a key that isn't one.
-   *
-   * @category models
-   * @since 0.1.0
-   */
-  export type ScopedOptions<Props, Events, Msg, Rcv, K, Ends extends boolean> =
-    & (
-      | {
-        /** The child's identity among the scoped children of one component. The empty string by default. */
-        readonly key?: ScopedKey<K, Ends> | undefined
-        readonly ref?: undefined
-      }
-      | {
-        /** Names the child, so the parent can send it messages. Its key is the child's key. */
-        readonly ref: Component.Ref.For<Receives<Rcv>> & ScopedRef<Ends>
-        readonly key?: undefined
-      }
-    )
+  export type ScopedOptions<Props, Events, Msg, K, Ends extends boolean> =
     & {
+      /** The child's identity among the scoped children of one component. The empty string by default. */
+      readonly key?: ScopedKey<K, Ends> | undefined
       /**
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
@@ -522,8 +483,6 @@ type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
   : K
 
 type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false : false
-
-type ScopedRef<Ends extends boolean> = [Ends] extends [true] ? unknown : { readonly "~dynamicKey"?: false }
 
 /**
  * The type a key takes when it needs a predicate, so the error names the fix.
@@ -554,14 +513,6 @@ export interface Scope<Msg, out Ends extends boolean = boolean> extends Helper<M
 }
 
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
-
-// Only `any` and `never` extend it. A conditional on `[Rcv]` against a fixed
-// type, unlike `0 extends 1 & Rcv`, relates for two `Rcv`s, so it passes a
-// variance check.
-declare const ErasedReceivesId: unique symbol
-interface ErasedReceives {
-  readonly [ErasedReceivesId]: never
-}
 
 /**
  * One child argument of an element: a node, an element builder, text, an

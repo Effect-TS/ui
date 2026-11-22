@@ -15,7 +15,7 @@ const root = Locator.tag("form")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Form", () => {
-  it.effect("a submit reports the form's fields and entries, and a rejected submit reports nothing", () =>
+  it.effect("a submit reports the form's fields and entries", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Form, {}, standIn)
       const settle = () => {
@@ -24,9 +24,6 @@ describe("Form", () => {
       const submission = { fields: { email: "ada@example.com" }, entries: [["email", "ada@example.com"]] as const }
 
       s.fire(root, "submit", submission).emitted({ _tag: "Submitted", ...submission })
-      settle()
-      s.receive({ _tag: "RejectedSubmit" } as never)
-      assert.deepStrictEqual(s.current.emitted, [])
       settle()
     }))
 

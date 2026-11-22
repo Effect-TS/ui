@@ -170,13 +170,6 @@ export abstract class Cursor {
       (state) => engine.update(state, { props: typeof next === "function" ? next(state.props) : next })
     )
   }
-  receive(message: unknown): this {
-    return this.act(
-      "receive",
-      "message",
-      (state) => engine.dispatch(state, typeof message === "function" ? message(state.model) : message)
-    )
-  }
   subscription(key: string, message: unknown): this {
     const keys = this.state.subscriptions()
     if (isWatchKey(key) || !keys.includes(key)) {
@@ -309,8 +302,8 @@ export abstract class Cursor {
   emitted(...events: ReadonlyArray<unknown>): this {
     return this.replace(engine.acknowledgeEmitted(this.state, events, this.name("emitted")))
   }
-  sent(target: Component.Ref.Any | Component.Headless.Any, message: unknown): this {
-    return this.replace(engine.acknowledgeSent(this.state, target, message, this.name("sent")))
+  sent(owner: Component.Headless.Any, message: unknown): this {
+    return this.replace(engine.acknowledgeSent(this.state, owner, message, this.name("sent")))
   }
   keepPending(target: Steps.Target | string): this {
     return this.replace(engine.keep(this.state, target, this.name("keepPending")))

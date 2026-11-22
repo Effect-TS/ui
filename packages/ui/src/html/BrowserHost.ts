@@ -1503,10 +1503,9 @@ export const mount = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>
@@ -1540,10 +1539,9 @@ export const mountEffect = <
   R,
   V extends View.Elements,
   RF = never,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>

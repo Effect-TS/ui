@@ -32,7 +32,7 @@ describe("Story", () => {
     expect(scene.current).type.not.toHaveProperty("model")
   })
 
-  it("a scene's child steps take the component, then a key or ref only when the child has one", () => {
+  it("a scene's child steps take the component, then a key only when the child has one", () => {
     const scene = Scene.start(Counter, { initial: 0 })
     const toggled = { _tag: "Toggled", done: true } as const
     expect(scene.childEmit).type.toBeCallableWith(TodoItem, toggled)
@@ -41,28 +41,14 @@ describe("Story", () => {
     expect(scene.childEmit).type.not.toBeCallableWith("t1", toggled)
   })
 
-  it("restricts receive to public messages and infers model callbacks", () => {
+  it("checks subscription messages and infers model callbacks", () => {
     const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Reset: {} })
-    const Receiver = Component.define({
-      name: "Receiver",
-      scoped: false,
-      model: Schema.Number,
-      message: Message,
-      receives: ["Set"]
-    }).make({
+    const Setter = Component.define({ name: "Setter", scoped: false, model: Schema.Number, message: Message }).make({
       init: () => 0,
       update: (_model, message) => message._tag === "Set" ? message.value : 0,
       view: (model, h) => h.text(String(model))
     })
-    const steps: Steps.Steps<typeof Receiver> = Story.start(Receiver, {})
-    steps.receive((model) => {
-      expect(model).type.toBe<number>()
-      return { _tag: "Set", value: model + 1 }
-    })
-    expect(steps.receive).type.toBeCallableWith({ _tag: "Set", value: 1 })
-    expect(steps.receive).type.not.toBeCallableWith({ _tag: "Reset" })
-    expect(steps.receive).type.not.toBeCallableWith((_model: number) => ({ _tag: "Reset" as const }))
-    expect(counter.receive).type.not.toBeCallableWith(CounterMessage.Increment())
+    const steps: Steps.Steps<typeof Setter> = Story.start(Setter, {})
     expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
     expect(steps.subscription).type.not.toBeCallableWith("tick", { _tag: "Missing" })
     counter.send((model) => {

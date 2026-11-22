@@ -55,8 +55,6 @@ const MenuDef = Component.define({
   }),
   message: MenuMessage,
   events: MenuEvents,
-  // A parent may open or close it.
-  receives: ["Toggle"],
   elements: Html
 })
 

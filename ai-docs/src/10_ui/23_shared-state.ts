@@ -33,10 +33,9 @@ export const TooltipProvider = Component.define({
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: ProviderMessage,
-  // `$.send(TooltipProvider, message)` takes these. They are facts, named
-  // like any other message.
-  receives: ["FocusedTooltip", "BlurredTooltip"],
-  shares: (model) => ({ open: model.open }),
+  // `receives` lists what `$.send(TooltipProvider, message)` takes. They are
+  // facts, named like any other message.
+  shares: { value: (model) => ({ open: model.open }), receives: ["FocusedTooltip", "BlurredTooltip"] },
   elements: Html
 }).make({
   init: () => ({ open: null }),
@@ -195,7 +194,7 @@ const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen:
 //
 // - `optional: true`: a Panel works with no PanelGroup above it. There
 //   `h.shared.group` is `undefined`, a `$.send(PanelGroup, ...)` is dropped
-//   and logged as `SendDropped` with reason `absent`, and the Panel needs no
+//   and logged as `SendDropped`, and the Panel needs no
 //   `Component.Shared<"PanelGroup">`.
 // - `report`: what the Panel tells the owner, from its own Model and props.
 //   It fails to compile for an owner whose `shares` has no `collects`.
@@ -291,9 +290,9 @@ export const Menu = Component.define({
   model: Schema.Number,
   message: MenuMessage,
   events: MenuEvents,
-  receives: ["PickedItem"],
   shares: {
     value: (_, props) => ({ open: props.open }),
+    receives: ["PickedItem"],
     collects: {
       schema: Schema.Number,
       onChange: (counts) => MenuMessage.ChangedOpenBelow({ count: counts.reduce((sum, count) => sum + count, 0) })

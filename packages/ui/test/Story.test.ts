@@ -17,7 +17,7 @@ import {
   TodoListMessage,
   Upload
 } from "./fixtures/components.ts"
-import { BadgeRef, Note, NoteEvents, NoteMessage, SaveNote as SaveNoteCommand } from "./fixtures/notes.ts"
+import { Note, NoteEvents, NoteMessage, SaveNote as SaveNoteCommand } from "./fixtures/notes.ts"
 import * as users from "./fixtures/users.ts"
 import { defect } from "./utils/scoped.ts"
 
@@ -27,24 +27,21 @@ const todos = [todo, { id: "t2", title: "write spec", done: false }]
 describe("Story", () => {
   it("delivers model-derived messages and validates subscription lifetimes", () => {
     const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Stop: {} })
-    const Receiver = Component.define({
-      name: "Receiver",
+    const Ticker = Component.define({
+      name: "Ticker",
       scoped: false,
       model: Schema.Number,
-      message: Message,
-      receives: ["Set"]
+      message: Message
     }).make({
       init: () => 1,
       update: (_model, message) => message._tag === "Set" ? message.value : 0,
       subscriptions: (model) => model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
       view: (model, h) => h.text(String(model))
     })
-    const s = Story.start(Receiver, {})
+    const s = Story.start(Ticker, {})
     s.send((model) => ({ _tag: "Set", value: model + 1 }))
     assert.strictEqual(s.model, 2)
-    s.receive({ _tag: "Set", value: 3 })
-    assert.strictEqual(s.model, 3)
-    s.receive((model) => ({ _tag: "Set", value: model * 2 }))
+    s.send((model) => ({ _tag: "Set", value: model * 3 }))
     assert.strictEqual(s.model, 6)
     assert.deepStrictEqual(s.subscriptions, ["tick"])
     assert.throws(() => s.subscription("missing", { _tag: "Stop" }), /Story.subscription.*missing.*active keys:.*tick/)
@@ -886,23 +883,22 @@ describe("Story", () => {
         scoped: false,
         model: Schema.Null,
         message: UiSchema.TaggedEnum({ Take: { token: Secret, at: Schema.Finite } }),
-        receives: ["Take"],
-        elements: Html
-      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.div })
-      const ref = Receiver.ref("secret")
+        shares: { value: () => null, receives: ["Take"] }
+      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
       const App = Component.define({
         name: "SecretOutputs",
         scoped: false,
         model: Schema.Null,
         message: Schema.Struct({ kind: Schema.Literals(["emit", "send"]), at: Schema.Number }),
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),
-        elements: Html
+        elements: Html,
+        shared: { receiver: Receiver }
       }).make({
         init: () => null,
         update: (_, { at, kind }, $) =>
           kind === "emit"
             ? $.emit({ token: Redacted.make("synthetic-event-secret"), at })
-            : $.send(ref, { _tag: "Take", token: Redacted.make("synthetic-send-secret"), at }),
+            : $.send(Receiver, { _tag: "Take", token: Redacted.make("synthetic-send-secret"), at }),
         view: (_, h) => h.div
       })
       const errorOf = (f: () => unknown): string => {
@@ -929,7 +925,7 @@ describe("Story", () => {
                 errorOf(() =>
                   kind === "emit"
                     ? s.emitted({ token: Redacted.make("synthetic-other-secret"), at })
-                    : s.sent(ref, { _tag: "Take", token: Redacted.make("synthetic-other-secret"), at })
+                    : s.sent(Receiver, { _tag: "Take", token: Redacted.make("synthetic-other-secret"), at })
                 )
               ]
               for (const text of messages) {
@@ -939,7 +935,9 @@ describe("Story", () => {
                 if (Number.isNaN(at)) {
                   assert.include(
                     text,
-                    kind === "emit" ? `"at":{"~unserialisable":"number"}` : `{"~redacted":true} to secret`
+                    kind === "emit"
+                      ? `"at":{"~unserialisable":"number"}`
+                      : `{"~redacted":true} to the owner SecretReceiver`
                   )
                 }
                 assert.notMatch(text, /synthetic-\w+-secret/)
@@ -986,21 +984,19 @@ describe("Story", () => {
         loaded.loaded("author", { id: "1", name: "Ann", email: "", likes: 0 }).send(edit)
       }))
 
-    it.effect("emitted and sent take the values they acknowledge, and an acting step waits for them", () =>
+    it.effect("emitted takes the value it acknowledges, and an acting step waits for it", () =>
       Effect.gen(function*() {
         const s = Story.start(Note, {}).send(NoteMessage.Save())
           .resolve(SaveNoteCommand, NoteMessage.Saved())
         assert.throws(() => s.send(edit), /was emitted/)
         assert.throws(() => s.emitted(NoteEvents.Saved({ text: "other" })), /^Story\.emitted: /)
-        s.emitted(saved).send(NoteMessage.Clear())
-        assert.throws(() => s.props({}), /was sent/)
-        s.sent(BadgeRef, { _tag: "Clear" })
-        assert.lengthOf(s.current.sent, 0)
+        s.emitted(saved)
+        assert.lengthOf(s.current.emitted, 0)
         const message = yield* defect(Effect.gen(function*() {
           const story = yield* Story.make(Note, {})
-          story.send(NoteMessage.Clear())
+          story.send(NoteMessage.Save()).resolve(SaveNoteCommand, NoteMessage.Saved())
         }))
-        assert.match(message, /^Story\.make: .*\n {2}- .*Clear.* to Badge.* was sent/)
+        assert.match(message, /^Story\.make: .*\n {2}- .*Saved.* was emitted/)
       }))
 
     it.effect("given replaces what init produced, and throws after an acting step rather than discard work", () =>
