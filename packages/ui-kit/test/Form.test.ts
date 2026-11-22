@@ -15,22 +15,19 @@ const root = Locator.tag("form")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 describe("Form", () => {
-  it.effect("a submit reports the form's fields and looks for an invalid control, and so does a rejected submit, which reports nothing", () =>
+  it.effect("a submit reports the form's fields and entries, and a rejected submit reports nothing", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Form, {}, standIn)
-      const focused = () => {
-        const pending = s.current.pending
-        assert.deepStrictEqual(pending.map(({ command }) => command.name), ["FocusInvalid"])
-        s.resolve(pending[0]!.command, Component.noop as never)
+      const settle = () => {
+        for (const { command } of s.current.pending) s.resolve(command, Component.noop as never)
       }
       const submission = { fields: { email: "ada@example.com" }, entries: [["email", "ada@example.com"]] as const }
 
       s.fire(root, "submit", submission).emitted({ _tag: "Submitted", ...submission })
-      focused()
-
+      settle()
       s.receive({ _tag: "RejectedSubmit" } as never)
-      focused()
       assert.deepStrictEqual(s.current.emitted, [])
+      settle()
     }))
 
   it("the root is a form with the browser's checks off, whatever the consumer set, and takes no other tag", () => {
