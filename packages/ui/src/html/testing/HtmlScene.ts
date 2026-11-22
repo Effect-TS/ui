@@ -313,7 +313,16 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
-    return this.one("keydown", locator, "keydown", (node) => defaults.keyPayload(key, details, node))
+    return this.interact("keydown", (state) => {
+      const node = engine.findOne(state, locator, this.name("keydown"))
+      const path = engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
+      return [{
+        node: () => node,
+        description: locator.description,
+        event: "keydown",
+        payload: () => defaults.keyPayload(key, details, path)
+      }]
+    })
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {

@@ -1318,6 +1318,9 @@ describe("BrowserHost", { concurrent: false }, () => {
             value: () => [shadowInput, shadow, shadowHost, document.body, document, window]
           })
           shadowHost.dispatchEvent(shadowEvent)
+          const svgInput = document.createElementNS("http://www.w3.org/2000/svg", "input")
+          app.appendChild(svgInput)
+          fire(svgInput, "keydown", "svg")
           yield* tick
           expect(root.model()).toEqual([
             "el:down:g:true:true",
@@ -1341,7 +1344,8 @@ describe("BrowserHost", { concurrent: false }, () => {
             "el:down:g:false:true",
             "doc:down:g:false:true",
             ...nonEditableTypes.flatMap((type) => [`el:down:${type}:false:false`, `doc:down:${type}:false:false`]),
-            "doc:down:s:true:false"
+            "doc:down:s:true:false",
+            "doc:down:svg:false:false"
           ])
         }).pipe(Effect.scoped))
 

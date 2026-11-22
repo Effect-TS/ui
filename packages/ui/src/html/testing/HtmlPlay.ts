@@ -90,7 +90,7 @@ import type * as HtmlScene from "./HtmlScene.ts"
  */
 export type Expect = HtmlScene.Expect<Effect.Effect<void, Play.StepError>>
 
-type Modifiers = Partial<Pick<Html.KeyPayload, "shift" | "ctrl" | "alt" | "meta">>
+type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
 
 /**
  * A cursor over an HTML tree on `TestHost`: the Play's steps, plus a step
@@ -120,8 +120,12 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
    * the new value; an object also sets `checked` on an `input`.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError>
-  /** Presses `key`: sends `keydown` with the modifier keys given, each `false` otherwise. */
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): Effect.Effect<void, Play.StepError>
+  /**
+   * Presses `key`: sends `keydown` with the modifier keys, `composing`,
+   * `repeat` and selection given, each `false` or `null` otherwise. `editable`
+   * defaults from the matched element unless given.
+   */
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError>
   /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
@@ -186,8 +190,17 @@ class HtmlPlayCursor extends internal.PlayCursor {
       Object.assign(node.props, payload)
     })
   }
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): Effect.Effect<void, Play.StepError> {
-    return this.one("keydown", locator, "keydown", (node) => defaults.keyPayload(key, modifiers, node))
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError> {
+    return this.interact("keydown", () => {
+      const node = this.findOne(locator, "keydown")
+      const path = internal.ancestors(node)
+      return [{
+        node,
+        description: locator.description,
+        event: "keydown",
+        payload: () => defaults.keyPayload(key, details, path)
+      }]
+    })
   }
   submit(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.interact("submit", () => {

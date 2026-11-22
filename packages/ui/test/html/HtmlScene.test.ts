@@ -139,12 +139,20 @@ describe("HtmlScene", () => {
           h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
             .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
           h.input.attr("type", "checkbox").attr("aria-label", "Active").onKeyDown(saw("keydown")),
+          h.input.prop("type", "checkbox").attr("aria-label", "PropBox").onKeyDown(saw("keydown")),
+          h.div.attr("contenteditable", "true").onKeyDown(saw("keydown")).children(
+            h.span.attr("id", "ce-child").children("Edit"),
+            h.div.attr("contenteditable", "false").children(
+              h.button.attr("id", "ce-island-btn").children("Stop")
+            )
+          ),
           h.output(log.join("\n"))
         )
       }
     })
     const name = HtmlLocator.label("Name")
     const active = HtmlLocator.label("Active")
+    const propBox = HtmlLocator.label("PropBox")
     const s = HtmlScene.start(Field, {})
       .type(name, "A")
       .type(name, "Ad", { composing: true, inputType: "insertCompositionText" })
@@ -155,6 +163,9 @@ describe("HtmlScene", () => {
       .keydown(name, "a")
       .keydown(name, "a", { composing: true, repeat: true, editable: false, selectionStart: 1, selectionEnd: 3 })
       .keydown(active, " ")
+      .keydown(propBox, " ")
+      .keydown(Locator.attr("id", "ce-child"), "g")
+      .keydown(Locator.attr("id", "ce-island-btn"), "g")
     assert.deepStrictEqual(s.get(log).children?.map((child) => child.text).join("").split("\n"), [
       `input {"value":"A","checked":false,"composing":false,"inputType":"insertText"}`,
       `input {"value":"Ad","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
@@ -164,7 +175,10 @@ describe("HtmlScene", () => {
       `change {"value":"Ada","checked":false,"composing":false,"inputType":"insertReplacementText"}`,
       `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
       `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
-      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
+      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
     ])
   })
 

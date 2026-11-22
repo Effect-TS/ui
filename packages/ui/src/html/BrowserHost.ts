@@ -131,6 +131,7 @@ import { ownEvents } from "./internal/ownEvents.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
+const HTML = "http://www.w3.org/1999/xhtml"
 const SVG = "http://www.w3.org/2000/svg"
 
 /** Events after which a controlled property may differ from what the Model says. */
@@ -335,9 +336,11 @@ const isEditableTarget = (event: Event, fallback: EventTarget | null): boolean =
   const node = raw as globalThis.Node
   const element = (node.nodeType === 3 ? node.parentElement : raw) as HTMLElement | null
   if (element === null || element.nodeType !== 1) return false
-  const tag = element.localName
-  if (tag === "textarea" || tag === "select") return true
-  if (tag === "input") return !nonEditableInputTypes.has((element as HTMLInputElement).type.toLowerCase())
+  if (element.namespaceURI === HTML) {
+    const tag = element.localName
+    if (tag === "textarea" || tag === "select") return true
+    if (tag === "input") return !nonEditableInputTypes.has((element as HTMLInputElement).type.toLowerCase())
+  }
   return element.isContentEditable === true
 }
 

@@ -6,7 +6,8 @@ import * as HtmlLocator from "../testing/HtmlLocator.ts"
 
 const lower = (value: string | undefined) => value?.toLowerCase()
 
-const inputType = (node: Locator.Node): string => lower(node.attrs?.type) ?? "text"
+const inputType = (node: Locator.Node): string =>
+  lower(typeof node.props?.type === "string" ? node.props.type : node.attrs?.type) ?? "text"
 
 /** An attribute set, or a property set to `true`. */
 const flag = (node: Locator.Node, name: string): boolean =>
@@ -24,11 +25,18 @@ const nonEditableInputTypes: ReadonlySet<string> = new Set([
   "submit"
 ])
 
-const isEditable = (node: Locator.Node): boolean => {
+const isEditable = (path: ReadonlyArray<Locator.Node>): boolean => {
+  const node = path[0]
+  if (node === undefined) return false
   if (node.tag === "textarea" || node.tag === "select") return true
   if (node.tag === "input") return !nonEditableInputTypes.has(inputType(node))
-  const contentEditable = lower(node.attrs?.contenteditable)
-  return contentEditable === "" || contentEditable === "true" || contentEditable === "plaintext-only"
+  for (const at of path) {
+    const raw = typeof at.props?.contentEditable === "string" ? at.props.contentEditable : at.attrs?.contenteditable
+    const value = lower(raw)
+    if (value === "" || value === "true" || value === "plaintext-only") return true
+    if (value === "false") return false
+  }
+  return false
 }
 
 const controls: ReadonlySet<string> = new Set([
@@ -291,7 +299,7 @@ export const changePayload = (
 export const keyPayload = (
   key: string,
   details: Partial<Omit<Html.KeyPayload, "key">> | undefined,
-  node?: Locator.Node | undefined
+  path?: ReadonlyArray<Locator.Node> | undefined
 ): Html.KeyPayload => ({
   key,
   shift: details?.shift === true,
@@ -300,7 +308,7 @@ export const keyPayload = (
   meta: details?.meta === true,
   composing: details?.composing === true,
   repeat: details?.repeat === true,
-  editable: details?.editable ?? (node !== undefined && isEditable(node)),
+  editable: details?.editable ?? (path !== undefined && isEditable(path)),
   selectionStart: details?.selectionStart ?? null,
   selectionEnd: details?.selectionEnd ?? null
 })
