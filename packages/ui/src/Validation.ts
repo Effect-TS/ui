@@ -16,7 +16,7 @@
  *
  * ```ts import.meta.vitest
  * import { Validation } from "@effect/ui"
- * import { Redacted, Schema } from "effect"
+ * import { Equal, Redacted, Schema } from "effect"
  *
  * const Signup = Validation.make({
  *   email: { required: "Email is required", rules: [Validation.Rule.email()] },
@@ -28,7 +28,7 @@
  *   confirm: {
  *     value: Schema.Redacted(Schema.String),
  *     required: "Confirm your password",
- *     rules: [[(confirm, values) => Redacted.value(confirm) === Redacted.value(values.password), "Passwords must match"]]
+ *     rules: [[(confirm, values) => Equal.equals(confirm, values.password), "Passwords must match"]]
  *   }
  * }, { mode: "onChange" })
  *
@@ -659,8 +659,9 @@ const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> => names.inc
  * - The `value` Schemas go in the Model, so history restore writes them into
  *   `history.state` and the server ships them in the page state. Declare a
  *   secret such as a password with `value: Schema.Redacted(Schema.String)`,
- *   and the component's whole state stays out of both, the other fields
- *   included.
+ *   and the component's whole state stays out of both: none of its fields
+ *   restore or hydrate, so keep the form a leaf component. See
+ *   `Component.define`.
  * - A form sets `novalidate`: native constraint validation isn't used.
  *
  * **Example** (A login form with a server error)

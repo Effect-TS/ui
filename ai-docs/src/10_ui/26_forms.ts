@@ -9,7 +9,7 @@ import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Story } from "@effect/ui/testing"
-import { Context, Effect, Option, Redacted, Schema } from "effect"
+import { Context, Effect, Equal, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
 // ---------------------------------------------------------------------------
@@ -56,22 +56,23 @@ export const SignupValidation = Validation.make({
     rules: [Rule.minLength(3), Rule.pattern(/^[a-z0-9_]+$/, "Use lowercase letters, digits and _")]
   },
   email: { required: "Email is required", rules: [Rule.email("Please enter a valid email address")] },
-  // Because form values live in the Model, history restore writes them into
-  // `history.state` and the server ships them in the page state. Declaring a
-  // secret as `Schema.Redacted(Schema.String)` keeps the component's whole
-  // state out of both. The default `isEmpty` unwraps `Redacted`, while rules
-  // unwrap it with `Redacted.value`.
+  // A secret is `Schema.Redacted(Schema.String)`. That keeps this
+  // component's whole state out of `history.state` and the server's page
+  // state, so no field of the form restores or hydrates: keep such a form a
+  // leaf component. `required` still sees an empty one, and a rule unwraps
+  // it with `Redacted.value`.
   password: {
     value: Schema.Redacted(Schema.String),
     required: "Password is required",
     rules: [[(password) => Redacted.value(password).length >= 8, "Must be at least 8 characters"]]
   },
   // A predicate also gets every value, so it can compare two fields. It
-  // runs whether or not the password passes its own rules.
+  // runs whether or not the password passes its own rules. Two `Redacted`
+  // compare by what they hold, so nothing is unwrapped.
   confirm: {
     value: Schema.Redacted(Schema.String),
     required: "Confirm your password",
-    rules: [[(confirm, values) => Redacted.value(confirm) === Redacted.value(values.password), "Passwords must match"]]
+    rules: [[(confirm, values) => Equal.equals(confirm, values.password), "Passwords must match"]]
   }
 }, { mode: "onChange", errors: "all" })
 
@@ -202,7 +203,7 @@ export const SignupForm = Component.define({
     // One field's markup, by its derived state. A ui-kit `Field` takes the
     // same facts: pass `invalid: true` for `Invalid`, `false` for `Valid`,
     // and leave it out otherwise, so a pending check doesn't show as valid.
-    const fieldRow = (
+    const row = (
       field: Validation.Field<unknown>,
       label: string,
       type: string,
@@ -224,39 +225,27 @@ export const SignupForm = Component.define({
           : null
       )
 
+    const text = (name: typeof TextFieldName.Type, label: string, type: string) =>
+      row(fields[name], label, type, fields[name].value, (value) => SignupMessage.UpdatedField({ name, value }))
+
+    // A secret is unwrapped only for the input, and what was typed is
+    // wrapped again before it leaves the view.
+    const secret = (name: typeof SecretFieldName.Type, label: string) =>
+      row(
+        fields[name],
+        label,
+        "password",
+        Redacted.value(fields[name].value),
+        (value) => SignupMessage.UpdatedSecret({ name, value: Redacted.make(value) })
+      )
+
     // `novalidate` turns the browser's own checks off. The rules above are
     // the only ones, and they run the same in a test and on the server.
     return h.form.attr("novalidate", "").onSubmit(SignupMessage.SubmittedForm()).children(
-      fieldRow(
-        fields.username,
-        "Username",
-        "text",
-        fields.username.value,
-        (value) => SignupMessage.UpdatedField({ name: "username", value })
-      ),
-      fieldRow(
-        fields.email,
-        "Email",
-        "email",
-        fields.email.value,
-        (value) => SignupMessage.UpdatedField({ name: "email", value })
-      ),
-      // Unwrap `Redacted` only at the DOM input and wrap edits back into
-      // `Redacted` before they leave the view.
-      fieldRow(
-        fields.password,
-        "Password",
-        "password",
-        Redacted.value(fields.password.value),
-        (value) => SignupMessage.UpdatedSecret({ name: "password", value: Redacted.make(value) })
-      ),
-      fieldRow(
-        fields.confirm,
-        "Confirm password",
-        "password",
-        Redacted.value(fields.confirm.value),
-        (value) => SignupMessage.UpdatedSecret({ name: "confirm", value: Redacted.make(value) })
-      ),
+      text("username", "Username", "text"),
+      text("email", "Email", "email"),
+      secret("password", "Password"),
+      secret("confirm", "Confirm password"),
       h.button.attr("type", "submit").disabled(model.submitting)
         .children(model.submitting ? "Creating account…" : "Create account")
     )

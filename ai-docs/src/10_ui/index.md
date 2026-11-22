@@ -574,15 +574,14 @@ A query keeps its result per args, so an answer about an earlier value is
 never shown. Forms set `novalidate`, so the browser's own checks stay out of
 the way.
 
-Because a form's values live in the Model, history restore writes them into
+A form's values live in the Model, so history restore writes them into
 `history.state` and the server ships them in the page state. Declare a secret
-field such as a password with `value: Schema.Redacted(Schema.String)`, and
-carry it in `Schema.Redacted(Schema.String)` messages and Command args so it
-never reaches `history.state`, page state or a devtools message log. An
-instance whose state holds a `Schema.Redacted` anywhere has its whole state
-left out of both, the other fields included. The default `isEmpty` unwraps a
-`Redacted` before checking for an empty string or array; write custom rules
-and view bindings with `Redacted.value`.
+field such as a password with `value: Schema.Redacted(Schema.String)`. A
+component whose state holds a `Schema.Redacted` anywhere is left out of
+both, so none of the form's fields restore or hydrate: keep the form a leaf
+component. Carry the secret as `Schema.Redacted(Schema.String)` in messages
+and Command args too, so the message log redacts it. The default `isEmpty`
+unwraps a `Redacted`, and a rule or the view reads it with `Redacted.value`.
 
 ### Organizing an app
 
