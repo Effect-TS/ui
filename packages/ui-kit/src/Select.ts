@@ -1331,7 +1331,7 @@ export const Select = Component.define({
         .forward((node) => {
           const named = node
             .attr("aria-controls", open ? (listed ? listId : popupId) : undefined)
-            .attr("aria-labelledby", node.attrs["aria-labelledby"] ?? (labelled ? labelId : undefined))
+            .attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined))
           return inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
         }))
 
@@ -1347,7 +1347,10 @@ export const Select = Component.define({
         .attr("role", "presentation")
         .popover("manual", shown)
         .forward((node) =>
-          node.attr("style", withStyle(node.attrs.style, open ? backdropBox : backdropBox + ";pointer-events:none"))
+          node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, open ? backdropBox : backdropBox + ";pointer-events:none")
+          )
         ))
 
     const positionerStyle = aligned ? alignedBox : Positioning.positionerStyle(tracked.positionMethod)
@@ -1356,7 +1359,7 @@ export const Select = Component.define({
         .attr("role", "presentation")
         .attr("data-anchor-hidden", flag(shown && !aligned && model.placement?.anchorHidden))
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       const layered = modal ? decorated.children(open ? blocking.open : blocking.closed) : decorated
       if (!shown) return layered
       const alignItem = props.items.find((item) => chosen.has(item.value)) ?? props.items[0]
@@ -1407,13 +1410,13 @@ export const Select = Component.define({
         .onKeyUp(({ key }) => key === " " ? Message.ReleasedSpace() : undefined)
         .forward((node) => {
           const own = listed ? node.attr("role", "presentation") : listbox(node)
-          return aligned && !listed ? own.attr("style", withStyle(node.attrs.style, scrolling)) : own
+          return aligned && !listed ? own.attr("style", withStyle(node.elementAttrs.style, scrolling)) : own
         }))
 
     const list = p.part("div", (b) => {
       listed = true
       const own = listbox(b).attr("id", listId)
-      return aligned ? own.forward((node) => node.attr("style", withStyle(node.attrs.style, scrolling))) : own
+      return aligned ? own.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, scrolling))) : own
     })
 
     const arrowStyle = Positioning.arrowStyle(side)
@@ -1422,7 +1425,7 @@ export const Select = Component.define({
         .attr("id", arrowId)
         .attr("aria-hidden", "true")
         .attr("data-uncentered", flag(model.placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
     const arrow = View.wrapPart(
       arrowPart,
       <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined =>
@@ -1479,7 +1482,7 @@ export const Select = Component.define({
           .attr("data-direction", direction)
           .attr("data-side", shownSide)
           .attr("data-visible", flag(visible))
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, "position:absolute"))))
+          .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "position:absolute"))))
       return View.wrapPart(
         part,
         <B extends View.PartTarget<"div">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined =>

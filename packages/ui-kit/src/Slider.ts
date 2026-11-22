@@ -795,12 +795,12 @@ export const Slider = Component.define({
         .onBlur(Message.BlurredThumb({ index }))
         .forward((node) => {
           // The consumer's text wins. Two thumbs say which end each one is.
-          const text = node.attrs["aria-valuetext"] === undefined && s.values.length === 2
+          const text = node.elementAttrs["aria-valuetext"] === undefined && s.values.length === 2
             ? node.attr("aria-valuetext", value + " " + (index === 0 ? "start" : "end") + " range")
             : node
           return text.attr(
             "style",
-            withStyle(node.attrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
+            withStyle(node.elementAttrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
           )
         })
     })
@@ -810,7 +810,7 @@ export const Slider = Component.define({
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.attrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
+            withStyle(node.elementAttrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
           )
         )
         .children(input as never)
@@ -833,7 +833,7 @@ export const Slider = Component.define({
           node.attr(
             "style",
             withStyle(
-              node.attrs.style,
+              node.elementAttrs.style,
               "--slider-indicator-start:" + start + "%;--slider-indicator-size:" + (end - start) + "%"
             )
           )

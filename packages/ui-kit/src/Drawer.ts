@@ -1424,7 +1424,7 @@ export const DrawerProvider = Component.define({
         .attr("id", id)
         .attr("data-active", flag(active))
         .attr("data-inactive", flag(!active))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, progressVar + ":0")))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, progressVar + ":0")))
         .onMount(ReportIndent({ id })))
     const indent = View.wrapPart(
       indentPart,
@@ -1602,7 +1602,7 @@ export const Drawer = Component.define({
           node.attr(
             "style",
             withStyle(
-              node.attrs.style,
+              node.elementAttrs.style,
               [
                 "--nested-drawers:" + nestedDrawers,
                 model.height > 0 ? heightVar + ":" + model.height + "px" : undefined,
@@ -1634,7 +1634,7 @@ export const Drawer = Component.define({
         .attr("data-drawer-backdrop", drawerId)
         .attr("data-swiping", flag(swiping))
         .attr("data-swipe-dismiss", flag(swipeDismiss))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, progressVar + ":" + rest))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, progressVar + ":" + rest))))
 
     const viewport = p.part("div", (b) =>
       props.virtualKeyboard === true
@@ -1659,7 +1659,7 @@ export const Drawer = Component.define({
             node.attr(
               "style",
               withStyle(
-                node.attrs.style,
+                node.elementAttrs.style,
                 "touch-action:" + (isHorizontal(direction) ? "pan-y" : "pan-x") +
                   (disabled || (open && !running) ? ";pointer-events:none" : "")
               )

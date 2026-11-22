@@ -715,7 +715,7 @@ const elementOf = <Msg, R>(
   _tag: "Element",
   tag: builder.tag,
   elementKey: builder.elementKey,
-  attrs: builder.owned.length === 0 ? builder.attrs : withTokens(builder.attrs, builder.owned),
+  attrs: builder.owned.length === 0 ? builder.elementAttrs : withTokens(builder.elementAttrs, builder.owned),
   props: builder.props,
   handlers: builder.handlers,
   eventOptions: builder.eventOptions,
@@ -855,8 +855,8 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
   builder: B,
   fields: Partial<
     Pick<
-      Element<unknown>,
-      "elementKey" | "attrs" | "props" | "handlers" | "eventOptions" | "refKey" | "mount" | "owned"
+      ElementBuilder<unknown>,
+      "elementKey" | "elementAttrs" | "props" | "handlers" | "eventOptions" | "refKey" | "mount" | "owned"
     >
   >
 ): B => Object.assign(copyBuilder(builder), fields)
@@ -892,7 +892,7 @@ const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(builder: B): 
 
 const builderFields = [
   "elementKey",
-  "attrs",
+  "elementAttrs",
   "props",
   "handlers",
   "eventOptions",
@@ -921,7 +921,7 @@ const makeCopier = (proto: object, first: ElementBuilder<any, any, any, any>): C
   }
   const copier = function(this: Mutable<ElementBuilder<any, any, any, any>>, from: ElementBuilder<any, any, any, any>) {
     this.elementKey = from.elementKey
-    this.attrs = from.attrs
+    this.elementAttrs = from.elementAttrs
     this.props = from.props
     this.handlers = from.handlers
     this.eventOptions = from.eventOptions
@@ -1060,15 +1060,15 @@ export const makePart = (
   }
   if (patch.elementKey !== undefined) throw new Error(owner.path + ": a part can't set an element's key")
   if (patch.owned.length > 0) throw new Error(owner.path + ": a part can't apply another part")
-  const attrs: Record<string, string> = { ...builder.attrs }
+  const elementAttrs: Record<string, string> = { ...builder.elementAttrs }
   const tokens: Record<string, string> = {}
   for (const name of patch.removals ?? []) {
     // Token lists are additive: a part can omit its own tokens, not the consumer's.
-    if (!tokenListAttributes.has(name)) delete attrs[name]
+    if (!tokenListAttributes.has(name)) delete elementAttrs[name]
   }
-  for (const name in patch.attrs) {
-    if (tokenListAttributes.has(name)) tokens[name] = patch.attrs[name]!
-    else attrs[name] = patch.attrs[name]!
+  for (const name in patch.elementAttrs) {
+    if (tokenListAttributes.has(name)) tokens[name] = patch.elementAttrs[name]!
+    else elementAttrs[name] = patch.elementAttrs[name]!
   }
   const layer: Owned = {
     owner,
@@ -1079,7 +1079,7 @@ export const makePart = (
     tokens
   }
   const out = withFields(builder, {
-    attrs,
+    elementAttrs,
     props: { ...builder.props, ...patch.props },
     owned: [...builder.owned, layer]
   })
@@ -1160,7 +1160,7 @@ type Mutable<A> = { -readonly [K in keyof A]: A[K] }
 
 const blankFields = {
   elementKey: undefined,
-  attrs: noFields,
+  elementAttrs: noFields,
   props: noFields,
   handlers: noFields,
   eventOptions: noFields,
@@ -1222,11 +1222,11 @@ export class ElementBuilder<
    */
   readonly elementKey: string | undefined = undefined
   /**
-   * The attributes set with `attr`.
+   * The attributes set with `attr` or `attrs`.
    *
    * @since 0.1.0
    */
-  readonly attrs: Readonly<Record<string, string>> = noFields
+  readonly elementAttrs: Readonly<Record<string, string>> = noFields
   /**
    * The properties set with `prop`.
    *
@@ -1362,13 +1362,39 @@ export class ElementBuilder<
     const out = copyBuilder(this) as Mutable<this>
     const removals = this.removals
     if (value === undefined && removals !== undefined) out.removals = [...removals, name]
-    const attrs = this.attrs
-    if (attrs === noFields) {
-      if (value !== undefined) out.attrs = assoc(attrs, name, value)
+    const elementAttrs = this.elementAttrs
+    if (elementAttrs === noFields) {
+      if (value !== undefined) out.elementAttrs = assoc(elementAttrs, name, value)
       // Removing an attribute that isn't set leaves the record as it is.
-    } else if (value !== undefined || Object.hasOwn(attrs, name)) {
-      out.attrs = withEntry(attrs, name, value)
+    } else if (value !== undefined || Object.hasOwn(elementAttrs, name)) {
+      out.elementAttrs = withEntry(elementAttrs, name, value)
     }
+    return out
+  }
+  /**
+   * Sets multiple attributes, removing any whose value is `undefined`.
+   *
+   * @since 0.1.0
+   */
+  attrs(attributes: Readonly<Record<string, string | undefined>>): this {
+    const out = copyBuilder(this) as Mutable<this>
+    let elementAttrs = this.elementAttrs
+    let removals: Array<string> | undefined
+    for (const name in attributes) {
+      if (!Object.hasOwn(attributes, name)) continue
+      const value = attributes[name]
+      if (value === undefined && this.removals !== undefined) {
+        removals ??= this.removals.slice()
+        removals.push(name)
+      }
+      if (elementAttrs === noFields) {
+        if (value !== undefined) elementAttrs = assoc(elementAttrs, name, value)
+      } else if (value !== undefined || Object.hasOwn(elementAttrs, name)) {
+        elementAttrs = withEntry(elementAttrs, name, value)
+      }
+    }
+    out.elementAttrs = elementAttrs
+    if (removals !== undefined) out.removals = removals
     return out
   }
   /**

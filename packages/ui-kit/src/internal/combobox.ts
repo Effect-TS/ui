@@ -1176,7 +1176,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         ? focusable.attr("name", props.name).attr("form", props.form).attr("required", flag(required))
         : focusable
       return field.forward((node) => {
-        const named = node.attrs.id === undefined ? node.attr("id", inputId) : node
+        const named = node.elementAttrs.id === undefined ? node.attr("id", inputId) : node
         return inPopup || inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
       })
     })
@@ -1219,8 +1219,8 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("aria-required", required ? "true" : undefined)
         .attr("aria-readonly", readOnly ? "true" : undefined)
         .forward((node) => {
-          const named = node.attr("id", node.attrs.id ?? triggerId)
-            .attr("aria-labelledby", node.attrs["aria-labelledby"] ?? (labelled ? labelId : undefined))
+          const named = node.attr("id", node.elementAttrs.id ?? triggerId)
+            .attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined))
           return inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
         })
     })
@@ -1275,7 +1275,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("role", "presentation")
         .popover("manual", shown)
         .forward((node) =>
-          node.attr("style", withStyle(node.attrs.style, open ? backdropBox : backdropBox + ";pointer-events:none"))
+          node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, open ? backdropBox : backdropBox + ";pointer-events:none")
+          )
         ))
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
@@ -1287,7 +1290,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("data-empty", flag(listEmpty))
         .popover("manual", shown)
         .forward((node) => {
-          const styled = node.attr("style", withStyle(node.attrs.style, positionerStyle))
+          const styled = node.attr("style", withStyle(node.elementAttrs.style, positionerStyle))
           return dismissable
             ? styled.children(
               dismissPart(new Html.Element<never, never, Html.EventsOf<"span">, HTMLSpanElement, "span">("span"))
@@ -1328,7 +1331,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("data-empty", flag(listEmpty))
         .forward((node) =>
           inPopup && labelled
-            ? node.attr("aria-labelledby", node.attrs["aria-labelledby"] ?? labelId)
+            ? node.attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelId)
             : node
         ))
 
@@ -1338,7 +1341,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .attr("id", arrowId)
         .attr("aria-hidden", "true")
         .attr("data-uncentered", flag(model.placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
 
     const list = p.part("div", (b) => {
       const decorated = b.attr("id", listId)

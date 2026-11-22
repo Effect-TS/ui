@@ -190,7 +190,7 @@ export const Meter = Component.define({
       // after it, so the width wins and the consumer's other declarations stay.
       indicator: p.part(
         "div",
-        (b) => b.forward((node) => node.attr("style", withStyle(node.attrs.style, indicatorSize(percentage))))
+        (b) => b.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, indicatorSize(percentage))))
       )
     }
   }

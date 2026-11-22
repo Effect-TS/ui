@@ -138,7 +138,7 @@ describe("Html", () => {
           return h.div.class("frame").children(node, needsClock)
         })
         expect(framed).type.toBe<Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
-        expect(framed.attr("title", "Go").children("Go")).type.toBe<
+        expect(framed.attr("title", "Go").attrs({ id: "go", "aria-label": undefined }).children("Go")).type.toBe<
           Html.Element<Msg, Clock, Html.EventsOf<"button">, HTMLButtonElement, "button">
         >()
         // A void element keeps its class, and still takes no children.

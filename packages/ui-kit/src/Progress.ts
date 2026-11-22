@@ -233,7 +233,7 @@ export const Progress = Component.define({
       track: p.part("div", state),
       indicator: p.part("div", (b) =>
         state(b)
-          .forward((node) => size === undefined ? node : node.attr("style", withStyle(node.attrs.style, size))))
+          .forward((node) => size === undefined ? node : node.attr("style", withStyle(node.elementAttrs.style, size))))
     }
   }
 })

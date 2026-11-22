@@ -118,7 +118,7 @@ describe("Html", () => {
     it("the root's own name and length never reach a builder or a node", () => {
       const h = helper()
       const node = ["attrs", "elementKey", "eventOptions", "handlers", "mount", "owned", "props", "refKey", "tag"]
-      const builder = [...node, "content", "hooks", "removals"].sort()
+      const builder = [...node.filter((key) => key !== "attrs"), "content", "elementAttrs", "hooks", "removals"].sort()
       assert.deepStrictEqual(Object.keys(h.form.attr("method", "post")).sort(), builder)
       assert.deepStrictEqual(Object.keys(h.form("a")).sort(), builder)
       assert.deepStrictEqual(Object.keys(View.toNode(h.form)).sort(), ["_tag", "children", ...node].sort())
@@ -128,23 +128,79 @@ describe("Html", () => {
       const h = helper()
       const base = h.button.attr("type", "button")
       const primary = base.class("primary")
-      assert.deepStrictEqual(base.attrs, { type: "button" })
-      assert.deepStrictEqual(primary.attrs, { type: "button", class: "primary" })
-      assert.deepStrictEqual(h.button.attrs, {})
+      assert.deepStrictEqual(base.elementAttrs, { type: "button" })
+      assert.deepStrictEqual(primary.elementAttrs, { type: "button", class: "primary" })
+      assert.deepStrictEqual(h.button.elementAttrs, {})
     })
 
     it("setting an attribute again moves it last, and removing one keeps the others in order", () => {
       const h = helper()
       const base = h.button.attr("type", "button").attr("title", "Go").attr("name", "go")
-      assert.deepStrictEqual(Object.entries(base.attr("type", "submit").attrs), [
+      assert.deepStrictEqual(Object.entries(base.attr("type", "submit").elementAttrs), [
         ["title", "Go"],
         ["name", "go"],
         ["type", "submit"]
       ])
-      assert.deepStrictEqual(Object.entries(base.attr("title", undefined).attrs), [["type", "button"], ["name", "go"]])
-      assert.strictEqual(base.attr("hidden", undefined).attrs, base.attrs)
-      assert.deepStrictEqual(Object.keys(base.attrs), ["type", "title", "name"])
+      assert.deepStrictEqual(Object.entries(base.attr("title", undefined).elementAttrs), [
+        ["type", "button"],
+        ["name", "go"]
+      ])
+      assert.strictEqual(base.attr("hidden", undefined).elementAttrs, base.elementAttrs)
+      assert.deepStrictEqual(Object.keys(base.elementAttrs), ["type", "title", "name"])
     })
+
+    it.effect("attrs sets and removes multiple attributes with the same semantics as chained attr calls", () =>
+      Effect.gen(function*() {
+        const h = helper()
+        const base = h.div.attrs({ id: "menu", role: "navigation", title: "Main" })
+        const chained = h.div.attr("id", "menu").attr("role", "navigation").attr("title", "Main")
+        assert.deepStrictEqual(Object.entries(base.elementAttrs), Object.entries(chained.elementAttrs))
+        assert.deepStrictEqual(View.build(base, []).attrs, View.build(chained, []).attrs)
+        assert.deepStrictEqual(h.div.elementAttrs, {})
+        const updated = base.attrs({ id: "nav", role: undefined, hidden: undefined, lang: "en" })
+        const updatedChained = chained
+          .attr("id", "nav")
+          .attr("role", undefined)
+          .attr("hidden", undefined)
+          .attr("lang", "en")
+        assert.deepStrictEqual(Object.entries(updated.elementAttrs), Object.entries(updatedChained.elementAttrs))
+        assert.strictEqual(base.attrs({}).elementAttrs, base.elementAttrs)
+        assert.strictEqual(base.attrs({ hidden: undefined }).elementAttrs, base.elementAttrs)
+        const withProto = Object.create({ inherited: "skip" }) as Record<string, string>
+        Object.defineProperty(withProto, "__proto__", { value: "a", enumerable: true })
+        withProto.id = "x"
+        assert.deepStrictEqual(Object.entries(h.div.attrs(withProto).elementAttrs), [["__proto__", "a"], ["id", "x"]])
+        const Trigger = Component.define({
+          name: "Trigger",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          parts: (_, p) => ({
+            root: p.part("button", (b) => b.attrs({ title: undefined, "data-state": "open" }))
+          })
+        })
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: (model) => model,
+          view: (_, h) =>
+            Trigger(h, { view: (trigger) => trigger.root(h.button.attrs({ id: "b", title: "old" })).children("Go") })
+        })
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        assert.strictEqual(
+          rendered.html,
+          "<!--[/Page--><button id=\"b\" data-state=\"open\">Go</button><!--]/Page-->"
+        )
+      }))
 
     it("a handler set again without options drops the ones it had", () => {
       const h = helper()
@@ -178,7 +234,7 @@ describe("Html", () => {
       assert.isFalse("tone" in plain.attr("id", "c"))
       assert.instanceOf(toned, Tagged)
       assert.strictEqual(toned.tone, "warm")
-      assert.deepStrictEqual(toned.attrs, { "data-tone": "warm", id: "b" })
+      assert.deepStrictEqual(toned.elementAttrs, { "data-tone": "warm", id: "b" })
       assert.strictEqual(toned.elementKey, "k")
     })
 
@@ -194,15 +250,18 @@ describe("Html", () => {
           height: undefined,
           display: ""
         })
-        assert.deepStrictEqual(h.div.attrs, {})
-        assert.deepStrictEqual(styled.attrs, { id: "styled", style: "color:red;margin-top:1rem;--spacing:2px" })
-        assert.deepStrictEqual(styled.style({ color: "blue" }).attrs, { id: "styled", style: "color:blue" })
-        assert.deepStrictEqual(styled.style({}).attrs, { id: "styled" })
-        assert.deepStrictEqual(styled.style({ color: false, width: null, height: undefined, display: "" }).attrs, {
-          id: "styled"
-        })
+        assert.deepStrictEqual(h.div.elementAttrs, {})
+        assert.deepStrictEqual(styled.elementAttrs, { id: "styled", style: "color:red;margin-top:1rem;--spacing:2px" })
+        assert.deepStrictEqual(styled.style({ color: "blue" }).elementAttrs, { id: "styled", style: "color:blue" })
+        assert.deepStrictEqual(styled.style({}).elementAttrs, { id: "styled" })
+        assert.deepStrictEqual(
+          styled.style({ color: false, width: null, height: undefined, display: "" }).elementAttrs,
+          {
+            id: "styled"
+          }
+        )
         assert.strictEqual(
-          h.div.style({ webkitLineClamp: "2", float: "left", "--Accent": "red" }).attrs.style,
+          h.div.style({ webkitLineClamp: "2", float: "left", "--Accent": "red" }).elementAttrs.style,
           "-webkit-line-clamp:2;float:left;--Accent:red"
         )
         const Page = Component.define({
@@ -268,28 +327,28 @@ describe("Html", () => {
 
     it("builders that set nothing share their empty records, and a chain call never writes to them", () => {
       const h = helper()
-      const empty = h.div.attrs
-      assert.strictEqual(h.span.attrs, empty)
+      const empty = h.div.elementAttrs
+      assert.strictEqual(h.span.elementAttrs, empty)
       assert.isTrue(Object.isFrozen(empty))
       const set = h.div.attr("id", "a").prop("hidden", true).on("click", add)
-      assert.deepStrictEqual(set.attrs, { id: "a" })
+      assert.deepStrictEqual(set.elementAttrs, { id: "a" })
       assert.deepStrictEqual(Object.keys(set.handlers), ["click"])
       assert.deepStrictEqual(Object.keys(empty), [])
-      assert.deepStrictEqual(h.div.attrs, {})
+      assert.deepStrictEqual(h.div.elementAttrs, {})
       assert.deepStrictEqual(h.div.props, {})
       assert.deepStrictEqual(h.div.handlers, {})
       // Removing the only attribute leaves a record with none.
-      assert.deepStrictEqual(set.attr("id", undefined).attrs, {})
+      assert.deepStrictEqual(set.attr("id", undefined).elementAttrs, {})
     })
 
     it("__proto__ is an attribute or property like any other name", () => {
       const h = helper()
       const set = h.div.attr("__proto__", "a").attr("id", "x").prop("__proto__", { hidden: true })
-      assert.deepStrictEqual(Object.entries(set.attrs), [["__proto__", "a"], ["id", "x"]])
+      assert.deepStrictEqual(Object.entries(set.elementAttrs), [["__proto__", "a"], ["id", "x"]])
       assert.deepStrictEqual(Object.entries(set.props), [["__proto__", { hidden: true }]])
       assert.strictEqual(Object.getPrototypeOf(set.props), Object.prototype)
       // Setting another attribute again copies `__proto__` across.
-      assert.deepStrictEqual(Object.entries(set.attr("id", "y").attrs), [["__proto__", "a"], ["id", "y"]])
+      assert.deepStrictEqual(Object.entries(set.attr("id", "y").elementAttrs), [["__proto__", "a"], ["id", "y"]])
     })
   })
 
@@ -310,19 +369,19 @@ describe("Html", () => {
 
   describe("Element.class", () => {
     it("still takes a single string", () => {
-      assert.deepStrictEqual(button().class("primary").attrs, { class: "primary" })
+      assert.deepStrictEqual(button().class("primary").elementAttrs, { class: "primary" })
     })
 
     it("joins several tokens and drops the falsy ones", () => {
       const saving = true
       const error: string | undefined = undefined
       const element = button().class("rounded px-3 py-1", saving && "opacity-50", error !== undefined && "ring-2")
-      assert.deepStrictEqual(element.attrs, { class: "rounded px-3 py-1 opacity-50" })
+      assert.deepStrictEqual(element.elementAttrs, { class: "rounded px-3 py-1 opacity-50" })
     })
 
     it("removes the attribute when every token is falsy", () => {
-      assert.deepStrictEqual(button().class(false, null, undefined, "").attrs, {})
-      assert.deepStrictEqual(button().class("primary").class(false).attrs, {})
+      assert.deepStrictEqual(button().class(false, null, undefined, "").elementAttrs, {})
+      assert.deepStrictEqual(button().class("primary").class(false).elementAttrs, {})
     })
 
     it.effect("renders the same classes on the server", () =>

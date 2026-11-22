@@ -734,9 +734,11 @@ export const ToastProvider = Component.define({
         .popover("manual", true)
         .onMount(TrackViewport({ empty, hovering: model.hovering }).pipe(Mount.map((fact) => Message[fact]())))
         .forward((node) => {
-          const labelled = node.attrs["aria-label"] === undefined ? node.attr("aria-label", "Notifications") : node
+          const labelled = node.elementAttrs["aria-label"] === undefined
+            ? node.attr("aria-label", "Notifications")
+            : node
           const styled = frontmost > 0
-            ? labelled.attr("style", withStyle(node.attrs.style, `--toast-frontmost-height:${frontmost}px`))
+            ? labelled.attr("style", withStyle(node.elementAttrs.style, `--toast-frontmost-height:${frontmost}px`))
             : labelled
           return alerts === undefined ? styled : styled.children(alerts)
         }))
@@ -772,7 +774,7 @@ export const ToastProvider = Component.define({
             )
           )
         )
-        .forward((node) => (vars === undefined ? node : node.attr("style", withStyle(node.attrs.style, vars))))
+        .forward((node) => (vars === undefined ? node : node.attr("style", withStyle(node.elementAttrs.style, vars))))
     })
     // The key keeps a toast's element, and its mount, as the list changes. A
     // part can't set it, so the builder gets it first.

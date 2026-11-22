@@ -398,7 +398,7 @@ export const Field = Component.define({
           // Read when the element is built, so a role chained after the
           // part, or another kit call's, is kept.
           .forward((node) =>
-            node.attrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
+            node.elementAttrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
           )
       ),
       member: formControl(false),

@@ -1364,7 +1364,7 @@ export const NumberField = Component.define({
         .forward((node) =>
           defaults(node, stepperDefaults[direction])
             .attr("aria-controls", inputId ?? p.id("input"))
-            .attr("style", withStyle(node.attrs.style, noSelect))
+            .attr("style", withStyle(node.elementAttrs.style, noSelect))
         )
     })
     const stepper = (direction: Direction) =>
@@ -1388,7 +1388,7 @@ export const NumberField = Component.define({
             cursorId
           })
         )
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, "touch-action:none;" + noSelect)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "touch-action:none;" + noSelect)))
     )
     const cursorPart = p.part((b) =>
       state(b)
@@ -1396,7 +1396,7 @@ export const NumberField = Component.define({
         .attr("role", "presentation")
         .attr("popover", "manual")
         .prop("popoverOpen", true)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, cursorBox)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, cursorBox)))
     )
     return {
       value: s.value,

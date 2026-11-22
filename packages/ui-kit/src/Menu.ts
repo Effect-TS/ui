@@ -2008,7 +2008,7 @@ export const Menu = Component.define({
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.attrs.style, open && !hovered ? backdropBox : backdropBox + ";pointer-events:none")
+            withStyle(node.elementAttrs.style, open && !hovered ? backdropBox : backdropBox + ";pointer-events:none")
           )
         ))
 
@@ -2019,7 +2019,7 @@ export const Menu = Component.define({
         .attr("data-anchor-hidden", flag(shown && model.placement?.anchorHidden))
         .attr("data-instant", instant)
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       const layered = modal ? decorated.children(open ? blocker.open : blocker.closed) : decorated
       if (!shown) return layered
       return layered.onMount(
@@ -2074,7 +2074,7 @@ export const Menu = Component.define({
         .forward((node) =>
           listed || inputDrawn
             ? node.attr("role", "presentation")
-            : menuRole(node).attr("aria-labelledby", node.attrs["aria-labelledby"] ?? labelledBy)
+            : menuRole(node).attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelledBy)
         ))
 
     const list = p.part("div", (b) => {
@@ -2082,7 +2082,7 @@ export const Menu = Component.define({
       return menuRole(b)
         .attr("id", listId)
         .attr("tabindex", "-1")
-        .forward((node) => node.attr("aria-labelledby", node.attrs["aria-labelledby"] ?? labelledBy))
+        .forward((node) => node.attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelledBy))
     })
 
     const arrowStyle = Positioning.arrowStyle(side)
@@ -2091,7 +2091,7 @@ export const Menu = Component.define({
         .attr("id", arrowId)
         .attr("aria-hidden", "true")
         .attr("data-uncentered", flag(model.placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
 
     const viewport = p.part("div", (b) =>
       b.attr("data-menu-viewport", "")
@@ -2137,7 +2137,7 @@ export const Menu = Component.define({
         .onClick(({ pointerType }) => Message.ClickedItem({ action, pointerType }))
         .onKeyDown(keyMessage(action), { preventDefault: true })
         .onKeyUp(({ key }) => key === " " ? Message.ReleasedSpace({ action }) : undefined)
-      return shownItem ? own : own.forward((node) => node.attr("style", withStyle(node.attrs.style, hiddenBox)))
+      return shownItem ? own : own.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, hiddenBox)))
     }
 
     const checkedAttrs = <B extends Attributed<B>>(builder: B, checked: boolean): B =>

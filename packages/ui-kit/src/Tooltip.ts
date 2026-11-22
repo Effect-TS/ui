@@ -701,7 +701,7 @@ export const Tooltip = Component.define({
         .attr("role", "presentation")
         .attr("data-anchor-hidden", flag(shown && placement?.anchorHidden))
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, style)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, style)))
       const hoverable = p.props.disableHoverablePopup === true
         ? decorated
         : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
@@ -718,7 +718,7 @@ export const Tooltip = Component.define({
         .attr("id", arrowId)
         .attr("aria-hidden", "true")
         .attr("data-uncentered", flag(placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
     return {
       open: shown,
       side,

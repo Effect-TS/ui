@@ -873,12 +873,14 @@ export const OTPField = Component.define({
         .onFocus(Message.FocusedSlot({ index }))
         .onBlur(Message.BlurredSlot({ index }))
         .forward((node) => {
-          const typed = node.attrs.type === undefined
+          const typed = node.elementAttrs.type === undefined
             ? node.attr("type", props.mask === true ? "password" : "text")
             : node
           // Only a slot drawn inside another component finds a name here: that component renders after
           // the root is built. The root names the slots among its own children itself.
-          return inherited === undefined || isNamed(typed.attrs) ? typed : typed.attr("aria-labelledby", inherited)
+          return inherited === undefined || isNamed(typed.elementAttrs)
+            ? typed
+            : typed.attr("aria-labelledby", inherited)
         })
     })
     return {

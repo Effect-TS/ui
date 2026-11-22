@@ -13,7 +13,7 @@ export const ownStyle =
     node.attr("style", withStyle(node.attrs.style, own))
 
 export const idOf = (builder: unknown): string | null => {
-  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
+  const id = (builder as { readonly elementAttrs?: Readonly<Record<string, string>> | undefined }).elementAttrs?.id
   return id === undefined || id === "" ? null : id
 }
 
@@ -31,12 +31,12 @@ export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B
 }
 
-export const defaults = <B extends Attributed<B> & { readonly attrs: Readonly<Record<string, string>> }>(
+export const defaults = <B extends Attributed<B> & { readonly elementAttrs: Readonly<Record<string, string>> }>(
   node: B,
   attrs: Readonly<Record<string, string>>
 ): B =>
   Object.entries(attrs).reduce(
-    (out, [name, value]) => node.attrs[name] === undefined ? out.attr(name, value) : out,
+    (out, [name, value]) => node.elementAttrs[name] === undefined ? out.attr(name, value) : out,
     node
   )
 

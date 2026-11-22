@@ -1137,9 +1137,9 @@ export const Dialog = Component.define({
         .popover("manual", shown)
         .forward((node) =>
           node
-            .attr("style", withStyle(node.attrs.style, portalBox))
-            .attr("aria-labelledby", withTokens(node.attrs["aria-labelledby"], titleId))
-            .attr("aria-describedby", withTokens(node.attrs["aria-describedby"], descriptionId))
+            .attr("style", withStyle(node.elementAttrs.style, portalBox))
+            .attr("aria-labelledby", withTokens(node.elementAttrs["aria-labelledby"], titleId))
+            .attr("aria-describedby", withTokens(node.elementAttrs["aria-describedby"], descriptionId))
         )
         .children(modal === true && (open ? layer : inertLayer))
       if (!shown) return dialog
@@ -1176,7 +1176,7 @@ export const Dialog = Component.define({
         .attr("role", "presentation")
         .attr("data-dialog-backdrop", portalId)
         .forward((node) =>
-          node.attr("style", withStyle(node.attrs.style, open ? noSelect : noSelect + ";" + passThrough))
+          node.attr("style", withStyle(node.elementAttrs.style, open ? noSelect : noSelect + ";" + passThrough))
         ))
     const backdrop = View.wrapPart(
       backdropPart,
@@ -1188,18 +1188,18 @@ export const Dialog = Component.define({
     const viewport = p.part("div", (b) =>
       nesting(b)
         .attr("role", "presentation")
-        .forward((node) => open ? node : node.attr("style", withStyle(node.attrs.style, passThrough))))
+        .forward((node) => open ? node : node.attr("style", withStyle(node.elementAttrs.style, passThrough))))
     const popup = p.part("div", (b) =>
       nesting(b)
         .attr("id", popupId)
         .attr("tabindex", "-1")
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, `--nested-dialogs:${nestedDialogs}`))))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, `--nested-dialogs:${nestedDialogs}`))))
 
     const titlePart = p.part(
       ["h1", "h2", "h3", "h4", "h5", "h6"],
       (b, id: string) =>
         b.attr("id", id).forward((node) => {
-          titleId = node.attrs.id ?? id
+          titleId = node.elementAttrs.id ?? id
           return node
         })
     )
@@ -1212,7 +1212,7 @@ export const Dialog = Component.define({
     )
     const descriptionPart = p.part("p", (b, id: string) =>
       b.attr("id", id).forward((node) => {
-        descriptionId = node.attrs.id ?? id
+        descriptionId = node.elementAttrs.id ?? id
         return node
       }))
     const description = View.wrapPart(
