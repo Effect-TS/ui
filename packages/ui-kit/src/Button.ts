@@ -161,9 +161,11 @@ export const Button = <Msg, R = never>(
       )
     }
     const button = node
-      .attr("type", props.type ?? "button")
-      .attr("aria-disabled", focusable ? "true" : undefined)
-      .attr("data-disabled", flag(disabled))
+      .attrs({
+        type: props.type ?? "button",
+        "aria-disabled": focusable ? "true" : undefined,
+        "data-disabled": flag(disabled)
+      })
       .disabled(disabled && !focusable)
     // A focusable disabled button keeps receiving clicks, so it cancels
     // them, and a submit button doesn't submit its form. A natively

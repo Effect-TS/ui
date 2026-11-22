@@ -119,19 +119,29 @@ describe("NumberField", () => {
       const custom = yield* scene({ value: 5, max: 5, disabled: true }, {
         elements: Html,
         view: (numberField, h) =>
-          numberField.root(h.div.class("root").attr("data-disabled", "no").attr("data-scrubbing", "yes")).children(
+          numberField.root(h.div.class("root").attrs({ "data-disabled": "no", "data-scrubbing": "yes" })).children(
             numberField.scrubArea({
-              element: h.span.class("scrub").attr("role", "button").attr("style", "cursor:ew-resize")
+              element: h.span.class("scrub").attrs({ role: "button", style: "cursor:ew-resize" })
             }),
             numberField.group(h.div.class("group").attr("role", "toolbar")).children(
               numberField.decrement({
-                element: h.button.class("decrement").attr("aria-label", "Less").attr("tabindex", "0")
-                  .attr("aria-controls", "other").attr("type", "submit").attr("style", "color:red").disabled(true)
+                element: h.button.class("decrement").attrs({
+                  "aria-label": "Less",
+                  tabindex: "0",
+                  "aria-controls": "other",
+                  type: "submit",
+                  style: "color:red"
+                }).disabled(true)
               }),
               numberField.input(
-                h.input.class("input").attr("id", "amount").attr("type", "number").attr("inputmode", "tel")
-                  .attr("aria-roledescription", "Amount").attr("autocomplete", "transaction-amount")
-                  .attr("readonly", "").value("nine").disabled(false)
+                h.input.class("input").attrs({
+                  id: "amount",
+                  type: "number",
+                  inputmode: "tel",
+                  "aria-roledescription": "Amount",
+                  autocomplete: "transaction-amount",
+                  readonly: ""
+                }).value("nine").disabled(false)
               ),
               numberField.increment({ element: h.button.class("increment").attr("aria-disabled", "false") })
             )

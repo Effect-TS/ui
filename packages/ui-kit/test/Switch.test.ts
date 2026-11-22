@@ -100,17 +100,19 @@ describe("Switch", () => {
   it("the root keeps the consumer's attributes, but the switch's own win, present or absent", () => {
     const element = h.button
       .class("switch")
-      .attr("aria-label", "Mute")
-      .attr("type", "submit")
-      .attr("role", "checkbox")
-      .attr("aria-checked", "mixed")
-      .attr("aria-readonly", "true")
-      .attr("aria-disabled", "true")
-      .attr("aria-required", "true")
-      .attr("data-checked", "")
-      .attr("data-disabled", "")
-      .attr("data-readonly", "")
-      .attr("data-required", "")
+      .attrs({
+        "aria-label": "Mute",
+        type: "submit",
+        role: "checkbox",
+        "aria-checked": "mixed",
+        "aria-readonly": "true",
+        "aria-disabled": "true",
+        "aria-required": "true",
+        "data-checked": "",
+        "data-disabled": "",
+        "data-readonly": "",
+        "data-required": ""
+      })
 
     // An enabled, optional, unchecked switch removes every state attribute
     // the consumer set, as it doesn't report those states.
@@ -144,10 +146,12 @@ describe("Switch", () => {
 
   it("the thumb drops a state the switch doesn't have, and its result is another call's element", () => {
     const element = h.span.class("thumb")
-      .attr("data-checked", "")
-      .attr("data-disabled", "")
-      .attr("data-readonly", "")
-      .attr("data-required", "")
+      .attrs({
+        "data-checked": "",
+        "data-disabled": "",
+        "data-readonly": "",
+        "data-required": ""
+      })
     const thumbOf = (checked: boolean, span: SwitchSpan<never>) =>
       View.build(Switch(h, { props: { checked }, view: (parts) => parts.thumb(span).children("on") }), [])
     const finished = thumbOf(false, element)

@@ -110,7 +110,7 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
-import { flag } from "./internal/attributes.ts"
+import { type Attributed, flag } from "./internal/attributes.ts"
 import { field } from "./internal/field.ts"
 
 /**
@@ -188,18 +188,20 @@ const interactive = (props: CheckboxProps): boolean => props.disabled !== true &
 // The state attributes, the same on the root and the indicator so either
 // one can be styled on its own. An indeterminate checkbox is neither
 // checked nor unchecked.
-const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(
+const state = <B extends Attributed<B>>(
   builder: B,
   props: CheckboxProps
 ): B => {
   const indeterminate = props.indeterminate === true
   return builder
-    .attr("data-checked", flag(!indeterminate && props.checked))
-    .attr("data-unchecked", flag(!indeterminate && !props.checked))
-    .attr("data-indeterminate", flag(indeterminate))
-    .attr("data-disabled", flag(props.disabled))
-    .attr("data-readonly", flag(props.readOnly))
-    .attr("data-required", flag(props.required))
+    .attrs({
+      "data-checked": flag(!indeterminate && props.checked),
+      "data-unchecked": flag(!indeterminate && !props.checked),
+      "data-indeterminate": flag(indeterminate),
+      "data-disabled": flag(props.disabled),
+      "data-readonly": flag(props.readOnly),
+      "data-required": flag(props.required)
+    })
 }
 
 /**
@@ -262,15 +264,17 @@ export const Checkbox = Component.define({
       required: p.props.required === true,
       root: p.part("button", (b) =>
         state(b, p.props)
-          // Inside a form a button submits by default.
-          .attr("type", "button")
-          .attr("role", "checkbox")
-          .attr("aria-checked", indeterminate ? "mixed" : String(p.props.checked))
-          .attr("aria-readonly", p.props.readOnly === true ? "true" : undefined)
-          .attr("aria-required", p.props.required === true ? "true" : undefined)
-          // Never set: the native `disabled` reports it. Removed, so the
-          // consumer's can't report a state the props don't have.
-          .attr("aria-disabled", undefined)
+          .attrs({
+            // Inside a form a button submits by default.
+            type: "button",
+            role: "checkbox",
+            "aria-checked": indeterminate ? "mixed" : String(p.props.checked),
+            "aria-readonly": p.props.readOnly === true ? "true" : undefined,
+            "aria-required": p.props.required === true ? "true" : undefined,
+            // Never set: the native `disabled` reports it. Removed, so the
+            // consumer's can't report a state the props don't have.
+            "aria-disabled": undefined
+          })
           .disabled(p.props.disabled === true)
           .onClick(CheckboxMessage.ClickedRoot())
           .onKeyDown(

@@ -36,7 +36,7 @@ const Plain = Component.define(app).make({
   view: (rows, h) =>
     h.ul.children(rows.map((row) =>
       h.li.key(row.id).class("row").attr("data-done", row.done ? "" : undefined).children(
-        h.button.attr("aria-expanded", "false").attr("aria-controls", h.id("panel", row.id))
+        h.button.attrs({ "aria-expanded": "false", "aria-controls": h.id("panel", row.id) })
           .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
         h.span(row.done ? "done" : "todo"),
         h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
@@ -57,7 +57,7 @@ const NormalRow = Component.define({
   update: (open) => !open,
   view: (open, h) =>
     h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
-      h.button.attr("aria-expanded", String(open)).attr("aria-controls", h.id("panel")).onClick(flip)
+      h.button.attrs({ "aria-expanded": String(open), "aria-controls": h.id("panel") }).onClick(flip)
         .children(h.props.row.label),
       h.span(h.props.row.done ? "done" : "todo"),
       h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children("details")
@@ -83,7 +83,7 @@ const Disclosure = Component.define({
     open,
     trigger: p.part(
       "button",
-      (b) => b.attr("aria-expanded", String(open)).attr("aria-controls", p.id("panel")).onClick(flip)
+      (b) => b.attrs({ "aria-expanded": String(open), "aria-controls": p.id("panel") }).onClick(flip)
     ),
     panel: p.part("div", (b) => b.id(p.id("panel")).attr("hidden", open ? undefined : ""))
   })
@@ -263,12 +263,14 @@ const ReaderRow = Component.define({
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
-        h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
-          .attr("data-open", h.shared.provider.open === h.props.row.id ? "" : undefined).children(
-            disclosure.trigger(h.button).children(h.props.row.label),
-            h.span(h.props.row.done ? "done" : "todo"),
-            disclosure.panel(h.div).children("details")
-          )
+        h.li.class("row").attrs({
+          "data-done": h.props.row.done ? "" : undefined,
+          "data-open": h.shared.provider.open === h.props.row.id ? "" : undefined
+        }).children(
+          disclosure.trigger(h.button).children(h.props.row.label),
+          h.span(h.props.row.done ? "done" : "todo"),
+          disclosure.panel(h.div).children("details")
+        )
     })
 })
 const OwnerReaders = Component.define(app).make({

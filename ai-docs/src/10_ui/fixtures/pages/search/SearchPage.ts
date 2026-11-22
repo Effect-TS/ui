@@ -93,7 +93,7 @@ export const SearchPageNoDeps = Component.define({
       // and where the caret is. The browser Router writes the address bar at
       // most every 200 ms, to stay under the browsers' limits on history
       // calls.
-      h.input.attr("type", "search").attr("aria-label", "Search").value(q ?? "")
+      h.input.attrs({ type: "search", "aria-label": "Search" }).value(q ?? "")
         .onInput(({ value }) => SearchPageMessage.UpdatedSearch({ text: value })),
       h.select.attr("aria-label", "Order").value(sort)
         .onChange(({ value }) => SearchPageMessage.SelectedOrder({ sort: value === "desc" ? "desc" : "asc" }))

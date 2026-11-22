@@ -48,7 +48,7 @@
  *     h.div(
  *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),
- *         h.input.attr("id", "zip").attr("name", "zip").value(model.zip)
+ *         h.input.attrs({ id: "zip", name: "zip" }).value(model.zip)
  *           .onInput(({ value }) => Message.UpdatedZip({ zip: value })),
  *         h.button.children("Get Weather")
  *       ),

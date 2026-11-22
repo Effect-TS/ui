@@ -53,8 +53,8 @@ export const Confirm = Component.define({
           h.form.attr("method", "dialog").onSubmit(({ entries }) =>
             ConfirmMessage.Chosen({ choice: entries.find(([name]) => name === "choice")?.[1] ?? "" })
           ).children(
-            h.button.attr("name", "choice").attr("value", "keep").children("Keep"),
-            h.button.attr("name", "choice").attr("value", "delete").children("Delete")
+            h.button.attrs({ name: "choice", value: "keep" }).children("Keep"),
+            h.button.attrs({ name: "choice", value: "delete" }).children("Delete")
           )
         )
     )

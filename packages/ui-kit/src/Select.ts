@@ -1274,7 +1274,7 @@ export const Select = Component.define({
 
     const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
     const placed = <B extends Attributed<B>>(builder: B): B =>
-      states(builder).attr("data-side", shownSide).attr("data-align", align)
+      states(builder).attrs({ "data-side": shownSide, "data-align": align })
 
     const inputs = formInputs(p, {
       name: props.name,
@@ -1296,21 +1296,23 @@ export const Select = Component.define({
 
     const trigger = p.part("button", (b) =>
       b.ref(Trigger)
-        .attr("id", triggerId)
-        .attr("type", "button")
-        .attr("role", "combobox")
-        .attr("aria-haspopup", "listbox")
-        .attr("aria-expanded", String(open))
-        .attr("aria-readonly", readOnly ? "true" : undefined)
-        .attr("aria-required", required ? "true" : undefined)
-        .attr("aria-disabled", undefined)
-        .attr("data-popup-open", flag(open))
-        .attr("data-pressed", flag(open))
-        .attr("data-popup-side", shown ? side : undefined)
-        .attr("data-disabled", flag(disabled))
-        .attr("data-readonly", flag(readOnly))
-        .attr("data-required", flag(required))
-        .attr("data-placeholder", flag(!filled))
+        .attrs({
+          id: triggerId,
+          type: "button",
+          role: "combobox",
+          "aria-haspopup": "listbox",
+          "aria-expanded": String(open),
+          "aria-readonly": readOnly ? "true" : undefined,
+          "aria-required": required ? "true" : undefined,
+          "aria-disabled": undefined,
+          "data-popup-open": flag(open),
+          "data-pressed": flag(open),
+          "data-popup-side": shown ? side : undefined,
+          "data-disabled": flag(disabled),
+          "data-readonly": flag(readOnly),
+          "data-required": flag(required),
+          "data-placeholder": flag(!filled)
+        })
         .disabled(disabled)
         .on("mousedown", ({ button, pointerType }) =>
           button === 0 && pointerType !== "touch" ? SelectMessage.PressedTrigger({ pointerType }) : undefined)
@@ -1330,33 +1332,36 @@ export const Select = Component.define({
         )
         .forward((node) => {
           const named = node
-            .attr("aria-controls", open ? (listed ? listId : popupId) : undefined)
-            .attr("aria-labelledby", node.attrs["aria-labelledby"] ?? (labelled ? labelId : undefined))
+            .attrs({
+              "aria-controls": open ? (listed ? listId : popupId) : undefined,
+              "aria-labelledby": node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined)
+            })
           return inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
         }))
 
     const value = p.part("span", (b) =>
-      b.attr("data-select-value", "")
-        .attr("data-placeholder", flag(!filled))
+      b.attrs({ "data-select-value": "", "data-placeholder": flag(!filled) })
         .forward((node) => node.children.length > 0 ? node : node.children(text)))
 
-    const icon = p.part("span", (b) => b.attr("aria-hidden", "true").attr("data-popup-open", flag(open)))
+    const icon = p.part("span", (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) }))
 
     const backdrop = p.part("div", (b) =>
       states(b)
         .attr("role", "presentation")
         .popover("manual", shown)
         .forward((node) =>
-          node.attr("style", withStyle(node.attrs.style, open ? backdropBox : backdropBox + ";pointer-events:none"))
+          node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, open ? backdropBox : backdropBox + ";pointer-events:none")
+          )
         ))
 
     const positionerStyle = aligned ? alignedBox : Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
-        .attr("role", "presentation")
-        .attr("data-anchor-hidden", flag(shown && !aligned && model.placement?.anchorHidden))
+        .attrs({ role: "presentation", "data-anchor-hidden": flag(shown && !aligned && model.placement?.anchorHidden) })
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       const layered = modal ? decorated.children(open ? blocking.open : blocking.closed) : decorated
       if (!shown) return layered
       const alignItem = props.items.find((item) => chosen.has(item.value)) ?? props.items[0]
@@ -1386,14 +1391,15 @@ export const Select = Component.define({
 
     const listbox = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("role", "listbox")
-        .attr("aria-multiselectable", multiple ? "true" : undefined)
-        .attr("aria-readonly", readOnly ? "true" : undefined)
+        .attrs({
+          role: "listbox",
+          "aria-multiselectable": multiple ? "true" : undefined,
+          "aria-readonly": readOnly ? "true" : undefined
+        })
 
     const popup = p.part("div", (b) =>
       placed(b)
-        .attr("id", popupId)
-        .attr("tabindex", "-1")
+        .attrs({ id: popupId, tabindex: "-1" })
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta, shift }) =>
             composing
@@ -1407,22 +1413,24 @@ export const Select = Component.define({
         .onKeyUp(({ key }) => key === " " ? SelectMessage.ReleasedSpace() : undefined)
         .forward((node) => {
           const own = listed ? node.attr("role", "presentation") : listbox(node)
-          return aligned && !listed ? own.attr("style", withStyle(node.attrs.style, scrolling)) : own
+          return aligned && !listed ? own.attr("style", withStyle(node.elementAttrs.style, scrolling)) : own
         }))
 
     const list = p.part("div", (b) => {
       listed = true
       const own = listbox(b).attr("id", listId)
-      return aligned ? own.forward((node) => node.attr("style", withStyle(node.attrs.style, scrolling))) : own
+      return aligned ? own.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, scrolling))) : own
     })
 
     const arrowStyle = Positioning.arrowStyle(side)
     const arrowPart = p.part("div", (b) =>
       placed(b)
-        .attr("id", arrowId)
-        .attr("aria-hidden", "true")
-        .attr("data-uncentered", flag(model.placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .attrs({
+          id: arrowId,
+          "aria-hidden": "true",
+          "data-uncentered": flag(model.placement?.arrowUncentered)
+        })
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
     const arrow = View.wrapPart(
       arrowPart,
       <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined =>
@@ -1435,14 +1443,16 @@ export const Select = Component.define({
       const active = highlighted === value
       const off = option.disabled === true
       return b
-        .attr("id", itemId(value))
-        .attr("role", "option")
-        .attr("aria-selected", String(selected))
-        .attr("aria-disabled", off ? "true" : undefined)
-        .attr("tabindex", open && active ? "0" : "-1")
-        .attr("data-selected", flag(selected))
-        .attr("data-highlighted", flag(active))
-        .attr("data-disabled", flag(off))
+        .attrs({
+          id: itemId(value),
+          role: "option",
+          "aria-selected": String(selected),
+          "aria-disabled": off ? "true" : undefined,
+          tabindex: open && active ? "0" : "-1",
+          "data-selected": flag(selected),
+          "data-highlighted": flag(active),
+          "data-disabled": flag(off)
+        })
         .on("mouseenter", () => hovers ? SelectMessage.EnteredItem({ value }) : undefined)
         .on("mouseleave", () => hovers ? SelectMessage.LeftItem() : undefined)
         .on("mousedown", SelectMessage.PressedItem())
@@ -1467,19 +1477,21 @@ export const Select = Component.define({
         chosen.has(itemOf(value).value) || keepMounted === true ? indicatorPart(element) : undefined
     )
 
-    const group = p.part("div", (b, key: string) => b.attr("role", "group").attr("aria-labelledby", groupLabelId(key)))
-    const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)).attr("aria-hidden", "true"))
+    const group = p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
+    const groupLabel = p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const scrollArrow = (direction: "up" | "down") => {
       const visible = (direction === "up" ? model.scrollUp : model.scrollDown) && !touch && shown
       const part = p.part("div", (b) =>
-        b.attr("aria-hidden", "true")
-          .attr("data-select-scroll-arrow", direction)
-          .attr("data-direction", direction)
-          .attr("data-side", shownSide)
-          .attr("data-visible", flag(visible))
-          .forward((node) => node.attr("style", withStyle(node.attrs.style, "position:absolute"))))
+        b.attrs({
+          "aria-hidden": "true",
+          "data-select-scroll-arrow": direction,
+          "data-direction": direction,
+          "data-side": shownSide,
+          "data-visible": flag(visible)
+        })
+          .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "position:absolute"))))
       return View.wrapPart(
         part,
         <B extends View.PartTarget<"div">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined =>

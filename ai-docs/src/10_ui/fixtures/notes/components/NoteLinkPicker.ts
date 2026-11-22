@@ -67,7 +67,7 @@ export const NoteLinkPickerNoDeps = Component.define({
                   : `Linked: ${notes.get(model.linked)?.title ?? "a removed note"}`
               ),
               listbox.popup(h.div.attr("aria-label", "Link to a note")).children(
-                listbox.input(h.input.attr("aria-label", "Filter notes").attr("placeholder", "Filter notes")),
+                listbox.input(h.input.attrs({ "aria-label": "Filter notes", placeholder: "Filter notes" })),
                 listbox.list(h.ul.attr("aria-label", "Notes")).children(
                   // Each row is drawn here, with the excerpt the Listbox never
                   // sees, looked up by the row's id.

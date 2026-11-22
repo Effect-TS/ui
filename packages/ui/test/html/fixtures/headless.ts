@@ -117,9 +117,11 @@ export const Menu = MenuDef.make({
       visible,
       trigger: p.part("button", (b) =>
         b.ref(Trigger)
-          .attr("aria-haspopup", "menu")
-          .attr("aria-expanded", String(model.open))
-          .attr("aria-controls", p.id("popup"))
+          .attrs({
+            "aria-haspopup": "menu",
+            "aria-expanded": String(model.open),
+            "aria-controls": p.id("popup")
+          })
           .onClick(MenuMessage.Toggle())
           .onKeyDown(
             ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.Key({ key }) : undefined,
@@ -134,9 +136,11 @@ export const Menu = MenuDef.make({
           .onToggle(({ open }) => MenuMessage.Toggled({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
-          .attr("role", "combobox")
-          .attr("aria-controls", p.id("popup"))
-          .attr("aria-activedescendant", active === null ? undefined : p.id("item", active))
+          .attrs({
+            role: "combobox",
+            "aria-controls": p.id("popup"),
+            "aria-activedescendant": active === null ? undefined : p.id("item", active)
+          })
           .value(model.query)
           .onInput(({ value }) => MenuMessage.Query({ value }))
           .onKeyDown(
@@ -148,9 +152,11 @@ export const Menu = MenuDef.make({
           )),
       item: p.part("li", (b, item: Item) =>
         b.id(p.id("item", item.id))
-          .attr("role", "menuitem")
-          .attr("aria-disabled", item.disabled === true ? "true" : undefined)
-          .attr("data-active", active === item.id ? "" : undefined)
+          .attrs({
+            role: "menuitem",
+            "aria-disabled": item.disabled === true ? "true" : undefined,
+            "data-active": active === item.id ? "" : undefined
+          })
           .onClick(item.disabled === true ? () => undefined : MenuMessage.Pick({ id: item.id })))
     }
   }

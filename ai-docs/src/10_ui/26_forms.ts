@@ -215,8 +215,11 @@ export const SignupForm = Component.define({
       h.div.children(
         h.label.children(
           label,
-          h.input.attr("type", type).attr("aria-invalid", field._tag === "Invalid" ? "true" : undefined)
-            .attr("aria-required", field.required ? "true" : undefined)
+          h.input.attrs({
+            type,
+            "aria-invalid": field._tag === "Invalid" ? "true" : undefined,
+            "aria-required": field.required ? "true" : undefined
+          })
             .value(value)
             .disabled(model.submitting)
             .onInput(({ value }) => onInput(value))

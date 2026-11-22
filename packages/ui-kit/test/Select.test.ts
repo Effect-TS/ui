@@ -23,22 +23,33 @@ const standIn = {
     h.div(
       select.label(h.div.class("label")).children("Theme"),
       select.trigger(
-        h.button.class("trigger").attr("id", "mine").attr("role", "button").attr("aria-expanded", "true")
-          .attr("data-popup-open", "x").attr("data-placeholder", "x").attr("data-note", "kept")
+        h.button.class("trigger").attrs({
+          id: "mine",
+          role: "button",
+          "aria-expanded": "true",
+          "data-popup-open": "x",
+          "data-placeholder": "x",
+          "data-note": "kept"
+        })
       ).children(
         select.value(h.span.class("value")),
         select.icon(h.span.class("icon"))
       ),
       select.backdrop(h.div.class("backdrop")),
       select.positioner(h.div.class("positioner").attr("role", "dialog")).children(
-        select.popup(h.div.class("popup").attr("role", "menu").attr("tabindex", "0")).children(
+        select.popup(h.div.class("popup").attrs({ role: "menu", tabindex: "0" })).children(
           select.scrollUpArrow(h.div.class("up")),
           select.group(h.div.class("group"), "all").children(
             select.groupLabel(h.div.class("group-label"), "all").children("All"),
             ...items.map(({ label, value }) =>
               select.item(
-                h.div.attr("data-testid", value).attr("role", "menuitem").attr("aria-selected", "true")
-                  .attr("data-selected", "x").attr("data-highlighted", "x"),
+                h.div.attrs({
+                  "data-testid": value,
+                  role: "menuitem",
+                  "aria-selected": "true",
+                  "data-selected": "x",
+                  "data-highlighted": "x"
+                }),
                 value
               ).children(
                 select.itemText(h.div).children(label),

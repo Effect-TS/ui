@@ -693,10 +693,11 @@ const containerOf = (viewport: HTMLElement, name: string): HTMLElement | null =>
 }
 
 const container = new Html.Element<never>("div")
-const previousContainer = container.key("previous").attr("data-previous", "").attr("inert", "").attr(
-  "style",
-  "position:absolute"
-)
+const previousContainer = container.key("previous").attrs({
+  "data-previous": "",
+  inert: "",
+  style: "position:absolute"
+})
 const previousNode = View.toNode(previousContainer)
 const endingNode = View.toNode(previousContainer.attr("data-ending-style", ""))
 
@@ -895,8 +896,7 @@ export const PopoverTrigger = <Msg, R = never>(
   return DialogTrigger(h, { element: options.element, props: { open, popupId } })
     .forward((node) =>
       node
-        .attr("data-pressed", flag(open && pressed === true))
-        .attr("data-disabled", flag(disabled))
+        .attrs({ "data-pressed": flag(open && pressed === true), "data-disabled": flag(disabled) })
         .disabled(disabled === true)
     )
     .onMount(TrackDetachedTrigger({ popupId, hover: hoverOf(options.props) }))
@@ -1041,16 +1041,18 @@ export const Popover = Component.define({
     const align = placement?.align ?? tracked.options.align
     let triggers = 0
 
-    const placed = <B extends Attributed<B>>(builder: B): B => builder.attr("data-side", side).attr("data-align", align)
+    const placed = <B extends Attributed<B>>(builder: B): B => builder.attrs({ "data-side": side, "data-align": align })
     const shown = <B extends Attributed<B>>(builder: B): B =>
-      placed(builder).attr("data-open", flag(open)).attr("data-closed", flag(!open))
+      placed(builder).attrs({ "data-open": flag(open), "data-closed": flag(!open) })
 
     const triggerPart = p.part(
       "button",
       (b, key: string, hover: Hover | null, disabled: boolean) => {
         const button = b
-          .attr("data-pressed", flag(open && active === key && reason === "trigger-press"))
-          .attr("data-disabled", flag(disabled))
+          .attrs({
+            "data-pressed": flag(open && active === key && reason === "trigger-press"),
+            "data-disabled": flag(disabled)
+          })
           .disabled(disabled)
         return hover === null ? button : button
           .on(
@@ -1068,23 +1070,27 @@ export const Popover = Component.define({
     const portalPart = p.part("dialog", (b) =>
       b.forward((node) =>
         tracked.positionMethod === "absolute"
-          ? node.attr("style", withStyle(node.attrs.style, "position:absolute;inset:0 auto auto 0"))
+          ? node.attr("style", withStyle(node.elementAttrs.style, "position:absolute;inset:0 auto auto 0"))
           : node
       ))
     const backdropPart = p.part(
       "div",
       (b) =>
-        b.forward((node) => byHover ? node.attr("style", withStyle(node.attrs.style, "pointer-events:none")) : node)
+        b.forward((node) =>
+          byHover ? node.attr("style", withStyle(node.elementAttrs.style, "pointer-events:none")) : node
+        )
     )
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
       const decorated = shown(b)
-        .attr("id", positionerId)
-        .attr("role", "presentation")
-        .attr("data-anchor-hidden", flag(open && placement?.anchorHidden))
+        .attrs({
+          id: positionerId,
+          role: "presentation",
+          "data-anchor-hidden": flag(open && placement?.anchorHidden)
+        })
         .on("mouseenter", PopoverMessage.EnteredPositioner())
         .on("mouseleave", PopoverMessage.LeftPositioner())
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, positionerStyle)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
       return open
         ? decorated.onMount(
           Positioning.TrackPosition(tracked).pipe(
@@ -1096,10 +1102,12 @@ export const Popover = Component.define({
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       shown(b)
-        .attr("id", arrowId)
-        .attr("aria-hidden", "true")
-        .attr("data-uncentered", flag(placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .attrs({
+          id: arrowId,
+          "aria-hidden": "true",
+          "data-uncentered": flag(placement?.arrowUncentered)
+        })
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
 
     return p.child(Dialog, {
       props: {
@@ -1137,17 +1145,21 @@ export const Popover = Component.define({
         const transition = open ? model.transition : null
         const viewportPart = p.part("div", (b) => {
           const viewport = b
-            .attr("data-activation-direction", transition?.direction ?? undefined)
-            .attr("data-transitioning", flag(transition !== null))
-            .attr("data-instant", instant)
+            .attrs({
+              "data-activation-direction": transition?.direction ?? undefined,
+              "data-transitioning": flag(transition !== null),
+              "data-instant": instant
+            })
             .forward((node) => {
               const built = View.build(node, [])
               const current = {
                 ...View.build(
                   container
                     .key("current:" + (active ?? ""))
-                    .attr("data-current", "")
-                    .attr("data-starting-style", flag(transition !== null && !transition.entered)),
+                    .attrs({
+                      "data-current": "",
+                      "data-starting-style": flag(transition !== null && !transition.entered)
+                    }),
                   []
                 ),
                 children: built.children

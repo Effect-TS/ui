@@ -327,8 +327,8 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: (model) => model,
         view: (_, h) =>
-          h.div.attr("TYPE", "first").attr("type", "last").children(
-            h.el("x-safe").attr("DATA-X", "first").attr("data-x", "last"),
+          h.div.attrs({ TYPE: "first", type: "last" }).children(
+            h.el("x-safe").attrs({ "DATA-X": "first", "data-x": "last" }),
             h.select.value("chosen").children(h.option.attr("VALUE", "chosen").children("label")),
             h.el("svg").attr("viewBox", "0 0 10 10").children(
               h.el("linearGradient").attr("gradientUnits", "userSpaceOnUse")
@@ -482,9 +482,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (step, h) => {
           const { loser, winner } = steps[step]!
           return h.div.children(
-            h.div.attr("DATA-X", loser).attr("data-x", winner),
-            h.el("x-safe").attr("DATA-X", loser).attr("data-x", winner),
-            h.el("svg").attr("viewBox", "0 0 10 10").attr("viewbox", loser)
+            h.div.attrs({ "DATA-X": loser, "data-x": winner }),
+            h.el("x-safe").attrs({ "DATA-X": loser, "data-x": winner }),
+            h.el("svg").attrs({ viewBox: "0 0 10 10", viewbox: loser })
           )
         }
       })
@@ -989,7 +989,7 @@ describe("HtmlServer", { concurrent: false }, () => {
               .onChange(({ value }) => Message.Change({ field: "name", value })),
             h.input.attr("aria-label", "Other").value(model.other).onInput(input("other")),
             h.textarea.attr("aria-label", "Note").value(model.note).onInput(input("note")),
-            h.input.attr("type", "checkbox").attr("aria-label", "Agree").checked(model.agree)
+            h.input.attrs({ type: "checkbox", "aria-label": "Agree" }).checked(model.agree)
               .onChange(({ checked }) => Message.Change({ field: "agree", value: String(checked) }))
           )
         }
@@ -1064,8 +1064,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         },
         view: (model, h) => {
           const radios = ["a", "b", "c"].map((value) =>
-            h.input.attr("type", "radio").attr("name", "choice").attr("aria-label", value)
-              .attr("form", "choices")
+            h.input.attrs({
+              type: "radio",
+              name: "choice",
+              "aria-label": value,
+              form: "choices"
+            })
               .checked(model.choice === value).onChange(() => Message.Change({ field: "choice", value }))
           )
           // The browser starts on B: A is disabled by its group.

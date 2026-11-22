@@ -127,8 +127,8 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
           choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
         })
       ).children(
-        h.button.attr("name", "choice").attr("value", "keep").children("Keep editing"),
-        h.button.attr("name", "choice").attr("value", "discard").children("Discard")
+        h.button.attrs({ name: "choice", value: "keep" }).children("Keep editing"),
+        h.button.attrs({ name: "choice", value: "discard" }).children("Discard")
       )
     )
 )
@@ -170,10 +170,17 @@ const noteEditorView = NoteEditorDef.view((model, h) =>
       // the Model in step with that and with Escape or a click outside.
       // CSS anchor positioning puts the menu under its button; a browser
       // without it shows the menu centred.
-      h.button.attr("type", "button").attr("popovertarget", `actions-${h.props.note.id}`)
-        .attr("style", `anchor-name: --actions-${h.props.note.id}`).children("More actions"),
-      h.div.attr("id", `actions-${h.props.note.id}`).attr("role", "menu").attr("aria-label", "Note actions")
-        .attr("style", `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`)
+      h.button.attrs({
+        type: "button",
+        popovertarget: `actions-${h.props.note.id}`,
+        style: `anchor-name: --actions-${h.props.note.id}`
+      }).children("More actions"),
+      h.div.attrs({
+        id: `actions-${h.props.note.id}`,
+        role: "menu",
+        "aria-label": "Note actions",
+        style: `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`
+      })
         .popover("auto", model.actionsOpen)
         .onToggle(({ open }) => NoteEditorMessage.ToggledActions({ open })).children(
           h.button.attr("type", "button").disabled(model.draft === model.saved)

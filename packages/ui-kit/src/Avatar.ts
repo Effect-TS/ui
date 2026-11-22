@@ -271,11 +271,13 @@ export const Avatar = Component.define({
       (b) =>
         b.forward((node) =>
           imageAttributes.reduce((out, name) => out.attr(name, undefined), node)
-            .attr("crossorigin", source.crossOrigin)
-            .attr("referrerpolicy", source.referrerPolicy)
-            .attr("sizes", source.sizes)
-            .attr("srcset", source.srcSet)
-            .attr("src", source.src)
+            .attrs({
+              crossorigin: source.crossOrigin,
+              referrerpolicy: source.referrerPolicy,
+              sizes: source.sizes,
+              srcset: source.srcSet,
+              src: source.src
+            })
         )
     )
     const fallback = p.part("span", (b) => b)

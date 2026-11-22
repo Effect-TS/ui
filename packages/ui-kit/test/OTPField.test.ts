@@ -357,11 +357,23 @@ describe("OTPField", () => {
     }))
 
   it("a slot keeps the consumer's class, name and type, but the field's own attributes win, present or absent", () => {
-    const element = h.input.class("slot").attr("aria-label", "Second").attr("type", "tel")
-      .attr("data-filled", "yes").attr("data-complete", "yes").attr("data-focused", "yes")
-      .attr("tabindex", "5").attr("maxlength", "9").attr("pattern", "x").attr("inputmode", "url")
-      .attr("autocomplete", "name").attr("disabled", "").attr("aria-disabled", "true").attr("readonly", "")
-      .attr("required", "").attr("id", "own")
+    const element = h.input.class("slot").attrs({
+      "aria-label": "Second",
+      type: "tel",
+      "data-filled": "yes",
+      "data-complete": "yes",
+      "data-focused": "yes",
+      tabindex: "5",
+      maxlength: "9",
+      pattern: "x",
+      inputmode: "url",
+      autocomplete: "name",
+      disabled: "",
+      "aria-disabled": "true",
+      readonly: "",
+      required: "",
+      id: "own"
+    })
     const built = View.build(parts({ value: "1", length: 2, validationType: "none" }).input({ element, index: 1 }), [])
     assert.deepStrictEqual(built.attrs, {
       class: "slot",
@@ -385,7 +397,7 @@ describe("OTPField", () => {
 
     const group = View.build(
       parts({ value: "", length: 2 }).root(
-        h.div.class("otp").attr("role", "list").attr("data-focused", "yes").attr("data-filled", "yes")
+        h.div.class("otp").attrs({ role: "list", "data-focused": "yes", "data-filled": "yes" })
       ),
       []
     )

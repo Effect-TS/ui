@@ -773,12 +773,14 @@ type ScrollbarOf<B extends View.PartTarget<"div">, T extends View.PartTarget<"di
 
 const overflowData = <B extends Attributed<B>>(builder: B, model: ScrollAreaModel): B =>
   builder
-    .attr("data-has-overflow-x", flag(model.hasOverflowX))
-    .attr("data-has-overflow-y", flag(model.hasOverflowY))
-    .attr("data-overflow-x-start", flag(model.overflowXStart))
-    .attr("data-overflow-x-end", flag(model.overflowXEnd))
-    .attr("data-overflow-y-start", flag(model.overflowYStart))
-    .attr("data-overflow-y-end", flag(model.overflowYEnd))
+    .attrs({
+      "data-has-overflow-x": flag(model.hasOverflowX),
+      "data-has-overflow-y": flag(model.hasOverflowY),
+      "data-overflow-x-start": flag(model.overflowXStart),
+      "data-overflow-x-end": flag(model.overflowXEnd),
+      "data-overflow-y-start": flag(model.overflowYStart),
+      "data-overflow-y-end": flag(model.overflowYEnd)
+    })
 
 /**
  * A headless scroll area. Call it with the consumer's `h`, optional `props`,
@@ -846,9 +848,11 @@ export const ScrollArea = Component.define({
 
     const thumbPart = p.part("div", (b, orientation: ScrollAreaOrientation) =>
       b
-        .attr("data-orientation", orientation)
-        .attr("data-scrolling", scrollingOn(orientation))
-        .attr(thumbAttr(orientation), id)
+        .attrs({
+          "data-orientation": orientation,
+          "data-scrolling": scrollingOn(orientation),
+          [thumbAttr(orientation)]: id
+        })
         .forward(ownStyle(
           (orientation === "vertical" ? `height:var(${thumbHeightVar})` : `width:var(${thumbWidthVar})`) +
             (model.measured ? "" : ";visibility:hidden")
@@ -858,11 +862,13 @@ export const ScrollArea = Component.define({
       "div",
       (b, orientation: ScrollAreaOrientation, thumb: View.Content<unknown, any>) =>
         overflowData(b, model)
-          .attr("aria-hidden", "true")
-          .attr("data-orientation", orientation)
-          .attr("data-hovering", flag(model.hovering))
-          .attr("data-scrolling", scrollingOn(orientation))
-          .attr(scrollbarAttr(orientation), id)
+          .attrs({
+            "aria-hidden": "true",
+            "data-orientation": orientation,
+            "data-hovering": flag(model.hovering),
+            "data-scrolling": scrollingOn(orientation),
+            [scrollbarAttr(orientation)]: id
+          })
           .forward(ownStyle(
             `position:absolute;touch-action:none;${noSelect};` + (orientation === "vertical"
               ? `top:0;bottom:var(${cornerHeightVar},0px);inset-inline-end:0`
@@ -873,8 +879,7 @@ export const ScrollArea = Component.define({
 
     const cornerPart = p.part("div", (b) =>
       b
-        .attr("aria-hidden", "true")
-        .attr(cornerAttr, id)
+        .attrs({ "aria-hidden": "true", [cornerAttr]: id })
         .forward(ownStyle(
           `position:absolute;bottom:0;inset-inline-end:0;width:var(${cornerWidthVar},0px);height:var(${cornerHeightVar},0px)`
         )))
@@ -903,13 +908,11 @@ export const ScrollArea = Component.define({
           .forward(ownStyle("position:relative"))),
       viewport: p.part("div", (b) =>
         areaState(b)
-          .attr("tabindex", model.hasOverflowX || model.hasOverflowY ? "0" : "-1")
-          .attr(viewportAttr, id)
+          .attrs({ tabindex: model.hasOverflowX || model.hasOverflowY ? "0" : "-1", [viewportAttr]: id })
           .forward(ownStyle("overflow:scroll;scrollbar-width:none"))),
       content: p.part("div", (b) =>
         areaState(b)
-          .attr("role", "presentation")
-          .attr(contentAttr, id)
+          .attrs({ role: "presentation", [contentAttr]: id })
           .forward(ownStyle("min-width:fit-content"))),
       scrollbar: View.wrapPart(
         scrollbarPart,

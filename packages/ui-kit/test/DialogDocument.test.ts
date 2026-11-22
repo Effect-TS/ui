@@ -156,9 +156,9 @@ const Page = Component.define({
                 props.skips
                   ? [
                     h.fieldset.attr("disabled", "").children(h.input.attr("id", "in-fieldset")),
-                    h.input.attr("id", "invisible").attr("style", "visibility:hidden"),
-                    h.input.attr("id", "r1").attr("type", "radio").attr("name", "size"),
-                    h.input.attr("id", "r2").attr("type", "radio").attr("name", "size").attr("checked", "")
+                    h.input.attrs({ id: "invisible", style: "visibility:hidden" }),
+                    h.input.attrs({ id: "r1", type: "radio", name: "size" }),
+                    h.input.attrs({ id: "r2", type: "radio", name: "size", checked: "" })
                   ]
                   : null,
                 h.input.attr("id", "first"),

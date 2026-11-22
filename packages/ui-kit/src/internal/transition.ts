@@ -35,10 +35,12 @@ export const statusOf = (
 
 export const transitionAttrs = <B extends Attributed<B>>(builder: B, open: boolean, status: TransitionStatus): B =>
   builder
-    .attr("data-open", flag(open))
-    .attr("data-closed", flag(!open))
-    .attr("data-starting-style", flag(status === "starting"))
-    .attr("data-ending-style", flag(status === "ending"))
+    .attrs({
+      "data-open": flag(open),
+      "data-closed": flag(!open),
+      "data-starting-style": flag(status === "starting"),
+      "data-ending-style": flag(status === "ending")
+    })
 
 export interface Phase {
   readonly open: boolean

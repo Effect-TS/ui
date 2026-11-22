@@ -18,8 +18,7 @@ const h = View.makeHelper<Message, {}, Html.Elements>({}, Html)
 
 type Button<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
 
-const hidden = (name: string) =>
-  new Html.VoidElement<never>("input").attr("type", "hidden").attr("name", name).attr("value", "on")
+const hidden = (name: string) => new Html.VoidElement<never>("input").attrs({ type: "hidden", name, value: "on" })
 
 // A function that takes a builder and returns it, with a frame around it
 // and a form field beside it. Its own attribute is written by `place`.
@@ -165,7 +164,7 @@ describe("forward", () => {
       if (node.handlers.click !== undefined) throw new Error("already handles click")
       return node.attr("type", "button")
     })
-    assert.deepStrictEqual(View.build(guarded.attr("type", "submit").attr("title", "Go"), []).attrs, {
+    assert.deepStrictEqual(View.build(guarded.attrs({ type: "submit", title: "Go" }), []).attrs, {
       title: "Go",
       type: "button"
     })

@@ -255,19 +255,19 @@ describe("HtmlScene", () => {
           h.form.attr("id", "f").onSubmit(({ entries }) =>
             `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
           ).children(
-            h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip),
+            h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(model.zip),
             // Inside the form, but owned by another one.
-            h.input.attr("name", "elsewhere").attr("form", "other").value("x"),
+            h.input.attrs({ name: "elsewhere", form: "other" }).value("x"),
             h.button.onClick("fill").children("Fill"),
             h.button.onClick("stopped", { preventDefault: true }).children("Stop"),
-            h.input.attr("type", "checkbox").attr("aria-label", "Agree")
+            h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
               .onClick("checked?", { preventDefault: true })
               .onChange(({ checked }) => `agree:${checked}`)
           ),
           // Outside the form, owned by it through its form attribute.
-          h.input.attr("name", "note").attr("form", "f").value("hi"),
+          h.input.attrs({ name: "note", form: "f" }).value("hi"),
           h.button.attr("popovertarget", "menu").onClick("menu?", { preventDefault: true }).children("Menu"),
-          h.div.attr("id", "menu").attr("popover", "").onToggle(({ newState }) => `toggle:${newState}`),
+          h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) => `toggle:${newState}`),
           h.fieldset.attr("disabled", "").children(
             h.legend(h.button.attr("type", "button").onClick("legend").children("In legend")),
             h.button.attr("type", "button").onClick("body").children("In body")

@@ -13,12 +13,12 @@ const standIn = {
   elements: Html,
   view: (popover: Parts, h: H) =>
     h.div(
-      popover.trigger({ element: h.button.attr("id", "press").attr("data-pressed", "x") }).children("Press"),
+      popover.trigger({ element: h.button.attrs({ id: "press", "data-pressed": "x" }) }).children("Press"),
       popover.trigger({ element: h.button.attr("id", "hover"), openOnHover: true, closeDelay: 50 }).children("Hover"),
       popover.trigger({ element: h.button.attr("id", "off"), openOnHover: true, disabled: true }).children("Off"),
       popover.portal(h.dialog.attr("style", "z-index:2"))?.children(
         popover.backdrop(h.div.class("backdrop")),
-        popover.positioner(h.div.class("positioner").attr("role", "none").attr("style", "color:red")).children(
+        popover.positioner(h.div.class("positioner").attrs({ role: "none", style: "color:red" })).children(
           popover.popup(h.div.class("popup").attr("data-side", "x")).children(
             popover.arrow(h.div.class("arrow")),
             popover.title(h.h2).children("Notifications"),

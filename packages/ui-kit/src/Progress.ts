@@ -88,7 +88,7 @@
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
 import { fillValue, indicatorSize, nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
 
 /**
@@ -205,27 +205,31 @@ export const Progress = Component.define({
     // An attribute a part sets to `undefined` is removed from the consumer's
     // builder too, so a consumer's `data-complete` can't report a state the
     // progress isn't in.
-    const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const state = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-progressing", flag(status === "progressing"))
-        .attr("data-complete", flag(status === "complete"))
-        .attr("data-indeterminate", flag(status === "indeterminate"))
+        .attrs({
+          "data-progressing": flag(status === "progressing"),
+          "data-complete": flag(status === "complete"),
+          "data-indeterminate": flag(status === "indeterminate")
+        })
     return {
       status,
       percentage,
       valueText,
       root: p.part("div", (b) =>
         state(b)
-          .attr("role", "progressbar")
-          .attr("aria-valuemin", String(min))
-          .attr("aria-valuemax", String(max))
-          .attr("aria-valuenow", value === null ? undefined : String(value))
-          .attr("aria-valuetext", valueText ?? "indeterminate progress")
-          // A token list: added to the consumer's own.
-          .attr("aria-labelledby", labelId)
+          .attrs({
+            role: "progressbar",
+            "aria-valuemin": String(min),
+            "aria-valuemax": String(max),
+            "aria-valuenow": value === null ? undefined : String(value),
+            "aria-valuetext": valueText ?? "indeterminate progress",
+            // A token list: added to the consumer's own.
+            "aria-labelledby": labelId
+          })
           // After every child, including the ones chained after the part.
           .forward((node) => node.children(nvdaLabel))),
-      label: p.part("span", (b) => state(b).attr("id", labelId).attr("role", "presentation")),
+      label: p.part("span", (b) => state(b).attrs({ id: labelId, role: "presentation" })),
       value: p.part("span", (b) =>
         state(b)
           .attr("aria-hidden", "true")
@@ -233,7 +237,7 @@ export const Progress = Component.define({
       track: p.part("div", state),
       indicator: p.part("div", (b) =>
         state(b)
-          .forward((node) => size === undefined ? node : node.attr("style", withStyle(node.attrs.style, size))))
+          .forward((node) => size === undefined ? node : node.attr("style", withStyle(node.elementAttrs.style, size))))
     }
   }
 })

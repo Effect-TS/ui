@@ -173,7 +173,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
 import { clamp } from "./internal/range.ts"
 import type { WithRequirements } from "./internal/requirements.ts"
 
@@ -765,23 +765,27 @@ export const Slider = Component.define({
     const s = settingsOf(p.props)
     const dragging = model.pressed >= 0 && !s.disabled
     const orientation = p.props.orientation ?? "horizontal"
-    const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const state = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-dragging", flag(dragging))
-        .attr("data-orientation", orientation)
-        .attr("data-disabled", flag(s.disabled))
+        .attrs({
+          "data-dragging": flag(dragging),
+          "data-orientation": orientation,
+          "data-disabled": flag(s.disabled)
+        })
     const start = s.values.length > 1 ? percentOf(s, s.values[0]!) : 0
     const end = s.values.length === 0 ? 0 : percentOf(s, s.values[s.values.length - 1]!)
     const inputPart = p.part("input", (b, index: number) => {
       const value = s.values[index]!
-      return b.attr("type", "range")
-        .attr("min", String(s.min))
-        .attr("max", String(s.max))
-        .attr("step", String(s.step))
-        .attr("aria-orientation", orientation)
-        .attr("aria-valuenow", String(value))
+      return b.attrs({
+        type: "range",
+        min: String(s.min),
+        max: String(s.max),
+        step: String(s.step),
+        "aria-orientation": orientation,
+        "aria-valuenow": String(value),
         // Never set: the native `disabled` reports it.
-        .attr("aria-disabled", undefined)
+        "aria-disabled": undefined
+      })
         .disabled(s.disabled)
         .value(String(value))
         .onKeyDown(
@@ -795,12 +799,12 @@ export const Slider = Component.define({
         .onBlur(SliderMessage.BlurredThumb({ index }))
         .forward((node) => {
           // The consumer's text wins. Two thumbs say which end each one is.
-          const text = node.attrs["aria-valuetext"] === undefined && s.values.length === 2
+          const text = node.elementAttrs["aria-valuetext"] === undefined && s.values.length === 2
             ? node.attr("aria-valuetext", value + " " + (index === 0 ? "start" : "end") + " range")
             : node
           return text.attr(
             "style",
-            withStyle(node.attrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
+            withStyle(node.elementAttrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
           )
         })
     })
@@ -810,7 +814,7 @@ export const Slider = Component.define({
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.attrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
+            withStyle(node.elementAttrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
           )
         )
         .children(input as never)
@@ -833,7 +837,7 @@ export const Slider = Component.define({
           node.attr(
             "style",
             withStyle(
-              node.attrs.style,
+              node.elementAttrs.style,
               "--slider-indicator-start:" + start + "%;--slider-indicator-size:" + (end - start) + "%"
             )
           )

@@ -57,21 +57,25 @@ const Signup = Component.define({
         props: { invalid: fields[name]._tag === "Invalid" },
         view: (field) =>
           field.root(h.div).children(
-            field.control(h.input).attr("name", name).attr("aria-label", name).value(fields[name].value)
+            field.control(h.input).attrs({ name, "aria-label": name }).value(fields[name].value)
               .disabled(model.saving)
               .onInput(({ value }) => Message.UpdatedField({ name, value })),
             field.error(h.span)?.children("Invalid")
           )
       })
     const radio = (value: string, tabbable: boolean) =>
-      h.button.attr("type", "button").attr("role", "radio").attr("tabindex", tabbable ? "0" : "-1")
-        .attr("data-plan", value)
+      h.button.attrs({
+        type: "button",
+        role: "radio",
+        tabindex: tabbable ? "0" : "-1",
+        "data-plan": value
+      })
         .onClick(Message.UpdatedField({ name: "plan", value }))
     return Form(h, {
       onEmit: () => Message.SubmittedForm(),
       view: (form) =>
         form.root(h.form).children(
-          h.div.attr("role", "radiogroup").attr("aria-invalid", fields.plan._tag === "Invalid" ? "true" : undefined)
+          h.div.attrs({ role: "radiogroup", "aria-invalid": fields.plan._tag === "Invalid" ? "true" : undefined })
             .children(radio("free", false), radio("team", true)),
           Field(h, {
             key: "billing",
@@ -80,7 +84,7 @@ const Signup = Component.define({
               field.group(h.div).children(
                 field.legend(h.span).children("Billing"),
                 ...["monthly", "yearly"].map((value) =>
-                  field.member(h.input).attr("type", "radio").attr("name", "billing").attr("value", value)
+                  field.member(h.input).attrs({ type: "radio", name: "billing", value })
                     .checked(fields.billing.value === value)
                     .onClick(Message.UpdatedField({ name: "billing", value }))
                 )
