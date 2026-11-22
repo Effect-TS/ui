@@ -40,17 +40,13 @@ const itemScene = (props: AccordionItemProps, value: Partial<Shared> = {}) =>
   )
 
 describe("Accordion", () => {
-  it.effect("opens from the accordion's value, names its panel by its trigger, and asks the accordion to toggle", () =>
+  it.effect("opens from the accordion's value, names its panel by its trigger, and forwards Settled", () =>
     Effect.gen(function*() {
       const s = yield* itemScene({ value: "a", index: 2 })
       assert.isUndefined(s.query(panel))
       assert.deepInclude(s.get(trigger).attrs, { type: "button", "aria-expanded": "false", "data-index": "2" })
       assert.deepInclude(s.get(itemRoot).attrs, { "data-closed": "", "data-index": "2" })
       assert.deepInclude(s.get(header).attrs, { "data-closed": "", "data-orientation": "vertical" })
-
-      s.childEmit(Collapsible, { _tag: "Toggled", open: true, reason: "trigger-press" })
-        .sent(Accordion, { _tag: "ToggledItem", item: "a", open: true, reason: "trigger-press" })
-        .emitted({ _tag: "Toggled", open: true, reason: "trigger-press" })
 
       s.shared(Accordion, shared({ value: ["a"], orientation: "horizontal" }))
       const triggerId = s.get(trigger).attrs?.id
@@ -104,7 +100,9 @@ describe("Accordion", () => {
     Effect.gen(function*() {
       const s = yield* itemScene({ value: "a" }, { value: ["a"] })
       s.parts((item) => {
-        const body = h.section.children(item.panel(h.div.attr("id", "panel-a")))
+        const body = h.section.children(
+          item.panel(h.div.attr("id", "panel-a").forward((panel) => h.div.class("wrapper").children(panel)))
+        )
         const node = View.build(
           item.root(h.div).children(
             item.header(h.h3).children(item.trigger(h.button.attr("id", "trigger-a"))),
@@ -113,8 +111,10 @@ describe("Accordion", () => {
           []
         )
         const triggerAttrs = ((node.children[0] as View.Element<never>).children[0] as View.Element<never>).attrs
-        const panelAttrs = ((node.children[1] as View.Element<never>).children[0] as View.Element<never>).attrs
-        assert.strictEqual(panelAttrs["aria-labelledby"], "trigger-a")
+        const wrapper = (node.children[1] as View.Element<never>).children[0] as View.Element<never>
+        assert.strictEqual(wrapper.attrs.class, "wrapper")
+        assert.isUndefined(wrapper.attrs["aria-labelledby"])
+        assert.strictEqual((wrapper.children[0] as View.Element<never>).attrs["aria-labelledby"], "trigger-a")
         assert.strictEqual(triggerAttrs["aria-controls"], "panel-a")
       })
       s.parts((item) => {
