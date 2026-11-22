@@ -40,7 +40,13 @@ const withElement = <A>(
         : Html.Host.useSync((host) => Option.some(f(host, node.value as globalThis.Element))))
   )
 
-const FocusOptions = Schema.Struct({ preventScroll: Schema.optional(Schema.Boolean) })
+const found = (
+  ref: Renderer.Ref<any>,
+  f: (host: Context.Service.Shape<typeof Html.Host>, element: globalThis.Element) => void
+): Effect.Effect<Found, never, Renderer.Refs | Html.Host> =>
+  Effect.map(withElement(ref, f), (done): Found => ({ found: Option.isSome(done) }))
+
+const FocusOptionsSchema = Schema.Struct({ preventScroll: Schema.optional(Schema.Boolean) })
 const ScrollOptionsSchema = Schema.Struct({
   behavior: Schema.optional(Schema.Literals(["auto", "instant", "smooth"])),
   block: Schema.optional(Schema.Literals(["center", "end", "nearest", "start"])),
@@ -55,16 +61,12 @@ const ScrollOptionsSchema = Schema.Struct({
  * @since 0.1.0
  */
 export const Focus: Command.Factory<
-  { readonly ref: Renderer.Ref<any>; readonly options?: { readonly preventScroll?: boolean | undefined } | undefined },
+  { readonly ref: Renderer.Ref<any>; readonly options?: Html.FocusOptions | undefined },
   Found
 > = Command.make(
   "DomCommand.focus",
-  { args: { ref: Renderer.Ref, options: Schema.optional(FocusOptions) } },
-  ({ options, ref }) =>
-    Effect.map(
-      withElement(ref, (host, element) => host.focus(element, options ?? {})),
-      (done): Found => ({ found: Option.isSome(done) })
-    )
+  { args: { ref: Renderer.Ref, options: Schema.optional(FocusOptionsSchema) } },
+  ({ options, ref }) => found(ref, (host, element) => host.focus(element, options ?? {}))
 )
 
 /**
@@ -77,10 +79,7 @@ export const Focus: Command.Factory<
 export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
   "DomCommand.blur",
   { args: { ref: Renderer.Ref } },
-  ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.blur(element)), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+  ({ ref }) => found(ref, (host, element) => host.blur(element))
 )
 
 /**
@@ -96,10 +95,7 @@ export const ScrollIntoView: Command.Factory<
 > = Command.make(
   "DomCommand.scrollIntoView",
   { args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) } },
-  ({ options, ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.scrollIntoView(element, options ?? {})), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+  ({ options, ref }) => found(ref, (host, element) => host.scrollIntoView(element, options ?? {}))
 )
 
 /**
@@ -145,7 +141,7 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
 export const focus = <N extends HTMLElement | SVGElement, Msg>(
   ref: Renderer.Ref<N>,
   f: (result: Found) => Msg,
-  options?: { readonly preventScroll?: boolean | undefined }
+  options?: Html.FocusOptions
 ): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
   Command.map(Focus.make(options === undefined ? { ref } : { ref, options }), f)
 

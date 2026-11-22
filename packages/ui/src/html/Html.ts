@@ -137,7 +137,7 @@ import * as HtmlHead from "./HtmlHead.ts"
  * @since 0.1.0
  */
 export class Host extends Context.Service<Host, {
-  readonly focus: (element: globalThis.Element, options: { readonly preventScroll?: boolean | undefined }) => void
+  readonly focus: (element: globalThis.Element, options: FocusOptions) => void
   readonly blur: (element: globalThis.Element) => void
   readonly scrollIntoView: (element: globalThis.Element, options: ScrollOptions) => void
   readonly measure: (element: globalThis.Element) => Rect
@@ -167,6 +167,17 @@ export interface Rect {
   readonly right: number
   readonly bottom: number
   readonly left: number
+}
+
+/**
+ * The options of `focus`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface FocusOptions {
+  readonly preventScroll?: boolean | undefined
 }
 
 /**
