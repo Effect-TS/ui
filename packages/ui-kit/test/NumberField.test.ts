@@ -542,12 +542,12 @@ describe("NumberField", () => {
   it.effect("the cursor is drawn only while a drag holds the pointer lock, as a popover", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 5, required: true })
-      s.mounted(tracked(s, scrub), sent("LockedPointer"))
+      s.mounted(tracked(s, scrub), sent("ChangedPointerLock", { locked: true }))
       assert.strictEqual(s.query(cursor), undefined)
       s.mounted(tracked(s, scrub), sent("StartedScrub", { focus: true }))
       s.expectMount(tracked(s, root))
       assert.strictEqual(s.query(cursor), undefined)
-      s.mounted(tracked(s, scrub), sent("LockedPointer"))
+      s.mounted(tracked(s, scrub), sent("ChangedPointerLock", { locked: true }))
       assert.deepInclude(s.get(cursor).attrs, {
         id: String(tracked(s, scrub).args.cursorId),
         role: "presentation",
@@ -558,7 +558,7 @@ describe("NumberField", () => {
       })
       assert.strictEqual(s.get(cursor).props?.popoverOpen, true)
       assert.strictEqual(tracked(s, scrub).args.cursor, true)
-      s.mounted(tracked(s, scrub), sent("UnlockedPointer"))
+      s.mounted(tracked(s, scrub), sent("ChangedPointerLock", { locked: false }))
       assert.strictEqual(s.query(cursor), undefined)
       assert.strictEqual(tracked(s, scrub).args.cursor, false)
       s.mounted(tracked(s, scrub), sent("EndedScrub", { commit: false }))

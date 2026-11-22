@@ -208,7 +208,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, noSelect, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import { type Attributed, defaults, flag, idOf, noSelect, visuallyHidden, withStyle } from "./internal/attributes.ts"
 import {
   allowedIn,
   allowsKey,
@@ -216,6 +216,7 @@ import {
   type Format,
   formatNumber,
   highest,
+  type Locale as LocaleOption,
   lowest,
   parseNumber,
   type Range,
@@ -473,8 +474,7 @@ const Message = UiSchema.TaggedEnum({
   ReleasedStepper: { direction: Direction },
   ClickedStepper: { direction: Direction, ...Modifiers },
   StartedScrub: { focus: Schema.Boolean },
-  LockedPointer: {},
-  UnlockedPointer: {},
+  ChangedPointerLock: { locked: Schema.Boolean },
   MovedScrub: { amount: Schema.Number, ...Modifiers },
   EndedScrub: { commit: Schema.Boolean },
   FocusedFormInput: {},
@@ -502,7 +502,7 @@ interface Settings extends Range {
   readonly smallStep: number
   readonly largeStep: number
   readonly allowOutOfRange: boolean
-  readonly locale: string | ReadonlyArray<string> | undefined
+  readonly locale: LocaleOption
   readonly locked: boolean
 }
 
@@ -536,6 +536,18 @@ interface Change {
   readonly fired: boolean
 }
 
+const enteredBy = (reason: NumberFieldChangeReason): boolean => reason.startsWith("input-") || reason === "none"
+
+const settled = (
+  s: Settings,
+  asked: number | null,
+  entered: boolean,
+  options: { readonly step?: number | undefined; readonly small?: boolean | undefined } = {}
+): number | null =>
+  asked === null
+    ? null
+    : validated(asked, s, { step: options.step, small: options.small === true, clamp: !s.allowOutOfRange || !entered })
+
 const setValue = (
   model: Model,
   s: Settings,
@@ -543,10 +555,8 @@ const setValue = (
   reason: NumberFieldChangeReason,
   options: { readonly step?: number; readonly small?: boolean; readonly typed?: boolean } = {}
 ): Change => {
-  const entered = reason.startsWith("input-") || reason === "none"
-  const value = asked === null
-    ? null
-    : validated(asked, s, { step: options.step, small: options.small === true, clamp: !s.allowOutOfRange || !entered })
+  const entered = enteredBy(reason)
+  const value = settled(s, asked, entered, options)
   const fired = value !== s.value || (entered && (asked !== s.value || options.typed === true))
   const direction = options.step === undefined ? undefined : options.step < 0 ? -1 : 1
   return {
@@ -568,38 +578,39 @@ const stepBy = (
   modifiers: Modifiers,
   reason: NumberFieldChangeReason,
   from: number | null = s.value
-): Change =>
-  from === null
-    ? setValue(model, s, 0, reason)
-    : setValue(model, s, from + amount * amountOf(s, modifiers), reason, {
-      step: amountOf(s, modifiers) * Math.sign(amount),
-      small: modifiers.alt
-    })
+): Change => {
+  if (from === null) return setValue(model, s, 0, reason)
+  const size = amountOf(s, modifiers)
+  return setValue(model, s, from + amount * size, reason, { step: size * Math.sign(amount), small: modifiers.alt })
+}
 
-const typedValue = (model: Model, s: Settings): number | null => model.text === null ? null : parse(s, model.text)
+const shown = (model: Model, s: Settings): number | null =>
+  (model.text === null ? null : parse(s, model.text)) ?? s.value
 
 const apply = ($: NumberFieldUpdate, change: Change) =>
   change.events.length === 0 ? change.model : $.set(change.model).emit(...change.events)
 
 const commit = (
   $: NumberFieldUpdate,
-  change: Pick<Change, "model" | "events" | "value">,
+  change: Pick<Change, "model" | "value"> & { readonly events?: ReadonlyArray<NumberFieldEvents> },
   reason: NumberFieldCommitReason
 ) =>
   $.set({ ...change.model, pending: false }).emit(
-    ...change.events,
+    ...(change.events ?? []),
     NumberFieldEvents.Committed({ value: change.value, reason })
   )
 
-const press = (model: Model, s: Settings, direction: Direction, modifiers: Modifiers): Change =>
-  stepBy(
-    { ...model, text: null },
-    s,
-    direction,
-    modifiers,
-    reasonOf(direction),
-    typedValue(model, s) ?? s.value
-  )
+const settle = ($: NumberFieldUpdate, change: Change, reason: NumberFieldCommitReason) =>
+  change.fired ? commit($, change, reason) : change.model
+
+const press = (
+  model: Model,
+  s: Settings,
+  direction: Direction,
+  modifiers: Modifiers,
+  reason: NumberFieldChangeReason,
+  from: number | null = shown(model, s)
+): Change => stepBy({ ...model, text: null }, s, direction, modifiers, reason, from)
 
 const touchLike = (pointerType: string): boolean => pointerType === "touch" || pointerType === "pen"
 
@@ -644,12 +655,7 @@ const TrackInput = Mount.makeStream(
         }
         const onPaste = (event: ClipboardEvent) => {
           if (event.defaultPrevented || current.locked) return
-          let pasted: string
-          try {
-            pasted = allowedIn(event.clipboardData?.getData("text/plain") ?? "", current)
-          } catch {
-            return
-          }
+          const pasted = allowedIn(event.clipboardData?.getData("text/plain") ?? "", current)
           event.preventDefault()
           if (pasted === "") return
           const start = node.selectionStart ?? node.value.length
@@ -671,15 +677,16 @@ const TrackInput = Mount.makeStream(
             Message.TurnedWheel({ direction: delta > 0 ? -1 : 1, shift: event.shiftKey, alt: event.altKey })
           )
         }
+        const listening = new AbortController()
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            node.addEventListener("keydown", onKeyDown)
-            node.addEventListener("paste", onPaste)
+            const { signal } = listening
+            node.addEventListener("keydown", onKeyDown, { signal })
+            node.addEventListener("paste", onPaste, { signal })
           }),
           () =>
             Effect.sync(() => {
-              node.removeEventListener("keydown", onKeyDown)
-              node.removeEventListener("paste", onPaste)
+              listening.abort()
               wheel?.abort()
             })
         )
@@ -850,6 +857,9 @@ const TrackStepper = Mount.makeStream(
     )
 )
 
+const wrap = (coordinate: number, low: number, high: number): number =>
+  coordinate < low ? high : coordinate > high ? low : coordinate
+
 const liveScrubs = new Set<string>()
 // A mount that is closing can't send, so a removed scrub area notifies the root's mount.
 const scrubRoots = new Map<string, () => void>()
@@ -875,6 +885,8 @@ const TrackScrub = Mount.makeStream(
         const document = node.ownerDocument
         const view = document.defaultView
         if (view === null) return
+        const gecko = isGecko(view)
+        const webkit = isWebKit(view)
         let current = args
         let scrubbing = false
         let moved = false
@@ -886,7 +898,7 @@ const TrackScrub = Mount.makeStream(
         let asked = false
         let client = { x: 0, y: 0 }
         let pointer = { x: 0, y: 0 }
-        let listening: AbortController | undefined
+        let dragging: AbortController | undefined
         let exit: ReturnType<typeof setTimeout> | undefined
         let click: ReturnType<typeof setTimeout> | undefined
         if (args.scrubbing) Queue.offerUnsafe(queue, Message.EndedScrub({ commit: false }))
@@ -931,11 +943,9 @@ const TrackScrub = Mount.makeStream(
               bottom: visual.offsetTop + visual.height
             }
         }
-        const wrap = (coordinate: number, low: number, high: number): number =>
-          coordinate < low ? high : coordinate > high ? low : coordinate
         const stop = (commit: boolean) => {
           scrubbing = false
-          listening?.abort()
+          dragging?.abort()
           Queue.offerUnsafe(queue, Message.EndedScrub({ commit }))
         }
         const onUp = (event: PointerEvent) => {
@@ -954,7 +964,7 @@ const TrackScrub = Mount.makeStream(
             }
           }
           // Firefox keeps the lock of a short click unless it is given a moment.
-          if (isGecko(view)) exit = setTimeout(release, 20)
+          if (gecko) exit = setTimeout(release, 20)
           else release()
         }
         const onCancel = (event: PointerEvent) => {
@@ -1005,16 +1015,18 @@ const TrackScrub = Mount.makeStream(
           pointerId = event.pointerId
           client = { x: event.clientX, y: event.clientY }
           pointer = client
-          listening?.abort()
-          listening = new AbortController()
-          const options = { capture: true, signal: listening.signal }
+          dragging?.abort()
+          dragging = new AbortController()
+          const options = { capture: true, signal: dragging.signal }
           view.addEventListener("pointerup", onUp, options)
           view.addEventListener("pointercancel", onCancel, options)
           view.addEventListener("pointermove", onMove, options)
           Queue.offerUnsafe(queue, Message.StartedScrub({ focus: mouse }))
           // WebKit shifts the page for the notice it shows with the lock.
-          if (event.pointerType === "touch" || isWebKit(view)) return
-          if (document.pointerLockElement != null) return Queue.offerUnsafe(queue, Message.LockedPointer())
+          if (event.pointerType === "touch" || webkit) return
+          if (document.pointerLockElement != null) {
+            return Queue.offerUnsafe(queue, Message.ChangedPointerLock({ locked: true }))
+          }
           asked = true
           try {
             Promise.resolve(document.body.requestPointerLock()).then(() => {
@@ -1030,9 +1042,9 @@ const TrackScrub = Mount.makeStream(
         const onLockChange = () => {
           if (document.pointerLockElement == null) {
             asked = false
-            if (scrubbing) Queue.offerUnsafe(queue, Message.UnlockedPointer())
+            if (scrubbing) Queue.offerUnsafe(queue, Message.ChangedPointerLock({ locked: false }))
           } else if (asked) {
-            if (scrubbing) Queue.offerUnsafe(queue, Message.LockedPointer())
+            if (scrubbing) Queue.offerUnsafe(queue, Message.ChangedPointerLock({ locked: true }))
             else unlock()
           }
         }
@@ -1042,29 +1054,27 @@ const TrackScrub = Mount.makeStream(
         const onClick = () => {
           clicked = true
         }
+        const listening = new AbortController()
         yield* Effect.acquireRelease(
           Effect.sync(() => {
+            const { signal } = listening
             liveScrubs.add(args.cursorId)
-            node.addEventListener("pointerdown", onDown)
-            node.addEventListener("touchstart", onTouchStart, { passive: false })
-            node.addEventListener("click", onClick, { capture: true })
-            document.addEventListener("pointerlockchange", onLockChange)
-            document.addEventListener("pointerlockerror", onLockError)
+            node.addEventListener("pointerdown", onDown, { signal })
+            node.addEventListener("touchstart", onTouchStart, { passive: false, signal })
+            node.addEventListener("click", onClick, { capture: true, signal })
+            document.addEventListener("pointerlockchange", onLockChange, { signal })
+            document.addEventListener("pointerlockerror", onLockError, { signal })
           }),
           () =>
             Effect.sync(() => {
               mounted = false
               liveScrubs.delete(args.cursorId)
-              node.removeEventListener("pointerdown", onDown)
-              node.removeEventListener("touchstart", onTouchStart)
-              node.removeEventListener("click", onClick, { capture: true })
-              document.removeEventListener("pointerlockchange", onLockChange)
-              document.removeEventListener("pointerlockerror", onLockError)
+              listening.abort()
               const pendingExit = exit !== undefined
               clearTimeout(exit)
               exit = undefined
               clearTimeout(click)
-              listening?.abort()
+              dragging?.abort()
               if (scrubbing || pendingExit) unlock()
               if (scrubbing) scrubRoots.get(args.cursorId)?.()
             })
@@ -1107,14 +1117,14 @@ const WatchScrub = Mount.makeStream(
 
 const cursorBox = "position:fixed;inset:0 auto auto 0;margin:0;pointer-events:none"
 
-const defaults = <B extends Attributed<B> & { readonly attrs: Readonly<Record<string, string>> }>(
-  node: B,
-  attrs: Readonly<Record<string, string>>
-): B =>
-  Object.entries(attrs).reduce(
-    (out, [name, value]) => node.attrs[name] === undefined ? out.attr(name, value) : out,
-    node
-  )
+const inputDefaults = {
+  autocomplete: "off",
+  autocorrect: "off",
+  spellcheck: "false",
+  "aria-roledescription": "Number field"
+}
+
+const stepperDefaults = { [1]: { "aria-label": "Increase" }, [-1]: { "aria-label": "Decrease" } }
 
 /**
  * A headless number field. Call it with the consumer's `h`, the `props`, and
@@ -1196,7 +1206,7 @@ export const NumberField = Component.define({
       // The parent was asked for the typed value as it was typed. One that
       // didn't store it is asked once more, with no commit of a value it may
       // decline again.
-      const declined = typed && change.fired && s.value !== setValue(synced, s, read, "input-change").value
+      const declined = typed && change.fired && s.value !== settled(s, read, true)
       if (declined) return apply($, { ...change, model: { ...change.model, pending: false } })
       return typed || model.pending || change.fired ? commit($, change, reason) : apply($, change)
     },
@@ -1208,21 +1218,20 @@ export const NumberField = Component.define({
       const bound = key === "Home" ? s.min : key === "End" ? s.max : undefined
       if (!up && key !== "ArrowDown" && bound === undefined) return model
       const change = bound === undefined
-        ? stepBy(synced, s, up ? 1 : -1, modifiers, "keyboard", typedValue(model, s) ?? s.value)
+        ? press(model, s, up ? 1 : -1, modifiers, "keyboard")
         : setValue(synced, s, bound, "keyboard")
-      return change.fired ? commit($, change, "keyboard") : apply($, change)
+      return settle($, change, "keyboard")
     },
     TurnedWheel: (model, { direction, ...modifiers }, $) => {
       const s = settingsOf($.props)
       if (s.locked || $.props.allowWheelScrub !== true) return model
-      const change = stepBy({ ...model, text: null }, s, direction, modifiers, "wheel")
-      return change.fired ? commit($, change, "wheel") : apply($, change)
+      return settle($, stepBy({ ...model, text: null }, s, direction, modifiers, "wheel"), "wheel")
     },
     DetectedIOS: (model) => ({ ...model, ios: true }),
     PressedStepper: (model, { direction, focus, ...modifiers }, $) => {
       const s = settingsOf($.props)
       if (s.locked || atBound(s, direction)) return model
-      const change = press(model, s, direction, modifiers)
+      const change = press(model, s, direction, modifiers, reasonOf(direction))
       return apply($, focus ? { ...change, model: { ...change.model, focus: model.focus + 1 } } : change)
     },
     HeldStepper: (model, { direction, ...modifiers }, $) => {
@@ -1235,21 +1244,20 @@ export const NumberField = Component.define({
       const s = settingsOf($.props)
       return s.locked
         ? model
-        : commit($, { model, events: [], value: s.value }, reasonOf(direction))
+        : commit($, { model, value: s.value }, reasonOf(direction))
     },
     ClickedStepper: (model, { direction, ...modifiers }, $) => {
       const s = settingsOf($.props)
       if (s.locked || atBound(s, direction)) return model
-      const from = typedValue(model, s) ?? s.value
-      const change = press(model, s, direction, modifiers)
+      const from = shown(model, s)
+      const change = press(model, s, direction, modifiers, reasonOf(direction), from)
       return change.value === from ? apply($, change) : commit($, change, reasonOf(direction))
     },
     StartedScrub: (model, { focus }, $) =>
       settingsOf($.props).locked
         ? model
         : { ...model, scrubbing: true, cursor: false, focus: focus ? model.focus + 1 : model.focus },
-    LockedPointer: (model) => (model.scrubbing ? { ...model, cursor: true } : model),
-    UnlockedPointer: (model) => (model.cursor ? { ...model, cursor: false } : model),
+    ChangedPointerLock: (model, { locked }) => (model.scrubbing ? { ...model, cursor: locked } : model),
     MovedScrub: (model, { amount, ...modifiers }, $) => {
       const s = settingsOf($.props)
       return !model.scrubbing || s.locked || amount * amountOf(s, modifiers) === 0
@@ -1260,7 +1268,7 @@ export const NumberField = Component.define({
       if (!model.scrubbing) return model
       const s = settingsOf($.props)
       const next = { ...model, scrubbing: false, cursor: false }
-      return done && !s.locked ? commit($, { model: next, events: [], value: s.value }, "scrub") : next
+      return done && !s.locked ? commit($, { model: next, value: s.value }, "scrub") : next
     },
     FocusedFormInput: (model) => ({ ...model, focus: model.focus + 1 }),
     Autofilled: (model, { value }, $) => {
@@ -1343,14 +1351,7 @@ export const NumberField = Component.define({
             focus: model.focus
           })
         )
-        .forward((node) =>
-          defaults(node, {
-            autocomplete: "off",
-            autocorrect: "off",
-            spellcheck: "false",
-            "aria-roledescription": "Number field"
-          })
-        ))
+        .forward((node) => defaults(node, inputDefaults)))
     const stepperPart = p.part("button", (b, direction: Direction, own: boolean) => {
       const off = own || disabled || atBound(s, direction)
       return state(b, off)
@@ -1360,7 +1361,7 @@ export const NumberField = Component.define({
         .disabled(false)
         .onMount(TrackStepper({ direction, disabled: off || readOnly }))
         .forward((node) =>
-          defaults(node, { "aria-label": direction === 1 ? "Increase" : "Decrease" })
+          defaults(node, stepperDefaults[direction])
             .attr("aria-controls", inputId ?? p.id("input"))
             .attr("style", withStyle(node.attrs.style, noSelect))
         )
@@ -1433,7 +1434,7 @@ export const NumberField = Component.define({
         cursorPart,
         <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> | undefined => {
           const cursor = cursorPart(element)
-          return model.scrubbing && model.cursor ? cursor : undefined
+          return model.cursor ? cursor : undefined
         }
       )
     }
