@@ -266,7 +266,12 @@ describe("BrowserHost", { concurrent: false }, () => {
       }).pipe(Effect.scoped))
 
     describe("the selection of a focused field the host writes", () => {
-      const Edited = UiSchema.TaggedEnum({ Upper: { value: Schema.String }, Card: { value: Schema.String }, Push: {} })
+      const Edited = UiSchema.TaggedEnum({
+        Upper: { value: Schema.String },
+        Card: { value: Schema.String },
+        Push: {},
+        ResetUpper: {}
+      })
       const Fields = Component.define({
         name: "Fields",
         scoped: false,
@@ -279,7 +284,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           Edited.match(message, {
             Upper: ({ value }) => ({ ...model, upper: value.toUpperCase() }),
             Card: ({ value }) => ({ ...model, card: value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ") }),
-            Push: () => ({ ...model, pushed: model.pushed === "hello world" ? "hello" : "hello world" })
+            Push: () => ({ ...model, pushed: model.pushed === "hello world" ? "hello" : "hello world" }),
+            ResetUpper: () => ({ ...model, upper: "ABCDEF" })
           }),
         view: (model, h) =>
           h.div(
@@ -289,7 +295,8 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.input.attr("aria-label", "Pushed").value(model.pushed),
             h.input.attr("aria-label", "Other").value(model.pushed),
             h.input.attrs({ type: "email", "aria-label": "Email" }).value(model.pushed),
-            h.button.onClick(Edited.Push()).children("Push")
+            h.button.onClick(Edited.Push()).children("Push"),
+            h.button.onClick(Edited.ResetUpper()).children("Reset")
           )
       })
       const mountFields = Effect.gen(function*() {
@@ -326,6 +333,16 @@ describe("BrowserHost", { concurrent: false }, () => {
           edit(field, "123a", 4)
           yield* tick
           expect(selection(field)).toEqual(["123456", 3, 6])
+          field.setSelectionRange(1, 1)
+          field.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
+          field.dispatchEvent(
+            new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" })
+          )
+          field.value = "123x456"
+          field.setSelectionRange(4, 4)
+          field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }))
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 3])
         }).pipe(Effect.scoped))
 
       it.effect("a normalized value keeps the caret with the text around it, and at the end", () =>
@@ -339,6 +356,16 @@ describe("BrowserHost", { concurrent: false }, () => {
           edit(upper, "ABCxDEF", 4)
           yield* tick
           expect(selection(upper)).toEqual(["ABCXDEF", 4, 4])
+          HtmlLocator.click(HtmlLocator.getByRole(upper.parentElement!, "button", { name: "Reset" }))
+          yield* tick
+          upper.setSelectionRange(1, 1)
+          edit(upper, "AXBCDEF", 2)
+          yield* Effect.promise(() => Promise.resolve())
+          expect(upper.value).toBe("AXBCDEF")
+          upper.setSelectionRange(5, 5)
+          HtmlLocator.click(HtmlLocator.getByRole(upper.parentElement!, "button", { name: "Reset" }))
+          yield* tick
+          expect(selection(upper)).toEqual(["ABCDEF", 4, 4])
 
           const card = field("Card")
           card.focus()

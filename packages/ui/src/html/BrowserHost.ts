@@ -542,11 +542,13 @@ export const makeHost = (
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
   const beforeEdits = new WeakMap<globalThis.Node, Array<FieldState>>()
-  let pendingEdit: { readonly node: globalThis.Node; readonly state: FieldState } | undefined
+  let pendingEdit:
+    | { readonly node: globalThis.Node; readonly state: FieldState; readonly event: Partial<InputEvent> }
+    | undefined
   let dropsPendingEdit = false
-  const expectEdit = (node: globalThis.Node) => {
+  const expectEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
     const state = fieldStateOf(node)
-    pendingEdit = state === undefined ? undefined : { node, state }
+    pendingEdit = state === undefined ? undefined : { node, state, event }
     // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
     if (pendingEdit !== undefined && !dropsPendingEdit) {
       dropsPendingEdit = true
@@ -557,7 +559,6 @@ export const makeHost = (
     }
   }
   const recordEdit = (node: globalThis.Node, state: FieldState | undefined) => {
-    pendingEdit = undefined
     if (state === undefined) return
     const edits = beforeEdits.get(node)
     if (edits === undefined) beforeEdits.set(node, [state])
@@ -1097,12 +1098,20 @@ export const makeHost = (
       if (target !== null && target !== undefined && "nodeType" in target) {
         const node = target as globalThis.Node
         if (name === "beforeinput") {
-          if ((event as Partial<InputEvent>).isComposing !== true && !composing.has(node)) expectEdit(node)
+          const e = event as Partial<InputEvent>
+          if (e.isComposing !== true && !composing.has(node)) expectEdit(node, e)
         } else if (name === "compositionstart") {
           recordEdit(node, fieldStateOf(node))
           composing.add(node)
         } else {
-          if (name === "input" && pendingEdit?.node === node) recordEdit(node, pendingEdit.state)
+          if (name === "input") {
+            const edit = pendingEdit
+            pendingEdit = undefined
+            if (
+              edit?.node === node && edit.event.defaultPrevented !== true &&
+              edit.event.inputType === (event as Partial<InputEvent>).inputType
+            ) recordEdit(node, edit.state)
+          }
           if ((event as Partial<InputEvent>).isComposing === true) composing.add(node)
           else composing.delete(node)
         }
@@ -1293,6 +1302,7 @@ export const makeHost = (
         if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) writeControlled(element, name, value)
+        if (name === "value") beforeEdits.delete(node)
         return
       }
       if (value === undefined) {
