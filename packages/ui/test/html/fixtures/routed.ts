@@ -118,18 +118,22 @@ export const App = Component.define({
         h.a.attr("href", AppRoute.print(AppRoute.Slow())).children("Slow"),
         h.button.onClick(Message.Block()).children("Block"),
         h.form
-          .attr("method", "get")
-          .attr("action", "/search")
-          .attr("aria-label", "Search").children(
-            h.input.attr("name", "q").attr("value", "ada"),
+          .attrs({
+            method: "get",
+            action: "/search",
+            "aria-label": "Search"
+          }).children(
+            h.input.attrs({ name: "q", value: "ada" }),
             h.button.attr("type", "submit").children("Search")
           ),
         h.form
-          .attr("method", "get")
-          .attr("action", "/search")
-          .attr("aria-label", "Filter")
+          .attrs({
+            method: "get",
+            action: "/search",
+            "aria-label": "Filter"
+          })
           .onSubmit(Message.Filter()).children(
-            h.input.attr("name", "q").attr("value", "x"),
+            h.input.attrs({ name: "q", value: "x" }),
             h.button.attr("type", "submit").children("Filter")
           )
       ),

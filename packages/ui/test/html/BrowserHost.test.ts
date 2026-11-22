@@ -179,7 +179,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           h.input.attr("aria-label", "Ignored").value(model.text).onInput(() => undefined),
           // No handler at all: the field is read-only, as the Model never changes.
           h.textarea.attr("aria-label", "Unhandled").value(model.text),
-          h.input.attr("type", "checkbox").attr("aria-label", "Agree").checked(model.checked)
+          h.input.attrs({ type: "checkbox", "aria-label": "Agree" }).checked(model.checked)
             .onInput(({ checked }) => Message.Checked({ checked })),
           h.select
             .attr("aria-label", "Pick")
@@ -231,7 +231,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           view: (_, h) =>
             h.form(
               h.input.attr("aria-label", "Name").value("fixed"),
-              h.input.attr("type", "checkbox").attr("aria-label", "Agree").checked(true),
+              h.input.attrs({ type: "checkbox", "aria-label": "Agree" }).checked(true),
               h.select
                 .attr("aria-label", "Pick").children(
                   h.option.attr("value", "a").children("A"),
@@ -775,9 +775,9 @@ describe("BrowserHost", { concurrent: false }, () => {
               tags: entries.filter(([name]) => name === "tag").map(([, value]) => value)
             })
           ).children(
-            h.input.attr("name", "title").attr("aria-label", "Title").attr("value", "Hello"),
-            h.input.attr("type", "checkbox").attr("name", "tag").attr("value", "a").attr("checked", ""),
-            h.input.attr("type", "checkbox").attr("name", "tag").attr("value", "b").attr("checked", ""),
+            h.input.attrs({ name: "title", "aria-label": "Title", value: "Hello" }),
+            h.input.attrs({ type: "checkbox", name: "tag", value: "a", checked: "" }),
+            h.input.attrs({ type: "checkbox", name: "tag", value: "b", checked: "" }),
             h.button.attr("type", "submit").children("Send")
           )
         )
@@ -1145,7 +1145,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.input.attr("aria-label", "Text").on("input", saw("input")).on("change", saw("change"))
               .onCompositionEnd(saw("compositionend")).onKeyDown(saw("key")),
             h.textarea.attr("aria-label", "Area").onInput(saw("input")).onCompositionEnd(saw("compositionend")),
-            h.input.attr("type", "checkbox").attr("aria-label", "Box").onKeyDown(saw("key")),
+            h.input.attrs({ type: "checkbox", "aria-label": "Box" }).onKeyDown(saw("key")),
             h.button.onKeyDown(saw("key")).children("Button")
           )
         }
@@ -1376,10 +1376,10 @@ describe("BrowserHost", { concurrent: false }, () => {
               seen.push(payload)
               return undefined
             }).children(
-              h.input.attr("name", "constructor").attr("value", "a"),
-              h.input.attr("name", "__proto__").attr("value", "b"),
-              h.input.attr("name", "toString").attr("value", "c"),
-              h.input.attr("name", "toString").attr("value", "d")
+              h.input.attrs({ name: "constructor", value: "a" }),
+              h.input.attrs({ name: "__proto__", value: "b" }),
+              h.input.attrs({ name: "toString", value: "c" }),
+              h.input.attrs({ name: "toString", value: "d" })
             )
         })
         const app = yield* container
@@ -2212,7 +2212,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       view: (_, h) =>
         h.div(
           h.form.onSubmit(({ fields }) => EntryMessage.Sent({ code: fields.code ?? "" })).children(
-            h.input.attr("aria-label", "Code").attr("name", "code").ref(Code).value("7")
+            h.input.attrs({ "aria-label": "Code", name: "code" }).ref(Code).value("7")
               .onPaste(({ text }) => EntryMessage.Pasted({ text }), { preventDefault: true })
           ),
           h.input.attr("aria-label", "Loose").ref(Loose)
@@ -2563,7 +2563,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           view: (changed, h) =>
             changed
               ? h.div.attr("style", "color: blue; margin-top: 8px")
-              : h.div.attr("STYLE", "color: green").attr("style", "color: red; margin-top: 4px")
+              : h.div.attrs({ STYLE: "color: green", style: "color: red; margin-top: 4px" })
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Page, {}, app)

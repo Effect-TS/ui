@@ -31,7 +31,7 @@ const Billing = Component.define({
         view: (field) =>
           field.root(h.div.class(name)).children(
             field.label(h.label).children(name),
-            field.control(h.input).attr("name", name).attr("value", name),
+            field.control(h.input).attrs({ name, value: name }),
             field.error(h.span)?.children("Required")
           )
       })
@@ -76,7 +76,7 @@ const blurOnDisable = (fieldset: HTMLFieldSetElement) => {
 describe("Fieldset", { concurrent: false }, () => {
   it("the root is a fieldset named by the legend, and both parts follow disabled over the consumer's values", () => {
     const enabled = parts({})
-    const legendAttrs = attrsOf(enabled.legend(h.div.attr("id", "mine").attr("data-disabled", "stale")))
+    const legendAttrs = attrsOf(enabled.legend(h.div.attrs({ id: "mine", "data-disabled": "stale" })))
     const legendId = legendAttrs.id
     assert.isString(legendId)
     assert.notStrictEqual(legendId, "mine")
@@ -84,8 +84,11 @@ describe("Fieldset", { concurrent: false }, () => {
     assert.deepStrictEqual(
       attrsOf(
         enabled.root(
-          h.fieldset.class("mine").attr("aria-labelledby", "heading").attr("aria-disabled", "true")
-            .attr("data-disabled", "stale").disabled(true)
+          h.fieldset.class("mine").attrs({
+            "aria-labelledby": "heading",
+            "aria-disabled": "true",
+            "data-disabled": "stale"
+          }).disabled(true)
         )
       ),
       { class: "mine", "aria-labelledby": `heading ${legendId}` }

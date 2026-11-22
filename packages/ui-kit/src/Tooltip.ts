@@ -162,7 +162,7 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
-import { flag, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -670,22 +670,23 @@ export const Tooltip = Component.define({
     // An attribute a part sets to `undefined` is removed from the
     // consumer's builder too, so a consumer's `data-open` can't report a
     // state the tooltip isn't in.
-    const placed = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const placed = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-open", flag(shown))
-        .attr("data-closed", flag(!shown))
-        .attr("data-side", side)
-        .attr("data-align", align)
+        .attrs({
+          "data-open": flag(shown),
+          "data-closed": flag(!shown),
+          "data-side": side,
+          "data-align": align
+        })
     const group = p.shared.provider
     // Closed while another tooltip of the group shows: this one was replaced.
     const instantBy = !shown && group?.open === true ? "delay" : model.instant
-    const instant = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const instant = <B extends Attributed<B>>(builder: B): B =>
       placed(builder).attr("data-instant", instantBy ?? undefined)
     const trigger = p.part(
       "button",
       (b) =>
-        b.attr("data-popup-open", flag(shown))
-          .attr("data-trigger-disabled", flag(p.props.disabled))
+        b.attrs({ "data-popup-open": flag(shown), "data-trigger-disabled": flag(p.props.disabled) })
           .on("mouseenter", Message.EnteredTrigger())
           .on("mouseleave", Message.LeftTrigger())
           .on("mousedown", Message.PressedTrigger())
@@ -698,10 +699,9 @@ export const Tooltip = Component.define({
       (p.props.disableHoverablePopup === true ? ";pointer-events:none" : "")
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
-        .attr("role", "presentation")
-        .attr("data-anchor-hidden", flag(shown && placement?.anchorHidden))
+        .attrs({ role: "presentation", "data-anchor-hidden": flag(shown && placement?.anchorHidden) })
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, style)))
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, style)))
       const hoverable = p.props.disableHoverablePopup === true
         ? decorated
         : decorated.on("mouseenter", Message.EnteredPositioner()).on("mouseleave", Message.LeftPositioner())
@@ -715,10 +715,12 @@ export const Tooltip = Component.define({
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       instant(b)
-        .attr("id", arrowId)
-        .attr("aria-hidden", "true")
-        .attr("data-uncentered", flag(placement?.arrowUncentered))
-        .forward((node) => node.attr("style", withStyle(node.attrs.style, arrowStyle))))
+        .attrs({
+          id: arrowId,
+          "aria-hidden": "true",
+          "data-uncentered": flag(placement?.arrowUncentered)
+        })
+        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
     return {
       open: shown,
       side,

@@ -168,7 +168,7 @@ import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { Fieldset } from "./Fieldset.ts"
-import { flag } from "./internal/attributes.ts"
+import { type Attributed, flag } from "./internal/attributes.ts"
 import { withoutField } from "./internal/field.ts"
 
 /**
@@ -340,18 +340,19 @@ export const Field = Component.define({
     // An attribute a part sets to `undefined` is removed from the
     // consumer's builder too, so a consumer's `data-invalid` can't report
     // a state the field isn't in.
-    const flags = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
+    const flags = <B extends Attributed<B>>(builder: B): B =>
       builder
-        .attr("data-valid", flag(valid))
-        .attr("data-invalid", flag(invalid))
-        .attr("data-touched", flag(model.touched))
-        .attr("data-dirty", flag(dirty))
-        .attr("data-filled", flag(filled))
-        .attr("data-focused", flag(focused))
+        .attrs({
+          "data-valid": flag(valid),
+          "data-invalid": flag(invalid),
+          "data-touched": flag(model.touched),
+          "data-dirty": flag(dirty),
+          "data-filled": flag(filled),
+          "data-focused": flag(focused)
+        })
     // With `data-disabled`, for every part but the control, which keeps
     // its own unless the field is disabled.
-    const state = <B extends { readonly attr: (name: string, value: string | undefined) => B }>(builder: B): B =>
-      flags(builder).attr("data-disabled", flag(disabled))
+    const state = <B extends Attributed<B>>(builder: B): B => flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
     // The parts that use it take any element, so the payload isn't typed.
@@ -369,9 +370,11 @@ export const Field = Component.define({
         const control = (own
           ? flags(b).attr("id", controlId).onFocus(Message.FocusedControl()).onBlur(blurred)
           : flags(b))
-          .attr("aria-invalid", showsError ? "true" : undefined)
-          // A token list: added to the consumer's own.
-          .attr("aria-describedby", describedBy === "" ? undefined : describedBy)
+          .attrs({
+            "aria-invalid": showsError ? "true" : undefined,
+            // A token list: added to the consumer's own.
+            "aria-describedby": describedBy === "" ? undefined : describedBy
+          })
         // Written when the control is built, after another kit call on the
         // same element wrote its own and added its children. An enabled
         // field leaves all of it alone.
@@ -398,7 +401,7 @@ export const Field = Component.define({
           // Read when the element is built, so a role chained after the
           // part, or another kit call's, is kept.
           .forward((node) =>
-            node.attrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
+            node.elementAttrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
           )
       ),
       member: formControl(false),

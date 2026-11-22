@@ -184,11 +184,13 @@ export const Fieldset = Component.define({
     return {
       disabled,
       root: p.part("fieldset", (b) =>
-        b.attr("aria-labelledby", legendId)
-          .attr("aria-disabled", undefined)
-          .attr("data-disabled", flag(disabled))
+        b.attrs({
+          "aria-labelledby": legendId,
+          "aria-disabled": undefined,
+          "data-disabled": flag(disabled)
+        })
           .disabled(disabled)),
-      legend: p.part((b) => b.attr("id", legendId).attr("data-disabled", flag(disabled)))
+      legend: p.part((b) => b.attrs({ id: legendId, "data-disabled": flag(disabled) }))
     }
   }
 })

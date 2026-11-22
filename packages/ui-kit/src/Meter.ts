@@ -174,23 +174,25 @@ export const Meter = Component.define({
       percentage,
       valueText,
       root: p.part("div", (b) =>
-        b.attr("role", "meter")
-          .attr("aria-valuemin", String(min))
-          .attr("aria-valuemax", String(max))
-          .attr("aria-valuenow", String(value))
-          .attr("aria-valuetext", valueText)
+        b.attrs({
+          role: "meter",
+          "aria-valuemin": String(min),
+          "aria-valuemax": String(max),
+          "aria-valuenow": String(value),
+          "aria-valuetext": valueText,
           // A token list: added to the consumer's own.
-          .attr("aria-labelledby", labelId)
+          "aria-labelledby": labelId
+        })
           // After every child, including the ones chained after the part.
           .forward((node) => node.children(nvdaLabel))),
-      label: p.part("span", (b) => b.attr("id", labelId).attr("role", "presentation")),
+      label: p.part("span", (b) => b.attrs({ id: labelId, role: "presentation" })),
       value: p.part("span", (b) => b.attr("aria-hidden", "true").forward((node) => fillValue(node, valueText))),
       track: p.part("div", (b) => b),
       // After the consumer's inline style, set before the part or chained
       // after it, so the width wins and the consumer's other declarations stay.
       indicator: p.part(
         "div",
-        (b) => b.forward((node) => node.attr("style", withStyle(node.attrs.style, indicatorSize(percentage))))
+        (b) => b.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, indicatorSize(percentage))))
       )
     }
   }

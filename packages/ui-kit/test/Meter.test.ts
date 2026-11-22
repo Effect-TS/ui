@@ -13,7 +13,7 @@ const standIn = {
     meter: Component.Headless.Parts<typeof Meter>,
     h: View.Helper<never, MeterProps> & View.Tags<Html.Elements, never>
   ) =>
-    meter.root(h.div.attr("role", "progressbar").attr("aria-labelledby", "heading")).children(
+    meter.root(h.div.attrs({ role: "progressbar", "aria-labelledby": "heading" })).children(
       meter.label(h.span.class("label")).children("Storage"),
       meter.value(h.span.class("value").attr("aria-hidden", "false")),
       meter.track(h.div.class("track")).children(

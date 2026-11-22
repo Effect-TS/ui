@@ -715,7 +715,7 @@ export const ToastProvider = Component.define({
     const alerts = urgent.length === 0 ? undefined : View.toNode(
       new Html.Element<never>("div").attr("style", visuallyHidden).children(
         ...urgent.map((toast) =>
-          new Html.Element<never>("div").key(toast.id).attr("role", "alert").attr("aria-atomic", "true").children(
+          new Html.Element<never>("div").key(toast.id).attrs({ role: "alert", "aria-atomic": "true" }).children(
             new Html.Element<never>("div").children(toast.title ?? ""),
             new Html.Element<never>("div").children(toast.description ?? "")
           )
@@ -723,20 +723,24 @@ export const ToastProvider = Component.define({
       )
     )
     const viewport = p.part("div", (b) =>
-      b.attr("role", "region")
-        .attr("tabindex", "-1")
-        .attr("aria-live", "polite")
-        .attr("aria-atomic", "false")
-        .attr("aria-relevant", "additions text")
-        .attr("data-expanded", flag(expanded))
+      b.attrs({
+        role: "region",
+        tabindex: "-1",
+        "aria-live": "polite",
+        "aria-atomic": "false",
+        "aria-relevant": "additions text",
+        "data-expanded": flag(expanded)
+      })
         .on("mouseenter", Message.EnteredViewport())
         .on("mouseleave", Message.LeftViewport())
         .popover("manual", true)
         .onMount(TrackViewport({ empty, hovering: model.hovering }).pipe(Mount.map((fact) => Message[fact]())))
         .forward((node) => {
-          const labelled = node.attrs["aria-label"] === undefined ? node.attr("aria-label", "Notifications") : node
+          const labelled = node.elementAttrs["aria-label"] === undefined
+            ? node.attr("aria-label", "Notifications")
+            : node
           const styled = frontmost > 0
-            ? labelled.attr("style", withStyle(node.attrs.style, `--toast-frontmost-height:${frontmost}px`))
+            ? labelled.attr("style", withStyle(node.elementAttrs.style, `--toast-frontmost-height:${frontmost}px`))
             : labelled
           return alerts === undefined ? styled : styled.children(alerts)
         }))
@@ -750,18 +754,20 @@ export const ToastProvider = Component.define({
         `--toast-offset-y:${place.offset}px`,
         place.height > 0 ? `--toast-height:${place.height}px` : undefined
       ].filter((declaration) => declaration !== undefined).join(";")
-      return b.attr("role", high ? "alertdialog" : "dialog")
-        .attr("tabindex", "0")
-        .attr("aria-modal", "false")
-        .attr("aria-labelledby", toast.title !== undefined ? p.id("title", toast.id) : undefined)
-        .attr("aria-describedby", toast.description !== undefined ? p.id("description", toast.id) : undefined)
-        .attr("aria-hidden", high && !model.focused ? "true" : undefined)
-        .attr("inert", flag(toast.limited))
-        .attr("data-expanded", flag(expanded))
-        .attr("data-limited", flag(toast.limited))
-        .attr("data-type", toast.type)
-        .attr("data-starting-style", flag(toast.transitionStatus === "starting"))
-        .attr("data-ending-style", flag(ending))
+      return b.attrs({
+        role: high ? "alertdialog" : "dialog",
+        tabindex: "0",
+        "aria-modal": "false",
+        "aria-labelledby": toast.title !== undefined ? p.id("title", toast.id) : undefined,
+        "aria-describedby": toast.description !== undefined ? p.id("description", toast.id) : undefined,
+        "aria-hidden": high && !model.focused ? "true" : undefined,
+        inert: flag(toast.limited),
+        "data-expanded": flag(expanded),
+        "data-limited": flag(toast.limited),
+        "data-type": toast.type,
+        "data-starting-style": flag(toast.transitionStatus === "starting"),
+        "data-ending-style": flag(ending)
+      })
         .onKeyDown(({ key }) => (key === "Escape" ? Message.PressedEscape({ id: toast.id }) : undefined))
         .onMount(
           TrackToast({ id: toast.id, ending }).pipe(
@@ -772,7 +778,7 @@ export const ToastProvider = Component.define({
             )
           )
         )
-        .forward((node) => (vars === undefined ? node : node.attr("style", withStyle(node.attrs.style, vars))))
+        .forward((node) => (vars === undefined ? node : node.attr("style", withStyle(node.elementAttrs.style, vars))))
     })
     // The key keeps a toast's element, and its mount, as the list changes. A
     // part can't set it, so the builder gets it first.
@@ -782,24 +788,29 @@ export const ToastProvider = Component.define({
         { element, toast }: { readonly element: B; readonly toast: ToastItem }
       ): ReturnType<B["attr"]> => rootPart(element.key(toast.id), toast)
     )
-    const contentPart = p.part("div", (b, toast: ToastItem) =>
-      b.attr("data-expanded", flag(expanded))
-        .attr("data-behind", flag((stack.get(toast.id)?.index ?? 0) > 0 && toast.transitionStatus !== "ending")))
-    const titlePart = p.part((b, toast: ToastItem) =>
-      b.attr("id", p.id("title", toast.id)).attr("data-type", toast.type)
+    const contentPart = p.part(
+      "div",
+      (b, toast: ToastItem) =>
+        b.attrs({
+          "data-expanded": flag(expanded),
+          "data-behind": flag((stack.get(toast.id)?.index ?? 0) > 0 && toast.transitionStatus !== "ending")
+        })
     )
+    const titlePart = p.part((b, toast: ToastItem) => b.attrs({ id: p.id("title", toast.id), "data-type": toast.type }))
     const descriptionPart = p.part((b, toast: ToastItem) =>
-      b.attr("id", p.id("description", toast.id)).attr("data-type", toast.type)
+      b.attrs({ id: p.id("description", toast.id), "data-type": toast.type })
     )
-    const actionPart = p.part("button", (b, toast: ToastItem) => b.attr("type", "button").attr("data-type", toast.type))
+    const actionPart = p.part("button", (b, toast: ToastItem) => b.attrs({ type: "button", "data-type": toast.type }))
     // Hidden from screen readers while the stack is collapsed, since a
     // keyboard user reaches it by focusing the viewport, which expands the
     // stack. It stays exposed while it has focus, as after a press that
     // ended outside the stack.
     const closePart = p.part("button", (b, toast: ToastItem) =>
-      b.attr("type", "button")
-        .attr("data-type", toast.type)
-        .attr("aria-hidden", expanded || model.closeFocused === toast.id ? undefined : "true")
+      b.attrs({
+        type: "button",
+        "data-type": toast.type,
+        "aria-hidden": expanded || model.closeFocused === toast.id ? undefined : "true"
+      })
         .onClick(Message.ClickedClose({ id: toast.id }))
         .onFocus(Message.FocusedClose({ id: toast.id }))
         .onBlur(Message.BlurredClose({ id: toast.id })))

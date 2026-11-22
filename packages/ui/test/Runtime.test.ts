@@ -491,9 +491,9 @@ describe("Runtime", () => {
             update: (_, step) => step,
             view: (step, h) =>
               step === 0
-                ? h.el("p").attr("id", "a").attr("title", "t").attr("constructor", "c").children("x")
+                ? h.el("p").attrs({ id: "a", title: "t", constructor: "c" }).children("x")
                 : step === 1
-                ? h.el("p").attr("id", "b").attr("lang", "en").children("x")
+                ? h.el("p").attrs({ id: "b", lang: "en" }).children("x")
                 : h.el("p").children("x")
           })
         const root = yield* TestHost.mount(Attrs, {})

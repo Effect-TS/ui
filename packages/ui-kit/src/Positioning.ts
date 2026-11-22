@@ -1418,8 +1418,10 @@ export const trackPosition = (
  *     const args = Positioning.trackArgs(h.props, { side: "bottom", anchorSelector: `[id="${anchorId}"]` })
  *     const positioner = h.div
  *       .popover("manual", h.props.open)
- *       .attr("style", Positioning.positionerStyle(args.positionMethod))
- *       .attr("data-side", model.placement?.side ?? args.options.side)
+ *       .attrs({
+ *         style: Positioning.positionerStyle(args.positionMethod),
+ *         "data-side": model.placement?.side ?? args.options.side
+ *       })
  *       .children("Saved")
  *     return h.span(
  *       h.button.id(anchorId).children("Save"),

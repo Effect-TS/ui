@@ -9,11 +9,11 @@ export const withStyle = (consumer: string | undefined, own: string): string =>
 
 export const ownStyle =
   (own: string) =>
-  <N extends Attributed<N> & { readonly attrs: { readonly style?: string | undefined } }>(node: N): N =>
-    node.attr("style", withStyle(node.attrs.style, own))
+  <N extends Attributed<N> & { readonly elementAttrs: { readonly style?: string | undefined } }>(node: N): N =>
+    node.attr("style", withStyle(node.elementAttrs.style, own))
 
 export const idOf = (builder: unknown): string | null => {
-  const id = (builder as { readonly attrs?: Readonly<Record<string, string>> | undefined }).attrs?.id
+  const id = (builder as { readonly elementAttrs?: Readonly<Record<string, string>> | undefined }).elementAttrs?.id
   return id === undefined || id === "" ? null : id
 }
 
@@ -29,16 +29,17 @@ export const idSelector = (id: string): string => attrSelector("id", id)
 
 export interface Attributed<B> {
   readonly attr: (name: string, value: string | undefined) => B
+  readonly attrs: (attributes: Readonly<Record<string, string | undefined>>) => B
 }
 
-export const defaults = <B extends Attributed<B> & { readonly attrs: Readonly<Record<string, string>> }>(
+export const defaults = <B extends Attributed<B> & { readonly elementAttrs: Readonly<Record<string, string>> }>(
   node: B,
   attrs: Readonly<Record<string, string>>
 ): B =>
   Object.entries(attrs).reduce(
-    (out, [name, value]) => node.attrs[name] === undefined ? out.attr(name, value) : out,
+    (out, [name, value]) => node.elementAttrs[name] === undefined ? out.attr(name, value) : out,
     node
   )
 
 export const separatorAttrs = <B extends Attributed<B>>(builder: B, orientation: "horizontal" | "vertical"): B =>
-  builder.attr("role", "separator").attr("aria-orientation", orientation).attr("data-orientation", orientation)
+  builder.attrs({ role: "separator", "aria-orientation": orientation, "data-orientation": orientation })

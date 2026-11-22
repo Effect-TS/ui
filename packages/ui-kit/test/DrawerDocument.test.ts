@@ -95,7 +95,7 @@ const Page = Component.define({
                 h.button.attr("id", "button").children("Go"),
                 h.input.attr("id", "field"),
                 props.scroll
-                  ? h.div.attr("id", "scroller").attr("style", "overflow-y:auto").children("Long")
+                  ? h.div.attrs({ id: "scroller", style: "overflow-y:auto" }).children("Long")
                   : undefined
               )
             )

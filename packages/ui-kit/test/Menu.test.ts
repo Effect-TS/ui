@@ -24,7 +24,7 @@ const items = [
 ]
 
 const entry = (h: H, value: string) =>
-  h.div.attr("data-testid", value).attr("role", "option").attr("aria-disabled", "false").attr("data-highlighted", "x")
+  h.div.attrs({ "data-testid": value, role: "option", "aria-disabled": "false", "data-highlighted": "x" })
 
 const standIn = {
   elements: Html,
@@ -48,7 +48,7 @@ const standIn = {
         menu.radioItem(entry(h, "small").attr("data-checked", "x"), "small").children("Small"),
         menu.radioItem(entry(h, "large"), "large").children("Large")
       ),
-      menu.linkItem(h.a.attr("data-testid", "docs").attr("href", "/docs"), "docs").children("Docs"),
+      menu.linkItem(h.a.attrs({ "data-testid": "docs", href: "/docs" }), "docs").children("Docs"),
       menu.item(entry(h, "delete"), "delete").children("Delete")
     ]
     return h.div(

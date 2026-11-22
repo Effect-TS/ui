@@ -75,10 +75,12 @@ export const TagPicker = Component.define({
         ...listbox,
         tags: p.props.options.filter((option) => picked.has(option.id)),
         announced: model.announced,
-        remove: p.part("button", (b, tag: ListboxOption) =>
-          b.attr("type", "button")
-            .attr("aria-label", `Remove ${tag.label}`)
-            .onClick(TagPickerMessage.ClickedRemove({ id: tag.id }))),
+        remove: p.part(
+          "button",
+          (b, tag: ListboxOption) =>
+            b.attrs({ type: "button", "aria-label": `Remove ${tag.label}` })
+              .onClick(TagPickerMessage.ClickedRemove({ id: tag.id }))
+        ),
         status: p.part("div", (b) => b.attr("role", "status"))
       })
     })

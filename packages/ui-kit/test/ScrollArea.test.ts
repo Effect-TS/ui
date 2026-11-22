@@ -30,34 +30,38 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
     snapshot(scrollArea)
     return scrollArea.root(
       h.div.class("root")
-        .attr("role", "region")
-        .attr("data-scrolling", "x")
-        .attr("data-has-overflow-y", "x")
-        .attr("data-custom", "kept")
-        .attr("style", "color:red")
+        .attrs({
+          role: "region",
+          "data-scrolling": "x",
+          "data-has-overflow-y": "x",
+          "data-custom": "kept",
+          style: "color:red"
+        })
     ).children(
       scrollArea.viewport(
         h.div.class("viewport")
-          .attr("tabindex", "5")
-          .attr("data-overflow-y-end", "x")
-          .attr("style", "height:100px")
+          .attrs({
+            tabindex: "5",
+            "data-overflow-y-end": "x",
+            style: "height:100px"
+          })
       ).children(
         scrollArea.content(
           h.div.class("content")
-            .attr("role", "main")
-            .attr("data-scrolling", "x")
+            .attrs({ role: "main", "data-scrolling": "x" })
         ).children("Body")
       ),
       scrollArea.scrollbar({
         element: h.div.class("bar-y")
-          .attr("aria-hidden", "false")
-          .attr("data-orientation", "horizontal")
-          .attr("data-hovering", "x")
-          .attr("data-scrolling", "x")
-          .attr("style", "width:8px"),
+          .attrs({
+            "aria-hidden": "false",
+            "data-orientation": "horizontal",
+            "data-hovering": "x",
+            "data-scrolling": "x",
+            style: "width:8px"
+          }),
         thumb: h.div.class("thumb-y")
-          .attr("data-orientation", "horizontal")
-          .attr("data-scrolling", "x")
+          .attrs({ "data-orientation": "horizontal", "data-scrolling": "x" })
       }),
       scrollArea.scrollbar({
         element: h.div.class("bar-x"),
@@ -67,8 +71,7 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
       }),
       scrollArea.corner(
         h.div.class("corner")
-          .attr("aria-hidden", "false")
-          .attr("style", "background:gray")
+          .attrs({ "aria-hidden": "false", style: "background:gray" })
       )
     )
   }

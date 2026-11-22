@@ -182,9 +182,9 @@ const Page = Component.define({
         })
     })
     const form = h.form.attr("id", "form").children(
-      h.button.attr("id", "before").attr("type", "button").children("Before"),
+      h.button.attrs({ id: "before", type: "button" }).children("Before"),
       select,
-      h.button.attr("id", "after").attr("type", "button").children("After")
+      h.button.attrs({ id: "after", type: "button" }).children("After")
     )
     return h.props.dialog
       ? Dialog(h, {
