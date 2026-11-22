@@ -1394,6 +1394,7 @@ const setup = (
     deferred: new Set(options.state["~deferred"] ?? []),
     claimed: new Set()
   }
+  const rawState = new WeakSet<Saved>(options?.state === undefined ? [] : [options.state])
   let popped: Saved | undefined
   let navigated = false
   let replaced: Instance | undefined
@@ -1412,6 +1413,7 @@ const setup = (
       hydrating.claimed.add(path)
     }
     const waits = { ...kept }
+    if (rawState.has(from)) { for (const child in kept) rawState.add(kept[child]) }
     if (drawn !== undefined) { for (const child of drawn) waits[child] = from }
     waitingOf.set(author, waits)
   }
@@ -1427,6 +1429,7 @@ const setup = (
       const all = state[key] as Saved | undefined
       for (const author in all) if (below(author, root)) ((out[key] ??= {}) as Saved)[author] = all[author]
     }
+    if (rawState.has(state)) rawState.add(out)
     return out
   }
   const takeSaved = (author: Instance, path: string): Saved | undefined => {
@@ -7373,13 +7376,8 @@ const setup = (
       const path = inst.path
       const restore = inst.component.definition.restore
       const state = from[path]
-      const reported = (from["~reported"] as Saved | undefined)?.[path]
-      delete to[path]
-      if (to["~reported"] !== undefined) {
-        const { [path]: _, ...others } = to["~reported"] as Saved
-        to["~reported"] = others
-      }
       if (state === undefined || restore === false) return
+      const reported = (from["~reported"] as Saved | undefined)?.[path]
       if (restore === undefined) return write(inst, to, path, Exit.succeed({ state, reported }))
       const codec = stateCodecOf(inst.component)
       const encoded = runCodec(Effect.flatMapEager(codec.decode(state), (decoded) => {
@@ -7404,27 +7402,26 @@ const setup = (
       if (inst.closed || inst.failure !== undefined) return
       const was = into
       const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
+      const source = inst.waiting ? restoring.get(inst) ?? hydrating!.state : undefined
       if (entry !== undefined) {
+        if (source !== undefined && !rawState.has(source)) return
         const author = entry.author
-        if (inst.waiting) {
-          const drawn = keptIn(homes.get(author)!)[author.path] as Saved | undefined
-          const from = drawn?.[inst.path] as Saved | undefined
-          if (from !== undefined) keep(inst, from, drawn![inst.path] = { ...from })
-          return
-        }
         into = ((keptIn(homes.get(author)!)[author.path] ??= {}) as Saved)[inst.path] = {}
       }
       const waits = waitingOf.get(inst)
       if (waits !== undefined) {
         for (const child in waits) {
           const saved = waits[child]
-          ;((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved === options?.state
-            ? subtree(saved, child)
-            : saved
+          if (!rawState.has(saved)) ((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved
         }
       }
-      if (inst.waiting) {
-        const all = subtree(restoring.get(inst) ?? hydrating!.state, inst.path)
+      if (source !== undefined && rawState.has(source)) {
+        keep(inst, source, into)
+        into = was
+        return
+      }
+      if (source !== undefined) {
+        const all = subtree(source, inst.path)
         const { "~kept": kept, "~scoped": drawn, "~reported": reported, ...state } = all as {
           readonly "~kept"?: Record<string, Saved>
           readonly "~scoped"?: Record<string, ReadonlyArray<string>>
@@ -7442,7 +7439,6 @@ const setup = (
         }
         Object.assign(into, state)
         if (reported !== undefined) Object.assign((into["~reported"] ??= {}) as Saved, reported)
-        keep(inst, all, into)
         return
       }
       save(inst, into)

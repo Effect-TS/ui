@@ -1245,15 +1245,22 @@ const commandLayers = Layer.mergeAll(
  * fetch afresh.
  *
  * The snapshot is kept in memory per entry. When a push leaves an entry, it's
- * also written into that entry's `state`, so it survives a reload. When back
- * or forward leaves an entry, the host has already moved to the other entry,
- * so the snapshot stays in memory only. After a reload, each root's first
- * mount restores its part of the snapshot written when a push last left the
- * entry, or starts fresh. Once that mount settles, the rest of its part is
- * dropped, so a later remount starts from `init`. An instance that
- * hydrates server-rendered HTML starts from the server's state instead. When
- * that write throws, the entry is written with its index only and
- * `SnapshotWriteFailed` is reported.
+ * also written into that entry's `state`, so it survives a reload. When that
+ * write throws, the entry is written with its index only and
+ * `SnapshotWriteFailed` is reported. When back or forward leaves an entry,
+ * the host has already moved to the other entry, so the snapshot stays in
+ * memory only. After a reload, each root's first mount restores its part of
+ * the snapshot written when a push last left the entry, or starts fresh. Once
+ * that mount settles, the rest of its part is dropped, so a later remount
+ * starts from `init`. An instance that hydrates server-rendered HTML starts
+ * from the server's state instead.
+ *
+ * When a push leaves a page whose hydration hasn't settled, a component still
+ * waiting for its Layer or for its state to decode has the server's state
+ * saved through its `restore` option. The components below it aren't built
+ * yet, so their `restore` options are unknown: none of their server state is
+ * saved, nor that of a scoped child the server kept undrawn, and after Back
+ * or forward they start from `init`.
  *
  * A state whose Schema encodes asynchronously, as `Schema.File` does, joins
  * the snapshot in memory once it is encoded, after the push has written the
