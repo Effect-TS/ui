@@ -243,13 +243,16 @@ export type FieldProps = typeof FieldProps.Type
  * })
  *
  * let state = Login.init({ email: "" })
- * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: undefined, filled: false }
+ * let props = fieldValidationProps(Login.validate(state).fields.email)
+ * if (props.invalid !== undefined || props.filled) throw new Error("a field not validated yet has a verdict")
  *
  * state = Login.submit(state)
- * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: true, filled: false }
+ * props = fieldValidationProps(Login.validate(state).fields.email)
+ * if (props.invalid !== true || props.filled) throw new Error("the empty field isn't invalid after submit")
  *
  * state = Login.change(state, "email", "ada@example.com")
- * fieldValidationProps(Login.validate(state).fields.email) // => { invalid: false, filled: true }
+ * props = fieldValidationProps(Login.validate(state).fields.email)
+ * if (props.invalid !== false || !props.filled) throw new Error("the filled field isn't valid")
  * ```
  *
  * @stability experimental

@@ -11,7 +11,7 @@
  *
  * | Part              | Element                                              |
  * | :---------------- | :--------------------------------------------------- |
- * | `root`            | any element, around every other part                 |
+ * | `root`            | any element that can contain an `<input>`, around every other part |
  * | `group`           | any element, `role="group"`, around the input and the buttons |
  * | `input`           | `<input>`, the text field                           |
  * | `decrement`       | `<button>`                                           |

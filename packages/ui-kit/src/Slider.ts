@@ -15,7 +15,7 @@
  * | `control`   | `<div>`, the area that takes pointer presses    |
  * | `track`     | any element inside the control                 |
  * | `indicator` | any element inside the track, the filled range |
- * | `thumb`     | any element, with the `<input type="range">` inside |
+ * | `thumb`     | any element that can contain an `<input>`, with the `<input type="range">` inside |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`. `thumb` takes

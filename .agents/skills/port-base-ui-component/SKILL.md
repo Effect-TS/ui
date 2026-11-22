@@ -52,19 +52,26 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
    - for a component, its `restore`: `false` when the Model depends on a
      Command an `update` started or on DOM state such as hover, focus or a
      measurement, a function that clears those fields when the rest should
-     come back after Back, or left out
-   - the message and event names, as past-tense facts
+     come back after Back, or left out. A measurement that scroll
+     restoration needs may stay: see "History restore" in
+     `ai-docs/src/10_ui/index.md`
+   - the message and event names: past-tense facts for messages, and for
+     each event the report/request test in the "Naming" section of
+     `ai-docs/src/10_ui/index.md`
    - the Base UI features you leave out, and why
 4. **Implement** `packages/ui-kit/src/<Name>.ts`, unstyled, and add
    `export * from "./<Name>.ts"` to `packages/ui-kit/src/index.ts`.
 5. **Test** in `packages/ui-kit/test/<Name>.test.ts`. Test a view function
    with `Scene.make` and a small consumer component that calls it, and
    call it directly with a `View.makeHelper` helper for its attributes and
-   markup. Test a headless component with `Story.make` and a stand-in
-   view, or `Story.parts` for a part on its own. Cover, in as few tests as
-   you can:
-   - each interaction sends the right message or emits the right event,
-     and a disabled or read-only component reports nothing
+   markup (a non-interactive view function already covered directly needs no
+   `Scene`, as in `Separator.test.ts`). Test a headless component with
+   `Scene.make` and a stand-in view for rendered interaction, `Story.parts`
+   for a part on its own, and `Story.make` for `update` and Command tests.
+   Cover, in as few tests as you can:
+   - each interaction sends the right message or emits the right event
+   - disabled and read-only, each in its own test: what each suppresses is
+     in the "State" section of the conventions
    - the ARIA and data attributes for each state, on every part that has them
    - the keyboard: fire `keydown` for the keys the component handles. For
      keys a native element handles, assert that a part rejects another tag
@@ -91,10 +98,12 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      `git grep -inE 'base[[:space:]_./-]*ui|@mui/base' -- packages/ui-kit`.
    - Write the module JSDoc in the shape the conventions give. The one
      example goes in a fence opened with `ts import.meta.vitest`, so it runs
-     as a doctest. Examples aren't type-checked, so the example renders the
-     component with `HtmlServer.renderToHtml` and throws unless the HTML
-     shows one thing, such as the consumer's class next to the part's role.
-   - Add `@since`, `@category` and `@stability experimental` to every export.
+     as a doctest. Examples aren't type-checked, so a component's example
+     renders it with `HtmlServer.renderToHtml` and throws unless the HTML
+     shows one thing, such as the consumer's class next to the part's role,
+     and a utility's example throws unless a result is the one expected.
+   - Add `@since`, `@category` and `@stability experimental` to every
+     public declaration. A re-export in `index.ts` takes none.
    - Name the parts argument after the component in the JSDoc, the README
      and the tests, as the "Call shape" section of the conventions says.
    - Add the component to `packages/ui-kit/README.md`.

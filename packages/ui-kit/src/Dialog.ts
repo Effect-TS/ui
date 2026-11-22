@@ -933,6 +933,20 @@ export type DialogTriggerElement<Msg, R = never> = Html.Element<
 >
 
 /**
+ * The props of a `DialogTrigger`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface DialogTriggerProps {
+  /** Whether the dialog is open for this trigger. */
+  readonly open: boolean
+  /** The dialog's `id`, which `aria-controls` points at while it is open. */
+  readonly popupId?: string | undefined
+}
+
+/**
  * A button that opens a dialog drawn somewhere else, such as in another
  * component. Call it with the caller's `h`, whether the dialog is open for
  * this trigger, the dialog's `id` as `popupId`, and what a press sends as
@@ -963,11 +977,7 @@ export const DialogTrigger = <Msg, R = never>(
   options: {
     /** The caller's `h.button`, to stack a part on it. `h.button` when left out. */
     readonly element?: DialogTriggerElement<Msg, R> | undefined
-    readonly props: {
-      readonly open: boolean
-      /** The dialog's `id`, which `aria-controls` points at while it is open. */
-      readonly popupId?: string | undefined
-    }
+    readonly props: DialogTriggerProps
     /** What a press sends, with a click, Space or Enter. */
     readonly onPress?: NoInfer<Msg> | ((press: DialogTriggerPress) => NoInfer<Msg>) | undefined
   }

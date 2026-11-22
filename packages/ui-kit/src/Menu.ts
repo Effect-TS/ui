@@ -1688,6 +1688,24 @@ export type MenuTriggerElement<Msg, R = never> = Html.Element<
 >
 
 /**
+ * The props of a `MenuTrigger`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface MenuTriggerProps {
+  /** Whether the menu is open for this trigger. */
+  readonly open: boolean
+  /** The menu's `id`, which `aria-controls` points at while it is open. */
+  readonly popupId: string
+  /** The trigger takes no press and no hover. */
+  readonly disabled?: boolean | undefined
+  /** How long the pointer rests on the trigger before `onHover`, in milliseconds. */
+  readonly delay?: number | undefined
+}
+
+/**
  * A button that opens a menu drawn somewhere else, such as in another
  * component. Call it with the caller's `h`, whether the menu is open for
  * this trigger, the menu's `id` as `popupId`, and what a press sends as
@@ -1711,7 +1729,9 @@ export type MenuTriggerElement<Msg, R = never> = Html.Element<
  * `"trigger-hover"` closes when the pointer leaves it and the trigger.
  *
  * Given `onPress`, a `mousedown` or `click` handler of the caller's own
- * throws at render: pass the message as `onPress`.
+ * throws at render: pass the message as `onPress`. Given `onHover`, it
+ * reserves the element's mount slot, so the caller can't set another mount
+ * on it.
  *
  * @stability experimental
  * @category components
@@ -1722,14 +1742,7 @@ export const MenuTrigger = <Msg, R = never>(
   options: {
     /** The caller's `h.button`, to stack a part on it. `h.button` when left out. */
     readonly element?: MenuTriggerElement<Msg, R> | undefined
-    readonly props: {
-      readonly open: boolean
-      /** The menu's `id`, which `aria-controls` points at while it is open. */
-      readonly popupId: string
-      readonly disabled?: boolean | undefined
-      /** How long the pointer rests on the trigger before `onHover`, in milliseconds. */
-      readonly delay?: number | undefined
-    }
+    readonly props: MenuTriggerProps
     /** What a press sends. */
     readonly onPress?: NoInfer<Msg> | ((press: MenuTriggerPress) => NoInfer<Msg>) | undefined
     /** What resting the pointer on the trigger sends. */
