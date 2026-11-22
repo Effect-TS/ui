@@ -18,20 +18,17 @@ const FieldName = Schema.Literals(["plan", "billing", "email", "name"])
 const Message = UiSchema.TaggedEnum({
   UpdatedField: { name: FieldName, value: Schema.String },
   SubmittedForm: {},
-  SucceededSave: {},
-  FailedSave: {}
+  SucceededSave: {}
 })
 
 const Save = Command.make(
   "Save",
   { args: { email: Schema.String } },
-  ({ email }) =>
+  () =>
     Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 5))).pipe(
-      Effect.as(email.startsWith("taken") ? Message.FailedSave() : Message.SucceededSave())
+      Effect.as(Message.SucceededSave())
     )
 )
-
-const SignupForm = Form.ref("Signup")
 
 const Signup = Component.define({
   name: "Signup",
@@ -50,10 +47,7 @@ const Signup = Component.define({
         onSome: ({ email }) => $.set({ form, saving: true }).run(Save.make({ email }))
       })
     },
-    SucceededSave: (model) => ({ ...model, saving: false }),
-    FailedSave: (model, _message, $) =>
-      $.set({ saving: false, form: SignupValidation.reject(model.form, { email: ["That email is taken"] }) })
-        .send(SignupForm, { _tag: "RejectedSubmit" })
+    SucceededSave: (model) => ({ ...model, saving: false })
   },
   view: (model, h) => {
     const { fields } = SignupValidation.validate(model.form)
@@ -74,7 +68,6 @@ const Signup = Component.define({
         .attr("data-plan", value)
         .onClick(Message.UpdatedField({ name: "plan", value }))
     return Form(h, {
-      ref: SignupForm,
       onEmit: () => Message.SubmittedForm(),
       view: (form) =>
         form.root(h.form).children(
@@ -107,7 +100,7 @@ const type = (input: HTMLInputElement, value: string) => {
 }
 
 describe("Form in a document", { concurrent: false }, () => {
-  it.effect("focuses the first invalid control on submit and after a server rejection, and leaves focus alone when valid", () =>
+  it.effect("focuses the first invalid control on submit, and leaves focus alone when valid", () =>
     Effect.gen(function*() {
       yield* focusability
       const app = yield* container
@@ -136,10 +129,6 @@ describe("Form in a document", { concurrent: false }, () => {
       assert.deepStrictEqual([email.selectionStart, email.selectionEnd], [0, 4])
 
       type(name, "Ada")
-      type(email, "taken@example.com")
-      yield* submitForm
-      assert.strictEqual(document.activeElement, email)
-
       type(email, "ada@example.com")
       yield* submitForm
       assert.strictEqual(document.activeElement, submit)

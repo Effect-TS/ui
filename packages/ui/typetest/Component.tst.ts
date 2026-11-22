@@ -351,7 +351,6 @@ describe("Component", () => {
       expect(TodoItem.definition).type.toBe<Component.Definition.Of<"TodoItem">>()
       expect(TodoItem.definition.name).type.toBe<"TodoItem">()
       expect(Component.provide(TodoItem, [SaveTodo.layer]).definition.name).type.toBe<"TodoItem">()
-      expect(TodoItem.ref("a")).type.toBe<Component.Ref<never, false>>()
       expect(TodoItem).type.toBeAssignableTo<Component.Any>()
       expect(TodoItem).type.toBeAssignableTo<
         Component.Mountable<{ readonly todo: typeof Todo.Type }, typeof TodoItemEvents.Type, SaveTodo>

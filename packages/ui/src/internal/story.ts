@@ -26,7 +26,6 @@ import { sharedEqual } from "./equal.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
-  checkAuthorRefs,
   checkAuthorWrites,
   checkChildPaths,
   checkContentPaths,
@@ -36,7 +35,6 @@ import {
   slotSegment
 } from "./paths.ts"
 import * as componentQueries from "./queries.ts"
-import * as childRef from "./ref.ts"
 import * as schedule from "./schedule.ts"
 import * as sharedReads from "./shared.ts"
 import type { SlotResult } from "./slotStatus.ts"
@@ -547,7 +545,6 @@ const expandRoot = <Msg>(
     }
   }
   const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
-  checkAuthorRefs("/" + name, written)
   checkAuthorPlacements("/" + name, written)
   checkAuthorWrites("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
@@ -1549,9 +1546,7 @@ const show = (schema: Schema.Top | undefined, value: unknown): string =>
 const describeEvent = (story: State<any, any, any, any>, event: unknown): string => show(story.component.events, event)
 
 const describeSend = (send: Component.Send): string =>
-  send.ref !== undefined
-    ? `${show(send.ref.receives, send.message)} to ${send.ref.key}`
-    : `${show(send.owner.receives, send.message)} to the owner ${send.owner.definition.name}`
+  `${show(send.owner.receives, send.message)} to the owner ${send.owner.definition.name}`
 
 /** Whether a Command's mode lets a message arrive while it runs: what such a mode is for. */
 const exempt = (entry: Pending<any>): boolean =>
@@ -1796,31 +1791,24 @@ export const acknowledgeEmitted = <Props, Model, Msg, Events>(
 }
 
 /**
- * Acknowledges the oldest unacknowledged send, after checking it went to `target` with `message`, compared
- * with the target's `receives` Schema.
+ * Acknowledges the oldest unacknowledged send, after checking it went to `owner` with `message`, compared
+ * with the owner's `receives` Schema.
  *
  * @internal
  */
 export const acknowledgeSent = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
-  target: Component.Ref.Any | Component.Headless.Any,
+  owner: Component.Headless.Any,
   message: unknown,
   step: string
 ): State<Props, Model, Msg, Events> => {
   const oldest = story.sent[0]
-  const isRef = childRef.TypeId in target
-  const receives = (target as { readonly receives: Schema.Codec<unknown, unknown> }).receives
-  const to = isRef
-    ? (target as Component.Ref.Any).key
-    : `the owner ${(target as Component.Headless.Any).definition.name}`
-  const matched = oldest !== undefined &&
-    (isRef
-      ? oldest.ref !== undefined && oldest.ref.key === (target as Component.Ref.Any).key
-      : oldest.owner !== undefined && oldest.owner.definition === (target as Component.Headless.Any).definition) &&
+  const receives: Schema.Codec<unknown, unknown> = owner.receives
+  const matched = oldest !== undefined && oldest.owner.definition === owner.definition &&
     Schema.toEquivalence(receives)(oldest.message, message)
   if (!matched) {
     throw new Error(
-      `${step}: expected ${show(receives, message)} to ${to}; unacknowledged: ${
+      `${step}: expected ${show(receives, message)} to the owner ${owner.definition.name}; unacknowledged: ${
         story.sent.length === 0 ? "nothing" : story.sent.map(describeSend).join(", ")
       }`
     )
@@ -1968,46 +1956,32 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
 }
 
 /**
- * The one child of `component` with `key`: a string matches a child rendered with that key, a ref a child
- * rendered with it, and no key a child rendered without a key or a ref.
+ * The one child of `component` with `key`: a string matches a child rendered with that key, and no key a
+ * child rendered without one.
  *
  * @internal
  */
 export const findChild = (
   view: View.Node<any, any>,
   component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
-  key: string | Component.Ref.Any | undefined,
+  key: string | undefined,
   step: string
 ): Occurrence => {
   const all = occurrences.get(view) ??
     children(view).map((child): Occurrence => ({ child, path: undefined, scope: undefined }))
-  const found = all.filter(({ child }) =>
-    isChildOf(child, component) && (
-      key === undefined
-        ? child.key === "" && child.ref === undefined
-        : typeof key === "string"
-        ? child.key === key && child.ref === undefined
-        : child.ref !== undefined && child.ref.key === key.key
-    )
-  )
+  const found = all.filter(({ child }) => isChildOf(child, component) && child.key === (key ?? ""))
   if (found.length === 1) return found[0]!
   const name = childName(component as Component.Any)
-  const which = key === undefined
-    ? "without a key"
-    : typeof key === "string"
-    ? `with key "${key}"`
-    : `with the ref ${key.key}`
+  const which = key === undefined ? "without a key" : `with key "${key}"`
   if (found.length === 0) {
     throw new Error(
-      `${step}: no child ${name} ${which}; children: ${
-        all.map(({ child }) => segment(child) + (child.ref !== undefined ? " (ref)" : "")).join(", ")
-      }`
+      `${step}: no child ${name} ${which}; children: ${all.map(({ child }) => segment(child)).join(", ")}`
     )
   }
   const owners = found.flatMap(({ child }) => child.owner === undefined ? [] : [child.owner.path])
   throw new Error(
     owners.length === 0
-      ? `${step}: ${found.length} children ${name} ${which}: give each one its own key or ref`
+      ? `${step}: ${found.length} children ${name} ${which}: give each one its own key`
       : `${step}: ${found.length} children ${name} ${which}, declared with p.child by ${
         owners.join(" and ")
       }. A scene can't choose between the children that one component owns in several places`

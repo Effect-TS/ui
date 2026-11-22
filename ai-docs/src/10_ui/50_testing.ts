@@ -174,19 +174,18 @@ describe("Collapsible", () => {
 })
 
 describe("NotePage", () => {
-  it.effect("tells the editor to save now", () =>
+  it.effect("shows a notice when the editor saves", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(NotePageNoDeps, { id: note.id })
       // Load steps take the query's name. `loaded` writes the `note`
       // query's result, as the runtime would, and re-renders.
       s.loaded("note", note)
-        // The button is in the Collapsible's `summary` slot. A parent's
-        // scene shows the content it passed to a child's slots, but not the
-        // child's own view.
-        .click("Save now")
-        // A scene renders no children, so what `update` sent them is data,
-        // acknowledged with the ref and the message.
-        .sent(NoteEditor.ref("Editor").at(note.id), { _tag: "RequestedSave" })
+        // The editor is in the Collapsible's `body` slot. A parent's scene
+        // shows the content it passed to a child's slots, but not the
+        // child's own view, so the test emits for the editor, found by its
+        // component and key.
+        .childEmit(NoteEditor, note.id, NoteEditorEvents.Saved({ note }))
+        .expect(HtmlLocator.role("status")).toHaveText("Saved")
     }))
 })
 
@@ -315,7 +314,7 @@ it.layer(AppTest, { buildPerTest: true })("App", (it) => {
       assert.include(result.html, "Milk")
       // The paths of the instances that adopted the server's state.
       // The editor sits in the Collapsible's `body` slot, under its path.
-      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[Editor[n1]]")
+      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[n1]")
     }))
 })
 

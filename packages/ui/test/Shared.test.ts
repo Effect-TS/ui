@@ -8,7 +8,7 @@ import { defect } from "./utils/scoped.ts"
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
-const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
+const click = (root: TestHost.TestRoot<unknown, never, unknown>, text: string) =>
   Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 const updatesAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
   log.filter((entry): entry is MessageLog.Update => entry._tag === "Update" && entry.path === path)
@@ -214,7 +214,7 @@ describe("shared state in a Scene", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Tip, { id: "a" })
       s.click("a:closed")
-      assert.deepStrictEqual(s.current.sent.map((send) => [send.owner?.definition.name, send.message]), [
+      assert.deepStrictEqual(s.current.sent.map((send) => [send.owner.definition.name, send.message]), [
         ["TipsProvider", { _tag: "Enter", id: "a" }]
       ])
       s.sent(TipsProvider, { _tag: "Enter", id: "a" })
@@ -357,20 +357,39 @@ const makeReader = (answer: (told: boolean) => boolean) =>
     view: (_, h) => h.el("button").on("click", ReaderMessage.Clicked()).children("reader")
   })
 
-const GroupRef = Group.ref("Group")
-const PageMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
+const BumperMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
+
+/** Sends `times` bumps to its group on a click. */
+const Bumper = Component.define({
+  name: "Bumper",
+  scoped: false,
+  props: Schema.Struct({ times: Schema.Number }),
+  model: Schema.Null,
+  message: BumperMessage,
+  shared: { group: Group }
+}).make({
+  init: () => null,
+  update: (model, { times }, $) => {
+    let next = $.set(model).send(Group, { _tag: "Bumped" })
+    for (let i = 1; i < times; i++) next = next.send(Group, { _tag: "Bumped" })
+    return next
+  },
+  view: (_, h) => h.el("button").on("click", BumperMessage.Bump({ times: h.props.times })).children("bump")
+})
+
 const makePage = (Reader: ReturnType<typeof makeReader>) =>
-  Component.define({ name: "Page", scoped: false, model: Schema.Null, message: PageMessage }).make({
+  Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model, { times }, $) => {
-      let next = $.set(model)
-      for (let i = 0; i < times; i++) next = next.send(GroupRef, { _tag: "Bumped" })
-      return next
-    },
-    view: (_, h) => Group(h, { ref: GroupRef, fallback: () => h.text("looped"), view: () => Reader(h, { key: "r" }) })
+    update: (model) => model,
+    view: (_, h) =>
+      Group(h, {
+        key: "g",
+        fallback: () => h.text("looped"),
+        view: () => h.el("div", Bumper(h, { key: "b", props: { times: 150 } }), Reader(h, { key: "r" }))
+      })
   })
 
-const group = "/Page/Group[Group]"
+const group = "/Page/Group[g]"
 const reader = group + "/Reader[r]"
 
 describe("optional owners, reports and onChange", () => {
@@ -395,7 +414,7 @@ describe("optional owners, reports and onChange", () => {
       click(root, "alone")
       yield* TestHost.settle
       const dropped = root.log().filter((entry): entry is MessageLog.SendDropped => entry._tag === "SendDropped")
-      assert.deepStrictEqual(dropped.map((entry) => [entry.ref, entry.reason]), [["TipsProvider", "absent"]])
+      assert.deepStrictEqual(dropped.map((entry) => [entry.owner, entry.reason]), [["TipsProvider", "absent"]])
     })))
 
   it.effect("an owner reads its readers' reports once the pass settles: a swap in one render sends nothing, an unmount does", () =>
@@ -440,7 +459,7 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.text("reader")), "click")
+      click(root, "reader")
       yield* TestHost.settle
       const [changed] = updatesAt(root.log(), group)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [
@@ -461,7 +480,7 @@ describe("optional owners, reports and onChange", () => {
       // Reports the opposite of what it's told, so equality never stops the pair.
       const root = yield* TestHost.mount(makePage(makeReader((told) => !told)), {})
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.text("reader")), "click")
+      click(root, "reader")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "looped")
       const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
@@ -473,7 +492,7 @@ describe("optional owners, reports and onChange", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(makePage(makeReader((told) => told)), {})
       yield* TestHost.settle
-      root.send(PageMessage.Bump({ times: 150 }))
+      click(root, "bump")
       yield* TestHost.settle
       assert.lengthOf(updatesAt(root.log(), group), 150)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => entry.message), [
@@ -512,11 +531,21 @@ describe("shared state in update", () => {
         .send(Clock, ClockMessage.Ticked()),
     view: (seen, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
   })
-  const ClockRef = Clock.ref("clock")
-  const Face = Component.define({ name: "Face", scoped: false, model: Schema.Null, message: ClockMessage }).make({
+  const Ticker = Component.define({
+    name: "Ticker",
+    scoped: false,
+    model: Schema.Null,
+    message: ClockMessage,
+    shared: { clock: Clock }
+  }).make({
     init: () => null,
-    update: (model, message, $) => $.set(model).send(ClockRef, message),
-    view: (_, h) => Clock(h, { ref: ClockRef, view: () => Watch(h, { key: "w" }) })
+    update: (model, message, $) => $.set(model).send(Clock, message),
+    view: (_, h) => h.el("button").on("click", ClockMessage.Ticked()).children("tick")
+  })
+  const Face = Component.define({ name: "Face", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+    init: () => null,
+    update: (model) => model,
+    view: (_, h) => Clock(h, { key: "clock", view: () => h.el("div", Watch(h, { key: "w" }), Ticker(h, { key: "t" })) })
   })
 
   it.effect("reads the owner's value as update runs, logs it, and replays it from entries and Wire frames", () =>
@@ -525,10 +554,10 @@ describe("shared state in update", () => {
       yield* TestHost.settle
       click(root, "saw []")
       yield* TestHost.settle
-      root.send(ClockMessage.Ticked())
+      click(root, "tick")
       click(root, "saw [0]")
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "saw [0,2]")
+      assert.strictEqual(root.text(), "saw [0,2]tick")
       const log = root.log()
       assert.deepStrictEqual(updatesAt(log, "/Face/Clock[clock]/Watch[w]").map((entry) => entry.shared), [
         { clock: { at: new Date(0), "~redacted": false }, tips: undefined },
@@ -569,15 +598,24 @@ describe("onChange rounds and declarations", () => {
         view: (_, h) => h.text("")
       })
       const Reader = makeReader((told) => told)
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: PageMessage }).make({
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model, _, $) => $.set(model).send(GroupRef, { _tag: "Bumped" }),
+        update: (model) => model,
         view: (_, h) =>
-          Group(h, { ref: GroupRef, view: () => h.el("div", Replier(h, { key: "a" }), Reader(h, { key: "r" })) })
+          Group(h, {
+            key: "g",
+            view: () =>
+              h.el(
+                "div",
+                Bumper(h, { key: "b", props: { times: 1 } }),
+                Replier(h, { key: "a" }),
+                Reader(h, { key: "r" })
+              )
+          })
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
-      root.send(PageMessage.Bump({ times: 1 }))
+      click(root, "bump")
       yield* TestHost.settle
       const [first, second] = updatesAt(root.log(), group)
       assert.deepStrictEqual(updatesAt(root.log(), reader).map((entry) => [entry.message, entry.source]), [

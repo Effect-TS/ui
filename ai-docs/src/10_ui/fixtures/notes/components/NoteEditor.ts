@@ -9,9 +9,8 @@ import { Notes } from "../services/Notes.ts"
 // `NoteEditorMessage.RequestedSave()`.
 //
 // A message is a fact about what happened, named verb first in the past
-// tense: the cause, then the control. `RequestedSave` has four causes, the
-// form, Ctrl+S, the autosave and a parent's send, so it names the fact they
-// share.
+// tense: the cause, then the control. `RequestedSave` has three causes, the
+// form, Ctrl+S and the autosave, so it names the fact they share.
 export const NoteEditorMessage = UiSchema.TaggedEnum({
   UpdatedBody: { body: Schema.String },
   RequestedSave: {},
@@ -78,11 +77,7 @@ const NoteEditorDef = Component.define({
     actionsOpen: Schema.Boolean
   }),
   message: NoteEditorMessage,
-  events: NoteEditorEvents,
-  // The messages a parent may send with `$.send`. The rest of the Message
-  // union stays private, so the editor can change it without breaking a
-  // parent.
-  receives: ["RequestedSave"]
+  events: NoteEditorEvents
 })
 
 // An update function without a tag takes every message, so `$.combine` in

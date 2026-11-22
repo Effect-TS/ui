@@ -44,20 +44,19 @@ const Frame = Component.define({
   }
 })
 
-const EditorMsg = UiSchema.TaggedEnum({ Typed: {}, Clear: {}, Break: {} })
+const EditorMsg = UiSchema.TaggedEnum({ Typed: {}, Break: {} })
 const Editor = Component.define({
   name: "Editor",
   scoped: false,
   model: Schema.Number,
   message: EditorMsg,
   events: Schema.Number,
-  receives: ["Clear"],
   elements: Html
 }).make({
   init: () => 0,
   update: (n, msg, $) => {
     if (msg._tag === "Break") throw new Error("broke")
-    return msg._tag === "Clear" ? 0 : $.set(n + 1).emit(n + 1)
+    return $.set(n + 1).emit(n + 1)
   },
   view: (n, h) =>
     h.span(
@@ -65,34 +64,27 @@ const Editor = Component.define({
       h.button.onClick(EditorMsg.Break()).children("break")
     )
 })
-const Draft = Editor.ref("Draft")
 
-const PageMsg = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, Clear: {}, Failed: {} })
+const PageMsg = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, Failed: {} })
 const Page = Component.define({ name: "Page", scoped: false, model: Schema.String, message: PageMsg, elements: Html })
   .make({
     init: () => "",
-    update: (log, msg, $) =>
-      msg._tag === "Clear"
-        ? $.send(Draft, { _tag: "Clear" })
-        : log + (msg._tag === "Changed" ? "changed " + msg.count : "failed"),
+    update: (log, msg) => log + (msg._tag === "Changed" ? "changed " + msg.count : "failed"),
     view: (log, h) =>
-      h.div(
-        h.button.onClick(PageMsg.Clear()).children("clear"),
-        Frame(h, {
-          key: "f",
-          slots: {
-            body: [
-              h.output(log),
-              Editor(h, {
-                ref: Draft,
-                onEmit: (count) => PageMsg.Changed({ count }),
-                onFailure: () => PageMsg.Failed(),
-                fallback: () => h.span("editor down")
-              })
-            ]
-          }
-        })
-      )
+      Frame(h, {
+        key: "f",
+        slots: {
+          body: [
+            h.output(log),
+            Editor(h, {
+              key: "Draft",
+              onEmit: (count) => PageMsg.Changed({ count }),
+              onFailure: () => PageMsg.Failed(),
+              fallback: () => h.span("editor down")
+            })
+          ]
+        }
+      })
   })
 const editorPath = "/Page/Frame[f]/[body]/Editor[Draft]"
 
@@ -126,17 +118,6 @@ describe("slots", () => {
       yield* TestHost.settle
       assert.include(root.text(), "changed 1")
       assert.strictEqual(frameViews, 0)
-    })))
-
-  it.effect("$.send reaches a child in content by its ref", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Page, {})
-      click(root, "type 0")
-      yield* TestHost.settle
-      click(root, "clear")
-      yield* TestHost.settle
-      assert.include(root.text(), "type 0")
-      assert.include(updates(root), editorPath + " Send Clear")
     })))
 
   it.effect("unplacing a slot unmounts its content, which starts over when placed again", () =>
@@ -336,12 +317,6 @@ describe("a mistake in content fails the parent that wrote it", () => {
       init: () => null,
       update: (m) => m,
       view: (_, h) => Frame(h, { key: "f", slots: { body: [h.li.key("a"), h.li.key("a")] } })
-    }),
-    "a child ref key also used in its view": define("Writer").make({
-      init: () => null,
-      update: (m) => m,
-      view: (_, h) =>
-        h.div(Leaf(h, { ref: Leaf.ref("N") }), Frame(h, { key: "f", slots: { body: Leaf(h, { ref: Leaf.ref("N") }) } }))
     }),
     "a fallback at a sibling's path": define("Writer").make({
       init: () => null,

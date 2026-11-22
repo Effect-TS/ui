@@ -228,29 +228,6 @@ describe("headless components", () => {
     })
   })
 
-  it("a headless child takes a ref of what it receives, and no other", () => {
-    const Other = Component.define({
-      name: "Other",
-      scoped: false,
-      model: Schema.Null,
-      message: UiSchema.TaggedEnum({ Reset: {} }),
-      receives: ["Reset"]
-    }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
-      init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
-        expect(Menu).type.toBeCallableWith(h, { ref: Menu.ref("Actions"), props: { items }, view: () => h.div() })
-        expect(Menu).type.not.toBeCallableWith(h, {
-          ref: Other.ref("Actions"),
-          props: { items },
-          view: () => h.div()
-        })
-        return h.div()
-      }
-    })
-  })
-
   it("a headless component isn't a Mountable", () => {
     expect(Menu).type.not.toBeAssignableTo<Component.Any>()
     expect(TestHost.mount).type.not.toBeCallableWith(Menu, { items })

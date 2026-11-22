@@ -142,13 +142,10 @@ export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: st
 }
 
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
-// `Rcv` is invariant, and `any` doesn't stand for `never`, so one that receives nothing needs its own members too.
 // The same union as `Steps.ts`'s, so `Story.Steps.Any` extends `Steps.Steps.Any`.
 type AnyComponent =
-  | Component.Members<any, any, any, any, any, any, any, any, any>
-  | Component.Members<any, any, any, never, any, any, any, any, any>
-  | Component.Members<any, any, any, any, any, any, any, any, never>
-  | Component.Members<any, any, any, never, any, any, any, any, never>
+  | Component.Members<any, any, any, any, any, any, any, any>
+  | Component.Members<any, any, any, never, any, any, any, any>
 
 /**
  * A cursor over one story. It has the steps every kind of test shares, from
@@ -368,8 +365,8 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  * @since 0.1.0
  */
 export const head: {
-  <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements, Rcv = never>(
-    component: Component.Component<Name, Props, Model, Msg, Events, R, V, any, Rcv>,
+  <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
+    component: Component.Component<Name, Props, Model, Msg, Events, R, V, any>,
     model: Model,
     ...props: {} extends Props ? [props?: Props] : [props: Props]
   ): ReadonlyArray<View.HeadEntry<V>>

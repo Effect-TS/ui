@@ -283,10 +283,9 @@ export const ssr = <
   Events,
   R,
   V extends View.Elements,
-  RP = never,
-  Rcv = never
+  RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any, Rcv> & BrowserHost.HtmlRoot<V>,
+  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & BrowserHost.HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined

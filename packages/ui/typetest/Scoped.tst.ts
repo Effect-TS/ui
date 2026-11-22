@@ -17,7 +17,6 @@ const NoteEditor = Component.define({
   model: Schema.String,
   message: EditorMessage,
   events: EditorEvents,
-  receives: ["Focus"],
   elements: Html
 }).make({
   init: () => "",
@@ -62,12 +61,7 @@ declare const condition: boolean
 describe("scoped", () => {
   it("defines a ScopedComponent with scoped: true and a Component with scoped: false", () => {
     expect(NoteEditor).type.toBeAssignableTo<
-      Component.Scoped<
-        { readonly noteId: string },
-        typeof EditorEvents.Type,
-        never,
-        Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>
-      >
+      Component.Scoped<{ readonly noteId: string }, typeof EditorEvents.Type>
     >()
     expect(Tooltip).type.toBeAssignableTo<Component.Any>()
     expect(NoteEditor).type.not.toBeAssignableTo<Component.Any>()
@@ -125,49 +119,6 @@ describe("scoped", () => {
     }, (s) => ProfileForm(s, {}))
     // @ts-expect-error Property 'nope' does not exist
     h.scoped(({ model }) => model.nope, (s) => ProfileForm(s, {}))
-  })
-
-  it("takes refs, and refs at a key that isn't a literal only in a scope with a predicate", () => {
-    const Editors = NoteEditor.ref("Editors")
-    expect(h.scoped((s) => NoteEditor(s, { ref: Editors, props: { noteId: "a" } }))).type.not.toRaiseError()
-    expect(h.scoped((s) => NoteEditor(s, { ref: Editors.at("main"), props: { noteId: "a" } }))).type.not
-      .toRaiseError()
-    expect(h.scoped((s) => NoteEditor(s, { ref: Editors.at(1), props: { noteId: "a" } }))).type.not.toRaiseError()
-    expect(h.scoped(({ key }) => key !== "", (s) => NoteEditor(s, { ref: Editors.at(id), props: { noteId: id } })))
-      .type.not.toRaiseError()
-    expect(Editors.at("main")).type.toBe<
-      Component.Ref<Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>, false>
-    >()
-    expect(Editors.at(id)).type.toBe<
-      Component.Ref<Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>, boolean>
-    >()
-    expect(Editors.at(id).at("a")).type.toBe<
-      Component.Ref<Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>, boolean>
-    >()
-    // @ts-expect-error "~dynamicKey"
-    h.scoped((s) => NoteEditor(s, { ref: Editors.at(id), props: { noteId: id } }))
-    // @ts-expect-error "~dynamicKey"
-    h.scoped((s) => NoteEditor(s, { ref: Editors.at(model.order.length), props: { noteId: id } }))
-    // @ts-expect-error "~dynamicKey"
-    h.scoped((s) => NoteEditor(s, { ref: Editors.at(id as "pinned" | `row-${string}`), props: { noteId: id } }))
-    // @ts-expect-error "~dynamicKey"
-    h.scoped((s) => NoteEditor(s, { ref: NoteEditor.ref(id), props: { noteId: id } }))
-    class Rows extends Feature.Service<Rows>()("Rows", {
-      props: Schema.Struct({}),
-      receives: EditorMessage.cases.Focus
-    }) {}
-    expect(h.scoped((s) => NoteEditor(s, { ref: Rows.ref("main"), props: { noteId: id } }))).type.not.toRaiseError()
-    // @ts-expect-error "~dynamicKey"
-    h.scoped((s) => NoteEditor(s, { ref: Rows.ref(id), props: { noteId: id } }))
-    type Focus = Extract<typeof EditorMessage.Type, { readonly _tag: "Focus" }>
-    const forwarded = (ref: Component.Ref.Within<Focus>) =>
-      // @ts-expect-error "~dynamicKey"
-      h.scoped((s) => NoteEditor(s, { ref, props: { noteId: id } }))
-    const bounded = (ref: Component.Ref.Within<Focus, false>) =>
-      h.scoped((s) => NoteEditor(s, { ref, props: { noteId: id } }))
-    expect(bounded).type.toBeCallableWith(Editors.at("main"))
-    expect(bounded).type.not.toBeCallableWith(Editors.at(id))
-    expect(forwarded).type.toBeCallableWith(Editors.at(id))
   })
 
   it("rejects a scoped component called with h", () => {

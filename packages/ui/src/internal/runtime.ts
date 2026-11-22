@@ -43,7 +43,6 @@ import type * as mountArgs from "./mountArgs.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
-  checkAuthorRefs,
   checkChildPaths,
   checkContentPaths,
   checkFallbackPaths,
@@ -389,51 +388,11 @@ const keptEntries = new WeakMap<Instance, Kept>()
 const waitingOf = new WeakMap<Instance, Record<string, Saved>>()
 let keptLive = 0
 
-/** How many times one instance may deliver sends in a flush before it fails. */
+/** How many times one instance may send to owners in a flush before it fails. */
 const maxSendPasses = 100
 
 /** What a keyed old's index is replaced with in the map of keys once a node has taken it. */
 const taken = -1
-
-/**
- * The child rendered with the ref `key` in the trees one author wrote: its view, the fallbacks shown
- * in it, and the closures of the headless children declared there, which it wrote too. Each render
- * checks that at most one child across them has the key.
- */
-const findChild = (rendered: Packed, key: string): RChild | RFallback | undefined => {
-  if (rendered === undefined) return undefined
-  if (!Array.isArray(rendered)) return findChildIn(rendered, key)
-  for (const r of rendered) {
-    const found = findChildIn(r, key)
-    if (found !== undefined) return found
-  }
-  return undefined
-}
-const findChildIn = (r: Rendered, key: string): RChild | RFallback | undefined => {
-  if (r._tag === "Element") return findChild(r.children, key)
-  if (r._tag === "Fallback" && r.scoped) return findChildIn(r.inner, key)
-  if (r._tag === "Child" || r._tag === "Fallback") {
-    if (r.v.ref !== undefined && r.v.ref.key === key && r.v.owner === undefined) return r
-    if (r._tag === "Fallback") return findChildIn(r.inner, key)
-    if (r.inst.owner !== undefined) return findChild(r.inst.rendered, key)
-    return firstInOutlets(r.inst, (out) => findChild(out.rendered, key))
-  }
-  // An outlet in the tree shows what another author wrote, so the search passes it by.
-  return undefined
-}
-
-const findOwned = (inst: Instance, key: string): RChild | RFallback | undefined => {
-  let r = inst.rendered
-  while (
-    r !== undefined && !Array.isArray(r) && (r._tag === "Child" || r._tag === "Fallback" && !r.scoped) &&
-    r.v.owner !== undefined
-  ) {
-    if (r.v.owner === inst.owner && r.v.ref !== undefined && r.v.ref.key === key) return r
-    if (r._tag === "Fallback") return undefined
-    r = r.inst.rendered
-  }
-  return undefined
-}
 
 // Kept beside the instances, so a component without slots carries no field for them.
 const slottedBy = new WeakMap<Instance, Slotted>()
@@ -622,8 +581,6 @@ export interface Instance {
    * updates, issued after `init`'s.
    */
   mounting: Array<{ readonly command: Command.Command<any, any>; readonly issued: MessageLog.Issued }> | undefined
-  /** The `$.send`s to children of updates whose render hasn't happened yet: delivered at the end of it. */
-  outbox: Array<{ readonly send: Component.Send.ToChild; readonly issued: MessageLog.Issued }>
   /** An owner of shared state: what its `shares` last returned. */
   shares: unknown
   /** An owner of shared state: the instances below it that read it, marked dirty when its value changes. */
@@ -1831,7 +1788,7 @@ const setup = (
       watchCauses.clear()
     }
   }
-  // How many times each instance has delivered sends in this flush: a parent and a child that answer
+  // How many times each instance has sent to owners in this flush: a reader and an owner that answer
   // each other would otherwise never leave `drainLoop`.
   const sendPasses = new Map<Instance, number>()
   // How many times each owner of shared state has sent its readers' `onChange` or its own `collects.onChange` in
@@ -1899,7 +1856,7 @@ const setup = (
         if (keeping.length > 0) flushKept()
       }
     }
-    checkPendingRefs()
+    checkPendingAuthors()
   }
   const defer = (f: () => void) => {
     const from = origin
@@ -1937,12 +1894,12 @@ const setup = (
   }
   function drainLoop() {
     do {
-      // Before any send is delivered: a mount or a closure that rendered alone leaves its author's refs to check.
-      checkPendingRefs()
+      // A mount or a closure that rendered alone leaves its author's placed slots to check.
+      checkPendingAuthors()
       while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0) {
         if (deferred.length > 0) {
           deferred.shift()!()
-          checkPendingRefs()
+          checkPendingAuthors()
           continue
         }
         if (dirty.size === 0) {
@@ -1958,7 +1915,7 @@ const setup = (
         }
         dirty.delete(next!)
         if (!next!.closed) renderDirty(next!)
-        else checkPendingRefs()
+        else checkPendingAuthors()
       }
       foldHead()
     } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
@@ -2899,7 +2856,6 @@ const setup = (
     keyedQueued: Instance["keyedQueued"] = false
     loadMores: Instance["loadMores"] = undefined
     mounting: Instance["mounting"] = undefined
-    outbox: Instance["outbox"] = emptyList
     shares: Instance["shares"] = undefined
     readers: Instance["readers"] = undefined
     owners: Instance["owners"] = undefined
@@ -3008,7 +2964,6 @@ const setup = (
     declare keyedQueued: Instance["keyedQueued"]
     declare loadMores: Instance["loadMores"]
     declare mounting: Instance["mounting"]
-    declare outbox: Instance["outbox"]
     declare shares: Instance["shares"]
     declare readers: Instance["readers"]
     declare owners: Instance["owners"]
@@ -3660,8 +3615,6 @@ const setup = (
       for (let index = 0; index < commands.length; index++) {
         mounting.push({ command: commands[index], issued: { seq: entrySeq, index } })
       }
-      // The first render, which makes the children, comes first.
-      if (queueSends(inst, next, entrySeq)) defer(() => deliverSends(inst))
       syncSubscriptions(inst, true)
       if (next.sends !== undefined && next.sends.length > 0) defer(() => sendToOwners(inst, next.sends!, entrySeq))
       if (next.events.length > 0) defer(() => deliverEvents(inst, next.events, entrySeq))
@@ -3672,8 +3625,6 @@ const setup = (
       issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
     }
     if (!initial) markDirty(inst)
-    // Delivered at the end of the render just marked, so a child it mounts can receive them.
-    queueSends(inst, next, entrySeq)
     syncSubscriptions(inst)
     // After the watches follow the Model, so a load more reaches the args the query returns for it.
     if (!initial && next.lists !== undefined) {
@@ -3729,20 +3680,9 @@ const setup = (
     }
     onceSelected(inst, go)
   }
-  const queueSends = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number): boolean => {
-    if (next.sends === undefined || next.sends.length === 0) return false
-    let queued = false
-    next.sends.forEach((send, index) => {
-      if (send.ref === undefined) return
-      if (inst.outbox === emptyList) inst.outbox = []
-      inst.outbox.push({ send, issued: { seq: entrySeq, index } })
-      queued = true
-    })
-    return queued
-  }
   /**
-   * Counts one more round of sends by `inst` in this flush, and fails it past the limit: a parent and
-   * a child, or a reader and its owner, whose updates answer each other would never leave `drainLoop`.
+   * Counts one more round of sends by `inst` in this flush, and fails it past the limit: a reader and
+   * its owner whose updates answer each other would never leave `drainLoop`.
    */
   const countSends = (inst: Instance, to: string): boolean => {
     const passes = (sendPasses.get(inst) ?? 0) + 1
@@ -3968,7 +3908,12 @@ const setup = (
           read.optional && read.owner.definition === definition
         )
       ) {
-        record(inst, { _tag: "SendDropped", ref: definition.name, issued: { seq: entrySeq, index }, reason: "absent" })
+        record(inst, {
+          _tag: "SendDropped",
+          owner: definition.name,
+          issued: { seq: entrySeq, index },
+          reason: "absent"
+        })
         continue
       }
       if (owner === undefined) {
@@ -3977,38 +3922,6 @@ const setup = (
         return
       }
       owner.dispatch(send.message, { _tag: "Send", path: inst.path, seq: entrySeq })
-    }
-  }
-  /**
-   * Delivers the sends of `inst`'s updates to its direct children, matched by ref key in its last
-   * render. A send whose child can't take it is dropped and logged, never kept for a later instance.
-   */
-  const deliverSends = (inst: Instance) => {
-    if (inst.outbox.length === 0 || inst.closed) return
-    const outbox = inst.outbox
-    inst.outbox = emptyList
-    if (!countSends(inst, "its children")) return
-    for (const { issued, send } of outbox) {
-      if (inst.closed) return
-      const child = inst.owner === undefined
-        ? findChild(inst.rendered, send.ref.key) ?? (keptLive > 0 ? findKept(inst, send.ref.key) : undefined)
-        : findOwned(inst, send.ref.key)
-      const reason: MessageLog.SendDropped["reason"] | undefined = child === undefined
-        ? "unrendered"
-        : child._tag === "Fallback"
-        ? (child.failedChild ? "failed" : "fallback")
-        : child.inst.failure !== undefined
-        ? "failed"
-        : child.inst.closed
-        ? "unrendered"
-        : child.inst.waiting
-        ? "waiting"
-        : undefined
-      if (reason !== undefined) {
-        record(inst, { _tag: "SendDropped", ref: send.ref.key, issued, reason })
-        continue
-      }
-      ;(child as RChild).inst.dispatch(send.message, { _tag: "Send", path: inst.path, seq: issued.seq })
     }
   }
   const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {
@@ -5505,32 +5418,31 @@ const setup = (
       ? inst.rendered
       : undefined
     const paths = checkChildPaths(inst, tree, last?._tag === "Element" ? last.v : undefined)
-    // A view with no child, ref or outlet has nothing to check its fallbacks or refs against.
-    inst.childPaths = paths.paths === undefined && paths.refs === undefined && paths.placed === undefined
+    // A view with no child or outlet has nothing to check its fallbacks or slots against.
+    inst.childPaths = paths.paths === undefined && paths.placed === undefined
       ? undefined
       : paths
     inst.clash = undefined
-    // Its author's refs are checked once the author's other trees are current too.
-    if (inst.owner !== undefined) refChecks.add(inst.author)
+    // Its author's placed slots are checked once the author's other trees are current too.
+    if (inst.owner !== undefined) authorChecks.add(inst.author)
     return tree
   }
 
   /**
-   * Authors with a closure rendered since their refs were last checked: one that mounted, or that
+   * Authors with a closure rendered since their placed slots were last checked: one that mounted, or that
    * rendered alone, as a headless child does when its own Model changes.
    */
-  const refChecks = new Set<Instance>()
+  const authorChecks = new Set<Instance>()
   /**
-   * Fails `author` with source `view` when two children across its view and the closures it wrote have
-   * refs with one key, since a send matches a child by its key alone. Run once all of them are current.
+   * Fails `author` with source `view` when two trees across its view and the closures it wrote place one
+   * of its slots. Run once all of them are current.
    */
-  const checkRefs = (author: Instance) => {
-    refChecks.delete(author)
+  const checkAuthor = (author: Instance) => {
+    authorChecks.delete(author)
     if (author.closed) return
     const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
     closurePaths(author, written)
     try {
-      checkAuthorRefs(author, written)
       checkAuthorPlacements(author, written)
     } catch (error) {
       failInstance(author, Cause.die(error), "view")
@@ -5556,8 +5468,8 @@ const setup = (
       closurePaths(child, out)
     }
   }
-  const checkPendingRefs = () => {
-    for (const author of refChecks) checkRefs(author)
+  const checkPendingAuthors = () => {
+    for (const author of authorChecks) checkAuthor(author)
   }
 
   /**
@@ -5624,10 +5536,9 @@ const setup = (
     })
     // Its closures render with it, so all it wrote is current. A closure that rendered alone is checked
     // in the drain, after the render that holds it.
-    if (inst.owner === undefined) checkRefs(inst)
+    if (inst.owner === undefined) checkAuthor(inst)
     if (table !== undefined && !inst.closed) askKept(inst, table)
     if (!inst.closed) viewChanged = true
-    deliverSends(inst)
   }
 
   /** The record of an element whose node and children are made: its mounts start now. */
@@ -5782,8 +5693,8 @@ const setup = (
       out.childPaths = checkContentPaths(out, views)
       out.clash = undefined
       checkKeys(out, views)
-      // The author's refs are checked once its other trees are current too.
-      refChecks.add(out.author)
+      // The author's placed slots are checked once its other trees are current too.
+      authorChecks.add(out.author)
       return views.length === 0 ? [emptyText] : views
     } catch (error) {
       failLater(out.author, error)
@@ -7236,13 +7147,6 @@ const setup = (
         askAlive(author, table, entry.alive, entry.inner.v, entry)
       }
     }
-  }
-
-  const findKept = (inst: Instance, key: string): RChild | RFallback | undefined => {
-    for (const entry of keptTables.get(inst)?.children.values() ?? []) {
-      if (entry.inner.v.ref?.key === key) return entry.inner
-    }
-    return undefined
   }
 
   const patchScoped = (inst: Instance, at: RScoped, view: View.Child<any, any>, env: Env): RScoped => {
