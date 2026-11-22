@@ -167,16 +167,16 @@ export const LaunchPage = Component.define({
       ),
       Section(h, "Lifetime").children(
         Label(h, "Lifetime"),
-        h.h2.children("State lasts as long as the component is rendered"),
+        h.h2.children("By default, state lasts as long as the component is rendered"),
         h.p.class("prose").children(
-          "Stop rendering a component and its Model goes with it. That's the trade for not storing every child's state yourself, and we think it's the right one."
+          "Stop rendering a component and its Model goes with it. That's the trade for not storing every child's state yourself, and we think it's the right one. When state has to survive being off screen, like a draft on a tab the reader switched away from, the parent renders that child with h.scoped, and its Model is kept while it's hidden."
         )
       ),
       Section(h, "What's next").children(
         Label(h, "What's next"),
         h.h2.children("Moving from Foldkit 0.x"),
         h.p.class("prose").children(
-          "An upgrade guide will cover the API changes step by step. It's a migration, not a rewrite: your Models, Messages and update functions move across mostly as they are. Foldkit, the full-stack framework, builds on Effect UI from here."
+          "The upgrade guide isn't published yet. When it is, it will cover the API changes step by step. It's a migration, not a rewrite: your Models, Messages and update functions move across mostly as they are. Foldkit, the full-stack framework, builds on Effect UI from here."
         ),
         h.p.class("links").children(
           h.a.class("button primary").attr("href", "https://github.com/Effect-TS/ui").children("Effect UI on GitHub")
