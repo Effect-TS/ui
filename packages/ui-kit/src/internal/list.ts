@@ -7,13 +7,16 @@ export interface Labelled {
 
 export const available = (item: Labelled | undefined): boolean => item !== undefined && item.disabled !== true
 
-export const keyed = <R>(part: View.Part<"div", [value: string], R>) =>
+export const keyed = <Tag extends string, Rest extends ReadonlyArray<unknown>, R>(
+  part: View.Part<Tag, [value: string, ...Rest], R>
+) =>
   View.wrapPart(
     part,
-    <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
+    <B extends View.PartTarget<Tag> & { readonly key: (key: string) => View.PartTarget<Tag> }>(
       element: B,
-      value: string
-    ): ReturnType<B["attr"]> => part(element.key(value), value)
+      value: string,
+      ...rest: Rest
+    ): ReturnType<B["attr"]> => part(element.key(value), value, ...rest)
   )
 
 export type Loop = "none" | "wrap" | "escape"

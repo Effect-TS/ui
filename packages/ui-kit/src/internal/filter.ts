@@ -4,24 +4,16 @@ export interface TextFilter {
   readonly endsWith: (text: string, query: string) => boolean
 }
 
+type Locale = string | ReadonlyArray<string> | undefined
+
+const defaults: Intl.CollatorOptions = { usage: "search", sensitivity: "base", ignorePunctuation: true }
+
 const cache = new Map<string, TextFilter>()
 
-export const textFilter = (
-  locale?: string | ReadonlyArray<string> | undefined,
-  options?: Intl.CollatorOptions
-): TextFilter => {
-  const collatorOptions: Intl.CollatorOptions = {
-    usage: "search",
-    sensitivity: "base",
-    ignorePunctuation: true,
-    ...options
-  }
-  const key = JSON.stringify([locale ?? null, collatorOptions])
-  const cached = cache.get(key)
-  if (cached !== undefined) return cached
-  const collator = new Intl.Collator(locale as Array<string> | string | undefined, collatorOptions)
+const make = (locale: Locale, options: Intl.CollatorOptions): TextFilter => {
+  const collator = new Intl.Collator(locale as Array<string> | string | undefined, options)
   const same = (a: string, b: string) => collator.compare(a, b) === 0
-  const filter: TextFilter = {
+  return {
     contains: (text, query) => {
       if (query === "") return true
       for (let i = 0; i <= text.length - query.length; i++) {
@@ -33,6 +25,11 @@ export const textFilter = (
     endsWith: (text, query) =>
       query === "" || (text.length >= query.length && same(text.slice(text.length - query.length), query))
   }
-  cache.set(key, filter)
+}
+
+export const textFilter = (locale?: Locale, options?: Intl.CollatorOptions): TextFilter => {
+  const key = options === undefined ? String(locale) : JSON.stringify([locale ?? null, options])
+  let filter = cache.get(key)
+  if (filter === undefined) cache.set(key, filter = make(locale, { ...defaults, ...options }))
   return filter
 }

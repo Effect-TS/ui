@@ -238,15 +238,16 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, separatorAttrs, withStyle } from "./internal/attributes.ts"
+import { type Attributed, attrSelector, flag, idOf, separatorAttrs, withStyle } from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
-import { byAttribute } from "./internal/dom.ts"
+import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
-import { methodOf, onScrollbar } from "./internal/interaction.ts"
-import { available } from "./internal/list.ts"
-import { lockScroll } from "./internal/modal.ts"
+import { methodOf } from "./internal/interaction.ts"
+import { available, keyed, stepped } from "./internal/list.ts"
+import { holdScroll } from "./internal/modal.ts"
+import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { activationDirection, inSafeArea, type Point } from "./internal/safeArea.ts"
-import { inKept, raiseAbove } from "./internal/topLayer.ts"
+import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
@@ -404,6 +405,8 @@ export const MenuFilterMode = Schema.Literals(["contains", "startsWith", "endsWi
  */
 export type MenuFilterMode = typeof MenuFilterMode.Type
 
+const Orientation = Schema.Literals(["vertical", "horizontal"])
+
 /**
  * The props of a `Menu`.
  *
@@ -465,7 +468,7 @@ export const MenuProps = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
   modal: Schema.optional(Schema.Boolean),
   loopFocus: Schema.optional(Schema.Boolean),
-  orientation: Schema.optional(Schema.Literals(["vertical", "horizontal"])),
+  orientation: Schema.optional(Orientation),
   highlightItemOnHover: Schema.optional(Schema.Boolean),
   closeParentOnEsc: Schema.optional(Schema.Boolean),
   openOnHover: Schema.optional(Schema.Boolean),
@@ -541,6 +544,8 @@ export type MenuEvents = typeof MenuEvents.Type
  */
 export type MenuTransitionStatus = "starting" | "ending" | null
 
+const Instant = Schema.Literals(["click", "dismiss", "trigger-change"])
+
 /**
  * Why the popup's animations are instant: `"click"` for a menu opened or
  * closed from the keyboard, `"dismiss"` for Escape, and `"trigger-change"`
@@ -550,7 +555,7 @@ export type MenuTransitionStatus = "starting" | "ending" | null
  * @category models
  * @since 0.1.0
  */
-export type MenuInstant = "click" | "dismiss" | "trigger-change"
+export type MenuInstant = typeof Instant.Type
 
 const ItemKind = Schema.Literals(["item", "link", "checkbox", "radio"])
 
@@ -562,8 +567,6 @@ const ItemAction = Schema.Struct({
 })
 
 type ItemAction = typeof ItemAction.Type
-
-const Orientation = Schema.Literals(["vertical", "horizontal"])
 
 const ParentState = Schema.Struct({
   open: Schema.Boolean,
@@ -583,7 +586,6 @@ type Submenu = typeof Submenu.Type
 const Message = UiSchema.TaggedEnum({
   PressedTrigger: { key: Schema.String, triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   ReleasedTrigger: {},
-  ClickedTrigger: { key: Schema.String, triggerId: Schema.NullOr(Schema.String), pointerType: Schema.String },
   PressedTriggerKey: { key: Schema.String, trigger: Schema.String, triggerId: Schema.NullOr(Schema.String) },
   EnteredTrigger: {
     key: Schema.String,
@@ -662,7 +664,7 @@ const Model = Schema.Struct({
   pressedItem: Schema.Boolean,
   rtl: Schema.Boolean,
   submenus: Schema.Array(Submenu),
-  instant: Schema.NullOr(Schema.Literals(["click", "dismiss", "trigger-change"])),
+  instant: Schema.NullOr(Instant),
   transitioning: Schema.Boolean,
   direction: Schema.NullOr(Schema.String),
   inputFocused: Schema.Boolean,
@@ -678,34 +680,22 @@ type MenuUpdate = Component.Update<Model, Message, MenuEvents, MenuProps> & {
   send(owner: "self", message: Extract<Message, { readonly _tag: "ClosedByChild" }>): Base
 }
 
-const WaitBeforeResetTyping = Command.make(
-  "WaitBeforeResetTyping",
-  { args: {}, mode: "switch" },
-  () => Effect.as(Effect.sleep(Duration.millis(500)), Message.CompletedWaitBeforeResetTyping())
-)
+const wait = (name: string, completed: () => Message) =>
+  Command.make(
+    name,
+    { args: { delay: Schema.Number }, mode: "switch" },
+    ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), completed())
+  )
 
-const WaitBeforeHoverOpen = Command.make(
-  "WaitBeforeHoverOpen",
-  { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeHoverOpen())
-)
+const WaitBeforeResetTyping = wait("WaitBeforeResetTyping", Message.CompletedWaitBeforeResetTyping)
+const WaitBeforeHoverOpen = wait("WaitBeforeHoverOpen", Message.CompletedWaitBeforeHoverOpen)
+const WaitBeforeHoverClose = wait("WaitBeforeHoverClose", Message.CompletedWaitBeforeHoverClose)
+const WaitBeforeStickExpires = wait("WaitBeforeStickExpires", Message.CompletedWaitBeforeStickExpires)
 
-const WaitBeforeHoverClose = Command.make(
-  "WaitBeforeHoverClose",
-  { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), Message.CompletedWaitBeforeHoverClose())
-)
-
-const WaitBeforeStickExpires = Command.make(
-  "WaitBeforeStickExpires",
-  { args: {}, mode: "switch" },
-  () => Effect.as(Effect.sleep(Duration.millis(500)), Message.CompletedWaitBeforeStickExpires())
-)
-
-const nestedOf = ($: MenuUpdate): ParentState | undefined => $.shared.parent
-
-const disabledOf = (props: MenuProps, parent: ParentState | undefined): boolean =>
-  props.disabled === true || parent?.disabled === true
+const disabledOf = ({ props, shared }: {
+  readonly props: MenuProps
+  readonly shared: { readonly parent?: ParentState | undefined }
+}): boolean => props.disabled === true || shared.parent?.disabled === true
 
 const hoverOf = (props: MenuProps, nested: boolean): boolean => props.openOnHover ?? nested
 
@@ -719,10 +709,8 @@ const matcherOf = (props: MenuProps): ((label: string) => boolean) | null => {
   return (label) => match(label, query)
 }
 
-const visibleOf = (props: MenuProps): ReadonlyArray<MenuItem> => {
-  const matches = matcherOf(props)
-  return matches === null ? props.items : props.items.filter((item) => matches(item.label))
-}
+const visibleOf = (props: MenuProps, matches = matcherOf(props)): ReadonlyArray<MenuItem> =>
+  matches === null ? props.items : props.items.filter((item) => matches(item.label))
 
 const firstEnabled = (items: ReadonlyArray<MenuItem>, last = false): MenuItem | undefined => {
   const ordered = last ? [...items].reverse() : items
@@ -732,7 +720,8 @@ const firstEnabled = (items: ReadonlyArray<MenuItem>, last = false): MenuItem | 
 const autoHighlighted = (props: MenuProps, query: string): string | null => {
   const auto = props.autoHighlight
   if (auto === undefined || auto === false || (auto === true && query.trim() === "")) return null
-  return visibleOf({ ...props, query })[0]?.value ?? null
+  const matches = matcherOf({ ...props, query })
+  return (matches === null ? props.items[0] : props.items.find((item) => matches(item.label)))?.value ?? null
 }
 
 const commit = (base: Base, before: Model, after: Model, reason: MenuHighlightReason) =>
@@ -750,12 +739,11 @@ const open = (
   last = false
 ) => {
   const props = $.props
-  const items = visibleOf(props)
   const keyboard = method === "keyboard" && reason !== "trigger-hover"
   const active = filteringOf(props) && props.autoHighlight === "always"
-    ? items[0]?.value ?? null
+    ? visibleOf(props)[0]?.value ?? null
     : keyboard
-    ? firstEnabled(items, last)?.value ?? null
+    ? firstEnabled(visibleOf(props), last)?.value ?? null
     : null
   const next: Model = {
     ...model,
@@ -777,16 +765,16 @@ const open = (
     keyboard: method === "keyboard"
   }
   const opened = commit($, model, next, "none").emit(MenuEvents.Opened({ reason, triggerId }))
-  return reason === "trigger-hover" ? opened.run(WaitBeforeStickExpires.make({})) : opened
+  return reason === "trigger-hover" ? opened.run(WaitBeforeStickExpires.make({ delay: 500 })) : opened
 }
 
 const dismiss = (
   model: Model,
-  base: Base,
   $: MenuUpdate,
   reason: MenuChangeReason,
   method: MenuInteraction | null,
-  focusLeft = false
+  focusLeft = false,
+  base: Base = $
 ) => {
   if (!$.props.open) return base.set(model)
   const instant: Model["instant"] = reason === "escape-key" || reason === "none"
@@ -814,8 +802,8 @@ const closeTree = (
   method: MenuInteraction | null,
   first?: MenuEvents
 ) => {
-  const base: Base = nestedOf($) === undefined ? $ : $.send("self", Message.ClosedByChild({ reason }))
-  return dismiss(model, first === undefined ? base : base.emit(first), $, reason, method)
+  const base: Base = $.shared.parent === undefined ? $ : $.send("self", Message.ClosedByChild({ reason }))
+  return dismiss(model, $, reason, method, false, first === undefined ? base : base.emit(first))
 }
 
 const isSubmenu = (model: Model, value: string): boolean => model.submenus.some((submenu) => submenu.item === value)
@@ -823,7 +811,7 @@ const isSubmenu = (model: Model, value: string): boolean => model.submenus.some(
 const activate = (model: Model, $: MenuUpdate, action: ItemAction, method: MenuInteraction) => {
   const props = $.props
   const item = props.items.find((candidate) => candidate.value === action.value)
-  if (!props.open || !available(item) || disabledOf(props, nestedOf($)) || isSubmenu(model, action.value)) {
+  if (!props.open || !available(item) || disabledOf($) || isSubmenu(model, action.value)) {
     return $.set(model)
   }
   const next = { ...model, pressedItem: false, spaceDown: false }
@@ -844,15 +832,12 @@ const navigate = (model: Model, $: MenuUpdate, key: string) => {
   if (items.length === 0) return $.set(model)
   const last = items.length - 1
   const at = model.active === null ? -1 : items.findIndex((item) => item.value === model.active)
-  const loop = props.loopFocus !== false
-  const forward = props.orientation === "horizontal" ? (model.rtl ? "ArrowLeft" : "ArrowRight") : "ArrowDown"
+  const direction = key === keys(props.orientation ?? "vertical", model.rtl).next ? 1 : -1
   const index = key === "Home"
     ? 0
     : key === "End"
     ? last
-    : key === forward
-    ? (at === -1 ? 0 : at === last ? (loop ? 0 : last) : at + 1)
-    : (at === -1 ? last : at === 0 ? (loop ? last : 0) : at - 1)
+    : stepped(at, last, direction, props.loopFocus !== false ? "wrap" : "none")
   return commit($, model, { ...model, active: items[index]!.value, activeByKey: true }, "keyboard")
 }
 
@@ -862,7 +847,7 @@ const typeKey = (model: Model, $: MenuUpdate, key: string) => {
   const { index, next } = typeahead(model, key, items, from)
   const item = items[index]
   const moved = item === undefined ? {} : { active: item.value, activeByKey: true }
-  return commit($, model, { ...model, ...next, ...moved }, "keyboard").run(WaitBeforeResetTyping.make({}))
+  return commit($, model, { ...model, ...next, ...moved }, "keyboard").run(WaitBeforeResetTyping.make({ delay: 500 }))
 }
 
 const keys = (orientation: "vertical" | "horizontal", rtl: boolean) =>
@@ -883,16 +868,16 @@ const keys = (orientation: "vertical" | "horizontal", rtl: boolean) =>
 const pressKey = (model: Model, $: MenuUpdate, key: string, action: ItemAction | null) => {
   const props = $.props
   if (!props.open) return $.set(model)
-  const parent = nestedOf($)
+  const parent = $.shared.parent
   const nav = keys(props.orientation ?? "vertical", model.rtl)
   if (key === nav.next || key === nav.previous || key === "Home" || key === "End") return navigate(model, $, key)
   if (key === "Escape") {
     return props.closeParentOnEsc === true && parent !== undefined
       ? closeTree(model, $, "escape-key", "keyboard")
-      : dismiss(model, $, $, "escape-key", "keyboard")
+      : dismiss(model, $, "escape-key", "keyboard")
   }
   if (parent !== undefined && key === keys(parent.orientation, parent.rtl).close) {
-    return dismiss(model, $, $, "list-navigation", "keyboard")
+    return dismiss(model, $, "list-navigation", "keyboard")
   }
   if (key === "Enter") return action === null ? $.set(model) : activate(model, $, action, "keyboard")
   if (key === " " && model.typed === "") return $.set({ ...model, spaceDown: true })
@@ -914,7 +899,7 @@ const enterTrigger = (model: Model, $: MenuUpdate, message: Extract<Message, { r
     hoverTriggerId: message.triggerId,
     hoverCloseDelay: message.closeDelay
   }
-  if (disabledOf(props, nestedOf($))) return $.set(next)
+  if (disabledOf($)) return $.set(next)
   if (!props.open) return $.set(next).run(WaitBeforeHoverOpen.make({ delay: message.delay }))
   const stay = Command.interrupt(WaitBeforeHoverClose)
   return opensFor(model, props, message.key, message.triggerId) ? $.set(next).run(stay) : hoverOpen(next, $).run(stay)
@@ -938,13 +923,13 @@ const pressTrigger = (
   triggerId: string | null
 ) => {
   const props = $.props
-  if (disabledOf(props, nestedOf($))) return $.set(model)
+  if (disabledOf($)) return $.set(model)
   if (props.open && opensFor(model, props, key, triggerId)) {
     if (model.stick && model.reason === "trigger-hover") {
       return $.set({ ...model, reason: "trigger-press", stick: false, hovering: false })
         .run(Command.interrupt(WaitBeforeHoverClose))
     }
-    return dismiss(model, $, $, "trigger-press", method)
+    return dismiss(model, $, "trigger-press", method)
   }
   return open(model, $, "trigger-press", method, key, triggerId)
 }
@@ -986,9 +971,15 @@ const TrackMenuArgs = {
 
 type TrackMenuArgs = Schema.Struct<typeof TrackMenuArgs>["Type"]
 
-const anyTrigger = (popupId: string) => "[data-menu-trigger=\"" + popupId.replace(/["\\]/g, "\\$&") + "\"]"
+const anyTrigger = (popupId: string) => attrSelector("data-menu-trigger", popupId)
 
 const triggerSelector = (popupId: string) => anyTrigger(popupId) + "[data-menu-active]"
+
+const selectorsOf = (popupId: string) => ({
+  any: anyTrigger(popupId),
+  active: triggerSelector(popupId),
+  enabled: anyTrigger(popupId) + ":not([disabled])"
+})
 
 const boxOf = (element: Element) => element.getBoundingClientRect()
 
@@ -1002,45 +993,29 @@ const setSize = (element: HTMLElement, prefix: string, size: Size | "auto" | "ma
   element.style.setProperty(prefix + "-height", typeof size === "string" ? size : size.height + "px")
 }
 
-const override = (element: HTMLElement, styles: Record<string, string>): () => void => {
-  const before = Object.keys(styles).map((name) => [name, element.style.getPropertyValue(name)] as const)
-  for (const [name, value] of Object.entries(styles)) element.style.setProperty(name, value)
-  return () => {
-    for (const [name, value] of before) {
-      if (value === "") element.style.removeProperty(name)
-      else element.style.setProperty(name, value)
-    }
-  }
-}
-
 const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<TrackMenuArgs>) =>
   Stream.callback<Message>((queue) => {
     const document = node.ownerDocument
     const view = document.defaultView
     const frame = frameOf(view)
     let current = args
+    let selectors = selectorsOf(args.popupId)
     const send = (message: Message) => Queue.offerUnsafe(queue, message)
-    const trigger = (): HTMLElement | null => document.querySelector<HTMLElement>(triggerSelector(current.popupId))
+    const trigger = (): HTMLElement | null => document.querySelector<HTMLElement>(selectors.active)
     const popup = (): HTMLElement => document.getElementById(current.popupId) ?? node
     const input = (): HTMLInputElement | null =>
       current.inputId === null ? null : document.getElementById(current.inputId) as HTMLInputElement | null
     const inside = (target: Node): boolean =>
       (node.contains(target) && !blocker.is(target)) ||
-      (target instanceof Element && target.closest(anyTrigger(current.popupId)) !== null)
+      (target instanceof Element && target.closest(selectors.any) !== null)
 
     let cutUndo: (() => void) | undefined
-    const cut = () => {
+    const cut = (anchor: HTMLElement | null) => {
       cutUndo?.()
       cutUndo = undefined
       const layer = Array.from(node.children).find(blocker.is) as HTMLElement | undefined
-      const anchor = trigger()
       if (layer === undefined || anchor === null) return
-      const before = layer.style.getPropertyValue("clip-path")
-      layer.style.setProperty("clip-path", cutPath([boxOf(anchor)]))
-      cutUndo = () => {
-        if (before === "") layer.style.removeProperty("clip-path")
-        else layer.style.setProperty("clip-path", before)
-      }
+      cutUndo = override(layer, { "clip-path": cutPath([boxOf(anchor)]) })
     }
 
     const focusActive = (scroll: boolean) => {
@@ -1065,14 +1040,12 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
     let release: (() => void) | undefined
     const hold = () => {
       release?.()
-      const wide = !current.touch || (document.documentElement.clientWidth > 0 &&
-        node.offsetWidth >= document.documentElement.clientWidth - 20)
-      release = current.open && current.lock && wide ? lockScroll(document) : undefined
+      release = current.open && current.lock ? holdScroll(node, current.touch) : undefined
     }
 
     let rtl = args.rtl
-    const direction = () => {
-      const next = view?.getComputedStyle(trigger() ?? node).direction === "rtl"
+    const direction = (anchor: HTMLElement | null) => {
+      const next = view?.getComputedStyle(anchor ?? node).direction === "rtl"
       if (next !== rtl) {
         rtl = next
         send(Message.ChangedDirection({ rtl }))
@@ -1080,8 +1053,8 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
     }
 
     let triggerElement: string | null = null
-    const found = () => {
-      const id = trigger()?.id || null
+    const found = (anchor: HTMLElement | null) => {
+      const id = anchor?.id || null
       if (id !== triggerElement) {
         triggerElement = id
         send(Message.FoundTrigger({ id }))
@@ -1094,9 +1067,10 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       node.inert = false
       clearTimeout(timer)
       if (current.pressing) timer = setTimeout(() => send(Message.AllowedRelease()), 200)
-      direction()
-      found()
-      cut()
+      const anchor = trigger()
+      direction(anchor)
+      found(anchor)
+      cut(anchor)
       fit()
       const field = input()
       if (field !== null) field.focus({ preventScroll: true })
@@ -1112,51 +1086,15 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       const focused = document.activeElement
       const lost = focused === null || focused === document.body || node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
-        const marked = byAttribute(document, "data-final-focus", current.popupId)
-        const back = marked ?? trigger()
-        if (back !== null && (marked !== null || lost)) {
-          back.focus({ preventScroll: true, focusVisible: current.closeMethod === "keyboard" } as FocusOptions)
-        }
+        focusFinal(document, current.popupId, trigger(), lost, current.closeMethod === "keyboard")
       } else if (focused instanceof HTMLElement && node.contains(focused)) {
         focused.blur()
       }
       node.inert = true
     }
 
-    let touchPress = false
-    const onPointerDown = (event: PointerEvent) => {
-      touchPress = false
-      const target = event.target as Node | null
-      if (!current.open || target === null || event.button !== 0 || !event.isPrimary || inside(target)) return
-      if (inKept(target)) return
-      if (event.pointerType === "touch") touchPress = true
-      else if (!onScrollbar(target, event)) send(Message.PressedOutside({ pointerType: event.pointerType }))
-    }
-    const onClick = (event: MouseEvent) => {
-      if (!touchPress) return
-      touchPress = false
-      const target = event.target as Node | null
-      if (current.open && target !== null && !inside(target)) send(Message.PressedOutside({ pointerType: "touch" }))
-    }
     const onMouseUp = (event: MouseEvent) => {
-      if (!current.pressing) return
-      const target = event.target as Node | null
-      const anchor = trigger()
-      let outside = target !== null && !inside(target)
-      if (outside && anchor !== null) {
-        const r = boxOf(anchor)
-        if (
-          event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom
-        ) {
-          outside = false
-        }
-      }
-      send(Message.ReleasedPointer({ outside }))
-    }
-    const onFocusIn = (event: FocusEvent) => {
-      const target = event.target as Node | null
-      if (!current.open || target === null || inside(target)) return
-      send(Message.FocusedOutside())
+      if (current.pressing) send(Message.ReleasedPointer({ outside: releasedOutside(event, inside, trigger()) }))
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1221,9 +1159,11 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       if (!current.nested || unblock !== undefined) return
       const element = node.parentElement?.closest<HTMLElement>("[data-menu-popup]")
       if (element === null || element === undefined) return
-      const undo = [override(element, { "pointer-events": "none" }), override(node, { "pointer-events": "auto" })]
+      const restoreParent = override(element, { "pointer-events": "none" })
+      const restoreNode = override(node, { "pointer-events": "auto" })
       unblock = () => {
-        for (const restore of undo) restore()
+        restoreParent()
+        restoreNode()
       }
     }
     const onMouseEnter = (event: MouseEvent) => {
@@ -1239,8 +1179,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       const target = event.target as Node | null
       const anchor = trigger()
       const point = { x: event.clientX, y: event.clientY }
-      const onTrigger = target instanceof Element &&
-        target.closest(anyTrigger(current.popupId) + ":not([disabled])") !== null
+      const onTrigger = target instanceof Element && target.closest(selectors.enabled) !== null
       if (target !== null && (node.contains(target) || anchor?.contains(target) === true || onTrigger)) {
         if (node.contains(target)) unblockParent()
         if (anchor?.contains(target) === true) leftAt = point
@@ -1312,7 +1251,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
         ...(fresh === null ? [] : [override(fresh, { animation: "none", transition: "none" })])
       ]
       const size = sizeOf(element)
-      for (const restore of undo) restore()
+      undo.forEach((restore) => restore())
       return size
     }
     const fit = () => {
@@ -1342,8 +1281,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       })
     }
 
-    const morph = () => {
-      const anchor = trigger()
+    const morph = (anchor: HTMLElement | null) => {
       const element = viewport()
       const from = previousTrigger
       const old = lastCurrent
@@ -1385,6 +1323,7 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
     const onChange = (next: TrackMenuArgs) => {
       const previous = current
       current = next
+      if (next.popupId !== previous.popupId) selectors = selectorsOf(next.popupId)
       if (next.open !== previous.open || next.lock !== previous.lock || next.touch !== previous.touch) hold()
       if (!next.hoverClose) {
         leftAt = null
@@ -1397,9 +1336,10 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
       const switched = next.open && next.trigger !== viewportKey && viewportKey !== null && next.trigger !== null
       if (switched) {
         viewportKey = next.trigger
-        morph()
-        found()
-        cut()
+        const anchor = trigger()
+        morph(anchor)
+        found(anchor)
+        cut(anchor)
       } else if (next.trigger !== null) viewportKey = next.trigger
       if (next.open && (next.side !== previous.side || next.rtl !== previous.rtl)) anchorPopup()
       if (next.open) remember(switched)
@@ -1407,7 +1347,9 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
     }
 
     const onTriggerLeave = (event: MouseEvent) => {
-      if (event.target === trigger()) leftAt = { x: event.clientX, y: event.clientY }
+      if (event.target instanceof Element && event.target.matches(selectors.active)) {
+        leftAt = { x: event.clientX, y: event.clientY }
+      }
     }
 
     const controller = new AbortController()
@@ -1415,13 +1357,16 @@ const watch = (node: HTMLElement, args: TrackMenuArgs, changes: Stream.Stream<Tr
 
     return Effect.acquireRelease(
       Effect.sync(() => {
-        document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
-        document.addEventListener("click", onClick, { capture: true, signal })
+        listenOutside(document, signal, {
+          open: () => current.open,
+          inside,
+          pressed: (pointerType) => send(Message.PressedOutside({ pointerType })),
+          focused: () => send(Message.FocusedOutside())
+        })
         document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
-        document.addEventListener("focusin", onFocusIn, { capture: true, signal })
         document.addEventListener("mousemove", onMouseMove, { capture: true, passive: true, signal })
         // The window sees the capture phase before the document, where the host delegates item handlers.
-        view?.addEventListener("mouseenter", onMouseEnter, { capture: true, signal })
+        if (current.nested) view?.addEventListener("mouseenter", onMouseEnter, { capture: true, signal })
         document.addEventListener("mouseout", onTriggerLeave, { capture: true, passive: true, signal })
         node.addEventListener("keydown", onKeyDown, { capture: true, signal })
         node.addEventListener("mousedown", (event) => {
@@ -1501,6 +1446,34 @@ const blocker = blockers("data-menu-blocker")
 const hiddenBox = "display:none"
 
 const MenuTriggerHoverDefault = 100
+
+const triggerAttrs = <B extends Attributed<B>>(builder: B, popupId: string, open: boolean, active: boolean): B =>
+  builder
+    .attr("aria-haspopup", "menu")
+    .attr("aria-expanded", String(open))
+    .attr("aria-controls", open ? popupId : undefined)
+    .attr("data-popup-open", flag(open))
+    .attr("data-menu-trigger", popupId)
+    .attr("data-menu-active", flag(active))
+
+type Handles<Msg> = Html.Element<Msg, any, Html.Events, any, any>
+
+type MsgOf<B> = B extends Handles<infer Msg> ? Msg : never
+
+const pressable = <B extends Handles<any>>(
+  builder: B,
+  press: (pointerType: string) => MsgOf<B>,
+  click: (pointerType: string) => MsgOf<B> = press
+): B =>
+  builder
+    .on(
+      "mousedown",
+      ({ button, pointerType }: Html.PointerPayload) =>
+        button === 0 && pointerType !== "touch" ? press(pointerType) : undefined
+    )
+    .onClick(({ pointerType }: Html.PointerPayload) =>
+      pointerType === "" || pointerType === "touch" ? click(pointerType) : undefined
+    )
 
 /**
  * The options of one `trigger` part, over the menu's props of the same
@@ -1616,32 +1589,13 @@ export const MenuTrigger = <Msg, R = never>(
       typeof handler === "function"
         ? (handler as (press: MenuTriggerPress) => Msg)({ triggerId, method, reason })
         : handler
-    const button = node
-      .attr("type", "button")
-      .attr("aria-haspopup", "menu")
-      .attr("aria-expanded", open ? "true" : "false")
-      .attr("aria-controls", open ? popupId : undefined)
-      .attr("data-popup-open", flag(open))
+    const button = triggerAttrs(node.attr("type", "button"), popupId, open, open)
       .attr("data-pressed", flag(open))
       .attr("data-disabled", flag(disabled))
-      .attr("data-menu-trigger", popupId)
-      .attr("data-menu-active", flag(open))
       .disabled(disabled === true)
     const pressed = onPress === undefined || disabled === true
       ? button
-      : button
-        .on(
-          "mousedown",
-          ({ button: which, pointerType }) =>
-            which === 0 && pointerType !== "touch"
-              ? message(onPress, methodOf(pointerType), "trigger-press")
-              : undefined
-        )
-        .onClick(({ pointerType }) =>
-          pointerType === "" || pointerType === "touch"
-            ? message(onPress, methodOf(pointerType), "trigger-press")
-            : undefined
-        )
+      : pressable(button, (pointerType) => message(onPress, methodOf(pointerType), "trigger-press"))
     return onHover === undefined || disabled === true || open
       ? pressed
       : pressed.onMount(
@@ -1774,17 +1728,15 @@ export const Menu = Component.define({
     PressedTrigger: (model, { key, pointerType, triggerId }, $) =>
       pressTrigger(model, $, methodOf(pointerType), key, triggerId),
     ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
-    ClickedTrigger: (model, { key, pointerType, triggerId }, $) =>
-      pressTrigger(model, $, methodOf(pointerType), key, triggerId),
     PressedTriggerKey: (model, { key, trigger, triggerId }, $) =>
-      $.props.open || disabledOf($.props, nestedOf($))
+      $.props.open || disabledOf($)
         ? model
         : open(model, $, "list-navigation", "keyboard", trigger, triggerId, key === "ArrowUp"),
     EnteredTrigger: (model, message, $) => enterTrigger(model, $, message),
     LeftTrigger: (model, _message, $) =>
       $.set($.props.open ? model : { ...model, hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
     CompletedWaitBeforeHoverOpen: (model, _message, $) =>
-      $.props.open || !model.hovering || disabledOf($.props, nestedOf($)) ? model : hoverOpen(model, $),
+      $.props.open || !model.hovering || disabledOf($) ? model : hoverOpen(model, $),
     LeftHoverArea: (model, _message, $) =>
       $.props.open && model.reason === "trigger-hover"
         ? $.set({ ...model, hovering: false }).run(WaitBeforeHoverClose.make({ delay: model.closeDelay }))
@@ -1794,19 +1746,16 @@ export const Menu = Component.define({
     CompletedWaitBeforeHoverClose: (model, _message, $) =>
       $.props.open && model.reason === "trigger-hover" && !model.hovering &&
         !model.submenus.some((submenu) => submenu.open)
-        ? dismiss(model, $, $, "trigger-hover", "mouse")
+        ? dismiss(model, $, "trigger-hover", "mouse")
         : model,
     CompletedWaitBeforeStickExpires: (_model, _message, $) => $.evolve({ stick: false }),
     PressedSubmenuTrigger: (model, { pointerType }, $) =>
       hoverOf($.props, true) ? model : pressTrigger(model, $, methodOf(pointerType), "submenu", null),
-    ClickedSubmenuTrigger: (model, { pointerType }, $) => {
-      const method = methodOf(pointerType)
-      if (method === "mouse" || method === "pen") return model
-      return pressTrigger(model, $, method, "submenu", null)
-    },
+    ClickedSubmenuTrigger: (model, { pointerType }, $) =>
+      pressTrigger(model, $, methodOf(pointerType), "submenu", null),
     PressedSubmenuTriggerKey: (model, { key }, $) => {
-      const parent = nestedOf($)
-      if ($.props.open || parent === undefined || disabledOf($.props, parent)) return model
+      const parent = $.shared.parent
+      if ($.props.open || parent === undefined || disabledOf($)) return model
       const reason = key === keys(parent.orientation, parent.rtl).open ? "list-navigation" : "trigger-press"
       return open(model, $, reason, "keyboard", "submenu", null)
     },
@@ -1859,22 +1808,22 @@ export const Menu = Component.define({
     ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
     ChangedDirection: (_model, { rtl }, $) => $.evolve({ rtl }),
     FoundTrigger: (_model, { id }, $) => $.evolve({ triggerElement: id }),
-    PressedOutside: (model, { pointerType }, $) => dismiss(model, $, $, "outside-press", methodOf(pointerType)),
-    FocusedOutside: (model, _message, $) => dismiss(model, $, $, "focus-out", null, true),
-    TabbedOut: (model, _message, $) => dismiss(model, $, $, "focus-out", "keyboard", true),
+    PressedOutside: (model, { pointerType }, $) => dismiss(model, $, "outside-press", methodOf(pointerType)),
+    FocusedOutside: (model, _message, $) => dismiss(model, $, "focus-out", null, true),
+    TabbedOut: (model, _message, $) => dismiss(model, $, "focus-out", "keyboard", true),
     ReleasedPointer: (model, { outside }, $) => {
       if (!model.pressing) return model
       const next = { ...model, pressing: false }
-      return outside ? dismiss(next, $, $, "cancel-open", "mouse") : next
+      return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
     AllowedRelease: (model, _message, $) => model.pressing ? $.evolve({ releaseAllowed: true }) : model,
     ChangedSubmenus: (_model, { submenus }, $) => $.evolve({ submenus }),
     ChangedParent: (model, { parent }, $) => {
       const next = parent.rtl === model.rtl ? model : { ...model, rtl: parent.rtl }
       if (!$.props.open) return next
-      if (!parent.open) return dismiss(next, $, $, parent.reason ?? "none", null)
+      if (!parent.open) return dismiss(next, $, parent.reason ?? "none", null)
       if (parent.active !== null && parent.active !== $.props.parentItem) {
-        return dismiss(next, $, $, "sibling-open", null)
+        return dismiss(next, $, "sibling-open", null)
       }
       return next
     },
@@ -1923,7 +1872,7 @@ export const Menu = Component.define({
     const open = props.open
     const shown = open || model.mounted
     const transitionStatus: MenuTransitionStatus = statusOf(model, props)
-    const disabled = disabledOf(props, parent)
+    const disabled = disabledOf(p)
     const orientation = props.orientation ?? "vertical"
     const rtl = nested ? parent.rtl : model.rtl
     const hover = hoverOf(props, nested)
@@ -1940,8 +1889,8 @@ export const Menu = Component.define({
     const activeTrigger = props.triggerId ?? model.trigger
     const filtering = filteringOf(props)
     const matches = matcherOf(props)
-    const visible = visibleOf(props)
-    const empty = filtering && (props.query ?? "").trim() !== "" && visible.length === 0
+    const visible = new Set(visibleOf(props, matches))
+    const empty = filtering && (props.query ?? "").trim() !== "" && visible.size === 0
     const tracked = Positioning.trackArgs(
       nested ? { ...props, align: props.align ?? "start" } : props,
       {
@@ -1973,39 +1922,39 @@ export const Menu = Component.define({
     const placed = <B extends Attributed<B>>(builder: B): B =>
       states(builder).attr("data-side", side).attr("data-align", align)
 
-    const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean): B =>
-      builder
-        .attr("aria-haspopup", "menu")
-        .attr("aria-expanded", String(open && active))
-        .attr("aria-controls", open && active ? popupId : undefined)
-        .attr("data-popup-open", flag(open && active))
-        .attr("data-menu-trigger", popupId)
-        .attr("data-menu-active", flag(shown && active))
+    const hoverOpens = <B extends Handles<Message>>(
+      builder: B,
+      key: string,
+      triggerId: string | null,
+      options: MenuTriggerOptions
+    ): B =>
+      builder.on(
+        "mouseenter",
+        Message.EnteredTrigger({
+          key,
+          triggerId,
+          delay: options.delay ?? props.delay ?? MenuTriggerHoverDefault,
+          closeDelay: options.closeDelay ?? props.closeDelay ?? 0
+        })
+      ).on("mouseleave", Message.LeftTrigger())
 
     const triggerPart = p.part("button", (b, key: string, triggerId: string | null, options: MenuTriggerOptions) => {
       const active = activeTrigger === null ? key === p.id("trigger", 0) || triggers === 1 : activeTrigger === key ||
         activeTrigger === triggerId
       if (active) labelledBy = key
       const off = disabled || options.disabled === true
-      const attributed = triggerAttrs(b.attr("id", key).attr("type", "button"), active)
+      const attributed = triggerAttrs(
+        b.attr("id", key).attr("type", "button"),
+        popupId,
+        open && active,
+        shown && active
+      )
         .attr("data-pressed", flag(open && active))
         .attr("data-disabled", flag(off))
         .disabled(off)
       if (options.disabled === true) return attributed
-      const own = attributed
-        .on(
-          "mousedown",
-          ({ button, pointerType }) =>
-            button === 0 && pointerType !== "touch"
-              ? Message.PressedTrigger({ key, triggerId, pointerType })
-              : undefined
-        )
+      const own = pressable(attributed, (pointerType) => Message.PressedTrigger({ key, triggerId, pointerType }))
         .on("mouseup", Message.ReleasedTrigger())
-        .onClick(({ pointerType }) =>
-          pointerType === "" || pointerType === "touch"
-            ? Message.ClickedTrigger({ key, triggerId, pointerType })
-            : undefined
-        )
         .onKeyDown(
           ({ composing, key: pressed }) =>
             !composing && (pressed === "ArrowDown" || pressed === "ArrowUp")
@@ -2013,17 +1962,7 @@ export const Menu = Component.define({
               : undefined,
           { preventDefault: true }
         )
-      return options.openOnHover ?? hover
-        ? own.on(
-          "mouseenter",
-          Message.EnteredTrigger({
-            key,
-            triggerId,
-            delay: options.delay ?? props.delay ?? MenuTriggerHoverDefault,
-            closeDelay: options.closeDelay ?? props.closeDelay ?? 0
-          })
-        ).on("mouseleave", Message.LeftTrigger())
-        : own
+      return options.openOnHover ?? hover ? hoverOpens(own, key, triggerId, options) : own
     })
     const trigger = View.wrapPart(
       triggerPart,
@@ -2036,14 +1975,11 @@ export const Menu = Component.define({
 
     const submenuTriggerPart = p.part("div", (b) => {
       const parentKeys = keys(parent?.orientation ?? "vertical", rtl)
-      const own = triggerAttrs(b, true)
-        .attr("data-disabled", flag(disabled))
-        .on(
-          "mousedown",
-          ({ button, pointerType }) =>
-            button === 0 && pointerType !== "touch" ? Message.PressedSubmenuTrigger({ pointerType }) : undefined
-        )
-        .onClick(({ pointerType }) => Message.ClickedSubmenuTrigger({ pointerType }))
+      const own = pressable(
+        triggerAttrs(b, popupId, open, shown).attr("data-disabled", flag(disabled)),
+        (pointerType) => Message.PressedSubmenuTrigger({ pointerType }),
+        (pointerType) => Message.ClickedSubmenuTrigger({ pointerType })
+      )
         .onKeyDown(
           ({ composing, key }) =>
             !composing && (key === parentKeys.open || key === "Enter" || key === " ")
@@ -2051,17 +1987,7 @@ export const Menu = Component.define({
               : undefined,
           { preventDefault: true }
         )
-      return hover
-        ? own.on(
-          "mouseenter",
-          Message.EnteredTrigger({
-            key: "submenu",
-            triggerId: null,
-            delay: props.delay ?? MenuTriggerHoverDefault,
-            closeDelay: props.closeDelay ?? 0
-          })
-        ).on("mouseleave", Message.LeftTrigger())
-        : own
+      return hover ? hoverOpens(own, "submenu", null, {}) : own
     })
     const submenuTrigger = View.wrapPart(
       submenuTriggerPart,
@@ -2177,8 +2103,6 @@ export const Menu = Component.define({
           return { ...built, children: [View.build(current, built.children as ReadonlyArray<View.Node<never>>)] }
         }))
 
-    const shownBy = (value: string): boolean => matches === null || matches(itemOf(value).label)
-
     const itemAttrs = <H extends HTMLElement, T extends "div" | "a">(
       b: Html.Element<Message, never, Html.Events, H, T>,
       value: string,
@@ -2186,6 +2110,7 @@ export const Menu = Component.define({
       action: ItemAction
     ) => {
       const item = itemOf(value)
+      const shownItem = matches === null || visible.has(item)
       const active = highlighted === value
       const off = item.disabled === true || disabled
       const submenuOpen = model.submenus.some((submenu) => submenu.open && submenu.item === value)
@@ -2196,7 +2121,7 @@ export const Menu = Component.define({
         .attr("tabindex", open && !filtering && (active || submenuOpen) ? "0" : "-1")
         .attr("data-highlighted", flag(active))
         .attr("data-disabled", flag(off))
-        .attr("hidden", flag(!shownBy(value)))
+        .attr("hidden", flag(!shownItem))
         .attr("data-menu-item", value)
         .on("mouseenter", () => hovers && !active ? Message.EnteredItem({ value }) : undefined)
         .on("mouseleave", () => hovers ? Message.LeftItem() : undefined)
@@ -2208,94 +2133,68 @@ export const Menu = Component.define({
         .onClick(({ pointerType }) => Message.ClickedItem({ action, pointerType }))
         .onKeyDown(keyMessage(action), { preventDefault: true })
         .onKeyUp(({ key }) => key === " " ? Message.ReleasedSpace({ action }) : undefined)
-      return shownBy(value) ? own : own.forward((node) => node.attr("style", withStyle(node.attrs.style, hiddenBox)))
+      return shownItem ? own : own.forward((node) => node.attr("style", withStyle(node.attrs.style, hiddenBox)))
     }
 
-    const checkedAttrs = <B extends Attributed<B>>(builder: B, checked: boolean, value: string): B =>
+    const checkedAttrs = <B extends Attributed<B>>(builder: B, checked: boolean): B =>
       builder
         .attr("aria-checked", String(checked))
         .attr("data-checked", flag(checked))
         .attr("data-unchecked", flag(!checked))
-        .attr("data-disabled", flag(itemOf(value).disabled === true || disabled))
 
-    const itemPart = p.part(
-      "div",
-      (b, value: string, closeOnClick: boolean) =>
-        itemAttrs(b, value, "menuitem", { value, kind: "item", closeOnClick, checked: false })
-    )
-    const item = View.wrapPart(
-      itemPart,
-      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
-        element: B,
-        value: string,
-        closeOnClick = true
-      ): ReturnType<B["attr"]> => itemPart(element.key(value), value, closeOnClick)
-    )
-
-    const linkPart = p.part(
-      "a",
-      (b, value: string, closeOnClick: boolean) =>
-        itemAttrs(b, value, "menuitem", { value, kind: "link", closeOnClick, checked: false })
-    )
-    const linkItem = View.wrapPart(
-      linkPart,
-      <B extends View.PartTarget<"a"> & { readonly key: (key: string) => View.PartTarget<"a"> }>(
-        element: B,
-        value: string,
-        closeOnClick = false
-      ): ReturnType<B["attr"]> => linkPart(element.key(value), value, closeOnClick)
-    )
-
-    const checkboxPart = p.part("div", (b, value: string, checked: boolean, closeOnClick: boolean) => {
-      checks.set(value, checked)
-      return checkedAttrs(
-        itemAttrs(b, value, "menuitemcheckbox", { value, kind: "checkbox", closeOnClick, checked }),
-        checked,
-        value
+    const item = keyed(
+      p.part(
+        "div",
+        (b, value: string, closeOnClick?: boolean) =>
+          itemAttrs(b, value, "menuitem", { value, kind: "item", closeOnClick: closeOnClick ?? true, checked: false })
       )
-    })
-    const checkboxItem = View.wrapPart(
-      checkboxPart,
-      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
-        element: B,
-        value: string,
-        checked: boolean,
-        closeOnClick = false
-      ): ReturnType<B["attr"]> => checkboxPart(element.key(value), value, checked, closeOnClick)
     )
 
-    const radioGroupPart = p.part("div", (b, value: string | null) => {
+    const linkItem = keyed(
+      p.part(
+        "a",
+        (b, value: string, closeOnClick?: boolean) =>
+          itemAttrs(b, value, "menuitem", { value, kind: "link", closeOnClick: closeOnClick ?? false, checked: false })
+      )
+    )
+
+    const checkboxItem = keyed(
+      p.part("div", (b, value: string, checked: boolean, closeOnClick?: boolean) => {
+        checks.set(value, checked)
+        return checkedAttrs(
+          itemAttrs(b, value, "menuitemcheckbox", {
+            value,
+            kind: "checkbox",
+            closeOnClick: closeOnClick ?? false,
+            checked
+          }),
+          checked
+        )
+      })
+    )
+
+    const radioGroup = p.part("div", (b, value: string | null) => {
       radio = value
       return b.attr("role", "group").attr("data-disabled", flag(disabled))
     })
-    const radioGroup = View.wrapPart(
-      radioGroupPart,
-      <B extends View.PartTarget<"div">>(element: B, value: string | null): ReturnType<B["attr"]> =>
-        radioGroupPart(element, value)
-    )
 
-    const radioPart = p.part("div", (b, value: string, closeOnClick: boolean) => {
-      const checked = radio === value
-      checks.set(value, checked)
-      return checkedAttrs(
-        itemAttrs(b, value, "menuitemradio", { value, kind: "radio", closeOnClick, checked }),
-        checked,
-        value
-      )
-    })
-    const radioItem = View.wrapPart(
-      radioPart,
-      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
-        element: B,
-        value: string,
-        closeOnClick = false
-      ): ReturnType<B["attr"]> => radioPart(element.key(value), value, closeOnClick)
+    const radioItem = keyed(
+      p.part("div", (b, value: string, closeOnClick?: boolean) => {
+        const checked = radio === value
+        checks.set(value, checked)
+        return checkedAttrs(
+          itemAttrs(b, value, "menuitemradio", { value, kind: "radio", closeOnClick: closeOnClick ?? false, checked }),
+          checked
+        )
+      })
     )
 
     const indicator = () => {
       const part = p.part(
         "span",
-        (b, value: string) => checkedAttrs(b.attr("aria-hidden", "true"), checks.get(value) === true, value)
+        (b, value: string) =>
+          checkedAttrs(b.attr("aria-hidden", "true"), checks.get(value) === true)
+            .attr("data-disabled", flag(itemOf(value).disabled === true || disabled))
       )
       return View.wrapPart(
         part,
@@ -2308,14 +2207,10 @@ export const Menu = Component.define({
       )
     }
 
-    const groupPart = p.part("div", (b, key: string) =>
+    const group = p.part("div", (b, key: string) =>
       b.attr("role", "group")
         .attr("aria-labelledby", groupLabelId(key))
         .forward((node) => matches === null || hasShownItem(View.build(node, [])) ? node : node.attr("hidden", "")))
-    const group = View.wrapPart(
-      groupPart,
-      <B extends View.PartTarget<"div">>(element: B, key: string): ReturnType<B["attr"]> => groupPart(element, key)
-    )
     const groupLabel = p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)))
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 

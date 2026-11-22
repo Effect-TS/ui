@@ -206,7 +206,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { type Attributed, flag, idSelector, separatorAttrs, withStyle } from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
-import { focusFinal } from "./internal/dom.ts"
+import { focusFinal, override } from "./internal/dom.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
 import { available, keyed, stepped } from "./internal/list.ts"
@@ -655,26 +655,8 @@ const arrowScrollTop = (
     : maxScrollTop
 }
 
-const transformResets = [
-  ["transform", "none"],
-  ["scale", "1"],
-  ["translate", "0 0"]
-] as const
-
-const override = (element: HTMLElement, name: string, value: string, priority = ""): () => void => {
-  const before = element.style.getPropertyValue(name)
-  const beforePriority = element.style.getPropertyPriority(name)
-  element.style.setProperty(name, value, priority)
-  return () => {
-    if (before === "") element.style.removeProperty(name)
-    else element.style.setProperty(name, before, beforePriority)
-  }
-}
-
-const withoutTransforms = (element: HTMLElement): () => void => {
-  const undos = transformResets.map(([name, value]) => override(element, name, value, "important"))
-  return () => undos.forEach((undo) => undo())
-}
+const withoutTransforms = (element: HTMLElement): () => void =>
+  override(element, { transform: "none", scale: "1", translate: "0 0" }, "important")
 
 const webkit = (): boolean =>
   typeof navigator !== "undefined" && /AppleWebKit/.test(navigator.userAgent) &&
@@ -724,7 +706,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       let own = saved.get(element)
       if (own === undefined) saved.set(element, own = new Map())
       if (own.has(name)) element.style.setProperty(name, value)
-      else own.set(name, override(element, name, value))
+      else own.set(name, override(element, { [name]: value }))
     }
     let placed = false
     let reachedMax = false
@@ -762,10 +744,10 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (top !== 0 && bottom !== 0) return [top || 10, bottom || 10]
       // An unset margin is `auto`, which reads as 0px like a margin set to 0, until
       // the box is held to both edges and its `auto` margins take the space left.
-      const undo = [override(node, "top", "0px"), override(node, "bottom", "0px"), override(node, "height", "0px")]
+      const restore = override(node, { top: "0px", bottom: "0px", height: "0px" })
       const heldTop = parseFloat(style.marginTop)
       const heldBottom = parseFloat(style.marginBottom)
-      undo.forEach((restore) => restore())
+      restore()
       return [top === 0 && heldTop === 0 ? 0 : top || 10, bottom === 0 && heldBottom === 0 ? 0 : bottom || 10]
     }
 
