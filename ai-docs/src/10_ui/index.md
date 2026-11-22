@@ -558,21 +558,23 @@ platform Layers, and it defines no components. The app is in
 `ai-docs/src/10_ui/fixtures`, laid out as it would be under `src/` in a real
 app. Read an example, then the files it imports.
 
-Put the types the app shares in one top-level `domain` folder. Group
-everything else by feature, then by kind within each feature:
+Put shared types in one top-level `domain` folder and queries in one top-level
+`queries` folder. Group services and components by feature, then by kind
+within each feature:
 
 ```text
 fixtures/
   App.ts                      // root component, imports pages
   routes.ts                   // AppRoute
   domain/Note.ts              // Schema, errors, NotesTag
+  queries/
+    ListNotes.ts
+    GetNote.ts
+    SearchNotes.ts
   kit/Listbox.ts              // headless components no feature owns
   kit/Collapsible.ts          // a component with slots
   notes/
     services/Notes.ts         // service and its Layers
-    queries/ListNotes.ts
-    queries/GetNote.ts
-    queries/SearchNotes.ts
     components/NoteEditor.ts  // NoteEditor and its SaveNote command
     components/NoteActivity.ts
     components/ActivityLog.ts
@@ -585,13 +587,17 @@ fixtures/
 ```
 
 `domain` holds Schemas with their types and errors, pure functions over them,
-and `Query.Tag` invalidation tags. Services and their Layers, queries and
-components stay in a feature. `domain` imports packages and other `domain`
-files, and nothing else from the app, so domain files can build on each other
-without one feature importing another.
+and `Query.Tag` invalidation tags. `domain` imports packages and other
+`domain` files, and nothing else from the app, so domain files can build on
+each other without one feature importing another.
 
-A second feature is a sibling of `notes/`, and its types go in `domain` next
-to `Note.ts`. Pages import features, but features never import pages. Keep
+`queries` starts flat (such as `queries/SearchPeople.ts`) and can grow into
+feature subfolders (such as `queries/people/SearchPeople.ts`) as the folder
+grows. Queries import `domain` and services; pages and components import them.
+
+Services and their Layers, and components, stay in a feature. A second
+feature is a sibling of `notes/`, with its types in `domain` next to
+`Note.ts`. Pages import features and queries, and neither imports pages. Keep
 `AppRoute` in `routes.ts`, outside `pages/` and separate from `App.ts`; pages
 can then build links without importing the root component that imports them.
 
@@ -626,8 +632,8 @@ folder follows the URL, not the feature the page uses.
 
 A command belongs in the file of the component that runs it, not in a shared
 `commands/` folder. When two components need the same write, share the service
-method and give each component its own command. Queries have their own folder
-because pages, multiple components and server rendering all read them.
+method and give each component its own command. Queries have their own
+top-level folder because pages, multiple components and server rendering all read them.
 
 A component provides the domain Layers it needs in its own file, with
 `Component.provide`: its commands, its queries and the services they capture.

@@ -1,7 +1,7 @@
 import { Note, NotesTag } from "#domain/Note"
 import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
-import { Notes } from "../services/Notes.ts"
+import { Notes } from "../notes/services/Notes.ts"
 
 // A query with no arguments writes `args: {}`, and one that can't fail writes
 // `error: Schema.Never`. The Effect runs once, when the Layer is built, and

@@ -2,8 +2,8 @@ import { type NoteResults, NoteSort } from "#domain/Note"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { SearchNotes } from "../../notes/queries/SearchNotes.ts"
 import { Notes } from "../../notes/services/Notes.ts"
+import { SearchNotes } from "../../queries/SearchNotes.ts"
 import { AppRoute } from "../../routes.ts"
 
 // A one-case subset of the union types the page's props. Its values are

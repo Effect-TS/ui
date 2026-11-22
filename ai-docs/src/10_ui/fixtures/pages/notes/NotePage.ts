@@ -5,8 +5,8 @@ import { Collapsible } from "../../kit/Collapsible.ts"
 import { ActivityLog } from "../../notes/components/ActivityLog.ts"
 import { NoteActivity } from "../../notes/components/NoteActivity.ts"
 import { NoteEditor } from "../../notes/components/NoteEditor.ts"
-import { GetNote } from "../../notes/queries/GetNote.ts"
 import { Notes } from "../../notes/services/Notes.ts"
+import { GetNote } from "../../queries/GetNote.ts"
 
 export const NotePageMessage = UiSchema.TaggedEnum({
   SavedNote: {},
