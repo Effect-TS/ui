@@ -1,7 +1,7 @@
 import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Option, Schema } from "effect"
+import { Cause, Effect, Option, Redacted, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
 const Rule = Validation.Rule
@@ -80,6 +80,43 @@ describe("Validation", () => {
       value: "abc",
       required: false,
       errors: ["Must be at least 8 characters", "Must contain 1"]
+    })
+  })
+
+  it("treats an empty Redacted value as empty for required", () => {
+    const Login = Validation.make({
+      password: { value: Schema.Redacted(Schema.String), required: "Password is required" }
+    })
+    const state = Login.submit(Login.init({ password: Redacted.make("") }))
+    const result = Login.validate(state)
+    assert.deepStrictEqual(result.fields.password, {
+      _tag: "Invalid",
+      value: Redacted.make(""),
+      required: true,
+      errors: ["Password is required"]
+    })
+    assert.isTrue(Option.isNone(result.value))
+  })
+
+  it("does not run rules on an empty Redacted value", () => {
+    let called = 0
+    const Login = Validation.make({
+      password: {
+        value: Schema.Redacted(Schema.String),
+        required: "Password is required",
+        rules: [[(password) => {
+          called += 1
+          return Redacted.value(password).length >= 8
+        }, "Must be at least 8 characters"]]
+      }
+    })
+    const result = Login.validate(Login.submit(Login.init({ password: Redacted.make("") })))
+    assert.strictEqual(called, 0)
+    assert.deepStrictEqual(result.fields.password, {
+      _tag: "Invalid",
+      value: Redacted.make(""),
+      required: true,
+      errors: ["Password is required"]
     })
   })
 

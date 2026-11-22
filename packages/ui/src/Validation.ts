@@ -16,23 +16,29 @@
  *
  * ```ts import.meta.vitest
  * import { Validation } from "@effect/ui"
+ * import { Redacted, Schema } from "effect"
  *
  * const Signup = Validation.make({
  *   email: { required: "Email is required", rules: [Validation.Rule.email()] },
- *   password: { required: "Password is required", rules: [Validation.Rule.minLength(8)] },
+ *   password: {
+ *     value: Schema.Redacted(Schema.String),
+ *     required: "Password is required",
+ *     rules: [[(password) => Redacted.value(password).length >= 8, "Must be at least 8 characters"]]
+ *   },
  *   confirm: {
+ *     value: Schema.Redacted(Schema.String),
  *     required: "Confirm your password",
- *     rules: [[(confirm, values) => confirm === values.password, "Passwords must match"]]
+ *     rules: [[(confirm, values) => Redacted.value(confirm) === Redacted.value(values.password), "Passwords must match"]]
  *   }
  * }, { mode: "onChange" })
  *
- * let state = Signup.init({ email: "", password: "", confirm: "" })
- * state = Signup.change(state, "password", "hunter22")
- * state = Signup.change(state, "confirm", "hunter2")
+ * let state = Signup.init({ email: "", password: Redacted.make(""), confirm: Redacted.make("") })
+ * state = Signup.change(state, "password", Redacted.make("hunter22"))
+ * state = Signup.change(state, "confirm", Redacted.make("hunter2"))
  *
  * const { email, confirm } = Signup.validate(state).fields
  * email._tag // => "NotValidated"
- * confirm // => { _tag: "Invalid", value: "hunter2", required: true, errors: ["Passwords must match"] }
+ * confirm // => { _tag: "Invalid", value: Redacted.make("hunter2"), required: true, errors: ["Passwords must match"] }
  * ```
  *
  * @stability experimental
@@ -42,6 +48,7 @@ import type * as Arr from "effect/Array"
 import { dual } from "effect/Function"
 import * as Option from "effect/Option"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
 
 /**
@@ -250,7 +257,8 @@ export type FieldType<S> = [S] extends [Schema.Top] ? S["Type"] : string
  *   values. Without it an empty value is acceptable and shows as
  *   `NotValidated`.
  * - `rules`: checked in order, only when the value isn't empty.
- * - `isEmpty`: what counts as empty. Defaults to an empty string or array.
+ * - `isEmpty`: what counts as empty. Defaults to an empty string or array,
+ *   unwrapping a `Redacted` first.
  *
  * @stability experimental
  * @category models
@@ -365,18 +373,21 @@ export type Field<A> = NotValidated<A> | Validating<A> | Valid<A> | Invalid<A>
  *
  * ```ts import.meta.vitest
  * import { Validation } from "@effect/ui"
- *
- * const Rule = Validation.Rule
+ * import { Redacted, Schema } from "effect"
  *
  * const Signup = Validation.make({
  *   password: {
+ *     value: Schema.Redacted(Schema.String),
  *     required: "Password is required",
- *     rules: [Rule.minLength(8, "At least 8 characters"), Rule.pattern(/\d/, "At least one number")]
+ *     rules: [
+ *       [(password) => Redacted.value(password).length >= 8, "At least 8 characters"],
+ *       [(password) => /\d/.test(Redacted.value(password)), "At least one number"]
+ *     ]
  *   }
  * })
  *
  * // Nothing was submitted, so the field shows no error yet. The list is there anyway.
- * const state = Signup.change(Signup.init({ password: "" }), "password", "hunter2")
+ * const state = Signup.change(Signup.init({ password: Redacted.make("") }), "password", Redacted.make("hunter2"))
  * Signup.checklist(state, "password") // => [{ message: "At least 8 characters", met: false }, { message: "At least one number", met: true }]
  * ```
  *
@@ -584,8 +595,10 @@ interface Spec {
 
 type AnyState = State<Record<string, unknown>>
 
-const isEmptyValue = (value: unknown): boolean =>
-  (typeof value === "string" || Array.isArray(value)) && value.length === 0
+const isEmptyValue = (value: unknown): boolean => {
+  const unwrapped = Redacted.isRedacted(value) ? Redacted.value(value) : value
+  return (typeof unwrapped === "string" || Array.isArray(unwrapped)) && unwrapped.length === 0
+}
 
 const requiredMessage = (spec: Spec, values: unknown): string | undefined => {
   if (typeof spec.required === "function") {
@@ -643,30 +656,34 @@ const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> => names.inc
  *   field `Validating`: map a fetch that can fail to errors first.
  * - The values are what the controls hold, not a parsed value. Parse them
  *   at submit, with the Schema that `Rule.fromSchema` checks.
- * - The `value` Schemas go in the Model, so they must encode to JSON.
+ * - The `value` Schemas go in the Model, so history restore writes them into
+ *   `history.state` and the server ships them in the page state. Declare a
+ *   secret such as a password with `value: Schema.Redacted(Schema.String)`,
+ *   and the component's whole state stays out of both, the other fields
+ *   included.
  * - A form sets `novalidate`: native constraint validation isn't used.
  *
  * **Example** (A login form with a server error)
  *
  * ```ts import.meta.vitest
  * import { Validation } from "@effect/ui"
- * import { Option } from "effect"
+ * import { Option, Redacted, Schema } from "effect"
  *
  * const Login = Validation.make({
  *   email: { required: "Email is required", rules: [Validation.Rule.email("Please enter a valid email")] },
- *   password: { required: "Password is required" }
+ *   password: { value: Schema.Redacted(Schema.String), required: "Password is required" }
  * })
  *
  * // The default mode shows nothing until a submit is tried.
- * let form = Login.init({ email: "ada@example", password: "" })
+ * let form = Login.init({ email: "ada@example", password: Redacted.make("") })
  * Login.validate(form).fields.email._tag // => "NotValidated"
  *
  * form = Login.submit(form)
  * Login.validate(form).fields.email // => { _tag: "Invalid", value: "ada@example", required: true, errors: ["Please enter a valid email"] }
  *
  * form = Login.change(form, "email", "ada@example.com")
- * form = Login.change(form, "password", "secret")
- * Login.validate(form).value // => Option.some({ email: "ada@example.com", password: "secret" })
+ * form = Login.change(form, "password", Redacted.make("secret"))
+ * Login.validate(form).value // => Option.some({ email: "ada@example.com", password: Redacted.make("secret") })
  *
  * // The server's error shows on the password until the password changes.
  * form = Login.reject(form, { password: ["Invalid credentials"] })

@@ -1249,8 +1249,10 @@ const commandLayers = Layer.mergeAll(
  * the snapshot in memory once it is encoded, after the push has written the
  * entry. Back and forward restore it, and after a reload it starts fresh,
  * with a warning logged the first time. A state that doesn't encode is left
- * out, with a warning logged once per component. A state whose Schema decodes
- * asynchronously shows nothing until it is decoded, then starts from it.
+ * out, with a warning logged once per component. An instance whose state holds
+ * a `Schema.Redacted` anywhere is left out of the snapshot too, with no
+ * warning. A state whose Schema decodes asynchronously shows nothing until it
+ * is decoded, then starts from it.
  *
  * With `throttle`, a replace that stays on the page is written at once, and
  * then at most once per interval, with the latest URL. A pending one is
