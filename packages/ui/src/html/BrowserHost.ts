@@ -358,6 +358,9 @@ const isDisabled = (target: EventTarget | null): boolean =>
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
  */
+const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
+  (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
+
 const payloadOf = (
   name: string,
   event: Event,
@@ -389,14 +392,9 @@ const payloadOf = (
     }
     case "input":
     case "change":
-      return controlPayload(
-        (target !== null && "value" in (target as object) ? target : element) as globalThis.Element,
-        event
-      )
-    case "compositionend": {
-      const field = (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
-      return { value: String(field.value ?? "") }
-    }
+      return controlPayload(fieldOf(target, element), event)
+    case "compositionend":
+      return { value: String(fieldOf(target, element).value ?? "") }
     case "submit": {
       const form = (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)

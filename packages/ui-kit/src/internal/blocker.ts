@@ -7,8 +7,15 @@ export const blockers = (attribute: string) => {
     .attr("role", "presentation")
     .attr(attribute, "")
     .attr("style", "position:fixed;inset:0;z-index:-1;" + noSelect)
-  return { open: View.toNode(blocker), closed: View.toNode(blocker.attr("inert", "")) }
+  return {
+    open: View.toNode(blocker),
+    closed: View.toNode(blocker.attr("inert", "")),
+    is: (target: Node): boolean => target instanceof Element && target.hasAttribute(attribute)
+  }
 }
+
+export const backdropBox = "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
+  noSelect
 
 export const cutPath = (holes: ReadonlyArray<DOMRect>): string =>
   "polygon(0% 0%,100% 0%,100% 100%,0% 100%,0% 0%," +

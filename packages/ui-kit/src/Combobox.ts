@@ -249,21 +249,20 @@ import {
   type Attributed,
   attrSelector,
   flag,
-  noSelect,
   separatorAttrs,
   visuallyHidden,
   withStyle
 } from "./internal/attributes.ts"
-import { blockers, cutPath } from "./internal/blocker.ts"
-import { byAttribute } from "./internal/dom.ts"
-import { formInputs } from "./internal/formInputs.ts"
+import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
+import { byAttribute, focusFinal } from "./internal/dom.ts"
+import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { type Loop, stepped } from "./internal/list.ts"
+import { available, keyed, type Loop, stepped } from "./internal/list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./internal/modal.ts"
-import { listenOutside } from "./internal/outside.ts"
+import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
-import { available, printable, typeahead } from "./internal/typeahead.ts"
+import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -737,11 +736,9 @@ const WaitBeforeResetTyping = Command.make(
   () => Effect.as(Effect.sleep(Duration.millis(750)), Message.CompletedWaitBeforeResetTyping())
 )
 
-const valuesOf = (props: ComboboxProps): ReadonlyArray<string> =>
-  props.value == null ? [] : typeof props.value === "string" ? [props.value] : props.value
+const lockedOf = (props: ComboboxProps): boolean => props.disabled === true || props.readOnly === true
 
-const filledOf = (props: ComboboxProps): boolean =>
-  props.multiple === true ? valuesOf(props).length > 0 : valuesOf(props).some((value) => value !== "")
+const navigableOf = (props: ComboboxProps): boolean => props.open || props.inline === true
 
 const itemOf = (props: ComboboxProps, value: string): ComboboxItem | undefined =>
   props.items.find((item) => item.value === value) ?? props.filteredItems?.find((item) => item.value === value)
@@ -755,14 +752,18 @@ const selectedLabelOf = (props: ComboboxProps): string => {
 const queryOf = (model: Model, props: ComboboxProps, open: boolean): string =>
   !open && model.closeQuery !== null ? model.closeQuery : props.inputValue.trim()
 
+const bypassed = (model: Model, props: ComboboxProps, query: string): boolean => {
+  if (props.multiple === true || model.queryChanged || query === "") return false
+  const label = selectedLabelOf(props)
+  return label.length === query.length && makeComboboxFilter(props.locale).contains(label, query)
+}
+
 const shownOf = (model: Model, props: ComboboxProps, open = props.open): ReadonlyArray<ComboboxItem> => {
   const query = queryOf(model, props, open)
-  const match = makeComboboxFilter(props.locale)
-  const label = selectedLabelOf(props)
-  const bypass = props.multiple !== true && !model.queryChanged && query !== "" && label.length === query.length &&
-    match.contains(label, query)
+  const bypass = bypassed(model, props, query)
   if (props.filteredItems !== undefined && !bypass) return props.filteredItems
   const filter = props.filter ?? "contains"
+  const match = makeComboboxFilter(props.locale)
   const text = bypass ? "" : query
   const limit = props.limit ?? -1
   const shown: Array<ComboboxItem> = []
@@ -808,53 +809,32 @@ const groupsOf = (items: ReadonlyArray<ComboboxItem>): ReadonlyArray<ComboboxGro
   }))
 }
 
-type Focus = "input" | "trigger" | { readonly chip: string } | null
+type ComboboxStep = Component.Step<Model, Message, ComboboxEvents>
 
-interface Change {
-  readonly model: Model
-  readonly events: ReadonlyArray<ComboboxEvents>
-  readonly focus: Focus
-  readonly typing: boolean
-}
+const focus = (step: ComboboxStep, ref: typeof Input | typeof Trigger | typeof Chip): ComboboxStep =>
+  step.run(Html.Focus({ ref }).pipe(Command.asNoop))
 
-const begin = (model: Model): Change => ({ model, events: [], focus: null, typing: false })
+const focusInput = (_model: Model, _message: unknown, $: ComboboxUpdate) =>
+  focus($, $.props.inputInPopup === true && !$.props.open ? Trigger : Input)
 
-const set = (change: Change, fields: Partial<Model>): Change => ({ ...change, model: { ...change.model, ...fields } })
-
-const emit = (change: Change, ...events: ReadonlyArray<ComboboxEvents>): Change => ({
-  ...change,
-  events: [...change.events, ...events]
-})
-
-const focus = (change: Change, target: Focus): Change => ({ ...change, focus: target })
-
-const focusInput = (change: Change, props: ComboboxProps): Change =>
-  focus(change, props.inputInPopup === true && !props.open ? "trigger" : "input")
-
-const finish = ($: ComboboxUpdate, change: Change) => {
-  const step = $.set(change.model).emit(...change.events)
-  const target = change.focus
-  const focused = target === null
-    ? step
-    : step.run(
-      Html.Focus({ ref: target === "input" ? Input : target === "trigger" ? Trigger : Chip.at(target.chip) }).pipe(
-        Command.asNoop
-      )
-    )
-  return change.typing ? focused.run(WaitBeforeResetTyping({})) : focused
-}
+const rewrite = (
+  step: ComboboxStep,
+  props: ComboboxProps,
+  inputValue: string,
+  reason: ComboboxChangeReason
+): ComboboxStep =>
+  props.inputValue === inputValue ? step : step.emit(ComboboxEvents.EditedInput({ inputValue, reason }))
 
 const highlight = (
-  change: Change,
+  step: ComboboxStep,
   shown: ReadonlyArray<ComboboxItem>,
   value: string | null,
   reason: ComboboxHighlightReason,
   byKey = false
-): Change => {
-  const before = highlightedOf(change.model, shown)
-  const next = set(change, { active: value, activeByKey: byKey, autoFirst: false })
-  return before === value ? next : emit(
-    next,
+): ComboboxStep => {
+  const before = highlightedOf(step.model, shown)
+  const next = step.evolve({ active: value, activeByKey: byKey, autoFirst: false })
+  return before === value ? next : next.emit(
     ComboboxEvents.Highlighted({
       value,
       index: value === null ? -1 : shown.findIndex((item) => item.value === value),
@@ -863,15 +843,25 @@ const highlight = (
   )
 }
 
+const unhighlight = (
+  step: ComboboxStep,
+  props: ComboboxProps,
+  reason: ComboboxHighlightReason,
+  listed = step.model
+): ComboboxStep =>
+  step.model.active === null && !step.model.autoFirst
+    ? step.evolve({ activeByKey: false })
+    : highlight(step, shownOf(listed, props), null, reason)
+
 const open = (
-  change: Change,
+  step: ComboboxStep,
   props: ComboboxProps,
   reason: ComboboxChangeReason,
   method: ComboboxInteraction,
   key?: string
-): Change => {
-  if (props.open || props.disabled === true) return change
-  let next = change
+): ComboboxStep => {
+  if (props.open || props.disabled === true) return step
+  let next = step
   let inputValue = props.inputValue
   const closeQuery = next.model.closeQuery
   if (closeQuery !== null) {
@@ -880,26 +870,22 @@ const open = (
     const clears = !typed && props.inputInPopup === true && props.inline !== true && inputValue !== "" &&
       (inputValue.trim() === closeQuery || inputValue === label)
     const matchesSelected = props.multiple !== true && props.inputInPopup !== true && inputValue === label
-    if (!typed && (clears || inputValue === "" || matchesSelected)) next = set(next, { queryChanged: false })
-    next = set(next, { closeQuery: null })
+    if (!typed && (clears || inputValue === "" || matchesSelected)) next = next.evolve({ queryChanged: false })
+    next = next.evolve({ closeQuery: null })
     if (clears) {
-      next = emit(next, ComboboxEvents.EditedInput({ inputValue: "", reason: "input-clear" }))
+      next = rewrite(next, props, "", "input-clear")
       inputValue = ""
     }
   }
-  next = emit(
-    set(next, {
-      openMethod: method,
-      closeMethod: null,
-      focusLeft: false,
-      pressedItem: null,
-      typed: "",
-      pressing: reason === "trigger-press" && props.inputInPopup === true && (method === "mouse" || method === "pen")
-    }),
-    ComboboxEvents.Opened({ reason })
-  )
-  const opened = { ...props, open: true, inputValue }
-  const shown = shownOf(next.model, opened, true)
+  next = next.evolve({
+    openMethod: method,
+    closeMethod: null,
+    focusLeft: false,
+    pressedItem: null,
+    typed: "",
+    pressing: reason === "trigger-press" && props.inputInPopup === true && (method === "mouse" || method === "pen")
+  }).emit(ComboboxEvents.Opened({ reason }))
+  const shown = shownOf(next.model, { ...props, open: true, inputValue }, true)
   let target: string | null = null
   if (reason !== "input-change" && !next.model.queryChanged) {
     const chosen = new Set(valuesOf(props))
@@ -909,72 +895,73 @@ const open = (
     }
   }
   next = highlight(next, shown, target, method === "keyboard" ? "keyboard" : "none", method === "keyboard")
-  return reason === "input-change" && props.autoHighlight === true ? set(next, { autoFirst: true }) : next
+  return reason === "input-change" && props.autoHighlight === true ? next.evolve({ autoFirst: true }) : next
 }
 
 const dismiss = (
-  change: Change,
+  step: ComboboxStep,
   props: ComboboxProps,
   reason: ComboboxChangeReason,
   method: ComboboxInteraction | null,
   focusLeft = false
-): Change => {
-  if (!props.open) return change
-  let next = change
+): ComboboxStep => {
+  if (!props.open) return step
+  let next = step
   const inline = props.inline === true
   if (next.model.queryChanged) {
     const query = props.inputValue.trim()
-    if (!inline) next = set(next, { closeQuery: query })
+    if (!inline) next = next.evolve({ closeQuery: query })
     if (props.multiple !== true) {
-      if (query === "") next = set(next, { queryChanged: false })
+      if (query === "") next = next.evolve({ queryChanged: false })
     } else {
-      if (props.inputInPopup === true) next = highlight(next, shownOf(next.model, props), null, "none")
-      if ((props.inputInPopup !== true || inline) && props.inputValue !== "") {
-        next = emit(next, ComboboxEvents.EditedInput({ inputValue: "", reason: "input-clear" }))
-      }
+      if (props.inputInPopup === true) next = unhighlight(next, props, "none")
+      if (props.inputInPopup !== true || inline) next = rewrite(next, props, "", "input-clear")
     }
   }
-  return emit(set(next, { closeMethod: method, focusLeft, pressing: false }), ComboboxEvents.Dismissed({ reason }))
+  return next.evolve({ closeMethod: method, focusLeft, pressing: false }).emit(ComboboxEvents.Dismissed({ reason }))
 }
 
-const toggle = (change: Change, props: ComboboxProps, method: ComboboxInteraction): Change =>
+const toggle = (step: ComboboxStep, props: ComboboxProps, method: ComboboxInteraction): ComboboxStep =>
   props.disabled === true
-    ? change
+    ? step
     : props.open
-    ? dismiss(change, props, "trigger-press", method)
-    : open(change, props, "trigger-press", method)
+    ? dismiss(step, props, "trigger-press", method)
+    : open(step, props, "trigger-press", method)
 
-const pick = (change: Change, props: ComboboxProps, value: string, method: ComboboxInteraction): Change => {
+const pick = (step: ComboboxStep, props: ComboboxProps, value: string, method: ComboboxInteraction): ComboboxStep => {
   const item = itemOf(props, value)
-  if (item === undefined || !available(item) || props.disabled === true || props.readOnly === true) return change
+  if (item === undefined || !available(item) || lockedOf(props)) return step
   if (props.multiple === true) {
-    const current = valuesOf(props)
-    const values = current.includes(value) ? current.filter((other) => other !== value) : [...current, value]
-    const picked = emit(change, ComboboxEvents.Picked({ value: values, reason: "item-press" }))
+    const picked = step.emit(ComboboxEvents.Picked({ value: toggled(valuesOf(props), value), reason: "item-press" }))
     if (props.inputValue.trim() === "") return picked
     return props.inputInPopup === true
-      ? emit(picked, ComboboxEvents.EditedInput({ inputValue: "", reason: "input-clear" }))
+      ? rewrite(picked, props, "", "input-clear")
       : dismiss(picked, props, "item-press", method)
   }
-  const picked = emit(change, ComboboxEvents.Picked({ value, reason: "item-press" }))
-  const filled = props.inputInPopup !== true && item.label !== props.inputValue
-    ? emit(picked, ComboboxEvents.EditedInput({ inputValue: item.label, reason: "item-press" }))
-    : picked
-  return dismiss(filled, props, "item-press", method)
+  const picked = step.emit(ComboboxEvents.Picked({ value, reason: "item-press" }))
+  return dismiss(
+    props.inputInPopup === true ? picked : rewrite(picked, props, item.label, "item-press"),
+    props,
+    "item-press",
+    method
+  )
 }
 
-const clear = (change: Change, props: ComboboxProps, reason: ComboboxChangeReason): Change => {
-  const cleared = props.inputValue === ""
-    ? change
-    : emit(change, ComboboxEvents.EditedInput({ inputValue: "", reason }))
+const clear = (step: ComboboxStep, props: ComboboxProps, reason: ComboboxChangeReason): ComboboxStep => {
+  const cleared = rewrite(step, props, "", reason)
   return filledOf(props)
-    ? emit(cleared, ComboboxEvents.Picked({ value: props.multiple === true ? [] : null, reason }))
+    ? cleared.emit(ComboboxEvents.Picked({ value: props.multiple === true ? [] : null, reason }))
     : cleared
 }
 
-const navigate = (change: Change, props: ComboboxProps, key: string): Change => {
-  const shown = shownOf(change.model, props)
-  const at = shown.findIndex((item) => item.value === highlightedOf(change.model, shown))
+const navigate = (
+  step: ComboboxStep,
+  props: ComboboxProps,
+  shown: ReadonlyArray<ComboboxItem>,
+  key: string
+): ComboboxStep => {
+  const highlighted = highlightedOf(step.model, shown)
+  const at = shown.findIndex((item) => item.value === highlighted)
   const last = shown.length - 1
   const loops = props.loopFocus !== false
   const loop: Loop = !loops ? "none" : props.autoHighlight === true ? "wrap" : "escape"
@@ -990,81 +977,95 @@ const navigate = (change: Change, props: ComboboxProps, key: string): Change => 
   } else {
     index = stepped(at, last, key === "ArrowDown" ? 1 : -1, loop)
   }
-  return highlight(change, shown, shown[index]?.value ?? null, "keyboard", true)
+  return highlight(step, shown, shown[index]?.value ?? null, "keyboard", true)
 }
 
 const edit = (
-  change: Change,
+  step: ComboboxStep,
   props: ComboboxProps,
   value: string,
   inputType: string,
   composing: boolean
-): Change => {
-  if (props.disabled === true || props.readOnly === true) return change
-  const typed = composing || (inputType !== "" && inputType !== "insertReplacementText")
+): ComboboxStep => {
+  if (lockedOf(props)) return step
   const query = value.trim()
   const auto = props.autoHighlight === true
-  const navigable = props.open || props.inline === true
-  const shown = shownOf(change.model, props)
+  const navigable = navigableOf(props)
   const inPopup = props.inputInPopup === true
-  let next = change
+  let next = step
   if (composing) {
     if (value === "" && props.openOnInputClick === false && !inPopup) next = dismiss(next, props, "input-clear", null)
-    if (!props.open && query !== "") next = open(next, props, "input-change", "keyboard")
-    else if (navigable && !(auto && query !== "")) next = highlight(next, shown, null, "none")
-    return next
+    if (!props.open && query !== "") return open(next, props, "input-change", "keyboard")
+    return navigable && !(auto && query !== "") ? unhighlight(next, props, "none", step.model) : next
   }
-  next = emit(next, ComboboxEvents.EditedInput({ inputValue: value, reason: "input-change" }))
+  const typed = inputType !== "" && inputType !== "insertReplacementText"
+  next = next.emit(ComboboxEvents.EditedInput({ inputValue: value, reason: "input-change" }))
   if (typed) {
-    if (query !== "") next = set(next, { queryChanged: true })
-    if (props.open) next = set(next, { closeQuery: null })
+    if (query !== "") next = next.evolve({ queryChanged: true })
+    if (props.open) next = next.evolve({ closeQuery: null })
   }
   if (value === "" && !inPopup) {
     if (props.multiple !== true && filledOf(props)) {
-      next = emit(next, ComboboxEvents.Picked({ value: null, reason: "input-clear" }))
+      next = next.emit(ComboboxEvents.Picked({ value: null, reason: "input-clear" }))
     }
     if (props.openOnInputClick === false) next = dismiss(next, props, "input-clear", null)
   }
   if (!props.open && typed && query !== "") {
     return open(next, { ...props, inputValue: value }, "input-change", "keyboard")
   }
-  if (auto && typed) return set(next, { active: null, autoFirst: query !== "" })
-  return navigable ? highlight(next, shown, null, "none") : next
+  if (auto && typed) return next.evolve({ active: null, autoFirst: query !== "" })
+  return navigable ? unhighlight(next, props, "none", step.model) : next
 }
 
-const removeChip = (change: Change, props: ComboboxProps, value: string, reason: ComboboxChangeReason): Change => {
-  if (props.disabled === true || props.readOnly === true) return change
+const removeChip = (
+  step: ComboboxStep,
+  props: ComboboxProps,
+  value: string,
+  reason: ComboboxChangeReason
+): ComboboxStep => {
+  if (lockedOf(props)) return step
   const values = valuesOf(props)
-  if (!values.includes(value)) return change
-  const removed = emit(
-    highlight(change, shownOf(change.model, props), null, "keyboard"),
+  if (!values.includes(value)) return step
+  const removed = unhighlight(step, props, "keyboard").emit(
     ComboboxEvents.Picked({ value: values.filter((other) => other !== value), reason })
   )
-  return reason === "chip-remove-press" ? focus(removed, "input") : removed
+  return reason === "chip-remove-press" ? focus(removed, Input) : removed
 }
 
-const pressInputKey = (change: Change, props: ComboboxProps, key: string, chips: boolean): Change => {
-  const navigable = props.open || props.inline === true
-  const shown = shownOf(change.model, props)
-  const highlighted = highlightedOf(change.model, shown)
+const hover = ($: ComboboxUpdate, value: string | null) =>
+  $.props.highlightItemOnHover === false || !navigableOf($.props)
+    ? $
+    : value === null
+    ? unhighlight($, $.props, "pointer")
+    : highlight($, shownOf($.model, $.props), value, "pointer")
+
+const pressInputKey = (step: ComboboxStep, props: ComboboxProps, key: string, chips: boolean): ComboboxStep => {
   const values = valuesOf(props)
   switch (key) {
     case "ArrowDown":
     case "ArrowUp":
-      return navigable ? navigate(change, props, key) : open(change, props, "list-navigation", "keyboard", key)
+      return navigableOf(props)
+        ? navigate(step, props, shownOf(step.model, props), key)
+        : open(step, props, "list-navigation", "keyboard", key)
     case "ArrowLeft":
-    case "ArrowRight":
-      if (props.grid === true && navigable && highlighted !== null) return navigate(change, props, key)
-      return chips && values.length > 0 ? focus(change, { chip: values[values.length - 1]! }) : change
+    case "ArrowRight": {
+      if (props.grid === true && navigableOf(props)) {
+        const shown = shownOf(step.model, props)
+        if (highlightedOf(step.model, shown) !== null) return navigate(step, props, shown, key)
+      }
+      return chips && values.length > 0 ? focus(step, Chip.at(values[values.length - 1]!)) : step
+    }
     case "Enter":
-    case " ":
-      return highlighted === null || props.readOnly === true ? change : pick(change, props, highlighted, "keyboard")
+    case " ": {
+      const highlighted = highlightedOf(step.model, shownOf(step.model, props))
+      return highlighted === null ? step : pick(step, props, highlighted, "keyboard")
+    }
     case "Escape":
-      return props.open ? dismiss(change, props, "escape-key", "keyboard") : clear(change, props, "escape-key")
+      return props.open ? dismiss(step, props, "escape-key", "keyboard") : clear(step, props, "escape-key")
     case "Backspace":
-      return values.length > 0 ? removeChip(change, props, values[values.length - 1]!, "none") : change
+      return values.length > 0 ? removeChip(step, props, values[values.length - 1]!, "none") : step
     default:
-      return change
+      return step
   }
 }
 
@@ -1135,6 +1136,8 @@ const TrackComboboxArgs = {
 
 type TrackComboboxArgs = Schema.Struct<typeof TrackComboboxArgs>["Type"]
 
+const blocking = blockers("data-combobox-blocker")
+
 const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Stream<TrackComboboxArgs>) =>
   Stream.callback<Message>((queue) => {
     const document = node.ownerDocument
@@ -1146,15 +1149,12 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
     const list = (): HTMLElement | null => document.getElementById(current.listId)
     const owned = (): Array<HTMLElement> =>
       Array.from(document.querySelectorAll<HTMLElement>(attrSelector("data-combobox-inside", current.owner)))
-    const find = (name: string): HTMLElement | null =>
-      document.querySelector<HTMLElement>(attrSelector(name, current.owner))
-    const blocking = (target: Node): boolean =>
-      target instanceof Element && target.hasAttribute("data-combobox-blocker")
+    const find = (name: string): HTMLElement | null => byAttribute(document, name, current.owner)
     const inside = (target: Node): boolean =>
-      (node.contains(target) && !blocking(target)) || owned().some((element) => element.contains(target))
+      (node.contains(target) && !blocking.is(target)) || owned().some((element) => element.contains(target))
 
     const cut = () => {
-      const layer = Array.from(node.children).find(blocking) as HTMLElement | undefined
+      const layer = Array.from(node.children).find(blocking.is) as HTMLElement | undefined
       if (layer === undefined) return
       const holes = owned().filter((element) => !node.contains(element)).map((element) =>
         element.getBoundingClientRect()
@@ -1191,11 +1191,7 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
       const focused = document.activeElement
       const lost = focused === null || focused === document.body || node.contains(focused)
       if (current.inputInPopup && current.finalFocus && (lost || !current.focusLeft)) {
-        const marked = byAttribute(document, "data-final-focus", current.popupId)
-        const back = marked ?? find("data-combobox-trigger")
-        if (back !== null && (marked !== null || lost)) {
-          back.focus({ preventScroll: true, focusVisible: current.closeMethod === "keyboard" } as FocusOptions)
-        }
+        focusFinal(document, current.popupId, find("data-combobox-trigger"), lost, current.closeMethod === "keyboard")
       } else if (focused instanceof HTMLElement && node.contains(focused)) {
         if (current.inputInPopup) focused.blur()
         else find("data-combobox-input")?.focus({ preventScroll: true })
@@ -1205,18 +1201,7 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
 
     const onMouseUp = (event: MouseEvent) => {
       if (!current.pressing) return
-      const target = event.target as Node | null
-      const anchor = find("data-combobox-trigger")
-      let outside = target !== null && !inside(target)
-      if (outside && anchor !== null) {
-        const r = anchor.getBoundingClientRect()
-        if (
-          event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom
-        ) {
-          outside = false
-        }
-      }
-      send(Message.ReleasedPointer({ outside }))
+      send(Message.ReleasedPointer({ outside: releasedOutside(event, inside, find("data-combobox-trigger")) }))
     }
     const onFocusIn = (event: FocusEvent) => {
       if (current.inputInPopup || current.touch || !current.open) return
@@ -1226,7 +1211,7 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
       }
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking(event.target)) event.preventDefault()
+      if (event.target instanceof Node && blocking.is(event.target)) event.preventDefault()
     }
 
     const transition = settling(node, popup, frame, (open) => send(Message.FinishedTransition({ open })))
@@ -1313,8 +1298,7 @@ const TrackChips = Mount.makeStream(
         Array.from(node.querySelectorAll<HTMLElement>("[data-combobox-chip]")).filter((chip) =>
           chip.closest("[data-combobox-chips]") === node
         )
-      const input = () =>
-        node.ownerDocument.querySelector<HTMLElement>(attrSelector("data-combobox-input", current.owner))
+      const input = () => byAttribute(node.ownerDocument, "data-combobox-input", current.owner)
       const onKeyDown = (event: KeyboardEvent) => {
         const chip = event.target
         if (
@@ -1341,7 +1325,7 @@ const TrackChips = Mount.makeStream(
           event.preventDefault()
           send(Message.OpenedFromChip({ key }))
           move(undefined)
-        } else if (key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        } else if (printable(key, event.altKey, event.ctrlKey, event.metaKey)) {
           move(undefined)
         }
       }
@@ -1359,10 +1343,6 @@ const TrackChips = Mount.makeStream(
       )
     })
 )
-
-const blocking = blockers("data-combobox-blocker")
-
-const backdropBox = "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" + noSelect
 
 /**
  * A combobox: an input that filters a list of options as the user types.
@@ -1416,51 +1396,36 @@ export const Combobox = Component.define({
     placement: null
   }),
   update: {
-    PressedInput: (model, { pointerType }, $) =>
-      finish($, open(begin(model), $.props, "input-press", methodOf(pointerType))),
+    PressedInput: (_model, { pointerType }, $) => open($, $.props, "input-press", methodOf(pointerType)),
     PressedGroup: (model, { pointerType }, $) => {
       const props = $.props
       if (props.disabled === true) return model
-      const focused = focus(begin(model), "input")
-      return finish(
-        $,
-        props.openOnInputClick === false ? focused : open(focused, props, "input-press", methodOf(pointerType))
-      )
+      const focused = focus($, Input)
+      return props.openOnInputClick === false ? focused : open(focused, props, "input-press", methodOf(pointerType))
     },
-    ChangedInput: (model, { composing, inputType, value }, $) =>
-      finish($, edit(begin(model), $.props, value, inputType, composing)),
-    PressedInputKey: (model, { chips, key }, $) => finish($, pressInputKey(begin(model), $.props, key, chips)),
-    ReleasedInputKey: (model, { key }, $) =>
-      finish(
-        $,
-        key === "Enter"
-          ? dismiss(begin(model), $.props, "none", "keyboard")
-          : clear(begin(model), $.props, "escape-key")
-      ),
+    ChangedInput: (_model, { composing, inputType, value }, $) => edit($, $.props, value, inputType, composing),
+    PressedInputKey: (_model, { chips, key }, $) => pressInputKey($, $.props, key, chips),
+    ReleasedInputKey: (_model, { key }, $) =>
+      key === "Enter" ? dismiss($, $.props, "none", "keyboard") : clear($, $.props, "escape-key"),
     FocusedInput: (model, _message, $) =>
       model.saved === null
         ? model
-        : finish($, set(highlight(begin(model), shownOf(model, $.props), model.saved, "none"), { saved: null })),
+        : highlight($, shownOf(model, $.props), model.saved, "none").evolve({ saved: null }),
     BlurredInput: (model, _message, $) => {
       const shown = shownOf(model, $.props)
       const highlighted = highlightedOf(model, shown)
-      return highlighted === null
-        ? model
-        : finish($, set(highlight(begin(model), shown, null, "none"), { saved: highlighted }))
+      return highlighted === null ? model : highlight($, shown, null, "none").evolve({ saved: highlighted })
     },
-    PressedTrigger: (model, { pointerType }, $) => {
-      const props = $.props
-      const change = props.inputInPopup === true ? begin(model) : focus(begin(model), "input")
-      return finish($, toggle(change, props, methodOf(pointerType)))
-    },
+    PressedTrigger: (_model, { pointerType }, $) =>
+      toggle($.props.inputInPopup === true ? $ : focus($, Input), $.props, methodOf(pointerType)),
     ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
-    ClickedTrigger: (model, { pointerType }, $) => finish($, toggle(begin(model), $.props, methodOf(pointerType))),
+    ClickedTrigger: (_model, { pointerType }, $) => toggle($, $.props, methodOf(pointerType)),
     PressedTriggerKey: (model, { key }, $) => {
       const props = $.props
       if (props.disabled === true) return model
       if (key === "ArrowDown" || key === "ArrowUp") {
-        const opened = open(begin(model), props, "list-navigation", "keyboard", key)
-        return finish($, props.inputInPopup === true ? opened : focus(opened, "input"))
+        const opened = open($, props, "list-navigation", "keyboard", key)
+        return props.inputInPopup === true ? opened : focus(opened, Input)
       }
       const values = valuesOf(props)
       const { index, next } = typeahead(
@@ -1470,63 +1435,36 @@ export const Combobox = Component.define({
         props.items.findIndex((item) => values.includes(item.value))
       )
       const item = props.items[index]
-      const typed = { ...set(begin(model), next), typing: true }
-      return finish(
-        $,
-        item === undefined || values.includes(item.value)
-          ? typed
-          : emit(typed, ComboboxEvents.Picked({ value: item.value, reason: "none" }))
-      )
+      const typed = $.evolve(next).run(WaitBeforeResetTyping({}))
+      return item === undefined || values.includes(item.value)
+        ? typed
+        : typed.emit(ComboboxEvents.Picked({ value: item.value, reason: "none" }))
     },
-    ClickedLabel: (model, _message, $) => finish($, focusInput(begin(model), $.props)),
-    FocusedFormInput: (model, _message, $) => finish($, focusInput(begin(model), $.props)),
+    ClickedLabel: focusInput,
+    FocusedFormInput: focusInput,
     Autofilled: (model, { value }, $) => {
       const props = $.props
-      if (props.disabled === true || props.readOnly === true || props.multiple === true) return model
-      const lower = value.toLowerCase()
-      const item = props.items.find((candidate) => candidate.value.toLowerCase() === lower) ??
-        props.items.find((candidate) => candidate.label.toLowerCase() === lower)
+      if (lockedOf(props) || props.multiple === true) return model
+      const item = autofillMatch(props.items, value)
       if (item === undefined || valuesOf(props).includes(item.value)) return model
-      const picked = emit(begin(model), ComboboxEvents.Picked({ value: item.value, reason: "none" }))
-      return finish(
-        $,
-        props.inputInPopup === true || props.inputValue === item.label
-          ? picked
-          : emit(picked, ComboboxEvents.EditedInput({ inputValue: item.label, reason: "none" }))
-      )
+      const picked = $.emit(ComboboxEvents.Picked({ value: item.value, reason: "none" }))
+      return props.inputInPopup === true ? picked : rewrite(picked, props, item.label, "none")
     },
-    PressedClear: (model, _message, $) => {
-      const props = $.props
-      if (props.disabled === true || props.readOnly === true) return model
-      const cleared = clear(highlight(begin(model), shownOf(model, props), null, "pointer"), props, "clear-press")
-      return finish($, focus(cleared, "input"))
-    },
-    RemovedChip: (model, { reason, value }, $) => finish($, removeChip(begin(model), $.props, value, reason)),
-    OpenedFromChip: (model, { key }, $) => finish($, open(begin(model), $.props, "list-navigation", "keyboard", key)),
-    EnteredItem: (model, { value }, $) => {
-      const props = $.props
-      if (props.highlightItemOnHover === false || !(props.open || props.inline === true)) return model
-      return finish($, highlight(begin(model), shownOf(model, props), value, "pointer"))
-    },
-    LeftItem: (model, _message, $) => {
-      const props = $.props
-      if (props.highlightItemOnHover === false || !(props.open || props.inline === true)) return model
-      return finish($, highlight(begin(model), shownOf(model, props), null, "pointer"))
-    },
+    PressedClear: (model, _message, $) =>
+      lockedOf($.props) ? model : focus(clear(unhighlight($, $.props, "pointer"), $.props, "clear-press"), Input),
+    RemovedChip: (_model, { reason, value }, $) => removeChip($, $.props, value, reason),
+    OpenedFromChip: (_model, { key }, $) => open($, $.props, "list-navigation", "keyboard", key),
+    EnteredItem: (_model, { value }, $) => hover($, value),
+    LeftItem: (_model, _message, $) => hover($, null),
     PressedItem: (_model, { value }, $) => $.evolve({ pressedItem: value }),
     ReleasedItem: (model, { button, value }, $) => {
       const props = $.props
-      const next = { ...model, pressedItem: null }
-      if (model.pressedItem === value || button !== 0 || !(props.open || props.inline === true)) {
-        return model.pressedItem === null ? model : next
-      }
-      return highlightedOf(model, shownOf(model, props)) === value
-        ? finish($, pick(begin(next), props, value, "mouse"))
-        : next
+      const next = $.evolve({ pressedItem: null })
+      if (model.pressedItem === value || button !== 0 || !navigableOf(props)) return next
+      return highlightedOf(model, shownOf(model, props)) === value ? pick(next, props, value, "mouse") : next
     },
-    ClickedItem: (model, { pointerType, value }, $) =>
-      finish($, pick(begin(model), $.props, value, methodOf(pointerType))),
-    PressedDismiss: (model, _message, $) => finish($, dismiss(begin(model), $.props, "close-press", null)),
+    ClickedItem: (_model, { pointerType, value }, $) => pick($, $.props, value, methodOf(pointerType)),
+    PressedDismiss: (_model, _message, $) => dismiss($, $.props, "close-press", null),
     CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
     ShowedPopup: (_model, _message, $) =>
       $.evolve($.props.open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
@@ -1536,7 +1474,8 @@ export const Combobox = Component.define({
       if (open !== props.open) return model
       if (open) return $.emit(ComboboxEvents.Settled({ open }))
       if (!model.mounted || props.holdExit === true) return model
-      let change = set(highlight(begin(model), shownOf(model, props), null, "none"), {
+      const rest = props.inputInPopup === true ? "" : selectedLabelOf(props)
+      const closed = unhighlight($, props, "none").evolve({
         mounted: false,
         started: false,
         queryChanged: false,
@@ -1544,29 +1483,15 @@ export const Combobox = Component.define({
         pressedItem: null,
         pressing: false
       })
-      if (props.multiple === true || props.inputInPopup === true) {
-        if (props.inputValue !== "") {
-          change = emit(change, ComboboxEvents.EditedInput({ inputValue: "", reason: "input-clear" }))
-        }
-      } else {
-        const label = selectedLabelOf(props)
-        if (props.inputValue !== label) {
-          change = emit(
-            change,
-            ComboboxEvents.EditedInput({ inputValue: label, reason: label === "" ? "input-clear" : "none" })
-          )
-        }
-      }
-      return finish($, emit(change, ComboboxEvents.Settled({ open })))
+      return rewrite(closed, props, rest, rest === "" ? "input-clear" : "none").emit(ComboboxEvents.Settled({ open }))
     },
     ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
-    PressedOutside: (model, { pointerType }, $) =>
-      finish($, dismiss(begin(model), $.props, "outside-press", methodOf(pointerType))),
-    FocusedOutside: (model, _message, $) => finish($, dismiss(begin(model), $.props, "focus-out", null, true)),
+    PressedOutside: (_model, { pointerType }, $) => dismiss($, $.props, "outside-press", methodOf(pointerType)),
+    FocusedOutside: (_model, _message, $) => dismiss($, $.props, "focus-out", null, true),
     ReleasedPointer: (model, { outside }, $) => {
       if (!model.pressing) return model
-      const next = begin({ ...model, pressing: false })
-      return finish($, outside ? dismiss(next, $.props, "cancel-open", "mouse") : next)
+      const next = $.evolve({ pressing: false })
+      return outside ? dismiss(next, $.props, "cancel-open", "mouse") : next
     }
   },
   parts: (model, p) => {
@@ -1668,16 +1593,15 @@ export const Combobox = Component.define({
       b.attr("data-placeholder", flag(!filled))
         .forward((node) => node.children.length > 0 ? node : node.children(text)))
 
+    const pressGroup = ({ button, pointerType }: Html.PointerPayload) =>
+      button === 0 ? Message.PressedGroup({ pointerType }) : undefined
+
     const inputGroup = p.part("div", (b) =>
       inside(control(b))
         .attr("role", "group")
         .attr("data-combobox-group", owner)
         .attr("data-placeholder", flag(!filled))
-        .on(
-          "mousedown",
-          ({ button, pointerType }) => button === 0 ? Message.PressedGroup({ pointerType }) : undefined,
-          { preventDefault: true }
-        ))
+        .on("mousedown", pressGroup, { preventDefault: true }))
 
     const keyHandled = (key: string, selectionStart: number | null): boolean => {
       switch (key) {
@@ -1825,11 +1749,7 @@ export const Combobox = Component.define({
       return inside(b)
         .attr("role", values.length > 0 ? "toolbar" : undefined)
         .attr("data-combobox-chips", owner)
-        .on(
-          "mousedown",
-          ({ button, pointerType }) => button === 0 ? Message.PressedGroup({ pointerType }) : undefined,
-          { preventDefault: true }
-        )
+        .on("mousedown", pressGroup, { preventDefault: true })
         .onMount(TrackChips({ owner, rtl: props.dir === "rtl", locked: disabled || readOnly }))
     })
 
@@ -1840,13 +1760,7 @@ export const Combobox = Component.define({
         .attr("aria-disabled", disabled ? "true" : undefined)
         .attr("aria-readonly", readOnly ? "true" : undefined)
         .attr("data-disabled", flag(disabled)))
-    const chip = View.wrapPart(
-      chipPart,
-      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
-        element: B,
-        value: string
-      ): ReturnType<B["attr"]> => chipPart(element.key(value), value)
-    )
+    const chip = keyed(chipPart)
 
     const chipRemove = p.part("button", (b, value: string) =>
       inside(b)
@@ -1964,13 +1878,7 @@ export const Combobox = Component.define({
         )
         .onClick(({ pointerType }) => off ? undefined : Message.ClickedItem({ value, pointerType }))
     })
-    const item = View.wrapPart(
-      itemPart,
-      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
-        element: B,
-        value: string
-      ): ReturnType<B["attr"]> => itemPart(element.key(value), value)
-    )
+    const item = keyed(itemPart)
 
     const indicatorPart = p.part("span", (b) => b.attr("aria-hidden", "true"))
     const itemIndicator = View.wrapPart(

@@ -1,9 +1,4 @@
-export interface Labelled {
-  readonly label: string
-  readonly disabled?: boolean | undefined
-}
-
-export const available = (item: Labelled | undefined): boolean => item !== undefined && item.disabled !== true
+import { available, type Labelled } from "./list.ts"
 
 const matchOf = (items: ReadonlyArray<Labelled>, text: string, start: number): number => {
   if (items.length === 0) return -1

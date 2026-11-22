@@ -14,6 +14,29 @@ export interface FormField {
   readonly filled: boolean
 }
 
+export interface Valued {
+  readonly value?: string | ReadonlyArray<string> | null | undefined
+  readonly multiple?: boolean | undefined
+}
+
+export const valuesOf = (props: Valued): ReadonlyArray<string> =>
+  props.value == null ? [] : typeof props.value === "string" ? [props.value] : props.value
+
+export const filledOf = (props: Valued): boolean =>
+  props.multiple === true ? valuesOf(props).length > 0 : valuesOf(props).some((value) => value !== "")
+
+export const toggled = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
+  values.includes(value) ? values.filter((other) => other !== value) : [...values, value]
+
+export const autofillMatch = <A extends { readonly value: string; readonly label: string }>(
+  items: ReadonlyArray<A>,
+  text: string
+): A | undefined => {
+  const lower = text.toLowerCase()
+  return items.find((item) => item.value.toLowerCase() === lower) ??
+    items.find((item) => item.label.toLowerCase() === lower)
+}
+
 export interface FormFieldMessages<Msg> {
   readonly focused: Msg
   readonly autofilled: (value: string) => Msg

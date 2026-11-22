@@ -203,18 +203,18 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idSelector, noSelect, separatorAttrs, withStyle } from "./internal/attributes.ts"
-import { blockers, cutPath } from "./internal/blocker.ts"
-import { byAttribute } from "./internal/dom.ts"
-import { formInputs } from "./internal/formInputs.ts"
+import { type Attributed, flag, idSelector, separatorAttrs, withStyle } from "./internal/attributes.ts"
+import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
+import { focusFinal } from "./internal/dom.ts"
+import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { stepped } from "./internal/list.ts"
+import { available, keyed, stepped } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
-import { listenOutside } from "./internal/outside.ts"
+import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp } from "./internal/range.ts"
 import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
-import { available, printable, typeahead } from "./internal/typeahead.ts"
+import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -498,12 +498,6 @@ const WaitBeforeResetTyping = Command.make(
   () => Effect.as(Effect.sleep(Duration.millis(750)), Message.CompletedWaitBeforeResetTyping())
 )
 
-const valuesOf = (props: SelectProps): ReadonlyArray<string> =>
-  props.value == null ? [] : typeof props.value === "string" ? [props.value] : props.value
-
-const filledOf = (props: SelectProps): boolean =>
-  props.multiple === true ? valuesOf(props).length > 0 : valuesOf(props).some((value) => value !== "")
-
 const selectedIndexOf = (props: SelectProps): number => {
   const values = valuesOf(props)
   return props.items.findIndex((item) => values.includes(item.value))
@@ -581,9 +575,7 @@ const pick = (model: Model, $: SelectUpdate, value: string, method: SelectIntera
   if (!available(item) || props.disabled === true || props.readOnly === true) return model
   const next = { ...model, active: value, pressedItem: false }
   if (props.multiple === true) {
-    const current = valuesOf(props)
-    const values = current.includes(value) ? current.filter((other) => other !== value) : [...current, value]
-    return $.set(next).emit(SelectEvents.Picked({ value: values, reason: "item-press" }))
+    return $.set(next).emit(SelectEvents.Picked({ value: toggled(valuesOf(props), value), reason: "item-press" }))
   }
   return $.set({ ...next, closeMethod: method, focusLeft: false, pressing: false })
     .emit(SelectEvents.Picked({ value, reason: "item-press" }))
@@ -710,6 +702,8 @@ const TrackSelectArgs = {
 
 type TrackSelectArgs = Schema.Struct<typeof TrackSelectArgs>["Type"]
 
+const blocking = blockers("data-select-blocker")
+
 const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<TrackSelectArgs>) =>
   Stream.callback<Message>((queue) => {
     const document = node.ownerDocument
@@ -721,9 +715,8 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     const trigger = (): HTMLElement | null => document.getElementById(current.triggerId)
     const popup = (): HTMLElement => document.getElementById(current.popupId) ?? node
     const scroller = (): HTMLElement => document.getElementById(current.listId) ?? popup()
-    const blocking = (target: Node): boolean => target instanceof Element && target.hasAttribute("data-select-blocker")
     const inside = (target: Node): boolean =>
-      (node.contains(target) && !blocking(target)) || trigger()?.contains(target) === true
+      (node.contains(target) && !blocking.is(target)) || trigger()?.contains(target) === true
 
     const saved = new Map<HTMLElement, Map<string, () => void>>()
     const write = (element: HTMLElement, name: string, value: string) => {
@@ -756,7 +749,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     }
 
     const cut = () => {
-      const layer = Array.from(node.children).find(blocking) as HTMLElement | undefined
+      const layer = Array.from(node.children).find(blocking.is) as HTMLElement | undefined
       const anchor = trigger()
       if (layer === undefined || anchor === null) return
       write(layer, "clip-path", cutPath([anchor.getBoundingClientRect()]))
@@ -934,11 +927,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       const focused = document.activeElement
       const lost = focused === null || focused === document.body || node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
-        const marked = byAttribute(document, "data-final-focus", current.popupId)
-        const back = marked ?? trigger()
-        if (back !== null && (marked !== null || lost)) {
-          back.focus({ preventScroll: true, focusVisible: current.closeMethod === "keyboard" } as FocusOptions)
-        }
+        focusFinal(document, current.popupId, trigger(), lost, current.closeMethod === "keyboard")
       } else if (focused instanceof HTMLElement && node.contains(focused)) {
         focused.blur()
       }
@@ -982,19 +971,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     }
     const onMouseUp = (event: MouseEvent) => {
       dragY = 0
-      if (!current.pressing) return
-      const target = event.target as Node | null
-      const anchor = trigger()
-      let outside = target !== null && !inside(target)
-      if (outside && anchor !== null) {
-        const r = anchor.getBoundingClientRect()
-        if (
-          event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom
-        ) {
-          outside = false
-        }
-      }
-      send(Message.ReleasedPointer({ outside }))
+      if (current.pressing) send(Message.ReleasedPointer({ outside: releasedOutside(event, inside, trigger()) }))
     }
     let dragY = 0
     let dragged = false
@@ -1015,7 +992,7 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       scrollBy(arrow, arrow.getAttribute("data-select-scroll-arrow") === "up")
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking(event.target)) event.preventDefault()
+      if (event.target instanceof Node && blocking.is(event.target)) event.preventDefault()
     }
     const onFocusIn = (event: FocusEvent) => {
       if (current.open && current.aligned && event.target === trigger()) send(Message.FocusedTrigger())
@@ -1101,12 +1078,8 @@ const TrackSelect = Mount.makeStream(
     )
 )
 
-const blocking = blockers("data-select-blocker")
-
 const alignedBox =
   "position:fixed;inset:auto;margin-left:0;margin-right:0;--available-width:100vw;--available-height:100vh"
-
-const backdropBox = "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" + noSelect
 
 const scrolling = "position:relative;max-height:100%;overflow-x:hidden;overflow-y:auto;scrollbar-width:none"
 
@@ -1181,9 +1154,7 @@ export const Select = Component.define({
     Autofilled: (model, { value }, $) => {
       const props = $.props
       if (props.disabled === true || props.readOnly === true || props.multiple === true) return model
-      const lower = value.toLowerCase()
-      const item = props.items.find((candidate) => candidate.value.toLowerCase() === lower) ??
-        props.items.find((candidate) => candidate.label.toLowerCase() === lower)
+      const item = autofillMatch(props.items, value)
       return item === undefined || valuesOf(props).includes(item.value)
         ? model
         : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
@@ -1496,13 +1467,7 @@ export const Select = Component.define({
         )
         .onClick(({ pointerType }) => Message.ClickedItem({ value, pointerType }))
     })
-    const item = View.wrapPart(
-      itemPart,
-      <B extends View.PartTarget<"div"> & { readonly key: (key: string) => View.PartTarget<"div"> }>(
-        element: B,
-        value: string
-      ): ReturnType<B["attr"]> => itemPart(element.key(value), value)
-    )
+    const item = keyed(itemPart)
 
     const itemText = p.part("div", (b) => b.attr("data-select-item-text", ""))
 
