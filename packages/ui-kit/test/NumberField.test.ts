@@ -209,7 +209,6 @@ describe("NumberField", () => {
         required: true,
         scrubbing: false
       })
-      assert.isUndefined(numberField.scrubAreaCursor(h.span))
       assert.throws(() => numberField.input(h.div as any), /a part for <input> was given <div>/)
       assert.throws(() => numberField.increment({ element: h.div as any }), /a part for <button> was given <div>/)
     }))

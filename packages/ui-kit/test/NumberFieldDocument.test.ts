@@ -56,6 +56,7 @@ const mount = Effect.fnUntraced(function*(
               element: h.span.class("scrub"),
               direction: vertical ? "vertical" : "horizontal"
             }).children(
+              h.label.class("label").children("Amount"),
               numberField.scrubAreaCursor(h.span.class("cursor"))
             ),
             numberField.decrement({ element: h.button.class("decrement") }),
@@ -320,10 +321,10 @@ describe("NumberField in a document", { concurrent: false }, () => {
       yield* firefox
       const lock = yield* pointerLock
       const { app, taken } = yield* mount({ locale: "en-US" })
-      const area = app.querySelector<HTMLElement>(".scrub")!
+      const label = app.querySelector<HTMLElement>(".label")!
       let clicks = 0
-      area.addEventListener("click", () => clicks++)
-      pointer(area, "pointerdown", { clientX: 10, clientY: 10 })
+      label.addEventListener("click", () => clicks++)
+      pointer(label, "pointerdown", { clientX: 10, clientY: 10 })
       yield* tick
       pointer(window, "pointerup")
       assert.strictEqual(lock.held(), document.body)
@@ -377,12 +378,20 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), [])
       pointer(increment, "pointerdown", touch)
       yield* wait(560)
+      const beforeOtherCancel = taken()
+      assert.isAbove(beforeOtherCancel.length, 1)
+      assert.isFalse(beforeOtherCancel.some((entry) => entry.startsWith("committed ")))
       pointer(window, "pointercancel", { pointerType: "touch", pointerId: 8 })
+      yield* wait(150)
+      const afterOtherCancel = taken()
+      assert.isAbove(afterOtherCancel.length, 0)
+      assert.isFalse(afterOtherCancel.some((entry) => entry.startsWith("committed ")))
       pointer(window, "pointercancel", touch)
       yield* tick
-      const steps = taken()
-      assert.isAbove(steps.length, 2)
-      assert.strictEqual(steps.at(-1), "committed " + (5 + steps.length - 1) + " increment-press")
+      const afterCancel = taken()
+      const totalSteps = beforeOtherCancel.length + afterOtherCancel.length + afterCancel.length - 1
+      assert.strictEqual(afterCancel.filter((entry) => entry.startsWith("committed ")).length, 1)
+      assert.strictEqual(afterCancel.at(-1), "committed " + (5 + totalSteps) + " increment-press")
       yield* wait(200)
       assert.deepStrictEqual(taken(), [])
       pointer(app.querySelector(".scrub")!, "pointerdown", { ...touch, clientX: 10, clientY: 10 })
@@ -390,7 +399,7 @@ describe("NumberField in a document", { concurrent: false }, () => {
       pointer(window, "pointercancel", touch)
       pointer(window, "pointermove", { ...touch, clientX: 30, clientY: 10 })
       yield* tick
-      const value = 5 + steps.length - 1 + 4
+      const value = 5 + totalSteps + 4
       assert.deepStrictEqual(taken(), ["updated " + value + " scrub", "committed " + value + " scrub"])
       assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
     }))
