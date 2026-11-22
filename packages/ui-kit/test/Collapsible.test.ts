@@ -99,6 +99,21 @@ describe("Collapsible", () => {
     assert.strictEqual((node.children[1] as View.Element<never>).attrs["aria-controls"], generated)
   })
 
+  it("the root repoints the trigger's button, not a wrapper the consumer adds with forward", () => {
+    const collapsible = parts({ open: true })
+    const node = View.build(
+      collapsible.root(h.div).children(
+        h.h3.children(collapsible.trigger(h.button.forward((button) => h.span.class("wrapper").children(button)))),
+        collapsible.panel(h.div.attr("id", "shipping"))
+      ),
+      []
+    )
+    const wrapper = (node.children[0] as View.Element<never>).children[0] as View.Element<never>
+    assert.strictEqual(wrapper.attrs.class, "wrapper")
+    assert.isUndefined(wrapper.attrs["aria-controls"])
+    assert.strictEqual((wrapper.children[0] as View.Element<never>).attrs["aria-controls"], "shipping")
+  })
+
   it("each part rejects another tag", () => {
     const collapsible = parts({ open: true })
     assert.strictEqual(View.build(collapsible.root(h.div), []).tag, "div")

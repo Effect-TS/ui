@@ -35,3 +35,11 @@ export const withAttr = <E extends View.Element<any, any>>(element: E, name: str
   else attrs[name] = value
   return { ...element, attrs }
 }
+
+export const layerOf = (builder: { readonly owned: ReadonlyArray<View.Owned> }): View.Owned =>
+  builder.owned[builder.owned.length - 1]!
+
+export const carries = (
+  element: View.Element<any, any>,
+  layers: ReadonlySet<View.Owned> | ReadonlyMap<View.Owned, unknown>
+): boolean => element.owned?.some((layer) => layers.has(layer)) === true

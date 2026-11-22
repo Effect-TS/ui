@@ -121,7 +121,7 @@ import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, ownStyle, withTokens } from "./internal/attributes.ts"
 import { override } from "./internal/dom.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
-import { rewrite, withAttr } from "./internal/tree.ts"
+import { carries, layerOf, rewrite, withAttr } from "./internal/tree.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while
@@ -387,8 +387,9 @@ const TrackPanel = Mount.makeStream(
  * panel is open; on the panel `hidden`. The panel keeps an `id` the consumer
  * gives it, and gets a generated one otherwise. A trigger inside another
  * element, such as a heading, is built before the panel's `id` is known, so
- * the root points that trigger's `aria-controls` at the consumer's `id`, and
- * leaves every other element's alone: draw the root around both when the
+ * the root points that trigger's `aria-controls` at the consumer's `id`, on
+ * the button even when the consumer wraps it with `forward`, and leaves every
+ * other element's alone: draw the root around both when the
  * panel has an `id` of its own. The panel's CSS variables, and
  * the `animation-name` and durations it overrides to skip an animation, are
  * added after the consumer's inline style. A handler the consumer adds to a
@@ -466,15 +467,21 @@ export const Collapsible = Component.define({
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus).attr("data-disabled", flag(disabled))
 
-    const triggers = new Map<Readonly<Record<string, string>>, string | undefined>()
+    const triggers = new Map<
+      View.Owned,
+      { readonly controls: string | undefined; readonly consumer: string | undefined }
+    >()
     const root = p.part("div", (b) =>
       states(b).forward((node) => {
         const target = open ? panelId : undefined
-        if (![...triggers.values()].some((controls) => controls !== target)) return node
-        return rewrite(View.build(node, []), (element) =>
-          element._tag === "Element" && triggers.has(element.attrs)
-            ? withAttr(element, "aria-controls", target)
-            : undefined)
+        if (![...triggers.values()].some(({ controls }) => controls !== target)) return node
+        return rewrite(View.build(node, []), (element) => {
+          if (element._tag !== "Element") return undefined
+          const layer = element.owned?.find((l) => triggers.has(l))
+          return layer === undefined
+            ? undefined
+            : withAttr(element, "aria-controls", withTokens(triggers.get(layer)!.consumer, target))
+        })
       }))
 
     const trigger = p.part("button", (b) =>
@@ -491,10 +498,10 @@ export const Collapsible = Component.define({
         .disabled(disabled)
         .onClick(CollapsibleMessage.ClickedTrigger())
         .forward((node) => {
-          const own = open ? panelId : undefined
-          const element = View.build(node.attr("aria-controls", withTokens(node.elementAttrs["aria-controls"], own)), [])
-          triggers.set(element.attrs, own)
-          return element
+          const consumer = node.elementAttrs["aria-controls"]
+          const controls = open ? panelId : undefined
+          triggers.set(layerOf(node), { controls, consumer })
+          return node.attr("aria-controls", withTokens(consumer, controls))
         }))
 
     const panelPart = p.part("div", (b, id: string) =>

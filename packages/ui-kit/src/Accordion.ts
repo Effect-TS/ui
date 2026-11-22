@@ -127,7 +127,7 @@ import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
 import { Collapsible, CollapsibleToggleReason, type CollapsibleTransitionStatus } from "./Collapsible.ts"
 import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
-import { find, rewrite, withAttr } from "./internal/tree.ts"
+import { carries, find, layerOf, rewrite, withAttr } from "./internal/tree.ts"
 
 /**
  * The axis an accordion's items are laid out along.
@@ -458,8 +458,8 @@ export const AccordionItem = Component.define({
     const orientation = accordion.orientation
     const index = props.index
     let triggerId: string | null = null
-    const triggers = new Set<string>()
-    const panels = new Set<Readonly<Record<string, string>>>()
+    const triggers = new Set<View.Owned>()
+    const panels = new Set<View.Owned>()
     const states = <B extends Attributed<B>>(builder: B): B =>
       builder.attrs({
         "data-orientation": orientation,
@@ -470,10 +470,9 @@ export const AccordionItem = Component.define({
       states(b).forward((node) => {
         if (panels.size === 0) return node
         const root = View.build(node, [])
-        const labelledBy = find(root, (element) => element.attrs.id !== undefined && triggers.has(element.attrs.id))
-          ?.attrs.id
+        const labelledBy = find(root, (element) => carries(element, triggers))?.attrs.id
         return rewrite(root, (element) =>
-          element._tag === "Element" && panels.has(element.attrs)
+          element._tag === "Element" && carries(element, panels)
             ? withAttr(element, "aria-labelledby", labelledBy)
             : undefined)
       }))
@@ -487,23 +486,18 @@ export const AccordionItem = Component.define({
       states(b)
         .attr("id", id)
         .forward((node) => {
-          const element = View.build(node, [])
-          triggerId = element.attrs.id ?? id
-          triggers.add(triggerId)
-          return element
+          triggerId = node.elementAttrs.id ?? id
+          triggers.add(layerOf(node))
+          return node
         }))
     const panelPart = p.part("div", (b) =>
       states(b)
         .attr("role", "region")
         .forward((node) => {
-          const element = View.build(
-            ownStyle(
-              "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
-            )(node.attr("aria-labelledby", triggerId ?? undefined)),
-            []
-          )
-          panels.add(element.attrs)
-          return element
+          panels.add(layerOf(node))
+          return ownStyle(
+            "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
+          )(node.attr("aria-labelledby", triggerId ?? undefined))
         }))
 
     return p.child(Collapsible, {

@@ -8,6 +8,7 @@ import { byId, container, tick } from "./utils/document.ts"
 
 const PageProps = Schema.Struct({
   multiple: Schema.Boolean,
+  wrapTriggers: Schema.optional(Schema.Boolean),
   disabled: Schema.optional(Schema.Boolean),
   initial: Schema.Array(Schema.String)
 })
@@ -61,7 +62,13 @@ const Page = Component.define({
                 view: (item) =>
                   item.root(h.div.attr("id", "item-" + value)).children(
                     item.header(h.h3).children(
-                      item.trigger(h.button.attr("id", "trigger-" + value)).children(value)
+                      item.trigger(
+                        h.props.wrapTriggers === true
+                          ? h.button.attr("id", "trigger-" + value).forward((button) =>
+                            h.span.attr("id", "wrapper-" + value).children(button)
+                          )
+                          : h.button.attr("id", "trigger-" + value)
+                      ).children(value)
                     ),
                     item.panel(h.div.attr("id", "panel-" + value))?.children("Answer " + value)
                   )
@@ -152,5 +159,24 @@ describe("AccordionDocument", { concurrent: false }, () => {
       assert.deepStrictEqual(indexes(), [["c", "0", "0"], ["b", "1", "1"], ["a", "2", "2"]])
       assert.strictEqual(byId("panel-b").getAttribute("data-index"), "1")
       assert.strictEqual(byId("panel-b").getAttribute("aria-labelledby"), "trigger-b")
+    }).pipe(Effect.scoped))
+
+  it.effect("a trigger the consumer wraps with forward keeps both links on the button, not the wrapper", () =>
+    Effect.gen(function*() {
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Page, { multiple: false, wrapTriggers: true, initial: ["a"] }, app)
+      yield* tick
+      const wrapper = byId("wrapper-a")
+      assert.strictEqual(byId("trigger-a").parentElement, wrapper)
+      assert.strictEqual(byId("trigger-a").getAttribute("aria-controls"), "panel-a")
+      assert.strictEqual(byId("panel-a").getAttribute("aria-labelledby"), "trigger-a")
+      assert.isFalse(wrapper.hasAttribute("aria-controls"))
+      assert.isFalse(wrapper.hasAttribute("aria-expanded"))
+
+      yield* press("b")
+      assert.strictEqual(byId("trigger-b").getAttribute("aria-controls"), "panel-b")
+      assert.strictEqual(byId("panel-b").getAttribute("aria-labelledby"), "trigger-b")
+      assert.isFalse(byId("wrapper-b").hasAttribute("aria-controls"))
+      assert.isFalse(byId("trigger-a").hasAttribute("aria-controls"))
     }).pipe(Effect.scoped))
 })
