@@ -68,7 +68,7 @@ a render fails the author. So do an ordinary child and a scoped child of
 the same name and key that resolve to one path.
 
 ```ts
-const view = (model: Model, h: H) =>
+const view = (model: SettingsModel, h: H) =>
   model.tab === "profile"
     ? h.scoped((s) => Profile(s, { key: "profile" }))
     : h.scoped((s) => Billing(s, { key: "billing" }))
@@ -196,7 +196,7 @@ A component with `shares` takes the `Provider` suffix, as in
 `h.shared.provider`. A reader of several owners names each one after its
 owner instead, such as `tooltip` and `theme`.
 
-A component's Schemas are `<Component>Props`, `<Component>Model`,
+The Schemas a component defines are `<Component>Props`, `<Component>Model`,
 `<Component>Message` and `<Component>Events`, exported or not, and the type
 alias has the same name. Import them by name. Never import a component's
 module as a namespace.

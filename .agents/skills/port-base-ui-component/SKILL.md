@@ -46,7 +46,7 @@ Work top to bottom. Put the notes from steps 1 to 3 in the PR description.
      owns
    - each part's arguments, and the markup a part adds and where it goes
    - the props, and the events: `on<Event>` options for a view function,
-     `<Name>Events` for a component. A component's Schemas are `<Name>Props`,
+     `<Name>Events` for a component. The Schemas a component defines are `<Name>Props`,
      `<Name>Model`, `<Name>Message` and `<Name>Events`, exported or not,
      with a type alias of the same name
    - for a component, `<Name>Model`, which holds only interaction state the
