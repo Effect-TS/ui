@@ -4,7 +4,7 @@
  * code whole, and submit it as one form value.
  *
  * `OTPField` is a headless component. It keeps which slot has focus and the
- * text an input method is composing, moves focus and selects a slot's text
+ * slot an input method is composing in, moves focus and selects a slot's text
  * with Commands, and emits `Updated`, `Completed` and `Rejected`. The code
  * itself is the consumer's: it comes in as the `value` prop.
  *
@@ -166,7 +166,9 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag, visuallyHidden } from "./internal/attributes.ts"
+import { input } from "./internal/formInputs.ts"
 import { isAndroid } from "./internal/platform.ts"
+import { clamp } from "./internal/range.ts"
 
 /**
  * Which characters a one-time code field accepts: digits, letters, both, or
@@ -366,30 +368,23 @@ const Message = UiSchema.TaggedEnum({
   Settled: {},
   DisabledWhileFocused: {},
   CompletedSelectSlot: {},
-  CompletedDetectAndroid: { android: Schema.Boolean },
-  CompletedFindLabel: { label: Schema.NullOr(Schema.String) }
+  CompletedInspectFirstSlot: { label: Schema.NullOr(Schema.String), android: Schema.Boolean }
 })
 
 type Message = typeof Message.Type
-
-const SlotText = Schema.Struct({ index: Schema.Number, text: Schema.String })
 
 const Model = Schema.Struct({
   focused: Schema.Boolean,
   focusedIndex: Schema.Number,
   target: Schema.NullOr(Schema.Number),
   moving: Schema.Number,
-  composing: Schema.NullOr(SlotText),
-  composed: Schema.NullOr(SlotText),
-  pending: Schema.NullOr(Schema.Struct({
+  composing: Schema.NullOr(Schema.Number),
+  composed: Schema.NullOr(Schema.Struct({ index: Schema.Number, text: Schema.String })),
+  edit: Schema.NullOr(Schema.Struct({
     before: Schema.String,
     asked: Schema.String,
-    reason: Schema.NullOr(OTPFieldEntryReason)
-  })),
-  candidate: Schema.NullOr(Schema.Struct({
-    before: Schema.String,
-    asked: Schema.String,
-    reason: OTPFieldEntryReason
+    reason: Schema.NullOr(OTPFieldEntryReason),
+    settled: Schema.Boolean
   })),
   edits: Schema.Number,
   label: Schema.NullOr(Schema.String),
@@ -401,29 +396,17 @@ type Model = typeof Model.Type
 type OTPFieldUpdate = Component.Update<Model, Message, OTPFieldEvents, OTPFieldProps>
 
 interface Rule {
-  readonly slot: string
-  readonly root: (length: number) => string
+  readonly accepted: string
   readonly rejected: RegExp
   readonly inputMode: OTPFieldInputMode
 }
 
-const rules: Record<Exclude<OTPFieldValidationType, "none">, Rule> = {
-  numeric: { slot: "\\d{1}", root: (length) => "\\d{" + length + "}", rejected: /[^\d]/g, inputMode: "numeric" },
-  alpha: {
-    slot: "[a-zA-Z]{1}",
-    root: (length) => "[a-zA-Z]{" + length + "}",
-    rejected: /[^a-zA-Z]/g,
-    inputMode: "text"
-  },
-  alphanumeric: {
-    slot: "[a-zA-Z0-9]{1}",
-    root: (length) => "[a-zA-Z0-9]{" + length + "}",
-    rejected: /[^a-zA-Z0-9]/g,
-    inputMode: "text"
-  }
+const rules: Record<OTPFieldValidationType, Rule | undefined> = {
+  numeric: { accepted: "\\d", rejected: /[^\d]/g, inputMode: "numeric" },
+  alpha: { accepted: "[a-zA-Z]", rejected: /[^a-zA-Z]/g, inputMode: "text" },
+  alphanumeric: { accepted: "[a-zA-Z0-9]", rejected: /[^a-zA-Z0-9]/g, inputMode: "text" },
+  none: undefined
 }
-
-const ruleOf = (type: OTPFieldValidationType): Rule | undefined => type === "none" ? undefined : rules[type]
 
 const normalize = (
   text: string,
@@ -431,7 +414,7 @@ const normalize = (
   type: OTPFieldValidationType
 ): readonly [characters: ReadonlyArray<string>, rejected: boolean] => {
   const stripped = text.replace(/\s/g, "")
-  const rule = ruleOf(type)
+  const rule = rules[type]
   const kept = rule === undefined ? stripped : stripped.replace(rule.rejected, "")
   const characters = Array.from(kept)
   return [characters.slice(0, length), stripped.length > kept.length || characters.length > length]
@@ -450,49 +433,45 @@ interface Settings {
   readonly readOnly: boolean
 }
 
-const settingsOf = (props: OTPFieldProps, pending: Model["pending"] = null): Settings => {
-  const length = Number.isInteger(props.length) && props.length > 0 ? props.length : 0
-  const type = props.validationType ?? "numeric"
-  const characters = normalize(props.value, length, type)[0]
+const storedOf = (props: OTPFieldProps): ReadonlyArray<string> =>
+  normalize(props.value, props.length, props.validationType ?? "numeric")[0]
+
+const settingsOf = (props: OTPFieldProps, edit: Model["edit"] = null): Settings => {
+  const characters = storedOf(props)
   const stored = characters.join("")
-  const unanswered = pending !== null && pending.before === stored
+  const unanswered = edit !== null && !edit.settled && edit.before === stored
   return {
-    length,
-    type,
+    length: props.length,
+    type: props.validationType ?? "numeric",
     stored,
-    characters: unanswered ? Array.from(pending.asked) : characters,
-    value: unanswered ? pending.asked : stored,
+    characters: unanswered ? Array.from(edit.asked) : characters,
+    value: unanswered ? edit.asked : stored,
     disabled: props.disabled === true,
     readOnly: props.readOnly === true
   }
 }
 
-const completed = (
-  pending: Model["pending"],
-  candidate: Model["candidate"],
-  s: Settings
-): OTPFieldEntryReason | null => {
-  if (
-    pending !== null && pending.reason !== null && pending.before !== s.stored && s.characters.length === s.length &&
-    (pending.reason === "input-paste" || Array.from(pending.before).length !== s.length)
-  ) {
-    return pending.reason
-  }
-  if (
-    candidate !== null && candidate.before !== s.stored && candidate.asked === s.stored &&
-    s.characters.length === s.length
-  ) {
-    return candidate.reason
-  }
-  return null
-}
+const locked = (props: OTPFieldProps): boolean => props.disabled === true || props.readOnly === true
 
-const candidateOf = (pending: Model["pending"], s: Settings): Model["candidate"] =>
-  pending !== null && pending.reason !== null && pending.before === s.stored &&
-    Array.from(pending.asked).length === s.length &&
-    (pending.reason === "input-paste" || Array.from(pending.before).length !== s.length)
-    ? { before: pending.before, asked: pending.asked, reason: pending.reason }
+type Edit = NonNullable<Model["edit"]>
+
+const completes = (edit: Edit, length: number): boolean =>
+  edit.reason === "input-paste" || Array.from(edit.before).length !== length
+
+const completed = (edit: Model["edit"], s: Settings): OTPFieldEntryReason | null =>
+  edit === null || edit.reason === null || edit.before === s.stored || s.characters.length !== s.length
+    ? null
+    : (edit.settled ? edit.asked === s.stored : completes(edit, s.length))
+    ? edit.reason
     : null
+
+const settle = (edit: Model["edit"], s: Settings): Model["edit"] => {
+  if (edit === null || edit.before !== s.stored) return null
+  if (edit.settled) return edit
+  return edit.reason !== null && Array.from(edit.asked).length === s.length && completes(edit, s.length)
+    ? { ...edit, settled: true }
+    : null
+}
 
 const Slot = Html.ref("OTPFieldSlot", "input")
 const HiddenInput = Html.ref("OTPFieldHiddenInput", "input")
@@ -520,22 +499,15 @@ const reselect = (model: Model, $: OTPFieldUpdate, index: number) => $.set(aim(m
 const aimedAt = (model: Model, s: Settings, index: number): number =>
   model.target === null || model.target === index ? index : Math.min(model.target, firstEmpty(s))
 
-const DetectAndroid = Mount.make(
-  "DetectAndroid",
-  { args: {} },
-  (node) => Effect.sync(() => isAndroid((node as Element).ownerDocument.defaultView))
-)
-
-const FindLabel = Mount.make(
-  "FindLabel",
+const InspectFirstSlot = Mount.make(
+  "InspectFirstSlot",
   { args: { id: Schema.String } },
   (node: HTMLInputElement, { id }) =>
     Effect.sync(() => {
       const label = node.labels?.[0]
-      if (label === undefined) return null
       // The label is the consumer's element. The other slots can only point at it by id.
-      if (label.id === "") label.id = id
-      return label.id
+      if (label !== undefined && label.id === "") label.id = id
+      return { label: label?.id ?? null, android: isAndroid(node.ownerDocument.defaultView) }
     })
 )
 
@@ -560,18 +532,17 @@ const setValue = (
 ) => {
   const value = characters.join("")
   const entry = reason === "input-change" || reason === "input-paste" ? reason : null
-  const pending = model.pending
-  const unanswered = pending !== null && pending.before === s.stored
+  const edit = model.edit
+  const unanswered = edit !== null && !edit.settled && edit.before === s.stored
   const unchanged = value === s.value
-  const earlier = completed(pending, model.candidate, s)
+  const earlier = completed(edit, s)
   const again = unchanged && !unanswered && entry === "input-paste" && characters.length === s.length
   const focus = !unchanged || options.focusWhenUnchanged === true ? options.focus : undefined
   return $.set({
     ...(focus === undefined ? model : aim(model, focus)),
-    pending: unchanged
-      ? (unanswered ? { ...pending, reason: entry ?? pending.reason } : null)
-      : { before: s.stored, asked: value, reason: entry },
-    candidate: null,
+    edit: unchanged
+      ? (unanswered ? { ...edit, reason: entry ?? edit.reason } : null)
+      : { before: s.stored, asked: value, reason: entry, settled: false },
     edits: unchanged ? model.edits : model.edits + 1
   })
     .run(
@@ -620,16 +591,16 @@ const editingKeys = new Set(["Backspace", "Delete"])
 
 const pressKey = (
   model: Model,
-  $: OTPFieldUpdate,
   message: { readonly index: number; readonly key: string; readonly boundary: boolean },
+  $: OTPFieldUpdate,
   rtl: boolean
 ) => {
-  const s = settingsOf($.props, model.pending)
-  if (s.disabled || model.composing !== null) return model
+  if ($.props.disabled === true || model.composing !== null) return model
+  const s = settingsOf($.props, model.edit)
   const { boundary, key } = message
   const index = aimedAt(model, s, message.index)
   const end = firstEmpty(s)
-  const go = (target: number) => moveTo(model, $, Math.min(Math.max(target, 0), end))
+  const go = (target: number) => moveTo(model, $, clamp(target, 0, end))
   if (key === (rtl ? "ArrowRight" : "ArrowLeft")) return go(boundary ? 0 : index - 1)
   if (key === (rtl ? "ArrowLeft" : "ArrowRight")) return go(boundary ? end : index + 1)
   if (key === "Home" || key === "ArrowUp") return go(0)
@@ -648,27 +619,31 @@ type SlotOf<B extends View.PartTarget<"input">> = ReturnType<B["attr"]>
 const isNamed = (attrs: View.Element<any, any>["attrs"]): boolean =>
   attrs["aria-label"] !== undefined || attrs["aria-labelledby"] !== undefined
 
-const slotKey = (node: View.Element<any, any>): string | undefined =>
-  node.owned?.find((layer) => layer.refKey !== undefined && layer.refKey.startsWith(Slot.key + "["))?.refKey
+const named = <N extends View.Element<any, any>>(node: N, label: string | undefined): N =>
+  label === undefined || isNamed(node.attrs) ? node : { ...node, attrs: { ...node.attrs, "aria-labelledby": label } }
 
 const checked = (
   node: View.Node<any, any>,
   label: string | undefined,
-  drawn: Set<string>
+  slots: ReadonlyMap<string, number>,
+  drawn: Set<number>
 ): View.Node<any, any> => {
   if (node._tag !== "Element") return node
-  const key = slotKey(node)
-  if (key !== undefined) {
-    if (drawn.has(key)) {
-      throw new Error("OTPField: the slot at index " + key.slice(Slot.key.length + 1, -1) + " was drawn twice")
-    }
-    drawn.add(key)
-    return label === undefined || isNamed(node.attrs)
-      ? node
-      : { ...node, attrs: { ...node.attrs, "aria-labelledby": label } }
+  const index = node.owned?.reduce<number | undefined>(
+    (found, layer) => found ?? (layer.refKey === undefined ? undefined : slots.get(layer.refKey)),
+    undefined
+  )
+  if (index !== undefined) {
+    if (drawn.has(index)) throw new Error("OTPField: the slot at index " + index + " was drawn twice")
+    drawn.add(index)
+    return named(node, label)
   }
-  const children = node.children.map((child) => checked(child, label, drawn))
-  return children.some((child, index) => child !== node.children[index]) ? { ...node, children } : node
+  let children: Array<View.Node<any, any>> | undefined
+  node.children.forEach((child, at) => {
+    const next = checked(child, label, slots, drawn)
+    if (next !== child) (children ??= node.children.slice())[at] = next
+  })
+  return children === undefined ? node : { ...node, children }
 }
 
 /**
@@ -734,19 +709,18 @@ export const OTPField = Component.define({
     moving: 0,
     composing: null,
     composed: null,
-    pending: null,
-    candidate: null,
+    edit: null,
     edits: 0,
     label: null,
     android: false
   }),
   update: {
     UpdatedSlot: (model, { composing, index, value }, $) => {
-      const s = settingsOf($.props, model.pending)
-      if (s.disabled || s.readOnly) return model
-      if ((composing && !model.android) || model.composing?.index === index) {
-        return { ...model, composing: { index, text: value } }
+      if (locked($.props)) return model
+      if ((composing && !model.android) || model.composing === index) {
+        return model.composing === index ? model : { ...model, composing: index }
       }
+      const s = settingsOf($.props, model.edit)
       if (model.composed === null) return enter(model, $, s, index, value, "input-change")
       const next = { ...model, composed: null }
       // Some browsers send one more `input` after `compositionend`, with the text that was just
@@ -757,19 +731,16 @@ export const OTPField = Component.define({
     },
     EndedComposition: (model, { index, value }, $) => {
       if (model.composing === null) return model
-      const s = settingsOf($.props, model.pending)
       const next = { ...model, composing: null, composed: { index, text: value } }
-      return s.disabled || s.readOnly ? next : enter(next, $, s, index, value, "input-change")
+      return locked($.props) ? next : enter(next, $, settingsOf($.props, model.edit), index, value, "input-change")
     },
-    PastedText: (model, { index, text }, $) => {
-      const s = settingsOf($.props, model.pending)
-      return s.disabled || s.readOnly ? model : enter(model, $, s, index, text, "input-paste")
-    },
-    PressedKey: (model, message, $) => pressKey(model, $, message, $.shared.provider?.direction === "rtl"),
+    PastedText: (model, { index, text }, $) =>
+      locked($.props) ? model : enter(model, $, settingsOf($.props, model.edit), index, text, "input-paste"),
+    PressedKey: (model, message, $) => pressKey(model, message, $, $.shared.provider?.direction === "rtl"),
     PressedSlot: (model, { index }, $) => ($.props.disabled === true ? model : reselect(model, $, index)),
     FocusedSlot: (model, { index }, $) => {
-      const s = settingsOf($.props, model.pending)
-      if (s.disabled) return model
+      if ($.props.disabled === true) return model
+      const s = settingsOf($.props, model.edit)
       const next = { ...model, focused: true, focusedIndex: index }
       // Focus passing through on its way to `target` is left alone.
       if (model.target !== null && model.target !== index) return next
@@ -779,8 +750,8 @@ export const OTPField = Component.define({
     BlurredSlot: (model) => ({ ...model, focused: false, composed: null }),
     FocusedHiddenInput: (model, _message, $) => $.props.disabled === true ? model : moveTo(model, $, 0),
     UpdatedHiddenInput: (model, { value }, $) => {
-      const s = settingsOf($.props, model.pending)
-      if (s.disabled || s.readOnly) return model
+      if (locked($.props)) return model
+      const s = settingsOf($.props, model.edit)
       const [entered, rejected] = normalize(value, s.length, s.type)
       return setValue(model, $, s, entered, "input-change", {
         events: rejected ? [OTPFieldEvents.Rejected({ value, reason: "input-change" })] : [],
@@ -789,13 +760,9 @@ export const OTPField = Component.define({
     },
     Settled: (model, _message, $) => {
       const s = settingsOf($.props)
-      const complete = completed(model.pending, model.candidate, s)
-      const candidate = model.pending !== null
-        ? candidateOf(model.pending, s)
-        : (model.candidate !== null && model.candidate.before === s.stored ? model.candidate : null)
-      const next = model.pending === null && model.candidate === candidate
-        ? model
-        : { ...model, pending: null, candidate }
+      const complete = completed(model.edit, s)
+      const edit = settle(model.edit, s)
+      const next = edit === model.edit ? model : { ...model, edit }
       const at = model.target ?? (model.focused ? model.focusedIndex : null)
       const back = !s.disabled && at !== null && at > s.characters.length
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next
@@ -806,11 +773,11 @@ export const OTPField = Component.define({
     DisabledWhileFocused: (model) => ({ ...model, focused: false, target: null, composing: null, composed: null }),
     CompletedSelectSlot: (model) =>
       model.moving > 1 ? { ...model, moving: model.moving - 1 } : { ...model, moving: 0, target: null },
-    CompletedDetectAndroid: (model, { android }) => (model.android === android ? model : { ...model, android }),
-    CompletedFindLabel: (model, { label }) => (model.label === label ? model : { ...model, label })
+    CompletedInspectFirstSlot: (model, { android, label }) =>
+      model.android === android && model.label === label ? model : { ...model, android, label }
   },
   subscriptions: (model, props) => [
-    settled(settingsOf(props).stored, model.edits),
+    settled(storedOf(props).join(""), model.edits),
     model.focused && props.disabled === true && disabledWhileFocused
   ],
   parts: (model, p) => {
@@ -820,7 +787,7 @@ export const OTPField = Component.define({
     }
     const s = settingsOf(props)
     const { characters, disabled, length, readOnly, value } = s
-    const rule = ruleOf(s.type)
+    const rule = rules[s.type]
     const required = props.required === true
     const complete = characters.length === length
     const filled = characters.length > 0
@@ -829,6 +796,7 @@ export const OTPField = Component.define({
     const active = focused ? Math.min(model.focusedIndex, last) : firstEmpty(s)
     const inputMode = props.inputMode ?? rule?.inputMode
     const autoComplete = props.autoComplete ?? "one-time-code"
+    const slots = new Map(Array.from({ length }, (_, index) => [Slot.at(index).key, index]))
     let inherited: string | undefined
     const state = <B extends Attributed<B>>(builder: B): B =>
       builder
@@ -847,7 +815,7 @@ export const OTPField = Component.define({
         .attr("inputmode", inputMode)
         .attr("minlength", String(length))
         .attr("maxlength", String(length))
-        .attr("pattern", rule?.root(length))
+        .attr("pattern", rule === undefined ? undefined : rule.accepted + "{" + length + "}")
         .attr("readonly", flag(readOnly))
         .attr("required", flag(required))
         .attr("aria-hidden", "true")
@@ -864,7 +832,7 @@ export const OTPField = Component.define({
         : b.attr("id", index === 0 ? props.id : props.id + "-" + (index + 1))
       const first = index === 0
         ? identified.onMount(
-          FindLabel({ id: p.id("label") }).pipe(Mount.map((label) => Message.CompletedFindLabel({ label })))
+          InspectFirstSlot({ id: p.id("label") }).pipe(Mount.map(Message.CompletedInspectFirstSlot))
         )
         : identified
       return state(first)
@@ -879,12 +847,12 @@ export const OTPField = Component.define({
         .attr("maxlength", index === 0 ? String(length) : undefined)
         .attr("tabindex", index === active ? "0" : "-1")
         .attr("form", props.form)
-        .attr("pattern", rule?.slot)
+        .attr("pattern", rule === undefined ? undefined : rule.accepted + "{1}")
         .attr("readonly", flag(readOnly))
         .attr("required", flag(required))
         .attr("aria-disabled", undefined)
         .disabled(disabled)
-        .value(model.composing?.index === index ? model.composing.text : character)
+        .value(character)
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta }) =>
             composing || model.composing !== null ||
@@ -925,20 +893,11 @@ export const OTPField = Component.define({
         state(b)
           .attr("role", "group")
           .attr("data-filled", flag(filled))
-          .onMount(DetectAndroid().pipe(Mount.map((android) => Message.CompletedDetectAndroid({ android }))))
           .forward((node) => {
-            const root = View.build(
-              node,
-              [hiddenInput(
-                new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
-              )]
-            )
+            const root = View.build(node, [hiddenInput(input())])
             const label = root.attrs["aria-labelledby"] ?? model.label ?? undefined
             inherited = label
-            const out = checked(root, label, new Set()) as typeof root
-            return label === undefined || isNamed(out.attrs)
-              ? out
-              : { ...out, attrs: { ...out.attrs, "aria-labelledby": label } }
+            return named(checked(root, label, slots, new Set()) as typeof root, label)
           })
       ),
       input: View.wrapPart(

@@ -42,7 +42,8 @@ export interface FormFieldMessages<Msg> {
   readonly autofilled: (value: string) => Msg
 }
 
-const input = () => new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
+export const input = () =>
+  new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
 
 export const formInputs = <Msg>(
   p: Pick<Component.PartsHelper<Msg, unknown, Html.Elements>, "part">,

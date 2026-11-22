@@ -1,6 +1,13 @@
 import type { Component, Mount } from "@effect/ui"
 import { View } from "@effect/ui"
-import { DirectionProvider, OTPField, type OTPFieldEvents, type OTPFieldProps } from "@effect/ui-kit"
+import {
+  DirectionProvider,
+  OTPField,
+  type OTPFieldEntryReason,
+  OTPFieldEvents,
+  type OTPFieldProps,
+  type OTPFieldUpdateReason
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
@@ -31,8 +38,7 @@ const idle = {
   moving: 0,
   composing: null,
   composed: null,
-  pending: null,
-  candidate: null,
+  edit: null,
   edits: 0,
   label: null,
   android: false
@@ -46,7 +52,7 @@ const mountOf = (s: Rendered, locator: Locator.Locator): Issued =>
     ?.mount as unknown as Issued
 const scene = (props: OTPFieldProps, android = false) =>
   HtmlScene.make(OTPField, props, standIn).pipe(
-    Effect.map((s) => s.mounted(mountOf(s, root), android).mounted(mountOf(s, slot(0)), null))
+    Effect.map((s) => s.mounted(mountOf(s, slot(0)), { label: null, android }))
   )
 type Scene = Effect.Success<ReturnType<typeof scene>>
 
@@ -63,10 +69,10 @@ const inFlight = (s: Scene) => s.keepPending(Html.Focus).keepPending(Html.Select
 const focusOn = (index: number) => ["Html.focus OTPFieldSlot[" + index + "]", "Html.select OTPFieldSlot[" + index + "]"]
 const submitted = "Html.requestSubmit OTPFieldHiddenInput"
 
-const updated = (value: string, reason: OTPFieldEvents["reason"] = "input-change"): OTPFieldEvents =>
-  ({ _tag: "Updated", value, reason }) as OTPFieldEvents
-const completed = (value: string, reason: OTPFieldEvents["reason"] = "input-change"): OTPFieldEvents =>
-  ({ _tag: "Completed", value, reason }) as OTPFieldEvents
+const updated = (value: string, reason: OTPFieldUpdateReason = "input-change") =>
+  OTPFieldEvents.Updated({ value, reason })
+const completed = (value: string, reason: OTPFieldEntryReason = "input-change") =>
+  OTPFieldEvents.Completed({ value, reason })
 const quiet = (s: Scene) => assert.deepStrictEqual(s.current.emitted, [])
 
 describe("OTPField", () => {
@@ -293,13 +299,12 @@ describe("OTPField", () => {
       assert.deepStrictEqual(commands(s), [])
     }))
 
-  it.effect("text an input method composes is shown as typed and entered once, when the composition ends", () =>
+  it.effect("text an input method composes is entered once, when the composition ends", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: "", length: 4, validationType: "none" })
       const composing = (value: string) => s.fire(slot(0), "input", { value, checked: false, composing: true })
       composing("k")
       quiet(s)
-      assert.strictEqual(s.get(slot(0)).props?.value, "k")
       s.keydown(slot(0), "Backspace").expectIgnored().expectDefaultPrevented(false)
       composing("か")
       s.fire(slot(0), "compositionend", { value: "か" }).emitted(updated("か"))

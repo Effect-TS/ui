@@ -293,7 +293,6 @@ export interface ValuePayload {
  */
 export interface InputPayload extends ValuePayload {
   readonly checked: boolean
-  readonly composing: boolean
 }
 
 /**
@@ -1883,6 +1882,8 @@ const withElement = <A>(
         : Host.useSync((host) => Option.some(f(host, node.value as globalThis.Element))))
   )
 
+const found = (done: Option.Option<unknown>): Found => ({ found: Option.isSome(done) })
+
 const FocusOptions = Schema.Struct({ preventScroll: Schema.optional(Schema.Boolean) })
 const ScrollOptionsSchema = Schema.Struct({
   behavior: Schema.optional(Schema.Literals(["auto", "instant", "smooth"])),
@@ -1906,7 +1907,7 @@ export const Focus: Command.Factory<
   ({ options, ref }) =>
     Effect.map(
       withElement(ref, (host, element) => host.focus(element, options ?? {})),
-      (done): Found => ({ found: Option.isSome(done) })
+      found
     )
 )
 
@@ -1920,10 +1921,7 @@ export const Focus: Command.Factory<
 export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
   "Html.blur",
   { args: { ref: Renderer.Ref } },
-  ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.blur(element)), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+  ({ ref }) => Effect.map(withElement(ref, (host, element) => host.blur(element)), found)
 )
 
 /**
@@ -1940,9 +1938,7 @@ export const ScrollIntoView: Command.Factory<
   "Html.scrollIntoView",
   { args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) } },
   ({ options, ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.scrollIntoView(element, options ?? {})), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+    Effect.map(withElement(ref, (host, element) => host.scrollIntoView(element, options ?? {})), found)
 )
 
 /**
@@ -1968,10 +1964,7 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
 export const Select: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
   "Html.select",
   { args: { ref: Renderer.Ref } },
-  ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.select(element)), (done): Found => ({
-      found: Option.isSome(done)
-    }))
+  ({ ref }) => Effect.map(withElement(ref, (host, element) => host.select(element)), found)
 )
 
 /**
@@ -1998,7 +1991,7 @@ export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> },
   { args: { ref: Renderer.Ref } },
   ({ ref }) =>
     Effect.map(withElement(ref, (host, element) => host.requestSubmit(element)), (done): Submitted => ({
-      found: Option.isSome(done),
+      ...found(done),
       submitted: Option.getOrElse(done, () => false)
     }))
 )

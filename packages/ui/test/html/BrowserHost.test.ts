@@ -2128,8 +2128,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     const Code = Html.ref("Code", "input")
     const Loose = Html.ref("Loose", "input")
     const EntryMessage = UiSchema.TaggedEnum({
-      Typed: { value: Schema.String },
-      Composed: { value: Schema.String },
       Pasted: { text: Schema.String },
       Select: {},
       Selected: { found: Schema.Boolean },
@@ -2147,8 +2145,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: (): ReadonlyArray<string> => [],
       update: (log, message, $) =>
         EntryMessage.match(message, {
-          Typed: ({ value }) => [...log, `typed ${value}`],
-          Composed: ({ value }) => [...log, `composed ${value}`],
           Pasted: ({ text }) => [...log, `pasted ${text}`],
           Select: () => $.run(Html.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
           Selected: ({ found }) => [...log, `selected ${found}`],
@@ -2157,52 +2153,28 @@ describe("BrowserHost", { concurrent: false }, () => {
           Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
           Sent: ({ code }) => [...log, `sent ${code}`]
         }),
-      view: (log, h) =>
+      view: (_, h) =>
         h.div(
           h.form.onSubmit(({ fields }) => EntryMessage.Sent({ code: fields.code ?? "" })).children(
             h.input.attr("aria-label", "Code").attr("name", "code").ref(Code).value("7")
-              .onInput(({ composing, value }) => composing ? undefined : EntryMessage.Typed({ value }))
-              .onCompositionEnd(({ value }) => EntryMessage.Composed({ value }))
               .onPaste(({ text }) => EntryMessage.Pasted({ text }), { preventDefault: true })
           ),
-          h.input.attr("aria-label", "Loose").ref(Loose).value(String(log.length))
+          h.input.attr("aria-label", "Loose").ref(Loose)
         )
     })
 
-    it.effect("a field reports pasted and composed text, is selected, and submits its form", () =>
+    it.effect("a field reports pasted text, is selected, and submits its form", () =>
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Entry, {}, app)
         yield* tick
         const code = HtmlLocator.getByRole(app, "textbox", { name: "Code" }) as HTMLInputElement
-        const fire = (event: Event, value?: string) => {
-          if (value !== undefined) code.value = value
-          code.dispatchEvent(event)
-          return event
-        }
-        const pasted = fire(Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
+        const pasted = Object.assign(new Event("paste", { bubbles: true, cancelable: true }), {
           clipboardData: { getData: (type: string) => (type === "text/plain" ? "12 34" : "") }
-        }))
+        })
+        code.dispatchEvent(pasted)
         expect(pasted.defaultPrevented).toBe(true)
         yield* tick
-
-        fire(new InputEvent("input", { bubbles: true }), "8")
-        fire(new InputEvent("input", { bubbles: true, isComposing: true }), "k")
-        yield* tick
-        expect(code.value).toBe("k")
-        fire(new CompositionEvent("compositionend", { bubbles: true, data: "か" }), "か")
-        yield* tick
-        expect(code.value).toBe("7")
-
-        const loose = HtmlLocator.getByRole(app, "textbox", { name: "Loose" }) as HTMLInputElement
-        loose.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
-        loose.value = "k"
-        root.send(EntryMessage.Typed({ value: "9" }))
-        yield* tick
-        expect(loose.value).toBe("k")
-        loose.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
-        yield* tick
-        expect(loose.value).toBe("4")
 
         code.value = "rejected"
         root.send(EntryMessage.Select())
@@ -2214,9 +2186,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* tick
         expect(root.model()).toEqual([
           "pasted 12 34",
-          "typed 8",
-          "composed か",
-          "typed 9",
           "selected true",
           "sent 7",
           "submitted true",
