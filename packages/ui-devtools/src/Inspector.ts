@@ -202,13 +202,19 @@ export interface Link {
  * value differs, `false` when none does, and `"unknown"` when the only
  * values that could differ are placeholders (see `diff`).
  *
+ * The two are compared when the later entry is given to the session, and
+ * the session keeps the answer, not the entry. `changed` is absent when the
+ * buffer no longer held the earlier entry by then: its Model is gone, and
+ * nothing says whether it differed. An answer already there stays when the
+ * earlier entry leaves the buffer after it.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export interface Previous {
   readonly seq: number
-  readonly changed: boolean | "unknown"
+  readonly changed?: boolean | "unknown"
 }
 
 /**
@@ -266,7 +272,8 @@ export interface Session {
   readonly previous: (seq: number) => Previous | undefined
   /**
    * Empties the buffer, as if every entry had been dropped from the ring.
-   * Open records and mounted instances stay.
+   * Open records and mounted instances stay, and no entry does: a mounted
+   * instance keeps the `seq` of its last state entry, not its Model.
    */
   readonly clear: () => void
 }
@@ -291,7 +298,6 @@ export interface Inspector {
 
 type Entry = MessageLog.WireEntry
 type InstanceEntry = Exclude<Entry, { readonly _tag: "SessionStarted" | "FetchStarted" }>
-type StateEntry = Extract<Entry, { readonly _tag: "Waiting" | "Mounted" | "Update" }>
 type Source = Extract<Entry, { readonly _tag: "Update" }>["source"]
 type Mutable<A> = { -readonly [K in keyof A]: A[K] }
 
@@ -300,7 +306,7 @@ interface InstanceState {
   readonly records: Array<Mutable<Record>>
   readonly subscriptions: Map<string, Mutable<Record>>
   layer: Mutable<Record> | undefined
-  state: StateEntry | undefined
+  state: number | undefined
   buffered: number
 }
 
@@ -346,7 +352,7 @@ const walk = (before: Schema.Json, after: Schema.Json, path: Array<string | numb
   return before !== after && emit("changed", before, after)
 }
 
-const compare = (before: Schema.Json, after: Schema.Json): Previous["changed"] => {
+const compare = (before: Schema.Json, after: Schema.Json): boolean | "unknown" => {
   let unknown = false
   const changed = walk(before, after, [], (kind) => {
     if (kind !== "unknown") return true
@@ -484,9 +490,15 @@ const makeSession = (id: string, size: number) => {
       case "Mounted":
       case "Update": {
         if (inst.state !== undefined) {
-          previous.set(seq, { seq: inst.state.seq, changed: compare(inst.state.model, entry.model) })
+          const before = entries.get(inst.state)
+          previous.set(
+            seq,
+            before !== undefined && "model" in before
+              ? { seq: inst.state, changed: compare(before.model, entry.model) }
+              : { seq: inst.state }
+          )
         }
-        inst.state = entry
+        inst.state = seq
         if (entry._tag === "Waiting") return
         if (entry._tag === "Mounted") inst.info.mounted = seq
         else linkSource(inst, seq, entry.source)
