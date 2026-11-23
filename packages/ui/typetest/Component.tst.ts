@@ -313,6 +313,48 @@ describe("Component", () => {
     })
   })
 
+  describe("lazy", () => {
+    const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
+    type ParentMessage = typeof ParentMessage.Type
+    const ParentDef = Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: ParentMessage })
+    const todo = { id: "", title: "", done: false }
+    const LazyTodo = Component.lazy("LazyTodo", () => Promise.resolve(TodoItem))
+
+    it("reads props, events and requirements from the loaded component", () => {
+      expect(LazyTodo).type.toBe<
+        Component.Lazy<{ readonly todo: typeof Todo.Type }, typeof TodoItemEvents.Type, SaveTodo>
+      >()
+      ParentDef.view((_, h) => {
+        expect(LazyTodo(h, { props: { todo }, onEmit: (events) => ParentMessage.make(events) })).type
+          .toBe<View.Child<ParentMessage, SaveTodo>>()
+        expect(LazyTodo).type.not.toBeCallableWith(h, { props: { todo }, onEmit: () => Message.X() })
+        expect(LazyTodo).type.not.toBeCallableWith(h, {})
+        return h.el("p")
+      })
+    })
+
+    it("passes the fallback Initial or Failure", () => {
+      ParentDef.view((_, h) =>
+        LazyTodo(h, {
+          props: { todo },
+          fallback: (result) => {
+            expect(result).type.toBe<AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>>()
+            return h.el("p")
+          }
+        })
+      )
+    })
+
+    it("takes only a component that isn't scoped or headless", () => {
+      const Scoped = Component.define({ name: "Scoped", scoped: true, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
+      const Headless = Component.define({ name: "Headless", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      expect(Component.lazy).type.not.toBeCallableWith("Scoped", () => Promise.resolve(Scoped))
+      expect(Component.lazy).type.not.toBeCallableWith("Headless", () => Promise.resolve(Headless))
+    })
+  })
+
   describe("calling a component", () => {
     const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
     type ParentMessage = typeof ParentMessage.Type

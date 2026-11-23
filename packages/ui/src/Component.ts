@@ -70,6 +70,7 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
+import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as sharedReads from "./internal/shared.ts"
@@ -3651,3 +3652,185 @@ export const provide: {
   const curried = !isComponent(args[0])
   return curried ? (component: Any) => go(component, args[0], args[1]) : go(args[0], args[1], args[2])
 }) as any
+
+/**
+ * Identifies a lazy component.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export const LazyTypeId = "~@effect/ui/Component/Lazy" as const
+
+/**
+ * Identifies a lazy component.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export type LazyTypeId = typeof LazyTypeId
+
+/**
+ * A component whose module is loaded with a dynamic `import()`, as returned
+ * by `lazy`. A parent declares it as it would the component: its props,
+ * events, slots and requirements are the loaded component's.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Lazy<in out Props, out Events, out R = never, in Sl extends string = never>
+  extends Lazy.Call<Props, Events, R, Sl>
+{
+  readonly [LazyTypeId]: Lazy.Info<Props, Events, R, Sl>
+  /**
+   * Starts loading the module without rendering anything, such as when the
+   * pointer enters a link. Settles once the module has loaded or failed to,
+   * and never rejects.
+   */
+  readonly preload: () => Promise<void>
+}
+
+/**
+ * Helper types for `Lazy`.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Lazy {
+  /**
+   * The call signature of a lazy component.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Call<in out Props, out Events, out R = never, in Sl extends string = never> {
+    /**
+     * Declares a child of the lazy component in a parent's view, from the
+     * parent's `h`. The first one rendered starts loading the module.
+     */
+    <Msg, RF = never, const SC extends object = never>(
+      h: View.Helper<Msg, unknown>,
+      options:
+        & View.Child.Options<Props, Events, NoInfer<Msg>>
+        & {
+          /**
+           * Shown while the module loads, passed `Initial`, and if the load
+           * or the child fails, passed `Failure`. Without it, the child is
+           * blank until it shows.
+           */
+          readonly fallback?:
+            | ((
+              result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+            ) => View.Content<NoInfer<Msg>, RF>)
+            | undefined
+        }
+        & SlotOptions<Sl, SC, NoInfer<Msg>>
+        & (0 extends 1 & Props ? { readonly props: Props } : {})
+    ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
+  }
+
+  /**
+   * The name a lazy component's children take in their paths, and phantom
+   * variance for its props, events, requirements and slots.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Info<in out Props, out Events, out R, in Sl extends string = never>
+    extends Mountable.Variance<Props, Events, R, Sl>
+  {
+    readonly name: string
+  }
+
+  /**
+   * Any lazy component.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type Any = Lazy<any, any, any>
+}
+
+/**
+ * Returns `true` if `u` is a lazy component.
+ *
+ * @stability experimental
+ * @category guards
+ * @since 0.1.0
+ */
+export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy as any
+
+/**
+ * Declares a component whose module is loaded the first time one of its
+ * children is rendered, so a bundler such as Vite puts it in a chunk of its
+ * own.
+ *
+ * **When to use**
+ *
+ * Use when most visits never show a page or a panel, so its code, and the
+ * code only it imports, stays out of the initial load.
+ *
+ * **Details**
+ *
+ * `load` returns the component, usually from `import()`. The props,
+ * events, slots and requirements are read from its type, which TypeScript
+ * erases, so the module is imported only when `load` runs. Nothing else in
+ * the app may import the module statically, or the bundler keeps it in the
+ * importing chunk.
+ *
+ * `name` stands in for the component's name in its children's paths, since
+ * the paths are needed before the module arrives. It's the name a `Scene`
+ * error or a log entry shows for the child.
+ *
+ * The first child rendered starts the load, which happens once per app. Until
+ * it ends, the child shows its `fallback`, passed `Initial`, and the
+ * parent's other content renders as usual. A child rendered after the module
+ * loaded mounts at once, with no fallback. A load that fails shows the
+ * fallback's `Failure` branch, and the next child that mounts loads again.
+ * `onFailure` hears a failure of the child, not of the load. `preload`
+ * starts the load without rendering, and `TestHost.settle` waits for a load
+ * in flight.
+ *
+ * Provide the services that only the loaded component uses with
+ * `Component.provide` inside its module, so their Layers go into its chunk.
+ * Its requirements that the module doesn't provide surface in the parent's.
+ *
+ * **Gotchas**
+ *
+ * - `load` must resolve to a component that isn't scoped or headless. Any
+ *   other value fails the load, as does a `load` that throws.
+ * - The server waits for the load and renders the component. The client
+ *   doesn't load the module before it hydrates, so it replaces the server's
+ *   nodes with the fallback, then with the component once it has loaded.
+ * - A browser may keep a failed chunk request in its module map and fail
+ *   every later load of it without a request. Reloading the page recovers:
+ *   Vite reports such a failure with the `vite:preloadError` event.
+ *
+ * **Example** (A page loaded on its first visit)
+ *
+ * ```ts
+ * import { Component } from "@effect/ui"
+ *
+ * const SettingsPage = Component.lazy(
+ *   "SettingsPage",
+ *   () => import("./pages/SettingsPage.ts").then((module) => module.SettingsPage)
+ * )
+ *
+ * // In the parent's view, called as the component would be:
+ * // SettingsPage(h, {
+ * //   props: { user },
+ * //   onEmit: { Saved: () => AppMessage.SavedSettings() },
+ * //   fallback: (result) => h.p.children(result._tag === "Failure" ? "Couldn't load settings." : "Loading…")
+ * // })
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const lazy: <C extends Any>(
+  name: string,
+  load: () => Promise<C>
+) => Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy.make as any

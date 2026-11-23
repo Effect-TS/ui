@@ -26,7 +26,7 @@ export interface ComposeOptions extends Options {
 
 /** @internal */
 export const make = (
-  component: Component.Any | Component.Headless.Any | Feature.Any,
+  component: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
   options: Options,
   alive?: View.Child<any, any>["alive"],
   owner?: View.Owner

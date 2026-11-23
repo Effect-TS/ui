@@ -377,8 +377,11 @@ export type MountHint =
  */
 export interface Child<out Msg, out R = never> {
   readonly _tag: "Child"
-  /** A component value, or a feature service resolved from the instance's context when it mounts. */
-  readonly component: Component.Any | Feature.Any
+  /**
+   * A component value, a lazy component whose module loads when it mounts, or a feature service
+   * resolved from the instance's context when it mounts.
+   */
+  readonly component: Component.Any | Component.Lazy.Any | Feature.Any
   /** The child's key. */
   readonly key: string
   readonly props: unknown

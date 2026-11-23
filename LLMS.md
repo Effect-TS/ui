@@ -916,6 +916,69 @@ platform Layers such as the Router, the HTTP client and logging. Domain Layers
 are never provided there. The server and a test of the whole app swap the HTTP
 client, not the services.
 
+### Code splitting
+
+Load a page that most visits never show from a chunk of its own with
+`Component.lazy`. Give it a name and a function that imports the component,
+and call it in the view as the component would be called:
+
+```ts
+// The `import()` is the only reference to the page's module.
+const SearchPage = Component.lazy(
+  "SearchPage",
+  () => import("./pages/search/SearchPage.ts").then((module) => module.SearchPage)
+)
+
+// In the root's view. `fallback` shows while the module loads, and if the
+// load fails.
+Search: (route) =>
+  SearchPage(h, {
+    key: AppRoute.printPath(route),
+    props: { route },
+    fallback: (result) => h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
+  })
+```
+
+Vite, like any bundler that splits on `import()`, puts the page and the code
+only it imports into a chunk of its own. The props, events, slots and
+requirements come from the component's type, so the call is checked as a
+direct one is. A static import of the page's module anywhere in the app pulls
+it back into the entry chunk. A type-only import doesn't.
+
+The first child rendered starts the load. The module stays loaded for the life
+of the document, so a later visit mounts at once, without the fallback.
+`SearchPage.preload()` starts the load early, such as when the pointer enters
+a link. A failed load shows the `Failure` branch of `fallback`, and the next
+mount loads again. The browser may keep the failed chunk and fail every later
+load of it, so listen for Vite's `vite:preloadError` event and reload the
+page.
+
+The page provides its own Layers with `Component.provide`, as every page
+does, and they go into its chunk with it. The name is the child's path
+segment, since the path is needed before the module arrives. A `Scene` names
+the child by the lazy value, as in `s.childEmit(SearchPage, event)`, and
+`TestHost.settle` waits for a load in flight.
+
+Don't put `@effect/ui` in one vendor chunk with Vite's `manualChunks` or
+`advancedChunks`. Framework modules that only a lazy page uses, such as
+`Query`, move back into the initial load, which can end up larger than with
+no splitting at all.
+
+A `Feature.Service` whose Layer is built from an `import()` splits too, but
+it needs a contract module for the Schemas, a host component and a Layer for
+each page. Use a feature to swap an implementation, and `Component.lazy` to
+split one off.
+
+Known limits:
+
+- A scoped component, a headless component or a view function can't be
+  loaded lazily. Make a page written as a view function a component first.
+- The server waits for the module and renders the page. The client doesn't
+  load the module before it hydrates, so it replaces the server's nodes with
+  the fallback, then with the page once the module has loaded.
+- Nothing preloads the chunk of a lazy page that a link opens directly: the
+  entry chunk loads, then the page's.
+
 - **[Building a component with @effect/ui](./ai-docs/src/10_ui/10_basics.ts)**:
   Build a note editor from Schemas and pure functions, with its update split
   into slices on a `Component.define` definition. It saves through a

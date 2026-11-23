@@ -7,9 +7,13 @@ import { FilesPage } from "./pages/files/FilesPage.ts"
 import { HomePage } from "./pages/HomePage.ts"
 import { NestedPage } from "./pages/nested/route/is/very/nested/NestedPage.ts"
 import { NotFoundPage } from "./pages/NotFoundPage.ts"
-import { PeoplePage } from "./pages/people/PeoplePage.ts"
 import { PersonPage } from "./pages/people/PersonPage.ts"
 import { AppRoute } from "./routes.ts"
+
+const PeoplePage = Component.lazy(
+  "PeoplePage",
+  () => import("./pages/people/PeoplePage.ts").then((module) => module.PeoplePage)
+)
 
 const filesPathOf = (route: typeof AppRoute.cases.Files.Type) => String.split(route.params["*"], "/")
 
@@ -109,7 +113,11 @@ export const App = AppDef.make({
           People: (route) =>
             PeoplePage(h, {
               props: { route, searchInput, searchHistory },
-              onEmit: { ChangedSearchInput: ({ value }) => AppMessage.ChangedSearchInput({ value }) }
+              onEmit: { ChangedSearchInput: ({ value }) => AppMessage.ChangedSearchInput({ value }) },
+              fallback: (result) =>
+                h.p.class("text-lg text-gray-600").children(
+                  result._tag === "Failure" ? "Couldn't load this page. Reload to try again." : "Loading…"
+                )
             }),
           Person: ({ params }) => PersonPage(h, params.personId),
           FilesIndex: () => FilesIndexPage(h),

@@ -105,7 +105,7 @@ export const makeExpectation = <A>(
 }
 
 /** A child a scene step names. */
-type ChildTarget = Component.Any | Component.Headless.Any | Feature.Any
+type ChildTarget = Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any
 
 /** `state` with the slot of `found` recorded as `result`: the view shows its `fallback` of it. */
 const withSlot = (
