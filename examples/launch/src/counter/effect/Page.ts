@@ -16,13 +16,17 @@ export const Page = Component.define({
 }).make({
   init: () => ({ isCounterShown: true }),
   update: {
-    ClickedToggleCounter: ($) => ({ isCounterShown: !$.model.isCounterShown })
+    ClickedToggleCounter: ($) => ({
+      isCounterShown: !$.model.isCounterShown
+    })
   },
   view: (h, model) =>
     h.div.class("counter-page").children(
-      h.button.onClick(PageMessage.ClickedToggleCounter()).children(
-        model.isCounterShown ? "Hide counter" : "Show counter"
-      ),
+      h.button
+        .onClick(PageMessage.ClickedToggleCounter())
+        .children(
+          model.isCounterShown ? "Hide counter" : "Show counter"
+        ),
       model.isCounterShown && Counter(h, {})
     )
 })

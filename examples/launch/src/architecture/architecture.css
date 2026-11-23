@@ -26,20 +26,24 @@
 }
 
 .arch2-leaf {
-  min-width: 44px;
-  padding: 6px 12px;
-  border: 1px solid var(--border-strong);
+  min-width: 48px;
+  padding: 6px 14px;
+  border: 1px solid var(--foreground);
   border-radius: 6px;
-  background: var(--background);
-  color: inherit;
+  background: var(--foreground);
+  color: var(--background);
   font: 500 14px/1.4 var(--mono);
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
-.arch2-leaf:hover,
-.arch2-leaf[aria-pressed="true"] {
-  border-color: var(--foreground);
+.arch2-leaf:hover {
+  border-color: var(--prose-foreground);
+  background: var(--prose-foreground);
+}
+
+.arch2-leaf:active {
+  transform: translateY(1px);
 }
 
 .arch2-panels {

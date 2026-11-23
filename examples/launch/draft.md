@@ -1,17 +1,18 @@
-# How Foldkit 0.x evolves into Effect UI
+# Foldkit 0.x becomes Effect UI
 
 Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect). Feature work on Foldkit 0.x is paused and has moved to Effect UI.
 
-If you've built an app with Foldkit 0.x, you can keep building with it for now. When Effect UI ships with an upgrade guide, you'll migrate your app rather than rewrite it. The Elm Architecture you know still applies.
+If you've built an app with Foldkit 0.x, you can keep building with it for now. When Effect UI ships with an upgrade guide, you'll migrate your app rather than rewrite it.
 
-This article covers what is different in Effect UI:
+This article covers what is changing in Effect UI:
 
 - [The core change: Component-based architecture](#architecture)
 - [Addition: Built-in queries](#queries)
-- [Change: Simpler Story and Scene tests, plus Play](#testing)
+- [Change: Simpler Story and Scene tests](#testing)
+- [Addition: Play tests](#play)
 - [Change: Improved performance](#performance)
 
-It also covers what stays the same.
+It also covers what will stay the same.
 
 ## Terms
 
@@ -21,11 +22,17 @@ It also covers what stays the same.
 
 ## The core change: Component-based architecture
 
-An Effect UI app is built from Components. A Component is a small Elm Architecture program with a Model, Messages, init, update and view. In Foldkit 0.x, the whole app shares one Model and one root update. In Effect UI, each Component has its own.
+Foldkit 0.x used the Elm Architecture. This architecture has many benefits, but meaningful drawbacks including performance challenges, issues with code splitting and scalability concerns.
 
-### How Messages travel
+Effect UI addresses these issues. In Effect UI, an app is built from Components. Each Component is an Elm Architecture program with a Model, Messages, init, update and view. You build your application by composing Components.
 
-The diagram below compares how a Message is handled in each architecture.
+### How Messages travel in Foldkit 0.x vs. Effect UI
+
+In Foldkit 0.x, every Message was handled by the root update function. If the application was decomposed into Submodels, the root update delegated to the relevant Submodel update function(s) to transition to the next state. The new state was slotted into the single application Model, and then the view function ran from the root with that new Model.
+
+In Effect UI, a Message for a Component is delivered directly to that Component's update function. The runtime then stores that Component's new Model, and its view runs. This gives you the benefits of the explicit state transitions of the Elm Architecture, without asking you to handle Message wiring.
+
+The diagram below illustrates how a Message is handled in each architecture.
 
 _Figure: an interactive diagram. Send a Message from A1, A2, B1 or B2 to play the steps, or select a step. The steps for A1:_
 
@@ -48,13 +55,17 @@ _Figure: an interactive diagram. Send a Message from A1, A2, B1 or B2 to play th
 
 In Foldkit 0.x, you compose an app from Submodels. Each parent stores its children's state and forwards their Messages, so every Message passes through the root update. In Effect UI, the runtime keeps each Component's Model and delivers a Message to the update of the Component that sent it.
 
-### The code you write
+### Foldkit 0.x vs. Effect UI code comparison
 
-To render a child Component, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages.
+In Effect UI, to render a child Component, a parent just calls it in its view. The parent doesn't store the child's state or forward its Messages.
 
 _Figure: Foldkit 0.x: Page stores and forwards for Counter / Effect UI: Page renders Counter. Code: Counter.ts, Page.ts, Counter.ts, Page.ts._
 
-A Foldkit 0.x app is composed as one program before it starts, so its code ships as one bundle and an error that escapes any part can stop the whole app. An Effect UI Component is self-contained. You can write, test and reuse it on its own or remove it without changing how its parent manages state or handles Messages. It can also bring its own services, load its code on demand and fail without stopping the rest of the app.
+### Components are self-contained
+
+A Foldkit 0.x app is composed as one program before it starts, so its code ships as one bundle and an error that escapes any part can stop the whole app.
+
+An Effect UI Component is self-contained. You can write, test and reuse it on its own or remove it without changing how its parent manages state or handles Messages. It can also bring its own services, load its code on demand and fail without stopping the rest of the app.
 
 Here is a counter with a delayed reset Command and an auto-count Subscription.
 
@@ -62,11 +73,11 @@ _Figure: Code: Counter.ts. Includes a live example. Caption: Click "Increment", 
 
 ### Organizing larger Components
 
-The counter above defines init, update, subscriptions and view inline in one call. As a Component grows, that call gets harder to follow. Extracting them into named functions keeps each one readable, and they can move into their own files.
-
-_Figure: Code: Counter.ts. Caption: The same counter with each function extracted._
+You can still extract init, update, subscriptions and view. This can help keep things readable as your Component grows.
 
 The Component definition's helpers supply the types, so you don't have to annotate the extracted functions.
+
+_Figure: Code: Counter.ts. Caption: The same counter with each function extracted._
 
 ## Addition: Built-in queries
 
@@ -80,9 +91,7 @@ _Figure: Foldkit 0.x: the parent stores and drives the Query / Effect UI: the Co
 
 The runtime keeps one cache for the app, keyed by query and arguments. Components that ask for the same data share one cache entry and one request. The runtime refetches stale entries and drops unused ones. A Command declares which query results it makes out of date. When the Command ends, the runtime refetches the ones a Component is showing. The Model holds what the user did, without keeping a copy of fetched data.
 
-## Change: Simpler Story and Scene tests, plus Play
-
-Effect UI changes testing in two ways. Story and Scene tests take the Component and start from its init. A third kind of test, Play, runs a Component's real Commands and Subscriptions.
+## Change: Simpler Story and Scene tests
 
 Story tests update and Scene tests update through the view. In Foldkit 0.x, you pass the functions under test and a starting Model. In Effect UI, you pass the Component, so there is no starting state to supply separately.
 
@@ -90,9 +99,13 @@ _Figure: Foldkit 0.x Story: update and a given Model / Effect UI Story: the Comp
 
 _Figure: Foldkit 0.x Scene: update, view and a given Model / Effect UI Scene: the Component itself. Code: counter.scene.test.ts, Counter.scene.test.ts._
 
-Both kinds of test let you expect a Command and resolve it by hand. That's useful for testing what update does with the result, but the Command itself never runs. In Foldkit 0.x, you test the Command's Effect separately with a mock Layer.
+## Addition: Play tests
 
-Play mounts the Component, lets you click its buttons and runs the real Commands and Subscriptions. With `TestClock`, the delayed-reset test can check that the count is 1 at 999 ms and changes to 0 at 1,000 ms.
+Play mounts the Component, lets you click its buttons and runs the real Commands and Subscriptions.
+
+Story and Scene tests let you expect a Command and resolve it by hand. That's useful for testing what update does with the result, but the Command itself never runs. In Foldkit 0.x, you test the Command's Effect separately with a mock Layer.
+
+With `TestClock`, the delayed-reset Play test can check that the count is 1 at 999 ms and changes to 0 at 1,000 ms.
 
 _Figure: Code: Counter.play.test.ts._
 

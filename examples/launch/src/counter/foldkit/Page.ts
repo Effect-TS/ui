@@ -23,13 +23,22 @@ export const init = () => ({
 const foldCounter = Update.foldChild({
   update: Counter.update,
   read: (model: Model) => Option.some(model.counter),
-  write: (model: Model, counter: Counter.Model): Model => ({ ...model, counter }),
-  toParentMessage: (message: Counter.Message): Message => Message.GotCounterMessage({ message })
+  write: (model: Model, counter: Counter.Model): Model => ({
+    ...model,
+    counter
+  }),
+  toParentMessage: (message: Counter.Message): Message =>
+    Message.GotCounterMessage({ message })
 })
 
-export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
+export const update = (
+  model: Model,
+  message: Message
+): Update.Return<Model, Message> =>
   Message.match(message, {
-    ClickedToggleCounter: () => ({ model: { ...model, isCounterShown: !model.isCounterShown } }),
+    ClickedToggleCounter: () => ({
+      model: { ...model, isCounterShown: !model.isCounterShown }
+    }),
     GotCounterMessage: ({ message }) => foldCounter(model, message)
   })
 
@@ -43,7 +52,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
         slotId: "counter",
         model: model.counter,
         view: Counter.view,
-        toParentMessage: (message) => Message.GotCounterMessage({ message })
+        toParentMessage: (message) =>
+          Message.GotCounterMessage({ message })
       })
       : h.empty
   ])

@@ -21,8 +21,14 @@ export const Counter = Component.define({
   },
   view: (h, model) =>
     h.div.class("counter").children(
-      h.button.attr("aria-label", "Decrement").onClick(CounterMessage.ClickedDecrement()).children("-"),
+      h.button
+        .attr("aria-label", "Decrement")
+        .onClick(CounterMessage.ClickedDecrement())
+        .children("-"),
       h.output.class("count").children(String(model.count)),
-      h.button.attr("aria-label", "Increment").onClick(CounterMessage.ClickedIncrement()).children("+")
+      h.button
+        .attr("aria-label", "Increment")
+        .onClick(CounterMessage.ClickedIncrement())
+        .children("+")
     )
 })

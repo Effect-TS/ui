@@ -1,4 +1,12 @@
-export const frameworks = ["vanillajs", "effect-ui", "foldkit", "react-hooks", "vue", "svelte", "solid"] as const
+export const frameworks = [
+  "vanillajs",
+  "effect-ui",
+  "foldkit",
+  "react-hooks",
+  "vue",
+  "svelte",
+  "solid"
+] as const
 export type Framework = typeof frameworks[number]
 
 export const names: Record<Framework, string> = {
@@ -16,11 +24,24 @@ export interface Row {
   readonly label: string
   readonly unit: "ms" | "MB" | "kB"
   readonly slowdown?: number
-  readonly values: readonly [number, number, number, number, number, number, number]
+  readonly values: readonly [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number
+  ]
 }
 
 export const script: ReadonlyArray<Row> = [
-  { benchmark: "01_run1k", label: "Create 1,000 rows", unit: "ms", values: [7.1, 24.2, 41.7, 24.7, 24.6, 11.6, 10.7] },
+  {
+    benchmark: "01_run1k",
+    label: "Create 1,000 rows",
+    unit: "ms",
+    values: [7.1, 24.2, 41.7, 24.7, 24.6, 11.6, 10.7]
+  },
   {
     benchmark: "02_replace1k",
     label: "Replace 1,000 rows",
@@ -55,7 +76,12 @@ export const script: ReadonlyArray<Row> = [
     slowdown: 2,
     values: [1.0, 4.3, 4.2, 3.7, 8.8, 2.0, 1.1]
   },
-  { benchmark: "07_create10k", label: "Create 10,000 rows", unit: "ms", values: [71.8, 188, 398, 441, 209, 110, 94.4] },
+  {
+    benchmark: "07_create10k",
+    label: "Create 10,000 rows",
+    unit: "ms",
+    values: [71.8, 188, 398, 441, 209, 110, 94.4]
+  },
   {
     benchmark: "08_create1k-after1k_x2",
     label: "Append 1,000 rows",
@@ -78,8 +104,18 @@ export const load: ReadonlyArray<Row> = [
     unit: "kB",
     values: [2.5, 70.3, 86.8, 51.4, 23.3, 9.7, 4.5]
   },
-  { benchmark: "43_first-paint", label: "First paint", unit: "ms", values: [83.5, 516, 688, 405, 162, 150, 193] },
-  { benchmark: "21_ready-memory", label: "Memory after load", unit: "MB", values: [0.6, 1.5, 2.3, 1.2, 0.9, 0.7, 0.6] },
+  {
+    benchmark: "43_first-paint",
+    label: "First paint",
+    unit: "ms",
+    values: [83.5, 516, 688, 405, 162, 150, 193]
+  },
+  {
+    benchmark: "21_ready-memory",
+    label: "Memory after load",
+    unit: "MB",
+    values: [0.6, 1.5, 2.3, 1.2, 0.9, 0.7, 0.6]
+  },
   {
     benchmark: "22_run-memory",
     label: "Memory with 1,000 rows",
@@ -88,27 +124,38 @@ export const load: ReadonlyArray<Row> = [
   }
 ]
 
-export const value = (row: Row, framework: Framework): number => row.values[frameworks.indexOf(framework)]!
+export const value = (row: Row, framework: Framework): number =>
+  row.values[frameworks.indexOf(framework)]!
 
 export interface Summary {
   readonly framework: Framework
   readonly multiple: number
 }
 
-export const summary: ReadonlyArray<Summary> = frameworks.map((framework) => ({
+export const summary: ReadonlyArray<Summary> = frameworks.map((
+  framework
+) => ({
   framework,
   multiple: Math.exp(
-    script.reduce((sum, row) => sum + Math.log(value(row, framework) / value(row, "vanillajs")), 0) / script.length
+    script.reduce(
+      (sum, row) =>
+        sum +
+        Math.log(value(row, framework) / value(row, "vanillajs")),
+      0
+    ) / script.length
   )
 })).sort((a, b) => a.multiple - b.multiple)
 
-export const format = (x: number): string => x >= 100 ? x.toFixed(0) : x.toFixed(1)
+export const format = (x: number): string =>
+  x >= 100 ? x.toFixed(0) : x.toFixed(1)
 
 const commit = "b3995f2a9683e557f3c9dae3de2d006a19bc5268"
-const base = `https://github.com/Effect-TS/ui/tree/${commit}/packages/ui/benchmark/js-framework-benchmark`
+const base =
+  `https://github.com/Effect-TS/ui/tree/${commit}/packages/ui/benchmark/js-framework-benchmark`
 
 export const links = {
-  methodology: `https://github.com/Effect-TS/ui/blob/${commit}/packages/ui/benchmark/js-framework-benchmark/README.md`,
+  methodology:
+    `https://github.com/Effect-TS/ui/blob/${commit}/packages/ui/benchmark/js-framework-benchmark/README.md`,
   data: `${base}/results`,
   harness: "https://github.com/krausest/js-framework-benchmark"
 }

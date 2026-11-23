@@ -15,7 +15,9 @@ export type Message = typeof Message.Type
 
 export const DelayReset = Command.define("DelayReset", {
   messages: [Message.CompletedDelayReset],
-  execute: Effect.sleep("1 second").pipe(Effect.as(Message.CompletedDelayReset()))
+  execute: Effect.sleep("1 second").pipe(
+    Effect.as(Message.CompletedDelayReset())
+  )
 })
 
 export const update = (model: Model, message: Message) =>
@@ -29,5 +31,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div([], [
     h.output([], [String(model.count)]),
     h.button([h.OnClick(Message.ClickedIncrement())], ["Increment"]),
-    h.button([h.OnClick(Message.ClickedResetAfterDelay())], ["Reset in 1 second"])
+    h.button([h.OnClick(Message.ClickedResetAfterDelay())], [
+      "Reset in 1 second"
+    ])
   ])

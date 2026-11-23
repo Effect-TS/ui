@@ -26,6 +26,9 @@ export const Posts = Component.define({
   view: (h) =>
     Option.match(AsyncResult.value(h.queries.posts), {
       onNone: () => h.p.children("Loading posts"),
-      onSome: (posts) => h.ul.children(posts.map((post) => h.li.key(post.id).children(post.title)))
+      onSome: (posts) =>
+        h.ul.children(
+          posts.map((post) => h.li.key(post.id).children(post.title))
+        )
     })
 }).pipe(Component.provide(GetPosts.layer))
