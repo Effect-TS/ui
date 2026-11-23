@@ -1,11 +1,9 @@
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { TestHost } from "@effect/ui/testing"
 import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { TestClock } from "effect/testing"
 import { Counter } from "./Counter.ts"
-import { Counter as FragmentCounter } from "./fragment/Counter.ts"
-import { Scoreboard } from "./headless/Scoreboard.ts"
 import { Counter as SplitCounter } from "./split/Counter.ts"
 
 const count = HtmlLocator.role("status")
@@ -49,28 +47,5 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Counter", (it) => {
       yield* play.click(reset)
       yield* TestClock.adjust("1 second")
       yield* play.expect(count).toHaveText("0")
-    }))
-
-  it.effect("disables the fragment's reset button while the reset runs", () =>
-    Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(FragmentCounter, {})
-      yield* play.click(increment)
-      yield* play.click(reset)
-      yield* play.expect(HtmlLocator.role("button", { name: "Resetting" })).toBeDisabled()
-      yield* TestClock.adjust("1 second")
-      yield* play.expect(count).toHaveText("0")
-      yield* play.expect(reset).toBeDisabled(false)
-    }))
-
-  it.effect("keeps a separate count for each drawing of the headless Counter", () =>
-    Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(Scoreboard, {})
-      const compact = HtmlLocator.role("group", { name: "Compact counter" })
-      const scoreboard = HtmlLocator.role("region", { name: "Scoreboard" })
-      yield* play.click(HtmlLocator.role("button", { name: "Add a point" }))
-      yield* play.click(HtmlLocator.role("button", { name: "Add a point" }))
-      yield* play.click(increment)
-      yield* play.expect(Locator.inside(scoreboard, count)).toHaveText("2")
-      yield* play.expect(Locator.inside(compact, count)).toHaveText("1")
     }))
 })
