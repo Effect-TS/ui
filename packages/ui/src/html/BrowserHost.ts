@@ -571,7 +571,6 @@ export const makeHost = (
   const retireEdits = (node: globalThis.Node) => {
     if (!composing.has(node)) beforeEdits.delete(node)
   }
-  // Assigning a value that changes the text moves the caret to the end, so the selection is put back.
   const writeControlled = (element: any, name: string, value: unknown) => {
     const state = name === "value" && element.getRootNode().activeElement === element
       ? fieldStateOf(element)
