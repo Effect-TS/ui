@@ -48,17 +48,8 @@ try {
         [`${pkg.name}/*`]: [Path.join(dist, "*")]
       }
     },
-    files: ["index.ts"]
+    files: ["index.ts", ...ambient]
   }
-  Fs.writeFileSync(
-    Path.join(dir, "content.ts"),
-    [
-      `import document, { frontmatter } from "./post.md"`,
-      `export const blocks: ReadonlyArray<unknown> = document.blocks`,
-      `export const title: string | undefined = frontmatter?.title`
-    ].join("\n")
-  )
-  config.files = ["index.ts", "content.ts", ...ambient]
   Fs.writeFileSync(Path.join(dir, "tsconfig.json"), JSON.stringify(config))
   execFileSync("pnpm", ["exec", "tsc", "-p", Path.join(dir, "tsconfig.json")], { cwd: root, stdio: "inherit" })
 

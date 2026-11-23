@@ -74,6 +74,8 @@ const spyWarn = Effect.acquireRelease(
   (spy) => Effect.sync(() => spy.mockRestore())
 )
 
+const withoutMarkers = (html: string): string => html.replace(/<!--.*?-->/g, "")
+
 const render = (document: Markdown.Document, config?: Markdown.ViewConfig<never>) =>
   HtmlServer.renderToHtml(
     Component.define({ name: "Doc", scoped: false, model: Schema.Struct({}), message: Schema.Never, elements: Html })
@@ -84,7 +86,7 @@ const render = (document: Markdown.Document, config?: Markdown.ViewConfig<never>
       }),
     {},
     { budget: 0 }
-  ).pipe(Effect.map(({ html }) => html.replace(/<!--.*?-->/g, "")))
+  ).pipe(Effect.map(({ html }) => withoutMarkers(html)))
 
 it.layer(TestHost.layer())("view", (it) => {
   it.effect("renders the default semantic elements in document order", () =>
@@ -263,7 +265,7 @@ it.layer(TestHost.layer())("view", (it) => {
         { budget: 0 }
       )
 
-      assert.strictEqual(html.html.replace(/<!--.*?-->/g, ""), "<article><h1>Title</h1><p>Prose.</p></article>")
+      assert.strictEqual(withoutMarkers(html.html), "<article><h1>Title</h1><p>Prose.</p></article>")
     }))
 })
 
@@ -408,7 +410,7 @@ it.layer(TestHost.layer())("islands", (it) => {
   it.effect("renders islands on the server", () =>
     Effect.gen(function*() {
       const { html } = yield* HtmlServer.renderToHtml(Post, {}, { budget: 0 })
-      const text = html.replace(/<!--.*?-->/g, "")
+      const text = withoutMarkers(html)
 
       expect(text).toContain("<h1>Making this blog</h1>")
       expect(text).toContain("<div role=\"group\" aria-label=\"First\"><div><span role=\"status\">0</span>")
@@ -426,6 +428,6 @@ it.layer(TestHost.layer())("islands", (it) => {
     Effect.gen(function*() {
       const { html } = yield* HtmlServer.renderToHtml(GreetingPost, {}, { budget: 0 }).pipe(Effect.provide(greetLayer))
 
-      expect(html.replace(/<!--.*?-->/g, "")).toContain("<p>Before.</p><p role=\"status\">...</p>")
+      expect(withoutMarkers(html)).toContain("<p>Before.</p><p role=\"status\">...</p>")
     }))
 })

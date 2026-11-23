@@ -56,6 +56,12 @@ export const isAllowedUrl = (url: string): boolean => {
   return !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(compact) || /^(?:https?|mailto|tel):/i.test(compact)
 }
 
+/** @internal */
+export const unsupportedUrl = (url: string, line?: number): string =>
+  `Unsupported URL scheme in "${url}"${
+    line === undefined ? "" : ` (line ${line})`
+  }. Link and image URLs may be relative, or use the http:, https:, mailto:, or tel: schemes.`
+
 /**
  * A link or image URL that passes `isAllowedUrl`.
  *
@@ -64,10 +70,7 @@ export const isAllowedUrl = (url: string): boolean => {
  * @since 0.1.0
  */
 export const Url: Schema.String = Schema.String.check(
-  Schema.makeFilter((url: string) =>
-    isAllowedUrl(url) ||
-    `Unsupported URL scheme in "${url}". Link and image URLs may be relative, or use the http:, https:, mailto:, or tel: schemes.`
-  )
+  Schema.makeFilter((url: string) => isAllowedUrl(url) || unsupportedUrl(url))
 )
 
 const OptionalString = Schema.OptionFromNullOr(Schema.String)
@@ -181,27 +184,18 @@ export interface Image {
  */
 export type Inline = Text | InlineCode | HardBreak | Emphasis | Strong | Strikethrough | Link | Image
 
+type Encoded<A> = A extends Option.Option<infer B> ? B | null
+  : A extends object ? { readonly [K in keyof A]: Encoded<A[K]> }
+  : A
+
 /**
- * The JSON form of an inline node.
+ * The JSON form of an inline node: each `Option` is its value or `null`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type InlineEncoded =
-  | Text
-  | InlineCode
-  | HardBreak
-  | { readonly _tag: "Emphasis"; readonly content: ReadonlyArray<InlineEncoded> }
-  | { readonly _tag: "Strong"; readonly content: ReadonlyArray<InlineEncoded> }
-  | { readonly _tag: "Strikethrough"; readonly content: ReadonlyArray<InlineEncoded> }
-  | {
-    readonly _tag: "Link"
-    readonly url: string
-    readonly title: string | null
-    readonly content: ReadonlyArray<InlineEncoded>
-  }
-  | { readonly _tag: "Image"; readonly url: string; readonly alt: string; readonly title: string | null }
+export type InlineEncoded = Encoded<Inline>
 
 /**
  * Heading depth, `1` through `6`.
@@ -374,52 +368,14 @@ export interface Island {
  */
 export type Block = Heading | Paragraph | CodeBlock | List | Blockquote | ThematicBreak | Table | Island
 
-interface TableRowEncoded {
-  readonly _tag: "TableRow"
-  readonly cells: ReadonlyArray<{ readonly _tag: "TableCell"; readonly content: ReadonlyArray<InlineEncoded> }>
-}
-
-interface ListItemEncoded {
-  readonly _tag: "ListItem"
-  readonly blocks: ReadonlyArray<BlockEncoded>
-}
-
 /**
- * The JSON form of a block node.
+ * The JSON form of a block node: each `Option` is its value or `null`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type BlockEncoded =
-  | { readonly _tag: "Heading"; readonly level: HeadingLevel; readonly content: ReadonlyArray<InlineEncoded> }
-  | { readonly _tag: "Paragraph"; readonly content: ReadonlyArray<InlineEncoded> }
-  | {
-    readonly _tag: "CodeBlock"
-    readonly language: string | null
-    readonly meta: string | null
-    readonly value: string
-  }
-  | {
-    readonly _tag: "List"
-    readonly isOrdered: boolean
-    readonly startNumber: number | null
-    readonly items: readonly [ListItemEncoded, ...Array<ListItemEncoded>]
-  }
-  | { readonly _tag: "Blockquote"; readonly blocks: ReadonlyArray<BlockEncoded> }
-  | ThematicBreak
-  | {
-    readonly _tag: "Table"
-    readonly alignments: ReadonlyArray<Alignment>
-    readonly headerRow: TableRowEncoded
-    readonly bodyRows: ReadonlyArray<TableRowEncoded>
-  }
-  | {
-    readonly _tag: "Island"
-    readonly name: string
-    readonly attributes: Readonly<Record<string, string>>
-    readonly blocks: ReadonlyArray<BlockEncoded>
-  }
+export type BlockEncoded = Encoded<Block>
 
 /**
  * A compiled Markdown document: the blocks of one source.
@@ -439,9 +395,7 @@ export interface Document {
  * @category models
  * @since 0.1.0
  */
-export interface DocumentEncoded {
-  readonly blocks: ReadonlyArray<BlockEncoded>
-}
+export type DocumentEncoded = Encoded<Document>
 
 /**
  * The schema of an inline node.
@@ -740,11 +694,11 @@ export const defaultViews: DefaultViews = {
 
 const warned = new Set<string>()
 
-const warnOnce = (key: string, message: string): void => {
+const warnOnce = (key: string, message: () => string): void => {
   if (!warned.has(key)) {
     warned.add(key)
     // oxlint-disable-next-line no-console
-    console.warn(message)
+    console.warn(message())
   }
 }
 
@@ -807,7 +761,8 @@ export const islandsFor = <
       }
       warnOnce(
         `attributes:${name}`,
-        `[@effect/ui/html/Markdown] Invalid attributes for island "${name}", so it renders nothing. Pass the island definitions to the parser's islands option to catch this at build time. ${exit.cause}`
+        () =>
+          `[@effect/ui/html/Markdown] Invalid attributes for island "${name}", so it renders nothing. Pass the island definitions to the parser's islands option to catch this at build time. ${exit.cause}`
       )
       return undefined
     }
@@ -894,7 +849,8 @@ export const viewBlocks = <Msg, R = never>(
         if (island === undefined) {
           warnOnce(
             `missing:${node.name}`,
-            `[@effect/ui/html/Markdown] No island view registered for "${node.name}", so it renders nothing. Add it to the islands passed to Markdown.view.`
+            () =>
+              `[@effect/ui/html/Markdown] No island view registered for "${node.name}", so it renders nothing. Add it to the islands passed to Markdown.view.`
           )
           return undefined
         }

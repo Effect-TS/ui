@@ -21,7 +21,7 @@ import * as Option from "effect/Option"
 import * as Result from "effect/Result"
 import * as Schema from "effect/Schema"
 import type * as SchemaIssue from "effect/SchemaIssue"
-import { parse } from "./internal/markdown.ts"
+import { parse, unsupported } from "./internal/markdown.ts"
 import type * as Markdown from "./Markdown.ts"
 
 /**
@@ -45,10 +45,7 @@ export class ParseError extends Data.TaggedError("ParseError")<{
  * @category models
  * @since 0.1.0
  */
-export type FrontmatterDefinition = Schema.Struct<Schema.Struct.Fields> & {
-  readonly DecodingServices: never
-  readonly EncodingServices: never
-}
+export type FrontmatterDefinition = Markdown.IslandDefinition
 
 /**
  * Options for `parseMarkdown`, `parseMarkdownWithFrontmatter` and the Vite
@@ -219,20 +216,16 @@ export const parseMarkdownWithFrontmatter = (source: string, options: Options = 
   const { frontmatter, islands } = checkOptions(options)
   const split = splitFrontmatter(source)
   if (split !== undefined && frontmatter === undefined) {
-    throw new ParseError({
-      line: 1,
-      message:
-        "Unsupported markdown node \"yaml\" (line 1). Frontmatter is not supported without a `frontmatter` schema in the Markdown options. Pass one to enable it, or keep document metadata in application code."
-    })
+    throw new ParseError({ line: 1, message: unsupported("yaml", 1) })
   }
   const fields = split === undefined || frontmatter === undefined
     ? Option.none()
     : Option.some(parseFrontmatter(split.lines, frontmatter))
   const result = parse(split?.body ?? source, { island: islands === undefined ? undefined : islandCheck(islands) })
-  if (result._tag === "Problem") {
-    throw new ParseError({ line: result.problem.line, message: result.problem.message })
+  if (Result.isFailure(result)) {
+    throw new ParseError({ line: result.failure.line, message: result.failure.message })
   }
-  return { document: result.document, frontmatter: fields }
+  return { document: result.success, frontmatter: fields }
 }
 
 /**

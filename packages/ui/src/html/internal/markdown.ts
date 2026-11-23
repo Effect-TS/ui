@@ -1,6 +1,7 @@
 import * as Option from "effect/Option"
+import * as Result from "effect/Result"
 import type * as Markdown from "../Markdown.ts"
-import { isAllowedUrl } from "../Markdown.ts"
+import { isAllowedUrl, unsupportedUrl } from "../Markdown.ts"
 import { entities } from "./markdownEntities.ts"
 
 /** @internal */
@@ -17,7 +18,9 @@ export interface Options {
     | undefined
 }
 
-const guidance: Readonly<Record<string, string>> = {
+const guidance = {
+  yaml:
+    "Frontmatter is not supported without a `frontmatter` schema in the Markdown options. Pass one to enable it, or keep document metadata in application code.",
   html: "Raw HTML is not part of the markdown vocabulary. Use an island directive to render custom views.",
   textDirective:
     "Inline directives are not supported. Use a leaf directive (`::Name`) on its own line, or a container directive (`:::Name`).",
@@ -32,8 +35,8 @@ const guidance: Readonly<Record<string, string>> = {
 }
 
 /** @internal */
-export const unsupported = (type: string, line: number): string =>
-  `Unsupported markdown node "${type}" (line ${line}). ${guidance[type] ?? "It is outside the Markdown vocabulary."}`
+export const unsupported = (type: keyof typeof guidance, line: number): string =>
+  `Unsupported markdown node "${type}" (line ${line}). ${guidance[type]}`
 
 const ESCAPABLE = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]"
 const ENTITY = "&(?:#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});"
@@ -174,8 +177,13 @@ type RawInline =
   | { readonly _tag: "InlineCode"; readonly value: string }
   | { readonly _tag: "HardBreak" }
   | { readonly _tag: "Emphasis" | "Strong" | "Strikethrough"; readonly content: Array<RawInline> }
-  | { readonly _tag: "Link"; readonly url: string; readonly title: string | null; readonly content: Array<RawInline> }
-  | { readonly _tag: "Image"; readonly url: string; readonly alt: string; readonly title: string | null }
+  | {
+    readonly _tag: "Link"
+    readonly url: string
+    readonly title: Option.Option<string>
+    readonly content: Array<RawInline>
+  }
+  | { readonly _tag: "Image"; readonly url: string; readonly alt: string; readonly title: Option.Option<string> }
 
 interface Delimiter {
   readonly char: string
@@ -247,7 +255,12 @@ const emails = (node: RawInline): Array<RawInline> => {
     if (found.index > index) {
       out.push({ _tag: "Text", value: node.value.slice(index, found.index) })
     }
-    out.push({ _tag: "Link", url: "mailto:" + found[0], title: null, content: [{ _tag: "Text", value: found[0] }] })
+    out.push({
+      _tag: "Link",
+      url: "mailto:" + found[0],
+      title: Option.none(),
+      content: [{ _tag: "Text", value: found[0] }]
+    })
     index = found.index + found[0].length
   }
   if (index < node.value.length) {
@@ -256,22 +269,7 @@ const emails = (node: RawInline): Array<RawInline> => {
   return out
 }
 
-const toInline = (node: RawInline): Markdown.Inline => {
-  switch (node._tag) {
-    case "Text":
-    case "InlineCode":
-    case "HardBreak":
-      return node
-    case "Emphasis":
-    case "Strong":
-    case "Strikethrough":
-      return { _tag: node._tag, content: node.content.map(toInline) }
-    case "Link":
-      return { _tag: "Link", url: node.url, title: Option.fromNullOr(node.title), content: node.content.map(toInline) }
-    case "Image":
-      return { _tag: "Image", url: node.url, alt: node.alt, title: Option.fromNullOr(node.title) }
-  }
-}
+const nonEmpty = Option.liftPredicate((text: string) => text !== "")
 
 // Lowering then raising the case folds a label as CommonMark matches it, so "ẞ" matches "SS".
 const normalizeLabel = (label: string): string => label.trim().replace(/[ \t\n]+/g, " ").toLowerCase().toUpperCase()
@@ -280,12 +278,9 @@ const normalizeLabel = (label: string): string => label.trim().replace(/[ \t\n]+
 export const parse = (
   input: string,
   options: Options = {}
-): { readonly _tag: "Document"; readonly document: Markdown.Document } | {
-  readonly _tag: "Problem"
-  readonly problem: Problem
-} => {
+): Result.Result<Markdown.Document, Problem> => {
   const problems: Array<Problem> = []
-  const report = (type: string, line: number, column = 0) =>
+  const report = (type: keyof typeof guidance, line: number, column = 0) =>
     problems.push({ line, column, message: unsupported(type, line) })
   const definitions = new Set<string>()
   const footnotes = new Set<string>()
@@ -460,6 +455,18 @@ export const parse = (
     allClosed = true
   }
 
+  const blockquoteMarker = (): boolean => {
+    if (indented || line[nextNonspace] !== ">") {
+      return false
+    }
+    advanceNextNonspace()
+    advanceOffset(1, false)
+    if (isSpaceOrTab(line[offset])) {
+      advanceOffset(1, true)
+    }
+    return true
+  }
+
   const MATCHED = 0
   const NO_MATCH = 1
   const CONSUMED = 2
@@ -474,15 +481,7 @@ export const parse = (
       case "paragraph":
         return blank ? NO_MATCH : MATCHED
       case "blockquote":
-        if (indented || line[nextNonspace] !== ">") {
-          return NO_MATCH
-        }
-        advanceNextNonspace()
-        advanceOffset(1, false)
-        if (isSpaceOrTab(line[offset])) {
-          advanceOffset(1, true)
-        }
-        return MATCHED
+        return blockquoteMarker() ? MATCHED : NO_MATCH
       case "item":
         if (blank) {
           if (block.children.length === 0) {
@@ -563,13 +562,8 @@ export const parse = (
   const LEAF_CONSUMED = 3
   const starts: ReadonlyArray<(container: BlockNode) => number> = [
     () => {
-      if (indented || line[nextNonspace] !== ">") {
+      if (!blockquoteMarker()) {
         return NONE
-      }
-      advanceNextNonspace()
-      advanceOffset(1, false)
-      if (isSpaceOrTab(line[offset])) {
-        advanceOffset(1, true)
       }
       closeUnmatched()
       addChild("blockquote")
@@ -783,17 +777,6 @@ export const parse = (
     finalize(open)
   }
 
-  const safeUrl = (url: string, line: number, column: number): string => {
-    if (!isAllowedUrl(url)) {
-      problems.push({
-        line,
-        column,
-        message:
-          `Unsupported URL scheme in "${url}" (line ${line}). Link and image URLs may be relative, or use the http:, https:, mailto:, or tel: schemes.`
-      })
-    }
-    return url
-  }
   const literalLinks = new WeakSet<RawInline>()
   const withoutLiteralLinks = (nodes: ReadonlyArray<RawInline>): Array<RawInline> =>
     nodes.flatMap((node): Array<RawInline> =>
@@ -811,6 +794,13 @@ export const parse = (
     let brackets: Bracket | null = null
     let hardBreak = false
     const lineAt = (index: number) => startLine + subject.slice(0, index).split("\n").length - 1
+    const safeUrl = (url: string, index: number): string => {
+      if (!isAllowedUrl(url)) {
+        const line = lineAt(index)
+        problems.push({ line, column: index, message: unsupportedUrl(url, line) })
+      }
+      return url
+    }
     const text = (value: string): RawText => {
       const node: RawText = { _tag: "Text", value }
       nodes.push(node)
@@ -904,8 +894,9 @@ export const parse = (
           closer.count -= used
           opener.node.value = opener.node.value.slice(used)
           closer.node.value = closer.node.value.slice(used)
-          const from = nodes.indexOf(opener.node)
-          const content = nodes.splice(from + 1, nodes.indexOf(closer.node) - from - 1)
+          const to = nodes.indexOf(closer.node)
+          const from = nodes.lastIndexOf(opener.node, to)
+          const content = nodes.splice(from + 1, to - from - 1)
           nodes.splice(from + 1, 0, {
             _tag: closer.char === "~" ? "Strikethrough" : used === 2 ? "Strong" : "Emphasis",
             content
@@ -1016,15 +1007,20 @@ export const parse = (
         text("]")
         return
       }
-      const from = nodes.indexOf(opener.node)
+      const from = nodes.lastIndexOf(opener.node)
       processEmphasis(opener.previousDelimiter)
       const content = nodes.splice(from + 1)
       nodes.pop()
-      const url = safeUrl(target.url, lineAt(opener.index), opener.index)
+      const url = safeUrl(target.url, opener.index)
       if (opener.image) {
-        nodes.push({ _tag: "Image", url, alt: plainText(content), title: target.title })
+        nodes.push({ _tag: "Image", url, alt: plainText(content), title: Option.fromNullOr(target.title) })
       } else {
-        nodes.push({ _tag: "Link", url, title: target.title, content: withoutLiteralLinks(content) })
+        nodes.push({
+          _tag: "Link",
+          url,
+          title: Option.fromNullOr(target.title),
+          content: withoutLiteralLinks(content)
+        })
         for (let bracket = brackets; bracket !== null; bracket = bracket.previous) {
           if (!bracket.image) {
             bracket.active = false
@@ -1072,7 +1068,7 @@ export const parse = (
         nodes.push({
           _tag: "Link",
           url: "mailto:" + email[1],
-          title: null,
+          title: Option.none(),
           content: [{ _tag: "Text", value: email[1] }]
         })
         return
@@ -1082,8 +1078,8 @@ export const parse = (
       if (uri !== null) {
         nodes.push({
           _tag: "Link",
-          url: safeUrl(uri[1], lineAt(start), start),
-          title: null,
+          url: safeUrl(uri[1], start),
+          title: Option.none(),
           content: [{ _tag: "Text", value: uri[1] }]
         })
         return
@@ -1132,7 +1128,7 @@ export const parse = (
       const link: RawInline = {
         _tag: "Link",
         url: (www ? "http://" : "") + found[1] + body,
-        title: null,
+        title: Option.none(),
         content: [{ _tag: "Text", value: found[1] + body }]
       }
       nodes.push(link)
@@ -1208,18 +1204,16 @@ export const parse = (
     return tidy(nodes).flatMap(emails)
   }
 
-  const inlines = (subject: string, startLine: number): Array<Markdown.Inline> =>
-    parseInlines(subject, startLine).map(toInline)
   const content = (block: BlockNode) => {
     const leading = /^[ \t\n]*/.exec(block.text)?.[0] ?? ""
-    return inlines(
+    return parseInlines(
       block.text.slice(leading.length).replace(/[ \t\n]+$/, ""),
       block.line + leading.split("\n").length - 1
     )
   }
   const row = (cells: ReadonlyArray<string>, line: number): Markdown.TableRow => ({
     _tag: "TableRow",
-    cells: cells.map((cell) => ({ _tag: "TableCell", content: inlines(cell, line) }))
+    cells: cells.map((cell) => ({ _tag: "TableCell", content: parseInlines(cell, line) }))
   })
   const toListItem = (item: BlockNode): Markdown.ListItem => {
     const first = item.children[0]
@@ -1242,8 +1236,8 @@ export const parse = (
         const meta = info?.[2] ?? ""
         return {
           _tag: "CodeBlock",
-          language: language === "" ? Option.none() : Option.some(language),
-          meta: meta === "" ? Option.none() : Option.some(meta),
+          language: nonEmpty(language),
+          meta: nonEmpty(meta),
           value: block.text.replace(/\n$/, "")
         }
       }
@@ -1275,7 +1269,7 @@ export const parse = (
         }
         const label: Array<Markdown.Block> = block.label === undefined
           ? []
-          : [{ _tag: "Paragraph", content: inlines(block.label, block.line) }]
+          : [{ _tag: "Paragraph", content: parseInlines(block.label, block.line) }]
         return {
           _tag: "Island",
           name: block.name,
@@ -1290,14 +1284,13 @@ export const parse = (
   const blocks = document.children.map(toBlock)
   const [problem, ...others] = problems
   if (problem === undefined) {
-    return { _tag: "Document", document: { blocks } }
+    return Result.succeed({ blocks })
   }
-  return {
-    _tag: "Problem",
-    problem: others.reduce(
+  return Result.fail(
+    others.reduce(
       (first, next) =>
         next.line < first.line || (next.line === first.line && next.column < first.column) ? next : first,
       problem
     )
-  }
+  )
 }
