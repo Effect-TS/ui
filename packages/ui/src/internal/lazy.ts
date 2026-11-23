@@ -16,6 +16,7 @@ export type State =
 
 interface Lazy extends Component.Lazy.Any {
   state: State
+  readonly listeners: Set<() => void>
 }
 
 /** @internal */
@@ -23,6 +24,13 @@ export const isLazy = (u: unknown): u is Component.Lazy.Any => Predicate.hasProp
 
 /** @internal */
 export const stateOf = (lazy: Component.Lazy.Any): State => (lazy as Lazy).state
+
+/** @internal */
+export const watch = (lazy: Component.Lazy.Any, listener: () => void): () => void => {
+  const listeners = (lazy as Lazy).listeners
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 const ComponentTypeId: Component.TypeId = "~@effect/ui/Component"
 
@@ -53,15 +61,18 @@ export const make = (name: string, load: () => Promise<Component.Any>): Componen
     const state = self.state
     if (state._tag === "Loaded") return Promise.resolve()
     if (state._tag === "Loading") return state.promise
+    const settle = (state: State) => {
+      self.state = state
+      for (const listener of self.listeners) listener()
+    }
     const promise = new Promise<unknown>((resolve) => resolve(load())).then(
-      (component) => {
-        self.state = isRenderable(component)
-          ? { _tag: "Loaded", component }
-          : { _tag: "Failed", error: new Error(`Component.lazy: "${name}" loaded no component that can be called`) }
-      },
-      (error) => {
-        self.state = { _tag: "Failed", error }
-      }
+      (component) =>
+        settle(
+          isRenderable(component)
+            ? { _tag: "Loaded", component }
+            : { _tag: "Failed", error: new Error(`Component.lazy: "${name}" loaded no component that can be called`) }
+        ),
+      (error) => settle({ _tag: "Failed", error })
     )
     self.state = { _tag: "Loading", promise }
     return promise
@@ -79,6 +90,7 @@ export const make = (name: string, load: () => Promise<Component.Any>): Componen
   const self: Lazy = Object.assign(call, {
     [TypeId]: { ...variance, name },
     state: { _tag: "Idle" } as State,
+    listeners: new Set(),
     preload
   }) as any
   return self

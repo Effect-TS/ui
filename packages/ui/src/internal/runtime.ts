@@ -354,11 +354,18 @@ interface RFallback {
   /** A failed child, not its feature's Layer, put it here: it stays until the key changes. */
   readonly failedChild: boolean
   readonly scoped?: undefined
+  readonly lazy?: LazySlot | undefined
+}
+
+interface LazySlot extends Load {
+  readonly lazy: Component.Lazy.Any
+  readonly release: () => void
 }
 
 interface RScoped {
   readonly _tag: "Fallback"
   readonly scoped: true
+  readonly lazy?: undefined
   v: View.Child<any, any>
   inner: RChild | RFallback | RText
   gone?: boolean
@@ -1772,7 +1779,14 @@ const setup = (
   // Each provided Layer build still pending, stamped with the flush it began in.
   let flushes = 0
   const building = new Set<{ readonly flush: number }>()
-  const loads = new Set<Load>()
+  const lazySlots = new Set<LazySlot>()
+  const loads = (): Array<Load> => {
+    const out: Array<Load> = []
+    for (const slot of lazySlots) {
+      if (lazyOf.stateOf(slot.lazy)._tag === "Loading") out.push({ path: slot.path, name: slot.name })
+    }
+    return out
+  }
   // True while the first render or a flush is building nodes the host hasn't committed yet.
   let rendering = true
   const wake = () => {
@@ -1949,7 +1963,7 @@ const setup = (
     idleCheck = true
     executor.schedule(() => {
       idleCheck = false
-      if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0 || loads.size > 0) return
+      if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0 || loads().length > 0) return
       // Any fetch in flight holds the response: a watch's, a `get`'s, a prefetch nobody renders.
       if (cache !== undefined && cache.pending().length > 0) return
       for (const f of idleWaiters.splice(0)) f()
@@ -5891,14 +5905,23 @@ const setup = (
 
   const loadingSlot = (inst: Instance, view: View.Child<any, any>, env: Env, range: Range | undefined): RFallback => {
     const lazy = view.component as Component.Lazy.Any
-    const load: Load = { path: `${inst.path}/${segment(view)}`, name: lazy[lazyOf.TypeId].name }
-    loads.add(load)
-    lazy.preload().then(() => {
-      loads.delete(load)
+    const unwatch = lazyOf.watch(lazy, () => {
       if (!inst.closed) markDirty(inst)
       checkIdle()
     })
-    return fallbackSlot(inst, view, pendingStatus, false, env, range)
+    const slot: LazySlot = {
+      path: `${inst.path}/${segment(view)}`,
+      name: lazy[lazyOf.TypeId].name,
+      lazy,
+      release: () => {
+        unwatch()
+        if (lazySlots.delete(slot)) checkIdle()
+      }
+    }
+    lazySlots.add(slot)
+    addFinalizer(inst.scope, Effect.sync(slot.release))
+    lazy.preload()
+    return { ...fallbackSlot(inst, view, pendingStatus, false, env, range), lazy: slot }
   }
 
   const lazyStatus = (lazy: Component.Lazy.Any): Status => {
@@ -6598,6 +6621,7 @@ const setup = (
         const status = rendered.failedChild ? rendered.status : lazy ? lazyStatus(child.component) : env.status
         if (status._tag === "Ready") {
           // Ready now: the fallback goes, and the feature or the lazy component mounts in its place.
+          rendered.lazy?.release()
           destroy(inst, rendered.inner)
           // A lazy scoped component makes a scoped slot, not a fallback: its parent's next patch sees
           // `scoped` and goes to `patchScoped`.
@@ -6611,7 +6635,8 @@ const setup = (
           v: child,
           inner: patchOrReplace(inst, rendered.inner, shown, settled(env)),
           status,
-          failedChild: rendered.failedChild
+          failedChild: rendered.failedChild,
+          lazy: rendered.lazy
         }
       }
       case "Child": {
@@ -7267,6 +7292,7 @@ const setup = (
       }
       case "Fallback": {
         const inner = rendered.inner
+        rendered.lazy?.release()
         if (rendered.scoped) {
           rendered.gone = true
           const entry = entryAt(inst.author, rendered.v)
@@ -7547,7 +7573,7 @@ const setup = (
     model: () => root.failure === undefined ? root.model : undefined,
     send: (message) => root.dispatch(message, { _tag: "Dispatch" }),
     pending: () => pendingOf(root),
-    loads: () => [...loads],
+    loads,
     get cache() {
       return queryCache()
     },

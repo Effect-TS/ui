@@ -76,7 +76,7 @@ describe("Component.lazy", () => {
       assert.strictEqual(loads, 1)
     })))
 
-  it.effect("shows the fallback's Failure branch when the load fails, and loads again on the next mount", () =>
+  it.effect("shows the fallback's Failure branch when the load fails, and a retry shows the component in every slot", () =>
     provideHost(Effect.gen(function*() {
       let loads = 0
       const LazyPage = Component.lazy("LazyPage", (): Promise<typeof Page> => {
@@ -87,6 +87,7 @@ describe("Component.lazy", () => {
         return later(Page)
       })
       const root = yield* TestHost.mount(makeApp(LazyPage), {})
+      const sibling = yield* TestHost.mount(makeApp(LazyPage), {})
       for (let i = 0; i < 3; i++) {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "app:failed")
@@ -96,7 +97,19 @@ describe("Component.lazy", () => {
       }
       yield* TestHost.settle
       assert.strictEqual(root.text(), "app:page:a")
+      assert.strictEqual(sibling.text(), "app:page:a")
       assert.strictEqual(loads, 4)
+    })))
+
+  it.effect("stops waiting for a load once its slot is removed", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(
+        makeApp(Component.lazy("LazyPage", () => new Promise<typeof Page>(() => {}))),
+        {}
+      )
+      root.send(AppMessage.Toggled())
+      yield* TestHost.settle
+      assert.deepStrictEqual(root.pending(), [])
     })))
 
   it.effect("keeps a lazy scoped child once loaded, and closes its scope when the predicate ends it", () =>
