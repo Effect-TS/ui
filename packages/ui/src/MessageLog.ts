@@ -975,6 +975,12 @@ export const fanoutAll = (logs: ReadonlyArray<MessageLog>): MessageLog => {
 /**
  * A Layer that sends entries to every log the given Layers provide.
  *
+ * **Details**
+ *
+ * The other services the Layers provide are kept, such as the
+ * `BrowserHost.Pausables` that `DevTools.layer` provides. When two Layers
+ * provide the same one, the later Layer's wins.
+ *
  * @stability experimental
  * @category layers
  * @since 0.1.0
@@ -982,10 +988,13 @@ export const fanoutAll = (logs: ReadonlyArray<MessageLog>): MessageLog => {
 export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any, any>>>(
   layers: Layers
 ): Layer.Layer<never, Layer.Error<Layers[number]>, Layer.Services<Layers[number]>> =>
-  Layer.effect(
-    MessageLog,
-    Effect.forEach(layers, (layer) => Effect.map(Layer.build(layer), Context.get(MessageLog))).pipe(
-      Effect.map(fanoutAll)
+  Layer.effectContext(
+    Effect.forEach(layers, (layer) => Layer.build(layer)).pipe(
+      Effect.map((built) =>
+        built.reduce((all, context) => Context.merge(all, context), Context.empty()).pipe(
+          Context.add(MessageLog, fanoutAll(built.map(Context.get(MessageLog))))
+        )
+      )
     )
   ) as any
 
