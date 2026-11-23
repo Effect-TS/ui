@@ -1,5 +1,5 @@
 /**
- * A fake `DomSubscription.AnimationFrames` for whole-app tests, so a test
+ * A fake `HtmlSubscription.AnimationFrames` for whole-app tests, so a test
  * fires animation frames without a window, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`, and fire a frame with
@@ -11,7 +11,7 @@
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { HtmlSubscription, Html } from "@effect/ui/html"
  * import { TestAnimationFrames } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
  * import { Effect, Layer, Schema } from "effect"
@@ -28,7 +28,7 @@
  *   init: () => 0,
  *   update: { TickedFrame: ($, { delta }) => $.model + delta },
  *   view: (h, elapsed) => h.p(String(elapsed)),
- *   subscriptions: () => [DomSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))]
+ *   subscriptions: () => [HtmlSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))]
  * })
  *
  * Effect.gen(function*() {
@@ -47,7 +47,7 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import * as DomSubscription from "../DomSubscription.ts"
+import * as HtmlSubscription from "../HtmlSubscription.ts"
 
 /**
  * The `TestAnimationFrames` service: the fake's control.
@@ -84,7 +84,7 @@ export const TestAnimationFrames: Context.Service<TestAnimationFrames, TestAnima
  * @category constructors
  * @since 0.1.0
  */
-export const make = (): DomSubscription.AnimationFrames & TestAnimationFrames => {
+export const make = (): HtmlSubscription.AnimationFrames & TestAnimationFrames => {
   const listeners = new Set<{ readonly listener: (time: number) => void }>()
   let now = 0
   return {
@@ -106,7 +106,7 @@ export const make = (): DomSubscription.AnimationFrames & TestAnimationFrames =>
 }
 
 /**
- * Provides a fake `DomSubscription.AnimationFrames` with its control,
+ * Provides a fake `HtmlSubscription.AnimationFrames` with its control,
  * `TestAnimationFrames`.
  *
  * @stability experimental
@@ -116,7 +116,7 @@ export const make = (): DomSubscription.AnimationFrames & TestAnimationFrames =>
 export const layer: Layer.Layer<TestAnimationFrames> = Layer.effectContext(
   Effect.sync(() => {
     const frames = make()
-    return Context.make(TestAnimationFrames, frames).pipe(Context.add(DomSubscription.AnimationFrames, frames))
+    return Context.make(TestAnimationFrames, frames).pipe(Context.add(HtmlSubscription.AnimationFrames, frames))
   })
 )
 

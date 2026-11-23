@@ -1,5 +1,5 @@
 import { Component } from "@effect/ui"
-import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -7,8 +7,8 @@ import { Effect, Schema } from "effect"
 
 describe("HtmlKeyboard.shortcuts", () => {
   const key = (
-    overrides: Partial<DomSubscription.GlobalPayload<Html.KeyPayload>>
-  ): DomSubscription.GlobalPayload<Html.KeyPayload> => ({
+    overrides: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
+  ): HtmlSubscription.GlobalPayload<Html.KeyPayload> => ({
     key: "",
     shift: false,
     ctrl: false,
@@ -44,7 +44,7 @@ describe("HtmlKeyboard.shortcuts", () => {
     assert.strictEqual(handle(key({ key: "x" })), undefined)
   })
 
-  it.effect("works with both element onKeyDown and DomSubscription.onDocument", () =>
+  it.effect("works with both element onKeyDown and HtmlSubscription.onDocument", () =>
     Effect.gen(function*() {
       const Panel = Component.define({
         name: "Panel",
@@ -62,7 +62,7 @@ describe("HtmlKeyboard.shortcuts", () => {
             h.output(log.join(","))
           ),
         subscriptions: () => [
-          DomSubscription.onDocument(
+          HtmlSubscription.onDocument(
             "keydown",
             HtmlKeyboard.shortcuts([
               { key: "?", message: "doc:help" },

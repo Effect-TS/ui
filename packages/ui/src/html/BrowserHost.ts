@@ -1,5 +1,5 @@
 /**
- * The DOM host for `@effect/ui`: mounts a component tree into an element of a
+ * The browser host for `@effect/ui`: mounts a component tree into an element of a
  * real document.
  *
  * Events are delegated: the host keeps one listener per event name on the
@@ -128,10 +128,10 @@ import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
-import * as DomFile from "./DomFile.ts"
-import * as DomImages from "./DomImages.ts"
-import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
+import * as HtmlFiles from "./HtmlFiles.ts"
+import * as HtmlImages from "./HtmlImages.ts"
+import * as HtmlSubscription from "./HtmlSubscription.ts"
 import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
@@ -519,7 +519,7 @@ const payloadOf = (
 const ignore = () => {}
 
 /**
- * Makes a DOM host for `document`, plus `dispose`, which removes its
+ * Makes a browser host for `document`, plus `dispose`, which removes its
  * listeners.
  *
  * **Details**
@@ -1435,7 +1435,7 @@ export const makeHost = (
 }
 
 /**
- * The element operations behind `DomCommand.focus`, `blur`,
+ * The element operations behind `HtmlCommand.focus`, `blur`,
  * `scrollIntoView`, `measure`, `select`, `requestSubmit` and `showPicker`,
  * on DOM elements.
  *
@@ -1512,9 +1512,9 @@ const signals = (document: Document) => {
   }
 }
 
-// `DomSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
+// `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
+const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
   listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
@@ -1533,7 +1533,7 @@ const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   }
 })
 
-const framesOf = (document: Document): DomSubscription.AnimationFrames => {
+const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   const view = document.defaultView
   return {
     now: () => view?.performance.now() ?? 0,
@@ -1550,7 +1550,7 @@ const framesOf = (document: Document): DomSubscription.AnimationFrames => {
 }
 
 // Loads in a detached <img>. A cached image may already be complete.
-const imagesOf = (document: Document): DomImages.Images => ({
+const imagesOf = (document: Document): HtmlImages.Images => ({
   load: (source) =>
     Effect.callback((resume) => {
       const image = document.createElement("img")
@@ -1570,7 +1570,7 @@ const imagesOf = (document: Document): DomImages.Images => ({
     })
 })
 
-const filesOf = (document: Document): DomFile.Files => ({
+const filesOf = (document: Document): HtmlFiles.Files => ({
   pick: (options) =>
     Effect.callback((resume) => {
       const input = document.createElement("input")
@@ -1590,17 +1590,17 @@ const filesOf = (document: Document): DomFile.Files => ({
 })
 
 /**
- * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
+ * Provides the browser host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `DomSubscription.GlobalEvents`, its window's frames as
- * `DomSubscription.AnimationFrames`, and a `DomImages.Images` and
- * `DomFile.Files` over it, for the life of the Layer.
+ * `HtmlSubscription.GlobalEvents`, its window's frames as
+ * `HtmlSubscription.AnimationFrames`, and an `HtmlImages.Images` and
+ * `HtmlFiles.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `DomSubscription.GlobalEvents`,
- * `DomSubscription.AnimationFrames`, `DomImages.Images` and `DomFile.Files`
+ * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
+ * `HtmlSubscription.AnimationFrames`, `HtmlImages.Images` and `HtmlFiles.Files`
  * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
@@ -1620,10 +1620,10 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
-      Context.add(DomSubscription.AnimationFrames, framesOf(document)),
-      Context.add(DomImages.Images, imagesOf(document)),
-      Context.add(DomFile.Files, filesOf(document))
+      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
+      Context.add(HtmlImages.Images, imagesOf(document)),
+      Context.add(HtmlFiles.Files, filesOf(document))
     )
   }))
 

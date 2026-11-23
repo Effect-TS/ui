@@ -155,8 +155,8 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Duration from "effect/Duration"
@@ -358,7 +358,7 @@ const WaitBeforeClosing = Command.make(
 // whether the press was outside the tooltip.
 const dismissals = [
   onEscape(TooltipMessage.PressedEscape()),
-  DomSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
+  HtmlSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
 ]
 
 const requestedOpen = TooltipEvents.RequestedOpen()

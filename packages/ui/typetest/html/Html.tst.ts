@@ -1,5 +1,5 @@
 import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
-import { BrowserHost, DomCommand, DomSubscription, Html, HtmlKeyboard, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlKeyboard, HtmlServer, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
@@ -223,7 +223,7 @@ describe("Html", () => {
           ReturnType<typeof Msg.Typed> | ReturnType<typeof Msg.Mounted> | undefined
         >()
         expect(h.div.onKeyDown).type.toBeCallableWith(shortcutHandler)
-        DomSubscription.onDocument("keydown", shortcutHandler, { preventDefault: true })
+        HtmlSubscription.onDocument("keydown", shortcutHandler, { preventDefault: true })
         expect(h.input.onPaste).type.toBeCallableWith(
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
           { preventDefault: true }
@@ -486,7 +486,7 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: ($) => $.run(DomCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
+      update: ($) => $.run(HtmlCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
       view: (h) => h.input.ref(Field)
     })
     expect(Form).type.toBe<Component.Component<"Form", {}, string, Msg, never, never, Html.Elements>>()

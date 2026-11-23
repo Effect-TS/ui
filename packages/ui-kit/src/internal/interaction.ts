@@ -1,5 +1,5 @@
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import type * as Html from "@effect/ui/html/Html"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import type * as Subscription from "@effect/ui/Subscription"
 import * as Schema from "effect/Schema"
 
@@ -14,7 +14,7 @@ export const methodOf = (pointerType: string): "mouse" | "touch" | "pen" | "keyb
   pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
 
 export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
-  DomSubscription.onDocument(
+  HtmlSubscription.onDocument(
     "keydown",
     ({ composing, defaultPrevented, key }) => key === "Escape" && !composing && !defaultPrevented ? message : undefined,
     { preventDefault: true }

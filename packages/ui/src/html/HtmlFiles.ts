@@ -17,7 +17,7 @@
  *
  * ```ts
  * import { Command, UiSchema } from "@effect/ui"
- * import { DomFile } from "@effect/ui/html"
+ * import { HtmlFiles } from "@effect/ui/html"
  * import { Effect, Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({
@@ -31,7 +31,7 @@
  *   "ReadPreview",
  *   { args: { file: Schema.instanceOf(File) }, mode: "switch" },
  *   ({ file }) =>
- *     DomFile.readAsText(file.slice(0, 4096)).pipe(
+ *     HtmlFiles.readAsText(file.slice(0, 4096)).pipe(
  *       Effect.match({
  *         onSuccess: (text) => Message.ReadPreview({ text }),
  *         onFailure: () => Message.FailedPreview()
@@ -180,21 +180,21 @@ export interface Files {
  * @since 0.1.0
  */
 export const Files: Context.Reference<Files> = Context.Reference<Files>(
-  "@effect/ui/html/DomFile/Files",
+  "@effect/ui/html/HtmlFiles/Files",
   { defaultValue: () => pending }
 )
 
 const pending: Files = { pick: () => Effect.never }
 
 /**
- * The Command behind `pick`, for a story's `.resolve(DomFile.Pick, { opened, files })`.
+ * The Command behind `pick`, for a story's `.resolve(HtmlFiles.Pick, { opened, files })`.
  *
  * @stability experimental
  * @category commands
  * @since 0.1.0
  */
 export const Pick: Command.Factory<PickOptions, Picked> = Command.make(
-  "DomFile.pick",
+  "HtmlFiles.pick",
   {
     args: {
       accept: Schema.optional(Schema.Array(Schema.String)),
@@ -224,7 +224,7 @@ export const Pick: Command.Factory<PickOptions, Picked> = Command.make(
  *
  * ```ts
  * import { UiSchema } from "@effect/ui"
- * import { DomFile } from "@effect/ui/html"
+ * import { HtmlFiles } from "@effect/ui/html"
  * import { Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({
@@ -232,7 +232,7 @@ export const Pick: Command.Factory<PickOptions, Picked> = Command.make(
  *   PickedImages: { files: Schema.Array(Schema.instanceOf(File)) }
  * })
  *
- * const command = DomFile.pick(
+ * const command = HtmlFiles.pick(
  *   ({ files }) => Message.PickedImages({ files }),
  *   { accept: ["image/*"], multiple: true }
  * )

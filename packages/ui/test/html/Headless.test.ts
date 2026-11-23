@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema } from "@effect/ui"
-import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -98,7 +98,7 @@ const Toolbar = Component.define({
   update: ($, message) =>
     ToolbarMessage.match(message, {
       Picked: ({ id }) => [...$.model, "picked " + id],
-      Focus: () => $.run(DomCommand.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
+      Focus: () => $.run(HtmlCommand.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
       Focused: ({ found }) => [...$.model, "focused " + String(found)]
     }),
   view: (h, log) =>

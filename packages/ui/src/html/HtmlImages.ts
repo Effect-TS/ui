@@ -50,7 +50,7 @@ export interface Images {
  * @since 0.1.0
  */
 export const Images: Context.Reference<Images> = Context.Reference<Images>(
-  "@effect/ui/html/DomImages/Images",
+  "@effect/ui/html/HtmlImages/Images",
   { defaultValue: () => pending }
 )
 

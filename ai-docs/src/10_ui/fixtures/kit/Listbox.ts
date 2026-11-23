@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { DomCommand, Html } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
 import { Schema } from "effect"
 
 // `kit/` holds components that belong to no feature: a design system's
@@ -53,7 +53,7 @@ const step = (options: ReadonlyArray<ListboxOption>, from: string | null, direct
 const activeIn = (shown: ReadonlyArray<ListboxOption>, active: string | null) =>
   shown.some((o) => o.id === active && o.disabled !== true) ? active : null
 
-// `DomCommand.focus` and `DomCommand.scrollIntoView` act on the element a
+// `HtmlCommand.focus` and `HtmlCommand.scrollIntoView` act on the element a
 // ref from `Html.ref` names, once the render is committed, and report
 // whether the ref was rendered. Nothing here depends on it, so they end in
 // `Component.noop`, which sends nothing, and the Message union has no no-op
@@ -93,7 +93,7 @@ export const Listbox = Component.define({
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
         $.evolve({ open, query: "", active: open ? $.props.selected : null })
-          .run(open ? DomCommand.focus(Input, silent) : DomCommand.focus(Trigger, silent)),
+          .run(open ? HtmlCommand.focus(Input, silent) : HtmlCommand.focus(Trigger, silent)),
       UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
       PressedKey: ({ key }) => {
         const shown = filter($.props.options, $.model.query)
@@ -107,7 +107,7 @@ export const Listbox = Component.define({
             return next === null
               ? $.evolve({ open: true })
               : $.evolve({ open: true, active: next })
-                .run(DomCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
+                .run(HtmlCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
           }
           case "Enter":
             return active === null

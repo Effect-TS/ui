@@ -1,13 +1,13 @@
 /**
  * Pure keyboard helpers over `Html.KeyPayload`: turn a table of single-key
- * shortcuts into a handler for `DomSubscription.onDocument` or element
+ * shortcuts into a handler for `HtmlSubscription.onDocument` or element
  * `onKeyDown`.
  *
  * @stability experimental
  * @since 0.1.0
  */
-import type * as DomSubscription from "./DomSubscription.ts"
 import type * as Html from "./Html.ts"
+import type * as HtmlSubscription from "./HtmlSubscription.ts"
 
 /**
  * One row of a table for {@link shortcuts}: a key to match, the message to
@@ -38,13 +38,13 @@ export interface Shortcut<Msg> {
 
 /**
  * Turns a table of single-key {@link Shortcut} rows into a pure `keydown` or
- * `keyup` handler usable with `DomSubscription.onDocument` or element
+ * `keyup` handler usable with `HtmlSubscription.onDocument` or element
  * `onKeyDown`.
  *
  * **Details**
  *
  * Events with `composing` are always ignored, and on document listeners
- * (`DomSubscription.onDocument`) events with `defaultPrevented` are ignored as
+ * (`HtmlSubscription.onDocument`) events with `defaultPrevented` are ignored as
  * well (element payloads carry no `defaultPrevented`). Each row is checked in
  * order and the first match returns its `message`. Unmatched events return
  * `undefined`, so `{ preventDefault: true }` cancels the browser's default
@@ -56,11 +56,11 @@ export interface Shortcut<Msg> {
  * listener registration, it can be combined with other keydown logic inside
  * an instance's single document listener.
  *
- * **Example** (Document shortcuts with `DomSubscription.onDocument`)
+ * **Example** (Document shortcuts with `HtmlSubscription.onDocument`)
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { HtmlSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -78,7 +78,7 @@ export interface Shortcut<Msg> {
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
  *   view: (h, open) => h.p(open ? "help open" : "help closed"),
  *   subscriptions: () => [
- *     DomSubscription.onDocument(
+ *     HtmlSubscription.onDocument(
  *       "keydown",
  *       HtmlKeyboard.shortcuts([
  *         { key: "?", message: Message.OpenedHelp() },
@@ -103,7 +103,9 @@ export interface Shortcut<Msg> {
  */
 export const shortcuts = <const Rows extends ReadonlyArray<Shortcut<unknown>>>(
   table: Rows
-): (payload: Html.KeyPayload | DomSubscription.GlobalPayload<Html.KeyPayload>) => Rows[number]["message"] | undefined =>
+): (
+  payload: Html.KeyPayload | HtmlSubscription.GlobalPayload<Html.KeyPayload>
+) => Rows[number]["message"] | undefined =>
 (payload) => {
   if (("defaultPrevented" in payload && payload.defaultPrevented) || payload.composing) return undefined
   for (const shortcut of table) {

@@ -1,5 +1,5 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
-import { DomFile } from "@effect/ui/html"
+import { HtmlFiles } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 
 const HEAD_LINES = 10
@@ -24,7 +24,7 @@ export const ReadFile = Command.make(
   "preview/ReadFile",
   { args: { file: Schema.instanceOf(File) }, mode: "switch" },
   ({ file }) =>
-    DomFile.readAsText(file).pipe(
+    HtmlFiles.readAsText(file).pipe(
       Effect.match({
         onSuccess: (text) => {
           const lines = text.split("\n")

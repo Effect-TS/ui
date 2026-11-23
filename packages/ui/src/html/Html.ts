@@ -1,8 +1,8 @@
 /**
  * The HTML element vocabulary for `@effect/ui`: element names on `h`, typed
  * events with plain payloads, controlled properties, and refs typed by tag.
- * The Commands that use those refs are in `DomCommand`, and document and
- * window events in `DomSubscription`.
+ * The Commands that use those refs are in `HtmlCommand`, and document and
+ * window events in `HtmlSubscription`.
  *
  * The module is itself a vocabulary. Register it once for the app by
  * importing `@effect/ui/html/register`, or set it on one component with

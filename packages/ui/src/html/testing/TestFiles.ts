@@ -1,5 +1,5 @@
 /**
- * A fake `DomFile.Files` for whole-app tests, so a test decides what the
+ * A fake `HtmlFiles.Files` for whole-app tests, so a test decides what the
  * user chooses in each file picker, without a document, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`. Every pick stays pending
@@ -10,7 +10,7 @@
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomFile, Html } from "@effect/ui/html"
+ * import { HtmlFiles, Html } from "@effect/ui/html"
  * import { TestFiles } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
  * import { Effect, Layer, Schema } from "effect"
@@ -30,7 +30,7 @@
  *   init: () => [],
  *   update: {
  *     ClickedAttach: ($) =>
- *       $.run(DomFile.pick(({ files }) => Message.Picked({ names: files.map((file) => file.name) }))),
+ *       $.run(HtmlFiles.pick(({ files }) => Message.Picked({ names: files.map((file) => file.name) }))),
  *     Picked: (_, { names }) => names
  *   },
  *   view: (h, names) => h.button.onClick(Message.ClickedAttach()).children(names.join(", ") || "Attach")
@@ -52,7 +52,7 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import * as DomFile from "../DomFile.ts"
+import * as HtmlFiles from "../HtmlFiles.ts"
 
 /**
  * The `TestFiles` service: the fake's control.
@@ -63,9 +63,9 @@ import * as DomFile from "../DomFile.ts"
  */
 export interface TestFiles {
   /** The options of each pending pick, oldest first. */
-  readonly pending: () => ReadonlyArray<DomFile.PickOptions>
+  readonly pending: () => ReadonlyArray<HtmlFiles.PickOptions>
   /** Settles every pending pick with `picked`. Throws when none is pending. */
-  readonly settle: (picked: DomFile.Picked) => void
+  readonly settle: (picked: HtmlFiles.Picked) => void
 }
 
 /**
@@ -80,8 +80,8 @@ export const TestFiles: Context.Service<TestFiles, TestFiles> = Context.Service<
 )
 
 interface Pending {
-  readonly options: DomFile.PickOptions
-  readonly settle: (picked: DomFile.Picked) => void
+  readonly options: HtmlFiles.PickOptions
+  readonly settle: (picked: HtmlFiles.Picked) => void
 }
 
 /**
@@ -91,7 +91,7 @@ interface Pending {
  * @category constructors
  * @since 0.1.0
  */
-export const make = (): DomFile.Files & TestFiles => {
+export const make = (): HtmlFiles.Files & TestFiles => {
   const pending = new Set<Pending>()
   return {
     pick: (options) =>
@@ -113,7 +113,7 @@ export const make = (): DomFile.Files & TestFiles => {
 }
 
 /**
- * Provides a fake `DomFile.Files` with its control, `TestFiles`.
+ * Provides a fake `HtmlFiles.Files` with its control, `TestFiles`.
  *
  * @stability experimental
  * @category layers
@@ -122,7 +122,7 @@ export const make = (): DomFile.Files & TestFiles => {
 export const layer: Layer.Layer<TestFiles> = Layer.effectContext(
   Effect.sync(() => {
     const files = make()
-    return Context.make(TestFiles, files).pipe(Context.add(DomFile.Files, files))
+    return Context.make(TestFiles, files).pipe(Context.add(HtmlFiles.Files, files))
   })
 )
 

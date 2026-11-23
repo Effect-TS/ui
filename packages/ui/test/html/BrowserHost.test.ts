@@ -13,7 +13,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, DomCommand, DomSubscription, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlServer, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -1428,11 +1428,11 @@ describe("BrowserHost", { concurrent: false }, () => {
                   )
                 ),
             subscriptions: () => [
-              DomSubscription.onDocument(
+              HtmlSubscription.onDocument(
                 "keydown",
                 ({ editable, key, repeat }) => `doc:down:${key}:${editable}:${repeat}`
               ),
-              DomSubscription.onDocument("keyup", ({ editable, key, repeat }) => `doc:up:${key}:${editable}:${repeat}`)
+              HtmlSubscription.onDocument("keyup", ({ editable, key, repeat }) => `doc:up:${key}:${editable}:${repeat}`)
             ]
           })
           const root = yield* BrowserHost.mountEffect(KeyTargets, {}, app)
@@ -2433,9 +2433,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>
           Message.match(message, {
-            Focus: () => $.run(DomCommand.focus(Field, ({ found }) => Message.Found({ found }))),
-            FocusMissing: () => $.run(DomCommand.focus(Missing, ({ found }) => Message.Found({ found }))),
-            Measure: () => $.run(DomCommand.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
+            Focus: () => $.run(HtmlCommand.focus(Field, ({ found }) => Message.Found({ found }))),
+            FocusMissing: () => $.run(HtmlCommand.focus(Missing, ({ found }) => Message.Found({ found }))),
+            Measure: () => $.run(HtmlCommand.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
             Found: ({ found }) => [...$.model, `found ${found}`],
             Measured: ({ some }) => [...$.model, `measured ${some}`],
             Mounted: ({ tag }) => [...$.model, `mounted ${tag}`]
@@ -2489,11 +2489,11 @@ describe("BrowserHost", { concurrent: false }, () => {
       update: ($, message) =>
         EntryMessage.match(message, {
           Pasted: ({ text }) => [...$.model, `pasted ${text}`],
-          Select: () => $.run(DomCommand.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
+          Select: () => $.run(HtmlCommand.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
           Selected: ({ found }) => [...$.model, `selected ${found}`],
           Submit: ({ loose }) =>
             $.run(
-              DomCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))
+              HtmlCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))
             ),
           Submitted: ({ submitted }) => [...$.model, `submitted ${submitted}`],
           Sent: ({ code }) => [...$.model, `sent ${code}`]

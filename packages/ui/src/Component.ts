@@ -1223,7 +1223,7 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  * fail the render that applies them. Handle keys on the part the user focuses, such as an
  * input or a trigger, rather than on a container around it.
  *
- * A part's ref and mount belong to its owner: `DomCommand.focus` in the
+ * A part's ref and mount belong to its owner: `HtmlCommand.focus` in the
  * headless `update` reaches its own ref, and the mount runs in a Scope of the
  * headless instance while the part stays applied to the element.
  *
