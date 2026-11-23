@@ -17,8 +17,8 @@ class Badge
 {}
 const BadgeView = define("BadgeView").make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.b("badge")
+  update: ($) => $.model,
+  view: (h) => h.b("badge")
 })
 
 const Frame = Component.define({
@@ -29,8 +29,8 @@ const Frame = Component.define({
   slots: ["body"]
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.section(h.slots.body)
+  update: ($) => $.model,
+  view: (h) => h.section(h.slots.body)
 })
 
 const BreakerMessage = UiSchema.TaggedEnum({ Break: {} })
@@ -44,7 +44,7 @@ const Breaker = Component.define({
   update: () => {
     throw new Error("broke")
   },
-  view: (_, h) => h.button.onClick(BreakerMessage.Break()).children("break")
+  view: (h) => h.button.onClick(BreakerMessage.Break()).children("break")
 })
 
 const AppMessage = UiSchema.TaggedEnum({ Failed: {} })
@@ -55,8 +55,8 @@ const App = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (failures) => failures + 1,
-  view: (failures, h) =>
+  update: ($) => $.model + 1,
+  view: (h, failures) =>
     Frame(h, {
       slots: {
         body: [
