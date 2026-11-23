@@ -735,6 +735,12 @@ interface Options {
   readonly head?: boolean | undefined
   /** Hydration: keeps the head of the adopted state for `Root.adoptionHead`, as `Ssr` asks, to compare it. */
   readonly adoptionHead?: boolean | undefined
+  readonly inert?: Inert | undefined
+}
+
+interface Inert {
+  readonly state: (path: string) => Decoded | undefined
+  readonly fellBack: (path: string) => void
 }
 
 interface ServerOptions {
@@ -956,6 +962,25 @@ export const mount = (
         (cell) => start(component, props, container, ctx, cell, startOptions)
       )
     }))
+
+/** @internal */
+export const paint = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  state: (
+    path: string
+  ) => { readonly model: unknown; readonly results: componentQueries.Results | undefined } | undefined
+): Effect.Effect<ReadonlyArray<string>, never, Scope.Scope | Renderer.Renderer> =>
+  Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+    const ctx = onScheduler(caller)
+    const fellBack: Array<string> = []
+    const options: Options = { head: false, inert: { state, fellBack: (path) => fellBack.push(path) } }
+    return Effect.flatMap(
+      makeQueryCache(ctx, options),
+      (cell) => Effect.as(start(component, rootProps, container, ctx, cell, options), fellBack)
+    )
+  })
 
 /**
  * Renders a tree on the server: on a host that only keeps the node tree,
@@ -1286,7 +1311,7 @@ const makeQueryCache = (
     idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
     // The server's per-request cache: one fetch per key per request, and none with a budget of 0.
     settleOnce: server !== undefined,
-    fetches: server === undefined || server.fetches
+    fetches: (server === undefined || server.fetches) && options?.inert === undefined
   }
   let dispose: Effect.Effect<void> | undefined
   let closed = false
@@ -1367,8 +1392,9 @@ const setup = (
   options: Options | undefined
 ): Root & Renderer.Root<any, any> => {
   const server = options?.server
+  const inert = options?.inert
   const host: Renderer.Host<any> = server !== undefined ? server.host : Context.get(ctx, services.Renderer).host
-  const log = Context.get(ctx, messageLog.MessageLog)
+  const log = inert === undefined ? Context.get(ctx, messageLog.MessageLog) : messageLog.noop
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
   const rootScope = Context.get(ctx, Scope.Scope)
@@ -1376,7 +1402,7 @@ const setup = (
   const controlled = host.controlled
   const rootEmitted: Array<unknown> = []
   const sharedBuilds = new WeakMap<Env, Map<Layer.Layer<any, any, any>, SharedBuild>>()
-  const hooks = Option.getOrUndefined(Context.getOption(ctx, services.RootHooks))
+  const hooks = inert === undefined ? Option.getOrUndefined(Context.getOption(ctx, services.RootHooks)) : undefined
 
   // The problems sink, read once. A throw from it is swallowed: a check only reports.
   const problems = Context.get(ctx, queryCore.Problems)
@@ -1390,7 +1416,7 @@ const setup = (
 
   // -- server ---------------------------------------------------------------
   // Set by `finish`: the tree is serialised, and nothing it does from now on counts.
-  let frozen = false
+  let frozen = inert !== undefined
   const idleWaiters: Array<() => void> = []
 
   // A host that reads its elements' events from the tree, through `eventsAlong`, instead of storing them.
@@ -2038,7 +2064,7 @@ const setup = (
   // Set when `merged` holds a head the host hasn't been given.
   let headChanged = false
   /** Whether this mount gives its head to the host. An embedded mount computes it and leaves the document alone. */
-  const ownsHead = options?.head !== false
+  const ownsHead = options?.head !== false && inert === undefined
   let rootInstance: Instance | undefined
   let handle: services.RootHandle | undefined
 
@@ -3216,6 +3242,13 @@ const setup = (
       recorded.add(inst)
     }
 
+    if (inert !== undefined) {
+      const recorded = inert.state(inst.path)
+      if (recorded === undefined) inert.fellBack(inst.path)
+      else restoredState.set(inst, recorded)
+      startInstance(inst, parentEnv, range, Option.none(), Option.none())
+      return inst
+    }
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const from = supply
     const own = supply = from === hydrating?.state ? undefined : from
@@ -3312,7 +3345,7 @@ const setup = (
     // A provided Layer builds in the background. The instance renders at once; its Commands,
     // Subscriptions and mounts, and its descendants', wait for it.
     if (component.layer !== undefined) {
-      if (server !== undefined && (!component.layerOnServer || parentEnv.never)) {
+      if (inert !== undefined || (server !== undefined && (!component.layerOnServer || parentEnv.never))) {
         // Kept off the server: never built, and the budget doesn't wait for it. The client builds it fresh.
         inst.env = buildingEnv(parentEnv, true)
         inst.deferred = true
@@ -3501,7 +3534,10 @@ const setup = (
     if (restored !== undefined) {
       restoredState.delete(inst)
       if (first !== undefined) {
-        adopted = Option.some({ model: restored.model, results: restoreQueries(inst.component, restored.results) })
+        adopted = Option.some({
+          model: restored.model,
+          results: inert === undefined ? restoreQueries(inst.component, restored.results) : restored.results
+        })
       }
     }
     return { first, adopted }
@@ -4033,7 +4069,7 @@ const setup = (
     initIndex: number | undefined
   ) => {
     // A patch that threw on an earlier Command of the same step failed the instance.
-    if (inst.closed) return
+    if (inst.closed || inert !== undefined) return
     if (server !== undefined) {
       // No Command runs on the server. `init`'s are dropped silently, since the client reruns them when
       // it adopts. One from `update`, an interrupt included, is logged and reported.
@@ -4495,7 +4531,9 @@ const setup = (
     const subscriptions = inst.component.subscriptions
     const bound = queryCore.boundOf(inst.component)
     // A waiting instance has no Model yet.
-    if (inst.closed || inst.waiting || (subscriptions === undefined && bound === undefined)) return
+    if (inst.closed || inst.waiting || inert !== undefined || (subscriptions === undefined && bound === undefined)) {
+      return
+    }
     // A keyed provide's read is due: nothing starts against services that may be about to go. The read
     // syncs. Before the first view the watches follow the Model at once, and the read restarts them.
     const due = inst.mounting === undefined ? dueSelection(inst) : undefined
@@ -5082,7 +5120,7 @@ const setup = (
     env: Env,
     renderer: Instance = inst
   ): RunningMount | undefined => {
-    if (!host.runsMounts) return undefined
+    if (!host.runsMounts || inert !== undefined) return undefined
     const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
     const causedBy = origin
     const running: RunningMount = { scope: mountScope, mount, args: undefined, cutBy: undefined }
@@ -7321,7 +7359,7 @@ const setup = (
 
   const toggleMounts = (inst: Instance, rendered: Rendered, env: Env, start: boolean): void => {
     // No mount ever started.
-    if (!host.runsMounts) return
+    if (!host.runsMounts || inert !== undefined) return
     switch (rendered._tag) {
       case "Element": {
         stopMounts(inst, rendered)
@@ -7438,7 +7476,9 @@ const setup = (
       }
     })
   )
-  if (hostEvents !== undefined) addFinalizer(rootScope, Effect.sync(hostEvents.connect(eventsAlong)))
+  if (hostEvents !== undefined && inert === undefined) {
+    addFinalizer(rootScope, Effect.sync(hostEvents.connect(eventsAlong)))
+  }
   // Hydration: the root's range among the container's nodes, which may hold more than the app.
   const rootPath = `/${component.definition.name}`
   let rootRange: Range | undefined

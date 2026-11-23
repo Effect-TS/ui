@@ -120,13 +120,15 @@
  */
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
-import type * as Scope from "effect/Scope"
+import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
+import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
@@ -1805,8 +1807,158 @@ export const mountEffect = <
 ): Effect.Effect<Renderer.Root<Model, Msg>, never, Exclude<R | RF | RP, Html.Host> | Scope.Scope> =>
   Effect.gen(function*() {
     const context = yield* Layer.build(layer({ document: container.ownerDocument }))
-    const scheduled = Context.getOrUndefined(yield* Effect.context<never>(), Scheduler.Scheduler) === undefined
+    const outer = yield* Effect.context<Scope.Scope>()
+    const scheduled = Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
       ? Context.add(context, Scheduler.Scheduler, defaultScheduler ??= HtmlScheduler.make())
       : context
-    return yield* Effect.provideContext(Renderer.mount(component, props, container, options), scheduled)
+    const root = (yield* Effect.provideContext(
+      Renderer.mount(component, props, container, options),
+      scheduled
+    )) as unknown as runtime.Root
+    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled))
+    const unregister = Context.get(outer, Pausables).register(paused)
+    yield* Effect.addFinalizer(() => Effect.andThen(Effect.sync(unregister), paused.resume))
+    return root
   }) as any
+
+/**
+ * An instance's state as a tool recorded it from the `MessageLog`: the
+ * Model of a `Mounted` or `Update` entry and, for a component with
+ * queries, its query results.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Recorded {
+  readonly model: unknown
+  readonly queries?: Component.Results | undefined
+}
+
+/**
+ * A root mounted with `mount` or `mountEffect`, offered to `Pausables` so
+ * a tool such as DevTools can show the page as it was at an earlier state.
+ *
+ * **Details**
+ *
+ * `pause` hides the root's container and paints a frozen copy of the tree
+ * next to it, in a copy of the container without its children and with the
+ * HTML `inert` attribute. Each instance of the copy adopts the state that
+ * `state` returns for its path, and one it returns nothing for starts from
+ * `init`. It returns the paths of those that started from `init`, which
+ * may show something the page never showed at that state.
+ *
+ * The frozen copy runs nothing: no Command, `init`'s included, no
+ * Subscription, query watch or fetch, element mount or provided Layer, so a
+ * feature slot shows its `fallback`. It logs no entries, leaves the
+ * document head alone, isn't seen by the Router and takes no events.
+ *
+ * The live root keeps running while it's hidden: its Commands,
+ * Subscriptions and updates go on, and it renders into its hidden
+ * container. Pausing again replaces the painted copy. `resume` removes the
+ * copy and shows the container again, with whatever happened meanwhile.
+ *
+ * **Gotchas**
+ *
+ * DOM state that isn't in a Model, such as what was typed into an
+ * uncontrolled input, scroll positions, focus and media, isn't painted. An
+ * element mount of the live root that measures reads zero while it's
+ * hidden. Elements of the copy have the same ids as the live ones.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Pausable {
+  /** The session the root's `MessageLog` entries carry. */
+  readonly session: string
+  /** The root instance's path, `/<name>`. */
+  readonly path: string
+  readonly pause: (state: (path: string) => Recorded | undefined) => Effect.Effect<ReadonlyArray<string>>
+  readonly resume: Effect.Effect<void>
+}
+
+/**
+ * Where `mount` and `mountEffect` offer their roots to be paused.
+ *
+ * **Details**
+ *
+ * `register` is called with each root as it mounts, and the function it
+ * returns when the root unmounts. The default ignores every root, so a tool
+ * that pauses roots provides its own.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export interface Pausables {
+  readonly register: (root: Pausable) => () => void
+}
+
+const unregistered = () => {}
+
+/**
+ * The `Pausables` service, read by `mount` and `mountEffect`.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export const Pausables: Context.Reference<Pausables> = Context.Reference<Pausables>(
+  "@effect/ui/html/BrowserHost/Pausables",
+  { defaultValue: () => ({ register: () => unregistered }) }
+)
+
+const pausable = (
+  component: Component.Any,
+  root: runtime.Root,
+  container: globalThis.Element,
+  context: Context.Context<Scope.Scope | Renderer.Renderer>
+): Pausable => {
+  const owner = Context.get(context, Scope.Scope)
+  const style = (container as HTMLElement).style
+  let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
+  let shown: readonly [value: string, priority: string] | undefined
+  const unpaint = (was: typeof painted): Effect.Effect<void> =>
+    was === undefined
+      ? Effect.void
+      : Effect.andThen(Scope.close(was.scope, Exit.void), Effect.sync(() => was.copy.remove()))
+  const show = (target: CSSStyleDeclaration, [value, priority]: readonly [string, string]) => {
+    if (value === "") target.removeProperty("display")
+    else target.setProperty("display", value, priority)
+  }
+  const resume = Effect.suspend(() => {
+    const was = painted
+    painted = undefined
+    return Effect.andThen(
+      unpaint(was),
+      Effect.sync(() => {
+        if (shown !== undefined) show(style, shown)
+        shown = undefined
+      })
+    )
+  })
+  return {
+    session: root.session,
+    path: root.path,
+    pause: (state) =>
+      Effect.uninterruptible(Effect.gen(function*() {
+        const scope = yield* Scope.fork(owner, "sequential")
+        shown ??= [style.getPropertyValue("display"), style.getPropertyPriority("display")]
+        const copy = container.cloneNode(false) as HTMLElement
+        show(copy.style, shown)
+        copy.setAttribute("inert", "")
+        ;(painted?.copy ?? container).after(copy)
+        style.setProperty("display", "none", "important")
+        const fellBack = yield* runtime.paint(component, root.instance.props, copy, (path) => {
+          const recorded = state(path)
+          return recorded === undefined ? undefined : { model: recorded.model, results: recorded.queries }
+        }).pipe(Effect.provideContext(Context.add(context, Scope.Scope, scope)))
+        const was = painted
+        painted = { scope, copy }
+        yield* unpaint(was)
+        return fellBack
+      })),
+    resume
+  }
+}
