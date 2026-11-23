@@ -70,303 +70,301 @@ export const LaunchPage = Component.define({
 }).make({
   init: () => ({}),
   update: (model) => model,
-  head: () => [Head.title("Effect UI is the successor to Foldkit 0.x’s frontend")],
+  head: () => [Head.title("Foldkit's frontend is now Effect UI")],
   view: (_model, h) =>
     h.main.class("article").children(
       h.header.class("article-head").children(
-        h.h1.children("Effect UI is the successor to Foldkit 0.x’s frontend"),
+        h.h1.children("Foldkit's frontend is now Effect UI"),
         P(
           h,
-          "Foldkit 0.x is the frontend framework published on npm as `foldkit`. Its frontend work continues as Effect UI, which you import from `effect/ui`. Foldkit becomes the full-stack framework built on Effect UI."
+          "Foldkit 0.x is the frontend framework on npm today as `foldkit`. Its frontend continues as Effect UI (`effect/ui`), while Foldkit becomes the full-stack framework built on top of it."
         ),
-        P(h, "This page shows what is changing and why. It assumes you've built something with Foldkit 0.x.")
+        P(
+          h,
+          "If you've built an app with Foldkit 0.x, most of your mental model carries over: Schema Models, fact-based Messages, pure update functions, and declarative Commands and Subscriptions. This post walks through what is changing, why we made those changes, and what Effect UI looks like in practice."
+        )
       ),
       h.section.attr("aria-labelledby", "define").children(
-        h.h2.id("define").children(
-          "In Effect UI, a component declares its Model and Messages, then defines init, update and view"
-        ),
+        h.h2.id("define").children("What an Effect UI component looks like"),
         P(
           h,
-          "Here is a counter written as one file. It counts up when you click, resets one second after you ask it to, and counts by itself while auto-count is on."
+          "Start with a complete component: a counter that increments on click, resets after a one-second delay, and ticks automatically when auto-count is turned on."
         ),
         Beside(h, {
           label: "Counter",
           files: h.props.snippets.intro,
           demo: Counter(h, { key: "intro" }),
-          caption: "The counter is running. Click Reset in 1 second, or click Auto-count and then Stop."
+          caption: "Try it live: click Reset in 1 second, or toggle Auto-count on and off."
         }),
         P(
           h,
-          "`Component.define` takes the name and the Schemas, and `make` takes init, update and view. update is a record with one handler per Message."
+          "`Component.define` declares the component's name and Schemas, and `.make` attaches its `init`, `update`, `subscriptions`, and `view`. Instead of a `Message.match` switch, `update` is a record keyed by Message tag."
         ),
         P(
           h,
-          "`DelayReset` waits one second and returns one Message, `CompletedDelayReset`. The `ClickedResetAfterDelay` handler returns `$.run(DelayReset.make({}))` and starts nothing itself. The runtime runs the Command and sends `CompletedDelayReset` to update, and that handler sets the count to zero. While the Command runs, `h.isRunning(DelayReset)` is true and the button reads Resetting. In Foldkit 0.x the same handler returned `{ model, commands: [DelayReset] }`."
+          "`DelayReset` is a Command that sleeps for one second and produces `CompletedDelayReset`. When the user clicks reset, `ClickedResetAfterDelay` returns `$.run(DelayReset.make({}))` without running any side effect itself. The runtime executes the Command and sends `CompletedDelayReset` back into `update`, which zeroes the count. While it is in flight, `h.isRunning(DelayReset)` is `true`, so the button shows \"Resetting\". In Foldkit 0.x, that same handler returned `{ model, commands: [DelayReset] }`."
         ),
         P(
           h,
-          "A Subscription runs for as long as the Model asks for it. `subscriptions` is a function of the Model that lists the Streams that should be running. While `isAutoCounting` is true the list contains `tick`, and each tick sends `Ticked`. When it becomes false the entry is gone and the runtime stops the Stream. No handler starts or stops a timer. In Foldkit 0.x the entry declared a dependency Schema with `modelToDependencies` and `dependenciesToStream`. Here the condition is an ordinary `&&`."
+          "Subscriptions are plain data derived from the Model. `subscriptions` returns the list of Streams that should be active right now: when `isAutoCounting` is `true`, `tick` is in the list and emits `Ticked` every second; when it flips to `false`, `tick` drops out and the runtime tears down the Stream automatically. There is no `modelToDependencies` or `dependenciesToStream` boilerplate — just an ordinary `&&`."
         )
       ),
       h.section.attr("aria-labelledby", "split").children(
-        h.h2.id("split").children(
-          ...Text(h, "Separating the definition from `make` lets you write init, update and view on their own")
-        ),
+        h.h2.id("split").children("Splitting a component across functions"),
         P(
           h,
-          "This is the same counter with the same behaviour, and the two calls pulled apart. The definition types each piece, so none of them needs a type annotation for `$`, `h` or the Message."
+          "When a component outgrows a single inline call, assign `Component.define(...)` to a variable and write each piece separately before calling `.make`. The definition carries the types for `$`, `h`, and every Message, so extracted handlers and views don't need manual type annotations."
         ),
         Listing(h, h.props.snippets.split),
         P(
           h,
-          "`CounterDef.update(\"ClickedResetAfterDelay\", ...)` writes the handler for one Message away from the component. `CounterDef.update(...)` without a tag writes one that works for any Message, so `increment` serves both `ClickedIncrement` and `Ticked`."
+          "`CounterDef.update(\"ClickedResetAfterDelay\", ...)` types a handler for one specific Message. Omit the tag — `CounterDef.update(...)` — and you get a shared handler that works for any Message, like `increment` serving both `ClickedIncrement` and `Ticked`."
         ),
         P(
           h,
-          "The definition has helpers for update, view and fragment, but none for init or subscriptions. Those two are plain functions annotated with the Model type, as `init` is above. A component that fits in one piece should keep the two calls chained, and split them when it grows."
+          "The definition provides typed helpers for `update`, `view`, and `fragment`. `init` and `subscriptions` don't need helpers; they are ordinary functions annotated with the `Model` type. Keep small components chained inline, and split them out once they grow."
         )
       ),
       h.section.attr("aria-labelledby", "one-model").children(
-        h.h2.id("one-model").children("In Foldkit 0.x, the entire application state was a single Model"),
+        h.h2.id("one-model").children("In Foldkit 0.x, the whole app shared one Model"),
         P(
           h,
-          "A Foldkit 0.x app has one Model, one Message union and one update function. Everything the app knows is in that Model, and every Message goes through that update."
+          "A Foldkit 0.x application has a single Model, a single Message union, and a single `update` function. Everything the app knows lives in that root Model, and every Message flows through that root `update`."
         ),
         P(
           h,
-          "You can split an app into Submodels. A Submodel is a module with its own Model, Message, update and view, so you can write a Counter once and use it wherever you need one. What a Submodel doesn't have is its own state. The parent's Model stores the Submodel's Model. The Submodel's Messages reach the parent's update wrapped in one of the parent's Messages, and the parent passes each one to the Submodel's update and stores the Model that comes back."
+          "You can organize code into Submodels — reusable modules with their own Model, Message, `update`, and `view` — so you only have to write a Counter once. What a Submodel doesn't have is its own state at runtime. The parent stores the Submodel's Model as a field, wraps its Messages in a parent Message, unwraps them in `update`, forwards them to the Submodel's `update`, and stores the updated Model."
         ),
         P(
           h,
-          "The parent does that for every Submodel, including the ones whose Messages it has no decision to make about."
+          "In a small app that wiring is manageable. In a real app, parents end up forwarding Messages for every child on the page, even when the parent has no interest in what those children are doing."
         )
       ),
       h.section.attr("aria-labelledby", "components").children(
-        h.h2.id("components").children(
-          "In Effect UI, each component instance has its own Model and handles its own Messages"
+        h.h2.id("components").children("In Effect UI, each component owns its Model and Messages"),
+        P(
+          h,
+          "An Effect UI app is a tree of independent components. Each component instance has its own Model, Message union, and `update`, managed by the runtime. When a user interacts with a child, the runtime sends that Message straight to that child's `update` — the parent never stores the child's state or routes its Messages."
         ),
         P(
           h,
-          "An Effect UI app is a tree of components. Each component has its own Model, Message and update, and you build a page by composing them. The runtime keeps a Model for each component instance and passes each Message to the update of the instance it came from. A parent doesn't store a child's Model or route its Messages."
+          "Compare a page with a Counter and a toggle button written both ways. The diagram traces a single click on `+`."
         ),
-        P(
-          h,
-          "Here is a page with one Counter and a button that hides it, written both ways. The diagram follows one click on +."
-        ),
-        Diagram(h, "One click on + in each version. The numbers mark what runs, in order."),
+        Diagram(h, "One click on + in each version. Numbers show the execution order."),
         h.figure.class("compare wide").children(
           h.div.class("compare-columns").children(
             Example(h, {
-              title: "The Foldkit 0.x page stores the count in its Model",
+              title: "Foldkit 0.x: Page stores and routes Counter",
               files: h.props.snippets.counterFoldkit,
               demo: h.div.class("embed").onMount(EmbedFoldkitPage())
             }),
             Example(h, {
-              title: "The Effect UI page renders the Counter without storing its count",
+              title: "Effect UI: Page just renders Counter",
               files: h.props.snippets.counterEffect,
               demo: Page(h, {})
             })
           ),
           h.figcaption.class("caption").children(
-            "Both pages are running. Click + in each, then hide the Counter and show it again."
+            "Both demos are live. Increment each counter, then hide and show it again."
           )
         ),
         P(
           h,
-          "The two Counter files have the same Model, the same two Messages and the same update logic. The pages are where the versions differ. Three things in the Foldkit 0.x page have no counterpart in the Effect UI page: the `counter` field in the Model, the `GotCounterMessage` wrapper, and `foldCounter`. `h.submodel` becomes a call to `Counter`. The Effect UI page's update handles `ClickedToggleCounter`, the one Message the page has a decision to make about."
+          "The two `Counter` files have the same Model, Messages, and update logic. The difference is all in `Page`. In Effect UI, the `counter` field on the parent Model, the `GotCounterMessage` wrapper, and `foldCounter` all disappear, and `h.submodel` becomes a direct `Counter(h, {})` call. The page's `update` only handles `ClickedToggleCounter` — the one event it actually cares about."
         ),
         P(
           h,
-          "Every Message still goes through an update, and the MessageLog records each update under the path of the instance that ran it."
+          "You don't lose observability by splitting state up: every Message still goes through an `update`, and `MessageLog` records each step under the component instance's path."
         )
       ),
       h.section.attr("aria-labelledby", "lifetime").children(
-        h.h2.id("lifetime").children("In Effect UI, removing a component discards its Model by default"),
+        h.h2.id("lifetime").children("Component state lives as long as the component is rendered"),
         P(
           h,
-          "If you hid and showed the two Counters above, the count came back in Foldkit 0.x and started again at 0 in Effect UI."
+          "If you hid and showed both counters above, you saw the difference immediately: Foldkit 0.x kept the count, while Effect UI reset it to 0."
         ),
         P(
           h,
-          "In Foldkit 0.x, a Submodel's Model lasts until the parent's update replaces it. `ClickedToggleCounter` changes `isCounterShown` and leaves `counter` as it was, so the count is still there when the Counter is shown again. To start the Counter over, the page's update would have to write a new `counter`."
+          "In Foldkit 0.x, a Submodel's state lives in its parent's Model until the parent explicitly replaces it. Toggling `isCounterShown` left `counter` untouched, so the count survived. Resetting it meant remembering to re-initialize `counter` inside the parent's `update`."
         ),
         P(
           h,
-          "In Effect UI, a component's Model lasts as long as the component does, and the component lasts as long as its parent's view keeps writing it. While `isCounterShown` is false the view doesn't write the Counter, so the runtime ends it and its Model is gone. Showing it again starts a new Counter at 0."
+          "In Effect UI, a component's state is tied to its lifecycle. When `isCounterShown` becomes `false`, the parent stops rendering `Counter`, so the runtime unmounts it and discards its Model. Showing it again creates a fresh instance starting at 0."
         ),
         P(
           h,
-          "Some state should outlast the view that shows it, like a half-filled form on a tab the user has switched away from. Define that component with `scoped: true` and write it inside `h.scoped`. When the view stops writing it, its nodes leave the document and its Model stays, along with its Subscriptions and any Commands in flight. It's kept until the component that wrote it ends, or until a predicate you pass to `h.scoped` returns false."
+          "When state should survive being hidden — like a draft inside a tab the user switched away from — opt in with `scoped: true` on the component and render it through `h.scoped`. When the view stops rendering it, its DOM nodes are removed, but its Model, Subscriptions, and in-flight Commands stay alive until the parent unmounts or a predicate passed to `h.scoped` returns `false`."
         ),
         h.figure.class("kept").children(
           ...h.props.snippets.kept.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet))),
           h.figcaption.class("caption").children(
-            ...Text(h, "With these two lines changed, the Counter above keeps its count while it's hidden.")
+            ...Text(h, "Two lines change, and the Effect UI Counter keeps its count while hidden.")
           )
         )
       ),
       h.section.attr("aria-labelledby", "services").children(
-        h.h2.id("services").children("In Effect UI, a component can provide services for itself and its children"),
+        h.h2.id("services").children("Components can provide their own Effect services"),
         P(
           h,
-          "In Effect UI a component can provide the services it uses. Say an editor saves drafts through a `Drafts` service."
+          "Suppose an editor saves drafts through a `Drafts` service."
         ),
         P(
           h,
-          "In Foldkit 0.x, the editor's Command requires `Drafts`. To share one `Drafts` between Commands, this app passes `Drafts.layer` to `makeApplication` in `resources`. The runtime builds that Layer the first time any Command or Subscription runs, whether or not it uses `Drafts`, and keeps it until the app shuts down. Every Command in the app can use it."
+          "In Foldkit 0.x, the editor's Command requires `Drafts`. To share one `Drafts` instance across Commands, you pass `Drafts.layer` to `makeApplication` in `resources`. The runtime builds that Layer the first time any Command or Subscription runs — even one that doesn't need `Drafts` — keeps it alive for the life of the app, and exposes it to every Command."
         ),
         P(
           h,
-          "If you leave `Drafts.layer` out of `resources`, the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves. A Command can provide `Drafts` inside its own Effect instead, and then `Drafts` is built again every time the Command runs."
+          "If you forget to add `Drafts.layer` to `resources`, the app still compiles and then crashes at runtime with \"Service not found: Drafts\" the first time you save. The alternative — providing `Drafts` inside the Command's own Effect — rebuilds the service on every single run."
         ),
         Compare(h, {
           foldkit: {
-            title: "The Foldkit 0.x app provides Drafts at the root",
+            title: "Foldkit 0.x: Drafts provided at the app root",
             files: h.props.snippets.providerFoldkit
           },
           effect: {
-            title: "The Effect UI Editor provides Drafts where the Editor is defined",
+            title: "Effect UI: Editor provides Drafts directly",
             files: h.props.snippets.providerEffect
           },
           caption:
-            "Foldkit 0.x provides `Drafts` at the root, to every Command. Effect UI provides it on `Editor`, in the editor’s own file."
+            "Foldkit 0.x wires `Drafts` globally at startup. Effect UI scopes it to `Editor`, right where the component is defined."
         }),
         P(
           h,
-          "`Component.provide` is `Effect.provide` for a component and everything below it. The editor's file exports `Editor` with its Layers already provided, so a page writes `Editor` and passes nothing down."
+          "`Component.provide` works like `Effect.provide` for a component and its subtree. Because `Editor` exports itself with its Layers already attached, any page can render `Editor(h, {})` without wiring up dependencies."
         ),
         P(
           h,
-          "With two Editors on the page, each has its own text and both use one `Drafts`. The runtime builds `Drafts` when the first Editor mounts and releases it when the last one unmounts. Removing one Editor drops that Editor's text and leaves `Drafts` in place for the other."
+          "If a page renders two Editors, each keeps its own text while sharing a single `Drafts` instance. The runtime builds `Drafts` when the first Editor mounts and releases it when the last one unmounts — removing one Editor discards its text without disrupting the other."
         ),
         P(
           h,
-          "`EditorNoDeps` is the same component without its Layers. Mounting it compiles, but the mounted app then requires `SaveDraft`, and TypeScript won't let you run it until something provides one. A test can mount `EditorNoDeps` with a fake `SaveDraft`."
+          "Exporting `EditorNoDeps` alongside `Editor` keeps dependencies testable. Mounting `EditorNoDeps` carries the `SaveDraft` requirement in the type system, so TypeScript won't let you run the app until something provides it — and a test can swap in a fake `SaveDraft` Layer."
         )
       ),
       h.section.attr("aria-labelledby", "noop").children(
-        h.h2.id("noop").children("In Effect UI, a Command whose result update ignores sends no Message"),
+        h.h2.id("noop").children("Fire-and-forget Commands don't need dummy Messages"),
         P(
           h,
-          "Every Foldkit 0.x Command returns a Message, even when update has no use for it. Saving a draft changes nothing in the Editor’s Model, so the Foldkit 0.x Editor declares `SavedDraft` and handles it by returning the Model it was given."
+          "In Foldkit 0.x, every Command has to return a Message, even when `update` has nothing to do with it. Saving a draft doesn't change the editor's Model, so the Foldkit 0.x version still has to declare `SavedDraft` and add a no-op handler that returns the Model unchanged."
         ),
         Compare(h, {
           foldkit: {
-            title: "The Foldkit 0.x Editor handles SavedDraft and changes nothing",
+            title: "Foldkit 0.x: declares SavedDraft just to ignore it",
             files: h.props.snippets.noopFoldkit
           },
           effect: {
-            title: "The Effect UI Editor runs SaveDraft with Command.asNoop",
+            title: "Effect UI: pipes SaveDraft through Command.asNoop",
             files: h.props.snippets.noopEffect
           }
         }),
         P(
           h,
-          "The runtime still saves the draft. `Command.asNoop` replaces the result with `Component.noop`, so update receives no follow-up Message. The Effect UI Editor has one Message where the Foldkit 0.x Editor has two."
+          "With `Command.asNoop`, the runtime still runs `SaveDraft`, then maps its result to `Component.noop` so `update` is never called. The Effect UI Editor has one Message instead of two."
         ),
         P(
           h,
-          "Use it only when update has nothing to do with the result. The counter’s `DelayReset` is the counter-example, because `CompletedDelayReset` is what sets the count to zero. With `Command.asNoop` it would still sleep for a second, and the count would never reset. That version type-checks, so the compiler won’t catch the mistake."
+          "Only reach for `Command.asNoop` when `update` truly ignores the result. Take `DelayReset` from the counter above: `CompletedDelayReset` is what actually sets `count` back to 0. Piping `DelayReset` into `Command.asNoop` would still compile, wait a second, and leave the count unchanged."
         )
       ),
       h.section.attr("aria-labelledby", "headless").children(
-        h.h2.id("headless").children(
-          "A headless component keeps its Model and update, and the parent draws it with parts"
-        ),
+        h.h2.id("headless").children("Headless components separate behavior from markup"),
         P(
           h,
-          "Here is the same Counter finished with `parts` in place of `view`. It keeps its Model, update, Command and Subscription, and has no markup of its own. The page below draws it twice: a compact one with the number and a + button, and a scoreboard with a large number, Add a point and Auto-count."
+          "Replace `view` with `parts` and a component becomes headless: it keeps its Model, `update`, Commands, and Subscriptions, while leaving all markup and styling to the caller. Below, the same headless `Counter` powers two different UIs — a compact inline counter and a scoreboard with auto-count."
         ),
         Beside(h, {
-          label: "Two drawings of the headless Counter",
+          label: "Two UIs built from the headless Counter",
           files: h.props.snippets.headless,
           demo: Scoreboard(h, {}),
-          caption: "Both drawings are running. Each keeps its own count."
+          caption: "Both counters are live and maintain independent counts."
         }),
         P(
           h,
-          "The parent chooses the elements, classes and labels. `counter.increment(h.button)` puts Counter’s click handler on the parent’s button, so the click still goes through Counter’s update. Each drawing is its own instance with its own count."
+          "The parent supplies the elements, classes, and labels. Calling `counter.increment(h.button)` attaches the component's click handler to the parent's button, so clicks still flow straight into `Counter`'s `update`. Each render creates its own independent instance."
         ),
-        P(h, "This is how `@effect/ui-kit` components such as Select and Collapsible are written.")
-      ),
-      h.section.attr("aria-labelledby", "fragment").children(
-        h.h2.id("fragment").children("A fragment is part of one component’s view, written as its own function"),
         P(
           h,
-          "Here is the reset button from the first counter, pulled out of the view. It disables itself and reads Resetting while `DelayReset` is running."
+          "This is the same pattern used across `@effect/ui-kit` for accessible primitives like Select and Collapsible."
+        )
+      ),
+      h.section.attr("aria-labelledby", "fragment").children(
+        h.h2.id("fragment").children("Fragments extract reusable pieces of a view"),
+        P(
+          h,
+          "Sometimes you want to pull part of a component's view into a helper function without creating a separate component. Here, the counter's delayed-reset button is extracted into a fragment that disables itself and shows \"Resetting\" while `DelayReset` is running."
         ),
         Beside(h, {
           label: "Counter with a reset fragment",
           files: h.props.snippets.fragment,
           demo: FragmentCounter(h, { key: "fragment" }),
-          caption: "Click Reset in 1 second. The button is disabled until the count is back at 0."
+          caption: "Click Reset in 1 second. The button disables itself until the reset completes."
         }),
         P(
           h,
-          "`CounterDef.fragment` gives the function the same `h` the view gets. It can send Counter’s Messages and call `h.isRunning` with no type parameters, and it takes whatever other arguments you give it after `h`."
+          "`CounterDef.fragment` gives the function the same typed `h` that `view` receives — so it can dispatch the component's Messages and call `h.isRunning` with no type annotations — followed by whatever extra arguments you want to pass."
         )
       ),
       h.section.attr("aria-labelledby", "testing").children(
-        h.h2.id("testing").children(
-          "In Effect UI, Story and Scene test a component, and Play runs its Commands and Subscriptions"
-        ),
+        h.h2.id("testing").children("Testing with Story, Scene, and Play"),
         P(
           h,
-          "Each test below follows one interaction: the user asks for a delayed reset, and the count goes to zero."
+          "Each test below verifies the same scenario: clicking the delayed reset button brings the count back to zero."
         ),
         Compare(h, {
-          foldkit: { title: "A Foldkit 0.x Story takes update", files: h.props.snippets.storyFoldkit },
-          effect: { title: "An Effect UI Story takes the component", files: h.props.snippets.storyEffect }
+          foldkit: { title: "Foldkit 0.x Story", files: h.props.snippets.storyFoldkit },
+          effect: { title: "Effect UI Story", files: h.props.snippets.storyEffect }
         }),
         Compare(h, {
-          foldkit: { title: "A Foldkit 0.x Scene takes update and view", files: h.props.snippets.sceneFoldkit },
-          effect: { title: "An Effect UI Scene takes the component", files: h.props.snippets.sceneEffect }
+          foldkit: { title: "Foldkit 0.x Scene", files: h.props.snippets.sceneFoldkit },
+          effect: { title: "Effect UI Scene", files: h.props.snippets.sceneEffect }
         }),
         P(
           h,
-          "Story still sends Messages and reads the Model. Scene still clicks through the view and reads what it shows. In both, a Command stays pending as data until the test resolves it by name, and the test fails if one is left unresolved."
+          "`Story` still tests `update` by sending Messages and inspecting the Model; `Scene` still drives interactions through the rendered view. In both, Commands stay pending as data until the test resolves them by name, and any unresolved Command fails the test."
         ),
         P(
           h,
-          "Three things changed. The test takes the component where Foldkit 0.x took `update`, or `update` and `view`. It starts from init, so this test clicks Increment first where the Foldkit 0.x test was given a Model with a count of 5. And the steps are calls on a cursor, so the test reads `s.model` between steps with an ordinary assertion."
+          "Three ergonomics changed from Foldkit 0.x: you pass the component directly instead of `update` (or `update` and `view`); the test starts from `init` rather than a hand-crafted initial Model; and steps run on a cursor so you can read `s.model` between steps with normal assertions."
         ),
-        Listing(h, h.props.snippets.play, "Play has no counterpart in Foldkit 0.x."),
-        P(
+        Listing(
           h,
-          "In a Story and a Scene the test hands update `CompletedDelayReset`, so both pass whatever `DelayReset` actually does. In a Play nothing is resolved. The runtime runs `DelayReset`, the test moves the clock, and the count changes at one second and not before."
-        ),
-        P(
-          h,
-          "The same holds for the Subscription. A Story can check that `tick` is listed and deliver a `Ticked` itself, but only a Play runs the Stream. With `Stream.drop(1)` removed from the counter, the Story still passes, and the Play shows 4 after three seconds where it should show 3."
+          h.props.snippets.play,
+          "Play is new in Effect UI — it runs real Commands, Subscriptions, and child components."
         ),
         P(
           h,
-          "A Play also runs child components for real, which is what this page’s hide and show test does. In Foldkit 0.x the docs tell you to test a Command’s Effect in a separate test with a mock Layer."
+          "Because `Story` and `Scene` resolve `DelayReset` manually, they pass regardless of what `DelayReset` actually does at runtime. `Play` executes the real Command against `TestClock`, proving the count stays at 1 after 999ms and resets to 0 at 1 second."
+        ),
+        P(
+          h,
+          "The same applies to Subscriptions. A `Story` can check that `tick` is active and send a synthetic `Ticked`, but only `Play` runs the Stream itself — if you accidentally removed `Stream.drop(1)`, the `Story` would still pass while `Play` would catch that the count hit 4 after three seconds instead of 3."
+        ),
+        P(
+          h,
+          "`Play` also mounts real child components end to end, so you no longer have to test a Command's Effect separately with a mock Layer like Foldkit 0.x recommended."
         )
       ),
       h.section.attr("aria-labelledby", "carries-over").children(
-        h.h2.id("carries-over").children(
-          "Messages still describe what happened, and update still decides what changes"
+        h.h2.id("carries-over").children("What stays the same"),
+        P(
+          h,
+          "Underneath the component model, the core architecture hasn't changed. Models are still Schemas. Messages still describe facts that happened — like `ClickedSave` — and `update` decides how state transitions. `init`, `update`, and `view` remain pure functions, and Commands, Subscriptions, and Mounts are still declarative values executed by the runtime."
         ),
         P(
           h,
-          "A Model is still a Schema. A Message still records something that happened, like `ClickedSave`, and update decides what to do about it. init, update and view are still pure functions. Commands, Subscriptions and Mounts keep their names, and they are still values the runtime performs."
-        ),
-        P(
-          h,
-          "A child still knows nothing about its parent. Where a Submodel returned an OutMessage, a component emits an event, and the parent decides what the event means."
+          "Data flow is still strictly one-way. A child never knows anything about its parent; instead of returning an `OutMessage`, it emits a typed event and lets the parent decide what it means."
         )
       ),
       h.section.attr("aria-labelledby", "next").children(
-        h.h2.id("next").children("You can reuse your Models, Messages and update logic when you migrate"),
+        h.h2.id("next").children("Migrating from Foldkit 0.x"),
         h.p.children(
-          "The upgrade guide isn't published yet. When it is, it will go through the API changes one at a time. The Models, Messages and update logic you've written carry over with small changes, and most of what you delete is in parents. Effect UI is ",
+          "A step-by-step upgrade guide is on the way. Expect a migration rather than a rewrite: your Models, Messages, and update logic move over with minimal changes, and most of the diff is deleting parent forwarding boilerplate. Follow along with Effect UI ",
           h.a.attr("href", "https://github.com/Effect-TS/ui").children("on GitHub"),
           "."
         )
       ),
       h.footer.class("footer").children(
-        P(h, "This page is an Effect UI app. Its source is `examples/launch` in Effect-TS/ui.")
+        P(h, "This page is built with Effect UI. Browse its source in `examples/launch` in Effect-TS/ui.")
       )
     )
 })
