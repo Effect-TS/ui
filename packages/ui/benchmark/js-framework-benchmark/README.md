@@ -53,7 +53,7 @@ Each cell is the median of both runs' values pooled. Lower is better everywhere.
 
 `vs vanilla` is the geometric mean, over the nine CPU benchmarks, of each framework's median total over vanilla JS's. It's unweighted, unlike the harness's own result page. Vanilla JS ran in the quietest part of the second run, which is why every framework's ratio is higher there. Compare frameworks within a run, not the two runs with each other. The order of the frameworks is the same in both.
 
-`total` is the harness's duration from the click to the end of the next paint, read from the Chrome trace. On this VM, painting 1,000 rows takes about 100 ms whatever the framework, so the `script` table (the JavaScript that ran in that window) separates the frameworks better. Sizes and first paint are one sample per run, so treat them as rough.
+`total` is the harness's duration from the click to the end of the next paint, read from the Chrome trace. On this VM, painting 1,000 rows takes about 100 ms whatever the framework, so the `script` table (the JavaScript that ran in that window) separates the frameworks better. Sizes and first paint are one sample per run, so treat them as rough. The harness slows the CPU down 4 times for update every 10th row, select row, swap rows and clear 1,000 rows, and 2 times for remove row, so those rows of the tables are 4 (or 2) times what the same work takes at full speed.
 
 ## What the results say
 
@@ -61,7 +61,7 @@ In script time, Effect UI is ahead of Foldkit 0.x on every operation except swap
 
 Effect UI is also ahead of React overall. React's 524 ms swap rows makes the gap look larger than it is. That's a known cost of how React moves keyed rows when two distant ones trade places. Without swap rows, `vs vanilla` is 1.25 for Effect UI and 1.37 for React. Effect UI is clearly ahead on creating 10,000 rows (188 ms of script against 441 ms) and on clearing, about level on creating 1,000 rows and on select row, and behind on update every 10th row (18.6 ms against 13.6 ms). Vue, Svelte and Solid are ahead of both.
 
-The gap is widest on small updates. Updating every 10th row, selecting a row and swapping two rows cost Effect UI 8 to 19 ms of script. Vue, Svelte and Solid need about 3 to 7 ms. In Effect UI each message runs `update`, then the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and write only those, so their cost follows the size of the change, not the size of the table. Creating rows is closer, since every framework has to build every row.
+The gap is widest on small updates. Updating every 10th row, selecting a row and swapping two rows cost Effect UI 8 to 19 ms of script with the CPU slowed down 4 times, about 2 to 5 ms at full speed. Vue, Svelte and Solid need about 3 to 7 ms slowed down. In Effect UI each message runs `update`, then the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and write only those, so their cost follows the size of the change, not the size of the table. Creating rows is closer, since every framework has to build every row.
 
 The two Effect frameworks ship the largest bundles, 70 kB and 87 kB compressed, and have the slowest first paint: 516 ms for Effect UI and 688 ms for Foldkit, against 150 to 405 ms for the others.
 
