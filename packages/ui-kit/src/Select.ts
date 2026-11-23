@@ -33,12 +33,14 @@
  * | `finalFocus`      | any focusable element, focused on close              |
  *
  * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children. `item`, `itemIndicator`,
- * `group` and `groupLabel` take the item's value or the group's key as
- * well. `arrow`, `itemIndicator` and the scroll arrows return `undefined`
- * while they're hidden; `keepMounted` keeps the indicator and the scroll
- * arrows drawn. Every `item` value has to be in `items`, and `item` keys
- * its element with the value.
+ * applied, and the consumer adds the children. `item` and `itemIndicator`
+ * take an options object, `{ element, value }`, and `group` and
+ * `groupLabel` take `{ element, group }`, where `group` is the `group` of
+ * the items inside. The scroll arrows take `{ element }`. `arrow`,
+ * `itemIndicator` and the scroll arrows return `undefined` while they're
+ * hidden; a `keepMounted` field keeps the indicator and the scroll arrows
+ * drawn. Every `item` value has to be in `items`, and `item` keys its
+ * element with the value.
  *
  * In a `Field`, wrap the trigger and the positioner in `field.focusWithin`
  * and draw the trigger with `field.member`, so focus moving into the popup
@@ -173,9 +175,9 @@
  *                 select.positioner(h.div).children(
  *                   select.popup(h.div).children(
  *                     ...themes.map(({ label, value }) =>
- *                       select.item(h.div, value).children(
+ *                       select.item({ element: h.div, value }).children(
  *                         select.itemText(h.div).children(label),
- *                         select.itemIndicator(h.span, value)?.children("✓")
+ *                         select.itemIndicator({ element: h.span, value })?.children("✓")
  *                       )
  *                     )
  *                   )
@@ -212,7 +214,7 @@ import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { available, keyed, stepped } from "./internal/list.ts"
+import { available, grouped, stepped, valued } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
@@ -1501,7 +1503,7 @@ export const Select = Component.define({
         )
         .onClick(({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType }))
     })
-    const item = keyed(itemPart)
+    const item = valued(itemPart)
 
     const itemText = p.part("div", (b) => b.attr("data-select-item-text", ""))
 
@@ -1509,17 +1511,23 @@ export const Select = Component.define({
     const itemIndicator = View.wrapPart(
       indicatorPart,
       <B extends View.PartTarget<"span">>(
-        element: B,
-        value: string,
-        keepMounted?: boolean
+        { element, keepMounted, value }: {
+          readonly element: B
+          readonly value: string
+          readonly keepMounted?: boolean | undefined
+        }
       ): ReturnType<B["attr"]> | undefined => {
         const applied = indicatorPart(element)
         return chosen.has(itemOf(value).value) || keepMounted === true ? applied : undefined
       }
     )
 
-    const group = p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
-    const groupLabel = p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    const group = grouped(
+      p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
+    )
+    const groupLabel = grouped(
+      p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    )
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const scrollArrow = (direction: "up" | "down") => {
@@ -1535,7 +1543,9 @@ export const Select = Component.define({
           .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "position:absolute"))))
       return View.wrapPart(
         part,
-        <B extends View.PartTarget<"div">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined => {
+        <B extends View.PartTarget<"div">>(
+          { element, keepMounted }: { readonly element: B; readonly keepMounted?: boolean | undefined }
+        ): ReturnType<B["attr"]> | undefined => {
           const applied = part(element)
           return visible || keepMounted === true ? applied : undefined
         }

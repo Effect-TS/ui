@@ -171,7 +171,7 @@ const Page = Component.define({
                 select.positioner(h.div.attr("id", "positioner")).children(
                   select.popup(h.div.class("popup")).children(
                     ...items.map(({ label, value }) =>
-                      select.item(h.div.attr("data-testid", value), value).children(
+                      select.item({ element: h.div.attr("data-testid", value), value }).children(
                         select.itemText(h.div.attr("data-geo", "text-" + value)).children(label)
                       )
                     )

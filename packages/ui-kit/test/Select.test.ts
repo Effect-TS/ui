@@ -38,12 +38,12 @@ const standIn = {
       select.backdrop(h.div.class("backdrop")),
       select.positioner(h.div.class("positioner").attr("role", "dialog")).children(
         select.popup(h.div.class("popup").attrs({ role: "menu", tabindex: "0" })).children(
-          select.scrollUpArrow(h.div.class("up")),
-          select.group(h.div.class("group"), "all").children(
-            select.groupLabel(h.div.class("group-label"), "all").children("All"),
+          select.scrollUpArrow({ element: h.div.class("up") }),
+          select.group({ element: h.div.class("group"), group: "all" }).children(
+            select.groupLabel({ element: h.div.class("group-label"), group: "all" }).children("All"),
             ...items.map(({ label, value }) =>
-              select.item(
-                h.div.attrs({
+              select.item({
+                element: h.div.attrs({
                   "data-testid": value,
                   role: "menuitem",
                   "aria-selected": "true",
@@ -51,14 +51,14 @@ const standIn = {
                   "data-highlighted": "x"
                 }),
                 value
-              ).children(
+              }).children(
                 select.itemText(h.div).children(label),
-                select.itemIndicator(h.span.class("check"), value)?.children("✓")
+                select.itemIndicator({ element: h.span.class("check"), value })?.children("✓")
               )
             )
           ),
           select.separator(h.div.class("separator")),
-          select.scrollDownArrow(h.div.class("down")),
+          select.scrollDownArrow({ element: h.div.class("down") }),
           select.arrow(h.div.class("arrow"))
         )
       ),
@@ -423,9 +423,9 @@ describe("Select", () => {
 
       const hiddenTagCases: ReadonlyArray<(select: Parts, h: H) => View.Content<never>> = [
         (select, h) => h.div(select.arrow(h.span as never)),
-        (select, h) => h.div(select.itemIndicator(h.div as never, "light")),
-        (select, h) => h.div(select.scrollUpArrow(h.span as never)),
-        (select, h) => h.div(select.scrollDownArrow(h.span as never))
+        (select, h) => h.div(select.itemIndicator({ element: h.div as never, value: "light" })),
+        (select, h) => h.div(select.scrollUpArrow({ element: h.span as never })),
+        (select, h) => h.div(select.scrollDownArrow({ element: h.span as never }))
       ]
       for (const render of hiddenTagCases) {
         const exit = yield* Effect.exit(
