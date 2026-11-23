@@ -489,10 +489,10 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  *   init: () => ({ running: true, elapsed: 0 }),
  *   update: {
  *     // A tab that comes back from the background sends one long frame.
- *     TickedFrame: (model, { delta }, $) => $.evolve({ elapsed: model.elapsed + Math.min(delta, 100) })
+ *     TickedFrame: ($, { delta }) => $.evolve({ elapsed: $.model.elapsed + Math.min(delta, 100) })
  *   },
- *   view: (model, h) => h.p(`${Math.round(model.elapsed)} ms`),
- *   subscriptions: (model) => [
+ *   view: (h, model) => h.p(`${Math.round(model.elapsed)} ms`),
+ *   subscriptions: ({ model }) => [
  *     model.running && DomSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))
  *   ]
  * })

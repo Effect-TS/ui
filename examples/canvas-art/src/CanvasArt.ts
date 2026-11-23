@@ -93,20 +93,20 @@ export const CanvasArt = Component.define({
 }).make({
   init: () => ({ balls: [], nextId: 0, running: true }),
   update: {
-    TickedFrame: (_model, { delta }, $) =>
+    TickedFrame: ($, { delta }) =>
       $.evolve({ balls: (balls) => balls.map(advance(Math.min(delta, MAX_FRAME_MS) / 1000)) }),
-    ClickedCanvas: (_model, { x, y }, $) =>
+    ClickedCanvas: ($, { x, y }) =>
       $.run(GenerateBall.make({ x, y }).pipe(Command.map((ball) => CanvasArtMessage.CompletedGenerateBall(ball)))),
-    CompletedGenerateBall: (model, { _tag, ...ball }, $) =>
-      $.evolve({ balls: [...model.balls, { id: model.nextId, ...ball }], nextId: model.nextId + 1 }),
-    ClickedClear: (_model, _message, $) => $.evolve({ balls: [] }),
-    ClickedTogglePlay: (model, _message, $) => $.evolve({ running: !model.running })
+    CompletedGenerateBall: ($, { _tag, ...ball }) =>
+      $.evolve({ balls: [...$.model.balls, { id: $.model.nextId, ...ball }], nextId: $.model.nextId + 1 }),
+    ClickedClear: ($) => $.evolve({ balls: [] }),
+    ClickedTogglePlay: ($) => $.evolve({ running: !$.model.running })
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.running && DomSubscription.onAnimationFrame((delta) => CanvasArtMessage.TickedFrame({ delta }))
   ],
-  head: (model) => [Head.title(`Canvas Art (${model.balls.length} balls)`)],
-  view: (model, h) =>
+  head: ({ model }) => [Head.title(`Canvas Art (${model.balls.length} balls)`)],
+  view: (h, model) =>
     h.div.class("flex flex-col items-center justify-center min-h-screen bg-black text-white p-8").children(
       h.h1.class("text-4xl font-bold mb-2").children("Canvas Art"),
       h.p.class("text-zinc-400 mb-6").children("Click the canvas to spawn a ball."),

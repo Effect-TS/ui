@@ -26,8 +26,8 @@
  *   elements: Html
  * }).make({
  *   init: () => 0,
- *   update: { TickedFrame: (elapsed, { delta }) => elapsed + delta },
- *   view: (elapsed, h) => h.p(String(elapsed)),
+ *   update: { TickedFrame: ($, { delta }) => $.model + delta },
+ *   view: (h, elapsed) => h.p(String(elapsed)),
  *   subscriptions: () => [DomSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))]
  * })
  *

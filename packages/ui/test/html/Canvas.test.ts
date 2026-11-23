@@ -34,11 +34,11 @@ const Dots = Component.define({
 }).make({
   init: () => ({ dots: [], bumps: 0 }),
   update: {
-    Pressed: (model, { x, y }) => ({ ...model, dots: [...model.dots, { x, y }] }),
-    Released: (model, { x, y }) => ({ ...model, dots: [...model.dots, { x, y }] }),
-    Bumped: (model) => ({ ...model, bumps: model.bumps + 1 })
+    Pressed: ($, { x, y }) => ({ ...$.model, dots: [...$.model.dots, { x, y }] }),
+    Released: ($, { x, y }) => ({ ...$.model, dots: [...$.model.dots, { x, y }] }),
+    Bumped: ($) => ({ ...$.model, bumps: $.model.bumps + 1 })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       Canvas.view(h, {
         width: 300,

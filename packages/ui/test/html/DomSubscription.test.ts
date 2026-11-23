@@ -387,11 +387,11 @@ const Frames = Component.define({
 }).make({
   init: () => ({ running: true, deltas: [] }),
   update: {
-    TickedFrame: (model, { delta }) => ({ ...model, deltas: [...model.deltas, delta] }),
-    Toggled: (model) => ({ ...model, running: !model.running })
+    TickedFrame: ($, { delta }) => ({ ...$.model, deltas: [...$.model.deltas, delta] }),
+    Toggled: ($) => ({ ...$.model, running: !$.model.running })
   },
-  view: (model, h) => h.p(model.deltas.join(",")),
-  subscriptions: (model) => [
+  view: (h, model) => h.p(model.deltas.join(",")),
+  subscriptions: ({ model }) => [
     model.running && DomSubscription.onAnimationFrame((delta) => FrameMessage.TickedFrame({ delta }))
   ]
 })
