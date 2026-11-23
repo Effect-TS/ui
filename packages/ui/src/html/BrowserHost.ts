@@ -1852,6 +1852,10 @@ export interface Recorded {
  * Subscription, query watch or fetch, element mount or provided Layer, so a
  * feature slot shows its `fallback`. It logs no entries, leaves the
  * document head alone, isn't seen by the Router and takes no events.
+ * A modal dialog in the copy is shown as a manual popover, and an auto
+ * popover as a manual one, so the copy never makes the rest of the page
+ * inert, a tool's own UI included, and never closes the live tree's
+ * popovers.
  *
  * The live root keeps running while it's hidden: its Commands,
  * Subscriptions and updates go on, and it renders into its hidden
@@ -1909,6 +1913,20 @@ export const Pausables: Context.Reference<Pausables> = Context.Reference<Pausabl
   { defaultValue: () => ({ register: () => unregistered }) }
 )
 
+// `showModal()` makes everything outside the dialog inert, DevTools included, while the copy's own `inert`
+// leaves the dialog unusable, and an auto popover shown in the copy would close the live page's. Both are
+// shown as manual popovers: in the top layer, with no effect on the rest of the page.
+const paintHost = (host: Renderer.Host<globalThis.Node>): Renderer.Host<globalThis.Node> => ({
+  ...host,
+  setAttr: (node, name, value, previous) =>
+    host.setAttr(node, name, name === "popover" && value !== undefined ? "manual" : value, previous),
+  setProp: (node, name, value) => {
+    if (name !== "open" || value !== "modal") return host.setProp(node, name, value)
+    host.setAttr(node, "popover", "manual")
+    host.setProp(node, "popoverOpen", true)
+  }
+})
+
 const pausable = (
   component: Component.Any,
   root: runtime.Root,
@@ -1916,6 +1934,8 @@ const pausable = (
   context: Context.Context<Scope.Scope | Renderer.Renderer>
 ): Pausable => {
   const owner = Context.get(context, Scope.Scope)
+  const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<globalThis.Node>
+  const painting = Context.add(context, Renderer.Renderer, { host: paintHost(host) })
   const style = (container as HTMLElement).style
   let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
   let shown: readonly [value: string, priority: string] | undefined
@@ -1953,7 +1973,7 @@ const pausable = (
         const fellBack = yield* runtime.paint(component, root.instance.props, copy, (path) => {
           const recorded = state(path)
           return recorded === undefined ? undefined : { model: recorded.model, results: recorded.queries }
-        }).pipe(Effect.provideContext(Context.add(context, Scope.Scope, scope)))
+        }).pipe(Effect.provideContext(Context.add(painting, Scope.Scope, scope)))
         const was = painted
         painted = { scope, copy }
         yield* unpaint(was)
