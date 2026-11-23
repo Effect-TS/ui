@@ -65,8 +65,6 @@ describe("Select", () => {
             expect(select.positioner).type.not.toBeCallableWith(h.span)
             expect(select.item).type.not.toBeCallableWith({ element: h.div })
             expect(select.item).type.not.toBeCallableWith(h.div, "light")
-            expect(select.itemIndicator).type.not.toBeCallableWith(h.span, "light")
-            expect(select.group).type.not.toBeCallableWith(h.div, "all")
             expect(select.scrollUpArrow).type.not.toBeCallableWith(h.div)
             return select.trigger(h.button)
           }

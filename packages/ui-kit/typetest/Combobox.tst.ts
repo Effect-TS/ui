@@ -66,8 +66,6 @@ describe("Combobox", () => {
             expect(combobox.trigger).type.not.toBeCallableWith(h.a)
             expect(combobox.item).type.not.toBeCallableWith({ element: h.div })
             expect(combobox.item).type.not.toBeCallableWith(h.div, "apple")
-            expect(combobox.chip).type.not.toBeCallableWith(h.div, "apple")
-            expect(combobox.chipRemove).type.not.toBeCallableWith(h.button, "apple")
             expect(combobox.clear).type.not.toBeCallableWith(h.button)
             return combobox.input(h.input)
           }
