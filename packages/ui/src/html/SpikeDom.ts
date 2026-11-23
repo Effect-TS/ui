@@ -5,12 +5,14 @@
  * Left out, each to arrive with what uses it: event payloads, controlled form properties, dialogs and
  * popovers, files and images, view transitions, the head and hydration.
  */
+import type * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as Kernel from "../spike/Kernel.ts"
-import type * as View from "../View.ts"
+import * as View from "../View.ts"
 import { attributeName, svgTags } from "./internal/elements.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
@@ -35,7 +37,9 @@ export const makeHost = (
         const handler = view.handlers[name]
         if (handler !== undefined) {
           const prevents = view.eventOptions[name]?.preventDefault
-          if ((rec.inst.fire(handler, event) && prevents === true) || prevents === "always") event.preventDefault()
+          if ((rec.inst.fire(handler, event, name) && prevents === true) || prevents === "always") {
+            event.preventDefault()
+          }
         }
       }
       if (!event.bubbles || event.cancelBubble) return
@@ -78,6 +82,7 @@ export const makeHost = (
       parent.textContent = ""
     },
     parentOf: (node) => node.parentNode!,
+    nextOf: (node) => node.nextSibling,
     dispose() {
       for (const name of listening) container.removeEventListener(name, listener, true)
     }
@@ -95,24 +100,48 @@ export interface Root<Model, Msg> {
   readonly send: (message: Msg) => void
 }
 
-const report: Kernel.Tree["report"] = (path, where, error) =>
-  reportError(new Error("[@effect/ui] " + path + " failed in " + where, { cause: error }))
+// A test DOM can lack `reportError`. Every browser has it.
+const report: Kernel.Tree["report"] = (path, where, cause) =>
+  globalThis.reportError?.(new Error("[@effect/ui] " + path + " failed in " + where, { cause }))
+
+/**
+ * What a mount takes besides its component: a message log's `record`, and what a failed root shows.
+ *
+ * @stability experimental
+ */
+export interface Options {
+  readonly log?: Kernel.Recorder | undefined
+  readonly fallback?:
+    | ((failure: AsyncResult.Failure<never, unknown>, h: View.Helper<never, {}>) => View.Content<never, any>)
+    | undefined
+}
 
 /**
  * Mounts `component` into `container` until the Scope closes.
  *
  * @stability experimental
  */
-export const mountEffect = <Props, Model, Msg>(
-  component: Component.Members<any, Props, Model, Msg, any, never, any, any>,
+export const mountEffect = <Props, Model, Msg, R = never>(
+  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
   props: Props,
-  container: globalThis.Element
-): Effect.Effect<Root<Model, Msg>, never, Scope.Scope> =>
+  container: globalThis.Element,
+  options?: Options
+): Effect.Effect<Root<Model, Msg>, never, R | Scope.Scope> =>
   Effect.map(
     Effect.acquireRelease(
-      Effect.sync(() => {
+      Effect.contextWith((context) => {
         const host = makeHost(container)
-        return { host, root: Kernel.mount(component as unknown as Kernel.Runnable, props, container, host, report) }
+        const fallback = options?.fallback
+        const root = Kernel.mount(component as unknown as Kernel.Runnable, props, container, host, {
+          report,
+          context,
+          log: options?.log,
+          fallback: fallback === undefined
+            ? undefined
+            : (cause: Cause.Cause<unknown>) =>
+              View.toNode(fallback(AsyncResult.failure(cause), View.makeHelper({}, component.elements()) as any))
+        })
+        return Effect.succeed({ host, root })
       }),
       ({ host, root }) =>
         Effect.sync(() => {
@@ -132,8 +161,9 @@ export const mountEffect = <Props, Model, Msg>(
  *
  * @stability experimental
  */
-export const mount = <Props, Model, Msg>(
-  component: Component.Members<any, Props, Model, Msg, any, never, any, any>,
+export const mount = <Props, Model, Msg, R = never>(
+  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
   props: Props,
-  container: globalThis.Element
-): Layer.Layer<never> => Layer.effectDiscard(mountEffect(component, props, container))
+  container: globalThis.Element,
+  options?: Options
+): Layer.Layer<never, never, R> => Layer.effectDiscard(mountEffect(component, props, container, options))

@@ -1,11 +1,16 @@
 /**
  * SPIKE (EFF-4218), not for release. A kernel for the runtime: the instance tree, the flush, element and
- * text diffing, event dispatch and failure, and nothing else. It runs components made with today's
- * `Component.define(...).make(...)` that use no feature: a Command, a Subscription, a query, a Layer, a
- * slot, a mount, a ref or a head makes it throw.
+ * text diffing, event dispatch, failure with its fallbacks, slots, and children found through a Layer.
+ * It runs components made with today's `Component.define(...).make(...)`. A Command, a Subscription, a
+ * query, a mount, a ref or a head makes it throw.
  *
- * It imports nothing a feature would need. What a feature needs of an instance is `closers`.
+ * Two features live outside it and reach it through values the app makes. A Layer is built by what
+ * `Layers.provide` puts on the component as `boot`. The message log is what the app passes as `log`.
  */
+import * as Cause from "effect/Cause"
+import * as Context from "effect/Context"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
+import { TypeId as FeatureId } from "../Feature.ts"
 import { propsEqual } from "../internal/equal.ts"
 import * as View from "../View.ts"
 
@@ -27,6 +32,8 @@ export interface Host<N = any> {
   /** Removes every child of `parent`. */
   readonly clear: (parent: N) => void
   readonly parentOf: (node: N) => N
+  /** The sibling after `node`, which a slot's content is placed before. */
+  readonly nextOf: (node: N) => N | null
 }
 
 /**
@@ -39,6 +46,9 @@ export interface Runnable {
   readonly init: (props: any) => Next
   readonly update: (model: any, message: never, props: any) => Next | undefined
   readonly view: Function
+  readonly layer?: unknown
+  /** Starts the component's Layer. `Layers.provide` puts it there. */
+  readonly boot?: ((inst: Instance) => void) | undefined
 }
 
 interface Next {
@@ -52,7 +62,27 @@ interface Next {
  *
  * @stability experimental
  */
-export type FailedIn = "init" | "update" | "view" | "event" | "onEmit"
+export type FailedIn = "init" | "update" | "view" | "event" | "onEmit" | "onFailure" | "fallback" | "layer"
+
+/**
+ * What the Layers above an instance built. `ctx` once they are ready, `cause` once one failed, and
+ * neither while one is building.
+ *
+ * @stability experimental
+ */
+export interface Env {
+  ctx: Context.Context<any> | undefined
+  cause: Cause.Cause<unknown> | undefined
+  /** What to run when it settles. */
+  readonly waiting: Array<() => void>
+}
+
+/**
+ * What the kernel tells a message log. The log adds the rest of an entry.
+ *
+ * @stability experimental
+ */
+export type Recorder = (inst: Instance, draft: { readonly _tag: string; readonly [field: string]: unknown }) => void
 
 /**
  * One tree: its host, what is dirty, and where failures go.
@@ -61,7 +91,10 @@ export type FailedIn = "init" | "update" | "view" | "event" | "onEmit"
  */
 export interface Tree {
   readonly host: Host
-  readonly report: (path: string, where: FailedIn, error: unknown) => void
+  readonly report: (path: string, where: FailedIn, cause: Cause.Cause<unknown>) => void
+  readonly log: Recorder | undefined
+  /** What a failed root shows. */
+  readonly fallback: ((cause: Cause.Cause<unknown>) => View.Node<any, any>) | undefined
   dirty: Array<Instance>
   scheduled: boolean
   closed: boolean
@@ -70,6 +103,10 @@ export interface Tree {
 /**
  * What a view node rendered to. `node` is the host node of an element or a text. `inst` is the instance
  * a child node mounted, and for an element the instance whose view built it, which takes its events.
+ *
+ * A record with no `node` stands for the nodes of others. A slot's are those of `kids`, its content. A
+ * child's are those of its instance, or of `kids` while it shows a fallback. A child that waits for a
+ * Layer has its declarer as `inst`.
  *
  * @stability experimental
  */
@@ -94,79 +131,153 @@ export class Rec {
 export class Instance {
   readonly tree: Tree
   readonly component: Runnable
+  /** The instance whose view declared it, which takes what it emits. */
   readonly parent: Instance | undefined
-  readonly key: string
+  /** The record of the child node that declared it. A root has none. */
+  readonly at: Rec | undefined
   readonly depth: number
   props: unknown
+  env: Env
   model: unknown = undefined
-  onEmit: ((event: unknown) => unknown) | undefined
   rendered: Rec | undefined = undefined
   dirty = false
   closed = false
-  /** How many instances its view mounted and still holds. */
+  failure: Cause.Cause<unknown> | undefined = undefined
+  /** How many instances, slots and waiting children its view holds. */
   live = 0
   lazy: unknown = undefined
+  /** Where its view placed each slot, and the content it showed there. */
+  placed: Map<string, Placed> | undefined = undefined
   /** What a feature runs when the instance leaves the tree. */
   closers: Array<() => void> | undefined = undefined
   constructor(
     tree: Tree,
     component: Runnable,
     parent: Instance | undefined,
-    key: string,
+    at: Rec | undefined,
     props: unknown,
-    onEmit: ((event: unknown) => unknown) | undefined
+    env: Env
   ) {
     this.tree = tree
     this.component = component
     this.parent = parent
-    this.key = key
+    this.at = at
     this.depth = parent === undefined ? 0 : parent.depth + 1
     this.props = props
-    this.onEmit = onEmit
+    this.env = env
   }
   get path(): string {
-    const own = "/" + this.component.definition.name + (this.key === "" ? "" : "[" + this.key + "]")
+    const key = this.at === undefined ? "" : (this.at.v as View.Child<any, any>).key
+    const own = "/" + this.component.definition.name + (key === "" ? "" : "[" + key + "]")
     return this.parent === undefined ? own : this.parent.path + own
   }
-  /** A host calls it for an event on an element this instance's view built. */
-  fire(handler: unknown, payload: unknown): boolean {
+  /**
+   * A host calls it for an event on an element this instance's view built, with the event's name as
+   * `source`.
+   */
+  fire(handler: unknown, payload: unknown, source: unknown, where: FailedIn = "event"): boolean {
     if (this.closed) return false
     let message = handler
     if (typeof handler === "function") {
       try {
         message = handler(payload)
       } catch (error) {
-        fail(this, "event", error)
+        fail(this, where, Cause.die(error))
         return false
       }
     }
     if (message === undefined) return false
-    send(this, message)
+    send(this, message, source)
     return true
   }
+}
+
+interface Placed {
+  rec: Rec
+  content: unknown
 }
 
 // -- failure ------------------------------------------------------------------
 
 const emptyText = View.text("")
 
-/** A failed instance shows nothing and takes no more messages. Its parent goes on. */
-const fail = (inst: Instance, where: FailedIn, error: unknown): void => {
-  const tree = inst.tree
-  const path = inst.path
-  const old = inst.rendered
-  if (old !== undefined && !inst.closed) {
-    const host = tree.host
-    const at = nodeOf(old)
-    const parent = host.parentOf(at)
-    const blank = new Rec(emptyText, host.createText(""), undefined, inst)
-    host.insert(parent, blank.node, at)
-    release(inst, old)
-    host.remove(parent, at)
-    inst.rendered = blank
+/** What a child's declarer shows in its place: for a failure, or with no `cause` while a Layer builds. */
+const fallbackOf = (
+  owner: Instance,
+  view: View.Child<any, any>,
+  cause: Cause.Cause<unknown> | undefined
+): View.Node<any, any> => {
+  const fallback = view.fallback
+  if (fallback === undefined) return emptyText
+  try {
+    return View.children([
+      fallback((cause === undefined ? AsyncResult.initial(true) : AsyncResult.failure(cause)) as any)
+    ])[0] ?? emptyText
+  } catch (error) {
+    queueMicrotask(() => fail(owner, "fallback", Cause.die(error)))
+    return emptyText
   }
+}
+
+const rootFallback = (tree: Tree, cause: Cause.Cause<unknown>): View.Node<any, any> => {
+  try {
+    return tree.fallback?.(cause) ?? emptyText
+  } catch (error) {
+    tree.report("", "fallback", Cause.die(error))
+    return emptyText
+  }
+}
+
+/** Builds what stands in for a failed instance. Its declarer authors it. */
+const stand = (inst: Instance, cause: Cause.Cause<unknown>): Rec => {
+  const parent = inst.parent
+  try {
+    return parent === undefined
+      ? create(inst, rootFallback(inst.tree, cause))
+      : create(parent, fallbackOf(parent, inst.at!.v as View.Child<any, any>, cause))
+  } catch (error) {
+    inst.tree.report(inst.path, "fallback", Cause.die(error))
+    return create(inst, emptyText)
+  }
+}
+
+/**
+ * A failed instance takes no more messages and shows its declarer's fallback, or nothing. Its parent
+ * goes on, and is told through `onFailure`.
+ *
+ * @stability experimental
+ */
+export const fail = (inst: Instance, where: FailedIn, cause: Cause.Cause<unknown>): void => {
+  if (inst.closed) return
+  const tree = inst.tree
+  const log = tree.log
+  if (log !== undefined) log(inst, { _tag: "Failed", props: inst.props, in: where, cause })
+  inst.failure = cause
+  const old = inst.rendered
+  const path = inst.path
   close(inst)
-  tree.report(path, where, error)
+  const at = inst.at
+  // With nothing rendered it failed while starting, and what started it shows the fallback.
+  if (old !== undefined) {
+    const host = tree.host
+    const first = nodeOf(old)
+    const parentNode = host.parentOf(first)
+    const shown = stand(inst, cause)
+    place(host, parentNode, shown, first)
+    unplace(host, parentNode, old)
+    if (at === undefined) inst.rendered = shown
+    else {
+      inst.rendered = undefined
+      at.kids = [shown]
+    }
+  }
+  const onFailure = at === undefined ? undefined : (at.v as View.Child<any, any>).onFailure
+  if (onFailure !== undefined) {
+    const parent = inst.parent!
+    queueMicrotask(() => parent.fire(onFailure, AsyncResult.failure(cause), inst, "onFailure"))
+  }
+  // Last, so a reporter that throws leaves the tree whole.
+  tree.report(path, where, cause)
 }
 
 // -- messages -----------------------------------------------------------------
@@ -176,15 +287,32 @@ const fail = (inst: Instance, where: FailedIn, error: unknown): void => {
  *
  * @stability experimental
  */
-export const send = (inst: Instance, message: unknown): void => {
+export const send = (inst: Instance, message: unknown, source?: unknown): void => {
   if (inst.closed) return
   let next: Next | undefined
   try {
     next = inst.component.update(inst.model, message as never, inst.props)
   } catch (error) {
-    return fail(inst, "update", error)
+    return fail(inst, "update", Cause.die(error))
   }
   if (next === undefined) return
+  const log = inst.tree.log
+  if (log !== undefined) {
+    log(inst, {
+      _tag: "Update",
+      // An event's name from a host, the instance a parent heard from, or nothing for a send.
+      source: typeof source === "string"
+        ? { _tag: "DomEvent", name: source }
+        : source instanceof Instance
+        ? { _tag: source.closed ? "Failure" : "Emit", path: source.path }
+        : { _tag: "Send" },
+      message,
+      props: inst.props,
+      model: next.model,
+      commands: next.commands,
+      events: next.events
+    })
+  }
   if (next.model !== inst.model) {
     inst.model = next.model
     markDirty(inst)
@@ -197,17 +325,19 @@ const apply = (inst: Instance, next: Next): void => {
   const events = next.events
   if (events.length === 0) return
   const parent = inst.parent
-  if (parent === undefined || inst.onEmit === undefined) return
+  if (parent === undefined) return
   for (let index = 0; index < events.length; index++) {
     if (inst.closed) return
+    const onEmit = (inst.at!.v as View.Child<any, any>).onEmit
+    if (onEmit === undefined) return
     let message: unknown
     try {
-      message = inst.onEmit(events[index])
+      message = onEmit(events[index])
     } catch (error) {
-      fail(parent, "onEmit", error)
+      fail(parent, "onEmit", Cause.die(error))
       return
     }
-    if (message !== undefined) send(parent, message)
+    if (message !== undefined) send(parent, message, inst)
   }
 }
 
@@ -260,35 +390,60 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
       inst
     ])
   } catch (error) {
-    fail(inst, "view", error)
+    fail(inst, "view", Cause.die(error))
     return undefined
   }
 }
 
 const unsupported = (component: any): boolean =>
-  component.subscriptions !== undefined || component.head !== undefined || component.layer !== undefined
+  component.subscriptions !== undefined || component.head !== undefined ||
+  (component.layer !== undefined && component.boot === undefined)
 
 /** Starts an instance and builds its nodes. `undefined` when it failed, having reported it. */
 const start = (inst: Instance): Rec | undefined => {
   let first: Next
+  const component = inst.component
   try {
-    if (unsupported(inst.component)) throw new Error("spike: " + inst.path + " uses a feature the kernel doesn't have")
-    first = inst.component.init(inst.props)
+    if (unsupported(component)) throw new Error("spike: " + inst.path + " uses a feature the kernel doesn't have")
+    // The view doesn't wait for the Layer: what needs it shows a fallback until it is ready.
+    if (component.boot !== undefined) {
+      component.boot(inst)
+      if (inst.closed) return undefined
+    }
+    first = component.init(inst.props)
   } catch (error) {
-    fail(inst, "init", error)
+    fail(inst, "init", Cause.die(error))
     return undefined
   }
   inst.model = first.model
+  const log = inst.tree.log
+  if (log !== undefined) {
+    log(inst, {
+      _tag: "Mounted",
+      props: inst.props,
+      model: first.model,
+      commands: first.commands,
+      events: first.events,
+      adopted: false
+    })
+  }
   const tree = viewOf(inst)
   if (tree === undefined) return undefined
+  let rendered: Rec
   try {
-    inst.rendered = create(inst, tree)
+    rendered = create(inst, tree)
   } catch (error) {
-    fail(inst, "view", error)
+    fail(inst, "view", Cause.die(error))
     return undefined
   }
+  // It can fail while its view is built, when a child's first event is more than its `update` takes.
+  if (inst.closed) {
+    release(inst, rendered)
+    return undefined
+  }
+  inst.rendered = rendered
   apply(inst, first)
-  return inst.rendered
+  return rendered
 }
 
 const render = (inst: Instance): void => {
@@ -298,7 +453,7 @@ const render = (inst: Instance): void => {
   try {
     inst.rendered = patch(inst, inst.rendered!, tree)
   } catch (error) {
-    fail(inst, "view", error)
+    fail(inst, "view", Cause.die(error))
   }
 }
 
@@ -308,24 +463,145 @@ const close = (inst: Instance): void => {
   inst.closed = true
   inst.lazy = undefined
   if (inst.parent !== undefined) inst.parent.live--
+  const log = inst.tree.log
+  if (log !== undefined) log(inst, { _tag: "Unmounted" })
   const closers = inst.closers
   if (closers !== undefined) { for (let index = closers.length - 1; index >= 0; index--) closers[index]!() }
   if (inst.rendered !== undefined && inst.live > 0) release(inst, inst.rendered)
 }
 
-/** Closes the instances under a record that `owner`'s view built. */
+/** What a waiting child's record has as `inst` once it is released, so the Layer it waits for leaves it. */
+const released = undefined as unknown as Instance
+
+/** Closes the instances under a record that `owner`'s view built. It leaves the records as they are. */
 const release = (owner: Instance, rec: Rec): void => {
   if (owner.live === 0) return
-  if (rec.v._tag === "Child") return close(rec.inst)
+  const view = rec.v
   const kids = rec.kids
+  if (view._tag === "Child") {
+    if (kids === undefined) return close(rec.inst)
+    if (rec.inst === owner) {
+      owner.live--
+      rec.inst = released
+    }
+  } else if (view._tag === "Outlet") {
+    owner.live--
+    if (owner.placed!.get(view.name)?.rec === rec) owner.placed!.delete(view.name)
+    // A slot's content is its receiver's declarer's.
+    owner = owner.parent!
+  }
   if (kids !== undefined) { for (let index = 0; index < kids.length; index++) release(owner, kids[index]!) }
 }
 
 // -- create -------------------------------------------------------------------
 
+/** The first host node of a record. */
 const nodeOf = (rec: Rec): any => {
-  while (rec.v._tag === "Child") rec = rec.inst.rendered!
+  while (rec.node === undefined) rec = rec.kids !== undefined ? rec.kids[0]! : rec.inst.rendered!
   return rec.node
+}
+
+const lastNodeOf = (rec: Rec): any => {
+  while (rec.node === undefined) rec = rec.kids !== undefined ? rec.kids[rec.kids.length - 1]! : rec.inst.rendered!
+  return rec.node
+}
+
+/** Puts every node of a record before `before`. */
+const place = (host: Host, parent: unknown, rec: Rec, before: unknown): void => {
+  if (rec.node !== undefined) host.insert(parent, rec.node, before)
+  else if (rec.kids === undefined) place(host, parent, rec.inst.rendered!, before)
+  else for (let index = 0; index < rec.kids.length; index++) place(host, parent, rec.kids[index]!, before)
+}
+
+const unplace = (host: Host, parent: unknown, rec: Rec): void => {
+  if (rec.node !== undefined) host.remove(parent, rec.node)
+  else if (rec.kids === undefined) unplace(host, parent, rec.inst.rendered!)
+  else for (let index = 0; index < rec.kids.length; index++) unplace(host, parent, rec.kids[index]!)
+}
+
+/** Mounts what a child node declares, or its fallback when a Layer it is found through isn't ready. */
+const mountChild = (owner: Instance, rec: Rec): void => {
+  const view = rec.v as View.Child<any, any>
+  let component = view.component as any
+  let env = owner.env
+  if (FeatureId in component) {
+    const ctx = env.ctx
+    if (ctx === undefined) {
+      if (view.fallback === undefined) {
+        throw new Error(
+          owner.path + ": " + component.key +
+            " isn't available, because a Layer above it is still building or failed. Pass `fallback`."
+        )
+      }
+      rec.kids = [create(owner, fallbackOf(owner, view, env.cause))]
+      rec.inst = owner
+      owner.live++
+      if (env.cause === undefined) env.waiting.push(() => settle(owner, rec))
+      return
+    }
+    const found = Context.getOrUndefined(ctx, component) as any
+    if (found === undefined) throw new Error(owner.path + ": nothing provides " + component.key)
+    component = found.component
+    env = { ctx: Context.merge(ctx, found.context), cause: undefined, waiting: [] }
+  }
+  const child = rec.inst = new Instance(owner.tree, component, owner, rec, view.props, env)
+  owner.live++
+  if (start(child) === undefined) rec.kids = [stand(child, child.failure!)]
+  // Its declarer can fail while it starts, when what it emits first is more than the declarer takes.
+  else if (owner.closed) close(child)
+}
+
+/** The Layer a child waited for settled: it takes its fallback's place, or the fallback shows the failure. */
+const settle = (owner: Instance, rec: Rec): void => {
+  if (rec.inst !== owner || owner.closed) return
+  const host = owner.tree.host
+  const old = rec.kids![0]!
+  try {
+    if (owner.env.ctx === undefined) {
+      rec.kids![0] = patch(owner, old, fallbackOf(owner, rec.v as View.Child<any, any>, owner.env.cause))
+      return
+    }
+    const first = nodeOf(old)
+    const parentNode = host.parentOf(first)
+    rec.kids = undefined
+    owner.live--
+    try {
+      mountChild(owner, rec)
+    } catch (error) {
+      rec.kids = [old]
+      owner.live++
+      throw error
+    }
+    place(host, parentNode, rec, first)
+    unplace(host, parentNode, old)
+    release(owner, old)
+  } catch (error) {
+    fail(owner, "view", Cause.die(error))
+  }
+}
+
+const noContent: ReadonlyArray<View.Node<any, any>> = [emptyText]
+
+/** What a slot shows: its content as nodes, and one empty text for none, so it keeps its place. */
+const contentOf = (content: unknown): ReadonlyArray<View.Node<any, any>> => {
+  if (content === undefined) return noContent
+  const views = View.children([content as View.Input<any, any>])
+  return views.length === 0 ? noContent : views
+}
+
+const slotOf = (receiver: Instance, name: string): unknown =>
+  receiver.at === undefined ? undefined : (receiver.at.v as View.Child<any, any>).slots?.[name]
+
+/** Brings a placed slot to the content its receiver is given now. */
+const refresh = (receiver: Instance, placed: Placed): void => {
+  const rec = placed.rec
+  const content = slotOf(receiver, (rec.v as View.Outlet).name)
+  if (content === placed.content) return
+  placed.content = content
+  const host = receiver.tree.host
+  const olds = rec.kids!
+  const after = host.nextOf(lastNodeOf(olds[olds.length - 1]!))
+  rec.kids = patchList(receiver.parent!, host.parentOf(nodeOf(olds[0]!)), olds, contentOf(content), after)
 }
 
 const create = (inst: Instance, view: View.Node<any, any>): Rec => {
@@ -342,7 +618,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
       if (views.length > 0) {
         kids = new Array(views.length)
         for (let index = 0; index < views.length; index++) {
-          host.insert(node, nodeOf(kids[index] = create(inst, views[index]!)), null)
+          place(host, node, kids[index] = create(inst, views[index]!), null)
         }
       }
       // After the children, as a select's value needs its options.
@@ -358,17 +634,23 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
       return rec
     }
     case "Child": {
-      const child = new Instance(inst.tree, view.component as any, inst, view.key, view.props, view.onEmit)
-      inst.live++
-      const rec = new Rec(view, undefined, undefined, child)
-      // A child that failed shows nothing.
-      if (start(child) === undefined && child.rendered === undefined) {
-        child.rendered = new Rec(emptyText, host.createText(""), undefined, child)
-      }
+      const rec = new Rec(view, undefined, undefined, inst)
+      mountChild(inst, rec)
       return rec
     }
-    case "Outlet":
-      throw new Error("spike: slots aren't part of the kernel")
+    case "Outlet": {
+      // `inst` is the receiver. Its declarer wrote the content, so takes its events and its children.
+      const declarer = inst.parent
+      if (declarer === undefined) throw new Error(inst.path + " places the slot " + view.name + ", and is a root")
+      const content = slotOf(inst, view.name)
+      const views = contentOf(content)
+      const kids: Array<Rec> = new Array(views.length)
+      const rec = new Rec(view, undefined, kids, inst)
+      inst.live++
+      ;(inst.placed ??= new Map()).set(view.name, { rec, content })
+      for (let index = 0; index < views.length; index++) kids[index] = create(declarer, views[index]!)
+      return rec
+    }
   }
 }
 
@@ -384,8 +666,8 @@ const pairs = (old: View.Node<any, any>, view: View.Node<any, any>): boolean => 
       return view._tag === "Text"
     case "Child":
       return view._tag === "Child" && old.component === view.component && old.key === view.key
-    default:
-      return false
+    case "Outlet":
+      return view._tag === "Outlet" && old.name === view.name
   }
 }
 
@@ -399,9 +681,9 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
     const at = nodeOf(old)
     const parent = host.parentOf(at)
     const next = create(inst, view)
-    host.insert(parent, nodeOf(next), at)
+    place(host, parent, next, at)
+    unplace(host, parent, old)
     release(inst, old)
-    host.remove(parent, at)
     return next
   }
   switch (view._tag) {
@@ -415,16 +697,27 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
     case "Child": {
       const child = old.inst
       old.v = view
-      child.onEmit = view.onEmit
+      const shown = old.kids
+      if (shown !== undefined) {
+        // A fallback, for a child that failed or one that waits for a Layer.
+        shown[0] = patch(inst, shown[0]!, fallbackOf(inst, view, child === inst ? inst.env.cause : child.failure))
+        return old
+      }
       if (child.closed) return old
       if (!propsEqual(child.props, view.props)) {
         child.props = view.props
+        const log = inst.tree.log
+        if (log !== undefined) log(child, { _tag: "PropsChanged", props: view.props })
         render(child)
       } else if (child.dirty) render(child)
+      const placed = child.placed
+      if (placed !== undefined && !child.closed) { for (const slot of placed.values()) refresh(child, slot) }
       return old
     }
-    default:
+    case "Outlet": {
+      refresh(inst, inst.placed!.get(view.name)!)
       return old
+    }
   }
 }
 
@@ -455,7 +748,7 @@ const patchElement = (inst: Instance, rec: Rec, prev: View.Element<any, any>, vi
     if (views.length === 0) return
     const kids: Array<Rec> = new Array(views.length)
     for (let index = 0; index < views.length; index++) {
-      host.insert(node, nodeOf(kids[index] = create(inst, views[index]!)), null)
+      place(host, node, kids[index] = create(inst, views[index]!), null)
     }
     rec.kids = kids
   } else if (views.length === 0) {
@@ -464,7 +757,7 @@ const patchElement = (inst: Instance, rec: Rec, prev: View.Element<any, any>, vi
     rec.kids = undefined
   } else if (views.length === 1 && olds.length === 1) {
     olds[0] = patch(inst, olds[0]!, views[0]!)
-  } else rec.kids = patchList(inst, node, olds, views)
+  } else rec.kids = patchList(inst, node, olds, views, null)
 }
 
 /** What a keyed node is found by among its siblings. A child with no key is found by its component. */
@@ -476,14 +769,16 @@ const keyOf = (view: View.Node<any, any>): unknown =>
     : undefined
 
 /**
- * Brings the children of `parent` to `views`. Equal ends are patched in place. What is left between them
- * is matched by key, or by place for a node with none, and the fewest nodes are moved.
+ * Brings a run of the children of `parent` to `views`: all of them, or a slot's content, which ends
+ * before `after`. Equal ends are patched in place. What is left between them is matched by key, or by
+ * place for a node with none, and the fewest nodes are moved.
  */
 const patchList = (
   inst: Instance,
   parent: unknown,
   olds: Array<Rec>,
-  views: ReadonlyArray<View.Node<any, any>>
+  views: ReadonlyArray<View.Node<any, any>>,
+  after: unknown
 ): Array<Rec> => {
   const host = inst.tree.host
   const out: Array<Rec> = new Array(views.length)
@@ -501,18 +796,17 @@ const patchList = (
   }
   if (start > oldEnd) {
     if (start > end) return out
-    const ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : null
+    const ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : after
     for (let index = start; index <= end; index++) {
-      host.insert(parent, nodeOf(out[index] = create(inst, views[index]!)), ref)
+      place(host, parent, out[index] = create(inst, views[index]!), ref)
     }
     return out
   }
   if (start > end) {
     for (let index = start; index <= oldEnd; index++) {
       const old = olds[index]!
-      const node = nodeOf(old)
+      unplace(host, parent, old)
       release(inst, old)
-      host.remove(parent, node)
     }
     return out
   }
@@ -536,23 +830,22 @@ const patchList = (
       else last = to
       out[to] = patch(inst, old, views[to]!)
     } else {
-      const node = nodeOf(old)
+      unplace(host, parent, old)
       release(inst, old)
-      host.remove(parent, node)
     }
   }
   // Back to front, so the node each one goes before is in place. The nodes of the longest run already
   // in order stay where they are.
   const stay = moved ? increasing(sources) : undefined
   let at = stay === undefined ? -1 : stay.length - 1
-  let ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : null
+  let ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : after
   for (let offset = count - 1; offset >= 0; offset--) {
     const index = start + offset
     if (sources[offset] === 0) {
-      host.insert(parent, nodeOf(out[index] = create(inst, views[index]!)), ref)
+      place(host, parent, out[index] = create(inst, views[index]!), ref)
     } else if (stay !== undefined) {
       if (at >= 0 && stay[at] === offset) at--
-      else host.insert(parent, nodeOf(out[index]!), ref)
+      else place(host, parent, out[index]!, ref)
     }
     ref = nodeOf(out[index]!)
   }
@@ -597,6 +890,19 @@ export interface Root {
 }
 
 /**
+ * What a mount is given besides its component: where failures go, the context the app's Layers start
+ * from, a message log, and what a failed root shows.
+ *
+ * @stability experimental
+ */
+export interface Options {
+  readonly report: Tree["report"]
+  readonly context?: Context.Context<any> | undefined
+  readonly log?: Recorder | undefined
+  readonly fallback?: Tree["fallback"]
+}
+
+/**
  * Mounts `component` as the last child of `container`.
  *
  * @stability experimental
@@ -606,12 +912,22 @@ export const mount = (
   props: unknown,
   container: unknown,
   host: Host,
-  report: Tree["report"]
+  options: Options
 ): Root => {
-  const tree: Tree = { host, report, dirty: [], scheduled: false, closed: false }
-  const instance = new Instance(tree, component, undefined, "", props, undefined)
-  const mounted = start(instance) !== undefined
-  if (mounted) host.insert(container, nodeOf(instance.rendered!), null)
+  const tree: Tree = {
+    host,
+    report: options.report,
+    log: options.log,
+    fallback: options.fallback,
+    dirty: [],
+    scheduled: false,
+    closed: false
+  }
+  const ctx: Context.Context<any> = options.context ?? (Context.empty() as Context.Context<any>)
+  const env: Env = { ctx, cause: undefined, waiting: [] }
+  const instance = new Instance(tree, component, undefined, undefined, props, env)
+  if (start(instance) === undefined) instance.rendered = stand(instance, instance.failure!)
+  place(host, container, instance.rendered!, null)
   return {
     instance,
     send: (message) => send(instance, message),
@@ -619,7 +935,7 @@ export const mount = (
       if (tree.closed) return
       tree.closed = true
       close(instance)
-      if (mounted) host.remove(container, nodeOf(instance.rendered!))
+      unplace(host, container, instance.rendered!)
     }
   }
 }

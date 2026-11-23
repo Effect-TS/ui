@@ -2,11 +2,13 @@
 //
 // Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary] [--spike]
+//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary] [--spike] [--features]
 //
 // Added gzip bytes are the counter total minus a separately bundled effect-only client.
 // Pass --vocabulary to measure the opt-in counter with the same click assertion.
 // Pass --spike to measure counter-spike.ts, the counter on the EFF-4218 kernel spike.
+// Pass --features to measure features.ts instead of the counter: an app with a Layer, a slot, a failure
+// fallback and the message log. With --spike it is features-spike.ts.
 //
 // --json writes the result and --base adds deltas against an earlier --json file. The table is also
 // appended to $GITHUB_STEP_SUMMARY when that is set.
@@ -20,8 +22,9 @@ import { gzipSync } from "node:zlib"
 import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
-const { values: { base, json, spike, vocabulary } } = parseArgs({
+const { values: { base, features, json, spike, vocabulary } } = parseArgs({
   options: {
+    features: { type: "boolean", default: false },
     vocabulary: { type: "boolean", default: false },
     spike: { type: "boolean", default: false },
     base: { type: "string" },
@@ -47,6 +50,14 @@ async function checkClient(code, baseline) {
     await window.happyDOM.waitUntilComplete()
     if (baseline) {
       assert.equal(app.textContent, "6", "baseline did not run the Layer with the decoded model and message")
+      return
+    }
+    if (features) {
+      assert.equal(app.textContent, "badgebreak0", "the app did not show the Layer's child in its slot")
+      document.querySelector("#app button").click()
+      await window.happyDOM.waitUntilComplete()
+      assert.equal(app.textContent, "badgedown1", "the app did not show the fallback and hear of the failure: " + app.textContent)
+      if (spike) assert.ok(window.entries().some((entry) => entry._tag === "Failed"), "the log has no failure")
       return
     }
     const count = () => document.querySelector("#app span")?.textContent
@@ -89,7 +100,7 @@ async function measure() {
     execFileSync("tar", ["-xzf", packed, "--strip-components=1", "-C", installed])
     fs.symlinkSync(effectDir, path.join(modules, "effect"))
     const input = path.join(root, "counter.ts")
-    const source = fs.readFileSync(path.join(import.meta.dirname, spike ? "counter-spike.ts" : "counter.ts"), "utf8")
+    const source = fs.readFileSync(path.join(import.meta.dirname, (features ? "features" : "counter") + (spike ? "-spike.ts" : ".ts")), "utf8")
     const binding = "elements: Html"
     if (vocabulary) assert.equal(source.split(binding).length, 2, "expected exactly one vocabulary binding")
     fs.writeFileSync(input, vocabulary ? source.replace(binding, "elements: Html.vocabulary") : source)
@@ -103,7 +114,8 @@ async function measure() {
   }
 }
 
-const elements = (vocabulary ? "Html.vocabulary" : "Html") + (spike ? " (kernel spike)" : "")
+const elements = (vocabulary ? "Html.vocabulary" : "Html") + (features ? ", features app" : "") +
+  (spike ? " (kernel spike)" : "")
 const result = { ...await measure(), elements }
 const headers = ["Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
 const row = [elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]

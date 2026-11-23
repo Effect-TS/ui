@@ -1,0 +1,63 @@
+// SPIKE (EFF-4218): an app with a Layer, a child found through it, a slot, a failure fallback and the
+// message log. `pnpm bundle-size --features` measures it.
+import { Component, Feature, UiSchema } from "@effect/ui"
+import { BrowserHost, Html } from "@effect/ui/html"
+import { Effect, Layer, Schema } from "effect"
+
+const define = <const Name extends string>(name: Name) =>
+  Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Html })
+
+class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
+const BadgeView = define("BadgeView").make({ init: () => null, update: (model) => model, view: (_, h) => h.b("badge") })
+
+const Frame = Component.define({
+  name: "Frame",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html,
+  slots: ["body"]
+}).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+
+const BreakerMessage = UiSchema.TaggedEnum({ Break: {} })
+const Breaker = Component.define({
+  name: "Breaker",
+  scoped: false,
+  model: Schema.Null,
+  message: BreakerMessage,
+  elements: Html
+}).make({
+  init: () => null,
+  update: () => {
+    throw new Error("broke")
+  },
+  view: (_, h) => h.button.onClick(BreakerMessage.Break()).children("break")
+})
+
+const AppMessage = UiSchema.TaggedEnum({ Failed: {} })
+const App = Component.define({
+  name: "App",
+  scoped: false,
+  model: Schema.Number,
+  message: AppMessage,
+  elements: Html
+}).make({
+  init: () => 0,
+  update: (failures) => failures + 1,
+  view: (failures, h) =>
+    Frame(h, {
+      slots: {
+        body: [
+          Badge.render(h, { key: "badge", props: {}, fallback: () => h.i("loading") }),
+          Breaker(h, { onFailure: () => AppMessage.Failed(), fallback: () => h.i("down") }),
+          h.output(String(failures))
+        ]
+      }
+    })
+})
+
+// The Layer builds a tick late, so the badge's fallback shows first.
+const badge = Badge.toLayer(BadgeView).pipe(Layer.provide(Layer.effectDiscard(Effect.yieldNow)))
+const Provided = Component.provide(App, badge)
+
+Layer.launch(BrowserHost.mount(Provided, {}, document.getElementById("app")!)).pipe(Effect.runFork)
