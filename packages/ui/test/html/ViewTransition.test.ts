@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { Command, Component, MessageLog, Renderer, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html } from "@effect/ui/html"
+import { HtmlLocator } from "@effect/ui/html/testing"
 import * as Executor from "@effect/ui/internal/executor"
 import type * as runtime from "@effect/ui/internal/runtime"
 import { expect, it } from "@effect/vitest"
@@ -67,19 +68,21 @@ interface Started {
   readonly types?: ReadonlyArray<string> | undefined
 }
 
+const win = window as unknown as Record<string, unknown>
+const doc = document as unknown as Record<string, unknown>
+const matchMedia = window.matchMedia
+
 const fakeTransitions = (options?: { readonly reducedMotion?: boolean }) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const started: Array<Started> = []
       let skipped = 0
-      const globals = window as unknown as Record<string, unknown>
-      const matchMedia = window.matchMedia
-      globals.ViewTransition = class {
+      win.ViewTransition = class {
         get types() {
           return new Set()
         }
       }
-      ;(document as unknown as Record<string, unknown>).startViewTransition = (update: (() => void) | Started) => {
+      doc.startViewTransition = (update: (() => void) | Started) => {
         started.push(typeof update === "function" ? { update } : update)
         const done = Promise.resolve()
         return { ready: done, finished: done, updateCallbackDone: done, skipTransition: () => skipped++ }
@@ -87,13 +90,13 @@ const fakeTransitions = (options?: { readonly reducedMotion?: boolean }) =>
       if (options?.reducedMotion === true) {
         window.matchMedia = (query) => ({ ...matchMedia.call(window, query), matches: true })
       }
-      return { started, skipped: () => skipped, restore: () => (window.matchMedia = matchMedia) }
+      return { started, skipped: () => skipped }
     }),
-    ({ restore }) =>
+    () =>
       Effect.sync(() => {
-        restore()
-        delete (document as unknown as Record<string, unknown>).startViewTransition
-        delete (window as unknown as Record<string, unknown>).ViewTransition
+        window.matchMedia = matchMedia
+        delete doc.startViewTransition
+        delete win.ViewTransition
       })
   )
 
@@ -123,19 +126,14 @@ const mount = Effect.fnUntraced(function*(executor: Executor.Executor) {
     Router.currentRoute(GalleryRoute),
     (route) => Renderer.mount(Gallery, { route }, app)
   ).pipe(Effect.provideContext(context))
-  const click = (label: string) =>
-    [...app.querySelectorAll("button")].find((button) => button.textContent === label)!.click()
-  const type = (value: string) => {
-    const input = app.querySelector("input")!
-    input.value = value
-    input.dispatchEvent(new Event("input", { bubbles: true }))
-  }
+  const click = (name: string) => HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name }))
+  const type = (value: string) => HtmlLocator.type(HtmlLocator.getByRole(app, "textbox", { name: "Filter" }), value)
   return {
     log,
     click,
     type,
     commits: () => commits,
-    freeze: () => (root as unknown as runtime.Root).freeze(),
+    freeze: () => (root as typeof root & runtime.Root).freeze(),
     shown: () => app.querySelector("p")!.textContent,
     card: () => app.querySelector("main > button:last-child")!.textContent
   }

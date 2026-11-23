@@ -1822,15 +1822,6 @@ const setup = (
   let busy = 0
   // The instance `renderAbove` is rendering the ancestors of.
   let receiving: Instance | undefined
-  /**
-   * Renders the dirty instances above `inst`, outermost first, before it is given a message or a
-   * query result. Its `update` then reads the props its ancestors' Models give it now, and it is gone
-   * when they no longer render it, whenever the flush that would have rendered them runs.
-   *
-   * `inst` is given its new props and stays dirty: its own view waits for the flush, as it does
-   * without a dirty ancestor. A message from a field's event is ahead of the Model that view would
-   * render, and rendering it now would write the older value over what the user typed.
-   */
   const dirtyAbove = (inst: Instance): Instance | undefined => {
     if (dirty.size === 0 || busy > 0) return undefined
     let top: Instance | undefined
@@ -1840,6 +1831,15 @@ const setup = (
   const waitsForTransition = (inst: Instance) =>
     (resume !== undefined || (transitionTypes !== undefined && (mayTransition || !draining))) &&
     dirtyAbove(inst) !== undefined
+  /**
+   * Renders the dirty instances above `inst`, outermost first, before it is given a message or a
+   * query result. Its `update` then reads the props its ancestors' Models give it now, and it is gone
+   * when they no longer render it, whenever the flush that would have rendered them runs.
+   *
+   * `inst` is given its new props and stays dirty: its own view waits for the flush, as it does
+   * without a dirty ancestor. A message from a field's event is ahead of the Model that view would
+   * render, and rendering it now would write the older value over what the user typed.
+   */
   const renderAbove = (inst: Instance) => {
     const top = dirtyAbove(inst)
     if (top === undefined) return
@@ -1879,6 +1879,12 @@ const setup = (
     deferred.push(from === undefined ? f : () => under(from, f))
     wake()
   }
+  const receive = (inst: Instance, f: () => void): void =>
+    step(() => {
+      if (waitsForTransition(inst)) return defer(() => receive(inst, f))
+      renderAbove(inst)
+      f()
+    })
   /** Runs `f` once the current render is committed. */
   const afterCommit = (f: () => void) => {
     if (rendering || scheduled || dirty.size > 0) committed.push(f)
@@ -1902,9 +1908,9 @@ const setup = (
   function finishFlush() {
     const done = drain()
     mayTransition = false
+    const types = transitionTypes
+    transitionTypes = undefined
     if (!done) {
-      const types = [...transitionTypes!]
-      transitionTypes = undefined
       scheduled = true
       const update = () => {
         if (resume !== update) return
@@ -1913,9 +1919,8 @@ const setup = (
         finishFlush()
       }
       resume = update
-      return host.viewTransition!(update, types)
+      return host.viewTransition!(update, [...types!])
     }
-    transitionTypes = undefined
     if (reportPending) reportAdoption()
     host.commit?.()
     afterCommitHooks()
@@ -2784,10 +2789,8 @@ const setup = (
 
   // -- instances ------------------------------------------------------------
   /** Runs `update` for a message to `inst`, in a step of its own. */
-  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source): void =>
-    step(() => {
-      if (waitsForTransition(inst)) return defer(() => dispatchTo(inst, message, source))
-      renderAbove(inst)
+  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
+    receive(inst, () => {
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
       let next: ReturnType<typeof component.update>
@@ -3672,10 +3675,12 @@ const setup = (
     for (let index = 0; index < commands.length; index++) {
       issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
     }
-    if (!initial) markDirty(inst)
-    if (!initial && next.viewTransition !== undefined && attached && host.viewTransition !== undefined) {
-      transitionTypes ??= new Set()
-      for (const type of next.viewTransition) transitionTypes.add(type)
+    if (!initial) {
+      markDirty(inst)
+      if (next.viewTransition !== undefined && attached && host.viewTransition !== undefined) {
+        transitionTypes ??= new Set()
+        for (const type of next.viewTransition) transitionTypes.add(type)
+      }
     }
     syncSubscriptions(inst)
     // After the watches follow the Model, so a load more reaches the args the query returns for it.
@@ -4571,10 +4576,8 @@ const setup = (
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )
         // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
-        const enter = (f: (latest: Subscription.Subscription<any, any>) => void): void =>
-          step(() => {
-            if (waitsForTransition(inst)) return defer(() => enter(f))
-            renderAbove(inst)
+        const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
+          receive(inst, () => {
             if (current()) f(running.latest)
           })
         const deliver = (message: unknown, accepted?: () => void) =>
@@ -4686,14 +4689,10 @@ const setup = (
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
-        const write = (): void =>
-          step(() => {
-            if (waitsForTransition(inst)) return defer(write)
-            renderAbove(inst)
-            if (running.released || inst.closed) return
-            writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
-          })
-        write()
+        receive(inst, () => {
+          if (running.released || inst.closed) return
+          writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
+        })
       }
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || running.released) return

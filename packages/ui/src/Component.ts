@@ -791,77 +791,28 @@ const StepProto = {
     return Pipeable.pipeArguments(this, arguments)
   },
   set(this: Step<any, any, any, any>, model: unknown) {
-    return makeStep(model, this.commands, this.emitted, this.lists, this.sends, this.viewTransitionTypes)
+    return stepWith(this, { model })
   },
   evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
-    return makeStep(
-      UiStruct.evolve<any>(this.model, fields as never),
-      this.commands,
-      this.emitted,
-      this.lists,
-      this.sends,
-      this.viewTransitionTypes
-    )
+    return stepWith(this, { model: UiStruct.evolve<any>(this.model, fields as never) })
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
-    return makeStep(
-      this.model,
-      [...this.commands, ...commands],
-      this.emitted,
-      this.lists,
-      this.sends,
-      this.viewTransitionTypes
-    )
+    return stepWith(this, { commands: [...this.commands, ...commands] })
   },
   emit(this: Step<any, any, any, any>, ...emitted: ReadonlyArray<unknown>) {
-    return makeStep(
-      this.model,
-      this.commands,
-      [...this.emitted, ...emitted],
-      this.lists,
-      this.sends,
-      this.viewTransitionTypes
-    )
+    return stepWith(this, { emitted: [...this.emitted, ...emitted] })
   },
   loadMore(this: Step<any, any, any, any>, name: string) {
-    return makeStep(
-      this.model,
-      this.commands,
-      this.emitted,
-      [...this.lists, { name, op: "loadMore" }],
-      this.sends,
-      this.viewTransitionTypes
-    )
+    return stepWith(this, { lists: [...this.lists, { name, op: "loadMore" }] })
   },
   reset(this: Step<any, any, any, any>, name: string) {
-    return makeStep(
-      this.model,
-      this.commands,
-      this.emitted,
-      [...this.lists, { name, op: "reset" }],
-      this.sends,
-      this.viewTransitionTypes
-    )
+    return stepWith(this, { lists: [...this.lists, { name, op: "reset" }] })
   },
   send(this: Step<any, any, any, any>, owner: Headless.Any, message: unknown) {
-    return makeStep(
-      this.model,
-      this.commands,
-      this.emitted,
-      this.lists,
-      [...this.sends, { owner, message }],
-      this.viewTransitionTypes
-    )
+    return stepWith(this, { sends: [...this.sends, { owner, message }] })
   },
   viewTransition(this: Step<any, any, any, any>, types: ReadonlyArray<string> = []) {
-    return makeStep(
-      this.model,
-      this.commands,
-      this.emitted,
-      this.lists,
-      this.sends,
-      mergeTypes(this.viewTransitionTypes, types)
-    )
+    return stepWith(this, { viewTransitionTypes: mergeTypes(this.viewTransitionTypes, types) })
   }
 }
 
@@ -879,6 +830,15 @@ const makeStep = (
   viewTransitionTypes: ReadonlyArray<string> | undefined
 ): Step<any, any, any, any> =>
   Object.assign(Object.create(StepProto), { model, commands, emitted, lists, sends, viewTransitionTypes })
+
+const stepWith = (
+  step: Step<any, any, any, any>,
+  change: Partial<Step<any, any, any, any>>
+): Step<any, any, any, any> =>
+  Object.assign(
+    makeStep(step.model, step.commands, step.emitted, step.lists, step.sends, step.viewTransitionTypes),
+    change
+  )
 
 type AnyUpdate = (model: unknown, msg: unknown, $: Update<any, any, any, any>) => unknown
 

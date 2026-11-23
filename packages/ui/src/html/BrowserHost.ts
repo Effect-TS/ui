@@ -1299,8 +1299,8 @@ export const makeHost = (
         if (ran) throw error
         return update()
       }
-      // A skipped transition rejects these. `updateCallbackDone` rejects only when `update` throws, and is
-      // left unhandled so that error is reported as a flush's is.
+      // `ready` rejects when the transition is skipped. `finished` and `updateCallbackDone` reject only when
+      // `update` throws, and `updateCallbackDone` is left unhandled so that error is reported once, as a flush's is.
       transition.ready.catch(ignore)
       transition.finished.catch(ignore)
     },
