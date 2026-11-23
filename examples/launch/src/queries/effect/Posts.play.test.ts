@@ -12,11 +12,11 @@ const titles = ["Foldkit Joins Effect", "How Foldkit 0.x evolves into Effect UI"
 const TwoPosts = Component.define({
   name: "TwoPosts",
   scoped: false,
-  model: Schema.Struct({}),
+  model: Schema.Null,
   message: Schema.Never,
   elements: Html
 }).make({
-  init: () => ({}),
+  init: () => null,
   update: ($) => $.model,
   view: (h) => h.div.children(Posts(h, { key: "first" }), Posts(h, { key: "second" }))
 })

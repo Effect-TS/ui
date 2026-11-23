@@ -1,6 +1,6 @@
 import { Component, Query } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { fetchPosts, Post } from "../Posts.ts"
 
@@ -14,19 +14,18 @@ export class GetPosts extends Query.Service<GetPosts>()("GetPosts", {
 export const Posts = Component.define({
   name: "Posts",
   scoped: false,
-  model: Schema.Struct({}),
+  model: Schema.Null,
   message: Schema.Never,
   elements: Html,
   queries: {
     posts: { query: GetPosts, args: () => ({}) }
   }
 }).make({
-  init: () => ({}),
+  init: () => null,
   update: ($) => $.model,
-  view: (h) => {
-    const posts = h.queries.posts
-    return AsyncResult.isSuccess(posts)
-      ? h.ul.children(posts.value.map((post) => h.li.key(post.id).children(post.title)))
-      : h.p.children("Loading posts")
-  }
+  view: (h) =>
+    Option.match(AsyncResult.value(h.queries.posts), {
+      onNone: () => h.p.children("Loading posts"),
+      onSome: (posts) => h.ul.children(posts.map((post) => h.li.key(post.id).children(post.title)))
+    })
 }).pipe(Component.provide(GetPosts.layer))

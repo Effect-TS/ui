@@ -5,8 +5,6 @@ import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { Architecture } from "./architecture/Architecture.ts"
 import { Counter } from "./autocounter/Counter.ts"
-import { Page } from "./counter/effect/Page.ts"
-import { EmbedFoldkitPage } from "./counter/FoldkitEmbed.ts"
 import { Nav } from "./nav/Nav.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
 import { links } from "./performance/Results.ts"
@@ -14,14 +12,10 @@ import { links } from "./performance/Results.ts"
 const Example = <M>(h: View.H<M>, options: {
   readonly title: string
   readonly files: ReadonlyArray<Snippet>
-  readonly demo?: View.Content<M>
 }) =>
   h.section.class("example").attr("aria-label", options.title).children(
     h.p.class("example-title").children(options.title),
-    h.div.class("example-body").children(
-      options.demo && h.div.class("demo").children(options.demo),
-      ...Files(h, options.files)
-    )
+    h.div.class("example-body").children(...Files(h, options.files))
   )
 
 const Files = <M>(h: View.H<M>, files: ReadonlyArray<Snippet>) =>
@@ -61,15 +55,25 @@ const Text = <M>(h: View.H<M>, text: string) =>
 
 const P = <M>(h: View.H<M>, text: string) => h.p.children(...Text(h, text))
 
+const changes = {
+  architecture: "The core change: Component-based architecture",
+  queries: "Addition: Built-in queries",
+  testing: "Change: Simpler Story and Scene tests, plus Play",
+  performance: "Change: Improved performance"
+} as const
+
+const More = <M>(h: View.H<M>, label: string, text: string) =>
+  h.li.children(h.strong.children(`${label}:`), " ", ...Text(h, text))
+
 export const LaunchPage = Component.define({
   name: "LaunchPage",
   scoped: false,
   props: Schema.Struct({ snippets: Snippets }),
-  model: Schema.Struct({}),
+  model: Schema.Null,
   message: Schema.Never,
   elements: Html
 }).make({
-  init: () => ({}),
+  init: () => null,
   update: ($) => $.model,
   head: () => [Head.title("How Foldkit 0.x evolves into Effect UI")],
   view: (h) =>
@@ -89,10 +93,13 @@ export const LaunchPage = Component.define({
             h,
             "If you've built an app with Foldkit 0.x, you can keep building with it for now. When Effect UI ships with an upgrade guide, you'll migrate your app rather than rewrite it. The Elm Architecture you know still applies."
           ),
-          P(
-            h,
-            "This article covers the four biggest changes: Components that each have their own Model, queries built into the runtime, Play tests that run real Commands and better performance. It also covers what stays the same."
-          )
+          P(h, "This article covers what is different in Effect UI:"),
+          h.ul.class("changes").children(
+            ...Object.entries(changes).map(([id, title]) =>
+              h.li.key(id).children(h.a.attr("href", `#${id}`).children(title))
+            )
+          ),
+          P(h, "It also covers what stays the same.")
         ),
         h.section.attr("aria-labelledby", "terms").children(
           h.h2.id("terms").children("Terms"),
@@ -112,26 +119,38 @@ export const LaunchPage = Component.define({
           )
         ),
         h.section.attr("aria-labelledby", "architecture").children(
-          h.h2.id("architecture").children("Change: Component-based architecture"),
+          h.h2.id("architecture").children(changes.architecture),
           P(
             h,
-            "An Effect UI app is built from Components. A Component is a small Elm Architecture program with its own Model, Messages, init, update and view. A Foldkit 0.x app is one such program, with one Model and one update at its root."
+            "An Effect UI app is built from Components. A Component is a small Elm Architecture program with a Model, Messages, init, update and view. In Foldkit 0.x, the whole app shares one Model and one root update. In Effect UI, each Component has its own."
           ),
-          P(
-            h,
-            "The diagram shows the same app built both ways: a root, two parts inside it and two parts inside each of those. Use the buttons to send a Message from one of the four parts at the bottom."
-          ),
-          Architecture(h, {}),
-          P(
-            h,
-            "In Foldkit 0.x, the Message travels up to the root update and back down to the update for the part that sent it, then the new value is written into the root Model. In Effect UI, the Component that sent the Message handles it in its own update and the runtime stores the result in that Component's Model."
-          ),
-          h.section.attr("aria-labelledby", "define").children(
-            h.h3.id("define").children("An Effect UI Component is a small Elm Architecture program"),
+          h.section.attr("aria-labelledby", "messages").children(
+            h.h3.id("messages").children("How Messages travel"),
+            P(h, "The diagram below compares how a Message is handled in each architecture."),
+            Architecture(h, {}),
             P(
               h,
-              "If you can read a counter in Foldkit 0.x, you can read one in Effect UI. This one also has a Command and a Subscription."
+              "In Foldkit 0.x, you compose an app from Submodels. Each parent stores its children's state and forwards their Messages, so every Message passes through the root update. In Effect UI, the runtime keeps each Component's Model and delivers a Message to the update of the Component that sent it."
+            )
+          ),
+          h.section.attr("aria-labelledby", "code").children(
+            h.h3.id("code").children("The code you write"),
+            P(
+              h,
+              "To render a child Component, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages."
             ),
+            Compare(h, {
+              foldkit: {
+                title: "Foldkit 0.x: Page stores and forwards for Counter",
+                files: h.props.snippets.counterFoldkit
+              },
+              effect: { title: "Effect UI: Page renders Counter", files: h.props.snippets.counterEffect }
+            }),
+            P(
+              h,
+              "A Foldkit 0.x app is composed as one program before it starts, so its code ships as one bundle and an error that escapes any part can stop the whole app. An Effect UI Component is self-contained. You can write, test and reuse it on its own or remove it without changing how its parent manages state or handles Messages. It can also bring its own services, load its code on demand and fail without stopping the rest of the app."
+            ),
+            P(h, "Here is a counter with a delayed reset Command and an auto-count Subscription."),
             Beside(h, {
               label: "Live auto-counter",
               files: h.props.snippets.intro,
@@ -139,62 +158,21 @@ export const LaunchPage = Component.define({
               caption: "Click \"Increment\", then turn \"Auto-count\" on and off."
             })
           ),
-          h.section.attr("aria-labelledby", "one-model").children(
-            h.h3.id("one-model").children("In Foldkit 0.x, the entire application state is a single Model"),
-            P(
-              h,
-              "In Foldkit 0.x, you can break an app into Submodels, but there is still one Model and one update at the root. Every change goes through the root update and DevTools can show every Message in order."
-            ),
-            P(
-              h,
-              "As an app grows, every part of it stays tied to the root. Each parent stores its children's state and forwards their Messages, even when it has no use for that state. Because the app is composed as one program before it starts, its code ships as one bundle and an error that escapes any part can stop the whole app."
-            )
-          ),
-          h.section.attr("aria-labelledby", "components").children(
-            h.h3.id("components").children("Effect UI applies the Elm Architecture to each Component"),
-            P(
-              h,
-              "A Component is self-contained. You can write, test and reuse it on its own or remove it without changing how its parent manages state or handles Messages."
-            ),
-            P(
-              h,
-              "Each place a Component is rendered is an instance. The runtime keeps a Model for each instance and delivers its Messages to its own update. To render a child Component, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages."
-            ),
-            h.figure.class("compare wide").children(
-              h.div.class("compare-columns").children(
-                Example(h, {
-                  title: "Foldkit 0.x: Page stores and forwards for Counter",
-                  files: h.props.snippets.counterFoldkit,
-                  demo: h.div.class("embed").onMount(EmbedFoldkitPage())
-                }),
-                Example(h, {
-                  title: "Effect UI: Page renders Counter",
-                  files: h.props.snippets.counterEffect,
-                  demo: Page(h, {})
-                })
-              ),
-              Caption(h, "Both counters are live. Click \"+\" in each.")
-            ),
-            P(
-              h,
-              "Inside each Component, the rules are unchanged: its state is its Model, only its own update changes that Model and every Message goes through update. Being self-contained also lets a Component bring its own services, load its code on demand and fail without stopping the rest of the app."
-            )
-          ),
           h.section.attr("aria-labelledby", "split").children(
-            h.h3.id("split").children("You can pull functions out as a Component grows"),
+            h.h3.id("split").children("Organizing larger Components"),
             P(
               h,
-              "The counter in the first example defines everything inline in one call. That's easy to read for a small Component, but the call gets harder to follow as the Component grows. Separate named functions are easier to scan and can move into their own files. If you organize your Foldkit 0.x modules this way, the layout will look familiar."
+              "The counter above defines init, update, subscriptions and view inline in one call. As a Component grows, that call gets harder to follow. Extracting them into named functions keeps each one readable, and they can move into their own files."
             ),
-            Listing(h, h.props.snippets.split, "The counter from the first example, written as separate functions."),
+            Listing(h, h.props.snippets.split, "The same counter with each function extracted."),
             P(
               h,
-              "The Component definition's helpers supply the types for init, update, subscriptions and view, so you don't have to annotate the separate functions."
+              "The Component definition's helpers supply the types, so you don't have to annotate the extracted functions."
             )
           )
         ),
         h.section.attr("aria-labelledby", "queries").children(
-          h.h2.id("queries").children("Change: Built-in queries"),
+          h.h2.id("queries").children(changes.queries),
           P(
             h,
             "In Foldkit 0.x, fetched data lives in the Model like any other state. Each resource needs a field in the Model, a Command to fetch it, a Message for the result and update branches for loading, success and failure. Foldkit 0.x's experimental `Query` packages that loop, but it's still a Submodel: the parent stores its Model, wraps its Messages and decides when to load or refresh. As the Foldkit 0.x docs put it, Query does not \"react to rendering, expire data after a duration, poll, or refresh related resources on its own\"."
@@ -221,14 +199,14 @@ export const LaunchPage = Component.define({
           )
         ),
         h.section.attr("aria-labelledby", "testing").children(
-          h.h2.id("testing").children("Change: Play tests"),
+          h.h2.id("testing").children(changes.testing),
           P(
             h,
-            "Effect UI keeps Story and Scene and adds a third kind of test, Play, which runs a Component's real Commands and Subscriptions."
+            "Effect UI changes testing in two ways. Story and Scene tests take the Component and start from its init. A third kind of test, Play, runs a Component's real Commands and Subscriptions."
           ),
           P(
             h,
-            "Story tests update and Scene tests update through the view. In Foldkit 0.x, you pass the functions under test and a starting Model. In Effect UI, you pass the Component and the test starts from its init, so you don't have to supply that starting state separately."
+            "Story tests update and Scene tests update through the view. In Foldkit 0.x, you pass the functions under test and a starting Model. In Effect UI, you pass the Component, so there is no starting state to supply separately."
           ),
           Compare(h, {
             foldkit: { title: "Foldkit 0.x Story: update and a given Model", files: h.props.snippets.storyFoldkit },
@@ -252,7 +230,7 @@ export const LaunchPage = Component.define({
           Listing(h, h.props.snippets.play)
         ),
         h.section.attr("aria-labelledby", "performance").children(
-          h.h2.id("performance").children("Change: Improved performance"),
+          h.h2.id("performance").children(changes.performance),
           h.p.children(
             "In ",
             h.a.attr("href", links.harness).children("js-framework-benchmark"),
@@ -264,54 +242,45 @@ export const LaunchPage = Component.define({
         h.section.attr("aria-labelledby", "more").children(
           h.h2.id("more").children("More changes"),
           h.ul.class("more").children(
-            h.li.children(
-              h.strong.children(...Text(h, "Services:")),
-              " ",
-              ...Text(
-                h,
-                "Provide the services a Component's Commands need with `Component.provide` and let TypeScript report any missing service at compile time."
-              )
+            More(
+              h,
+              "Services per Component",
+              "Provide the services a Component's Commands need with `Component.provide`. TypeScript reports a missing service at compile time."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "Loading on demand:")),
-              " ",
-              ...Text(h, "Load a Component's code the first time it's rendered so it stays out of the initial bundle.")
+            More(
+              h,
+              "Load Components on demand",
+              "Load a Component's code the first time it's rendered so it stays out of the initial bundle."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "Failure boundaries:")),
-              " ",
-              ...Text(h, "Show a fallback for a Component that fails while the rest of the app keeps running.")
+            More(
+              h,
+              "Recover from Component failures",
+              "Show a fallback for a Component that fails while the rest of the app keeps running."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "Lifetime:")),
-              " ",
-              ...Text(
-                h,
-                "Mark a Component `scoped` to keep its Model while it's hidden instead of discarding the Model when the Component stops being rendered."
-              )
+            More(
+              h,
+              "Keep state while hidden",
+              "Mark a Component `scoped` to keep its Model while it's hidden. Otherwise the Model is discarded when the Component stops being rendered."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "Command modes:")),
-              " ",
-              ...Text(
-                h,
-                "When a Command is issued again while still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it."
-              )
+            More(
+              h,
+              "Control overlapping Commands",
+              "When a Command is issued again while still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "`Command.asNoop`:")),
-              " ",
-              ...Text(h, "Run a Command without defining a result Message when update doesn't need the result.")
+            More(
+              h,
+              "Commands without result Messages",
+              "Use `Command.asNoop` to run a Command when update doesn't need its result."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "Headless Components:")),
-              " ",
-              ...Text(h, "Supply your own markup while the Component manages its state and behavior.")
+            More(
+              h,
+              "Custom markup for headless Components",
+              "Supply your own markup while the Component manages its state and behavior."
             ),
-            h.li.children(
-              h.strong.children(...Text(h, "Fragments:")),
-              " ",
-              ...Text(h, "Use a typed view function for a piece of the view that needs no Model of its own.")
+            More(
+              h,
+              "Reusable view fragments",
+              "Use a typed view function for a piece of the view that needs no Model of its own."
             )
           )
         ),

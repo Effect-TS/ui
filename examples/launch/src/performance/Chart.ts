@@ -69,7 +69,9 @@ const Full = <M>(h: View.H<M>, title: string, rows: ReadonlyArray<Row>) =>
 
 export const AllResults = <M>(h: View.H<M>) =>
   h.details.class("perf-all").children(
-    h.summary.children("Results for all seven frameworks, where lower is better"),
-    Full(h, scriptTitle, script),
-    Full(h, loadTitle, load)
+    h.summary.children(
+      "Results for all seven frameworks, where lower is better",
+      h.span.class("perf-all-chevron").attr("aria-hidden", "true")
+    ),
+    h.div.class("perf-all-panel").children(Full(h, scriptTitle, script), Full(h, loadTitle, load))
   )

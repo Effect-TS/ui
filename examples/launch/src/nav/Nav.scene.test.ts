@@ -9,7 +9,7 @@ import { Nav, NavMessage, sections } from "./Nav.ts"
 const closed = Locator.attr("aria-expanded", "false")
 const opened = Locator.attr("aria-expanded", "true")
 const current = Locator.attr("aria-current", "location")
-const queries = HtmlLocator.role("link", { name: "Change: Built-in queries" })
+const queries = HtmlLocator.role("link", { name: "Addition: Built-in queries" })
 
 describe("Nav", () => {
   it.effect("lists every section in order", () =>
@@ -53,8 +53,8 @@ describe("Nav", () => {
       const s = yield* HtmlScene.make(Nav, {})
       s.expect(current).toBeAbsent()
         .subscription("section", NavMessage.ChangedSection({ current: "queries" }))
-        .expect(current).toHaveText("Change: Built-in queries")
-        .expect(closed).toHaveText("On this page Change: Built-in queries")
+        .expect(current).toHaveText("Addition: Built-in queries")
+        .expect(closed).toHaveText("On this page Addition: Built-in queries")
         .subscription("section", NavMessage.ChangedSection({ current: null }))
         .expect(current).toBeAbsent()
         .expect(closed).toHaveText("On this page")
