@@ -18,9 +18,11 @@ export const DelayReset = Command.make(
 
 export const Counter = Component.define({
   name: "Counter",
+  // Required, with no default. false discards the Model when no longer rendered.
   scoped: false,
   model: Schema.Struct({ count: Schema.Number, isAutoCounting: Schema.Boolean }),
   message: CounterMessage,
+  // Selects h's element builders; defaults to the app's registered vocabulary.
   elements: Html
 }).make({
   init: () => ({ count: 0, isAutoCounting: false }),

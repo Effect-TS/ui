@@ -2449,8 +2449,8 @@ type DispatchedByTag<Msg> = [Msg] extends [{ readonly _tag: string }]
 
 /**
  * What `define` returns: a component's name, Schemas, queries and
- * vocabulary. `update`, `view` and `fragment` written in pieces are typed
- * against it, and `make` finishes the component.
+ * vocabulary. `init`, `update`, `subscriptions`, `view` and `fragment`
+ * written in pieces are typed against it, and `make` finishes the component.
  *
  * **Details**
  *
@@ -2459,8 +2459,8 @@ type DispatchedByTag<Msg> = [Msg] extends [{ readonly _tag: string }]
  * `_tag` of a tagged message, and returns an update function over that type.
  * A slice or an update function fits the matching key of a record `update`,
  * and `$.combine` takes either where the message fits. A record key that
- * isn't a message tag is a type error. `view` and `fragment` return the
- * function they're given.
+ * isn't a message tag is a type error. `init`, `subscriptions`, `view` and
+ * `fragment` return the function they're given.
  *
  * `make` takes `init`, `update`, `view`, `subscriptions` and `head`,
  * and reads `R` off what they return.
@@ -2504,6 +2504,10 @@ export interface Definition<
   readonly collects: SharesCollects<Msg, Rp> | undefined
   /** What history restore saves of an instance: `false` for nothing, or the Model to save. */
   readonly restore: false | ((model: Model, props: Props) => Model) | undefined
+  /** An init function, with the definition's Model, message, events and props. */
+  init<UI extends Model | InitStep<Model, Msg, Events, any>>(
+    init: ($: Init<Model, Msg, Events, Props>) => UI
+  ): ($: Init<Model, Msg, Events, Props>) => UI
   /**
    * A slice for one tag: `msg` is that tag's member, and so is the message
    * `$.combine` takes functions over. The slice returned takes any `$`, so
@@ -2543,6 +2547,10 @@ export interface Definition<
     $: Update<Model, Msg, Events, Props, L, Msg, SR>,
     msg: Msg
   ) => UR[keyof UR]
+  /** A subscriptions function, with the definition's Model, props and query results. */
+  subscriptions<Sub extends Subscription.Subscription<Msg, any>>(
+    subscriptions: ($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>
+  ): ($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (
@@ -3502,6 +3510,7 @@ export const define = <
       ? shares.collects
       : undefined,
     restore: options.restore,
+    init: (init) => init,
     // A slice is the function given, with `$` bound to the message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update = toUpdateFn(args[args.length - 1])
@@ -3518,6 +3527,7 @@ export const define = <
           msg
         )
     }) as any,
+    subscriptions: (subscriptions) => subscriptions,
     view: (view) => view,
     fragment: (fragment) => fragment,
     // The type of `reads` names the component in each `"self"` entry. The value keeps `"self"`, which `finish`

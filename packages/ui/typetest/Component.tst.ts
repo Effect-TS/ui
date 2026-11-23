@@ -3,10 +3,18 @@ import {
   Component,
   Feature,
   type Query,
+  Subscription,
   UiSchema,
   type View
 } from "@effect/ui"
-import { Context, Effect, Layer, Schema, Scope } from "effect"
+import {
+  Context,
+  Effect,
+  Layer,
+  Schema,
+  Scope,
+  Stream
+} from "effect"
 import type { KeyValueStore } from "effect/persistence"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
@@ -75,6 +83,53 @@ declare const NeedsFailed: Component.Component<
 >
 
 describe("Component", () => {
+  describe("definition helpers", () => {
+    const Def = Component.define({
+      name: "Extracted",
+      scoped: false,
+      props: Schema.Struct({ initial: Schema.Number }),
+      model: Schema.Struct({ count: Schema.Number }),
+      message: Message
+    })
+
+    it("infers init's props and preserves requirements from every branch", () => {
+      const init = Def.init(($) => {
+        expect($.props).type.toBe<{ readonly initial: number }>()
+        return $.props.initial > 0
+          ? $.set({ count: $.props.initial }).run(CA.make())
+          : $.set({ count: 0 }).run(CB.make())
+      })
+      const C = Def.make({ init, update: (model) => model, view: (_, h) => h.el("div") })
+      expect<Component.Requirements<typeof C>>().type.toBe<CA | CB>()
+      expect(Def.init).type.not.toBeCallableWith(() => ({ count: "wrong" }))
+    })
+
+    it("infers subscriptions' inputs and preserves stream requirements and falsy entries", () => {
+      const subscriptions = Def.subscriptions((model, props, queries) => {
+        expect(model).type.toBe<{ readonly count: number }>()
+        expect(props).type.toBe<{ readonly initial: number }>()
+        expect(queries).type.toBe<{}>()
+        return [
+          model.count > props.initial && Subscription.make("a", Stream.fromEffect(Effect.as(A, Message.X()))),
+          Subscription.make("b", Stream.fromEffect(Effect.as(B, Message.Y()))),
+          false,
+          null,
+          undefined
+        ]
+      })
+      const C = Def.make({
+        init: () => ({ count: 0 }),
+        update: (model) => model,
+        subscriptions,
+        view: (_, h) => h.el("div")
+      })
+      expect<Component.Requirements<typeof C>>().type.toBe<A | B>()
+      expect(Def.subscriptions).type.not.toBeCallableWith(
+        () => [Subscription.make("wrong", Stream.make("not a message"))]
+      )
+    })
+  })
+
   describe("Requirements", () => {
     it("names the Command service, not what its implementation uses", () => {
       expect<Component.Requirements<typeof TodoItem>>().type.toBe<SaveTodo>()

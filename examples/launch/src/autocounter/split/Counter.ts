@@ -11,21 +11,22 @@ const CounterDef = Component.define({
   elements: Html
 })
 
-type Model = typeof CounterDef.model.Type
+const init = CounterDef.init(() => ({ count: 0, isAutoCounting: false }))
 
-const init = (): Model => ({ count: 0, isAutoCounting: false })
-
-const increment = CounterDef.update((_model, _message, $) => $.evolve({ count: (count) => count + 1 }))
-
-const resetAfterDelay = CounterDef.update(
-  "ClickedResetAfterDelay",
-  (_model, _message, $) => $.run(DelayReset.make({}))
+const update = CounterDef.update((_model, message, $) =>
+  CounterMessage.match(message, {
+    ClickedIncrement: () => $.evolve({ count: (count) => count + 1 }),
+    ClickedResetAfterDelay: () => $.run(DelayReset.make({})),
+    CompletedDelayReset: () => $.evolve({ count: 0 }),
+    ClickedToggleAutoCount: () => $.evolve({ isAutoCounting: (isAutoCounting) => !isAutoCounting }),
+    Ticked: () => $.evolve({ count: (count) => count + 1 })
+  })
 )
 
-const subscriptions = (model: Model) => [
+const subscriptions = CounterDef.subscriptions((model) => [
   model.isAutoCounting &&
   Subscription.make("tick", Stream.tick("1 second").pipe(Stream.drop(1), Stream.map(() => CounterMessage.Ticked())))
-]
+])
 
 const view = CounterDef.view((model, h) =>
   h.div.class("counter").children(
@@ -42,13 +43,7 @@ const view = CounterDef.view((model, h) =>
 
 export const Counter = CounterDef.make({
   init,
-  update: {
-    ClickedIncrement: increment,
-    ClickedResetAfterDelay: resetAfterDelay,
-    CompletedDelayReset: (_model, _message, $) => $.evolve({ count: 0 }),
-    ClickedToggleAutoCount: (_model, _message, $) => $.evolve({ isAutoCounting: (isAutoCounting) => !isAutoCounting }),
-    Ticked: increment
-  },
+  update,
   subscriptions,
   view
 })
