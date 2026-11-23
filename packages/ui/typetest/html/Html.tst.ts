@@ -215,9 +215,15 @@ describe("Html", () => {
         expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
         expect<Html.KeyPayload["repeat"]>().type.toBe<boolean>()
         expect<Html.KeyPayload["editable"]>().type.toBe<boolean>()
-        const shortcutHandler = Html.shortcuts([{ key: "Escape", message: Msg.Mounted(), whileTyping: true }])
+        const shortcutHandler = Html.shortcuts([
+          { key: "?", message: Msg.Typed({ value: "help" }) },
+          { key: "Escape", message: Msg.Mounted(), whileTyping: true }
+        ])
+        expect<ReturnType<typeof shortcutHandler>>().type.toBe<
+          ReturnType<typeof Msg.Typed> | ReturnType<typeof Msg.Mounted> | undefined
+        >()
         expect(h.div.onKeyDown).type.toBeCallableWith(shortcutHandler)
-        expect(DomSubscription.onDocument).type.toBeCallableWith("keydown", shortcutHandler, { preventDefault: true })
+        DomSubscription.onDocument("keydown", shortcutHandler, { preventDefault: true })
         expect(h.input.onPaste).type.toBeCallableWith(
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
           { preventDefault: true }

@@ -327,10 +327,14 @@ export interface Shortcut<Msg> {
  *
  * **Details**
  *
- * Events with `defaultPrevented` or `composing` are always ignored. Each row
- * is checked in order and the first match returns its `message`. Unmatched
- * events return `undefined`, so `{ preventDefault: true }` cancels the
- * browser's default only for matched shortcuts.
+ * Events with `composing` are always ignored, and on document listeners
+ * (`DomSubscription.onDocument`) events with `defaultPrevented` are ignored as
+ * well (element payloads carry no `defaultPrevented`). Each row is checked in
+ * order and the first match returns its `message`. Unmatched events return
+ * `undefined`, so `{ preventDefault: true }` cancels the browser's default
+ * only for matched shortcuts. On element handlers, returning `undefined` does
+ * not fall through to an ancestor element's handler because the host stops at
+ * the innermost element that listens; a document listener can still receive it.
  *
  * Because this returns a plain handler function with no state and no
  * listener registration, it can be combined with other keydown logic inside
@@ -381,9 +385,9 @@ export interface Shortcut<Msg> {
  * @category events
  * @since 0.1.0
  */
-export const shortcuts = <Msg>(
-  table: ReadonlyArray<Shortcut<Msg>>
-): (payload: KeyPayload & { readonly defaultPrevented?: boolean | undefined }) => Msg | undefined =>
+export const shortcuts = <const Rows extends ReadonlyArray<Shortcut<unknown>>>(
+  table: Rows
+): (payload: KeyPayload & { readonly defaultPrevented?: boolean | undefined }) => Rows[number]["message"] | undefined =>
 (payload) => {
   if (payload.defaultPrevented === true || payload.composing) return undefined
   for (const shortcut of table) {
@@ -396,7 +400,7 @@ export const shortcuts = <Msg>(
       (!payload.editable || shortcut.whileTyping === true) &&
       (!payload.repeat || shortcut.repeat === true)
     ) {
-      return shortcut.message
+      return shortcut.message as Rows[number]["message"]
     }
   }
   return undefined
