@@ -389,6 +389,9 @@ importers:
       '@effect/ui':
         specifier: workspace:^
         version: link:../ui
+      '@effect/ui-kit':
+        specifier: workspace:^
+        version: link:../ui-kit
       effect:
         specifier: ^4.1.4
         version: 4.1.4

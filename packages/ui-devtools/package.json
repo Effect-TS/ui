@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "license": "MIT",
-  "description": "A read-only inspector for @effect/ui's message log",
+  "description": "A read-only inspector and overlay for @effect/ui's message log",
   "homepage": "https://effect.website",
   "repository": {
     "type": "git",
@@ -64,10 +64,12 @@
   },
   "peerDependencies": {
     "@effect/ui": "workspace:^",
+    "@effect/ui-kit": "workspace:^",
     "effect": "^4.1.4"
   },
   "devDependencies": {
     "@effect/ui": "workspace:^",
+    "@effect/ui-kit": "workspace:^",
     "effect": "^4.1.4"
   }
 }

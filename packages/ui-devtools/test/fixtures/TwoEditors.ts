@@ -105,11 +105,10 @@ const Workspace = Component.define({
 
 export type Capture = "interrupted" | "open" | "closed" | "switched"
 
-export const record = Effect.fnUntraced(function*(capture: Capture) {
+export const play = Effect.fnUntraced(function*(capture: Capture) {
   const app = document.body.appendChild(document.createElement("div"))
   yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-  const log = MessageLog.makeMemory({ size: 500 })
-  yield* BrowserHost.mountEffect(Workspace, {}, app).pipe(Effect.provideService(MessageLog.MessageLog, log))
+  yield* BrowserHost.mountEffect(Workspace, {}, app)
   yield* wait(60)
   const body = (id: string) => HtmlLocator.getByRole(app, "textbox", { name: "Body " + id }) as HTMLTextAreaElement
   const button = (label: string) => HtmlLocator.getByRole(app, "button", { name: label })
@@ -136,6 +135,12 @@ export const record = Effect.fnUntraced(function*(capture: Capture) {
     HtmlLocator.click(button("Save n2"))
     yield* wait(60)
   }
+  return app
+})
+
+export const record = Effect.fnUntraced(function*(capture: Capture) {
+  const log = MessageLog.makeMemory({ size: 500 })
+  yield* play(capture).pipe(Effect.provideService(MessageLog.MessageLog, log))
   const encoder = MessageLog.makeEncoder()
   return log.entries().map((entry) => encoder.encode(entry))
 }, Effect.scoped)
