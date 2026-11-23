@@ -1,65 +1,27 @@
 import { Code } from "#components/Code"
-import { Flow } from "#components/Flow"
-import { Snippet } from "#domain/Snippet"
+import { Diagram } from "#components/Diagram"
+import { Pair, Snippet } from "#domain/Snippet"
 import { Component, Head, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-import { DialogPage } from "./demo/DialogPage.ts"
-import { foldkitInitial, foldkitSteps } from "./foldkitFlow.ts"
+import { Page } from "./counter/effect/Page.ts"
+import { EmbedFoldkitPage } from "./counter/FoldkitEmbed.ts"
 
-const Label = <M>(h: View.H<M>, text: string) => h.p.class("label").children(`// ${text}`)
-
-const Section = <M>(h: View.H<M>, label: string) =>
-  h.section.class("section").attr("aria-label", label).children(Label(h, label))
-
-const Terms = <M>(h: View.H<M>, name: string, items: ReadonlyArray<readonly [term: string, description: string]>) =>
-  h.dl.class(name).children(
-    ...items.map(([term, description]) =>
-      h.div.key(term).class("term").children(h.dt.children(term), h.dd.children(description))
-    )
+const Example = <M>(h: View.H<M>, options: {
+  readonly title: string
+  readonly files: ReadonlyArray<Snippet>
+  readonly demo?: View.Content<M>
+}) =>
+  h.section.class("example").attr("aria-label", options.title).children(
+    h.h3.class("example-title").children(options.title),
+    options.demo && h.div.class("demo").children(options.demo),
+    ...options.files.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet)))
   )
-
-const Listing = <M>(h: View.H<M>, title: string, files: ReadonlyArray<Snippet>, caption: string) =>
-  h.figure.class("flow").attr("aria-label", title).children(
-    h.header.class("flow-head").children(h.h3.class("flow-title").children(title)),
-    h.div.class("files").children(
-      ...files.map((snippet) => h.div.key(snippet.name).children(Code(h, { snippet, lit: -1 })))
-    ),
-    h.figcaption.class("listing-caption").children(caption)
-  )
-
-const names = [
-  ["Foldkit 0.x", "The frontend framework on npm today, foldkit@0.171."],
-  ["Effect UI", "@effect/ui, where Foldkit's frontend work continues."],
-  ["Foldkit", "The full-stack framework, with Effect UI as its frontend."]
-] as const
-
-const kept = [
-  ["The same shape", "A Schema Model, Messages, and pure init, update and view."],
-  ["Messages are facts", "ClickedSave, not Save. update decides what a fact means."],
-  ["Effects are data", "Commands, Subscriptions and Mounts keep their names, and the runtime runs them."],
-  ["One-way flow", "A child never knows its parent. It reports facts upward."],
-  [
-    "State is Schema data",
-    "The server ships it, the Router restores it on Back, and the MessageLog records every update."
-  ],
-  ["Tests run no effects", "Each Command is data the test resolves by name."]
-] as const
-
-const totals = [
-  ["Messages", "8, all through the page's update", "8: 6 to the Dialog, 2 to the page"],
-  ["Commands", "6", "0"],
-  ["Other", "4 OutMessages: 2 to the page, 2 from Animation to the Dialog", "1 Mount, 4 events, 2 prop changes"]
-] as const
 
 export const LaunchPage = Component.define({
   name: "LaunchPage",
   scoped: false,
-  props: Schema.Struct({
-    effect: Snippet,
-    foldkit: Schema.Array(Snippet),
-    provider: Schema.Struct({ foldkit: Schema.Array(Snippet), effect: Schema.Array(Snippet) })
-  }),
+  props: Schema.Struct({ counter: Pair, kept: Schema.Array(Snippet), provider: Pair }),
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -68,137 +30,98 @@ export const LaunchPage = Component.define({
   update: (model) => model,
   head: () => [Head.title("Foldkit's frontend continues as Effect UI")],
   view: (_model, h) =>
-    h.main.class("page").children(
-      h.header.class("hero").children(
-        Label(h, "Effect UI"),
-        h.h1.class("title").children("Foldkit's frontend continues as Effect UI"),
-        h.p.class("lede").children(
-          "Foldkit 0.x was a frontend framework. Its frontend work continues as Effect UI, and Foldkit becomes the full-stack framework built on it. If you've built with Foldkit 0.x, most of what you know carries over. This page shows the two things that changed the most, and why."
+    h.main.class("article").children(
+      h.header.class("article-head").children(
+        h.h1.children("Foldkit's frontend continues as Effect UI"),
+        h.p.children(
+          "Foldkit 0.x was a frontend framework. Its frontend work continues as Effect UI, and Foldkit becomes the full-stack framework built on it. If you've built with Foldkit 0.x, most of what you know carries over. This page shows what is changing and why."
         ),
-        Terms(h, "names", names)
-      ),
-      Section(h, "Where state lives").children(
-        h.h2.children("One Model you could read top to bottom"),
-        h.p.class("prose").children(
-          "In Foldkit 0.x the whole app is one Schema Model, and every Message goes through one update. You could start at the Model, follow a Message, and see exactly what changed and why. That made apps easy to reason about and easy to test. Effect UI keeps what made that work:"
-        ),
-        Terms(h, "kept", kept)
-      ),
-      Section(h, "Where it got heavy").children(
-        h.h2.children("Every child's state went through its parent"),
-        h.div.class("split").children(
-          h.div.class("prose").children(
-            h.p.children(
-              "One Model meant the parent stored each child's Model. Every message the child sent was wrapped, routed through the parent's update, and unwrapped again, even when the parent had no decision to make."
-            ),
-            h.p.children(
-              "foldkit.dev's own source has 59 Got*Message wrappers, 84 Update.foldChild* call sites and 88 h.submodel embeds. That's wiring you write and maintain, and so do your agents."
-            )
-          ),
-          h.figure.class("wrappers").children(
-            h.div.class("wrapper").children(
-              h.code.children("GotUiPageMessage"),
-              h.div.class("wrapper").children(
-                h.code.children("GotDialogDemoMessage"),
-                h.div.class("wrapper wrapper-core").children(h.code.children("Dialog.Message"))
-              )
-            ),
-            h.figcaption.children("A click in foldkit.dev's Dialog demo reaches the root inside two wrappers.")
-          )
+        h.p.children(
+          "Three names come up below. Foldkit 0.x is the frontend framework on npm today, foldkit@0.171. Effect UI is effect/ui, where Foldkit's frontend work continues. Foldkit is the full-stack framework, with Effect UI as its frontend."
         )
       ),
-      Section(h, "What changes").children(
-        h.h2.children("Each component holds its own state"),
-        h.p.class("prose").children(
-          "In Effect UI every component instance has its own Schema Model, changed only by its own update. A parent passes props down and handles the events its children emit. It no longer stores a child's state or forwards its messages. Your Models, Messages and update functions are written the same way, and the MessageLog still records every step under the instance's path."
+      h.section.attr("aria-labelledby", "one-model").children(
+        h.h2.id("one-model").children("One Model in Foldkit 0.x"),
+        h.p.children(
+          "In Foldkit 0.x the whole app is one Schema Model, and every Message goes through one update. You could start at the Model, follow a Message, and see exactly what changed and why. That made apps easy to reason about and easy to test."
         ),
-        h.p.class("prose").children(
-          "Here is the same confirm dialog in both. The Effect UI one is running: open it, close it, and step through what the log recorded."
+        h.p.children(
+          "One Model meant the parent stored each child's Model. Every message the child sent was wrapped, routed through the parent's update, and unwrapped again, even when the parent had no decision to make."
         ),
-        h.div.class("compare").children(
-          Flow(h, {
-            key: "foldkit",
-            props: {
+        h.p.children(
+          "foldkit.dev's own source has 59 Got*Message wrappers, 84 Update.foldChild* call sites and 88 h.submodel embeds. That's wiring you write and maintain, and so do your agents."
+        )
+      ),
+      h.section.attr("aria-labelledby", "components").children(
+        h.h2.id("components").children("Components in Effect UI"),
+        h.p.children(
+          "In Effect UI every component instance has its own Schema Model, changed only by its own update. A parent passes props down and handles the events its children emit. It no longer stores a child's state or forwards its messages."
+        ),
+        Diagram(h, "One click on + in the same counter, in each version."),
+        h.figure.class("compare wide").children(
+          h.div.class("compare-columns").children(
+            Example(h, {
               title: "Foldkit 0.x",
-              files: h.props.foldkit,
-              steps: foldkitSteps,
-              page: { name: "Page", note: "Stores the dialog's Model", state: foldkitInitial },
-              dialog: { name: "Dialog.update", note: "Runs on the Model the page passes in", state: [] },
-              empty: "Press Step to follow one open and one close."
-            }
-          }),
-          Flow(h, {
-            key: "effect",
-            props: {
-              title: "Effect UI",
-              files: [h.props.effect],
-              page: { name: "DialogPage", note: "Owns whether the dialog is open", state: ["confirm: false"] },
-              dialog: {
-                name: "Dialog",
-                note: "Owns focus and transition state",
-                state: ["mounted: false", "started: false"]
-              },
-              empty: "Press Discard draft to record what happens."
-            },
-            slots: { demo: h.div.class("demo").children(DialogPage(h, {})) }
-          })
-        ),
-        h.table.class("totals").children(
-          h.caption.children("One open and one close, counted"),
-          h.thead.children(
-            h.tr.children(
-              h.th.attr("scope", "col").children(""),
-              h.th.attr("scope", "col").children("Foldkit 0.x"),
-              h.th.attr("scope", "col").children("Effect UI")
-            )
+              files: h.props.counter.foldkit,
+              demo: h.div.class("embed").onMount(EmbedFoldkitPage())
+            }),
+            Example(h, { title: "Effect UI", files: h.props.counter.effect, demo: Page(h, {}) })
           ),
-          h.tbody.children(
-            ...totals.map(([name, foldkit, effect]) =>
-              h.tr.key(name).children(
-                h.th.attr("scope", "row").children(name),
-                h.td.children(foldkit),
-                h.td.children(effect)
-              )
-            )
+          h.figcaption.class("caption").children(
+            "Both counters are running. Click + in each, then hide the counter and show it again."
+          )
+        ),
+        h.p.children(
+          "Your Models, Messages and update functions are written the same way, and the MessageLog still records every step under the instance's path."
+        )
+      ),
+      h.section.attr("aria-labelledby", "lifetime").children(
+        h.h2.id("lifetime").children("How long a component's state lives"),
+        h.p.children(
+          "Stop rendering a component and its Model goes with it. That's the trade for not storing every child's state yourself. When state has to survive being off screen, like a draft on a tab the reader switched away from, the parent renders that child with ",
+          h.code.children("h.scoped"),
+          ", and its Model is kept while it's hidden."
+        ),
+        h.figure.class("kept").children(
+          ...h.props.kept.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet))),
+          h.figcaption.class("caption").children(
+            "The same Counter, defined with scoped: true and rendered inside h.scoped, keeps its count when it's hidden."
           )
         )
       ),
-      Section(h, "Lifetime").children(
-        h.h2.children("By default, state lasts as long as the component is rendered"),
-        h.p.class("prose").children(
-          "Stop rendering a component and its Model goes with it. That's the trade for not storing every child's state yourself, and we think it's the right one. When state has to survive being off screen, like a draft on a tab the reader switched away from, the parent renders that child with h.scoped, and its Model is kept while it's hidden."
-        )
-      ),
-      Section(h, "Dependencies").children(
-        h.h2.children("A component provides its own services"),
-        h.p.class("prose").children(
-          "Say an editor saves drafts through a Drafts service. In Foldkit 0.x the editor's Command can ask for Drafts. To share one Drafts service across Commands, this app puts Drafts.layer in makeApplication's resources. The runtime builds that Layer the first time any Command or Subscription runs, whether or not it uses Drafts, and keeps it until the app shuts down. Every Command in the app can reach it. Leave it out and the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves. A Command can instead provide the service inside its own Effect, which builds it again on every run."
+      h.section.attr("aria-labelledby", "services").children(
+        h.h2.id("services").children("Providing services to a component"),
+        h.p.children(
+          "Say an editor saves drafts through a Drafts service. In Foldkit 0.x the editor's Command can ask for Drafts. To share one Drafts service across Commands, this app puts Drafts.layer in makeApplication's resources. The runtime builds that Layer the first time any Command or Subscription runs, whether or not it uses Drafts, and keeps it until the app shuts down. Leave it out and the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves."
         ),
-        h.div.class("compare").children(
-          Listing(
-            h,
-            "Foldkit 0.x",
-            h.props.provider.foldkit,
-            "The editor's Command asks for Drafts. This app provides it at the root, to every Command."
+        h.figure.class("compare wide").children(
+          h.div.class("compare-columns").children(
+            Example(h, { title: "Foldkit 0.x", files: h.props.provider.foldkit }),
+            Example(h, { title: "Effect UI", files: h.props.provider.effect })
           ),
-          Listing(
-            h,
-            "Effect UI",
-            h.props.provider.effect,
-            "The editor provides Drafts in its own file. The entry module never mentions it."
+          h.figcaption.class("caption").children(
+            "Foldkit 0.x provides Drafts at the root, to every Command. Effect UI provides it on Editor, in Editor's own file."
           )
         ),
-        h.p.class("prose").children(
-          "Component.provide is Effect.provide for a component and everything below it. The editor's file exports Editor with its Layers already provided, so a page renders Editor and passes nothing down. With two Editors on screen, each has its own text, and both use one Drafts service. It's built when the first Editor mounts and released when the last one unmounts, so removing one Editor drops that Editor's text and keeps Drafts for the other. Mounting EditorNoDeps, which has no Layers, still compiles, but the mounted app then needs SaveDraft, and TypeScript won't let you run it until something provides one. A test can mount EditorNoDeps with a fake."
+        h.p.children(
+          "Component.provide is Effect.provide for a component and everything below it. With two Editors on screen, each has its own text, and both use one Drafts service. It's built when the first Editor mounts and released when the last one unmounts. Mounting EditorNoDeps, which has no Layers, still compiles, but the mounted app then needs SaveDraft, and TypeScript won't let you run it until something provides one. A test can mount EditorNoDeps with a fake."
         )
       ),
-      Section(h, "What's next").children(
-        h.h2.children("Moving from Foldkit 0.x"),
-        h.p.class("prose").children(
-          "The upgrade guide isn't published yet. When it is, it will cover the API changes step by step. It's a migration, not a rewrite: your Models, Messages and update functions move across mostly as they are. Foldkit, the full-stack framework, builds on Effect UI from here."
+      h.section.attr("aria-labelledby", "carries-over").children(
+        h.h2.id("carries-over").children("What carries over"),
+        h.p.children(
+          "Effect UI keeps the same shape: a Schema Model, Messages, and pure init, update and view. Messages are facts, ClickedSave and not Save, and update decides what a fact means. Commands, Subscriptions and Mounts keep their names, and the runtime runs them. A child never knows its parent, and reports facts upward."
         ),
-        h.p.class("links").children(
-          h.a.class("button primary").attr("href", "https://github.com/Effect-TS/ui").children("Effect UI on GitHub")
+        h.p.children(
+          "State is still Schema data. The server ships it, the Router restores it on Back, and the MessageLog records every update. Tests run no effects: each Command is data the test resolves by name."
+        )
+      ),
+      h.section.attr("aria-labelledby", "next").children(
+        h.h2.id("next").children("Moving from Foldkit 0.x"),
+        h.p.children(
+          "The upgrade guide isn't published yet. When it is, it will cover the API changes step by step. It's a migration, not a rewrite: your Models, Messages and update functions move across mostly as they are. Foldkit, the full-stack framework, builds on Effect UI from here. Effect UI is ",
+          h.a.attr("href", "https://github.com/Effect-TS/ui").children("on GitHub"),
+          "."
         )
       ),
       h.footer.class("footer").children(
