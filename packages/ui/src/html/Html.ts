@@ -132,7 +132,8 @@ import * as HtmlHead from "./HtmlHead.ts"
  * type error. It's a framework service, so a Command may use it without it
  * appearing in a component's requirements. It holds the element operations
  * the ref Commands use, which a test on `TestHost` fakes with
- * `Layer.succeed(Html.Host, ...)`.
+ * `Layer.succeed(Html.Host, ...)`. `showPicker` returns whether the browser
+ * opened the picker.
  *
  * @stability experimental
  * @category services
@@ -145,6 +146,7 @@ export class Host extends Context.Service<Host, {
   readonly measure: (element: globalThis.Element) => Rect
   readonly select: (element: globalThis.Element) => void
   readonly requestSubmit: (element: globalThis.Element) => boolean
+  readonly showPicker: (element: globalThis.Element) => boolean
 }>()("@effect/ui/html/Html/Host") {}
 
 declare module "../Command.ts" {
@@ -320,8 +322,21 @@ export interface ValuePayload {
 
 /**
  * The payload of `input` and `change` on an `input`: its value, whether
- * it's checked (a checkbox or radio button), and how the edit was made, as
- * `ValuePayload` describes.
+ * it's checked (a checkbox or radio button), the files it holds (a file
+ * input), and how the edit was made, as `ValuePayload` describes.
+ *
+ * **Details**
+ *
+ * `files` is empty unless the input is `type="file"`. A `File` isn't plain
+ * data: send it on to a Command whose args type it with
+ * `Schema.instanceOf(File)`, and keep plain facts about it, such as its name
+ * and size, in the Model, which must stay encodable. A `Schema.File` in the
+ * Model encodes the file's bytes into the page state.
+ *
+ * Give a file input `.value("")` to report each choice once: the browser
+ * host sends the files in `change`, then empties the input, so choosing the
+ * same file again sends `change` again. Without `.value` the input keeps
+ * what the user chose.
  *
  * @stability experimental
  * @category events
@@ -329,6 +344,7 @@ export interface ValuePayload {
  */
 export interface InputPayload extends ValuePayload {
   readonly checked: boolean
+  readonly files: ReadonlyArray<File>
 }
 
 /**
@@ -841,6 +857,9 @@ export class VoidElement<
   /**
    * The controlled `value` of an `input`, `textarea` or `select`. The element
    * always shows it, whatever the user types, until the Model changes.
+   *
+   * A browser lets a file input's value only be emptied, so the browser host
+   * writes `""` to one and skips any other value. See `InputPayload`.
    *
    * @since 0.1.0
    */

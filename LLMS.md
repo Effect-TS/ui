@@ -966,6 +966,12 @@ client, not the services.
   Compare a controlled modal, a workflow started by mounting it, and a provider
   that owns visibility. Contrast an initial prop with a live prop and see
   how competing routes for the same value or request can still compile.
+- **[Files](./ai-docs/src/10_ui/28_files.ts)**:
+  Let the user choose a file and read it: a file input reports the `File`s
+  the user chose, `DomFile.pick` opens a picker from a keyboard shortcut,
+  and a Command reads the file with `DomFile.readAsText`. Cancelling the
+  Command stops the browser reading the file. A story resolves the picker
+  and the read, and a scene chooses a file in the input.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta

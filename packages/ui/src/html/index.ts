@@ -31,6 +31,12 @@ export * as DomCommand from "./DomCommand.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as DomFile from "./DomFile.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as DomImages from "./DomImages.ts"
 
 /**

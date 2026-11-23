@@ -159,8 +159,10 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   type(locator: Locator.Locator, value: string, details?: EditDetails): this
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
-   * the new value; an object also sets `checked` on an `input`, and
+   * the new value; an object also sets `checked` on an `input`, its current
+   * `checked` otherwise, `files` on a file input, none otherwise, and
    * `composing` and `inputType`, `false` and `""` otherwise.
+   * `change(locator, { files })` chooses files in a file input.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this
   /**

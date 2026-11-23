@@ -1,7 +1,7 @@
 /**
  * Commands on rendered elements: `focus`, `blur`, `scrollIntoView`,
- * `measure`, `select` and `requestSubmit`, each given a ref from
- * `Html.ref` or `Row.at`.
+ * `measure`, `select`, `requestSubmit` and `showPicker`, each given a ref
+ * from `Html.ref` or `Row.at`.
  *
  * A Command runs once the render the issuing `update` caused is committed,
  * and reaches the element through `Html.Host`, which a test on `TestHost`
@@ -280,3 +280,71 @@ export const requestSubmit = <N extends HTMLElement, Msg>(
   f: (result: Submitted) => Msg
 ): Command.Mapped<Command.Issued<Submitted, never, Submitted, "Effect">, Msg> =>
   Command.map(RequestSubmit.make({ ref }), f)
+
+/**
+ * What `showPicker` reports: whether the ref was rendered, and whether the
+ * browser opened its picker.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Opened extends Found {
+  readonly opened: boolean
+}
+
+/**
+ * The Command behind `showPicker`.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Opened> = Command.make(
+  "DomCommand.showPicker",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) =>
+    Effect.map(withElement(ref, (host, element) => host.showPicker(element)), (done): Opened => ({
+      found: Option.isSome(done),
+      opened: Option.getOrElse(done, () => false)
+    }))
+)
+
+/**
+ * Opens the picker of the `input` or `select` `ref` names, as a click on
+ * it would, and sends `f`'s message.
+ *
+ * **When to use**
+ *
+ * Use to open a file input the view renders from a menu item or a keyboard
+ * shortcut. The files arrive in the input's `onChange`. To choose files
+ * without rendering an input, use `DomFile.pick`.
+ *
+ * **Details**
+ *
+ * It calls the element's `showPicker()`, or `click()` on a file input in a
+ * browser without it. `opened` is `false` when the browser refuses, as it
+ * does outside a user's action and for a disabled element. A Command issued
+ * from a click or key press runs within that action.
+ *
+ * **Example** (Opening a rendered file input's picker)
+ *
+ * ```ts
+ * import { DomCommand, Html } from "@effect/ui/html"
+ * import { UiSchema } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ CompletedShowPicker: { opened: Schema.Boolean } })
+ * const Attachment = Html.ref("Attachment", "input")
+ *
+ * const command = DomCommand.showPicker(Attachment, ({ opened }) => Message.CompletedShowPicker({ opened }))
+ * ```
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const showPicker = <N extends HTMLInputElement | HTMLSelectElement, Msg>(
+  ref: Renderer.Ref<N>,
+  f: (result: Opened) => Msg
+): Command.Mapped<Command.Issued<Opened, never, Opened, "Effect">, Msg> => Command.map(ShowPicker.make({ ref }), f)

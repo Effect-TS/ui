@@ -117,7 +117,9 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
   type(locator: Locator.Locator, value: string): Effect.Effect<void, Play.StepError>
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
-   * the new value; an object also sets `checked` on an `input`.
+   * the new value; an object also sets `checked` on an `input`, and `files`
+   * on a file input. `change(locator, { files })` chooses files in a file
+   * input.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError>
   /**
@@ -187,7 +189,8 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError> {
     return this.one("change", locator, "change", (node) => defaults.changePayload(node, value), (node, payload) => {
-      Object.assign(node.props, payload)
+      node.props.value = payload.value
+      if ("checked" in payload) node.props.checked = payload.checked
     })
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError> {

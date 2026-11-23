@@ -128,6 +128,7 @@ import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
+import * as DomFile from "./DomFile.ts"
 import * as DomImages from "./DomImages.ts"
 import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
@@ -320,9 +321,20 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
   const composing = e?.isComposing === true
   const inputType = typeof e?.inputType === "string" ? e.inputType : ""
   return control.localName === "input"
-    ? { value: control.value, checked: control.checked === true, composing, inputType }
+    ? {
+      value: control.value,
+      checked: control.checked === true,
+      files: control.files ? Array.from(control.files) : noFiles,
+      composing,
+      inputType
+    }
     : { value: String(control.value ?? ""), composing, inputType }
 }
+
+const noFiles: ReadonlyArray<File> = []
+
+const isFileInput = (node: globalThis.Node): boolean =>
+  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "file"
 
 const noSelection = { selectionStart: null, selectionEnd: null }
 
@@ -593,6 +605,7 @@ export const makeHost = (
     if (!composing.has(node)) beforeEdits.delete(node)
   }
   const writeControlled = (element: any, name: string, value: unknown) => {
+    if (name === "value" && value !== "" && isFileInput(element)) return
     const state = name === "value" && element.getRootNode().activeElement === element
       ? fieldStateOf(element)
       : undefined
@@ -1437,7 +1450,8 @@ export const makeHost = (
 
 /**
  * The element operations behind `DomCommand.focus`, `blur`,
- * `scrollIntoView`, `measure`, `select` and `requestSubmit`, on DOM elements.
+ * `scrollIntoView`, `measure`, `select`, `requestSubmit` and `showPicker`,
+ * on DOM elements.
  *
  * @stability experimental
  * @category constructors
@@ -1475,6 +1489,17 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
     if (form === null || typeof form.requestSubmit !== "function") return false
     form.requestSubmit()
     return true
+  },
+  showPicker: (element) => {
+    const field = element as HTMLInputElement
+    try {
+      if (typeof field.showPicker === "function") field.showPicker()
+      else if (field.type === "file" && !field.matches(":disabled")) field.click()
+      else return false
+      return true
+    } catch {
+      return false
+    }
   }
 }
 
@@ -1543,17 +1568,37 @@ const imagesOf = (document: Document): DomImages.Images => ({
     })
 })
 
+const filesOf = (document: Document): DomFile.Files => ({
+  pick: (options) =>
+    Effect.callback((resume) => {
+      const input = document.createElement("input")
+      input.type = "file"
+      input.multiple = options.multiple === true
+      if (options.accept !== undefined) input.accept = options.accept.join(",")
+      if (options.capture !== undefined) input.setAttribute("capture", options.capture)
+      const settle = (files: ReadonlyArray<File>) => resume(Effect.succeed({ opened: true, files }))
+      input.onchange = () => settle(Array.from(input.files ?? []))
+      input.oncancel = () => settle([])
+      if (!htmlHost.showPicker(input)) return resume(Effect.succeed({ opened: false, files: [] }))
+      return Effect.sync(() => {
+        input.onchange = null
+        input.oncancel = null
+      })
+    })
+})
+
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `DomSubscription.GlobalEvents`, and a `DomImages.Images` over it, for the
- * life of the Layer.
+ * `DomSubscription.GlobalEvents`, and a `DomImages.Images` and
+ * `DomFile.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `DomSubscription.GlobalEvents` and
- * `DomImages.Images` use the document and its `defaultView`, never globals.
+ * host's listeners. The signals, `DomSubscription.GlobalEvents`,
+ * `DomImages.Images` and `DomFile.Files` use the document and its
+ * `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1573,7 +1618,8 @@ export const layer = (options?: {
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
       Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
-      Context.add(DomImages.Images, imagesOf(document))
+      Context.add(DomImages.Images, imagesOf(document)),
+      Context.add(DomFile.Files, filesOf(document))
     )
   }))
 

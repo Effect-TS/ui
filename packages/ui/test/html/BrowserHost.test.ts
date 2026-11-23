@@ -1341,9 +1341,9 @@ describe("BrowserHost", { concurrent: false }, () => {
           area.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
           yield* tick
           expect(root.model()).toEqual([
-            `input {"value":"ka","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+            `input {"value":"ka","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
             `compositionend {"value":"ka"}`,
-            `change {"value":"ka","checked":false,"composing":false,"inputType":""}`,
+            `change {"value":"ka","checked":false,"files":[],"composing":false,"inputType":""}`,
             `input {"value":"auto","composing":false,"inputType":"insertReplacementText"}`,
             `compositionend {"value":"auto"}`
           ])
@@ -2019,6 +2019,34 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(accepting.dialog()!.open).toBe(false)
         expect(accepting.root.model()!.log).toEqual(["escape", "closed"])
         expect(calls).toEqual(["showModal Delete note?", "close Delete note?"])
+      }).pipe(Effect.scoped))
+
+    it.effect("a file input in a modal keeps its cancel to itself, and is never given a non-empty value", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Cancelled: {} })
+        const Upload = Component.define({
+          name: "Upload",
+          scoped: false,
+          model: Schema.Number,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => 0,
+          update: (cancels) => cancels + 1,
+          view: (_, h) =>
+            h.dialog.attr("aria-label", "Upload").modal(true).onCancel(Message.Cancelled()).children(
+              h.input.attrs({ type: "file", "aria-label": "File" }).value("notes.txt")
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Upload, {}, app)
+        yield* tick
+        const input = app.querySelector("input")!
+        const dismissed = new Event("cancel", { bubbles: true, cancelable: true })
+        input.dispatchEvent(dismissed)
+        yield* tick
+        expect([dismissed.defaultPrevented, root.model(), app.querySelector("dialog")!.open, input.value])
+          .toEqual([false, 0, true, ""])
       }).pipe(Effect.scoped))
 
     it.effect("a modal removed while open is forgotten, and switching mode closes without telling the app", () =>
