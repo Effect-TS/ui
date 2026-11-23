@@ -35,12 +35,13 @@ export const make = (options: {
         changes: Stream.fromPubSub(changes)
       }
 
+      const position = options.position ?? "BottomRight"
       const frame = document.createElement("iframe")
       frame.setAttribute("data-effect-ui-devtools", "")
       frame.title = "Effect UI inspector"
       frame.setAttribute(
         "style",
-        "position:fixed;" + corners[options.position ?? "BottomRight"] +
+        "position:fixed;" + corners[position] +
           ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
           "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
           "box-shadow:0 8px 28px rgb(0 0 0 / .14)"
@@ -56,7 +57,6 @@ export const make = (options: {
       const container = inner.getElementById("root")!
 
       const view = document.defaultView
-      const position = options.position ?? "BottomRight"
       const root = inner.documentElement
       root.setAttribute("data-position", position)
       const resize = (width: number, height: number) => {
@@ -75,7 +75,7 @@ export const make = (options: {
       }
       const grow = { x: position.endsWith("Right") ? -1 : 1, y: position.startsWith("Bottom") ? -1 : 1 }
       container.addEventListener("pointerdown", (event) => {
-        const grip = (event.target as Element).closest(".grip")
+        const grip = (event.target as Element).closest<HTMLElement>(".grip")
         const panel = grip?.parentElement
         if (grip == null || panel == null || event.button !== 0) return
         event.preventDefault()
@@ -86,7 +86,7 @@ export const make = (options: {
             start.rect.height + grow.y * (moved.screenY - start.y)
           )
         const end = () => {
-          grip.removeEventListener("pointermove", move as EventListener)
+          grip.removeEventListener("pointermove", move)
           const rect = panel.getBoundingClientRect()
           try {
             view?.localStorage.setItem(sizeKey, JSON.stringify([rect.width, rect.height]))
@@ -95,7 +95,7 @@ export const make = (options: {
           }
         }
         grip.setPointerCapture(event.pointerId)
-        grip.addEventListener("pointermove", move as EventListener)
+        grip.addEventListener("pointermove", move)
         grip.addEventListener("lostpointercapture", end, { once: true })
       })
 

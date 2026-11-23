@@ -27,8 +27,7 @@ const commandTags: ReadonlySet<string> = new Set([
 ])
 const instanceTags: ReadonlySet<string> = new Set(["Mounted", "Unmounted", "Waiting"])
 
-export const matches = (entry: Entry, filter: Filter, instance: number | null): boolean => {
-  if (instance !== null && (!("instance" in entry) || entry.instance !== instance)) return false
+export const matches = (entry: Entry, filter: Filter): boolean => {
   switch (filter) {
     case "all":
       return true
@@ -56,9 +55,6 @@ export const tagOf = (value: Schema.Json): string | undefined =>
 export const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path
 
 export const depthOf = (path: string): number => Math.max(0, path.split("/").length - 2)
-
-export const interruption = (reason: string): string =>
-  reason === "interrupt" ? "interrupted" : "interrupted (" + reason + ")"
 
 export interface Label {
   readonly text: string
@@ -92,11 +88,11 @@ export const labelOf = (entry: Entry): Label => {
     case "CommandAwaiting":
       return { text: entry.name, detail: "waiting", tone: "open" }
     case "CommandEnded":
-      return { text: entry.name, detail: "ended" }
+      return { text: entry.name, detail: reasonText.ended }
     case "CommandInterrupted":
-      return { text: entry.name, detail: interruption(entry.reason), tone: "bad" }
+      return { text: entry.name, detail: reasonText[entry.reason], tone: "bad" }
     case "CommandDropped":
-      return { text: entry.name, detail: "dropped on the server", tone: "bad" }
+      return { text: entry.name, detail: reasonText.server, tone: "bad" }
     case "SendDropped":
       return { text: "SendDropped", detail: entry.owner, tone: "bad" }
     default:
@@ -125,7 +121,7 @@ export interface Status {
 }
 
 export const statusesOf = (session: Inspector.Session, instance: Inspector.Instance): ReadonlyArray<Status> => {
-  const ended = new Map<string, number>()
+  const ended = new Map<Inspector.Reason, number>()
   let running = 0
   let waiting = 0
   for (const record of session.records(instance.instance)) {
@@ -140,15 +136,7 @@ export const statusesOf = (session: Inspector.Session, instance: Inspector.Insta
   }
   const statuses: Array<Status> = []
   for (const [reason, count] of ended) {
-    statuses.push(
-      reason === "ended"
-        ? { text: count + " ended" }
-        : reason === "failed"
-        ? { text: count + " failed", tone: "bad" }
-        : reason === "server"
-        ? { text: count + " dropped on the server", tone: "bad" }
-        : { text: count + " " + interruption(reason), tone: "bad" }
-    )
+    statuses.push({ text: count + " " + reasonText[reason], tone: reasonTone[reason] === "bad" ? "bad" : undefined })
   }
   if (running > 0) statuses.push({ text: running + " running", tone: "open" })
   if (waiting > 0) statuses.push({ text: waiting + " waiting", tone: "open" })
@@ -171,7 +159,7 @@ export const summaryOf = (entry: Entry | Inspector.Outside): string => {
 
 export type Step =
   | { readonly _tag: "Source"; readonly source: Source; readonly link: Ref | undefined }
-  | { readonly _tag: "Link"; readonly what: string; readonly ref: Ref }
+  | { readonly _tag: "Link"; readonly rel: Inspector.Link["rel"]; readonly ref: Ref }
   | {
     readonly _tag: "Entry"
     readonly ref: Ref
@@ -268,7 +256,7 @@ const issuingSteps = (session: Inspector.Session, issuing: IssuingEntry, selecte
   if (issuing._tag === "Update") {
     steps.push({ _tag: "Source", source: issuing.source, link: sourceLink(session, issuing.seq) })
   } else if (issuing.causedBy !== undefined) {
-    steps.push({ _tag: "Link", what: "causedBy", ref: refOf(session, issuing.causedBy) })
+    steps.push({ _tag: "Link", rel: "causedBy", ref: refOf(session, issuing.causedBy) })
   }
   const { byCommand, unattributed } = stoppedBy(session, issuing)
   steps.push({
@@ -304,7 +292,7 @@ export const chainOf = (session: Inspector.Session, entry: Entry): ReadonlyArray
   }
   const steps: Array<Step> = []
   for (const link of session.back(entry.seq)) {
-    steps.push({ _tag: "Link", what: link.rel === "issued" ? "issued by" : link.rel, ref: refOf(session, link.seq) })
+    steps.push({ _tag: "Link", rel: link.rel, ref: refOf(session, link.seq) })
   }
   steps.push({ _tag: "Entry", ref: { seq: entry.seq, entry }, selected: true })
   const named = session.forward(entry.seq).map((link) => ({ ...link, entry: session.resolve(link.seq) }))
@@ -367,8 +355,8 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
   }
   const rows: Array<Row> = []
   const visit = (value: Schema.Json, key: string | number | undefined, path: Array<string | number>, depth: number) => {
-    const change = byPath.get(pathKey(path))
     const id = pathKey(path)
+    const change = byPath.get(id)
     if (!isBranch(value) || change !== undefined && change.kind !== "unknown") {
       rows.push({ id, depth, key, value, change })
       return
@@ -383,7 +371,7 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
     } else {
       for (const [name, item] of Object.entries(value)) visit(item, name, [...path, name], inner)
     }
-    for (const removed of removedUnder.get(pathKey(path)) ?? []) {
+    for (const removed of removedUnder.get(id) ?? []) {
       rows.push({
         id: pathKey(removed.path),
         depth: inner,
@@ -406,6 +394,21 @@ export const statusOf = (changes: ReadonlyArray<Inspector.Change>): "same" | "ch
     : changes.some((change) => change.kind !== "unknown")
     ? "changed"
     : "unknown"
+
+export const reasonText: { readonly [R in Inspector.Reason]: string } = {
+  ended: "ended",
+  completed: "completed",
+  closed: "closed",
+  ready: "ready",
+  stopped: "stopped",
+  failed: "failed",
+  server: "dropped on the server",
+  interrupt: "interrupted",
+  switch: "interrupted (switch)",
+  unmount: "interrupted (unmount)",
+  layer: "interrupted (layer)",
+  self: "interrupted (self)"
+}
 
 export const reasonTone: { readonly [R in Inspector.Reason]: "ok" | "bad" } = {
   ended: "ok",
