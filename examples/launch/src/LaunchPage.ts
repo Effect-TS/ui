@@ -101,7 +101,7 @@ export const LaunchPage = Component.define({
         ),
         P(
           h,
-          "A Command is one request with one result. The `ClickedResetAfterDelay` handler returns `$.run(DelayReset.make({}))` and starts nothing itself. The runtime sleeps for one second and sends `CompletedDelayReset`, and that handler sets the count to zero. While the Command runs, `h.isRunning(DelayReset)` is true and the button reads Resetting. In Foldkit 0.x the same handler returned `{ model, commands: [DelayReset] }`."
+          "`DelayReset` waits one second and returns one Message, `CompletedDelayReset`. The `ClickedResetAfterDelay` handler returns `$.run(DelayReset.make({}))` and starts nothing itself. The runtime runs the Command and sends `CompletedDelayReset` to update, and that handler sets the count to zero. While the Command runs, `h.isRunning(DelayReset)` is true and the button reads Resetting. In Foldkit 0.x the same handler returned `{ model, commands: [DelayReset] }`."
         ),
         P(
           h,
@@ -262,7 +262,7 @@ export const LaunchPage = Component.define({
         }),
         P(
           h,
-          "`Command.asNoop` runs the Command and replaces its result with `Component.noop`, which never reaches update. The Effect UI Editor has one Message where the Foldkit 0.x Editor has two."
+          "The runtime still saves the draft. `Command.asNoop` replaces the result with `Component.noop`, so update receives no follow-up Message. The Effect UI Editor has one Message where the Foldkit 0.x Editor has two."
         ),
         P(
           h,
