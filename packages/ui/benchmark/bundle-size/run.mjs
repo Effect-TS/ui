@@ -2,10 +2,11 @@
 //
 // Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary]
+//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary] [--spike]
 //
 // Added gzip bytes are the counter total minus a separately bundled effect-only client.
 // Pass --vocabulary to measure the opt-in counter with the same click assertion.
+// Pass --spike to measure counter-spike.ts, the counter on the EFF-4218 kernel spike.
 //
 // --json writes the result and --base adds deltas against an earlier --json file. The table is also
 // appended to $GITHUB_STEP_SUMMARY when that is set.
@@ -19,8 +20,13 @@ import { gzipSync } from "node:zlib"
 import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
-const { values: { base, json, vocabulary } } = parseArgs({
-  options: { vocabulary: { type: "boolean", default: false }, base: { type: "string" }, json: { type: "string" } }
+const { values: { base, json, spike, vocabulary } } = parseArgs({
+  options: {
+    vocabulary: { type: "boolean", default: false },
+    spike: { type: "boolean", default: false },
+    base: { type: "string" },
+    json: { type: "string" }
+  }
 })
 const ui = path.resolve(import.meta.dirname, "../..")
 const effectDir = path.join(ui, "node_modules/effect")
@@ -83,7 +89,7 @@ async function measure() {
     execFileSync("tar", ["-xzf", packed, "--strip-components=1", "-C", installed])
     fs.symlinkSync(effectDir, path.join(modules, "effect"))
     const input = path.join(root, "counter.ts")
-    const source = fs.readFileSync(path.join(import.meta.dirname, "counter.ts"), "utf8")
+    const source = fs.readFileSync(path.join(import.meta.dirname, spike ? "counter-spike.ts" : "counter.ts"), "utf8")
     const binding = "elements: Html"
     if (vocabulary) assert.equal(source.split(binding).length, 2, "expected exactly one vocabulary binding")
     fs.writeFileSync(input, vocabulary ? source.replace(binding, "elements: Html.vocabulary") : source)
@@ -97,7 +103,7 @@ async function measure() {
   }
 }
 
-const elements = vocabulary ? "Html.vocabulary" : "Html"
+const elements = (vocabulary ? "Html.vocabulary" : "Html") + (spike ? " (kernel spike)" : "")
 const result = { ...await measure(), elements }
 const headers = ["Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
 const row = [elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]
