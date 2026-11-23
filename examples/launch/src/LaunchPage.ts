@@ -72,11 +72,11 @@ export const LaunchPage = Component.define({
 }).make({
   init: () => ({}),
   update: (model) => model,
-  head: () => [Head.title("Foldkit's frontend is now Effect UI")],
+  head: () => [Head.title("Effect UI succeeds Foldkit 0.x's frontend")],
   view: (_model, h) =>
     h.main.class("article").children(
       h.header.class("article-head").children(
-        h.h1.children("Foldkit's frontend is now Effect UI"),
+        h.h1.children("Effect UI succeeds Foldkit 0.x's frontend"),
         P(
           h,
           "Foldkit 0.x is the frontend framework on npm today as `foldkit`. Its frontend continues as Effect UI (`effect/ui`), while Foldkit becomes the full-stack framework built on top of it."
@@ -87,7 +87,7 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "define").children(
-        h.h2.id("define").children("What an Effect UI component looks like"),
+        h.h2.id("define").children("A component declares its Model and Messages, then defines its behavior and view"),
         P(
           h,
           "Start with a complete component: a counter that increments on click, resets after a one-second delay, and ticks automatically when auto-count is turned on."
@@ -112,7 +112,7 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "split").children(
-        h.h2.id("split").children("Splitting a component across functions"),
+        h.h2.id("split").children("The component definition types handlers and views written separately"),
         P(
           h,
           "When a component outgrows a single inline call, assign `Component.define(...)` to a variable and write each piece separately before calling `.make`. The definition carries the types for `$`, `h`, and every Message, so extracted handlers and views don't need manual type annotations."
@@ -143,7 +143,9 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "components").children(
-        h.h2.id("components").children("In Effect UI, each component owns its Model and Messages"),
+        h.h2.id("components").children(
+          "Each component instance stores its own Model and handles its own Messages"
+        ),
         P(
           h,
           "An Effect UI app is a tree of independent components. Each component instance has its own Model, Message union, and `update`, managed by the runtime. When a user interacts with a child, the runtime sends that Message straight to that child's `update` — the parent never stores the child's state or routes its Messages."
@@ -180,7 +182,7 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "lifetime").children(
-        h.h2.id("lifetime").children("Component state lives as long as the component is rendered"),
+        h.h2.id("lifetime").children("Component state lives as long as the component is rendered, by default"),
         P(
           h,
           "If you hid and showed both counters above, you saw the difference immediately: Foldkit 0.x kept the count, while Effect UI reset it to 0."
@@ -228,7 +230,7 @@ export const LaunchPage = Component.define({
             files: h.props.snippets.providerEffect
           },
           caption:
-            "Foldkit 0.x wires `Drafts` globally at startup. Effect UI scopes it to `Editor`, right where the component is defined."
+            "Foldkit 0.x configures `Drafts` globally at the root. Effect UI scopes it to `Editor`, right where the component is defined."
         }),
         P(
           h,
@@ -261,7 +263,7 @@ export const LaunchPage = Component.define({
         }),
         P(
           h,
-          "With `Command.asNoop`, the runtime still runs `SaveDraft`, then maps its result to `Component.noop` so `update` is never called. The Effect UI Editor has one Message instead of two."
+          "With `Command.asNoop`, the runtime still runs `SaveDraft`, then maps its result to `Component.noop` so no follow-up Message reaches `update`. The Effect UI Editor has one Message instead of two."
         ),
         P(
           h,
@@ -282,7 +284,7 @@ export const LaunchPage = Component.define({
         }),
         P(
           h,
-          "The parent supplies the elements, classes, and labels. Calling `counter.increment(h.button)` attaches the component's click handler to the parent's button, so clicks still flow straight into `Counter`'s `update`. Each render creates its own independent instance."
+          "The parent supplies the elements, classes, and labels. Calling `counter.increment(h.button)` attaches the component's click handler to the parent's button, so clicks still flow straight into `Counter`'s `update`. Each keyed placement (`compact` and `scoreboard`) is its own instance with its own count."
         ),
         P(
           h,
@@ -307,18 +309,18 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "testing").children(
-        h.h2.id("testing").children("Testing with Story, Scene, and Play"),
+        h.h2.id("testing").children("Story and Scene supply Command results; Play runs Commands and Subscriptions"),
         P(
           h,
-          "Each test below verifies the same scenario: clicking the delayed reset button brings the count back to zero."
+          "Each test below covers the same delayed reset."
         ),
         Compare(h, {
-          foldkit: { title: "Foldkit 0.x Story", files: h.props.snippets.storyFoldkit },
-          effect: { title: "Effect UI Story", files: h.props.snippets.storyEffect }
+          foldkit: { title: "Foldkit 0.x Story: passes update", files: h.props.snippets.storyFoldkit },
+          effect: { title: "Effect UI Story: passes the component", files: h.props.snippets.storyEffect }
         }),
         Compare(h, {
-          foldkit: { title: "Foldkit 0.x Scene", files: h.props.snippets.sceneFoldkit },
-          effect: { title: "Effect UI Scene", files: h.props.snippets.sceneEffect }
+          foldkit: { title: "Foldkit 0.x Scene: passes update and view", files: h.props.snippets.sceneFoldkit },
+          effect: { title: "Effect UI Scene: passes the component", files: h.props.snippets.sceneEffect }
         }),
         P(
           h,
@@ -365,7 +367,7 @@ export const LaunchPage = Component.define({
         AllResults(h)
       ),
       h.section.attr("aria-labelledby", "carries-over").children(
-        h.h2.id("carries-over").children("What stays the same"),
+        h.h2.id("carries-over").children("Messages still report facts; update still decides what changes"),
         P(
           h,
           "Underneath the component model, the core architecture hasn't changed. Models are still Schemas. Messages still describe facts that happened — like `ClickedSave` — and `update` decides how state transitions. `init`, `update`, and `view` remain pure functions, and Commands, Subscriptions, and Mounts are still declarative values executed by the runtime."
@@ -376,9 +378,9 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "next").children(
-        h.h2.id("next").children("Migrating from Foldkit 0.x"),
+        h.h2.id("next").children("You can reuse your Models, Messages, and update logic"),
         h.p.children(
-          "A step-by-step upgrade guide is on the way. Expect a migration rather than a rewrite: your Models, Messages, and update logic move over with minimal changes, and most of the diff is deleting parent forwarding boilerplate. Follow along with Effect UI ",
+          "The upgrade guide isn't published yet. When it is, it will walk through the API changes step by step. Expect a migration rather than a rewrite: your Models, Messages, and update logic move over with minimal changes, and most of the diff is deleting parent forwarding boilerplate. Follow along with Effect UI ",
           h.a.attr("href", "https://github.com/Effect-TS/ui").children("on GitHub"),
           "."
         )
