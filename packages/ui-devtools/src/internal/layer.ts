@@ -10,6 +10,8 @@ import { styles } from "./styles.ts"
 
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
 
+const sizeKey = "@effect/ui-devtools/size"
+
 const corners: { readonly [P in Position]: string } = {
   TopLeft: "top:12px;left:12px",
   TopRight: "top:12px;right:12px",
@@ -41,7 +43,7 @@ export const make = (options: {
         "position:fixed;" + corners[options.position ?? "BottomRight"] +
           ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
           "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
-          "box-shadow:0 4px 12px rgb(0 0 0 / .2)"
+          "box-shadow:0 8px 28px rgb(0 0 0 / .14)"
       )
       frame.srcdoc = "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
         "</style></head><body><div id=\"root\"></div></body></html>"
@@ -54,10 +56,53 @@ export const make = (options: {
       const container = inner.getElementById("root")!
 
       const view = document.defaultView
+      const position = options.position ?? "BottomRight"
+      const root = inner.documentElement
+      root.setAttribute("data-position", position)
+      const resize = (width: number, height: number) => {
+        root.style.setProperty("--panel-w", Math.max(480, Math.round(width)) + "px")
+        root.style.setProperty("--panel-h", Math.max(300, Math.round(height)) + "px")
+      }
+      const saved = ((): unknown => {
+        try {
+          return JSON.parse(view?.localStorage.getItem(sizeKey) ?? "null")
+        } catch {
+          return null
+        }
+      })()
+      if (Array.isArray(saved) && typeof saved[0] === "number" && typeof saved[1] === "number") {
+        resize(saved[0], saved[1])
+      }
+      const grow = { x: position.endsWith("Right") ? -1 : 1, y: position.startsWith("Bottom") ? -1 : 1 }
+      container.addEventListener("pointerdown", (event) => {
+        const grip = (event.target as Element).closest(".grip")
+        const panel = grip?.parentElement
+        if (grip == null || panel == null || event.button !== 0) return
+        event.preventDefault()
+        const start = { x: event.screenX, y: event.screenY, rect: panel.getBoundingClientRect() }
+        const move = (moved: PointerEvent) =>
+          resize(
+            start.rect.width + grow.x * (moved.screenX - start.x),
+            start.rect.height + grow.y * (moved.screenY - start.y)
+          )
+        const end = () => {
+          grip.removeEventListener("pointermove", move as EventListener)
+          const rect = panel.getBoundingClientRect()
+          try {
+            view?.localStorage.setItem(sizeKey, JSON.stringify([rect.width, rect.height]))
+          } catch {
+            return
+          }
+        }
+        grip.setPointerCapture(event.pointerId)
+        grip.addEventListener("pointermove", move as EventListener)
+        grip.addEventListener("lostpointercapture", end, { once: true })
+      })
+
       const viewport = () => {
         if (view === null) return
-        inner.documentElement.style.setProperty("--vw", view.innerWidth + "px")
-        inner.documentElement.style.setProperty("--vh", view.innerHeight + "px")
+        root.style.setProperty("--vw", view.innerWidth + "px")
+        root.style.setProperty("--vh", view.innerHeight + "px")
       }
       viewport()
       view?.addEventListener("resize", viewport)

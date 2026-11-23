@@ -50,7 +50,7 @@ const check = async (position, open) => {
   await page.mouse.click(box.x + box.width / 2, box.y + Math.min(r * 2, box.height / 2))
   if ((await clicks()) !== before) failures.push(name + ": a click inside reached the page")
   if (open) {
-    await frame.getByRole("button", { name: "Follow latest →" }).focus()
+    await frame.getByRole("button", { name: "Follow latest" }).focus()
     const keys = await page.evaluate(() => globalThis.counts.keys)
     await page.keyboard.press("Escape")
     if ((await page.evaluate(() => globalThis.counts.keys)) !== keys) failures.push(name + ": Escape reached the page")

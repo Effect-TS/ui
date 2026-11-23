@@ -59,6 +59,7 @@
   "scripts": {
     "codegen": "effect-utils codegen",
     "check-hit-testing": "node test/browser/check-hit-testing.mjs",
+    "check-panel": "node test/browser/check-panel.mjs",
     "build": "tsc -b tsconfig.json && pnpm babel",
     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
     "check": "tsc -b tsconfig.json"

@@ -1,0 +1,148 @@
+import { chromium } from "playwright"
+import { createServer } from "vite"
+import { fileURLToPath } from "node:url"
+
+const at = process.argv.indexOf("--executable")
+const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM
+
+const server = await createServer({
+  root: import.meta.dirname,
+  configFile: false,
+  logLevel: "silent",
+  resolve: { alias: { "@effect/ui-devtools": fileURLToPath(new URL("../../src/index.ts", import.meta.url)) } },
+  server: { port: 0, strictPort: false }
+})
+await server.listen()
+const url = server.resolvedUrls.local[0]
+const browser = await chromium.launch({ executablePath })
+const failures = []
+const expect = (ok, what, detail) => {
+  if (!ok) failures.push(what + " " + JSON.stringify(detail))
+}
+
+const setup = async (context) => {
+  const page = await context.newPage()
+  page.on("pageerror", (error) => failures.push("page error " + String(error)))
+  await page.goto(url)
+  await page.waitForSelector("body[data-ready]", { state: "attached" })
+  const frame = page.frameLocator("iframe[data-effect-ui-devtools]")
+  await frame.getByRole("button", { name: "Open the Effect UI inspector" }).click()
+  await frame.getByRole("dialog", { name: "Effect UI inspector" }).waitFor()
+  await page.waitForTimeout(100)
+  return { page, frame }
+}
+
+const timeline = (page) =>
+  page.evaluate(() => {
+    const doc = document.querySelector("iframe[data-effect-ui-devtools]").contentDocument
+    const viewport = doc.querySelector(".timeline")
+    const box = viewport.getBoundingClientRect()
+    const rows = Array.from(doc.querySelectorAll(".row"), (row) => Number(row.getAttribute("data-seq")))
+    return {
+      scrollTop: Math.round(viewport.scrollTop),
+      top: Number(doc.elementFromPoint(box.left + 40, box.top + 4)?.closest(".row")?.getAttribute("data-seq")),
+      newest: Math.max(...rows)
+    }
+  })
+
+const type = async (page, text) => {
+  await page.getByRole("textbox", { name: "Body n1" }).focus()
+  for (const key of text) {
+    await page.keyboard.type(key)
+    await page.waitForTimeout(30)
+  }
+  await page.waitForTimeout(250)
+}
+
+const atTop = (state) => state.scrollTop === 0 && state.top === state.newest
+
+const wheel = async (page, frame, delta) => {
+  const box = await frame.locator(".timeline").boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.wheel(0, delta)
+  await page.waitForTimeout(300)
+}
+
+const pinning = async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const { frame, page } = await setup(context)
+  const opened = await timeline(page)
+  await type(page, "abcdefghij")
+  let state = await timeline(page)
+  expect(atTop(state) && state.newest > opened.newest, "a timeline at the top stays pinned to new events", state)
+
+  await frame.locator(".row-button").nth(3).click()
+  await type(page, "klm")
+  state = await timeline(page)
+  expect(atTop(state), "selecting an entry keeps the timeline pinned", state)
+
+  await wheel(page, frame, 200)
+  const before = await timeline(page)
+  await type(page, "nopq")
+  const after = await timeline(page)
+  expect(
+    before.scrollTop > 0 && after.top === before.top && after.scrollTop >= before.scrollTop + 4 * 28,
+    "a reader farther down keeps their place",
+    { before, after }
+  )
+
+  await frame.getByRole("button", { name: "Follow latest" }).click()
+  await page.waitForTimeout(200)
+  await type(page, "rst")
+  state = await timeline(page)
+  expect(atTop(state), "Follow latest pins the timeline again", state)
+
+  await wheel(page, frame, 200)
+  await wheel(page, frame, -2000)
+  await type(page, "uv")
+  state = await timeline(page)
+  expect(atTop(state), "scrolling back to the top pins the timeline again", state)
+  await context.close()
+}
+
+const resizing = async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+  const { frame, page } = await setup(context)
+  const panel = frame.getByRole("dialog", { name: "Effect UI inspector" })
+  const opened = await panel.boundingBox()
+  expect(Math.round(opened.width) === 920 && Math.round(opened.height) === 560, "the panel opens at 920 by 560", opened)
+  expect(
+    Math.round(opened.x + opened.width) > 1400 && Math.round(opened.y + opened.height) > 860,
+    "the panel opens in the launcher's corner",
+    opened
+  )
+  const grip = await frame.locator(".grip").boundingBox()
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + grip.width / 2 - 100, grip.y + grip.height / 2 - 60, { steps: 5 })
+  await page.mouse.up()
+  await page.waitForTimeout(150)
+  const resized = await panel.boundingBox()
+  expect(
+    Math.round(resized.width) === 1020 && Math.round(resized.height) === 620,
+    "dragging the inner corner resizes the panel",
+    resized
+  )
+  await page.reload()
+  await page.waitForSelector("body[data-ready]", { state: "attached" })
+  await frame.getByRole("button", { name: "Open the Effect UI inspector" }).click()
+  await page.waitForTimeout(150)
+  const reopened = await panel.boundingBox()
+  expect(
+    Math.round(reopened.width) === 1020 && Math.round(reopened.height) === 620,
+    "the panel keeps its size after a reload",
+    reopened
+  )
+  await context.close()
+}
+
+try {
+  await pinning()
+  await resizing()
+} finally {
+  await browser.close()
+  await server.close()
+}
+for (const failure of failures) console.log(failure)
+console.log(failures.length === 0 ? "panel: ok" : "panel: " + failures.length + " failed")
+process.exitCode = failures.length === 0 ? 0 : 1

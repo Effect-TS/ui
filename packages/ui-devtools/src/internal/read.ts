@@ -12,9 +12,9 @@ type RunEntry = Extract<
   { readonly _tag: "CommandStarted" | "CommandEnded" | "CommandInterrupted" | "CommandAwaiting" | "CommandDropped" }
 >
 
-export type Tone = "plain" | "ok" | "bad" | "open" | "muted"
+export type Tone = "bad" | "open"
 
-export type Filter = "all" | "updates" | "commands" | "lifecycle"
+export type Filter = "messages" | "commands" | "all"
 
 const updateTags: ReadonlySet<string> = new Set(["Update", "Failed", "PropsChanged", "QueryChanged"])
 const commandTags: ReadonlySet<string> = new Set([
@@ -25,19 +25,18 @@ const commandTags: ReadonlySet<string> = new Set([
   "CommandDropped",
   "SendDropped"
 ])
+const instanceTags: ReadonlySet<string> = new Set(["Mounted", "Unmounted", "Waiting"])
 
 export const matches = (entry: Entry, filter: Filter, instance: number | null): boolean => {
   if (instance !== null && (!("instance" in entry) || entry.instance !== instance)) return false
   switch (filter) {
     case "all":
       return true
-    case "updates":
-      return updateTags.has(entry._tag)
+    case "messages":
+      return updateTags.has(entry._tag) || commandTags.has(entry._tag) || instanceTags.has(entry._tag)
     case "commands":
       return commandTags.has(entry._tag) || isIssuing(entry) && entry.commands.length > 0 ||
         issuedOf(entry) !== undefined
-    case "lifecycle":
-      return !updateTags.has(entry._tag) && !commandTags.has(entry._tag)
   }
 }
 
@@ -58,67 +57,19 @@ export const nameOf = (path: string): string => path.slice(path.lastIndexOf("/")
 
 export const depthOf = (path: string): number => Math.max(0, path.split("/").length - 2)
 
-export interface Glyph {
-  readonly glyph: string
-  readonly tone: Tone
-}
-
-const glyph = (glyph: string, tone: Tone = "plain"): Glyph => ({ glyph, tone })
-
-export const glyphOf = (entry: Entry, changed: Inspector.Previous["changed"] | undefined): Glyph => {
-  switch (entry._tag) {
-    case "Update":
-    case "Waiting":
-    case "PropsChanged":
-      return changed === true ? glyph("~") : glyph(" ")
-    case "Mounted":
-      return glyph("●")
-    case "Unmounted":
-      return glyph("⏏")
-    case "LayerPending":
-    case "CommandAwaiting":
-      return glyph("◌", "open")
-    case "LayerReady":
-    case "CommandEnded":
-      return glyph("✓", "ok")
-    case "MountEnded":
-      return entry.reason === "completed"
-        ? glyph("✓", "ok")
-        : entry.reason === "failed"
-        ? glyph("×", "bad")
-        : glyph("■")
-    case "SubscriptionStarted":
-    case "MountStarted":
-    case "CommandStarted":
-      return glyph("▶")
-    case "SubscriptionStopped":
-      return glyph("■")
-    case "LayerFailed":
-    case "Failed":
-    case "CommandInterrupted":
-    case "CommandDropped":
-    case "SendDropped":
-      return glyph("×", "bad")
-    default:
-      return glyph(" ")
-  }
-}
+export const interruption = (reason: string): string =>
+  reason === "interrupt" ? "interrupted" : "interrupted (" + reason + ")"
 
 export interface Label {
   readonly text: string
   readonly detail?: string | undefined
-  readonly commands?: number | undefined
+  readonly tone?: Tone | undefined
 }
 
 export const labelOf = (entry: Entry): Label => {
   switch (entry._tag) {
     case "Update":
-      return {
-        text: tagOf(entry.message) ?? "Update",
-        commands: entry.commands.length || undefined
-      }
-    case "Mounted":
-      return { text: "Mounted", commands: entry.commands.length || undefined }
+      return { text: tagOf(entry.message) ?? "Update" }
     case "SessionStarted":
       return { text: "SessionStarted", detail: entry.app }
     case "FetchStarted":
@@ -126,24 +77,38 @@ export const labelOf = (entry: Entry): Label => {
     case "QueryChanged":
       return { text: "QueryChanged", detail: entry.name }
     case "Failed":
-      return { text: "Failed", detail: entry.name === undefined ? entry.in : entry.in + " " + entry.name }
+      return { text: "Failed", detail: entry.name === undefined ? entry.in : entry.in + " " + entry.name, tone: "bad" }
+    case "LayerFailed":
+      return { text: "LayerFailed", tone: "bad" }
     case "SubscriptionStarted":
     case "SubscriptionStopped":
       return { text: entry._tag, detail: subscriptionText(entry) }
     case "MountStarted":
+      return { text: "MountStarted", detail: entry.name }
     case "MountEnded":
+      return { text: "MountEnded", detail: entry.name, tone: entry.reason === "failed" ? "bad" : undefined }
     case "CommandStarted":
+      return { text: entry.name, detail: "started" }
     case "CommandAwaiting":
+      return { text: entry.name, detail: "waiting", tone: "open" }
     case "CommandEnded":
-    case "CommandDropped":
-      return { text: entry._tag, detail: entry.name }
+      return { text: entry.name, detail: "ended" }
     case "CommandInterrupted":
-      return { text: entry._tag, detail: entry.name + " · " + entry.reason }
+      return { text: entry.name, detail: interruption(entry.reason), tone: "bad" }
+    case "CommandDropped":
+      return { text: entry.name, detail: "dropped on the server", tone: "bad" }
     case "SendDropped":
-      return { text: entry._tag, detail: entry.owner }
+      return { text: "SendDropped", detail: entry.owner, tone: "bad" }
     default:
       return { text: entry._tag }
   }
+}
+
+export const rowOf = (session: Inspector.Session, entry: Entry): Label => {
+  const label = labelOf(entry)
+  if (entry._tag !== "CommandStarted") return label
+  const run = session.run(entry.issued)
+  return run !== undefined && run.end === undefined ? { ...label, detail: "running", tone: "open" } : label
 }
 
 export const subscriptionText = (
@@ -154,15 +119,12 @@ export const subscriptionText = (
 export const instanceOf = (entry: Entry | Inspector.Outside): number | undefined =>
   "instance" in entry ? entry.instance : undefined
 
-export interface Badge {
-  readonly glyph: string
+export interface Status {
   readonly text: string
-  readonly tone: Tone
+  readonly tone?: Tone | undefined
 }
 
-const plural = (count: number, one: string, many: string) => count + " " + (count === 1 ? one : many)
-
-export const badgesOf = (session: Inspector.Session, instance: Inspector.Instance): ReadonlyArray<Badge> => {
+export const statusesOf = (session: Inspector.Session, instance: Inspector.Instance): ReadonlyArray<Status> => {
   const ended = new Map<string, number>()
   let running = 0
   let waiting = 0
@@ -176,28 +138,23 @@ export const badgesOf = (session: Inspector.Session, instance: Inspector.Instanc
     const reason = record.reason ?? "ended"
     ended.set(reason, (ended.get(reason) ?? 0) + 1)
   }
-  const badges: Array<Badge> = []
+  const statuses: Array<Status> = []
   for (const [reason, count] of ended) {
-    if (reason === "ended") {
-      badges.push({ glyph: "✓", text: plural(count, "command ended", "commands ended"), tone: "ok" })
-    } else if (reason === "failed") badges.push({ glyph: "×", text: count + " failed", tone: "bad" })
-    else if (reason === "server") badges.push({ glyph: "×", text: count + " dropped on the server", tone: "bad" })
-    else {
-      badges.push({
-        glyph: "×",
-        text: count + " interrupted" + (reason === "interrupt" ? "" : " · " + reason),
-        tone: "bad"
-      })
-    }
+    statuses.push(
+      reason === "ended"
+        ? { text: count + " ended" }
+        : reason === "failed"
+        ? { text: count + " failed", tone: "bad" }
+        : reason === "server"
+        ? { text: count + " dropped on the server", tone: "bad" }
+        : { text: count + " " + interruption(reason), tone: "bad" }
+    )
   }
-  if (running > 0) badges.push({ glyph: "◌", text: count(running, "running"), tone: "open" })
-  if (waiting > 0) badges.push({ glyph: "◌", text: count(waiting, "not started"), tone: "open" })
-  if (instance.unmounted !== undefined) badges.push({ glyph: "⏏", text: "unmounted", tone: "bad" })
-  if (badges.length === 0) badges.push({ glyph: "", text: "idle", tone: "muted" })
-  return badges
+  if (running > 0) statuses.push({ text: running + " running", tone: "open" })
+  if (waiting > 0) statuses.push({ text: waiting + " waiting", tone: "open" })
+  if (instance.unmounted !== undefined) statuses.push({ text: "unmounted", tone: "bad" })
+  return statuses
 }
-
-const count = (n: number, text: string) => n + " " + text
 
 export interface Ref {
   readonly seq: number
@@ -209,11 +166,7 @@ export const refOf = (session: Inspector.Session, seq: number): Ref => ({ seq, e
 export const summaryOf = (entry: Entry | Inspector.Outside): string => {
   if (entry._tag === "Outside") return "outside the buffer"
   const label = labelOf(entry)
-  return entry._tag === "Update"
-    ? "Update " + label.text
-    : label.detail === undefined
-    ? label.text
-    : label.text + " " + label.detail
+  return entry._tag === "Update" ? "Update " + label.text : [label.text, label.detail].filter(Boolean).join(" ")
 }
 
 export type Step =
