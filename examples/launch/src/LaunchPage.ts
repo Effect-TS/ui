@@ -80,27 +80,37 @@ export const LaunchPage = Component.define({
       h.header.class("article-head").children(
         h.h1.children("Foldkit 0.x continues as Effect UI"),
         h.p.children(
-          "We have paused feature work on Foldkit 0.x and moved that work to Effect UI, the library that ",
+          "We have paused feature work on ",
+          h.a.attr("href", "https://foldkit.dev").children("Foldkit 0.x"),
+          " and moved that work to Effect UI, the new frontend foundation announced in ",
           h.a.attr("href", "https://foldkit.dev/blog/foldkit-joins-effect").children("Foldkit Joins Effect"),
           ...Text(
             h,
-            " called the new frontend foundation. You import it from `effect/ui`, and Foldkit itself becomes the full-stack framework built on top of it."
+            ". You import it from `effect/ui`, and Foldkit will become the full-stack framework built on top of it."
           )
         ),
         P(
           h,
-          "If you have an app on Foldkit 0.x, most of what you know stays. You still write Models, Messages and update, and your app will be migrated, not rewritten, although some of the API changes are substantial. Foldkit 0.x keeps getting critical bug fixes at least until Effect UI ships with an upgrade guide."
+          "If you've been building with Foldkit 0.x, Effect UI will feel familiar, yet streamlined. Where a Foldkit 0.x app is one big Elm Architecture application, each Effect UI component is its own little one, and components have structured ways of communicating. Your app will be migrated, not rewritten. Some of the API changes are substantial, but all of them move in the right direction, towards better composability, scalability and performance."
         ),
-        P(
-          h,
-          "This page shows what is changing and why. It assumes you've built something with Foldkit 0.x, and most of the examples are live so you can try each difference yourself."
+        P(h, "This page covers what is changing in Effect UI and why.")
+      ),
+      h.section.attr("aria-labelledby", "terms").children(
+        h.h2.id("terms").children("Terms"),
+        h.dl.class("terms").children(
+          h.dt.children("Foldkit 0.x"),
+          h.dd.children("The existing frontend framework at foldkit.dev."),
+          h.dt.children("Effect UI"),
+          h.dd.children("The new frontend library that continues that work."),
+          h.dt.children("Foldkit"),
+          h.dd.children("The future full-stack framework built on Effect UI.")
         )
       ),
       h.section.attr("aria-labelledby", "define").children(
-        h.h2.id("define").children("An Effect UI component is made of the pieces you already write"),
+        h.h2.id("define").children("Components are the unit of composition in Effect UI"),
         P(
           h,
-          "We'll start with what a component looks like. Here is a counter with a delayed reset and an auto-count, and if you can read a Foldkit 0.x module, you can read it."
+          "A component is a small Elm Architecture program that you compose with other components. Here is a counter with a delayed reset and an auto-count."
         ),
         Beside(h, {
           label: "Live auto-counter",
@@ -121,16 +131,16 @@ export const LaunchPage = Component.define({
         h.h2.id("split").children("You can still write init, update and view as separate functions"),
         P(
           h,
-          "That counter is written in one call, but it doesn't have to be. A Foldkit 0.x module exports its init, update and view one by one, and you can keep that shape here:"
+          "The counter above defines `init`, `update`, `subscriptions` and `view` inline. As a component grows more complex, extracting these functions can make its logic easier to read:"
         ),
         Listing(h, h.props.snippets.split, "The counter from the first example, written as separate functions."),
         P(
           h,
-          "What differs is where the types come from. In Foldkit 0.x you annotate each function with its Model and Message types yourself, while here `CounterDef.update` and `CounterDef.view` take them from the definition. Only init and subscriptions name `Model`, because they are plain functions."
+          "`CounterDef.init`, `CounterDef.update`, `CounterDef.subscriptions` and `CounterDef.view` infer their types from the component definition, so the extracted functions need no type annotations."
         ),
         P(
           h,
-          "So far the differences are small. The change that affects how you structure an app is where the Model lives. To explain it, we need to start with Foldkit 0.x."
+          "So far, the differences between Foldkit 0.x and Effect UI are small. The most significant change is that Effect UI has no single application Model. Each component has its own."
         )
       ),
       h.section.attr("aria-labelledby", "one-model").children(
