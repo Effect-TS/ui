@@ -32,7 +32,8 @@ export const matches = (entry: Entry, filter: Filter, instance: number | null): 
     case "updates":
       return updateTags.has(entry._tag)
     case "commands":
-      return commandTags.has(entry._tag) || isIssuing(entry) && entry.commands.length > 0
+      return commandTags.has(entry._tag) || isIssuing(entry) && entry.commands.length > 0 ||
+        issuedOf(entry) !== undefined
     case "lifecycle":
       return !updateTags.has(entry._tag) && !commandTags.has(entry._tag)
   }
@@ -44,6 +45,9 @@ export const isIssuing = (entry: Entry | Inspector.Outside): entry is IssuingEnt
 export const isRun = (entry: Entry | Inspector.Outside): entry is RunEntry =>
   entry._tag === "CommandStarted" || entry._tag === "CommandEnded" || entry._tag === "CommandInterrupted" ||
   entry._tag === "CommandAwaiting" || entry._tag === "CommandDropped"
+
+export const issuedOf = (entry: Entry | Inspector.Outside): MessageLog.Issued | undefined =>
+  isRun(entry) ? entry.issued : entry._tag === "Failed" ? entry.issued : undefined
 
 export const tagOf = (value: Schema.Json): string | undefined => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
@@ -79,7 +83,11 @@ export const glyphOf = (entry: Entry, changed: Inspector.Previous["changed"] | u
     case "CommandEnded":
       return glyph("✓", "ok")
     case "MountEnded":
-      return entry.reason === "completed" ? glyph("✓", "ok") : entry.reason === "failed" ? glyph("×", "bad") : glyph("■")
+      return entry.reason === "completed"
+        ? glyph("✓", "ok")
+        : entry.reason === "failed"
+        ? glyph("×", "bad")
+        : glyph("■")
     case "SubscriptionStarted":
     case "MountStarted":
     case "CommandStarted":
@@ -119,7 +127,7 @@ export const labelOf = (entry: Entry): Label => {
     case "QueryChanged":
       return { text: "QueryChanged", detail: entry.name }
     case "Failed":
-      return { text: "Failed", detail: entry.in }
+      return { text: "Failed", detail: entry.name === undefined ? entry.in : entry.in + " " + entry.name }
     case "SubscriptionStarted":
     case "SubscriptionStopped":
       return { text: entry._tag, detail: subscriptionText(entry) }
@@ -141,7 +149,8 @@ export const labelOf = (entry: Entry): Label => {
 
 export const subscriptionText = (
   subscription: { readonly name: string; readonly deps: ReadonlyArray<Schema.Json> | null }
-): string => subscription.deps === null ? subscription.name : subscription.name + " " + JSON.stringify(subscription.deps)
+): string =>
+  subscription.deps === null ? subscription.name : subscription.name + " " + JSON.stringify(subscription.deps)
 
 export const instanceOf = (entry: Entry | Inspector.Outside): number | undefined =>
   "instance" in entry ? entry.instance : undefined
@@ -170,7 +179,9 @@ export const badgesOf = (session: Inspector.Session, instance: Inspector.Instanc
   }
   const badges: Array<Badge> = []
   for (const [reason, count] of ended) {
-    if (reason === "ended") badges.push({ glyph: "✓", text: plural(count, "command ended", "commands ended"), tone: "ok" })
+    if (reason === "ended") {
+      badges.push({ glyph: "✓", text: plural(count, "command ended", "commands ended"), tone: "ok" })
+    } else if (reason === "failed") badges.push({ glyph: "×", text: count + " failed", tone: "bad" })
     else if (reason === "server") badges.push({ glyph: "×", text: count + " dropped on the server", tone: "bad" })
     else {
       badges.push({
@@ -199,7 +210,11 @@ export const refOf = (session: Inspector.Session, seq: number): Ref => ({ seq, e
 export const summaryOf = (entry: Entry | Inspector.Outside): string => {
   if (entry._tag === "Outside") return "outside the buffer"
   const label = labelOf(entry)
-  return entry._tag === "Update" ? "Update " + label.text : label.detail === undefined ? label.text : label.text + " " + label.detail
+  return entry._tag === "Update"
+    ? "Update " + label.text
+    : label.detail === undefined
+    ? label.text
+    : label.text + " " + label.detail
 }
 
 export type Step =
@@ -218,7 +233,10 @@ export type Step =
   | { readonly _tag: "Running"; readonly since: Ref | undefined }
   | { readonly _tag: "Result"; readonly ref: Ref }
   | { readonly _tag: "CausedBy"; readonly ref: Ref }
-  | { readonly _tag: "Names"; readonly links: ReadonlyArray<Inspector.Link & { readonly entry: Entry | Inspector.Outside }> }
+  | {
+    readonly _tag: "Names"
+    readonly links: ReadonlyArray<Inspector.Link & { readonly entry: Entry | Inspector.Outside }>
+  }
 
 const sourceLink = (session: Inspector.Session, seq: number): Ref | undefined => {
   const link = session.back(seq).find((link) => link.rel === "source")
@@ -275,9 +293,7 @@ const issuingSteps = (session: Inspector.Session, issuing: IssuingEntry, selecte
         _tag: "Command",
         index,
         command,
-        stopped: stopped.filter((ref) =>
-          ref.entry._tag === "CommandInterrupted" && ref.entry.name === command.name
-        )
+        stopped: stopped.filter((ref) => ref.entry._tag === "CommandInterrupted" && ref.entry.name === command.name)
       })
       return
     }
@@ -289,17 +305,18 @@ const issuingSteps = (session: Inspector.Session, issuing: IssuingEntry, selecte
 
 export const chainOf = (session: Inspector.Session, entry: Entry): ReadonlyArray<Step> => {
   if (isIssuing(entry)) return issuingSteps(session, entry, entry.seq)
-  if (isRun(entry)) {
-    const issuing = session.resolve(entry.issued.seq)
+  const issued = issuedOf(entry)
+  if (issued !== undefined) {
+    const issuing = session.resolve(issued.seq)
     if (isIssuing(issuing)) {
-      const steps = issuingSteps(session, issuing, entry.seq, entry.issued.index)
+      const steps = issuingSteps(session, issuing, entry.seq, issued.index)
       if (entry._tag === "CommandAwaiting" || entry._tag === "CommandDropped") {
         steps.push({ _tag: "Entry", ref: { seq: entry.seq, entry }, selected: true })
       }
       return steps
     }
     return [
-      { _tag: "Link", what: "issued by", ref: refOf(session, entry.issued.seq) },
+      { _tag: "Link", what: "issued by", ref: refOf(session, issued.seq) },
       { _tag: "Entry", ref: { seq: entry.seq, entry }, selected: true }
     ]
   }

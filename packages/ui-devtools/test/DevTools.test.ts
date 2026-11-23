@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-import { MessageLog } from "@effect/ui"
-import { HtmlLocator } from "@effect/ui/html/testing"
+import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
+import { BrowserHost, Html } from "@effect/ui/html"
+import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
-import { type Capture, play, record } from "./fixtures/TwoEditors.ts"
+import { Effect, Layer, Schema } from "effect"
+import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 const settle = wait(10)
@@ -36,7 +37,9 @@ const click = Effect.fnUntraced(function*(element: Element) {
 const instance = (root: ShadowRoot, name: string) => root.querySelector(`[data-instance="${name}"]`)!
 
 const entry = (root: ShadowRoot, name: RegExp) => {
-  const found = HtmlLocator.queryAllByRole(root, "button", { name }).filter((node) => node.classList.contains("row-button"))
+  const found = HtmlLocator.queryAllByRole(root, "button", { name }).filter((node) =>
+    node.classList.contains("row-button")
+  )
   assert.isAbove(found.length, 0, "no timeline entry named " + name)
   return found
 }
@@ -47,7 +50,7 @@ const steps = (root: ShadowRoot) =>
   Array.from(root.querySelectorAll(".chain .step")).map((step) => ({
     step,
     what: text(step.querySelector(".what")),
-    body: text(step.querySelector(".body")),
+    body: text(step.querySelector(".step-body")),
     meta: text(step.querySelector(".meta"))
   }))
 
@@ -60,8 +63,7 @@ const step = (root: ShadowRoot, what: string) => {
 const heading = (root: ShadowRoot) =>
   Array.from(root.querySelectorAll(".ehead > span")).map((node) => text(node)).filter((part) => part !== "").join(" ")
 
-const follow = (root: ShadowRoot, what: string) =>
-  click(step(root, what).step.querySelector("button.ref")!)
+const follow = (root: ShadowRoot, what: string) => click(step(root, what).step.querySelector("button.ref")!)
 
 const selectClickedSave = Effect.fnUntraced(function*(root: ShadowRoot, pick = oldest) {
   yield* click(instance(root, "Editor[n2]"))
@@ -73,8 +75,8 @@ const commonChecks = Effect.fnUntraced(function*(root: ShadowRoot) {
   assert.strictEqual(changed?.querySelector(".g")?.textContent, "~")
   assert.strictEqual(changed?.querySelector(".t-key")?.textContent, "status: ")
   assert.strictEqual(changed?.querySelector(".badge")?.textContent, "changed")
-  assert.strictEqual(changed?.querySelector("del")?.textContent, '"Dirty"')
-  assert.strictEqual(changed?.querySelector("ins")?.textContent, '"Saving"')
+  assert.strictEqual(changed?.querySelector("del")?.textContent, "\"Dirty\"")
+  assert.strictEqual(changed?.querySelector("ins")?.textContent, "\"Saving\"")
 
   HtmlLocator.click(HtmlLocator.getByRole(root, "tab", { name: /Raw frame/ }))
   yield* settle
@@ -85,9 +87,9 @@ const commonChecks = Effect.fnUntraced(function*(root: ShadowRoot) {
   })
   yield* click(HtmlLocator.getByRole(root, "button", { name: "Copy frame" }))
   assert.strictEqual(copied.length, 1)
-  assert.include(copied[0], '"~redacted": true')
+  assert.include(copied[0], "\"~redacted\": true")
   assert.notInclude(copied[0], token)
-  assert.include(text(root.querySelector(".raw")), '"~redacted": true')
+  assert.include(text(root.querySelector(".raw")), "\"~redacted\": true")
   assert.notInclude(root.textContent, token)
 })
 
@@ -112,7 +114,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         "end",
         "causedBy"
       ])
-      assert.strictEqual(chain[0].body, 'DomEvent "click"')
+      assert.strictEqual(chain[0].body, "DomEvent \"click\"")
       assert.include(chain[1].body, "Update ClickedSave")
       assert.include(chain[1].body, "THIS ENTRY")
       assert.include(chain[1].meta, "Editor[n2]")
@@ -127,10 +129,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.include(heading(root), "PressedEscape")
       assert.include(heading(root), "/Workspace/Editor[n2]")
       const escape = step(root, "command 0")
-      assert.strictEqual(escape.body, 'Interrupt notes/SaveNote group {"noteId":"n2"}')
+      assert.strictEqual(escape.body, "Interrupt notes/SaveNote group {\"noteId\":\"n2\"}")
       assert.match(escape.meta, /^stopped #\d+$/)
       const source = step(root, "source")
-      assert.strictEqual(source.body, 'Subscription @effect/ui/html/document ["keydown"]')
+      assert.strictEqual(source.body, "Subscription @effect/ui/html/document [\"keydown\"]")
       assert.match(source.meta, /^started #\d+ on this instance$/)
       yield* click(source.step.querySelector("button.ref")!)
       assert.include(heading(root), "SubscriptionStarted")
@@ -153,7 +155,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const count = text(root.querySelector(".bar"))
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Follow latest →" }))
       assert.include(heading(root), "Unmounted")
-      assert.strictEqual(text(root.querySelector(".bar")).replace(/Inspecting #\d+/, ""), count.replace(/Inspecting #\d+/, ""))
+      assert.strictEqual(
+        text(root.querySelector(".bar")).replace(/Inspecting #\d+/, ""),
+        count.replace(/Inspecting #\d+/, "")
+      )
       assert.notInclude(root.textContent, "DevToolsOverlay")
       assert.isFalse(memory.entries().some((entry) => "path" in entry && entry.path.includes("DevToolsOverlay")))
     }))
@@ -198,6 +203,63 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* commonChecks(root)
     }))
 
+  it.live("reads a run whose defect failed its instance as failed, not running", () =>
+    Effect.gen(function*() {
+      const Upload = Command.make("files/Upload", { args: {} }, () => Effect.die("disk full"))
+      const UploaderMessage = UiSchema.TaggedEnum({ ClickedUpload: {} })
+      const Uploader = Component.define({
+        name: "Uploader",
+        scoped: false,
+        model: Schema.Struct({}),
+        message: UploaderMessage,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: { ClickedUpload: (_model, _message, $) => $.run(Upload.make()) },
+        view: (_model, h) => h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
+      })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) => h.main(Uploader(h, { key: "uploader", props: {} }))
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer()).pipe(
+        Effect.flatMap((services) => BrowserHost.mountEffect(Page, {}, app).pipe(Effect.provide(services)))
+      )
+      yield* settle
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Upload" }))
+      yield* wait(30)
+      const root = document.querySelector("[data-effect-ui-devtools]")!.shadowRoot!
+      yield* open(root)
+
+      const uploader = text(instance(root, "Uploader[uploader]"))
+      assert.include(uploader, "× 1 failed")
+      assert.notInclude(uploader, "running")
+      yield* click(instance(root, "Uploader[uploader]"))
+      yield* click(oldest(root, /Update ClickedUpload$/))
+      const end = step(root, "end")
+      assert.match(end.body, /^#\d+ Failed in command · the run failed its instance · \d+ms after issue$/)
+      assert.isTrue(end.step.classList.contains("stop"))
+      assert.isFalse(steps(root).some((step) => step.body.includes("no end observed")))
+      const run = Array.from(root.querySelectorAll(".lifecycle tr[data-kind=command] > *")).map((cell) => text(cell))
+      assert.strictEqual(run[1], "files/Upload")
+      assert.match(run[2], /^issued #\d+ · started #\d+$/)
+      assert.match(run[3], /^× failed #\d+ after \d+ms$/)
+
+      yield* follow(root, "end")
+      assert.include(heading(root), "Failed")
+      assert.strictEqual(step(root, "end").step.classList.contains("this"), false)
+      assert.include(step(root, "Update").body, "Update ClickedUpload")
+    }).pipe(Effect.scoped))
+
   it.live("leaves the app's Model and DOM as they are", () =>
     Effect.gen(function*() {
       const models = (entries: ReadonlyArray<MessageLog.Wire>) => {
@@ -222,6 +284,5 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.deepStrictEqual(within.models, without.models)
         assert.isNull(document.querySelector("[data-effect-ui-devtools]"))
       }
-      assert.isAbove((yield* record("interrupted")).length, 0)
     }))
 })

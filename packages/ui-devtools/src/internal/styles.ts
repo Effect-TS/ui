@@ -73,7 +73,7 @@ ol, ul { list-style: none; }
 .row-button { display: grid; grid-template-columns: 26px 16px minmax(0, 1fr) auto 58px; gap: 4px; align-items: center; padding: 0 12px 0 0; height: 24px; }
 .row:hover { background: var(--muted); }
 .row .seq { color: var(--fg-subtle); text-align: right; }
-.row.chain .seq { color: var(--fg); font-weight: 700; }
+.row.linked .seq { color: var(--fg); font-weight: 700; }
 .row .glyph { text-align: center; color: var(--fg-muted); }
 .row .label { overflow: hidden; text-overflow: ellipsis; }
 .row .label i { font-style: normal; color: var(--fg-muted); }
@@ -99,7 +99,7 @@ ol, ul { list-style: none; }
 .chain { padding: 2px 14px 10px; border-bottom: 1px solid var(--border); font-size: 11px; overflow: auto; max-height: 34vh; }
 .chain .sect { padding-left: 0; padding-right: 0; }
 .step { display: grid; grid-template-columns: 16px 150px minmax(0, 1fr) auto; gap: 6px; white-space: nowrap; align-items: baseline; padding: 2.5px 6px; margin: 0 -6px; border: 1px solid transparent; border-radius: 4px; }
-.step .body { overflow: hidden; text-overflow: ellipsis; }
+.step-body { overflow: hidden; text-overflow: ellipsis; }
 .step.indent .what { padding-left: 14px; }
 .step .dot { text-align: center; color: var(--ring); font-weight: 700; }
 .step .dot.tone-muted { color: var(--fg-subtle); }
@@ -144,8 +144,9 @@ ol, ul { list-style: none; }
 .lifecycle { border-top: 1px solid var(--border); padding: 0 14px 8px; max-height: 32vh; overflow: auto; }
 .lifecycle .sect { padding-left: 0; padding-right: 0; }
 .life-table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
-.life-table th { text-align: left; font: 400 12px var(--sans); color: var(--fg-muted); padding: 2px 12px 2px 0; white-space: nowrap; }
-.life-table td { padding: 2px 12px 2px 0; white-space: nowrap; }
+.life-table th { vertical-align: top; text-align: left; font: 400 12px var(--sans); color: var(--fg-muted); padding: 2px 12px 2px 0; white-space: nowrap; }
+.life-table td { padding: 2px 12px 2px 0; white-space: nowrap; vertical-align: top; }
+.life-table td:last-child { white-space: normal; padding-right: 0; }
 .legend { display: flex; gap: 14px; align-items: center; padding: 0 12px; border-top: 1px solid var(--border); background: var(--card); color: var(--fg-muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; }
 @media (prefers-reduced-motion: no-preference) { .row, .irow, .seg { transition: background-color 80ms; } }
 `

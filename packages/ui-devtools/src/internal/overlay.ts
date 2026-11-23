@@ -1,3 +1,5 @@
+import { Tabs } from "@effect/ui-kit/Tabs"
+import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit/VirtualList"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
@@ -5,8 +7,6 @@ import * as MessageLog from "@effect/ui/MessageLog"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import type * as View from "@effect/ui/View"
-import { Tabs } from "@effect/ui-kit/Tabs"
-import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit/VirtualList"
 import * as Effect from "effect/Effect"
 import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
@@ -138,8 +138,12 @@ const Placeholder = (h: H, value: MessageLog.Placeholder) =>
     ? h.span.class("placeholder").attr("title", "Redacted by the encoder: the value never left the app")
       .children("(redacted)")
     : "~truncated" in value
-    ? h.span.class("placeholder").attr("title", "Over maxEntryBytes").children("(truncated " + value["~truncated"] + " bytes)")
-    : h.span.class("placeholder").attr("title", "No JSON form").children("(unserialisable " + value["~unserialisable"] + ")")
+    ? h.span.class("placeholder").attr("title", "Over maxEntryBytes").children(
+      "(truncated " + value["~truncated"] + " bytes)"
+    )
+    : h.span.class("placeholder").attr("title", "No JSON form").children(
+      "(unserialisable " + value["~unserialisable"] + ")"
+    )
 
 const sessionOf = (feed: Feed): Session | undefined => {
   const sessions = feed.inspector.sessions()
@@ -152,7 +156,13 @@ const timelineOf = (session: Session, model: OverlayModel): ReadonlyArray<Entry>
 const selectedOf = (session: Session, model: OverlayModel, timeline: ReadonlyArray<Entry>) =>
   model.selected === null ? timeline[0] : session.resolve(model.selected)
 
-const Header = (h: H, feed: Feed, session: Session | undefined, selected: Entry | Inspector.Outside | undefined, model: OverlayModel) => {
+const Header = (
+  h: H,
+  feed: Feed,
+  session: Session | undefined,
+  selected: Entry | Inspector.Outside | undefined,
+  model: OverlayModel
+) => {
   const entries = session?.entries() ?? []
   const last = entries[entries.length - 1]
   return h.header.class("bar").children(
@@ -164,7 +174,10 @@ const Header = (h: H, feed: Feed, session: Session | undefined, selected: Entry 
       entries.length + " entries" + (last === undefined ? "" : " · last #" + last.seq + " " + clock(feed, last))
     ),
     selected === undefined ? null : h.span.class("chip").children("Inspecting #" + selected.seq),
-    h.button.class("chip", "button", model.selected === null && "on").attr("aria-pressed", String(model.selected === null))
+    h.button.class("chip", "button", model.selected === null && "on").attr(
+      "aria-pressed",
+      String(model.selected === null)
+    )
       .onClick(OverlayMessage.ClickedFollowLatest()).children("Follow latest →"),
     h.span.class("chip", "dashed").children("read-only"),
     h.button.class("chip", "button").attr("aria-label", "Close the inspector").onClick(OverlayMessage.ClickedClose())
@@ -211,7 +224,10 @@ const Instances = (h: H, session: Session, model: OverlayModel) => {
 const Filters = (h: H, model: OverlayModel) =>
   h.div.class("filters").attr("role", "group").attr("aria-label", "Filter entries").children(
     filters.map(([filter, label]) =>
-      h.button.key(filter).class("seg", model.filter === filter && "on").attr("aria-pressed", String(model.filter === filter))
+      h.button.key(filter).class("seg", model.filter === filter && "on").attr(
+        "aria-pressed",
+        String(model.filter === filter)
+      )
         .onClick(OverlayMessage.ClickedFilter({ filter })).children(label)
     )
   )
@@ -261,7 +277,7 @@ const Timeline = (
               element: h.div.key(keys[index]!).class(
                 "row",
                 entry.seq === selected && "selected",
-                railed[index] && "chain",
+                railed[index] && "linked",
                 Read.isRun(entry) || entry._tag === "Update" || entry._tag === "Failed" ? null : "life"
               ),
               index
@@ -330,7 +346,7 @@ const Step = (
       options.tone === "stop" ? "×" : options.tone === "open" ? "◌" : options.indent ? "└" : "●"
     ),
     h.span.class("what").children(what),
-    h.span.class("body").children(...body),
+    h.span.class("step-body").children(...body),
     h.span.class("meta").children(...(options.meta ?? []))
   )
 
@@ -372,12 +388,17 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
               meta: [placeMeta(feed, step.ref.entry)]
             })
           case "Entry":
-            return Step(h, step.ref.entry._tag, RefSummary(h, step.ref).slice(2).concat(
-              step.selected ? [h.span.class("tag-this").children("THIS ENTRY")] : []
-            ), {
-              tone: step.selected ? "this" : undefined,
-              meta: [SeqLink(h, step.ref), " · ", placeMeta(feed, step.ref.entry)]
-            })
+            return Step(
+              h,
+              step.ref.entry._tag,
+              RefSummary(h, step.ref).slice(2).concat(
+                step.selected ? [h.span.class("tag-this").children("THIS ENTRY")] : []
+              ),
+              {
+                tone: step.selected ? "this" : undefined,
+                meta: [SeqLink(h, step.ref), " · ", placeMeta(feed, step.ref.entry)]
+              }
+            )
           case "Command":
             return Step(
               h,
@@ -391,7 +412,9 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
               ],
               {
                 indent: true,
-                meta: step.stopped.length === 0 ? [] : ["stopped ", ...step.stopped.flatMap((ref) => [SeqLink(h, ref), " "])]
+                meta: step.stopped.length === 0
+                  ? []
+                  : ["stopped ", ...step.stopped.flatMap((ref) => [SeqLink(h, ref), " "])]
               }
             )
           case "Started": {
@@ -405,7 +428,9 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
           case "NotStarted":
             return Step(h, "started", [
               h.span.class("note").children(
-                step.ended ? "no CommandStarted: stopped before its work began" : "no CommandStarted yet: waiting to start"
+                step.ended
+                  ? "no CommandStarted: stopped before its work began"
+                  : "no CommandStarted yet: waiting to start"
               )
             ], { indent: true, dot: "muted" })
           case "Result":
@@ -423,13 +448,15 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
             ], { tone: "open", dot: "open" })
           case "End": {
             const end = step.ref.entry
-            const stop = end._tag === "CommandInterrupted" || end._tag === "CommandDropped"
+            const stop = end._tag === "CommandInterrupted" || end._tag === "CommandDropped" || end._tag === "Failed"
             return Step(h, "end", [
               SeqLink(h, step.ref),
               " ",
               h.span.class("strong").children(end._tag === "Outside" ? "" : end._tag),
               end._tag === "CommandInterrupted"
                 ? h.span.children(" reason ", h.span.class("reason").children(end.reason))
+                : end._tag === "Failed"
+                ? h.span.children(" in ", h.span.class("reason").children(end.in), " · the run failed its instance")
                 : null,
               step.after === undefined ? null : h.span.class("note").children(" · " + ms(step.after) + " after issue")
             ], {
@@ -449,11 +476,16 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
               meta: [placeMeta(feed, step.ref.entry)]
             })
           case "Names":
-            return Step(h, "named by", step.links.flatMap((link) => [
-              SeqLink(h, { seq: link.seq, entry: link.entry }),
-              h.span.class("note").children(" " + link.rel + " "),
-              link.entry._tag === "Outside" ? "" : Read.labelOf(link.entry).text + "  "
-            ]), { dot: "muted" })
+            return Step(
+              h,
+              "named by",
+              step.links.flatMap((link) => [
+                SeqLink(h, { seq: link.seq, entry: link.entry }),
+                h.span.class("note").children(" " + link.rel + " "),
+                link.entry._tag === "Outside" ? "" : Read.labelOf(link.entry).text + "  "
+              ]),
+              { dot: "muted" }
+            )
         }
       })
     )
@@ -534,12 +566,15 @@ const Details = (h: H, session: Session, entry: Entry, model: OverlayModel) => {
           h.div.class("pane").children(
             h.h4.children(
               h.span.children("Props seen"),
-              before !== undefined && before._tag !== "Outside" && "props" in before && Read.sameJson(before.props, state.props)
+              before !== undefined && before._tag !== "Outside" && "props" in before &&
+                Read.sameJson(before.props, state.props)
                 ? h.span.children("same as ", SeqLink(h, Read.refOf(session, before.seq)))
                 : h.span
             ),
             ModelTree(h, state.props, []),
-            entry._tag === "Update" ? h.h4.children(h.span.children("Message"), h.span.children("as encoded on the wire")) : null,
+            entry._tag === "Update"
+              ? h.h4.children(h.span.children("Message"), h.span.children("as encoded on the wire"))
+              : null,
             entry._tag === "Update" ? ModelTree(h, entry.message, []) : null
           )
         ),
@@ -575,7 +610,9 @@ const Details = (h: H, session: Session, entry: Entry, model: OverlayModel) => {
         state === undefined ? null : t.panel({ element: h.div.class("pane", "solo"), value: "events" })?.children(
           events.length === 0
             ? h.p.class("note").children("This entry emitted no event.")
-            : h.ol.class("commands").children(events.map((event, index) => h.li.key(String(index)).children(...Json(h, event))))
+            : h.ol.class("commands").children(
+              events.map((event, index) => h.li.key(String(index)).children(...Json(h, event)))
+            )
         ),
         t.panel({ element: h.div.class("pane", "solo"), value: "raw" })?.children(
           h.h4.children(h.span.children("Raw frame"), h.span.children("what Copy frame copies")),
@@ -587,7 +624,13 @@ const Details = (h: H, session: Session, entry: Entry, model: OverlayModel) => {
 
 const runText = (run: Inspector.Record) =>
   run.end !== undefined
-    ? run.reason === "ended" ? "ended" : run.reason === "server" ? "dropped on the server" : "interrupted · " + run.reason
+    ? run.reason === "ended"
+      ? "ended"
+      : run.reason === "failed"
+      ? "failed"
+      : run.reason === "server"
+      ? "dropped on the server"
+      : "interrupted · " + run.reason
     : run.start === undefined
     ? "not started"
     : "running, no end observed"
@@ -638,7 +681,9 @@ const recordRow = (h: H, session: Session, record: Inspector.Record) => {
         ? h.span.children(
           "■ closed by Unmounted ",
           SeqLink(h, endRef!),
-          h.span.class("note").children(record.kind === "subscription" ? " (no SubscriptionStopped entry)" : " (no LayerReady)")
+          h.span.class("note").children(
+            record.kind === "subscription" ? " (no SubscriptionStopped entry)" : " (no LayerReady)"
+          )
         )
         : h.span.children(
           (bad ? "× " : "✓ ") + (record.reason ?? "") + " ",
@@ -672,7 +717,9 @@ const LifecyclePanel = (h: H, session: Session, instance: number | undefined) =>
           h.th.attr("scope", "row").children("Instance"),
           h.td.class("mono").children(info.path),
           h.td.class("mono").children(
-            info.mounted === undefined ? "mounted before the buffer" : h.span.children("mounted ", SeqLink(h, Read.refOf(session, info.mounted)))
+            info.mounted === undefined
+              ? "mounted before the buffer"
+              : h.span.children("mounted ", SeqLink(h, Read.refOf(session, info.mounted)))
           ),
           h.td.class("mono", info.unmounted === undefined ? "tone-ok" : "tone-bad").children(
             info.unmounted === undefined
@@ -680,7 +727,14 @@ const LifecyclePanel = (h: H, session: Session, instance: number | undefined) =>
               : h.span.children(
                 "⏏ unmounted ",
                 SeqLink(h, Read.refOf(session, info.unmounted)),
-                cause === undefined ? "" : h.span.children(", causedBy ", ...RefSummary(h, cause).slice(0, 1), " ", cause.entry._tag === "Outside" ? "" : Read.labelOf(cause.entry).text)
+                cause === undefined
+                  ? ""
+                  : h.span.children(
+                    ", causedBy ",
+                    ...RefSummary(h, cause).slice(0, 1),
+                    " ",
+                    cause.entry._tag === "Outside" ? "" : Read.labelOf(cause.entry).text
+                  )
               )
           )
         ),
@@ -782,7 +836,9 @@ export const Overlay = Component.define({
     h.div.class("overlay", "at-" + h.props.position).children(
       model.open
         ? Panel(h, model)
-        : h.button.class("launcher").attr("aria-label", "Open the Effect UI inspector").onClick(OverlayMessage.ClickedOpen())
+        : h.button.class("launcher").attr("aria-label", "Open the Effect UI inspector").onClick(
+          OverlayMessage.ClickedOpen()
+        )
           .children(
             h.span.class("launcher-mark").attr("aria-hidden", "true").children("◆"),
             "Effect UI",
