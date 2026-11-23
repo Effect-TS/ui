@@ -5909,17 +5909,23 @@ const setup = (
       if (!inst.closed) markDirty(inst)
       checkIdle()
     })
+    const scope = inst.scope
     const slot: LazySlot = {
       path: `${inst.path}/${segment(view)}`,
       name: lazy[lazyOf.TypeId].name,
       lazy,
       release: () => {
         unwatch()
+        scopeRemoveFinalizerUnsafe(scope, slot)
         if (lazySlots.delete(slot)) checkIdle()
       }
     }
-    lazySlots.add(slot)
-    addFinalizer(inst.scope, Effect.sync(slot.release))
+    if (scope.state._tag === "Closed") {
+      unwatch()
+    } else {
+      lazySlots.add(slot)
+      scopeAddFinalizerUnsafe(scope, slot, () => Effect.sync(slot.release))
+    }
     lazy.preload()
     return { ...fallbackSlot(inst, view, pendingStatus, false, env, range), lazy: slot }
   }
