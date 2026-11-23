@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { BrowserHost, DomCommand, DomFile, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlFiles } from "@effect/ui/html"
 import { assert, describe, expect, it } from "@effect/vitest"
 import { Effect, Fiber, Layer, Schema } from "effect"
 
@@ -40,16 +40,19 @@ class Chunked extends Blob {
 
 const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
 
-describe("DomFile", { concurrent: false }, () => {
+describe("HtmlFiles", { concurrent: false }, () => {
   it.effect("reads a Blob's bytes, text and data URL, and a failed read is a FileReadError with its cause", () =>
     Effect.gen(function*() {
       const chunks = [new Uint8Array([0x68, 0xc3]), new Uint8Array([0xa9, 0x21])]
-      assert.deepStrictEqual(yield* DomFile.readAsBytes(new Chunked(chunks)), new Uint8Array([0x68, 0xc3, 0xa9, 0x21]))
-      assert.strictEqual(yield* DomFile.readAsText(new Chunked(chunks)), "hé!")
-      assert.strictEqual(yield* DomFile.readAsText(new Blob([new Uint8Array([0xe9])]), "latin1"), "é")
-      assert.strictEqual(yield* DomFile.readAsDataUrl(new Blob(["hi"])), "data:application/octet-stream;base64,aGk=")
+      assert.deepStrictEqual(
+        yield* HtmlFiles.readAsBytes(new Chunked(chunks)),
+        new Uint8Array([0x68, 0xc3, 0xa9, 0x21])
+      )
+      assert.strictEqual(yield* HtmlFiles.readAsText(new Chunked(chunks)), "hé!")
+      assert.strictEqual(yield* HtmlFiles.readAsText(new Blob([new Uint8Array([0xe9])]), "latin1"), "é")
+      assert.strictEqual(yield* HtmlFiles.readAsDataUrl(new Blob(["hi"])), "data:application/octet-stream;base64,aGk=")
       assert.strictEqual(
-        yield* DomFile.readAsDataUrl(new Blob(["hi"], { type: "text/plain" })),
+        yield* HtmlFiles.readAsDataUrl(new Blob(["hi"], { type: "text/plain" })),
         "data:text/plain;base64,aGk="
       )
 
@@ -59,7 +62,7 @@ describe("DomFile", { concurrent: false }, () => {
           return new ReadableStream<Uint8Array<ArrayBuffer>>({ start: (controller) => controller.error(cause) })
         }
       }
-      const error = yield* Effect.flip(DomFile.readAsText(new Changed()))
+      const error = yield* Effect.flip(HtmlFiles.readAsText(new Changed()))
       assert.strictEqual(error._tag, "FileReadError")
       assert.strictEqual(error.cause, cause)
     }))
@@ -68,8 +71,8 @@ describe("DomFile", { concurrent: false }, () => {
     Effect.gen(function*() {
       const picker = yield* pickers
       const context = yield* Layer.build(BrowserHost.layer())
-      const pick = (options: DomFile.PickOptions) =>
-        DomFile.Files.use((files) => files.pick(options)).pipe(Effect.provide(context), Effect.forkChild)
+      const pick = (options: HtmlFiles.PickOptions) =>
+        HtmlFiles.Files.use((files) => files.pick(options)).pipe(Effect.provide(context), Effect.forkChild)
       const file = new File(["hi"], "notes.txt")
 
       const chosen = yield* pick({ accept: ["image/*", ".pdf"], multiple: true, capture: "environment" })
@@ -89,7 +92,7 @@ describe("DomFile", { concurrent: false }, () => {
       assert.deepStrictEqual(yield* Fiber.join(yield* pick({})), { opened: false, files: [] })
     }).pipe(Effect.scoped))
 
-  it.effect("DomCommand.showPicker opens a rendered input's picker, whose files arrive in its change", () =>
+  it.effect("HtmlCommand.showPicker opens a rendered input's picker, whose files arrive in its change", () =>
     Effect.gen(function*() {
       const picker = yield* pickers
       const Attachment = Html.ref("Attachment", "input")
@@ -108,7 +111,7 @@ describe("DomFile", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>
           Message.match(message, {
-            PressedOpen: () => $.run(DomCommand.showPicker(Attachment, Message.ShowedPicker)),
+            PressedOpen: () => $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
             ShowedPicker: ({ found, opened }) => [...$.model, `found ${found}, opened ${opened}`],
             Chose: ({ files }) => [...$.model, `chose ${files.map((file) => file.name).join(", ")}`]
           }),
@@ -131,7 +134,7 @@ describe("DomFile", { concurrent: false }, () => {
       expect(input.files!.length).toBe(0)
     }).pipe(Effect.scoped))
 
-  it.effect("without showPicker, DomCommand.showPicker falls back to click only on an enabled file input and never submits a form", () =>
+  it.effect("without showPicker, HtmlCommand.showPicker falls back to click only on an enabled file input and never submits a form", () =>
     Effect.gen(function*() {
       const Submit = Html.ref("Submit", "input")
       const Attachment = Html.ref("Attachment", "input")
@@ -153,9 +156,9 @@ describe("DomFile", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>
           Message.match(message, {
-            OpenSubmit: () => $.run(DomCommand.showPicker(Submit, Message.ShowedPicker)),
-            OpenFile: () => $.run(DomCommand.showPicker(Attachment, Message.ShowedPicker)),
-            OpenLocked: () => $.run(DomCommand.showPicker(Locked, Message.ShowedPicker)),
+            OpenSubmit: () => $.run(HtmlCommand.showPicker(Submit, Message.ShowedPicker)),
+            OpenFile: () => $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
+            OpenLocked: () => $.run(HtmlCommand.showPicker(Locked, Message.ShowedPicker)),
             ShowedPicker: ({ found, opened }) => [...$.model, `found ${found}, opened ${opened}`],
             Submitted: () => [...$.model, "submitted"]
           }),

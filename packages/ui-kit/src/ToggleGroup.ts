@@ -110,8 +110,8 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
@@ -341,7 +341,7 @@ export const ToggleGroup = Component.define({
       ]
       if (target === undefined || target.value === value) return $.model
       return $.evolve({ active: target.value }).run(
-        DomCommand.Focus.make({ ref: Item.at(target.value) }).pipe(Command.asNoop)
+        HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(Command.asNoop)
       )
     }
   },

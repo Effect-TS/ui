@@ -5,7 +5,7 @@
  * and press a key in a whole-app test.
  */
 import { Component, UiSchema } from "@effect/ui"
-import { DomSubscription, Html } from "@effect/ui/html"
+import { Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { Effect, Layer, Schema } from "effect"
@@ -28,7 +28,7 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // Listening on the document while the game runs
 // ---------------------------------------------------------------------------
 
-// `DomSubscription` holds the listeners on the live document and window,
+// `HtmlSubscription` holds the listeners on the live document and window,
 // apart from `Html`, which only describes elements. Each entry is a
 // Subscription, keyed by target, event and phase, so the game listens only
 // while `running` is true. The handler returns a message
@@ -56,7 +56,7 @@ export const Snake = Component.define({
       ? h.p(`heading ${model.heading}`)
       : h.button.onClick(SnakeMessage.ClickedStart()).children("Start"),
   subscriptions: ({ model }) => [
-    model.running && DomSubscription.onDocument(
+    model.running && HtmlSubscription.onDocument(
       "keydown",
       ({ composing, defaultPrevented, editable, key, repeat }) => {
         if (defaultPrevented || composing || repeat) return undefined

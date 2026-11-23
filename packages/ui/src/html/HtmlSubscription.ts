@@ -1,8 +1,8 @@
 /**
- * Subscriptions to the host's document and window: `onDocument` for a
- * keyboard shortcut or a press outside a popup, `onCustomEvent` for a
- * `CustomEvent` dispatched on the document, `onWindow` for the window's
- * focus, and `onAnimationFrame` for animation.
+ * The Subscriptions to the page, as opposed to one element's events:
+ * `onDocument` for a keyboard shortcut or a press outside a popup,
+ * `onCustomEvent` for a `CustomEvent` dispatched on the document,
+ * `onWindow` for the window's focus, and `onAnimationFrame` for animation.
  *
  * Their sources are the `GlobalEvents` and `AnimationFrames` services,
  * which `BrowserHost.layer` provides. Nothing listens on the server, and a
@@ -151,7 +151,7 @@ export interface GlobalEvents {
  * @since 0.1.0
  */
 export const GlobalEvents: Context.Reference<GlobalEvents> = Context.Reference<GlobalEvents>(
-  "@effect/ui/html/DomSubscription/GlobalEvents",
+  "@effect/ui/html/HtmlSubscription/GlobalEvents",
   { defaultValue: () => silent }
 )
 
@@ -229,7 +229,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -248,7 +248,7 @@ const listenFor = (
  *   update: { PressedArrow: ($, { key }) => $.evolve({ heading: key }) },
  *   view: (h, model) => h.p(model.heading),
  *   subscriptions: ({ model }) => [
- *     model.running && DomSubscription.onDocument(
+ *     model.running && HtmlSubscription.onDocument(
  *       "keydown",
  *       // The page doesn't scroll on an arrow key, and other keys keep their default.
  *       ({ key }) => Schema.is(Direction)(key) ? Message.PressedArrow({ key }) : undefined,
@@ -269,7 +269,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -287,7 +287,7 @@ const listenFor = (
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
  *   view: (h, open) => h.p(open ? "help open" : "help closed"),
  *   subscriptions: () => [
- *     DomSubscription.onDocument(
+ *     HtmlSubscription.onDocument(
  *       "keydown",
  *       HtmlKeyboard.shortcuts([
  *         { key: "?", message: Message.OpenedHelp() },
@@ -329,13 +329,13 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  *
  * ```ts import.meta.vitest
  * import { UiSchema } from "@effect/ui"
- * import { DomSubscription } from "@effect/ui/html"
+ * import { HtmlSubscription } from "@effect/ui/html"
  *
  * const Message = UiSchema.TaggedEnum({ FocusedWindow: {}, BlurredWindow: {} })
  *
  * const subscriptions = () => [
- *   DomSubscription.onWindow("focus", Message.FocusedWindow()),
- *   DomSubscription.onWindow("blur", Message.BlurredWindow())
+ *   HtmlSubscription.onWindow("focus", Message.FocusedWindow()),
+ *   HtmlSubscription.onWindow("blur", Message.BlurredWindow())
  * ]
  *
  * subscriptions().map((subscription) => subscription.key) // => ['@effect/ui/html/window:"focus"', '@effect/ui/html/window:"blur"']
@@ -365,7 +365,7 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -383,7 +383,7 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  *   update: { Received: (_, { text }) => text },
  *   view: (h, text) => h.p(text),
  *   subscriptions: () => [
- *     DomSubscription.onCustomEvent("app:notice", ({ detail }) =>
+ *     HtmlSubscription.onCustomEvent("app:notice", ({ detail }) =>
  *       typeof detail === "string" ? Message.Received({ text: detail }) : undefined
  *     )
  *   ]
@@ -438,7 +438,7 @@ export interface AnimationFrames {
  * @since 0.1.0
  */
 export const AnimationFrames: Context.Reference<AnimationFrames> = Context.Reference<AnimationFrames>(
-  "@effect/ui/html/DomSubscription/AnimationFrames",
+  "@effect/ui/html/HtmlSubscription/AnimationFrames",
   { defaultValue: () => still }
 )
 
@@ -472,7 +472,7 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -493,7 +493,7 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  *   },
  *   view: (h, model) => h.p(`${Math.round(model.elapsed)} ms`),
  *   subscriptions: ({ model }) => [
- *     model.running && DomSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))
+ *     model.running && HtmlSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))
  *   ]
  * })
  *

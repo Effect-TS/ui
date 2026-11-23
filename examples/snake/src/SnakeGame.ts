@@ -3,7 +3,7 @@ import * as Direction from "#domain/direction"
 import * as Position from "#domain/position"
 import * as Snake from "#domain/snake"
 import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
-import { DomSubscription } from "@effect/ui/html"
+import { HtmlSubscription } from "@effect/ui/html"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
 
@@ -142,7 +142,7 @@ export const SnakeGame = Component.define({
           Stream.as(SnakeGameMessage.TickedClock())
         )
     ),
-    DomSubscription.onDocument(
+    HtmlSubscription.onDocument(
       "keydown",
       ({ key, ctrl, alt, meta, defaultPrevented }) =>
         defaultPrevented || ctrl || alt || meta || !HANDLED_KEYS.has(key)

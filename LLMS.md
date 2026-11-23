@@ -689,8 +689,8 @@ and the end of the test.
 
 Keys and presses that no element hears, such as a game's arrow keys or an
 Escape that closes a popup opened by hovering, are entries in
-`subscriptions`: `DomSubscription.onDocument("keydown", handler, options)`,
-and `DomSubscription.onWindow("focus" | "blur", handler)` for the window's
+`subscriptions`: `HtmlSubscription.onDocument("keydown", handler, options)`,
+and `HtmlSubscription.onWindow("focus" | "blur", handler)` for the window's
 focus. The handler and `preventDefault` mean what they mean on an element,
 and the payload adds `defaultPrevented`, so a listener can skip a key an
 element already took. `capture: true` hears a press before any element can stop it.
@@ -715,7 +715,7 @@ children chain on it, and it takes the element's mount. Pointer handlers
 get `x` and `y` in scene units. `pixelRatio: "auto"` draws sharply on a
 HiDPI screen; chain `.style({ width: "100%" })` for a canvas that fills
 its container. For motion, add
-`model.running && DomSubscription.onAnimationFrame((delta) => ...)` to
+`model.running && HtmlSubscription.onAnimationFrame((delta) => ...)` to
 `subscriptions`, and cap the delta, which is long after a hidden tab
 returns. A `Scene` asserts on the shapes with
 `expectMount(Canvas.Paint({ ... }))`, and an `HtmlScene` fires a frame
@@ -1055,8 +1055,8 @@ Known limits:
   how competing routes for the same value or request can still compile.
 - **[Files](./ai-docs/src/10_ui/28_files.ts)**:
   Let the user choose a file and read it: a file input reports the `File`s
-  the user chose, `DomFile.pick` opens a picker from a keyboard shortcut,
-  and a Command reads the file with `DomFile.readAsText`. Cancelling the
+  the user chose, `HtmlFiles.pick` opens a picker from a keyboard shortcut,
+  and a Command reads the file with `HtmlFiles.readAsText`. Cancelling the
   Command stops the browser reading the file. A story resolves the picker
   and the read, and a scene chooses a file in the input.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:

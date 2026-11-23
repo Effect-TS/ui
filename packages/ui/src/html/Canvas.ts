@@ -7,7 +7,7 @@
  * `Paint` mount on it, which paints on mount and again whenever the scene
  * changes, and reports pointer presses in scene coordinates. `paint` draws
  * a scene on any 2D context, such as an `OffscreenCanvas`'s. For animation,
- * pair it with `DomSubscription.onAnimationFrame`.
+ * pair it with `HtmlSubscription.onAnimationFrame`.
  *
  * **Example** (Dots where the user clicks)
  *

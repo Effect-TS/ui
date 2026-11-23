@@ -1,7 +1,7 @@
 /**
- * Commands on rendered elements: `focus`, `blur`, `scrollIntoView`,
- * `measure`, `select`, `requestSubmit` and `showPicker`, each given a ref
- * from `Html.ref` or `Row.at`.
+ * The Commands that take a rendered element's ref, from `Html.ref` or
+ * `Row.at`: `focus`, `blur`, `scrollIntoView`, `measure`, `select`,
+ * `requestSubmit` and `showPicker`.
  *
  * A Command runs once the render the issuing `update` caused is committed,
  * and reaches the element through `Html.Host`, which a test on `TestHost`
@@ -55,7 +55,7 @@ const ScrollOptionsSchema = Schema.Struct({
 })
 
 /**
- * The Command behind `focus`, for a story's `.resolve(DomCommand.Focus, { found })`.
+ * The Command behind `focus`, for a story's `.resolve(HtmlCommand.Focus, { found })`.
  *
  * @stability experimental
  * @category commands
@@ -65,7 +65,7 @@ export const Focus: Command.Factory<
   { readonly ref: Renderer.Ref<any>; readonly options?: Html.FocusOptions | undefined },
   Found
 > = Command.make(
-  "DomCommand.focus",
+  "HtmlCommand.focus",
   { args: { ref: Renderer.Ref, options: Schema.optional(FocusOptionsSchema) } },
   ({ options, ref }) => found(ref, (host, element) => host.focus(element, options ?? {}))
 )
@@ -78,7 +78,7 @@ export const Focus: Command.Factory<
  * @since 0.1.0
  */
 export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
-  "DomCommand.blur",
+  "HtmlCommand.blur",
   { args: { ref: Renderer.Ref } },
   ({ ref }) => found(ref, (host, element) => host.blur(element))
 )
@@ -94,7 +94,7 @@ export const ScrollIntoView: Command.Factory<
   { readonly ref: Renderer.Ref<any>; readonly options?: Html.ScrollOptions | undefined },
   Found
 > = Command.make(
-  "DomCommand.scrollIntoView",
+  "HtmlCommand.scrollIntoView",
   { args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) } },
   ({ options, ref }) => found(ref, (host, element) => host.scrollIntoView(element, options ?? {}))
 )
@@ -107,7 +107,7 @@ export const ScrollIntoView: Command.Factory<
  * @since 0.1.0
  */
 export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Option.Option<Html.Rect>> = Command.make(
-  "DomCommand.measure",
+  "HtmlCommand.measure",
   { args: { ref: Renderer.Ref } },
   ({ ref }) => withElement(ref, (host, element) => host.measure(element))
 )
@@ -120,7 +120,7 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
  * @since 0.1.0
  */
 export const Select: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
-  "DomCommand.select",
+  "HtmlCommand.select",
   { args: { ref: Renderer.Ref } },
   ({ ref }) => found(ref, (host, element) => host.select(element))
 )
@@ -145,7 +145,7 @@ export interface Submitted extends Found {
  * @since 0.1.0
  */
 export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Submitted> = Command.make(
-  "DomCommand.requestSubmit",
+  "HtmlCommand.requestSubmit",
   { args: { ref: Renderer.Ref } },
   ({ ref }) =>
     Effect.map(withElement(ref, (host, element) => host.requestSubmit(element)), (done): Submitted => ({
@@ -167,14 +167,14 @@ export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> },
  * **Example** (Focusing the new-todo field after adding)
  *
  * ```ts
- * import { DomCommand, Html } from "@effect/ui/html"
+ * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ SubmittedForm: {}, CompletedFocusNewTodo: {} })
  * const NewTodo = Html.ref("NewTodo", "input")
  *
- * const command = DomCommand.focus(NewTodo, () => Message.CompletedFocusNewTodo())
+ * const command = HtmlCommand.focus(NewTodo, () => Message.CompletedFocusNewTodo())
  * ```
  *
  * @stability experimental
@@ -242,13 +242,13 @@ export const measure = <N extends globalThis.Element, Msg>(
  * **Example** (Selecting a field's text once it has focus)
  *
  * ```ts
- * import { DomCommand, Html } from "@effect/ui/html"
+ * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  *
  * const Message = UiSchema.TaggedEnum({ FocusedAmount: {}, CompletedSelectAmount: {} })
  * const Amount = Html.ref("Amount", "input")
  *
- * const command = DomCommand.select(Amount, () => Message.CompletedSelectAmount())
+ * const command = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount())
  * ```
  *
  * @stability experimental
@@ -301,7 +301,7 @@ export interface Opened extends Found {
  * @since 0.1.0
  */
 export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Opened> = Command.make(
-  "DomCommand.showPicker",
+  "HtmlCommand.showPicker",
   { args: { ref: Renderer.Ref } },
   ({ ref }) =>
     Effect.map(withElement(ref, (host, element) => host.showPicker(element)), (done): Opened => ({
@@ -318,7 +318,7 @@ export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Op
  *
  * Use to open a file input the view renders from a menu item or a keyboard
  * shortcut. The files arrive in the input's `onChange`. To choose files
- * without rendering an input, use `DomFile.pick`.
+ * without rendering an input, use `HtmlFiles.pick`.
  *
  * **Details**
  *
@@ -330,14 +330,14 @@ export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Op
  * **Example** (Opening a rendered file input's picker)
  *
  * ```ts
- * import { DomCommand, Html } from "@effect/ui/html"
+ * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ CompletedShowPicker: { opened: Schema.Boolean } })
  * const Attachment = Html.ref("Attachment", "input")
  *
- * const command = DomCommand.showPicker(Attachment, ({ opened }) => Message.CompletedShowPicker({ opened }))
+ * const command = HtmlCommand.showPicker(Attachment, ({ opened }) => Message.CompletedShowPicker({ opened }))
  * ```
  *
  * @stability experimental

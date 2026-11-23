@@ -111,8 +111,8 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -247,7 +247,7 @@ type RadioGroupModel = typeof RadioGroupModel.Type
 
 const Radio = Html.ref("RadioGroupRadio", "button")
 
-const focusRadio = (value: string) => DomCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
+const focusRadio = (value: string) => HtmlCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
 
 const synced = (value: string | null) =>
   Subscription.make("synced", [value], () => Stream.make(RadioGroupMessage.SyncedValue({ value })))

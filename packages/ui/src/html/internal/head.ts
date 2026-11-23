@@ -69,7 +69,7 @@ interface Shared {
 const shared = new WeakMap<Document, Shared>()
 
 /**
- * Makes the `head` member of the DOM host, and `release` for its `dispose`.
+ * Makes the `head` member of the browser host, and `release` for its `dispose`.
  *
  * **Details**
  *

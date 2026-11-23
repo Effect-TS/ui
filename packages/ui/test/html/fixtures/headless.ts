@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { DomCommand, Html } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
 import { Schema } from "effect"
 
 export const Item = Schema.Struct({
@@ -71,8 +71,8 @@ export const Menu = MenuDef.make({
       Toggled: ({ open }) =>
         $.set({ ...$.model, open, query: open ? $.model.query : "", active: open ? $.model.active : null }).run(
           open
-            ? DomCommand.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
-            : DomCommand.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
+            ? HtmlCommand.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
+            : HtmlCommand.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
         ),
       Query: ({ value }) => ({ ...$.model, query: value, active: step(filter($.props.items, value), null, 1) }),
       Key: ({ key }) => {

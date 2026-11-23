@@ -80,8 +80,8 @@ import * as engine from "../../internal/story.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
-import type * as DomSubscription from "../DomSubscription.ts"
 import type * as Html from "../Html.ts"
+import type * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as frames from "../internal/frames.ts"
@@ -204,7 +204,7 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this
   /**
    * Fires `event` on the document, as the browser host delivers it to the
-   * component's `DomSubscription.onDocument` listeners. Missing payload
+   * component's `HtmlSubscription.onDocument` listeners. Missing payload
    * fields default as `keydown` and `click` default them, and
    * `defaultPrevented` to `false`.
    *
@@ -220,31 +220,31 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * It throws when nothing listens for `event` on the document, listing
    * the active keys, and is ignored when no listener produced a message.
    */
-  fireDocument<K extends keyof DomSubscription.DocumentEvents>(
+  fireDocument<K extends keyof HtmlSubscription.DocumentEvents>(
     event: K,
-    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.DocumentEvents[K]>>
+    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.DocumentEvents[K]>>
   ): this
   /**
    * Fires `event` on the window, as `fireDocument` does for
-   * `DomSubscription.onWindow`'s listeners.
+   * `HtmlSubscription.onWindow`'s listeners.
    */
-  fireWindow<K extends keyof DomSubscription.WindowEvents>(
+  fireWindow<K extends keyof HtmlSubscription.WindowEvents>(
     event: K,
-    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.WindowEvents[K]>>
+    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.WindowEvents[K]>>
   ): this
   /**
    * Fires a custom `event` on the document, as `fireDocument` does for
-   * `DomSubscription.onCustomEvent`'s listeners. `detail` defaults to `null`
+   * `HtmlSubscription.onCustomEvent`'s listeners. `detail` defaults to `null`
    * and `defaultPrevented` to `false`.
    */
   fireCustomEvent(
     event: string,
-    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.CustomEventPayload>>
+    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>>
   ): this
   /**
    * Fires an animation frame `delta` ms after the last, `16` by default,
    * as the browser host delivers it to the component's
-   * `DomSubscription.onAnimationFrame`, and dispatches what its handler
+   * `HtmlSubscription.onAnimationFrame`, and dispatches what its handler
    * returns.
    *
    * It throws when nothing listens for frames, listing the active keys, and

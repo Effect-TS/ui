@@ -199,8 +199,8 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as UiStruct from "@effect/ui/UiStruct"
@@ -603,7 +603,7 @@ const typeKey = ($: SelectUpdate, key: string) => {
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = ($: SelectUpdate) => $.run(DomCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+const focusTrigger = ($: SelectUpdate) => $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 

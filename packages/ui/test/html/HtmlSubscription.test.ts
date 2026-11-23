@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { BrowserHost, DomSubscription, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlScene, TestAnimationFrames, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -40,7 +40,7 @@ const Keys = Component.define({
       h.output(model.log.join(","))
     ),
   subscriptions: ({ model }) => [
-    model.listening && DomSubscription.onDocument(
+    model.listening && HtmlSubscription.onDocument(
       "keydown",
       ({ defaultPrevented, key }) =>
         key === "Escape" ? undefined : Message.Pressed({ key: `${model.prefix}${key}${defaultPrevented ? "!" : ""}` }),
@@ -65,17 +65,17 @@ const Phases = Component.define({
   view: (h, log) => h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
   subscriptions: ({ model: log }) => [
     !log.includes("capture") &&
-    DomSubscription.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), {
+    HtmlSubscription.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), {
       capture: true,
       preventDefault: "always"
     }),
     log.length > 0 &&
-    DomSubscription.onDocument(
+    HtmlSubscription.onDocument(
       "mousedown",
       ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })
     ),
-    DomSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" })),
-    DomSubscription.onDocument(
+    HtmlSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" })),
+    HtmlSubscription.onDocument(
       "pointercancel",
       ({ button, pointerType }) => PhaseMessage.Heard({ what: `cancel ${button} ${pointerType}` })
     )
@@ -84,14 +84,14 @@ const Phases = Component.define({
 
 const testLayer = Layer.merge(TestHost.layer(), TestGlobalEvents.layer)
 
-describe("DomSubscription.onDocument and DomSubscription.onWindow", () => {
+describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
   it("are keyed by target, event and phase", () => {
     const handler = () => undefined
     assert.deepStrictEqual(
       [
-        DomSubscription.onDocument("keydown", handler),
-        DomSubscription.onDocument("mousedown", handler, { capture: true }),
-        DomSubscription.onWindow("blur", handler)
+        HtmlSubscription.onDocument("keydown", handler),
+        HtmlSubscription.onDocument("mousedown", handler, { capture: true }),
+        HtmlSubscription.onWindow("blur", handler)
       ].map(({ key }) => key),
       [
         `@effect/ui/html/document:"keydown"`,
@@ -141,7 +141,7 @@ describe("DomSubscription.onDocument and DomSubscription.onWindow", () => {
         update: ($) => $.model,
         view: (h) => h.p("throws"),
         subscriptions: () => [
-          DomSubscription.onDocument("keydown", (): typeof Message.Type => {
+          HtmlSubscription.onDocument("keydown", (): typeof Message.Type => {
             throw new Error("boom")
           })
         ]
@@ -172,7 +172,7 @@ const Listener = Component.define({
   update: ($) => $.model,
   view: (h) => h.span(),
   subscriptions: ({ props: { preventDefault } }) => [
-    DomSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), {
+    HtmlSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), {
       preventDefault
     })
   ]
@@ -274,7 +274,7 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
         update: ($, { what }) => [...$.model, what],
         view: (h, log) => h.output(log.join(",")),
         subscriptions: () => [
-          DomSubscription.onCustomEvent(
+          HtmlSubscription.onCustomEvent(
             "submit",
             ({ defaultPrevented, detail }) =>
               typeof detail === "string"
@@ -355,7 +355,7 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         update: ($, entry) => [...$.model, entry],
         view: (h, log) => h.output(log.join(",")),
         subscriptions: () => [
-          DomSubscription.onDocument("keydown", ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`)
+          HtmlSubscription.onDocument("keydown", ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`)
         ]
       })
       const root = yield* TestHost.mount(Shortcut, {})
@@ -392,7 +392,7 @@ const Frames = Component.define({
   },
   view: (h, model) => h.p(model.deltas.join(",")),
   subscriptions: ({ model }) => [
-    model.running && DomSubscription.onAnimationFrame((delta) => FrameMessage.TickedFrame({ delta }))
+    model.running && HtmlSubscription.onAnimationFrame((delta) => FrameMessage.TickedFrame({ delta }))
   ]
 })
 

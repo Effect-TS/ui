@@ -2,13 +2,13 @@
  * @title Files
  *
  * Let the user choose a file and read it: a file input reports the `File`s
- * the user chose, `DomFile.pick` opens a picker from a keyboard shortcut,
- * and a Command reads the file with `DomFile.readAsText`. Cancelling the
+ * the user chose, `HtmlFiles.pick` opens a picker from a keyboard shortcut,
+ * and a Command reads the file with `HtmlFiles.readAsText`. Cancelling the
  * Command stops the browser reading the file. A story resolves the picker
  * and the read, and a scene chooses a file in the input.
  */
 import { Command, Component, UiSchema } from "@effect/ui"
-import { DomFile, DomSubscription, Html } from "@effect/ui/html"
+import { Html, HtmlFiles, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
@@ -41,7 +41,7 @@ export const ImportMessage = UiSchema.TaggedEnum({
 // The args type the file with `Schema.instanceOf(File)`. `Schema.File`
 // would encode its bytes wherever the args are logged.
 //
-// `DomFile.readAsText` reads the file's stream, so interrupting the
+// `HtmlFiles.readAsText` reads the file's stream, so interrupting the
 // Command cancels the read: the browser stops reading a large file instead
 // of reading all of it and dropping the result, as `file.text()` would.
 // `mode: "switch"` interrupts a read still running when the user chooses
@@ -50,7 +50,7 @@ export const ReadCsv = Command.make(
   "import/ReadCsv",
   { args: { file: Schema.instanceOf(File) }, mode: "switch" },
   ({ file }) =>
-    DomFile.readAsText(file).pipe(
+    HtmlFiles.readAsText(file).pipe(
       Effect.match({
         onSuccess: (text) =>
           ImportMessage.CompletedReadCsv({ name: file.name, rows: text.split("\n").filter(Boolean).length }),
@@ -73,7 +73,7 @@ export const ReadCsv = Command.make(
 // be emptied, so `""` is the one value to give it.
 //
 // Ctrl+O or Cmd+O, heard on the document, opens a picker with
-// `DomFile.pick`, which needs no input in the view. The browser opens a
+// `HtmlFiles.pick`, which needs no input in the view. The browser opens a
 // picker only during a user's action, and a Command issued from a key press
 // runs within it. `opened` is `false` when it refused.
 export const CsvImport = Component.define({
@@ -88,7 +88,7 @@ export const CsvImport = Component.define({
     ChoseFiles: ($, { files: [file] }) =>
       file === undefined ? $.model : $.set(ImportModel.Reading({ name: file.name })).run(ReadCsv.make({ file })),
     PressedOpen: ($) =>
-      $.run(DomFile.pick(({ files }) => ImportMessage.ChoseFiles({ files }), { accept: [".csv", "text/csv"] })),
+      $.run(HtmlFiles.pick(({ files }) => ImportMessage.ChoseFiles({ files }), { accept: [".csv", "text/csv"] })),
     ClickedCancel: ($) =>
       $.model._tag === "Reading"
         ? $.set(ImportModel.Cancelled({ name: $.model.name })).run(Command.interrupt(ReadCsv))
@@ -113,7 +113,7 @@ export const CsvImport = Component.define({
       })
     ),
   subscriptions: () => [
-    DomSubscription.onDocument(
+    HtmlSubscription.onDocument(
       "keydown",
       ({ ctrl, key, meta, repeat }) =>
         (ctrl || meta) && key === "o" && !repeat ? ImportMessage.PressedOpen() : undefined,
@@ -126,13 +126,13 @@ export const CsvImport = Component.define({
 // A story resolves the picker and the read
 // ---------------------------------------------------------------------------
 
-// `DomFile.Pick` is the picker's Command, so a story resolves it with what
+// `HtmlFiles.Pick` is the picker's Command, so a story resolves it with what
 // the user chose, as it resolves `ReadCsv` with what the read sent.
 export const pickedAndCancelled = Effect.gen(function*() {
   const file = new File(["id,name\n1,Ada\n"], "people.csv", { type: "text/csv" })
   const s = yield* Story.make(CsvImport, {})
   s.send(ImportMessage.PressedOpen())
-    .resolve(DomFile.Pick, { opened: true, files: [file] })
+    .resolve(HtmlFiles.Pick, { opened: true, files: [file] })
     .expectExact(ReadCsv.make({ file }))
     .send(ImportMessage.ClickedCancel())
   return [s.model._tag, s.interrupted.map((command) => command.name)] // ["Cancelled", ["import/ReadCsv"]]

@@ -160,8 +160,8 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -492,14 +492,14 @@ const settle = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldModel["edit"]
 const Slot = Html.ref("OTPFieldSlot", "input")
 const HiddenInput = Html.ref("OTPFieldHiddenInput", "input")
 
-const selectSlot = (index: number) => DomCommand.select(Slot.at(index), () => OTPFieldMessage.CompletedSelectSlot())
+const selectSlot = (index: number) => HtmlCommand.select(Slot.at(index), () => OTPFieldMessage.CompletedSelectSlot())
 
 const focusSlot = (index: number) => [
-  DomCommand.Focus.make({ ref: Slot.at(index) }).pipe(Command.asNoop),
+  HtmlCommand.Focus.make({ ref: Slot.at(index) }).pipe(Command.asNoop),
   selectSlot(index)
 ]
 
-const submit = DomCommand.RequestSubmit.make({ ref: HiddenInput }).pipe(Command.asNoop)
+const submit = HtmlCommand.RequestSubmit.make({ ref: HiddenInput }).pipe(Command.asNoop)
 
 const firstEmpty = (s: Settings): number => Math.min(s.characters.length, s.length - 1)
 

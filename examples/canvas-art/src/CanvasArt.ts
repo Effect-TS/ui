@@ -1,6 +1,6 @@
 import { Command, Component, Head, UiSchema } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
-import { Canvas, DomSubscription } from "@effect/ui/html"
+import { Canvas, HtmlSubscription } from "@effect/ui/html"
 import { Effect, Random, Schema } from "effect"
 
 export const CANVAS_WIDTH = 600
@@ -103,7 +103,7 @@ export const CanvasArt = Component.define({
     ClickedTogglePlay: ($) => $.evolve({ running: !$.model.running })
   },
   subscriptions: ({ model }) => [
-    model.running && DomSubscription.onAnimationFrame((delta) => CanvasArtMessage.TickedFrame({ delta }))
+    model.running && HtmlSubscription.onAnimationFrame((delta) => CanvasArtMessage.TickedFrame({ delta }))
   ],
   head: ({ model }) => [Head.title(`Canvas Art (${model.balls.length} balls)`)],
   view: (h, model) =>

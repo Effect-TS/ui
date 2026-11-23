@@ -132,9 +132,9 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -388,7 +388,7 @@ const navigate = ($: TabsUpdate, value: string, to: Step) => {
   const tab = tabs[target]
   if (tab === undefined || target === from) return $.model
   return $.evolve({ highlighted: tab.value }).run(
-    DomCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
+    HtmlCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
   )
 }
 
@@ -659,8 +659,8 @@ const TrackIndicator = Mount.makeStream(
 )
 
 const releasedPointer = [
-  DomSubscription.onDocument("pointerup", TabsMessage.ReleasedPointer()),
-  DomSubscription.onDocument("pointercancel", TabsMessage.ReleasedPointer())
+  HtmlSubscription.onDocument("pointerup", TabsMessage.ReleasedPointer()),
+  HtmlSubscription.onDocument("pointercancel", TabsMessage.ReleasedPointer())
 ]
 
 type Keyed<Tag extends string> = View.PartTarget<Tag> & { readonly key: (key: string) => View.PartTarget<Tag> }

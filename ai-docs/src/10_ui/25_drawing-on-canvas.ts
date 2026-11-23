@@ -5,7 +5,7 @@
  * into scene points, and test it in a scene and a whole-app test.
  */
 import { Component, UiSchema } from "@effect/ui"
-import { Canvas, DomSubscription, Html } from "@effect/ui/html"
+import { Canvas, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlScene, TestAnimationFrames } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Layer, Schema } from "effect"
@@ -69,7 +69,7 @@ export const sceneOf = (comets: ReadonlyArray<typeof Comet.Type>): ReadonlyArray
 // `onPointerUp`, a press captures the pointer, and a cancelled press arrives
 // at `onPointerUp`, so a drag that leaves the canvas still ends.
 //
-// `DomSubscription.onAnimationFrame` gives the ms since the last frame, and
+// `HtmlSubscription.onAnimationFrame` gives the ms since the last frame, and
 // the first since it started, so pausing doesn't save up a jump. A tab that
 // comes back from the background still sends one long frame: cap it.
 export const Sky = Component.define({
@@ -90,7 +90,7 @@ export const Sky = Component.define({
     ClickedPause: ($) => $.evolve({ running: !$.model.running })
   },
   subscriptions: ({ model }) => [
-    model.running && DomSubscription.onAnimationFrame((delta) => SkyMessage.TickedFrame({ delta }))
+    model.running && HtmlSubscription.onAnimationFrame((delta) => SkyMessage.TickedFrame({ delta }))
   ],
   view: (h, model) =>
     h.div(

@@ -1,7 +1,7 @@
 import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -305,7 +305,7 @@ const groupsOf = (items: ReadonlyArray<Item>): ReadonlyArray<Group> => {
 }
 
 const focus = <E>(step: Step<E>, ref: typeof Input | typeof Trigger | typeof Chip): Step<E> =>
-  step.run(DomCommand.Focus.make({ ref }).pipe(Command.asNoop))
+  step.run(HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop))
 
 const picked = <E>(
   step: Step<E>,
@@ -460,7 +460,7 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
   )
   return props.submitOnItemClick === true
     ? closed.run(
-      DomCommand.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop)
+      HtmlCommand.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop)
     )
     : closed
 }
