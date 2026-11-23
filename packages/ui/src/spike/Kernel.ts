@@ -7,6 +7,7 @@
  * Two features live outside it and reach it through values the app makes. A Layer is built by what
  * `Layers.provide` puts on the component as `boot`. The message log is what the app passes as `log`.
  */
+import { checkKeys, dev } from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
@@ -195,37 +196,6 @@ export class Instance {
 interface Placed {
   rec: Rec
   content: unknown
-}
-
-// -- checks -------------------------------------------------------------------
-
-/**
- * Whether the checks that only catch an author's mistake run. A bundler that builds for production
- * replaces `process.env.NODE_ENV`, this folds to `false`, and the checks and their messages are dropped.
- */
-const dev = process.env.NODE_ENV !== "production"
-
-/** Throws for two siblings found by the same key, as the diff would give one of them the other's node. */
-const checkKeys = (inst: Instance, views: ReadonlyArray<View.Node<any, any>>): void => {
-  // An element and a child can share a key: they are never each other's.
-  const elements = new Set<unknown>()
-  const children = new Set<unknown>()
-  for (let index = 0; index < views.length; index++) {
-    const view = views[index]!
-    const key = keyOf(view)
-    if (key === undefined) continue
-    const seen = view._tag === "Element" ? elements : children
-    if (seen.has(key)) {
-      throw new Error(
-        view._tag === "Child" && view.key === ""
-          ? inst.path + ": two children of " + (view.component as any).definition?.name +
-            " have no key. Give each a key."
-          : inst.path + ": two siblings have the key " + String(view._tag === "Child" ? view.key : key) +
-            ". Keys are unique among siblings."
-      )
-    }
-    seen.add(key)
-  }
 }
 
 // -- failure ------------------------------------------------------------------
@@ -646,7 +616,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
       if (attrs !== View.noFields) { for (const name in attrs) host.setAttr(node, name, attrs[name]) }
       const views = view.children
       let kids: Array<Rec> | undefined
-      if (dev && views.length > 1) checkKeys(inst, views)
+      if (dev && views.length > 1) checkKeys(inst.path, views)
       if (views.length > 0) {
         kids = new Array(views.length)
         for (let index = 0; index < views.length; index++) {
@@ -776,7 +746,7 @@ const patchElement = (inst: Instance, rec: Rec, prev: View.Element<any, any>, vi
   if (view.handlers !== View.noFields) host.setEvents(node, rec, prev.handlers === View.noFields)
   const views = view.children
   const olds = rec.kids
-  if (dev && views.length > 1) checkKeys(inst, views)
+  if (dev && views.length > 1) checkKeys(inst.path, views)
   if (olds === undefined) {
     if (views.length === 0) return
     const kids: Array<Rec> = new Array(views.length)
