@@ -141,7 +141,7 @@ import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag, separatorAttrs } from "./internal/attributes.ts"
-import { arrowKeys, valued, stepped } from "./internal/list.ts"
+import { arrowKeys, stepped, valued } from "./internal/list.ts"
 
 /**
  * The direction a toolbar's items run in, which picks its arrow keys.

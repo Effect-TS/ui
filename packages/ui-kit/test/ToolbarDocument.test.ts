@@ -108,13 +108,16 @@ const Page = Component.define({
               view: (menu) =>
                 h.div(
                   toolbar.button({
-                    element: menu.trigger(h.button.attr("id", "menu"), { disabled: toolbar.isDisabled("menu") }),
+                    element: menu.trigger({
+                      element: h.button.attr("id", "menu"),
+                      disabled: toolbar.isDisabled("menu")
+                    }),
                     value: "menu"
                   }).children("Edit"),
                   menu.positioner(h.div.attr("id", "menu-positioner")).children(
                     menu.popup(h.div).children(
-                      menu.item(h.div.attr("id", "copy"), "copy").children("Copy"),
-                      menu.item(h.div.attr("id", "paste"), "paste").children("Paste")
+                      menu.item({ element: h.div.attr("id", "copy"), value: "copy" }).children("Copy"),
+                      menu.item({ element: h.div.attr("id", "paste"), value: "paste" }).children("Paste")
                     )
                   )
                 )
@@ -140,8 +143,8 @@ const Page = Component.define({
                   ),
                   select.positioner(h.div.attr("id", "select-positioner")).children(
                     select.popup(h.div).children(
-                      select.item(h.div.attr("id", "zoom-100"), "100").children("100%"),
-                      select.item(h.div.attr("id", "zoom-200"), "200").children("200%")
+                      select.item({ element: h.div.attr("id", "zoom-100"), value: "100" }).children("100%"),
+                      select.item({ element: h.div.attr("id", "zoom-200"), value: "200" }).children("200%")
                     )
                   )
                 )

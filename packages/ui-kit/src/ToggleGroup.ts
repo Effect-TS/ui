@@ -116,7 +116,7 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, pressedAttrs } from "./internal/attributes.ts"
-import { arrowKeys, available, valued, stepped } from "./internal/list.ts"
+import { arrowKeys, available, stepped, valued } from "./internal/list.ts"
 import { Toolbar } from "./Toolbar.ts"
 
 /**
