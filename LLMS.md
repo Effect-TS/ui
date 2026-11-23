@@ -1085,6 +1085,10 @@ Known limits:
 - **[Hydrating in the browser](./ai-docs/src/10_ui/45_hydration.ts)**:
   Hydrate what the server rendered with `BrowserHost`. This is the browser
   entry module of the server-rendered app, served as `/client.js`.
+- **[Markdown content](./ai-docs/src/10_ui/47_markdown.ts)**:
+  Write pages in Markdown, compile them at build time with the Vite plugin
+  from `@effect/ui/html/MarkdownVite`, and render them with `Markdown.view`,
+  with components in the prose as islands.
 - **[Testing @effect/ui components](./ai-docs/src/10_ui/50_testing.ts)**:
   Test a component's logic as a `Story`, its view as a `Scene`, a Command
   against a fake Layer, and components working together as a `Play`. The

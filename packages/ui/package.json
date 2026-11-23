@@ -37,6 +37,9 @@
     "./testing": "./src/testing/index.ts",
     "./html": "./src/html/index.ts",
     "./html/testing": "./src/html/testing/index.ts",
+    "./html/MarkdownContent": {
+      "types": "./src/html/MarkdownContent.d.ts"
+    },
     "./*": "./src/*.ts",
     "./internal/*": null,
     "./html/internal/*": null,
@@ -62,6 +65,9 @@
       "./testing": "./dist/testing/index.js",
       "./html": "./dist/html/index.js",
       "./html/testing": "./dist/html/testing/index.js",
+      "./html/MarkdownContent": {
+        "types": "./src/html/MarkdownContent.d.ts"
+      },
       "./*": "./dist/*.js",
       "./internal/*": null,
       "./html/internal/*": null,
@@ -81,6 +87,7 @@
   "devDependencies": {
     "@effect/platform-node": "^4.1.4",
     "@types/node": "^26.6.6",
+    "commonmark-spec": "^0.31.2",
     "effect": "^4.1.4",
     "esbuild": "^0.28.2",
     "happy-dom": "^21.0.4",
