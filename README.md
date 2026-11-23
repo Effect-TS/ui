@@ -4,16 +4,17 @@
 
 Frontend packages for [Effect](https://github.com/Effect-TS/effect).
 
-| Package                             | Description                                                                                                                           |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@effect/ui`](packages/ui)         | A frontend framework whose apps are composed with Layers, with `@effect/ui/html` for the DOM, routing, server rendering and hydration |
-| [`@effect/ui-kit`](packages/ui-kit) | The component library for `@effect/ui`: see [its components](packages/ui-kit/README.md#components)                                    |
+| Package                                       | Description                                                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@effect/ui`](packages/ui)                   | A frontend framework whose apps are composed with Layers, with `@effect/ui/html` for the DOM, routing, server rendering and hydration |
+| [`@effect/ui-kit`](packages/ui-kit)           | The component library for `@effect/ui`: see [its components](packages/ui-kit/README.md#components)                                    |
+| [`@effect/ui-devtools`](packages/ui-devtools) | A read-only inspector for the message log of an `@effect/ui` app                                                                      |
 
-Both packages are experimental.
+The packages are experimental.
 
 ## Snapshots
 
-Every pull request and every push to `main` publishes snapshot builds of both packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install one with the commit's short SHA:
+Every pull request and every push to `main` publishes snapshot builds of the packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install one with the commit's short SHA:
 
 ```sh
 pnpm add https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>

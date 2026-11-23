@@ -31,7 +31,9 @@
       "@effect/ui/html/testing": ["./packages/ui/src/html/testing/index.ts"],
       "@effect/ui/*": ["./packages/ui/src/*.ts"],
       "@effect/ui-kit": ["./packages/ui-kit/src/index.ts"],
-      "@effect/ui-kit/*": ["./packages/ui-kit/src/*.ts"]
+      "@effect/ui-kit/*": ["./packages/ui-kit/src/*.ts"],
+      "@effect/ui-devtools": ["./packages/ui-devtools/src/index.ts"],
+      "@effect/ui-devtools/*": ["./packages/ui-devtools/src/*.ts"]
     },
     "plugins": [{
       "name": "@effect/language-service",
