@@ -2565,6 +2565,7 @@ describe("Runtime", () => {
         root.send(Message.Stop())
         yield* TestHost.settle
 
+        assert.strictEqual(MessageLog.wireVersion, 1)
         const encoder = MessageLog.makeEncoder()
         const wire = root.log().map((entry) =>
           Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(encoder.encode(entry))))
