@@ -1,0 +1,16 @@
+{
+  "framework": "svelte-v5.42.1-keyed",
+  "keyed": true,
+  "benchmark": "21_ready-memory",
+  "type": "memory",
+  "values": {
+    "DEFAULT": {
+      "min": 0.6654577255249023,
+      "max": 0.6654577255249023,
+      "median": 0.6654577255249023,
+      "mean": 0.6654577255249023,
+      "stddev": null,
+      "values": [0.6654577255249023]
+    }
+  }
+}
