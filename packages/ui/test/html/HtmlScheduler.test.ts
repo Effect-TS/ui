@@ -4,6 +4,8 @@ import { Deferred, Effect } from "effect"
 
 type Lane = "user-blocking" | "user-visible" | "background"
 
+const hostOrder = ["user-blocking", "user-visible", "background", "message"]
+
 const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
   let time = 0
   const posted: Array<{ readonly run: () => void; readonly priority: Lane | "message" }> = []
@@ -37,9 +39,14 @@ const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
         time += ms
       }),
     fork: <A>(effect: Effect.Effect<A>) => Effect.runFork(effect, { scheduler }),
+    page: (run: () => void) => posted.push({ run, priority: "user-visible" }),
     next: () => {
       const start = time
-      posted.shift()!.run()
+      const index = posted.reduce(
+        (best, task, i) => hostOrder.indexOf(task.priority) < hostOrder.indexOf(posted[best]!.priority) ? i : best,
+        0
+      )
+      posted.splice(index, 1)[0]!.run()
       return time - start
     }
   }
@@ -72,8 +79,8 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     expect(Math.max(...slices)).toBeLessThanOrEqual(6)
   })
 
-  it("runs lower priorities first, and keeps a fiber that spends its budget at its priority", () => {
-    const { fork, next, posted, work } = browser()
+  it("runs each priority in a host task of its own, and keeps a fiber that spends its budget at its priority", () => {
+    const { fork, next, page, posted, work } = browser()
     const log: Array<string> = []
     fork(Effect.gen(function*() {
       yield* Effect.yieldNowWith(1)
@@ -81,14 +88,18 @@ describe("HtmlScheduler", { concurrent: false }, () => {
       log.push("background")
     }))
     fork(Effect.yieldNowWith(-1).pipe(Effect.andThen(Effect.sync(() => log.push("urgent")))))
+    page(() => log.push("page"))
     fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("normal")))))
-    expect(posted.map((task) => task.priority)).toEqual(["background", "user-blocking", "user-visible"])
+    expect(posted.map((task) => task.priority)).toEqual(["background", "user-blocking", "user-visible", "user-visible"])
     next()
-    expect(log).toEqual(["urgent", "normal"])
+    next()
+    next()
+    next()
+    expect(log).toEqual(["urgent", "page", "normal"])
     fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("later")))))
-    expect(posted.map((task) => task.priority)).toEqual(["user-blocking", "user-visible", "background"])
+    expect(posted.map((task) => task.priority)).toEqual(["background", "user-visible"])
     while (posted.length > 0) next()
-    expect(log).toEqual(["urgent", "normal", "later", "background"])
+    expect(log).toEqual(["urgent", "page", "normal", "later", "background"])
   })
 
   it("runs work forked or woken by background work at priority 0", () => {
@@ -106,6 +117,7 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     background("first", Effect.forkDetach(Effect.sync(() => log.push("forked"))))
     background("second", Deferred.succeed(woken, undefined))
     background("third")
+    expect(next()).toBe(0)
     while (posted.length > 0) next()
     expect(log).toEqual(["first", "forked", "woken", "third", "second"])
   })

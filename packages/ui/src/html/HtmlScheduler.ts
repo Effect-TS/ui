@@ -191,7 +191,7 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
       this.pending.add(lane)
       tasks.postTask(() => {
         this.pending.delete(lane)
-        this.run()
+        this.drain(now() + this.budget, lane === "user-blocking" ? -1 : lane === "user-visible" ? 0 : 1)
       }, { priority: lane })
     } else if (this.pending.size === 0) {
       this.pending.add(lane)
@@ -210,7 +210,7 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
     this.drain(now() + this.budget)
   }
 
-  private drain(deadline: number): void {
+  private drain(deadline: number, lowest = 1): void {
     const outer = this.active
     const batch = this.queue
     this.queue = []
@@ -219,6 +219,7 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
     let i = 0
     try {
       for (; b < batch.length; b++, i = 0) {
+        if (Math.sign(batch[b]!.priority) > lowest) return
         const tasks = batch[b]!.tasks
         while (i < tasks.length) {
           const task = tasks[i]!
