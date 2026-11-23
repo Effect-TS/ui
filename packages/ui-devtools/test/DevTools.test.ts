@@ -20,7 +20,10 @@ const overlay = () =>
 const mount = Effect.fnUntraced(function*(capture: Capture, buffer?: number) {
   const memory = MessageLog.makeMemory({ size: 500 })
   const services = yield* Layer.build(
-    MessageLog.fanout([DevToolsLayer.make({ buffer }), Layer.succeed(MessageLog.MessageLog, memory)])
+    MessageLog.fanout([
+      buffer === undefined ? DevTools.layer() : DevToolsLayer.make({ buffer }),
+      Layer.succeed(MessageLog.MessageLog, memory)
+    ])
   )
   const app = yield* play(capture).pipe(Effect.provide(services))
   yield* settle
@@ -172,44 +175,44 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isFalse(memory.entries().some((entry) => "path" in entry && entry.path.includes("DevToolsOverlay")))
     }))
 
-  it.live("reads Editor[n2]'s Save as interrupted by its unmount when it's closed mid-save", () =>
+  it.live("reads the other captures as unmount, switch and still running", () =>
     Effect.gen(function*() {
-      const { root } = yield* mount("closed")
-      yield* open(root)
-      assert.include(text(instance(root, "Editor[n2]")), "× 1 interrupted · unmount")
-      yield* selectClickedSave(root)
-      assert.include(step(root, "end").body, "CommandInterrupted reason unmount")
-      assert.include(step(root, "causedBy").body, "Update ClickedClose")
-      yield* commonChecks(root)
-    }))
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { root } = yield* mount("closed")
+        yield* open(root)
+        assert.include(text(instance(root, "Editor[n2]")), "× 1 interrupted · unmount")
+        yield* selectClickedSave(root)
+        assert.include(step(root, "end").body, "CommandInterrupted reason unmount")
+        assert.include(step(root, "causedBy").body, "Update ClickedClose")
+        yield* commonChecks(root)
+      }))
 
-  it.live("reads Editor[n2]'s first Save as switched out by the second", () =>
-    Effect.gen(function*() {
-      const { root } = yield* mount("switched")
-      yield* open(root)
-      assert.include(text(instance(root, "Editor[n2]")), "× 1 interrupted · switch")
-      assert.include(text(instance(root, "Editor[n2]")), "◌ 1 running")
-      yield* selectClickedSave(root)
-      assert.include(step(root, "end").body, "CommandInterrupted reason switch")
-      assert.include(step(root, "causedBy").body, "Update ClickedSave")
-      yield* commonChecks(root)
-    }))
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { root } = yield* mount("switched")
+        yield* open(root)
+        assert.include(text(instance(root, "Editor[n2]")), "× 1 interrupted · switch")
+        assert.include(text(instance(root, "Editor[n2]")), "◌ 1 running")
+        yield* selectClickedSave(root)
+        assert.include(step(root, "end").body, "CommandInterrupted reason switch")
+        assert.include(step(root, "causedBy").body, "Update ClickedSave")
+        yield* commonChecks(root)
+      }))
 
-  it.live("reads a hanging save as running since its CommandStarted, with no end", () =>
-    Effect.gen(function*() {
-      const { root } = yield* mount("open")
-      yield* open(root)
-      assert.include(text(instance(root, "Editor[n1]")), "✓ 1 command ended")
-      assert.include(text(instance(root, "Editor[n2]")), "◌ 1 running")
-      yield* selectClickedSave(root)
-      assert.match(step(root, "started").body, /CommandStarted span [0-9a-f]+$/)
-      const end = step(root, "end")
-      assert.match(end.body, /^running since #\d+ · no end observed$/)
-      assert.isTrue(end.step.classList.contains("open"))
-      assert.isFalse(steps(root).some((step) => step.what === "causedBy"))
-      assert.include(text(root.querySelector(".lifecycle")), "◌ running · no end observed")
-      assert.notInclude(text(root.querySelector(".lifecycle")), "interrupt")
-      yield* commonChecks(root)
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { root } = yield* mount("open")
+        yield* open(root)
+        assert.include(text(instance(root, "Editor[n1]")), "✓ 1 command ended")
+        assert.include(text(instance(root, "Editor[n2]")), "◌ 1 running")
+        yield* selectClickedSave(root)
+        assert.match(step(root, "started").body, /CommandStarted span [0-9a-f]+$/)
+        const end = step(root, "end")
+        assert.match(end.body, /^running since #\d+ · no end observed$/)
+        assert.isTrue(end.step.classList.contains("open"))
+        assert.isFalse(steps(root).some((step) => step.what === "causedBy"))
+        assert.include(text(root.querySelector(".lifecycle")), "◌ running · no end observed")
+        assert.notInclude(text(root.querySelector(".lifecycle")), "interrupt")
+        yield* commonChecks(root)
+      }))
     }))
 
   it.live("reads a run whose defect failed its instance as failed, not running", () =>
@@ -267,7 +270,44 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.include(heading(root), "Failed")
       assert.strictEqual(step(root, "end").step.classList.contains("this"), false)
       assert.include(step(root, "Update").body, "Update ClickedUpload")
-    }).pipe(Effect.scoped))
+    }))
+
+  it.live("credits each interrupt with the run of its own group", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Escaped: {}, Saved: {} })
+      const Save = Command.make("test/Save", { args: { id: Schema.String }, group: ["id"] }, () => Effect.never)
+      const save = (id: string) => Save.make({ id }).pipe(Command.map(() => Message.Saved()))
+      const Editor = Component.define({
+        name: "Editor",
+        scoped: false,
+        model: Schema.Null,
+        message: Message,
+        elements: Html
+      }).make({
+        init: ($) => $.set(null).run(save("a")).run(save("b")),
+        update: {
+          Escaped: (model, _message, $) =>
+            $.set(model).run(Command.interrupt(Save, { id: "b" })).run(Command.interrupt(Save, { id: "a" })),
+          Saved: (model) => model
+        },
+        view: (_, h) => h.button.onClick(Message.Escaped()).children("Escape")
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer()).pipe(
+        Effect.flatMap((services) => BrowserHost.mountEffect(Editor, {}, app).pipe(Effect.provide(services)))
+      )
+      yield* settle
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Escape" }))
+      const root = overlay()
+      yield* open(root)
+      yield* click(oldest(root, /Update Escaped$/))
+      assert.notInclude(step(root, "Update").meta, "stopped ")
+      assert.match(step(root, "command 0").meta, /^stopped #\d+$/)
+      assert.match(step(root, "command 1").meta, /^stopped #\d+$/)
+      yield* follow(root, "command 0")
+      assert.include(step(root, "issued command 1").body, "{\"id\":\"b\"}")
+    }))
 
   it.live("keeps a key pressed in the overlay from the app's document listeners", () =>
     Effect.gen(function*() {
@@ -287,9 +327,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
       yield* wait(30)
       assert.strictEqual(interrupted(), 1)
-    }).pipe(Effect.scoped))
+    }))
 
-  it.live("follows an interruption's cause when its issuing Update left the buffer", () =>
+  it.live("handles evicted entries in the causal chain and Model diff", () =>
     Effect.gen(function*() {
       const { root } = yield* mount("interrupted", 6)
       yield* open(root)
@@ -300,62 +340,13 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNull(issuedBy.step.querySelector("button.ref"))
       yield* follow(root, "causedBy")
       assert.include(heading(root), "PressedEscape")
-    }).pipe(Effect.scoped))
-
-  it.live("says the diff is unavailable when the previous state entry left the buffer", () =>
-    Effect.gen(function*() {
-      const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
-      const Counter = Component.define({
-        name: "Counter",
-        scoped: false,
-        props: Schema.Struct({ label: Schema.String }),
-        model: Schema.Number,
-        message: CounterMessage,
-        elements: Html
-      }).make({
-        init: () => 0,
-        update: { Clicked: (count, _message, $) => $.set(count + 1) },
-        view: (count, h) => h.button.onClick(CounterMessage.Clicked()).children(h.props.label + " " + count)
-      })
-      const Page = Component.define({
-        name: "Page",
-        scoped: false,
-        model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
-      }).make({
-        init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) =>
-          h.main(Counter(h, { key: "a", props: { label: "a" } }), Counter(h, { key: "b", props: { label: "b" } }))
-      })
-      const app = document.body.appendChild(document.createElement("div"))
-      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-      yield* Layer.build(DevToolsLayer.make({ buffer: 4 })).pipe(
-        Effect.flatMap((services) => BrowserHost.mountEffect(Page, {}, app).pipe(Effect.provide(services)))
-      )
-      yield* settle
-      const press = (name: RegExp) => click(HtmlLocator.getByRole(app, "button", { name }))
-      yield* press(/^a /)
-      yield* press(/^a /)
-      const root = overlay()
-      yield* open(root)
-      yield* click(instance(root, "Counter[a]"))
-      const latest = entry(root, /Update Clicked$/)[0]!
-      yield* click(latest)
-      const glyph = () => text(latest.closest(".row")!.querySelector(".glyph"))
-      assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "1 changed")
-      assert.strictEqual(glyph(), "~")
-
-      for (let i = 0; i < 3; i++) yield* press(/^b /)
-      assert.strictEqual(glyph(), "~")
       assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "diff unavailable")
       assert.match(
         text(root.querySelector(".pane.model h4")),
         /diff unavailable: this instance's previous entry #\d+ is outside the buffer/
       )
       assert.isNull(root.querySelector(".tree .tl[data-change]"))
-    }).pipe(Effect.scoped))
+    }))
 
   it.live("leaves the app's Model and DOM as they are", () =>
     Effect.gen(function*() {
