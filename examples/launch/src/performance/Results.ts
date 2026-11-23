@@ -1,0 +1,102 @@
+export const frameworks = ["vanillajs", "effect-ui", "foldkit", "react-hooks", "vue", "svelte", "solid"] as const
+export type Framework = typeof frameworks[number]
+
+export const names: Record<Framework, string> = {
+  vanillajs: "Vanilla JS",
+  "effect-ui": "Effect UI",
+  foldkit: "Foldkit 0.x",
+  "react-hooks": "React",
+  vue: "Vue",
+  svelte: "Svelte",
+  solid: "Solid"
+}
+
+export interface Row {
+  readonly benchmark: string
+  readonly label: string
+  readonly unit: "ms" | "MB" | "kB"
+  readonly slowdown?: number
+  readonly values: readonly [number, number, number, number, number, number, number]
+}
+
+export const script: ReadonlyArray<Row> = [
+  { benchmark: "01_run1k", label: "Create 1,000 rows", unit: "ms", values: [7.1, 24.2, 41.7, 24.7, 24.6, 11.6, 10.7] },
+  {
+    benchmark: "02_replace1k",
+    label: "Replace 1,000 rows",
+    unit: "ms",
+    values: [14.6, 35.8, 56.3, 42.3, 35.1, 24.4, 21.3]
+  },
+  {
+    benchmark: "03_update10th1k_x16",
+    label: "Update every 10th row",
+    unit: "ms",
+    slowdown: 4,
+    values: [1.1, 18.6, 25.3, 13.6, 7.1, 3.7, 3.7]
+  },
+  {
+    benchmark: "04_select1k",
+    label: "Select a row",
+    unit: "ms",
+    slowdown: 4,
+    values: [0.8, 8.3, 10.8, 8.9, 3.7, 7.4, 2.8]
+  },
+  {
+    benchmark: "05_swap1k",
+    label: "Swap two rows",
+    unit: "ms",
+    slowdown: 4,
+    values: [0.7, 12.5, 8.6, 69.1, 3.6, 4.6, 3.2]
+  },
+  {
+    benchmark: "06_remove-one-1k",
+    label: "Remove a row",
+    unit: "ms",
+    slowdown: 2,
+    values: [1.0, 4.3, 4.2, 3.7, 8.8, 2.0, 1.1]
+  },
+  { benchmark: "07_create10k", label: "Create 10,000 rows", unit: "ms", values: [71.8, 188, 398, 441, 209, 110, 94.4] },
+  {
+    benchmark: "08_create1k-after1k_x2",
+    label: "Append 1,000 rows",
+    unit: "ms",
+    values: [7.5, 27.7, 44.7, 26.1, 23.4, 12.8, 11.1]
+  },
+  {
+    benchmark: "09_clear1k_x8",
+    label: "Clear 1,000 rows",
+    unit: "ms",
+    slowdown: 4,
+    values: [35.0, 42.8, 64.5, 74.0, 49.0, 39.2, 48.3]
+  }
+]
+
+export const load: ReadonlyArray<Row> = [
+  {
+    benchmark: "42_size-compressed",
+    label: "Compressed size",
+    unit: "kB",
+    values: [2.5, 70.3, 86.8, 51.4, 23.3, 9.7, 4.5]
+  },
+  { benchmark: "43_first-paint", label: "First paint", unit: "ms", values: [83.5, 516, 688, 405, 162, 150, 193] },
+  { benchmark: "21_ready-memory", label: "Memory after load", unit: "MB", values: [0.6, 1.5, 2.3, 1.2, 0.9, 0.7, 0.6] },
+  {
+    benchmark: "22_run-memory",
+    label: "Memory with 1,000 rows",
+    unit: "MB",
+    values: [1.9, 4.2, 6.1, 4.4, 3.9, 2.9, 2.7]
+  }
+]
+
+export const value = (row: Row, framework: Framework): number => row.values[frameworks.indexOf(framework)]!
+
+export const format = (x: number): string => x >= 100 ? x.toFixed(0) : x.toFixed(1)
+
+const commit = "b3995f2a9683e557f3c9dae3de2d006a19bc5268"
+const base = `https://github.com/Effect-TS/ui/tree/${commit}/packages/ui/benchmark/js-framework-benchmark`
+
+export const links = {
+  methodology: `https://github.com/Effect-TS/ui/blob/${commit}/packages/ui/benchmark/js-framework-benchmark/README.md`,
+  data: `${base}/results`,
+  harness: "https://github.com/krausest/js-framework-benchmark"
+}
