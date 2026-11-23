@@ -2590,10 +2590,13 @@ describe("Runtime", () => {
         assert.deepStrictEqual([replay.model, replay.replayed, replay.divergence], [1, 2, undefined])
       })))
 
-    it.effect("makeEncoded only queues on record, and passes what was queued to onBatch as Wire frames", () =>
+    it.effect("makeEncoded queues on record, batches as Wire frames, recovers when onBatch dies, and drops after its Scope", () =>
       Effect.gen(function*() {
         const batches: Array<ReadonlyArray<MessageLog.WireEntry>> = []
-        const log = yield* MessageLog.makeEncoded((batch) => Effect.sync(() => batches.push(batch)))
+        const scope = yield* Scope.make()
+        const log = yield* MessageLog.makeEncoded((batch) =>
+          batch[0]!.seq === 3 ? Effect.die("inspector broke") : Effect.sync(() => batches.push(batch))
+        ).pipe(Scope.provide(scope))
         log.record({ _tag: "SessionStarted", seq: 1, at: 0, session: "s", app: "A" })
         log.record({ _tag: "SessionStarted", seq: 2, at: 0, session: "s", app: "B" })
         assert.deepStrictEqual(batches, [])
@@ -2602,24 +2605,15 @@ describe("Runtime", () => {
           { _tag: "SessionStarted", seq: 1, at: 0, session: "s", app: "A" },
           { _tag: "SessionStarted", seq: 2, at: 0, session: "s", app: "B" }
         ]])
-      }).pipe(Effect.scoped))
-
-    it.effect("makeEncoded drops the batch onBatch dies on, sends later ones, and drops what's recorded after its Scope", () =>
-      Effect.gen(function*() {
-        const batches: Array<ReadonlyArray<MessageLog.WireEntry>> = []
-        const scope = yield* Scope.make()
-        const log = yield* MessageLog.makeEncoded((batch) =>
-          batch[0]!.seq === 1 ? Effect.die("inspector broke") : Effect.sync(() => batches.push(batch))
-        ).pipe(Scope.provide(scope))
-        log.record({ _tag: "SessionStarted", seq: 1, at: 0, session: "s", app: "A" })
-        yield* Effect.yieldNow
-        log.record({ _tag: "SessionStarted", seq: 2, at: 0, session: "s", app: "B" })
-        yield* Effect.yieldNow
-        assert.deepStrictEqual(batches.map((batch) => batch.map((frame) => frame.seq)), [[2]])
-        yield* Scope.close(scope, Exit.void)
         log.record({ _tag: "SessionStarted", seq: 3, at: 0, session: "s", app: "C" })
         yield* Effect.yieldNow
-        assert.strictEqual(batches.length, 1)
+        log.record({ _tag: "SessionStarted", seq: 4, at: 0, session: "s", app: "D" })
+        yield* Effect.yieldNow
+        assert.deepStrictEqual(batches.map((batch) => batch.map((frame) => frame.seq)), [[1, 2], [4]])
+        yield* Scope.close(scope, Exit.void)
+        log.record({ _tag: "SessionStarted", seq: 5, at: 0, session: "s", app: "E" })
+        yield* Effect.yieldNow
+        assert.strictEqual(batches.length, 2)
       }))
 
     it.effect("makeEncoded masks overlapping keys, and sends any part its Schema rejects as a placeholder, checked containers included", () =>
