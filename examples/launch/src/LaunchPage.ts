@@ -114,7 +114,7 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "split").children(
-        h.h2.id("split").children("Split large components without manual type annotations"),
+        h.h2.id("split").children("Extracted handlers and views get their types from the component definition"),
         P(
           h,
           "Once a component outgrows a single chained call, assign `Component.define(...)` to a variable and write each piece separately before calling `.make`. Because the definition carries the types for `$`, `h`, and every Message, extracted handlers, views, and fragments stay typed on their own (while `init` and `subscriptions` take an explicit `Model` annotation)."
