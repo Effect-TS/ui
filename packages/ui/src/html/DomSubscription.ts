@@ -256,11 +256,6 @@ const listenFor = (
  *
  * const Message = UiSchema.TaggedEnum({ OpenedHelp: {}, ClosedHelp: {} })
  *
- * const shortcuts = [
- *   { key: "?", message: Message.OpenedHelp(), whileTyping: false },
- *   { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
- * ]
- *
  * const Shortcuts = Component.define({
  *   name: "Shortcuts",
  *   scoped: false,
@@ -274,11 +269,10 @@ const listenFor = (
  *   subscriptions: () => [
  *     DomSubscription.onDocument(
  *       "keydown",
- *       // Adding a shortcut adds a row. This handler stays as it is.
- *       ({ alt, composing, ctrl, defaultPrevented, editable, key, meta, repeat }) =>
- *         defaultPrevented || composing || repeat || alt || ctrl || meta
- *           ? undefined
- *           : shortcuts.find((shortcut) => shortcut.key === key && (shortcut.whileTyping || !editable))?.message,
+ *       Html.shortcuts([
+ *         { key: "?", message: Message.OpenedHelp() },
+ *         { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
+ *       ]),
  *       { preventDefault: true }
  *     )
  *   ]

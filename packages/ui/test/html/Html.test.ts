@@ -386,4 +386,43 @@ describe("Html", () => {
         assert.include(rendered.html, "<p>Idle</p>")
       }))
   })
+
+  describe("shortcuts", () => {
+    const key = (
+      overrides: Partial<Html.KeyPayload & { readonly defaultPrevented: boolean }>
+    ): Html.KeyPayload & { readonly defaultPrevented?: boolean | undefined } => ({
+      key: "",
+      shift: false,
+      ctrl: false,
+      alt: false,
+      meta: false,
+      composing: false,
+      repeat: false,
+      editable: false,
+      selectionStart: null,
+      selectionEnd: null,
+      ...overrides
+    })
+
+    it("matches rows in order with modifier, typing, repeat, composing and defaultPrevented guards", () => {
+      const handle = Html.shortcuts([
+        { key: "?", message: "help" },
+        { key: "Escape", message: "close", whileTyping: true },
+        { key: "ArrowDown", message: "down", repeat: true },
+        { key: "k", meta: true, shift: true, message: "cmd-shift-k" },
+        { key: "k", meta: true, message: "cmd-k" }
+      ])
+      assert.strictEqual(handle(key({ key: "?", shift: true })), "help")
+      assert.strictEqual(handle(key({ key: "?", ctrl: true })), undefined)
+      assert.strictEqual(handle(key({ key: "?", editable: true })), undefined)
+      assert.strictEqual(handle(key({ key: "?", repeat: true })), undefined)
+      assert.strictEqual(handle(key({ key: "?", composing: true })), undefined)
+      assert.strictEqual(handle(key({ key: "?", defaultPrevented: true })), undefined)
+      assert.strictEqual(handle(key({ key: "Escape", editable: true })), "close")
+      assert.strictEqual(handle(key({ key: "ArrowDown", repeat: true })), "down")
+      assert.strictEqual(handle(key({ key: "k", meta: true, shift: true })), "cmd-shift-k")
+      assert.strictEqual(handle(key({ key: "k", meta: true })), "cmd-k")
+      assert.strictEqual(handle(key({ key: "x" })), undefined)
+    })
+  })
 })

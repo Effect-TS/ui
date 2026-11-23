@@ -1,5 +1,5 @@
 import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
-import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, DomSubscription, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
@@ -215,6 +215,9 @@ describe("Html", () => {
         expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
         expect<Html.KeyPayload["repeat"]>().type.toBe<boolean>()
         expect<Html.KeyPayload["editable"]>().type.toBe<boolean>()
+        const shortcutHandler = Html.shortcuts([{ key: "Escape", message: Msg.Mounted(), whileTyping: true }])
+        expect(h.div.onKeyDown).type.toBeCallableWith(shortcutHandler)
+        expect(DomSubscription.onDocument).type.toBeCallableWith("keydown", shortcutHandler, { preventDefault: true })
         expect(h.input.onPaste).type.toBeCallableWith(
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
           { preventDefault: true }
