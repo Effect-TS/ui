@@ -1,0 +1,16 @@
+{
+  "framework": "foldkit-v0.171.0-keyed",
+  "keyed": true,
+  "benchmark": "21_ready-memory",
+  "type": "memory",
+  "values": {
+    "DEFAULT": {
+      "min": 2.274059295654297,
+      "max": 2.274059295654297,
+      "median": 2.274059295654297,
+      "mean": 2.274059295654297,
+      "stddev": null,
+      "values": [2.274059295654297]
+    }
+  }
+}

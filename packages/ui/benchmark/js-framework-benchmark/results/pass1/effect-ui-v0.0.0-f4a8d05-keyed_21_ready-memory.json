@@ -1,0 +1,16 @@
+{
+  "framework": "effect-ui-v0.0.0-f4a8d05-keyed",
+  "keyed": true,
+  "benchmark": "21_ready-memory",
+  "type": "memory",
+  "values": {
+    "DEFAULT": {
+      "min": 1.4593610763549805,
+      "max": 1.4593610763549805,
+      "median": 1.4593610763549805,
+      "mean": 1.4593610763549805,
+      "stddev": null,
+      "values": [1.4593610763549805]
+    }
+  }
+}
