@@ -1845,12 +1845,12 @@ export interface Recorded {
  * next to it, in a copy of the container without its children and with the
  * HTML `inert` attribute. Each instance of the copy adopts the state that
  * `state` returns for its path, and one it returns nothing for starts from
- * `init`. It returns the paths of those that started from `init`, which
- * may show something the page never showed at that state.
+ * `init`. See `Painted` for what it returns.
  *
  * The frozen copy runs nothing: no Command, `init`'s included, no
  * Subscription, query watch or fetch, element mount or provided Layer, so a
- * feature slot shows its `fallback`. It logs no entries, leaves the
+ * feature slot whose service comes from a provided Layer shows its
+ * `fallback`. It logs no entries, leaves the
  * document head alone, isn't seen by the Router and takes no events.
  * A modal dialog in the copy is shown as a manual popover, and an auto
  * popover as a manual one, so the copy never makes the rest of the page
@@ -1878,8 +1878,28 @@ export interface Pausable {
   readonly session: string
   /** The root instance's path, `/<name>`. */
   readonly path: string
-  readonly pause: (state: (path: string) => Recorded | undefined) => Effect.Effect<ReadonlyArray<string>>
+  readonly pause: (state: (path: string) => Recorded | undefined) => Effect.Effect<Painted>
   readonly resume: Effect.Effect<void>
+}
+
+/**
+ * What `Pausable.pause` painted that differs from the page at that state.
+ *
+ * **Details**
+ *
+ * `fellBack` has the paths of the instances `state` returned nothing for,
+ * which started from `init`. `fallbacks` has the path of each instance
+ * whose view shows a feature slot's `fallback`, because the copy doesn't
+ * build the provided Layer the feature's service comes from. Both may show
+ * something the page never showed at that state.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Painted {
+  readonly fellBack: ReadonlyArray<string>
+  readonly fallbacks: ReadonlyArray<string>
 }
 
 /**
@@ -1970,14 +1990,14 @@ const pausable = (
         copy.setAttribute("inert", "")
         ;(painted?.copy ?? container).after(copy)
         style.setProperty("display", "none", "important")
-        const fellBack = yield* runtime.paint(component, root.instance.props, copy, (path) => {
+        const result = yield* runtime.paint(component, root.instance.props, copy, (path) => {
           const recorded = state(path)
           return recorded === undefined ? undefined : { model: recorded.model, results: recorded.queries }
         }).pipe(Effect.provideContext(Context.add(painting, Scope.Scope, scope)))
         const was = painted
         painted = { scope, copy }
         yield* unpaint(was)
-        return fellBack
+        return result
       })),
     resume
   }

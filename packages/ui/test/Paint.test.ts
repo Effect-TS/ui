@@ -110,8 +110,8 @@ describe("paint", () => {
         const before = { ...ran }
         const logged = testHost.log.entries().length
         const container = testHost.host.createElement("div")
-        const fellBack = yield* runtime.paint(List, {}, container, (path) => then.get(path))
-        assert.deepStrictEqual(fellBack, [])
+        const painted = yield* runtime.paint(List, {}, container, (path) => then.get(path))
+        assert.deepStrictEqual(painted.fellBack, [])
         assert.strictEqual(Locator.textOf(container), "a:A=1;b:B=0;")
 
         assert.throws(() => click(container, "a:A=1;"), /nothing handles "click"/)
@@ -131,14 +131,14 @@ describe("paint", () => {
       Effect.gen(function*() {
         const testHost = yield* TestHost.TestHost
         const container = testHost.host.createElement("div")
-        const fellBack = yield* runtime.paint(
+        const painted = yield* runtime.paint(
           List,
           {},
           container,
           (path) => path === "/List" ? { model: ["a", "b"], results: undefined } : undefined
         )
         yield* load
-        assert.deepStrictEqual(fellBack, ["/List/Row[a]", "/List/Row[b]"])
+        assert.deepStrictEqual(painted.fellBack, ["/List/Row[a]", "/List/Row[b]"])
         assert.strictEqual(Locator.textOf(container), "a:?=0;b:?=0;")
         assert.deepStrictEqual(ran, { commands: 0, subscriptions: 0, fetches: 0 })
       })

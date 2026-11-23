@@ -741,6 +741,7 @@ interface Options {
 interface Inert {
   readonly state: (path: string) => Decoded | undefined
   readonly fellBack: (path: string) => void
+  readonly fallback: (path: string) => void
 }
 
 interface ServerOptions {
@@ -971,14 +972,26 @@ export const paint = (
   state: (
     path: string
   ) => { readonly model: unknown; readonly results: componentQueries.Results | undefined } | undefined
-): Effect.Effect<ReadonlyArray<string>, never, Scope.Scope | Renderer.Renderer> =>
+): Effect.Effect<
+  { readonly fellBack: ReadonlyArray<string>; readonly fallbacks: ReadonlyArray<string> },
+  never,
+  Scope.Scope | Renderer.Renderer
+> =>
   Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
     const ctx = onScheduler(caller)
     const fellBack: Array<string> = []
-    const options: Options = { head: false, inert: { state, fellBack: (path) => fellBack.push(path) } }
+    const fallbacks = new Set<string>()
+    const options: Options = {
+      head: false,
+      inert: { state, fellBack: (path) => fellBack.push(path), fallback: (path) => fallbacks.add(path) }
+    }
     return Effect.flatMap(
       makeQueryCache(ctx, options),
-      (cell) => Effect.as(start(component, rootProps, container, ctx, cell, options), fellBack)
+      (cell) =>
+        Effect.map(
+          start(component, rootProps, container, ctx, cell, options),
+          () => ({ fellBack, fallbacks: Array.from(fallbacks) })
+        )
     )
   })
 
@@ -5907,6 +5920,7 @@ const setup = (
         }
         whenReady(env, rerender, rerender)
       }
+      inert?.fallback(inst.path)
       return fallbackSlot(inst, view, status, false, env, range)
     }
     let component: Component.Any
