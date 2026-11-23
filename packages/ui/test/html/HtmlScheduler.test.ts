@@ -6,7 +6,7 @@ type Lane = "user-blocking" | "user-visible" | "background"
 
 const hostOrder = ["user-blocking", "user-visible", "background", "message"]
 
-const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
+const browser = (transport: "postTask" | "MessageChannel" | "setTimeout" = "postTask") => {
   let time = 0
   const posted: Array<{ readonly run: () => void; readonly priority: Lane | "message" }> = []
   vi.spyOn(performance, "now").mockImplementation(() => time)
@@ -17,7 +17,7 @@ const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
         return Promise.resolve()
       }
     })
-  } else {
+  } else if (transport === "MessageChannel") {
     vi.stubGlobal("scheduler", undefined)
     vi.stubGlobal(
       "MessageChannel",
@@ -26,6 +26,10 @@ const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
         readonly port2 = { postMessage: () => posted.push({ run: () => this.port1.onmessage(), priority: "message" }) }
       }
     )
+  } else {
+    vi.stubGlobal("scheduler", undefined)
+    vi.stubGlobal("MessageChannel", undefined)
+    vi.stubGlobal("setTimeout", (run: () => void) => posted.push({ run, priority: "message" }))
   }
   const scheduler = HtmlScheduler.make({ budget: 5 })
   return {
@@ -58,26 +62,29 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     vi.unstubAllGlobals()
   })
 
-  it("slices sequential and concurrent work, and falls back to MessageChannel", () => {
-    const { elapsed, fork, next, posted, work } = browser("MessageChannel")
-    const log: Array<string> = []
-    fork(
-      Effect.yieldNowWith(1).pipe(
-        Effect.andThen(Effect.forEach(Array.from({ length: 100 }), () => work(1), { discard: true })),
-        Effect.andThen(Effect.sync(() => log.push("background")))
+  it.each(["MessageChannel", "setTimeout"] as const)(
+    "slices sequential and concurrent work, and falls back to %s",
+    (transport) => {
+      const { elapsed, fork, next, posted, work } = browser(transport)
+      const log: Array<string> = []
+      fork(
+        Effect.yieldNowWith(1).pipe(
+          Effect.andThen(Effect.forEach(Array.from({ length: 100 }), () => work(1), { discard: true })),
+          Effect.andThen(Effect.sync(() => log.push("background")))
+        )
       )
-    )
-    fork(
-      Effect.forEach(Array.from({ length: 100 }), () => work(1), { concurrency: "unbounded", discard: true }).pipe(
-        Effect.andThen(Effect.sync(() => log.push("normal")))
+      fork(
+        Effect.forEach(Array.from({ length: 100 }), () => work(1), { concurrency: "unbounded", discard: true }).pipe(
+          Effect.andThen(Effect.sync(() => log.push("normal")))
+        )
       )
-    )
-    expect(posted.length).toBe(1)
-    const slices = [elapsed()]
-    while (posted.length > 0) slices.push(next())
-    expect(log).toEqual(["normal", "background"])
-    expect(Math.max(...slices)).toBeLessThanOrEqual(6)
-  })
+      expect(posted.length).toBe(1)
+      const slices = [elapsed()]
+      while (posted.length > 0) slices.push(next())
+      expect(log).toEqual(["normal", "background"])
+      expect(Math.max(...slices)).toBeLessThanOrEqual(6)
+    }
+  )
 
   it("runs each priority in a host task of its own, and keeps a fiber that spends its budget at its priority", () => {
     const { fork, next, page, posted, work } = browser()

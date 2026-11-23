@@ -44,8 +44,9 @@ export interface Options {
  * the last budget. Once that is spent it starts a budget of its own, unless
  * fiber work is already waiting for a task, in which case it joins that work.
  *
- * Tasks are posted with `scheduler.postTask` where the browser has it, and
- * otherwise with a `MessageChannel`.
+ * Tasks are posted with `scheduler.postTask` where the browser has it,
+ * `MessageChannel` otherwise, and `setTimeout` in environments that have
+ * neither.
  *
  * Lower priorities run first, and equal ones in the order they were queued.
  * Effect queues everything at priority 0, and `Effect.yieldNowWith(priority)`
@@ -195,18 +196,20 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
       }, { priority: lane })
     } else if (this.pending.size === 0) {
       this.pending.add(lane)
-      if (this.channel === undefined) {
-        this.channel = new MessageChannel()
-        this.channel.port1.onmessage = () => {
-          this.pending.clear()
-          this.run()
+      if (typeof MessageChannel === "function") {
+        if (this.channel === undefined) {
+          this.channel = new MessageChannel()
+          this.channel.port1.onmessage = this.run
         }
+        this.channel.port2.postMessage(undefined)
+      } else {
+        setTimeout(this.run, 0)
       }
-      this.channel.port2.postMessage(undefined)
     }
   }
 
-  private run(): void {
+  private readonly run = (): void => {
+    this.pending.clear()
     this.drain(now() + this.budget)
   }
 
