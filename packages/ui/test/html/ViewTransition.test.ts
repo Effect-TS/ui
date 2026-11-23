@@ -212,6 +212,7 @@ describe("view transitions", { concurrent: false }, () => {
           } else if (consume === "freeze") {
             app.freeze()
             expect(app.shown()).toBe("Detail grid ")
+            started.update()
           } else {
             yield* Scope.close(scope, Exit.void)
             expect(transitions.skipped()).toBe(skippedBefore + 1)
