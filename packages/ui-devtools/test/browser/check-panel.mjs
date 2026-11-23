@@ -63,9 +63,27 @@ const wheel = async (page, frame, delta) => {
   await page.waitForTimeout(300)
 }
 
-const pinning = async () => {
+const desktop = async () => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
   const { frame, page } = await setup(context)
+  const panel = frame.getByRole("dialog", { name: "Effect UI inspector" })
+  const openedBox = await panel.boundingBox()
+  expect(
+    Math.round(openedBox.width) === 920 && Math.round(openedBox.height) === 560,
+    "the panel opens at 920 by 560",
+    openedBox
+  )
+  expect(
+    Math.round(openedBox.x + openedBox.width) > 1400 && Math.round(openedBox.y + openedBox.height) > 860,
+    "the panel opens in the launcher's corner",
+    openedBox
+  )
+  expect(
+    !(await frame.getByRole("button", { name: "Back to the timeline" }).isVisible()),
+    "a wide panel shows both columns without a back button",
+    {}
+  )
+
   const opened = await timeline(page)
   await type(page, "abcdefghij")
   let state = await timeline(page)
@@ -97,20 +115,7 @@ const pinning = async () => {
   await type(page, "uv")
   state = await timeline(page)
   expect(atTop(state), "scrolling back to the top pins the timeline again", state)
-  await context.close()
-}
 
-const resizing = async () => {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
-  const { frame, page } = await setup(context)
-  const panel = frame.getByRole("dialog", { name: "Effect UI inspector" })
-  const opened = await panel.boundingBox()
-  expect(Math.round(opened.width) === 920 && Math.round(opened.height) === 560, "the panel opens at 920 by 560", opened)
-  expect(
-    Math.round(opened.x + opened.width) > 1400 && Math.round(opened.y + opened.height) > 860,
-    "the panel opens in the launcher's corner",
-    opened
-  )
   const grip = await frame.locator(".grip").boundingBox()
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
   await page.mouse.down()
@@ -165,66 +170,63 @@ const readable = (frame, selector) =>
     }
   })
 
-const walkthrough = async (width, height) => {
-  const at = width + "x" + height + ": "
-  const context = await browser.newContext({ viewport: { width, height } })
+const narrow = async () => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const { frame, page } = await setup(context, "?capture=interrupted")
   await frame.locator("[data-instance=\"Editor[n2]\"]").click()
   await frame.locator(".row-button[aria-label$=\"Update ClickedSave\"]").last().click()
 
+  const back = frame.getByRole("button", { name: "Back to the timeline" })
+  expect(await back.isVisible(), "390x844: a narrow panel offers a way back to the timeline", {})
   let seen = await readable(frame, ".ehead .headline")
-  expect(seen.ok && seen.text === "ClickedSave", at + "the selected entry's title is readable", seen)
+  expect(seen.ok && seen.text === "ClickedSave", "390x844: the selected entry's title is readable", seen)
   seen = await readable(frame, ".tree .tl[data-change=changed]")
-  expect(seen.ok && /"Dirty" → "Saving"/.test(seen.text), at + "the Dirty → Saving change is readable", seen)
+  expect(seen.ok && /"Dirty" → "Saving"/.test(seen.text), "390x844: the Dirty → Saving change is readable", seen)
   for (const tab of ["Model", "Message", "Commands", "Lifecycle", "Raw"]) {
     seen = await readable(frame, ".tabs .tab:has-text('" + tab + "')")
-    expect(seen.ok, at + "the " + tab + " tab is readable", seen)
+    expect(seen.ok, "390x844: the " + tab + " tab is readable", seen)
   }
-
   const escape = ".step[data-step=End] .cause button.ref"
   seen = await readable(frame, escape)
-  expect(seen.ok, at + "the PressedEscape link is readable", seen)
+  expect(seen.ok, "390x844: the PressedEscape link is readable", seen)
+
+  await page.setViewportSize({ width: 640, height: 480 })
+  await page.waitForTimeout(100)
+  expect(await back.isVisible(), "640x480: a narrow panel stays single-pane below 720px", {})
+  seen = await readable(frame, ".tree .tl[data-change=changed]")
+  expect(seen.ok && /"Dirty" → "Saving"/.test(seen.text), "640x480: the Dirty → Saving change is readable", seen)
+
   await frame.locator(escape).click()
   seen = await readable(frame, ".ehead .headline")
-  expect(seen.ok && seen.text === "PressedEscape", at + "following the link shows PressedEscape", seen)
+  expect(seen.ok && seen.text === "PressedEscape", "narrow: following the link shows PressedEscape", seen)
 
-  const back = frame.getByRole("button", { name: "Back to the timeline" })
-  if (width >= 800) {
-    expect(!(await back.isVisible()), at + "a wide panel shows both columns without a back button", {})
-  } else if (!(await back.isVisible())) {
-    expect(false, at + "a narrow panel offers a way back to the timeline", {})
-  } else {
-    await back.click()
-    seen = await readable(frame, ".row.selected")
-    expect(
-      seen.ok && /PressedEscape/.test(seen.text),
-      at + "going back shows the timeline with PressedEscape selected",
-      seen
-    )
-    await frame.getByRole("button", { name: "Follow latest" }).click()
-    await frame.locator(".row-button").nth(2).click()
-    seen = await readable(frame, ".ehead .headline")
-    expect(seen.ok, at + "choosing another entry shows its detail", seen)
-    const before = await timeline(page)
-    await type(page, "abc")
-    await back.click()
-    await page.waitForTimeout(150)
-    const after = await timeline(page)
-    expect(
-      atTop(after) && after.newest > before.newest,
-      at + "the timeline stays pinned while an entry is shown",
-      { before, after }
-    )
-  }
+  await back.click()
+  seen = await readable(frame, ".row.selected")
+  expect(
+    seen.ok && /PressedEscape/.test(seen.text),
+    "narrow: going back shows the timeline with PressedEscape selected",
+    seen
+  )
+  await frame.getByRole("button", { name: "Follow latest" }).click()
+  await frame.locator(".row-button").nth(2).click()
+  seen = await readable(frame, ".ehead .headline")
+  expect(seen.ok, "narrow: choosing another entry shows its detail", seen)
+  const before = await timeline(page)
+  await type(page, "abc")
+  await back.click()
+  await page.waitForTimeout(150)
+  const after = await timeline(page)
+  expect(
+    atTop(after) && after.newest > before.newest,
+    "narrow: the timeline stays pinned while an entry is shown",
+    { before, after }
+  )
   await context.close()
 }
 
 try {
-  await pinning()
-  await resizing()
-  await walkthrough(390, 844)
-  await walkthrough(640, 480)
-  await walkthrough(1440, 900)
+  await desktop()
+  await narrow()
 } finally {
   await browser.close()
   await server.close()

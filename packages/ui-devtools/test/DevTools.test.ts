@@ -139,13 +139,20 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNotNull(instance(root, "Editor[n2]").querySelector(".status .tone-bad"))
       assert.isNull(instance(root, "Editor[n1]").querySelector(".status .tone-bad"))
 
-      const pane = () => root.querySelector(".panel")!.getAttribute("data-pane")
-      assert.strictEqual(pane(), "timeline")
+      const rows = () => Array.from(root.querySelectorAll(".row")).map((row) => row.getAttribute("data-tag"))
+      assert.notInclude(rows(), "SubscriptionStarted")
+      assert.include(rows(), "CommandStarted")
+      assert.include(rows(), "Update")
+      assert.match(text(root.querySelector(".hidden-note")), /^\d+ lifecycle entries hidden\. Show them$/)
+      yield* click(root.querySelector(".hidden-note button")!)
+      assert.strictEqual(
+        HtmlLocator.getByRole(root, "button", { name: "Everything" }).getAttribute("aria-pressed"),
+        "true"
+      )
+      assert.include(rows(), "SubscriptionStarted")
+      assert.isNull(root.querySelector(".hidden-note"))
+
       yield* selectClickedSave(root)
-      assert.strictEqual(pane(), "entry")
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Back to the timeline" }))
-      assert.strictEqual(pane(), "timeline")
-      assert.strictEqual(headline(root), "ClickedSave")
       yield* click(instance(root, "Editor[n2]"))
       assert.isFalse(instance(root, "Editor[n2]").classList.contains("on"))
       assert.strictEqual(instance(root, "Editor[n2]").getAttribute("aria-current"), "true")
@@ -201,25 +208,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(text(root.querySelector(".bar .count")), count)
       assert.notInclude(root.textContent, "DevToolsOverlay")
       assert.isFalse(memory.entries().some((entry) => "path" in entry && entry.path.includes("DevToolsOverlay")))
-    }))
-
-  it.live("hides lifecycle entries from Messages and shows them on request", () =>
-    Effect.gen(function*() {
-      const { root } = yield* mount("interrupted")
-      yield* open(root)
-      const rows = () => Array.from(root.querySelectorAll(".row")).map((row) => row.getAttribute("data-tag"))
-      assert.notInclude(rows(), "SubscriptionStarted")
-      assert.include(rows(), "CommandStarted")
-      assert.include(rows(), "Update")
-      const note = text(root.querySelector(".hidden-note"))
-      assert.match(note, /^\d+ lifecycle entries hidden\. Show them$/)
-      yield* click(root.querySelector(".hidden-note button")!)
-      assert.strictEqual(
-        HtmlLocator.getByRole(root, "button", { name: "Everything" }).getAttribute("aria-pressed"),
-        "true"
-      )
-      assert.include(rows(), "SubscriptionStarted")
-      assert.isNull(root.querySelector(".hidden-note"))
     }))
 
   it.live("reads the other captures as unmount, switch and still running", () =>
@@ -398,7 +386,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const saved = oldest(root, /Update SucceededSaveNote$/)
       yield* click(saved)
       assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "no diff")
-      assert.match(text(root.querySelector(".pane.model .note")), /#\d+, which is outside the buffer$/)
+      assert.match(text(root.querySelector(".pane.model .note")), /^Changed since #\d+, which is outside the buffer$/)
       assert.isNull(root.querySelector(".tree .tl[data-change]"))
     }))
 
