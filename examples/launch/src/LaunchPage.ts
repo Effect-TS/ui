@@ -349,20 +349,22 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "performance").children(
-        h.h2.id("performance").children("Performance on js-framework-benchmark"),
+        h.h2.id("performance").children(
+          "Effect UI spent less time in script than Foldkit 0.x on seven of nine table operations"
+        ),
         h.p.children(
-          "We ran Effect UI and Foldkit 0.x through ",
+          "We ran Effect UI and Foldkit 0.x entries through ",
           h.a.attr("href", links.harness).children("js-framework-benchmark"),
-          ", the keyed table benchmark most UI frameworks publish numbers for, alongside React, Vue, Svelte, Solid, and vanilla JS. Every entry renders the same table, and the harness times each operation from the click to the next paint."
+          ", a keyed table benchmark, next to its own React, Vue, Svelte, Solid, and vanilla JS entries. Every entry renders the same table. For each operation, the harness records the time from the click to the end of the next paint, and how much of that time went to running script."
         ),
         PerformanceChart(h),
         P(
           h,
-          "The first group shows script time: the JavaScript that runs between the click and the paint. Painting 1,000 rows took about 100 ms on the test machine whatever the framework, so script time separates the frameworks better than total time. Effect UI runs less JavaScript than Foldkit 0.x on seven of the nine operations, and less than half as much to create 10,000 rows. Foldkit 0.x is faster at swapping two rows, and the two are level on removing one."
+          "The first group shows script time. Painting 1,000 rows took about 100 ms in every entry on the test machine, so script time separates the entries better than the time from click to paint. Creating 10,000 rows took Effect UI 188 ms of script against Foldkit 0.x's 398 ms, but 1,319 ms against 1,471 ms from click to paint. Foldkit 0.x spent less script time swapping two rows, 8.6 ms against 12.5 ms. Removing a row took about 4 ms of script in both."
         ),
         P(
           h,
-          "Effect UI also ships a smaller bundle, paints first sooner, and uses less memory. Vue, Svelte, and Solid are still ahead of both on most operations, most of all on small updates. Effect UI runs `update` and the whole `view` for each Message and compares every row's arguments to find the few that changed, while Svelte and Solid write only the DOM nodes that depend on the changed state."
+          "The Effect UI entry's bundle was also smaller, its first paint came sooner, and its JavaScript heap was smaller after load and with 1,000 rows. Each of those four was measured once per run, so treat them as rough. Svelte spent less script time than both Effect entries on all nine operations, and Solid on all but clearing rows. Vue spent less than Effect UI on five, by the widest margins on updating, selecting and swapping rows. In Effect UI each Message runs `update` and the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and write only those."
         ),
         AllResults(h)
       ),
