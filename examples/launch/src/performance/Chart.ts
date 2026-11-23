@@ -12,7 +12,7 @@ const Amount = <M>(h: View.H<M>, row: Row, framework: Framework) => [
 const Label = <M>(h: View.H<M>, row: Row) =>
   h.th.attr("scope", "row").children(
     row.label,
-    row.slowdown !== undefined && h.span.class("perf-note").children(`CPU slowed ${row.slowdown}×`)
+    row.slowdown !== undefined && h.span.class("perf-note").children(`${row.slowdown}× CPU throttle`)
   )
 
 const pair = ["effect-ui", "foldkit"] as const
@@ -47,13 +47,13 @@ const Group = <M>(
     ...rows.map(row)
   )
 
-const scriptTitle = "JavaScript run per operation"
+const scriptTitle = "Median script time per operation"
 const loadTitle = "Page load and memory"
 
 export const PerformanceChart = <M>(h: View.H<M>) =>
   h.figure.class("perf").children(
     h.table.class("perf-chart").children(
-      h.caption.children("Effect UI and Foldkit 0.x on js-framework-benchmark. Lower is better."),
+      h.caption.children("Effect UI and Foldkit 0.x entries on js-framework-benchmark. Lower is better."),
       h.thead.children(
         h.tr.children(
           h.th.attr("scope", "col").children("Workload"),
@@ -64,7 +64,7 @@ export const PerformanceChart = <M>(h: View.H<M>) =>
       Group(h, loadTitle, load, 3, (row) => Bars(h, row))
     ),
     h.figcaption.class("caption").children(
-      "Each value is the median of two full runs on headless Chromium. Bars compare the two frameworks within each row. Rows marked “CPU slowed” ran with the CPU throttled, so they take that many times longer than at full speed. Read the ",
+      "Each value is the median of the samples from two full runs on headless Chromium, pooled: 30 samples per operation (50 for selecting a row), and one per run for size, first paint and memory. Bars compare the two entries within each row only. Rows marked with a CPU throttle ran with the harness slowing the CPU by that factor, and their values are as measured under it. Read the ",
       h.a.attr("href", links.methodology).children("methodology"),
       " or the ",
       h.a.attr("href", links.data).children("raw results"),
