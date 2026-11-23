@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../ui"
+    },
+    {
+      "path": "../ui-kit"
+    }
+  ],
+  "compilerOptions": {
+    "types": [
+      "node"
+    ]
+  }
+}

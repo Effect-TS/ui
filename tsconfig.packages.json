@@ -6,6 +6,7 @@
     { "path": "ai-docs" },
     { "path": "packages/ui" },
     { "path": "packages/ui-kit" },
+    { "path": "packages/ui-devtools" },
     { "path": "packages/tools/ai-docgen" },
     { "path": "packages/tools/jsdocs" },
     { "path": "packages/tools/oxc" },
