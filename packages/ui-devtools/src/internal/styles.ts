@@ -25,7 +25,7 @@ html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
 .tone-open { color: var(--open); }
 .launcher { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-weight: 500; }
 .launcher-count { color: var(--muted); font-variant-numeric: tabular-nums; }
-.panel { position: relative; width: min(var(--panel-w, 920px), calc(var(--vw, 100vw) - 24px)); height: min(var(--panel-h, 560px), calc(var(--vh, 100vh) - 24px)); display: grid; grid-template-rows: 44px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.panel { position: relative; width: min(var(--panel-w, 920px), calc(var(--vw, 100vw) - 24px)); height: min(var(--panel-h, 560px), calc(var(--vh, 100vh) - 24px)); display: grid; grid-template-rows: 44px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); container: panel / inline-size; }
 .panel.empty { grid-template-rows: 44px 1fr; }
 .empty-note { padding: 20px; color: var(--muted); }
 .grip { position: absolute; width: 16px; height: 16px; z-index: 1; cursor: nwse-resize; touch-action: none; }
@@ -135,4 +135,22 @@ html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
 .life td:nth-child(4) { width: 36%; }
 .life td:last-child { padding-right: 0; }
 .life tr:last-child > * { border-bottom: 0; }
+.back { display: none; align-self: flex-start; margin: 10px 0 0 10px; padding: 3px 10px; border-radius: 6px; color: var(--muted); white-space: nowrap; }
+.back:hover { background: var(--sel); color: var(--ink); }
+@container panel (max-width: 719px) {
+  .bar { gap: 8px; padding-left: 16px; }
+  .count { display: none; }
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .left { border-right: 0; }
+  [data-pane=timeline] > .body > .right, [data-pane=entry] > .body > .left { display: none; }
+  .back { display: block; }
+  .ehead { padding: 8px 16px 4px; }
+  .tabs { column-gap: 12px; flex-wrap: wrap; padding: 0 16px; }
+  .tab { flex: none; }
+  .tab .unit { display: none; }
+  .pane { padding: 12px 16px 16px; }
+  .tl { grid-template-columns: minmax(64px, 112px) minmax(0, 1fr); gap: 10px; }
+  .life th { width: 88px; }
+  .life td:nth-child(3) { width: 104px; }
+}
 `

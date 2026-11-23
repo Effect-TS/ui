@@ -20,10 +20,10 @@ const expect = (ok, what, detail) => {
   if (!ok) failures.push(what + " " + JSON.stringify(detail))
 }
 
-const setup = async (context) => {
+const setup = async (context, query = "") => {
   const page = await context.newPage()
   page.on("pageerror", (error) => failures.push("page error " + String(error)))
-  await page.goto(url)
+  await page.goto(url + query)
   await page.waitForSelector("body[data-ready]", { state: "attached" })
   const frame = page.frameLocator("iframe[data-effect-ui-devtools]")
   await frame.getByRole("button", { name: "Open the Effect UI inspector" }).click()
@@ -136,9 +136,95 @@ const resizing = async () => {
   await context.close()
 }
 
+const readable = (frame, selector) =>
+  frame.locator(selector).first().evaluate((element) => {
+    element.scrollIntoView({ block: "center", inline: "nearest" })
+    const doc = element.ownerDocument
+    const box = element.getBoundingClientRect()
+    const clip = { left: 0, top: 0, right: doc.documentElement.clientWidth, bottom: doc.documentElement.clientHeight }
+    let scrolledSideways = false
+    for (let node = element.parentElement; node !== null; node = node.parentElement) {
+      if (node.scrollLeft > 0) scrolledSideways = true
+      const style = getComputedStyle(node)
+      if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+        const rect = node.getBoundingClientRect()
+        clip.left = Math.max(clip.left, rect.left)
+        clip.top = Math.max(clip.top, rect.top)
+        clip.right = Math.min(clip.right, rect.right)
+        clip.bottom = Math.min(clip.bottom, rect.bottom)
+      }
+    }
+    const hit = doc.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+    return {
+      ok: box.width > 0 && !scrolledSideways && box.left >= clip.left - 0.5 && box.right <= clip.right + 0.5 &&
+        box.top >= clip.top - 0.5 && box.bottom <= clip.bottom + 0.5 && hit !== null &&
+        (element === hit || element.contains(hit)),
+      text: element.textContent.replace(/\s+/g, " ").trim(),
+      box: { left: Math.round(box.left), right: Math.round(box.right), top: Math.round(box.top) },
+      clip
+    }
+  })
+
+const walkthrough = async (width, height) => {
+  const at = width + "x" + height + ": "
+  const context = await browser.newContext({ viewport: { width, height } })
+  const { frame, page } = await setup(context, "?capture=interrupted")
+  await frame.locator('[data-instance="Editor[n2]"]').click()
+  await frame.locator('.row-button[aria-label$="Update ClickedSave"]').last().click()
+
+  let seen = await readable(frame, ".ehead .headline")
+  expect(seen.ok && seen.text === "ClickedSave", at + "the selected entry's title is readable", seen)
+  seen = await readable(frame, ".tree .tl[data-change=changed]")
+  expect(seen.ok && /"Dirty" → "Saving"/.test(seen.text), at + "the Dirty → Saving change is readable", seen)
+  for (const tab of ["Model", "Message", "Commands", "Lifecycle", "Raw"]) {
+    seen = await readable(frame, ".tabs .tab:has-text('" + tab + "')")
+    expect(seen.ok, at + "the " + tab + " tab is readable", seen)
+  }
+
+  const escape = ".step[data-step=End] .cause button.ref"
+  seen = await readable(frame, escape)
+  expect(seen.ok, at + "the PressedEscape link is readable", seen)
+  await frame.locator(escape).click()
+  seen = await readable(frame, ".ehead .headline")
+  expect(seen.ok && seen.text === "PressedEscape", at + "following the link shows PressedEscape", seen)
+
+  const back = frame.getByRole("button", { name: "Back to the timeline" })
+  if (width >= 800) {
+    expect(!(await back.isVisible()), at + "a wide panel shows both columns without a back button", {})
+  } else if (!(await back.isVisible())) {
+    expect(false, at + "a narrow panel offers a way back to the timeline", {})
+  } else {
+    await back.click()
+    seen = await readable(frame, ".row.selected")
+    expect(
+      seen.ok && /PressedEscape/.test(seen.text),
+      at + "going back shows the timeline with PressedEscape selected",
+      seen
+    )
+    await frame.getByRole("button", { name: "Follow latest" }).click()
+    await frame.locator(".row-button").nth(2).click()
+    seen = await readable(frame, ".ehead .headline")
+    expect(seen.ok, at + "choosing another entry shows its detail", seen)
+    const before = await timeline(page)
+    await type(page, "abc")
+    await back.click()
+    await page.waitForTimeout(150)
+    const after = await timeline(page)
+    expect(
+      atTop(after) && after.newest > before.newest,
+      at + "the timeline stays pinned while an entry is shown",
+      { before, after }
+    )
+  }
+  await context.close()
+}
+
 try {
   await pinning()
   await resizing()
+  await walkthrough(390, 844)
+  await walkthrough(640, 480)
+  await walkthrough(1440, 900)
 } finally {
   await browser.close()
   await server.close()

@@ -139,7 +139,13 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNotNull(instance(root, "Editor[n2]").querySelector(".status .tone-bad"))
       assert.isNull(instance(root, "Editor[n1]").querySelector(".status .tone-bad"))
 
+      const pane = () => root.querySelector(".panel")!.getAttribute("data-pane")
+      assert.strictEqual(pane(), "timeline")
       yield* selectClickedSave(root)
+      assert.strictEqual(pane(), "entry")
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Back to the timeline" }))
+      assert.strictEqual(pane(), "timeline")
+      assert.strictEqual(headline(root), "ClickedSave")
       yield* click(instance(root, "Editor[n2]"))
       assert.isFalse(instance(root, "Editor[n2]").classList.contains("on"))
       assert.strictEqual(instance(root, "Editor[n2]").getAttribute("aria-current"), "true")

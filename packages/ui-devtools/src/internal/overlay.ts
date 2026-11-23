@@ -28,6 +28,8 @@ const FeedSchema = Schema.declare(
 
 const Filter = Schema.Literals(["messages", "commands", "all"])
 
+const Pane = Schema.Literals(["timeline", "entry"])
+
 const OverlayProps = Schema.Struct({ feed: FeedSchema })
 
 type OverlayProps = typeof OverlayProps.Type
@@ -43,7 +45,8 @@ const OverlayModel = Schema.Struct({
   pinned: Schema.Boolean,
   atStart: Schema.Boolean,
   reveal: Schema.NullOr(Schema.Number),
-  pins: Schema.Number
+  pins: Schema.Number,
+  pane: Pane
 })
 
 type OverlayModel = typeof OverlayModel.Type
@@ -57,6 +60,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedInstance: { instance: Schema.Number },
   ClickedFilter: { filter: Filter },
   ClickedFollowLatest: {},
+  ClickedBack: {},
   ScrolledTimeline: { atStart: Schema.Boolean },
   SelectedTab: { value: Schema.String },
   ClickedCopyFrame: { seq: Schema.Number, text: Schema.String },
@@ -778,7 +782,12 @@ const Details = (
             t.tab({
               element: h.button.class("tab").children(
                 section.label,
-                section.count === undefined ? null : h.small.children(" " + section.count)
+                section.count === undefined ? null : h.small.children(
+                  " ",
+                  ...(/^\d+ changes?$/.test(section.count)
+                    ? [section.count.split(" ")[0]!, h.span.class("unit").children(" " + section.count.split(" ")[1])]
+                    : [section.count])
+                )
               ),
               value: section.value
             })
@@ -837,7 +846,10 @@ const Panel = (h: H, model: OverlayModel) => {
   const steps = entry === undefined ? [] : Read.chainOf(session, entry)
   const owner = entry === undefined ? undefined : Read.instanceOf(entry)
   const shown = model.instance ?? owner
-  return h.div.class("panel").attr("role", "dialog").attr("aria-label", "Effect UI inspector").children(
+  return h.div.class("panel").attr("role", "dialog").attr("aria-label", "Effect UI inspector").attr(
+    "data-pane",
+    model.pane
+  ).children(
     h.span.class("grip").attr("aria-hidden", "true"),
     Header(h, session, entries.length, model),
     h.div.class("body").children(
@@ -847,6 +859,8 @@ const Panel = (h: H, model: OverlayModel) => {
         Timeline(h, session, model, timeline, hidden, selected?.seq, Read.chainSeqs(steps))
       ),
       h.div.class("right").children(
+        h.button.class("back").attr("aria-label", "Back to the timeline").onClick(OverlayMessage.ClickedBack())
+          .children("← Timeline"),
         entry === undefined
           ? h.section.class("ehead").children(
             h.h3.class("headline").children(selected === undefined ? "No entry" : "#" + selected.seq),
@@ -877,7 +891,8 @@ export const Overlay = Component.define({
     pinned: true,
     atStart: true,
     reveal: null,
-    pins: 0
+    pins: 0,
+    pane: "timeline"
   }),
   update: {
     ReceivedFrames: (model, _message, $) =>
@@ -886,16 +901,17 @@ export const Overlay = Component.define({
         ...(model.reveal === null ? {} : { reveal: null, pinned: model.atStart, pins: (pins) => pins + 1 })
       }),
     ClickedOpen: (_model, _message, $) =>
-      $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: (pins) => pins + 1 }),
+      $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: (pins) => pins + 1, pane: "timeline" }),
     ClickedClose: (_model, _message, $) => $.evolve({ open: false }),
     ClickedEntry: (model, { seq }, $) =>
-      $.evolve({ selected: seq, ...(model.pinned ? { pins: (pins: number) => pins + 1 } : {}) }),
+      $.evolve({ selected: seq, pane: "entry", ...(model.pinned ? { pins: (pins: number) => pins + 1 } : {}) }),
     ClickedLink: (_model, { seq }, $) =>
       $.evolve({ selected: seq, filter: "all", instance: null, pinned: false, reveal: seq, pins: (pins) => pins + 1 }),
     ClickedInstance: (model, { instance }, $) => $.evolve({ instance: model.instance === instance ? null : instance }),
     ClickedFilter: (_model, { filter }, $) => $.evolve({ filter }),
     ClickedFollowLatest: (_model, _message, $) =>
-      $.evolve({ selected: null, pinned: true, reveal: null, pins: (pins) => pins + 1 }),
+      $.evolve({ selected: null, pinned: true, reveal: null, pins: (pins) => pins + 1, pane: "timeline" }),
+    ClickedBack: (_model, _message, $) => $.evolve({ pane: "timeline" }),
     ScrolledTimeline: (model, { atStart }, $) =>
       atStart
         ? model.reveal !== null || model.pinned
