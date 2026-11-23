@@ -52,7 +52,12 @@ export interface Runnable {
   readonly boot?: ((inst: Instance) => void) | undefined
 }
 
-interface Next {
+/**
+ * What `init` and `update` return.
+ *
+ * @stability experimental
+ */
+export interface Next {
   readonly model: unknown
   readonly commands: ReadonlyArray<unknown>
   readonly events: ReadonlyArray<unknown>
@@ -108,6 +113,8 @@ export interface Tree {
     where: FailedIn,
     cause: Cause.Cause<unknown>
   ) => void
+  /** What starts an instance: its component's `init`, or what a hydration gives it in its place. */
+  readonly init: (inst: Instance) => Next
   readonly log: Recorder | undefined
   /** What a failed root shows. */
   readonly fallback:
@@ -471,7 +478,7 @@ const start = (inst: Instance): Rec | undefined => {
       component.boot(inst)
       if (inst.closed) return undefined
     }
-    first = component.init(inst.props)
+    first = inst.tree.init(inst)
   } catch (error) {
     fail(inst, "init", Cause.die(error))
     return undefined
@@ -1075,7 +1082,11 @@ export interface Options {
   readonly context?: Context.Context<any> | undefined
   readonly log?: Recorder | undefined
   readonly fallback?: Tree["fallback"]
+  /** Starts each instance in place of its `init`. Hydration passes one that gives an instance the server's Model. */
+  readonly init?: Tree["init"] | undefined
 }
+
+const initOf = (inst: Instance): Next => inst.component.init(inst.props)
 
 /**
  * Mounts `component` as the last child of `container`.
@@ -1092,6 +1103,7 @@ export const mount = (
   const tree: Tree = {
     host,
     report: options.report,
+    init: options.init ?? initOf,
     log: options.log,
     fallback: options.fallback,
     dirty: [],

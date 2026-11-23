@@ -132,41 +132,38 @@ export interface Options {
 }
 
 /**
- * Mounts `component` into `container` until the Scope closes.
+ * `mountEffect` with the kernel's mount given: hydration's, which lives in a module of its own.
  *
  * @stability experimental
  */
-export const mountEffect = <Props, Model, Msg, R = never>(
+export const mountWith = <Props, Model, Msg, R = never>(
   component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
-  props: Props,
   container: globalThis.Element,
-  options?: Options
+  options: Options | undefined,
+  start: (
+    host: Kernel.Host<globalThis.Node>,
+    options: Kernel.Options
+  ) => Kernel.Root
 ): Effect.Effect<Root<Model, Msg>, never, R | Scope.Scope> =>
   Effect.map(
     Effect.acquireRelease(
       Effect.contextWith((context) => {
         const host = makeHost(container)
         const fallback = options?.fallback
-        const root = Kernel.mount(
-          component as unknown as Kernel.Runnable,
-          props,
-          container,
-          host,
-          {
-            report,
-            context,
-            log: options?.log,
-            fallback: fallback === undefined
-              ? undefined
-              : (cause: Cause.Cause<unknown>) =>
-                View.toNode(
-                  fallback(
-                    AsyncResult.failure(cause),
-                    View.makeHelper({}, component.elements()) as any
-                  )
+        const root = start(host, {
+          report,
+          context,
+          log: options?.log,
+          fallback: fallback === undefined
+            ? undefined
+            : (cause: Cause.Cause<unknown>) =>
+              View.toNode(
+                fallback(
+                  AsyncResult.failure(cause),
+                  View.makeHelper({}, component.elements()) as any
                 )
-          }
-        )
+              )
+        })
         return Effect.succeed({ host, root })
       }),
       ({ host, root }) =>
@@ -180,6 +177,31 @@ export const mountEffect = <Props, Model, Msg, R = never>(
       model: () => root.instance.model as Model | undefined,
       send: root.send
     })
+  )
+
+/**
+ * Mounts `component` into `container` until the Scope closes.
+ *
+ * @stability experimental
+ */
+export const mountEffect = <Props, Model, Msg, R = never>(
+  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
+  props: Props,
+  container: globalThis.Element,
+  options?: Options
+): Effect.Effect<Root<Model, Msg>, never, R | Scope.Scope> =>
+  mountWith(
+    component,
+    container,
+    options,
+    (host, kernel) =>
+      Kernel.mount(
+        component as unknown as Kernel.Runnable,
+        props,
+        container,
+        host,
+        kernel
+      )
   )
 
 /**
