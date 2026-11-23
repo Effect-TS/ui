@@ -18,7 +18,7 @@ interface Column {
 
 const columns: ReadonlyArray<Column> = [
   {
-    title: "In Foldkit 0.x, the page routes the Counter’s Message",
+    title: "Foldkit 0.x: Page routes Counter's Message",
     boxes: [
       {
         name: "Page",
@@ -53,7 +53,7 @@ const columns: ReadonlyArray<Column> = [
     ]
   },
   {
-    title: "In Effect UI, the Message goes directly to the Counter’s update",
+    title: "Effect UI: Counter handles its own Message",
     boxes: [
       {
         name: "Page",
