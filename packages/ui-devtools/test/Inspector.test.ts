@@ -12,7 +12,7 @@ type Capture = "interrupted" | "open" | "closed" | "switched"
 
 const decode = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Array(MessageLog.Wire)))
 const traces = decode(
-  JSON.parse(fs.readFileSync(new URL("./fixtures/two-editor-traces.wire-v8.json", import.meta.url), "utf8"))
+  JSON.parse(fs.readFileSync(new URL("./fixtures/two-editor-traces.wire-v1.json", import.meta.url), "utf8"))
 )
 const frames = (capture: Capture): ReadonlyArray<Entry> =>
   traces[capture].filter((frame): frame is Entry => frame._tag !== "Hello")

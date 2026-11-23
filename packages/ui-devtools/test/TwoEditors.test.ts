@@ -6,7 +6,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { type Capture, record } from "./fixtures/TwoEditors.ts"
 
-const file = path.join(import.meta.dirname, "fixtures", "two-editor-traces.wire-v8.json")
+const file = path.join(import.meta.dirname, "fixtures", "two-editor-traces.wire-v1.json")
 const captures: ReadonlyArray<Capture> = ["interrupted", "open", "closed", "switched"]
 
 const shape = (frames: ReadonlyArray<MessageLog.Wire>) => {
