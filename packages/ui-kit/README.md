@@ -40,6 +40,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Form](src/Form.ts): a native form that focuses its first invalid control after a submit.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
+- [Menubar](src/Menubar.ts): a row of menus, as in a desktop application, with one Tab stop, arrow keys that move between the triggers and switch between open menus, and hover that switches while a menu is open.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [NavigationMenu](src/NavigationMenu.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.

@@ -63,7 +63,8 @@ const Message = UiSchema.TaggedEnum({
   RequestedOpen: { menu: Schema.String, reason: Schema.String, triggerId: Schema.NullOr(Schema.String) },
   RequestedClose: { menu: Schema.String, reason: Schema.String },
   Picked: { menu: Schema.String, value: Schema.String },
-  RequestedQuery: { query: Schema.String }
+  RequestedQuery: { query: Schema.String },
+  ChangedModal: { modal: Schema.Boolean }
 })
 
 const Page = Component.define({
@@ -72,6 +73,7 @@ const Page = Component.define({
   props: Config,
   model: Schema.Struct({
     open: Schema.Boolean,
+    modal: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
     share: Schema.Boolean,
     query: Schema.String,
@@ -80,7 +82,7 @@ const Page = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: false, triggerId: null, share: false, query: "", log: [] }),
+  init: () => ({ open: false, modal: true, triggerId: null, share: false, query: "", log: [] }),
   update: {
     RequestedOpen: (model, { menu, reason, triggerId }) => ({
       ...model,
@@ -100,7 +102,8 @@ const Page = Component.define({
       ...model,
       log: [...model.log, menu + " Picked " + value]
     }),
-    RequestedQuery: (model, { query }) => ({ ...model, query })
+    RequestedQuery: (model, { query }) => ({ ...model, query }),
+    ChangedModal: (model, { modal }) => ({ ...model, modal })
   },
   view: (model, h) =>
     Menu(h, {
@@ -108,6 +111,7 @@ const Page = Component.define({
         open: model.open,
         items,
         id: "menu",
+        modal: model.modal,
         triggerId: h.props.viewport ? model.triggerId : undefined,
         ...(h.props.filter ? { query: model.query } : {})
       },
@@ -465,7 +469,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
-  it.effect("a modal menu blocks the page behind it but for a cut-out around the trigger", () =>
+  it.effect("a modal menu blocks the page behind it but for a cut-out around the trigger, once it is cut", () =>
     Effect.gen(function*() {
       yield* mountPage()
       mousedown(byId("trigger"))
@@ -473,10 +477,39 @@ describe("Menu in a document", { concurrent: false }, () => {
       const blocker = byId("positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
       assert.isNotNull(blocker)
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
+      assert.isFalse(blocker.inert)
       assert.strictEqual(document.body.style.overflowY, "hidden")
       keydown(item("copy"), "Escape")
       yield* tick
       assert.strictEqual(document.body.style.overflowY, "")
+      assert.isTrue(blocker.inert)
+    }))
+
+  it.effect("the positioner lets the pointer through until its first frames, before it may be placed", () =>
+    Effect.gen(function*() {
+      yield* mountPage()
+      const styles: Array<string> = []
+      const observer = new MutationObserver(() => styles.push(byId("positioner").style.pointerEvents))
+      observer.observe(byId("positioner"), { attributes: true, attributeFilter: ["style"] })
+      mousedown(byId("trigger"))
+      yield* tick
+      observer.disconnect()
+      assert.include(styles, "none")
+      assert.strictEqual(byId("positioner").style.pointerEvents, "")
+    }))
+
+  it.effect("a menu that becomes modal while open blocks the page but for the trigger", () =>
+    Effect.gen(function*() {
+      const { root } = yield* mountPage()
+      root.send(Message.ChangedModal({ modal: false }))
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.isNull(byId("positioner").querySelector("[data-menu-blocker]"))
+      root.send(Message.ChangedModal({ modal: true }))
+      yield* tick
+      const blocker = byId("positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
+      assert.isFalse(blocker.inert)
+      assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
     }))
 
   it.effect("the viewport keeps the previous content while the popup moves to another trigger", () =>
