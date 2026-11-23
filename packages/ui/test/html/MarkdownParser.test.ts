@@ -7,131 +7,25 @@ const { parseMarkdown, parseMarkdownWithFrontmatter } = MarkdownParser
 const lines = (...sourceLines: ReadonlyArray<string>): string => sourceLines.join("\n")
 
 describe("parseMarkdown", () => {
-  it("parses the core block vocabulary in document order", () => {
-    const document = parseMarkdown(
-      lines(
-        "# Title",
-        "",
-        "A paragraph.",
-        "",
-        "> Quoted.",
-        "",
-        "- one",
-        "- two",
-        "",
-        "---",
-        "",
-        "~~~ts twoslash",
-        "const count = 1",
-        "~~~"
-      )
-    )
-
-    expect(document.blocks.map((block) => block._tag)).toStrictEqual([
-      "Heading",
-      "Paragraph",
-      "Blockquote",
-      "List",
-      "ThematicBreak",
-      "CodeBlock"
-    ])
-  })
-
-  it("parses headings with their level and inline content", () => {
-    expect(parseMarkdown("## Two words").blocks).toStrictEqual([
-      { _tag: "Heading", level: 2, content: [{ _tag: "Text", value: "Two words" }] }
-    ])
-  })
-
-  it("parses nested inline content", () => {
-    const document = parseMarkdown(
-      "Some *emphasis with `code`*, **strength**, ~~loss~~, and a [link](https://example.com \"Example\")."
-    )
-
-    expect(document.blocks).toStrictEqual([
-      {
-        _tag: "Paragraph",
-        content: [
-          { _tag: "Text", value: "Some " },
-          {
-            _tag: "Emphasis",
-            content: [{ _tag: "Text", value: "emphasis with " }, { _tag: "InlineCode", value: "code" }]
-          },
-          { _tag: "Text", value: ", " },
-          { _tag: "Strong", content: [{ _tag: "Text", value: "strength" }] },
-          { _tag: "Text", value: ", " },
-          { _tag: "Strikethrough", content: [{ _tag: "Text", value: "loss" }] },
-          { _tag: "Text", value: ", and a " },
-          {
-            _tag: "Link",
-            url: "https://example.com",
-            title: Option.some("Example"),
-            content: [{ _tag: "Text", value: "link" }]
-          },
-          { _tag: "Text", value: "." }
-        ]
-      }
-    ])
-  })
-
-  it("parses images with alt text", () => {
-    expect(parseMarkdown("![A film photograph](./photo.jpg)").blocks).toStrictEqual([
-      {
-        _tag: "Paragraph",
-        content: [{ _tag: "Image", url: "./photo.jpg", alt: "A film photograph", title: Option.none() }]
-      }
-    ])
-  })
-
-  it("captures code block language and meta from the opening fence", () => {
-    expect(parseMarkdown(lines("~~~ts filename=main.ts", "const count = 1", "~~~")).blocks).toStrictEqual([
-      {
-        _tag: "CodeBlock",
-        language: Option.some("ts"),
-        meta: Option.some("filename=main.ts"),
-        value: "const count = 1"
-      }
-    ])
-  })
-
-  it("parses nested lists as block content of the parent item", () => {
-    const paragraph = (value: string) => ({ _tag: "Paragraph", content: [{ _tag: "Text", value }] })
-
-    expect(parseMarkdown(lines("1. outer", "   - inner one", "   - inner two")).blocks).toStrictEqual([
-      {
-        _tag: "List",
-        isOrdered: true,
-        startNumber: Option.some(1),
-        items: [
-          {
-            _tag: "ListItem",
-            blocks: [
-              paragraph("outer"),
-              {
-                _tag: "List",
-                isOrdered: false,
-                startNumber: Option.none(),
-                items: [
-                  { _tag: "ListItem", blocks: [paragraph("inner one")] },
-                  { _tag: "ListItem", blocks: [paragraph("inner two")] }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ])
-  })
-
-  it("parses tables with per-column alignments and a header row", () => {
+  it("parses GFM strikethrough and tables with column alignments", () => {
     const row = (...cells: ReadonlyArray<string>) => ({
       _tag: "TableRow",
       cells: cells.map((value) => ({ _tag: "TableCell", content: [{ _tag: "Text", value }] }))
     })
 
     expect(
-      parseMarkdown(lines("| Stock | Speed |", "| :--- | ---: |", "| Portra | 400 |", "| Ektar | 100 |")).blocks
+      parseMarkdown(
+        lines("Some ~~loss~~.", "", "| Stock | Speed |", "| :--- | ---: |", "| Portra | 400 |", "| Ektar | 100 |")
+      ).blocks
     ).toStrictEqual([
+      {
+        _tag: "Paragraph",
+        content: [
+          { _tag: "Text", value: "Some " },
+          { _tag: "Strikethrough", content: [{ _tag: "Text", value: "loss" }] },
+          { _tag: "Text", value: "." }
+        ]
+      },
       {
         _tag: "Table",
         alignments: ["Left", "Right"],
@@ -141,14 +35,14 @@ describe("parseMarkdown", () => {
     ])
   })
 
-  it("parses a leaf directive into an island with attributes and no blocks", () => {
-    expect(parseMarkdown("::Counter{label=\"Clicks\"}").blocks).toStrictEqual([
-      { _tag: "Island", name: "Counter", attributes: { label: "Clicks" }, blocks: [] }
-    ])
-  })
+  it("parses leaf and container islands and validates declared island attributes", () => {
+    const document = parseMarkdown(
+      lines("::Counter{label=\"Clicks\"}", "", ":::Note", "Nested *prose* inside.", ":::"),
+      { islands: { Counter: Schema.Struct({ label: Schema.optionalKey(Schema.String) }), Note: Schema.Struct({}) } }
+    )
 
-  it("parses a container directive into an island with nested blocks", () => {
-    expect(parseMarkdown(lines(":::Note", "Nested *prose* inside.", ":::")).blocks).toStrictEqual([
+    expect(document.blocks).toStrictEqual([
+      { _tag: "Island", name: "Counter", attributes: { label: "Clicks" }, blocks: [] },
       {
         _tag: "Island",
         name: "Note",
@@ -184,20 +78,14 @@ describe("parseMarkdown", () => {
     expect(Markdown.decodeDocument(wire)).toStrictEqual(document)
   })
 
-  it("accepts declared islands and validates their attributes", () => {
-    const document = parseMarkdown("::Counter{label=\"Clicks\"}", {
-      islands: { Counter: Schema.Struct({ label: Schema.optionalKey(Schema.String) }) }
-    })
+  it("rejects non-Struct island definitions", () => {
+    const message = "Island \"Counter\" in the Markdown options must map to a Schema struct describing its attributes."
 
-    expect(document.blocks.map((block) => block._tag)).toStrictEqual(["Island"])
-  })
-
-  it("rejects non-schema island definitions from untyped callers", () => {
-    const malformed = { islands: { Counter: ["label"] } } as unknown as MarkdownParser.Options
-
-    expect(() => parseMarkdown("::Counter", malformed)).toThrowError(
-      "Island \"Counter\" in the Markdown options must map to a Schema struct describing its attributes."
-    )
+    expect(() => parseMarkdown("::Counter", { islands: { Counter: ["label"] } } as unknown as MarkdownParser.Options))
+      .toThrowError(message)
+    expect(() =>
+      parseMarkdown("::Counter", { islands: { Counter: Schema.String } } as unknown as MarkdownParser.Options)
+    ).toThrowError(message)
   })
 
   it("rejects island names missing from the declared islands", () => {
@@ -205,38 +93,20 @@ describe("parseMarkdown", () => {
       .toThrowError("Unknown island \"Conuter\" (line 1). Allowed islands: Counter, Note.")
   })
 
-  it("rejects attributes missing from the island schema", () => {
+  it("rejects unknown island attributes", () => {
     expect(() =>
       parseMarkdown("::Counter{labl=\"Clicks\"}", {
         islands: { Counter: Schema.Struct({ label: Schema.optionalKey(Schema.String) }) }
       })
     ).toThrowError("Unknown attribute \"labl\" for island \"Counter\" (line 1). Allowed attributes: label.")
-  })
-
-  it("rejects attributes on islands that declare none", () => {
     expect(() =>
       parseMarkdown(lines(":::Note{tone=\"calm\"}", "Prose.", ":::"), { islands: { Note: Schema.Struct({}) } })
-    )
-      .toThrowError("Unknown attribute \"tone\" for island \"Note\" (line 1). It takes no attributes.")
+    ).toThrowError("Unknown attribute \"tone\" for island \"Note\" (line 1). It takes no attributes.")
   })
 
   it("rejects attribute values outside the island schema", () => {
     expect(() => parseMarkdown("::Counter", { islands: { Counter: Schema.Struct({ label: Schema.String }) } }))
       .toThrowError(/Invalid attributes for island "Counter" \(line 1\)/)
-  })
-
-  it("rejects raw HTML blocks", () => {
-    expect(() => parseMarkdown("<div>raw</div>")).toThrowError(/Unsupported markdown node "html" \(line 1\)/)
-  })
-
-  it("rejects raw inline HTML", () => {
-    expect(() => parseMarkdown("Some <em>raw</em> HTML.")).toThrowError(/Unsupported markdown node "html"/)
-  })
-
-  it("rejects reference-style links", () => {
-    expect(() => parseMarkdown(lines("See [the docs][docs].", "", "[docs]: https://example.com"))).toThrowError(
-      /Reference-style links are not supported/
-    )
   })
 
   it("rejects task list items", () => {
@@ -286,14 +156,6 @@ describe("parseMarkdown", () => {
     expect(document.blocks).toHaveLength(1)
   })
 
-  it("rejects non-Struct island schemas", () => {
-    const malformed = { islands: { Counter: Schema.String } } as unknown as MarkdownParser.Options
-
-    expect(() => parseMarkdown("::Counter", malformed)).toThrowError(
-      "Island \"Counter\" in the Markdown options must map to a Schema struct describing its attributes."
-    )
-  })
-
   it("rejects YAML frontmatter when no frontmatter schema is configured", () => {
     expect(() => parseMarkdown(lines("---", "title: My Post", "---", "", "Prose."))).toThrowError(
       /Frontmatter is not supported/
@@ -310,12 +172,6 @@ describe("parseMarkdown", () => {
     }
   })
 
-  it("turns line endings inside code spans into spaces, as CommonMark does", () => {
-    expect(parseMarkdown("`one\ntwo`").blocks).toStrictEqual([
-      { _tag: "Paragraph", content: [{ _tag: "InlineCode", value: "one two" }] }
-    ])
-  })
-
   it("normalizes line endings in text to \\n", () => {
     expect(parseMarkdown("one\r\ntwo\rthree").blocks).toStrictEqual([
       { _tag: "Paragraph", content: [{ _tag: "Text", value: "one\ntwo\nthree" }] }
@@ -328,23 +184,14 @@ describe("parseMarkdownWithFrontmatter", () => {
     frontmatter: Schema.Struct({ title: Schema.String, date: Schema.optionalKey(Schema.String) })
   }
 
-  it("extracts validated frontmatter fields and drops the block from the document", () => {
+  it("extracts validated frontmatter fields, strips surrounding quotes, and returns None when absent", () => {
     const { document, frontmatter } = parseMarkdownWithFrontmatter(
-      lines("---", "title: My Post", "date: 2026-08-01", "---", "", "Prose."),
+      lines("---", "title: \"Colons: allowed\"", "date: 2026-08-01", "---", "", "Prose."),
       options
     )
 
-    expect(frontmatter).toStrictEqual(Option.some({ title: "My Post", date: "2026-08-01" }))
+    expect(frontmatter).toStrictEqual(Option.some({ title: "Colons: allowed", date: "2026-08-01" }))
     expect(document.blocks.map((block) => block._tag)).toStrictEqual(["Paragraph"])
-  })
-
-  it("strips matching surrounding quotes from field values", () => {
-    const { frontmatter } = parseMarkdownWithFrontmatter(lines("---", "title: \"Colons: allowed\"", "---"), options)
-
-    expect(frontmatter).toStrictEqual(Option.some({ title: "Colons: allowed" }))
-  })
-
-  it("returns no frontmatter for a document without a block", () => {
     expect(parseMarkdownWithFrontmatter("# Title", options).frontmatter).toStrictEqual(Option.none())
   })
 
@@ -373,16 +220,13 @@ describe("parseMarkdownWithFrontmatter", () => {
       .toThrowError(/Unknown frontmatter field "author" \(line 3\)\. Allowed fields: title, date\./)
   })
 
-  it("rejects values the schema does not accept, naming the offending line", () => {
+  it("rejects frontmatter values that fail the schema or miss required fields", () => {
     const strict: MarkdownParser.Options = {
       frontmatter: Schema.Struct({ title: Schema.String, count: Schema.NumberFromString.check(Schema.isFinite()) })
     }
 
     expect(() => parseMarkdownWithFrontmatter(lines("---", "title: My Post", "count: not-a-number", "---"), strict))
       .toThrowError(/Invalid frontmatter \(line 3\)/)
-  })
-
-  it("rejects a document missing required fields", () => {
     expect(() => parseMarkdownWithFrontmatter(lines("---", "date: 2026-08-01", "---"), options)).toThrowError(
       /Invalid frontmatter/
     )

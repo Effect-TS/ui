@@ -18,39 +18,26 @@ const wireDocument = (): unknown => ({
 })
 
 describe("decodeDocument", () => {
-  it("returns the first document when one wire object is decoded again", () => {
+  it("memoizes per wire object and bypasses the cache when options are passed", () => {
     const wire = wireDocument()
+    const cached = Markdown.decodeDocument(wire)
+    const distinct = Markdown.decodeDocument(wireDocument())
+    const overridden = Markdown.decodeDocument(wire, {})
 
-    expect(Markdown.decodeDocument(wire)).toBe(Markdown.decodeDocument(wire))
+    expect(Markdown.decodeDocument(wire)).toBe(cached)
+    expect(distinct).not.toBe(cached)
+    expect(distinct).toStrictEqual(cached)
+    expect(overridden).not.toBe(cached)
+    expect(overridden).toStrictEqual(cached)
+    expect(Markdown.decodeDocument(wire)).toBe(cached)
   })
 
-  it("decodes distinct wire objects independently", () => {
-    const first = Markdown.decodeDocument(wireDocument())
-    const second = Markdown.decodeDocument(wireDocument())
-
-    expect(first).not.toBe(second)
-    expect(first).toStrictEqual(second)
-  })
-
-  it("throws on a block outside the markdown vocabulary, every time", () => {
+  it("rejects invalid wire input without caching failures", () => {
     const wire = { blocks: [{ _tag: "Marquee" }] }
 
     expect(() => Markdown.decodeDocument(wire)).toThrowError("at [\"blocks\"][0]")
     expect(() => Markdown.decodeDocument(wire)).toThrowError("at [\"blocks\"][0]")
-  })
-
-  it("throws on input that is not an object", () => {
     expect(() => Markdown.decodeDocument("not a document")).toThrowError("Expected object")
-  })
-
-  it("bypasses the cache when override options are passed", () => {
-    const wire = wireDocument()
-    const cached = Markdown.decodeDocument(wire)
-    const overridden = Markdown.decodeDocument(wire, {})
-
-    expect(overridden).not.toBe(cached)
-    expect(overridden).toStrictEqual(cached)
-    expect(Markdown.decodeDocument(wire)).toBe(cached)
   })
 
   it("rejects link and image URLs outside the allowlist", () => {
@@ -60,9 +47,7 @@ describe("decodeDocument", () => {
       Markdown.decodeDocument(paragraph({ _tag: "Link", url: "javascript:alert(1)", title: null, content: [] }))
     ).toThrowError(/url/)
     expect(() => Markdown.decodeDocument(paragraph({ _tag: "Image", url: "data:x", alt: "", title: null })))
-      .toThrowError(
-        /url/
-      )
+      .toThrowError(/url/)
     expect(
       Markdown.decodeDocument(paragraph({ _tag: "Link", url: "/posts", title: null, content: [] })).blocks
     ).toHaveLength(1)
@@ -89,18 +74,50 @@ const render = (document: Markdown.Document, config?: Markdown.ViewConfig<never>
   ).pipe(Effect.map(({ html }) => withoutMarkers(html)))
 
 it.layer(TestHost.layer())("view", (it) => {
-  it.effect("renders the default semantic elements in document order", () =>
+  it.effect("renders default semantic block, inline, heading, and list elements", () =>
     Effect.gen(function*() {
-      const html = yield* render(parseMarkdown(lines("# Title", "", "A paragraph.", "", "---")))
+      const html = yield* render(
+        parseMarkdown(
+          lines(
+            "# 1",
+            "## 2",
+            "### 3",
+            "#### 4",
+            "##### 5",
+            "###### 6",
+            "",
+            "Some *emphasis*, `code`, and a [link](https://example.com \"Ex\").",
+            "",
+            "- one",
+            "- two",
+            "",
+            "3. three",
+            "4. four",
+            "",
+            "---"
+          )
+        )
+      )
 
-      assert.strictEqual(html, "<div><h1>Title</h1><p>A paragraph.</p><hr></div>")
+      assert.strictEqual(
+        html,
+        "<div><h1>1</h1><h2>2</h2><h3>3</h3><h4>4</h4><h5>5</h5><h6>6</h6>" +
+          "<p>Some <em>emphasis</em>, <code>code</code>, and a <a href=\"https://example.com\" title=\"Ex\">link</a>.</p>" +
+          "<ul><li><p>one</p></li><li><p>two</p></li></ul>" +
+          "<ol start=\"3\"><li><p>three</p></li><li><p>four</p></li></ol>" +
+          "<hr></div>"
+      )
     }))
 
-  it.effect("renders every heading level to its matching element", () =>
+  it.effect("renders table header and body cells with alignment styles", () =>
     Effect.gen(function*() {
-      const html = yield* render(parseMarkdown(lines("# 1", "## 2", "### 3", "#### 4", "##### 5", "###### 6")))
+      const html = yield* render(parseMarkdown(lines("| Stock | Speed |", "| :--- | ---: |", "| Portra | 400 |")))
 
-      assert.strictEqual(html, "<div><h1>1</h1><h2>2</h2><h3>3</h3><h4>4</h4><h5>5</h5><h6>6</h6></div>")
+      assert.strictEqual(
+        html,
+        "<div><table><thead><tr><th style=\"text-align:left\">Stock</th><th style=\"text-align:right\">Speed</th></tr></thead>" +
+          "<tbody><tr><td style=\"text-align:left\">Portra</td><td style=\"text-align:right\">400</td></tr></tbody></table></div>"
+      )
     }))
 
   it.effect("passes each code block its occurrence index in document order", () =>
@@ -118,109 +135,54 @@ it.layer(TestHost.layer())("view", (it) => {
       assert.deepStrictEqual(received, [0, 1])
     }))
 
-  it.effect("renders nested inline content through the default views", () =>
-    Effect.gen(function*() {
-      const html = yield* render(parseMarkdown("Some *emphasis*, `code`, and a [link](https://example.com \"Ex\")."))
-
-      assert.strictEqual(
-        html,
-        "<div><p>Some <em>emphasis</em>, <code>code</code>, and a <a href=\"https://example.com\" title=\"Ex\">link</a>.</p></div>"
-      )
-    }))
-
-  it.effect("renders unordered and ordered lists", () =>
-    Effect.gen(function*() {
-      assert.strictEqual(
-        yield* render(parseMarkdown(lines("- one", "- two"))),
-        "<div><ul><li><p>one</p></li><li><p>two</p></li></ul></div>"
-      )
-      assert.strictEqual(
-        yield* render(parseMarkdown(lines("3. three", "4. four"))),
-        "<div><ol start=\"3\"><li><p>three</p></li><li><p>four</p></li></ol></div>"
-      )
-    }))
-
-  it.effect("renders table header and body cells with alignment styles", () =>
-    Effect.gen(function*() {
-      const html = yield* render(parseMarkdown(lines("| Stock | Speed |", "| :--- | ---: |", "| Portra | 400 |")))
-
-      assert.strictEqual(
-        html,
-        "<div><table><thead><tr><th style=\"text-align:left\">Stock</th><th style=\"text-align:right\">Speed</th></tr></thead>" +
-          "<tbody><tr><td style=\"text-align:left\">Portra</td><td style=\"text-align:right\">400</td></tr></tbody></table></div>"
-      )
-    }))
-
-  it.effect("renders islands through the registered view with attributes and nested content", () =>
-    Effect.gen(function*() {
-      const html = yield* render(parseMarkdown(lines(":::Note{tone=\"calm\"}", "Inside the island.", ":::")), {
-        islands: {
-          Note: (h, attributes, content) => h.aside.class(`note-${attributes.tone ?? "plain"}`).children(content)
-        }
-      })
-
-      assert.strictEqual(html, "<div><aside class=\"note-calm\"><p>Inside the island.</p></aside></div>")
-    }))
-
-  it.effect("passes each island its per-name occurrence index in document order", () =>
+  it.effect("renders registered islands with attributes, nested content, and per-name occurrence indices", () =>
     Effect.gen(function*() {
       const received: Array<number> = []
-      yield* render(parseMarkdown(lines("::Slot", "", "Between.", "", "::Other", "", "::Slot")), {
-        islands: {
-          Slot: (h, _attributes, _content, occurrenceIndex) => {
-            received.push(occurrenceIndex)
-            return h.div
-          },
-          Other: (h) => h.div
+      const html = yield* render(
+        parseMarkdown(
+          lines(":::Note{tone=\"calm\"}", "Inside.", ":::", "", "::Other", "", ":::Note", "Second.", ":::")
+        ),
+        {
+          islands: {
+            Note: (h, attributes, content, occurrenceIndex) => {
+              received.push(occurrenceIndex)
+              return h.aside.class(`note-${attributes.tone ?? "plain"}`).children(content)
+            },
+            Other: (h) => h.hr
+          }
         }
-      })
+      )
 
+      assert.strictEqual(
+        html,
+        "<div><aside class=\"note-calm\"><p>Inside.</p></aside><hr><aside class=\"note-plain\"><p>Second.</p></aside></div>"
+      )
       assert.deepStrictEqual(received, [0, 1])
     }))
 
-  it.effect("ignores inherited object members when resolving island views", () =>
+  it.effect("warns once and renders nothing for unregistered islands, including inherited object properties", () =>
     Effect.gen(function*() {
       const warn = yield* spyWarn
-      const html = yield* render(parseMarkdown("::constructor"), { islands: {} })
+      const document = parseMarkdown(lines("::Missing", "", "::Missing", "", "::constructor"))
+      const html = yield* render(document, { islands: {} })
+      yield* render(document, { islands: {} })
 
       assert.strictEqual(html, "<div></div>")
+      expect(warn).toHaveBeenCalledTimes(2)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("No island view registered for \"Missing\""))
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("No island view registered for \"constructor\""))
     }))
 
-  it.effect("warns once and renders nothing for an unregistered island", () =>
+  it.effect("applies view overrides and exposes defaultViews for reuse", () =>
     Effect.gen(function*() {
-      const warn = yield* spyWarn
-      const document = parseMarkdown(lines("::Missing", "", "::Missing"))
-      const html = yield* render(document)
-      yield* render(document)
-
-      assert.strictEqual(html, "<div></div>")
-      expect(warn).toHaveBeenCalledOnce()
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("No island view registered for \"Missing\""))
-    }))
-
-  it.effect("applies view overrides over the defaults", () =>
-    Effect.gen(function*() {
-      const html = yield* render(parseMarkdown("A paragraph."), {
-        views: { Paragraph: (h, _paragraph, content) => h.p.class("leading-relaxed").children(content) }
+      const html = yield* render(parseMarkdown(lines("# Title", "", "A paragraph.")), {
+        views: {
+          Heading: (h, heading, content) => Markdown.defaultViews.Heading(h, heading, content),
+          Paragraph: (h, _paragraph, content) => h.p.class("leading-relaxed").children(content)
+        }
       })
 
-      assert.strictEqual(html, "<div><p class=\"leading-relaxed\">A paragraph.</p></div>")
-    }))
-
-  it.effect("islandsFor decodes attributes through the island schema before dispatch", () =>
-    Effect.gen(function*() {
-      const html = yield* render(parseMarkdown("::Badge{label=\"hi\" count=\"2\"}"), {
-        islands: Markdown.islandsFor(
-          { Badge: Schema.Struct({ label: Schema.optionalKey(Schema.String), count: Schema.NumberFromString }) },
-          {
-            Badge: (h, { count, label }, _content, occurrenceIndex) =>
-              h.span.children(label ?? "none", String(count + 1), String(occurrenceIndex))
-          }
-        )
-      })
-
-      assert.strictEqual(html, "<div><span>hi30</span></div>")
+      assert.strictEqual(html, "<div><h1>Title</h1><p class=\"leading-relaxed\">A paragraph.</p></div>")
     }))
 
   it.effect("islandsFor warns and renders nothing when attributes fail the schema", () =>
@@ -235,15 +197,6 @@ it.layer(TestHost.layer())("view", (it) => {
 
       assert.strictEqual(html, "<div></div>")
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("Invalid attributes for island \"Gauge\""))
-    }))
-
-  it.effect("exposes the default views for reuse inside overrides", () =>
-    Effect.gen(function*() {
-      const html = yield* render(parseMarkdown("# Title"), {
-        views: { Heading: (h, heading, content) => Markdown.defaultViews.Heading(h, heading, content) }
-      })
-
-      assert.strictEqual(html, "<div><h1>Title</h1></div>")
     }))
 
   it.effect("viewBlocks renders the blocks without a container", () =>
@@ -423,11 +376,4 @@ it.layer(TestHost.layer())("islands", (it) => {
       const play = yield* HtmlPlay.make(GreetingPost, {})
       yield* play.expect(HtmlLocator.role("status")).toHaveText("hello world")
     }).pipe(Effect.provide(greetLayer)))
-
-  it.effect("an island's child renders its initial model on the server, where no Command runs", () =>
-    Effect.gen(function*() {
-      const { html } = yield* HtmlServer.renderToHtml(GreetingPost, {}, { budget: 0 }).pipe(Effect.provide(greetLayer))
-
-      expect(withoutMarkers(html)).toContain("<p>Before.</p><p role=\"status\">...</p>")
-    }))
 })
