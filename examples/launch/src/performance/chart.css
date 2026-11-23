@@ -1,0 +1,37 @@
+.perf2-rows {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  gap: 10px 14px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.perf2-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.perf2-bar {
+  height: 10px;
+  border-radius: 3px;
+  background: var(--border-strong);
+}
+
+.perf2-value {
+  color: var(--muted-foreground);
+  text-align: end;
+}
+
+.perf2-effect {
+  font-weight: 600;
+}
+
+.perf2-effect .perf2-bar {
+  background: var(--foreground);
+}
+
+.perf2-effect .perf2-value {
+  color: var(--foreground);
+}

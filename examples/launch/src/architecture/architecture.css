@@ -1,0 +1,219 @@
+.arch2 {
+  --wide: 920px;
+  --arch2-accent: oklch(55% 0.2 270);
+  --arch2-gap: 8px;
+  container: arch2 / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.arch2-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.arch2-prompt {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.arch2-leaves {
+  display: flex;
+  gap: 8px;
+}
+
+.arch2-leaf {
+  min-width: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--background);
+  color: inherit;
+  font: 500 14px/1.4 var(--mono);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.arch2-leaf:hover:not(:disabled) {
+  border-color: var(--foreground);
+}
+
+.arch2-leaf:disabled {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
+.arch2-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.arch2-panel {
+  container: arch2-panel / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+}
+
+.arch2-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.arch2-subtitle {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.arch2-tree,
+.arch2-branch {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.arch2-tree {
+  margin-top: 16px;
+}
+
+.arch2-children {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--arch2-gap);
+}
+
+.arch2-fork {
+  position: relative;
+  height: 18px;
+  margin-inline: calc((100% - var(--arch2-gap)) / 4);
+}
+
+.arch2-fork::before,
+.arch2-fork::after {
+  content: "";
+  position: absolute;
+  border: 0 solid var(--border-strong);
+}
+
+.arch2-fork::before {
+  top: 0;
+  bottom: 50%;
+  left: calc(50% - 0.5px);
+  border-left-width: 1px;
+}
+
+.arch2-fork::after {
+  inset: 50% 0 0;
+  border-width: 1px 1px 0;
+}
+
+.arch2-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+  min-width: min(100%, 7.5rem);
+  padding: 6px 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--background);
+  text-align: center;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.arch2-children > .arch2-node {
+  align-self: stretch;
+  min-width: 0;
+}
+
+.arch2-node-plain {
+  border-style: dashed;
+}
+
+.arch2-node-active {
+  border-style: solid;
+  border-color: var(--arch2-accent);
+  background: var(--arch2-accent);
+  color: oklch(100% 0 0);
+}
+
+.arch2-name {
+  font: 600 0.8125rem/1.4 var(--mono);
+}
+
+.arch2-role {
+  font-size: 0.625rem;
+  line-height: 1.3;
+  color: var(--muted-foreground);
+  transition: color 0.2s;
+}
+
+.arch2-node-active .arch2-role {
+  color: inherit;
+}
+
+.arch2 .arch2-sentence {
+  min-height: 2.9em;
+  margin-top: 16px;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.arch2 .arch2-progress {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.35em;
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+@container arch2 (max-width: 720px) {
+  .arch2-panel {
+    padding: 12px;
+  }
+}
+
+@container arch2 (max-width: 560px) {
+  .arch2-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container arch2-panel (max-width: 400px) {
+  .arch2-handled {
+    flex-basis: 100%;
+  }
+}
+
+@container arch2-panel (max-width: 330px) {
+  .arch2-children {
+    --arch2-gap: 6px;
+  }
+}
+
+@container arch2-panel (max-width: 280px) {
+  .arch2 .arch2-sentence {
+    min-height: 4.35em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch2-leaf,
+  .arch2-node,
+  .arch2-role {
+    transition: none;
+  }
+}

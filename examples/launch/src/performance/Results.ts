@@ -90,6 +90,18 @@ export const load: ReadonlyArray<Row> = [
 
 export const value = (row: Row, framework: Framework): number => row.values[frameworks.indexOf(framework)]!
 
+export interface Summary {
+  readonly framework: Framework
+  readonly multiple: number
+}
+
+export const summary: ReadonlyArray<Summary> = frameworks.map((framework) => ({
+  framework,
+  multiple: Math.exp(
+    script.reduce((sum, row) => sum + Math.log(value(row, framework) / value(row, "vanillajs")), 0) / script.length
+  )
+})).sort((a, b) => a.multiple - b.multiple)
+
 export const format = (x: number): string => x >= 100 ? x.toFixed(0) : x.toFixed(1)
 
 const commit = "b3995f2a9683e557f3c9dae3de2d006a19bc5268"
