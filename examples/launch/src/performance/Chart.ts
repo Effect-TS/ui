@@ -33,7 +33,7 @@ export const PerformanceChart = <M>(h: View.H<M>) =>
       )
     ),
     h.figcaption.class("caption").children(
-      "Script time across the nine operations, as a multiple of vanilla JS (geometric mean). Shorter is faster. Read the ",
+      "Time spent running JavaScript across the nine operations, as a multiple of vanilla JS (geometric mean). Shorter is faster. Read the ",
       h.a.attr("href", links.methodology).children("methodology"),
       " or the ",
       h.a.attr("href", links.data).children("raw results"),
@@ -41,7 +41,7 @@ export const PerformanceChart = <M>(h: View.H<M>) =>
     )
   )
 
-const scriptTitle = "Median script time per operation"
+const scriptTitle = "Median time running JavaScript per operation"
 const loadTitle = "Page load and memory"
 
 const Full = <M>(h: View.H<M>, title: string, rows: ReadonlyArray<Row>) =>

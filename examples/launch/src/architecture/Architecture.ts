@@ -89,7 +89,7 @@ const nodesAt = (step: Step, leaf: Leaf): ReadonlyArray<Name> => {
 const progress = (side: Side, model: ArchitectureModel) => {
   const total = side.steps.length
   if (model.leaf === null) {
-    return { sentence: "Pick a leaf.", status: `Step 0 of ${total}.`, highlighted: [], handled: 0 }
+    return { sentence: "Send a Message to start.", status: `Step 0 of ${total}.`, highlighted: [], handled: 0 }
   }
   const leaf = model.leaf
   const index = Math.min(model.elapsed, total - 1)
@@ -138,7 +138,7 @@ const Panel = <M>(h: View.H<M>, side: Side, model: ArchitectureModel) => {
     h.p.class("arch2-progress").children(
       h.span.children(status),
       " ",
-      h.span.class("arch2-handled").children(`Components that handled the Message: ${handled}`)
+      h.span.class("arch2-handled").children(`Parts that handled the Message: ${handled}`)
     )
   )
 }

@@ -21,8 +21,8 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Architecture", (it) => {
   it.effect("waits for a leaf", () =>
     Effect.gen(function*() {
       const play = yield* HtmlPlay.make(Architecture, {})
-      yield* play.expect(sentence("Foldkit 0.x")).toHaveText("Pick a leaf.")
-      yield* play.expect(sentence("Effect UI")).toHaveText("Pick a leaf.")
+      yield* play.expect(sentence("Foldkit 0.x")).toHaveText("Send a Message to start.")
+      yield* play.expect(sentence("Effect UI")).toHaveText("Send a Message to start.")
       yield* play.expect(disabled).toBeAbsent()
     }))
 
@@ -32,7 +32,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Architecture", (it) => {
       yield* play.click(HtmlLocator.role("button", { name: "A1" }))
       yield* play.expect(sentence("Foldkit 0.x")).toHaveText("A1's view sends a Message.")
       yield* play.expect(sentence("Effect UI")).toHaveText("A1's view sends a Message.")
-      yield* play.expect(progress("Foldkit 0.x")).toHaveText("Step 1 of 8. Components that handled the Message: 1")
+      yield* play.expect(progress("Foldkit 0.x")).toHaveText("Step 1 of 8. Parts that handled the Message: 1")
       yield* play.expect(activeName("Foldkit 0.x")).toHaveText("A1")
       yield* play.expect(activeName("Effect UI")).toHaveText("A1")
       yield* play.expect(disabled).toHaveCount(4)
@@ -45,10 +45,10 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Architecture", (it) => {
 
       yield* TestClock.adjust("1800 millis")
       yield* play.expect(sentence("Foldkit 0.x")).toHaveText("Root's update passes it to A's update.")
-      yield* play.expect(progress("Foldkit 0.x")).toHaveText("Step 4 of 8. Components that handled the Message: 3")
+      yield* play.expect(progress("Foldkit 0.x")).toHaveText("Step 4 of 8. Parts that handled the Message: 3")
       yield* play.expect(activeName("Foldkit 0.x")).toHaveText("A")
       yield* play.expect(sentence("Effect UI")).toHaveText("The runtime stores A1's new Model, and A1's view runs.")
-      yield* play.expect(progress("Effect UI")).toHaveText("Step 3 of 3, done. Components that handled the Message: 1")
+      yield* play.expect(progress("Effect UI")).toHaveText("Step 3 of 3, done. Parts that handled the Message: 1")
       yield* play.expect(active("Effect UI")).toBeAbsent()
       yield* play.expect(disabled).toHaveCount(4)
 
@@ -61,15 +61,15 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Architecture", (it) => {
       yield* play.expect(sentence("Foldkit 0.x")).toHaveText("The view runs from the root with the new Model.")
       yield* play.expect(sentence("Effect UI")).toHaveText("The runtime stores A1's new Model, and A1's view runs.")
       yield* play.expect(progress("Foldkit 0.x")).toHaveText(
-        "Step 8 of 8, done. Components that handled the Message: 3"
+        "Step 8 of 8, done. Parts that handled the Message: 3"
       )
-      yield* play.expect(progress("Effect UI")).toHaveText("Step 3 of 3, done. Components that handled the Message: 1")
+      yield* play.expect(progress("Effect UI")).toHaveText("Step 3 of 3, done. Parts that handled the Message: 1")
       yield* play.expect(classed("arch2-node-active")).toBeAbsent()
       yield* play.expect(disabled).toBeAbsent()
 
       yield* TestClock.adjust("5 seconds")
       yield* play.expect(progress("Foldkit 0.x")).toHaveText(
-        "Step 8 of 8, done. Components that handled the Message: 3"
+        "Step 8 of 8, done. Parts that handled the Message: 3"
       )
     }))
 
@@ -82,6 +82,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Architecture", (it) => {
       yield* TestClock.adjust("900 millis")
       yield* play.expect(sentence("Foldkit 0.x")).toHaveText("B wraps it in a Message of its own.")
       yield* play.expect(sentence("Effect UI")).toHaveText("The runtime delivers it to B2's update.")
-      yield* play.expect(progress("Foldkit 0.x")).toHaveText("Step 2 of 8. Components that handled the Message: 2")
+      yield* play.expect(progress("Foldkit 0.x")).toHaveText("Step 2 of 8. Parts that handled the Message: 2")
     }))
 })
