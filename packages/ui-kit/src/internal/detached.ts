@@ -1,5 +1,6 @@
 import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import type * as Subscription from "@effect/ui/Subscription"
+import * as Predicate from "effect/Predicate"
 
 export interface DetachedChannel<M> {
   readonly send: (document: Document, popupId: string, message: M) => void
@@ -16,10 +17,7 @@ export const detachedChannel = <M>(name: string): DetachedChannel<M> => {
     subscription: (popupId) =>
       DomSubscription.onCustomEvent(
         typeOf(popupId),
-        ({ detail }) =>
-          typeof detail === "object" && detail !== null && tag in detail
-            ? (detail as Record<typeof tag, M>)[tag]
-            : undefined
+        ({ detail }) => Predicate.hasProperty(detail, tag) ? detail[tag] as M : undefined
       )
   }
 }

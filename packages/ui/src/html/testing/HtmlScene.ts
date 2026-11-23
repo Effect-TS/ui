@@ -234,7 +234,7 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    */
   fireCustomEvent(
     event: string,
-    payload?: Partial<DomSubscription.GlobalPayload<{ readonly detail: unknown }>>
+    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.CustomEventPayload>>
   ): this
 
   /** Asserts on the elements `locator` matches in the current view. */
@@ -374,11 +374,8 @@ class StepsImpl extends internal.SceneCursor {
   fireWindow(event: string, payload?: object): this {
     return this.fireGlobal("fireWindow", "window", event, payload)
   }
-  fireCustomEvent(
-    event: string,
-    payload?: Partial<DomSubscription.GlobalPayload<{ readonly detail: unknown }>>
-  ): this {
-    return this.fireGlobal("fireCustomEvent", "document", event, { ...payload, detail: payload?.detail ?? null })
+  fireCustomEvent(event: string, payload?: object): this {
+    return this.fireGlobal("fireCustomEvent", "document", event, fireGlobal.custom(payload))
   }
   private fireGlobal(
     step: string,

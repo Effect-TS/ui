@@ -81,9 +81,22 @@ export interface WindowEvents {
 export type GlobalPayload<P> = P & { readonly defaultPrevented: boolean }
 
 /**
- * The options of `onDocument` and `onWindow`: `preventDefault`, as on an
- * element's handler, and `capture`, to listen in the capture phase, before
- * any element sees the event, so a handler that stops it can't hide it.
+ * The payload of `onCustomEvent`: the event's `detail`, which is `null`
+ * when the event has none.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface CustomEventPayload {
+  readonly detail: unknown
+}
+
+/**
+ * The options of `onDocument`, `onCustomEvent` and `onWindow`:
+ * `preventDefault`, as on an element's handler, and `capture`, to listen in
+ * the capture phase, before any element sees the event, so a handler that
+ * stops it can't hide it.
  *
  * @stability experimental
  * @category events
@@ -94,22 +107,23 @@ export interface GlobalEventOptions extends View.EventOptions {
 }
 
 /**
- * The source of document and window events, which `onDocument` and
- * `onWindow` listen to.
+ * The source of document and window events, which `onDocument`,
+ * `onCustomEvent` and `onWindow` listen to.
  *
  * **Details**
  *
  * `listen` adds a listener to the host's `document` or its window and
  * returns the function that removes it. The listener gets the plain payload,
  * `defaultPrevented` included, and a function that cancels the event's
- * default.
+ * default. With `custom: true` the payload is a `CustomEventPayload`,
+ * whatever the event's type.
  *
  * `BrowserHost.layer` provides the one over its `document` and that
  * document's `defaultView`, so an app in an iframe hears its own document.
  * The default never fires, so a host without a document, and a test that
  * doesn't fire events, need nothing. A test fires them with `HtmlScene`'s
- * `fireDocument` and `fireWindow`, or with `TestGlobalEvents` from
- * `@effect/ui/html/testing`.
+ * `fireDocument`, `fireCustomEvent` and `fireWindow`, or with
+ * `TestGlobalEvents` from `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @category services
@@ -162,7 +176,7 @@ const listenFor = (
     close: Context.get(context, GlobalEvents).listen(
       target,
       event,
-      custom ? { capture, custom: true } : { capture },
+      { capture, custom },
       (payload, preventDefault) =>
         enter((latest) => {
           try {
@@ -343,6 +357,6 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  */
 export const onCustomEvent = <Msg>(
   event: string,
-  handler: View.Handler<Msg, GlobalPayload<{ readonly detail: unknown }>>,
+  handler: View.Handler<Msg, GlobalPayload<CustomEventPayload>>,
   options?: GlobalEventOptions | undefined
 ): Subscription.Subscription<Msg> => listenFor("document", event, handler, options, true)
