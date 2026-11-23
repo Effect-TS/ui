@@ -1,4 +1,5 @@
 import * as View from "@effect/ui/View"
+import * as Schema from "effect/Schema"
 import type { Keyed } from "./attributes.ts"
 
 export interface Labelled {
@@ -47,7 +48,9 @@ export const stepped = (at: number, last: number, direction: 1 | -1, loop: Loop)
   return loop === "none" ? at : loop === "escape" ? -1 : direction === 1 ? 0 : last
 }
 
-export type Orientation = "horizontal" | "vertical"
+export const Orientation = Schema.Literals(["horizontal", "vertical"])
+
+export type Orientation = typeof Orientation.Type
 
 export const arrowKeys = (orientation: Orientation, rtl: boolean) =>
   orientation === "vertical"
