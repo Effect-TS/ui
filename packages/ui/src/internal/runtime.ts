@@ -1503,7 +1503,7 @@ const setup = (
     const outer = origin
     const outerStarting = starting
     origin = cause
-    starting = start && cause === undefined ? { seq: undefined } : undefined
+    starting = start && cause === undefined && log.enabled ? { seq: undefined } : undefined
     depth++
     try {
       return f()
