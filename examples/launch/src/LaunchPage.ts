@@ -334,7 +334,7 @@ export const LaunchPage = Component.define({
           h.h2.id("next").children("You can keep building on Foldkit 0.x"),
           P(
             h,
-            "Effect UI doesn't have everything Foldkit 0.x has. DevTools, hot reload and the crash view, for example, are not in Effect UI today. You can keep building with Foldkit 0.x, and it will receive critical bug fixes at least until Effect UI ships with an upgrade guide."
+            "Effect UI doesn't have everything Foldkit 0.x has. DevTools, state-preserving live reload and the crash view, for example, are not in Effect UI today. You can keep building with Foldkit 0.x, and it will receive critical bug fixes at least until Effect UI ships with an upgrade guide."
           ),
           h.p.children(
             "Effect UI is developed in ",
