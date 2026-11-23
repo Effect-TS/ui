@@ -14,8 +14,10 @@ const Example = <M>(h: View.H<M>, options: {
 }) =>
   h.section.class("example").attr("aria-label", options.title).children(
     h.h3.class("example-title").children(options.title),
-    options.demo && h.div.class("demo").children(options.demo),
-    ...options.files.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet)))
+    h.div.class("example-body").children(
+      options.demo && h.div.class("demo").children(options.demo),
+      ...options.files.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet)))
+    )
   )
 
 const Text = <M>(h: View.H<M>, text: string) =>
@@ -33,11 +35,11 @@ export const LaunchPage = Component.define({
 }).make({
   init: () => ({}),
   update: (model) => model,
-  head: () => [Head.title("Foldkit's frontend continues as Effect UI")],
+  head: () => [Head.title("Effect UI is the successor to Foldkit 0.x’s frontend")],
   view: (_model, h) =>
     h.main.class("article").children(
       h.header.class("article-head").children(
-        h.h1.children("Foldkit's frontend continues as Effect UI"),
+        h.h1.children("Effect UI is the successor to Foldkit 0.x’s frontend"),
         P(
           h,
           "Foldkit 0.x is the frontend framework published on npm as `foldkit`. Its frontend work continues as Effect UI, which you import from `effect/ui`. Foldkit becomes the full-stack framework built on Effect UI."
@@ -45,7 +47,7 @@ export const LaunchPage = Component.define({
         P(h, "This page shows what is changing and why. It assumes you've built something with Foldkit 0.x.")
       ),
       h.section.attr("aria-labelledby", "one-model").children(
-        h.h2.id("one-model").children("One Model in Foldkit 0.x"),
+        h.h2.id("one-model").children("In Foldkit 0.x, the entire application state was a single Model"),
         P(
           h,
           "A Foldkit 0.x app has one Model, one Message union and one update function. Everything the app knows is in that Model, and every Message goes through that update."
@@ -60,7 +62,9 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "components").children(
-        h.h2.id("components").children("Components in Effect UI"),
+        h.h2.id("components").children(
+          "In Effect UI, each component instance has its own Model and handles its own Messages"
+        ),
         P(
           h,
           "An Effect UI app is a tree of components. Each component has its own Model, Message and update, and you build a page by composing them. The runtime keeps a Model for each component instance and passes each Message to the update of the instance it came from. A parent doesn't store a child's Model or route its Messages."
@@ -73,11 +77,15 @@ export const LaunchPage = Component.define({
         h.figure.class("compare wide").children(
           h.div.class("compare-columns").children(
             Example(h, {
-              title: "Foldkit 0.x",
+              title: "The Foldkit 0.x page stores the count in its Model",
               files: h.props.counter.foldkit,
               demo: h.div.class("embed").onMount(EmbedFoldkitPage())
             }),
-            Example(h, { title: "Effect UI", files: h.props.counter.effect, demo: Page(h, {}) })
+            Example(h, {
+              title: "The Effect UI page renders the Counter without storing its count",
+              files: h.props.counter.effect,
+              demo: Page(h, {})
+            })
           ),
           h.figcaption.class("caption").children(
             "Both pages are running. Click + in each, then hide the Counter and show it again."
@@ -93,7 +101,7 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "lifetime").children(
-        h.h2.id("lifetime").children("How long state lasts"),
+        h.h2.id("lifetime").children("In Effect UI, removing a component discards its Model by default"),
         P(
           h,
           "If you hid and showed the two Counters above, the count came back in Foldkit 0.x and started again at 0 in Effect UI."
@@ -118,7 +126,7 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "services").children(
-        h.h2.id("services").children("Services"),
+        h.h2.id("services").children("In Effect UI, a component can provide services for itself and its children"),
         P(
           h,
           "In Effect UI a component can provide the services it uses. Say an editor saves drafts through a `Drafts` service."
@@ -133,8 +141,11 @@ export const LaunchPage = Component.define({
         ),
         h.figure.class("compare wide").children(
           h.div.class("compare-columns").children(
-            Example(h, { title: "Foldkit 0.x", files: h.props.provider.foldkit }),
-            Example(h, { title: "Effect UI", files: h.props.provider.effect })
+            Example(h, { title: "The Foldkit 0.x app provides Drafts at the root", files: h.props.provider.foldkit }),
+            Example(h, {
+              title: "The Effect UI Editor provides Drafts where the Editor is defined",
+              files: h.props.provider.effect
+            })
           ),
           h.figcaption.class("caption").children(
             ...Text(
@@ -157,7 +168,9 @@ export const LaunchPage = Component.define({
         )
       ),
       h.section.attr("aria-labelledby", "carries-over").children(
-        h.h2.id("carries-over").children("What carries over"),
+        h.h2.id("carries-over").children(
+          "Messages still describe what happened, and update still decides what changes"
+        ),
         P(
           h,
           "A Model is still a Schema. A Message still records something that happened, like `ClickedSave`, and update decides what to do about it. init, update and view are still pure functions. Commands, Subscriptions and Mounts keep their names, and they are still values the runtime performs."
@@ -169,7 +182,7 @@ export const LaunchPage = Component.define({
         P(h, "A test still performs no effects. Each Command is a value the test resolves by name.")
       ),
       h.section.attr("aria-labelledby", "next").children(
-        h.h2.id("next").children("Upgrading from Foldkit 0.x"),
+        h.h2.id("next").children("You can reuse your Models, Messages and update logic when you migrate"),
         h.p.children(
           "The upgrade guide isn't published yet. When it is, it will go through the API changes one at a time. The Models, Messages and update logic you've written carry over with small changes, and most of what you delete is in parents. Effect UI is ",
           h.a.attr("href", "https://github.com/Effect-TS/ui").children("on GitHub"),

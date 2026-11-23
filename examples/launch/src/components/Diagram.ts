@@ -18,7 +18,7 @@ interface Column {
 
 const columns: ReadonlyArray<Column> = [
   {
-    title: "Foldkit 0.x",
+    title: "In Foldkit 0.x, the page routes the Counter’s Message",
     boxes: [
       {
         name: "Page",
@@ -53,7 +53,7 @@ const columns: ReadonlyArray<Column> = [
     ]
   },
   {
-    title: "Effect UI",
+    title: "In Effect UI, the Message goes directly to the Counter’s update",
     boxes: [
       {
         name: "Page",
@@ -116,11 +116,13 @@ export const Diagram = <M>(h: View.H<M>, caption: string) =>
       ...columns.map((column) =>
         h.section.key(column.title).class("arch-column").attr("aria-label", column.title).children(
           h.h3.class("arch-title").children(column.title),
-          BoxView(h, column.boxes[0]!, false),
-          h.p.class("arch-link").children(column.link),
-          BoxView(h, column.boxes[1]!, false),
-          h.ol.class("steps").children(
-            ...column.steps.map((step, index) => h.li.key(String(index)).children(Step(h, index + 1), h.span(step)))
+          h.div.class("arch-body").children(
+            BoxView(h, column.boxes[0]!, false),
+            h.p.class("arch-link").children(column.link),
+            BoxView(h, column.boxes[1]!, false),
+            h.ol.class("steps").children(
+              ...column.steps.map((step, index) => h.li.key(String(index)).children(Step(h, index + 1), h.span(step)))
+            )
           )
         )
       )
