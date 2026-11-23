@@ -1,9 +1,11 @@
 import * as MessageLog from "@effect/ui/MessageLog"
+import * as Predicate from "effect/Predicate"
 import type * as Schema from "effect/Schema"
-import * as Inspector from "../Inspector.ts"
+import type * as Inspector from "../Inspector.ts"
 
 export type Entry = MessageLog.WireEntry
 type UpdateEntry = Extract<Entry, { readonly _tag: "Update" }>
+export type Source = UpdateEntry["source"]
 type IssuingEntry = Extract<Entry, { readonly _tag: "Update" | "Mounted" }>
 type RunEntry = Extract<
   Entry,
@@ -49,11 +51,8 @@ export const isRun = (entry: Entry | Inspector.Outside): entry is RunEntry =>
 export const issuedOf = (entry: Entry | Inspector.Outside): MessageLog.Issued | undefined =>
   isRun(entry) ? entry.issued : entry._tag === "Failed" ? entry.issued : undefined
 
-export const tagOf = (value: Schema.Json): string | undefined => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined
-  const tag = (value as Schema.JsonObject)._tag
-  return typeof tag === "string" ? tag : undefined
-}
+export const tagOf = (value: Schema.Json): string | undefined =>
+  Predicate.hasProperty(value, "_tag") && typeof value._tag === "string" ? value._tag : undefined
 
 export const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path
 
@@ -218,7 +217,7 @@ export const summaryOf = (entry: Entry | Inspector.Outside): string => {
 }
 
 export type Step =
-  | { readonly _tag: "Source"; readonly source: UpdateEntry["source"]; readonly link: Ref | undefined }
+  | { readonly _tag: "Source"; readonly source: Source; readonly link: Ref | undefined }
   | { readonly _tag: "Link"; readonly what: string; readonly ref: Ref }
   | {
     readonly _tag: "Entry"
@@ -367,8 +366,11 @@ export const chainSeqs = (steps: ReadonlyArray<Step>): ReadonlySet<number> => {
       case "Source":
         if (step.link !== undefined) seqs.add(step.link.seq)
         break
-      case "Link":
       case "Entry":
+        seqs.add(step.ref.seq)
+        for (const ref of step.stopped ?? []) seqs.add(ref.seq)
+        break
+      case "Link":
       case "Started":
       case "End":
       case "Result":
@@ -379,7 +381,6 @@ export const chainSeqs = (steps: ReadonlyArray<Step>): ReadonlySet<number> => {
         for (const ref of step.stopped) seqs.add(ref.seq)
         break
     }
-    if (step._tag === "Entry") { for (const ref of step.stopped ?? []) seqs.add(ref.seq) }
   }
   return seqs
 }
@@ -446,21 +447,24 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
   return rows
 }
 
-export const compare = (a: Schema.Json, b: Schema.Json): "same" | "changed" | "unknown" => {
-  const changes = Inspector.diff(a, b)
-  return changes.length === 0
+export const statusOf = (changes: ReadonlyArray<Inspector.Change>): "same" | "changed" | "unknown" =>
+  changes.length === 0
     ? "same"
     : changes.some((change) => change.kind !== "unknown")
     ? "changed"
     : "unknown"
-}
 
-export interface Lifecycle {
-  readonly instance: Inspector.Instance
-  readonly records: ReadonlyArray<Inspector.Record>
-}
-
-export const lifecycleOf = (session: Inspector.Session, instance: number): Lifecycle | undefined => {
-  const info = session.instances().find((candidate) => candidate.instance === instance)
-  return info === undefined ? undefined : { instance: info, records: session.records(instance) }
+export const reasonTone: { readonly [R in Inspector.Reason]: "ok" | "bad" } = {
+  ended: "ok",
+  completed: "ok",
+  closed: "ok",
+  ready: "ok",
+  stopped: "ok",
+  failed: "bad",
+  server: "bad",
+  interrupt: "bad",
+  switch: "bad",
+  unmount: "bad",
+  layer: "bad",
+  self: "bad"
 }
