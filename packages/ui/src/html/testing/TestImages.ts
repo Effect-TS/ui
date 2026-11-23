@@ -10,7 +10,7 @@
  *
  * ```ts import.meta.vitest
  * import { Component, Subscription, UiSchema } from "@effect/ui"
- * import { HtmlImages, Html } from "@effect/ui/html"
+ * import { Html, HtmlImages } from "@effect/ui/html"
  * import { TestImages } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
  * import { Effect, Layer, Schema, Stream } from "effect"

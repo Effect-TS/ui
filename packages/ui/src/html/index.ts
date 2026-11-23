@@ -6,8 +6,8 @@
  * `HtmlCommand` holds the Commands that take a ref, and `HtmlSubscription`
  * the Subscriptions to the page (document, window, animation frames), as
  * opposed to one element's events. Anything that is neither, or that groups
- * several kinds around one browser feature, is its own module: `HtmlFiles`,
- * `HtmlImages`, `HtmlKeyboard` and `Canvas`.
+ * several kinds around one browser feature, is its own module, such as
+ * `HtmlFiles`, `HtmlImages`, `HtmlKeyboard` or `Canvas`.
  *
  * @stability experimental
  * @since 0.1.0

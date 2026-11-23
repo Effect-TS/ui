@@ -1,9 +1,8 @@
 /**
- * The Subscriptions to the page, as opposed to one element's events: the
- * host's document, window and animation frames. `onDocument` for a keyboard
- * shortcut or a press outside a popup, `onCustomEvent` for a `CustomEvent`
- * dispatched on the document, `onWindow` for the window's focus, and
- * `onAnimationFrame` for animation.
+ * The Subscriptions to the page, as opposed to one element's events:
+ * `onDocument` for a keyboard shortcut or a press outside a popup,
+ * `onCustomEvent` for a `CustomEvent` dispatched on the document,
+ * `onWindow` for the window's focus, and `onAnimationFrame` for animation.
  *
  * Their sources are the `GlobalEvents` and `AnimationFrames` services,
  * which `BrowserHost.layer` provides. Nothing listens on the server, and a
@@ -230,7 +229,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { HtmlSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -270,7 +269,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { HtmlSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -366,7 +365,7 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { HtmlSubscription, Html } from "@effect/ui/html"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -473,7 +472,7 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { HtmlSubscription, Html } from "@effect/ui/html"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"

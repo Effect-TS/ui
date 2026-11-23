@@ -60,7 +60,7 @@ export interface Shortcut<Msg> {
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { HtmlSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"

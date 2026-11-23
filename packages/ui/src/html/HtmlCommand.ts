@@ -1,7 +1,7 @@
 /**
- * The Commands that take a ref: `focus`, `blur`, `scrollIntoView`,
- * `measure`, `select`, `requestSubmit` and `showPicker`, each given a
- * rendered element's ref from `Html.ref` or `Row.at`.
+ * The Commands that take a rendered element's ref, from `Html.ref` or
+ * `Row.at`: `focus`, `blur`, `scrollIntoView`, `measure`, `select`,
+ * `requestSubmit` and `showPicker`.
  *
  * A Command runs once the render the issuing `update` caused is committed,
  * and reaches the element through `Html.Host`, which a test on `TestHost`
@@ -167,7 +167,7 @@ export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> },
  * **Example** (Focusing the new-todo field after adding)
  *
  * ```ts
- * import { HtmlCommand, Html } from "@effect/ui/html"
+ * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
@@ -242,7 +242,7 @@ export const measure = <N extends globalThis.Element, Msg>(
  * **Example** (Selecting a field's text once it has focus)
  *
  * ```ts
- * import { HtmlCommand, Html } from "@effect/ui/html"
+ * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  *
  * const Message = UiSchema.TaggedEnum({ FocusedAmount: {}, CompletedSelectAmount: {} })
@@ -330,7 +330,7 @@ export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Op
  * **Example** (Opening a rendered file input's picker)
  *
  * ```ts
- * import { HtmlCommand, Html } from "@effect/ui/html"
+ * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
