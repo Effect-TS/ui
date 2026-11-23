@@ -282,7 +282,12 @@ export const changePayload = (
   const edit = { composing: input.composing ?? false, inputType: input.inputType ?? "" }
   const value = input.value ?? HtmlLocator.value(node) ?? ""
   return node.tag === "input"
-    ? { value, checked: input.checked ?? HtmlLocator.checked(node) === true, files: input.files ?? [], ...edit }
+    ? {
+      value,
+      checked: input.checked ?? HtmlLocator.checked(node) === true,
+      files: inputType(node) === "file" ? input.files ?? [] : [],
+      ...edit
+    }
     : { value, ...edit }
 }
 

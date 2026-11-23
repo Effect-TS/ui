@@ -200,7 +200,7 @@ describe("HtmlScene", () => {
       })
       const s = yield* HtmlScene.make(Upload, {})
       s.change(HtmlLocator.label("File"), { files: [new File(["a"], "a.txt"), new File(["b"], "b.txt")] })
-        .change(HtmlLocator.label("Name"), { value: "Ada" })
+        .change(HtmlLocator.label("Name"), { value: "Ada", files: [new File(["c"], "c.txt")] })
         .expect(Locator.text("a.txt,b.txt | 0")).toExist()
     }))
 

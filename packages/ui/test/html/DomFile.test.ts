@@ -131,13 +131,15 @@ describe("DomFile", { concurrent: false }, () => {
       expect(input.files!.length).toBe(0)
     }).pipe(Effect.scoped))
 
-  it.effect("without showPicker, DomCommand.showPicker falls back to click only on a file input and never submits a form", () =>
+  it.effect("without showPicker, DomCommand.showPicker falls back to click only on an enabled file input and never submits a form", () =>
     Effect.gen(function*() {
       const Submit = Html.ref("Submit", "input")
       const Attachment = Html.ref("Attachment", "input")
+      const Locked = Html.ref("Locked", "input")
       const Message = UiSchema.TaggedEnum({
         OpenSubmit: {},
         OpenFile: {},
+        OpenLocked: {},
         ShowedPicker: { found: Schema.Boolean, opened: Schema.Boolean },
         Submitted: {}
       })
@@ -153,26 +155,31 @@ describe("DomFile", { concurrent: false }, () => {
           Message.match(message, {
             OpenSubmit: () => $.run(DomCommand.showPicker(Submit, Message.ShowedPicker)),
             OpenFile: () => $.run(DomCommand.showPicker(Attachment, Message.ShowedPicker)),
+            OpenLocked: () => $.run(DomCommand.showPicker(Locked, Message.ShowedPicker)),
             ShowedPicker: ({ found, opened }) => [...log, `found ${found}, opened ${opened}`],
             Submitted: () => [...log, "submitted"]
           }),
         view: (_, h) =>
           h.form.onSubmit(Message.Submitted()).children(
             h.input.attr("type", "submit").ref(Submit),
-            h.input.attr("type", "file").ref(Attachment)
+            h.input.attr("type", "file").ref(Attachment),
+            h.input.attr("type", "file").disabled(true).ref(Locked)
           )
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
       const root = yield* BrowserHost.mountEffect(Form, {}, app)
       let fileClicks = 0
-      app.querySelector<HTMLInputElement>("input[type='file']")!.addEventListener("click", () => {
-        fileClicks++
-      })
+      for (const input of app.querySelectorAll("input[type='file']")) {
+        input.addEventListener("click", () => {
+          fileClicks++
+        })
+      }
       root.send(Message.OpenSubmit())
       root.send(Message.OpenFile())
+      root.send(Message.OpenLocked())
       yield* tick
-      expect(root.model()).toEqual(["found true, opened false", "found true, opened true"])
+      expect(root.model()).toEqual(["found true, opened false", "found true, opened true", "found true, opened false"])
       expect(fileClicks).toBe(1)
     }).pipe(Effect.scoped))
 })
