@@ -162,7 +162,7 @@ export interface Expect<S> {
 
 /** The events a child emits: a component's, a headless component's, a lazy component's or a feature's. */
 type EventsOf<Child> = Child extends Feature.Service<any, any, infer E> ? E
-  : Child extends Component.Lazy<any, infer E, any, never> ? E
+  : Child extends Component.Lazy.Members<any, infer E, any, never> ? E
   : Child extends Component.Headless<any, infer E, any, any, infer _Rcv, never> ? E
   : Component.Events<Child>
 

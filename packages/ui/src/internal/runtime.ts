@@ -5819,8 +5819,8 @@ const setup = (
     const child = makeInstance(
       component,
       view.props,
-      // A feature's segment names the feature, not the component that implements it.
-      component === target ? named : `${inst.path}/${segment(view)}`,
+      // A feature's or a lazy component's segment names it, not the component that implements it.
+      component === target ? named : named ?? `${inst.path}/${segment(view)}`,
       view.key,
       inst,
       childEnv,
@@ -6603,7 +6603,9 @@ const setup = (
         if (status._tag === "Ready") {
           // Ready now: the fallback goes, and the feature or the lazy component mounts in its place.
           destroy(inst, rendered.inner)
-          return makeChild(inst, child, env)
+          const scoped = lazyOf.TypeId in child.component ? lazyOf.scopedOnceLoaded(child) : undefined
+          // A scoped slot, not a fallback: its parent's next patch sees `scoped` and goes to `patchScoped`.
+          return scoped === undefined ? makeChild(inst, child, env) : createChild(inst, scoped, env) as RFallback
         }
         const shown = fallbackOf(inst, child, status)
         return {

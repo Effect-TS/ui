@@ -3681,16 +3681,8 @@ export type LazyTypeId = typeof LazyTypeId
  * @since 0.1.0
  */
 export interface Lazy<in out Props, out Events, out R = never, in Sl extends string = never>
-  extends Lazy.Call<Props, Events, R, Sl>
-{
-  readonly [LazyTypeId]: Lazy.Info<Props, Events, R, Sl>
-  /**
-   * Starts loading the module without rendering anything, such as when the
-   * pointer enters a link. Settles once the module has loaded or failed to,
-   * and never rejects.
-   */
-  readonly preload: () => Promise<void>
-}
+  extends Lazy.Members<Props, Events, R, Sl>, Lazy.Call<Props, Events, R, Sl>
+{}
 
 /**
  * Helper types for `Lazy`.
@@ -3699,6 +3691,22 @@ export interface Lazy<in out Props, out Events, out R = never, in Sl extends str
  * @since 0.1.0
  */
 export declare namespace Lazy {
+  /**
+   * What every lazy component has, scoped or not.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Members<in out Props, out Events, out R = never, in Sl extends string = never> {
+    readonly [LazyTypeId]: Info<Props, Events, R, Sl>
+    /**
+     * Starts loading the module without rendering anything, such as when the
+     * pointer enters a link. Settles once the module has loaded or failed to,
+     * and never rejects.
+     */
+    readonly preload: () => Promise<void>
+  }
+
   /**
    * The call signature of a lazy component.
    *
@@ -3732,6 +3740,51 @@ export declare namespace Lazy {
   }
 
   /**
+   * A lazy scoped component: it's written inside `h.scoped`, with the `s`
+   * it gives, as the scoped component is.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Scoped<in out Props, out Events, out R = never, in Sl extends string = never>
+    extends Members<Props, Events, R, Sl>, ScopedCall<Props, Events, R, Sl>
+  {}
+
+  /**
+   * The call signature of a lazy scoped component.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface ScopedCall<in out Props, out Events, out R = never, in Sl extends string = never> {
+    /**
+     * Declares a scoped child of the lazy component, from the `s` of the
+     * parent's `h.scoped`. The first one rendered starts loading the
+     * module. Once it has loaded, the child lives until the scope's
+     * predicate is false for its key, or the parent ends.
+     */
+    <Msg, Ends extends boolean, const K extends string = never, RF = never, const SC extends object = never>(
+      s: View.Scope<Msg, Ends>,
+      options:
+        & View.Child.ScopedOptions<Props, Events, NoInfer<Msg>, K, Ends>
+        & {
+          /**
+           * Shown while the module loads, passed `Initial`, and if the load
+           * or the child fails, passed `Failure`. Without it, the child is
+           * blank until it shows.
+           */
+          readonly fallback?:
+            | ((
+              result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+            ) => View.Content<NoInfer<Msg>, RF>)
+            | undefined
+        }
+        & SlotOptions<Sl, SC, NoInfer<Msg>>
+        & (0 extends 1 & Props ? { readonly props: Props } : {})
+    ): View.Child<Msg, R | NoInfer<RF> | SlotRequirements<SC>>
+  }
+
+  /**
    * The name a lazy component's children take in their paths, and phantom
    * variance for its props, events, requirements and slots.
    *
@@ -3745,12 +3798,12 @@ export declare namespace Lazy {
   }
 
   /**
-   * Any lazy component.
+   * Any lazy component, scoped or not.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Any = Lazy<any, any, any>
+  export type Any = Members<any, any, any>
 }
 
 /**
@@ -3793,14 +3846,20 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy as any
  * starts the load without rendering, and `TestHost.settle` waits for a load
  * in flight.
  *
+ * A scoped component loaded lazily is still scoped: write its children
+ * inside `h.scoped`, with the `s` it gives.
+ *
  * Provide the services that only the loaded component uses with
  * `Component.provide` inside its module, so their Layers go into its chunk.
  * Its requirements that the module doesn't provide surface in the parent's.
  *
  * **Gotchas**
  *
- * - `load` must resolve to a component that isn't scoped or headless. Any
- *   other value fails the load, as does a `load` that throws.
+ * - `load` must resolve to a component that isn't headless. Any other
+ *   value fails the load, as does a `load` that throws.
+ * - A lazy scoped child is kept only once its module has loaded. Until then,
+ *   a parent that stops writing it drops its fallback, as it would any
+ *   child's.
  * - The server waits for the load and renders the component. The client
  *   doesn't load the module before it hydrates, so it replaces the server's
  *   nodes with the fallback, then with the component once it has loaded.
@@ -3830,7 +3889,8 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy as any
  * @category constructors
  * @since 0.1.0
  */
-export const lazy: <C extends Any>(
+export const lazy: <C extends AnyRoot>(
   name: string,
   load: () => Promise<C>
-) => Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy.make as any
+) => C extends Mountable.Call<any, any, any, never> ? Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>>
+  : Lazy.Scoped<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy.make as any

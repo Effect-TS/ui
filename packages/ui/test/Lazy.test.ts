@@ -2,7 +2,7 @@ import { Component, UiSchema } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
 const PageEvents = UiSchema.TaggedEnum({ Saved: { title: Schema.String } })
@@ -18,12 +18,6 @@ const Page = Component.define({
   init: () => null,
   update: (model) => model,
   view: (_, h) => h.text(`page:${h.props.title}`)
-})
-
-const Scoped = Component.define({ name: "Scoped", scoped: true, model: Schema.Null, message: Schema.Never }).make({
-  init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.text("scoped")
 })
 
 const AppMessage = UiSchema.TaggedEnum({ Toggled: {}, Saved: { title: Schema.String } })
@@ -100,20 +94,79 @@ describe("Component.lazy", () => {
       assert.strictEqual(loads, 2)
     })))
 
-  it.effect("fails the load when it throws or brings no component that can be called", () =>
+  it.effect("fails the load when it throws or brings no component", () =>
     provideHost(Effect.gen(function*() {
       const loads: ReadonlyArray<() => Promise<typeof Page>> = [
         () => {
           throw new Error("no import")
         },
-        () => Promise.resolve({ Page } as any),
-        () => Promise.resolve(Scoped as any)
+        () => Promise.resolve({ Page } as any)
       ]
       for (const load of loads) {
         const root = yield* TestHost.mount(makeApp(Component.lazy("LazyPage", load)), {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "app:failed")
       }
+    })))
+
+  it.effect("keeps a lazy scoped child once loaded, and closes its scope when the predicate ends it", () =>
+    provideHost(Effect.gen(function*() {
+      let closed = 0
+      const DraftMessage = UiSchema.TaggedEnum({ Typed: {} })
+      const Draft = Component.define({ name: "Draft", scoped: true, model: Schema.Number, message: DraftMessage }).make(
+        {
+          init: () => 0,
+          update: (count) => count + 1,
+          view: (count, h) => h.el("button").on("click", DraftMessage.Typed()).children(`draft:${count}`)
+        }
+      ).pipe(
+        Component.provide(Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => closed++))))
+      )
+      const LazyDraft = Component.lazy("LazyDraft", () => later(Draft))
+      const HostMessage = UiSchema.TaggedEnum({ Toggled: {}, Ended: {} })
+      const Host = Component.define({
+        name: "Host",
+        scoped: false,
+        model: Schema.Struct({ open: Schema.Boolean, alive: Schema.Boolean }),
+        message: HostMessage
+      }).make({
+        init: () => ({ open: true, alive: true }),
+        update: (model, message) =>
+          HostMessage.match(message, {
+            Toggled: () => ({ ...model, open: !model.open }),
+            Ended: () => ({ ...model, alive: false })
+          }),
+        view: (model, h) =>
+          h.el(
+            "main",
+            h.scoped(({ model }) => model.alive, (s) =>
+              model.open ? LazyDraft(s, { key: "d", fallback: () => h.text("loading") }) : null)
+          )
+      })
+      const root = yield* TestHost.mount(Host, {})
+      assert.strictEqual(root.text(), "loading")
+      yield* TestHost.settle
+      Locator.fire(root.get(Locator.text("draft:0")), "click")
+      yield* TestHost.settle
+      root.send(HostMessage.Toggled())
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "")
+      root.send(HostMessage.Toggled())
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "draft:1")
+      assert.strictEqual(closed, 0)
+      root.send(HostMessage.Ended())
+      yield* TestHost.settle
+      assert.strictEqual(closed, 1)
+      assert.deepStrictEqual(
+        root.log().flatMap((entry) =>
+          "path" in entry && entry.path === "/Host/LazyDraft[d]" &&
+            ["Mounted", "Kept", "Drawn", "Unmounted"].includes(entry._tag)
+            ? [entry._tag]
+            : []
+        ),
+        ["Mounted", "Kept", "Drawn", "Unmounted"]
+      )
     })))
 
   it.effect("preload loads the module before a child renders", () =>

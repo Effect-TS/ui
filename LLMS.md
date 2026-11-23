@@ -931,12 +931,13 @@ const SearchPage = Component.lazy(
 
 // In the root's view. `fallback` shows while the module loads, and if the
 // load fails.
-Search: (route) =>
+Search: ;
+;((route) =>
   SearchPage(h, {
     key: AppRoute.printPath(route),
     props: { route },
     fallback: (result) => h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
-  })
+  }))
 ```
 
 Vite, like any bundler that splits on `import()`, puts the page and the code
@@ -971,8 +972,11 @@ split one off.
 
 Known limits:
 
-- A scoped component, a headless component or a view function can't be
-  loaded lazily. Make a page written as a view function a component first.
+- A headless component or a view function can't be loaded lazily. Make a
+  page written as a view function a component first.
+- A lazy scoped component is written with the `s` of `h.scoped`, as the
+  component is, but it's kept only once its module has loaded. A parent that
+  stops writing it while it loads drops its fallback.
 - The server waits for the module and renders the page. The client doesn't
   load the module before it hydrates, so it replaces the server's nodes with
   the fallback, then with the page once the module has loaded.

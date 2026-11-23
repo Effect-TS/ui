@@ -1,6 +1,7 @@
 /** @internal */
 import * as Predicate from "effect/Predicate"
 import type * as Component from "../Component.ts"
+import type * as View from "../View.ts"
 import * as child from "./child.ts"
 
 /** @internal */
@@ -52,8 +53,19 @@ export const start = (lazy: Component.Lazy.Any): Promise<void> => {
 }
 
 const isRenderable = (u: unknown): u is Component.Any =>
-  Predicate.hasProperty(u, "~@effect/ui/Component") && !Predicate.hasProperty(u, "~@effect/ui/Component/Headless") &&
-  (u as Component.Any).definition.scoped === false
+  Predicate.hasProperty(u, "~@effect/ui/Component") && !Predicate.hasProperty(u, "~@effect/ui/Component/Headless")
+
+const pendingAlive = new WeakMap<View.Child<any, any>, NonNullable<View.Child<any, any>["alive"]>>()
+
+/** @internal */
+export const scopedOnceLoaded = (view: View.Child<any, any>): View.Child<any, any> | undefined => {
+  if (view.alive !== undefined) return view
+  const alive = pendingAlive.get(view)
+  const state = stateOf(view.component as Component.Lazy.Any)
+  return alive !== undefined && state._tag === "Loaded" && state.component.definition.scoped
+    ? { ...view, alive }
+    : undefined
+}
 
 const variance = {
   _Props: (_: never) => _,
@@ -64,7 +76,15 @@ const variance = {
 
 /** @internal */
 export const make = (name: string, load: () => Promise<Component.Any>): Component.Lazy.Any => {
-  const self: Lazy = Object.assign((_h: unknown, options: child.Options) => child.make(self, options), {
+  const call = (h: any, options: child.Options) => {
+    const alive = h["~alive"]
+    const state = self.state
+    if (state._tag === "Loaded") return child.make(self, options, state.component.definition.scoped ? alive : undefined)
+    const made = child.make(self, options)
+    if (alive !== undefined) pendingAlive.set(made, alive)
+    return made
+  }
+  const self: Lazy = Object.assign(call, {
     [TypeId]: { ...variance, name },
     load,
     state: { _tag: "Idle" } as State,
