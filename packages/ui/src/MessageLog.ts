@@ -598,10 +598,10 @@ export interface MountEnded extends InstanceBase {
  *
  * **Details**
  *
- * From here until its `CommandEnded` or `CommandInterrupted` the run is
- * running. A run with an end entry and no `CommandStarted` never began: it
- * was stopped while queued in its group or while it waited for its
- * instance's Layer. `causedBy` names the fact of the step that started it:
+ * From here until its end entry the run is running: `CommandEnded`,
+ * `CommandInterrupted`, or a `Failed` with its `issued`. A run with an end
+ * entry and no `CommandStarted` never began: it was stopped while queued in
+ * its group or while it waited for its instance's Layer. `causedBy` names the fact of the step that started it:
  * the one that issued it, the one that freed its group for a queued run, or
  * the Layer build that ended for a run that waited for it.
  *
@@ -808,6 +808,11 @@ export interface Failed extends InstanceBase {
    * only record.
    */
   readonly update?: { readonly message: unknown; readonly source: Source } | undefined
+  /**
+   * The run that failed the instance, when `in` is `"command"`. This entry
+   * is that run's end: it has no `CommandEnded` or `CommandInterrupted`.
+   */
+  readonly issued?: Issued | undefined
 }
 
 /**
@@ -1168,7 +1173,8 @@ export const Wire = Schema.Union([
     in: Schema.String,
     name: Schema.NullOr(Schema.String),
     cause: CauseWire,
-    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire }))
+    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire })),
+    issued: Schema.optionalKey(IssuedWire)
   }),
   Schema.TaggedStruct("Unmounted", InstanceWire),
   Schema.TaggedStruct("Kept", InstanceWire),
@@ -1301,6 +1307,7 @@ export const makeEncoder = (options?: {
   const through = (component: Component.Any, field: "props" | "model" | "message" | "events", value: unknown) =>
     encodeWith(component[field] as Schema.Top, `${component.definition.name}.${field}`, value)
   const encodeWith = (schema: Schema.Top, id: string, value: unknown) => {
+    if (holdsRedactedOverlap(schema.ast)) return encodeArgs(schema, value)
     let encode = encoders.get(schema)
     if (encode === undefined) {
       encode = Schema.encodeUnknownSync(
@@ -1470,7 +1477,8 @@ export const makeEncoder = (options?: {
                 message: capped(entry.component, "message", entry.update.message),
                 source: encodeSource(entry.update.source)
               }
-            })
+            }),
+            ...(entry.issued === undefined ? undefined : { issued: entry.issued })
           }
         case "MountStarted":
           return {
@@ -1898,7 +1906,9 @@ const utf8Length = (text: string): number => {
  * somewhere builds on this rather than encode inside `record`. A value whose
  * Schema fails to encode is sent as a placeholder, and a warning is logged
  * the first time per component and field. `maxEntryBytes` caps Models,
- * messages, query results and shared values, as in `makeEncoder`.
+ * messages, query results and shared values, as in `makeEncoder`. A batch
+ * whose `onBatch` dies is dropped, and an error is logged. Entries
+ * recorded once the Scope has closed are dropped.
  *
  * **Example** (Keeping encoded frames in an array)
  *
@@ -1935,12 +1945,16 @@ export const makeEncoded = (
           const frames = batch.map((entry) => encoder.encode(entry))
           const logged = warnings.splice(0)
           return Effect.andThen(
-            onBatch(frames),
+            Effect.catchCause(
+              Effect.suspend(() => onBatch(frames)),
+              (cause) => Effect.logError("MessageLog: onBatch failed, and its batch was dropped", cause)
+            ),
             logged.length === 0 ? Effect.void : Effect.forEach(logged, (message) => Effect.logWarning(message))
           )
         })
       ),
       Effect.forever,
+      Effect.ensuring(Queue.shutdown(entries)),
       Effect.forkScoped
     )
     return {
