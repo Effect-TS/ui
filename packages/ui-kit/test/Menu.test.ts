@@ -155,8 +155,7 @@ const Page = Component.define({
   update: {
     ChangedRoute: ($, { route }) => $.evolve({ route }),
     RequestedOpen: ($) => $.evolve({ open: true }),
-    Left: ($) =>
-      $.set($.model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
+    Left: ($) => $.run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
     Navigated: ($) => $.model
   },
   subscriptions: ({ model }) => [

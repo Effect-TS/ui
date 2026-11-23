@@ -113,14 +113,14 @@ const makeApp = (options?: {
       order.push(`update ${$.props.tag} ${message._tag}${"name" in message ? " " + message.name : ""}`)
       return CardMessage.match(message, {
         UserChanged: () => $.model,
-        Rename: ({ name }) => $.set($.model).run(rename($.props.id, name)),
+        Rename: ({ name }) => $.run(rename($.props.id, name)),
         Renamed: ({ name }) => {
           const next = { ...$.model, done: [...$.model.done, name] }
           const chain = options?.chain
           return chain !== undefined && $.model.done.length === 0 ? $.set(next).run(rename($.props.id, chain)) : next
         },
         Failed: ({ name }) => ({ ...$.model, done: [...$.model.done, "failed " + name] }),
-        Stop: () => $.set($.model).run(Command.interrupt(RenameUser))
+        Stop: () => $.run(Command.interrupt(RenameUser))
       })
     },
     view: (h, model) => {
@@ -401,7 +401,7 @@ describe("Command.afterRefetch", () => {
         return BoardMessage.match(message, {
           Changed: () => $.model,
           Rename: () =>
-            $.set($.model).run(
+            $.run(
               app.RenameUser.make({ id: "1", name: "Bob" }).pipe(
                 Command.match({
                   onSuccess: () => BoardMessage.Renamed(),

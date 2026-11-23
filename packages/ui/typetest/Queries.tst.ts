@@ -573,11 +573,11 @@ describe("List queries", () => {
       update: ($, message) =>
         ChatMessage.match(message, {
           // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
-          Changed: () => $.set($.model).loadMore("user"),
+          Changed: () => $.loadMore("user"),
           // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type '"messages"'
-          More: () => $.set($.model).loadMore("missing"),
+          More: () => $.loadMore("missing"),
           // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
-          Refresh: () => $.set($.model).reset("user")
+          Refresh: () => $.reset("user")
         }),
       view: (h) => h.p("")
     })

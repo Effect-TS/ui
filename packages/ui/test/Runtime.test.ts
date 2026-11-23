@@ -1178,7 +1178,7 @@ describe("Runtime", () => {
         const Child = Component.provide(
           Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Null }).make({
             init: () => null,
-            update: ($) => $.set($.model).run(Write.make()),
+            update: ($) => $.run(Write.make()),
             view: (h) => h.el("button").on("click", null).children("write")
           }),
           () =>
@@ -1543,8 +1543,8 @@ describe("Runtime", () => {
         init: () => null,
         update: ($, message) =>
           Msg.match(message, {
-            Go: ({ n }) => $.set($.model).run(Job.make({ n }).pipe(Command.asNoop)),
-            Stop: () => $.set($.model).run(Command.interrupt(Job))
+            Go: ({ n }) => $.run(Job.make({ n }).pipe(Command.asNoop)),
+            Stop: () => $.run(Command.interrupt(Job))
           }),
         view: (h) => h.text(h.isRunning(Job) ? "running" : "idle")
       })
@@ -1590,7 +1590,7 @@ describe("Runtime", () => {
         const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Schema.Number }).make(
           {
             init: () => null,
-            update: ($, n) => $.set($.model).run(Job.make({ n }).pipe(Command.asNoop)),
+            update: ($, n) => $.run(Job.make({ n }).pipe(Command.asNoop)),
             view: (h) => h.text(h.isRunning(Job) ? "running" : "idle")
           }
         )
@@ -4172,8 +4172,8 @@ describe("Runtime", () => {
         update: ($, message) =>
           Act.match(message, {
             Move: () => ({ ...$.model, room: "b" }),
-            Ping: () => $.set($.model).run(Ping.make()),
-            Need: () => $.set($.model).run(Need.make()),
+            Ping: () => $.run(Ping.make()),
+            Need: () => $.run(Need.make()),
             Done: ({ by }) => ({ ...$.model, done: by })
           }),
         view: (h, model) => h.text(`${model.room}:${model.done}`)
@@ -4481,7 +4481,7 @@ describe("Runtime", () => {
         })
           .make({
             init: () => null,
-            update: ($) => $.set($.model).emit(null),
+            update: ($) => $.emit(null),
             view: (h) =>
               h.el(
                 "div",

@@ -343,8 +343,8 @@ const targetOf = (
   return target === undefined || target.value === value ? undefined : target
 }
 
-const moveTo = (model: ToolbarModel, target: ToolbarItem, $: ToolbarUpdate) =>
-  $.set({ ...model, active: target.value }).run(FocusItem.make({ ref: Item.at(target.value) }))
+const moveTo = ($: ToolbarUpdate, target: ToolbarItem) =>
+  $.set({ ...$.model, active: target.value }).run(FocusItem.make({ ref: Item.at(target.value) }))
 
 /**
  * A headless toolbar. Call it with the consumer's `h`, the `props`, and a `view`
@@ -420,17 +420,17 @@ export const Toolbar = Component.define({
     FocusedItem: ($, { value }) => $.model.active === value ? $.model : { ...$.model, active: value },
     PressedItemKey: ($, { key, value }) => {
       const target = targetOf(value, key, keysOf($), $)
-      return target === undefined ? $.model : moveTo($.model, target, $)
+      return target === undefined ? $.model : moveTo($, target)
     },
     PressedInputKey: ($, { caret, key, value }) => {
       const keys = keysOf($)
       const target = targetOf(value, key, keys, $)
       if (target === undefined) return $.model
-      if (caret === null) return moveTo($.model, target, $)
+      if (caret === null) return moveTo($, target)
       if (key === keys.next) {
         return $.run(FocusItem.make({ ref: Item.at(target.value), leaving: { ref: Item.at(value), caret } }))
       }
-      return caret > 0 ? $.model : moveTo($.model, target, $)
+      return caret > 0 ? $.model : moveTo($, target)
     }
   },
   parts: (p, model) => {

@@ -66,7 +66,7 @@ const Tip = Component.define({
   elements: Html
 }).make({
   init: () => ({ hovered: false }),
-  update: ($) => $.set($.model).send(Provider, { _tag: "Completed" }),
+  update: ($) => $.send(Provider, { _tag: "Completed" }),
   view: (h) => {
     expect(h.shared.provider).type.toBe<{ open: boolean; instant: boolean } | undefined>()
     return h.span()
@@ -166,7 +166,7 @@ describe("reports", () => {
       shared: { p: { owner: Provider, optional: true } }
     }).make({
       init: () => null,
-      update: ($) => $.set($.model).send(Provider, { _tag: "Completed" }),
+      update: ($) => $.send(Provider, { _tag: "Completed" }),
       view: (h) => Child(h, { key: "c" })
     })
     expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared.Of<typeof Provider>>()

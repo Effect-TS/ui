@@ -706,7 +706,7 @@ export interface Update<
 > extends Step<Model, Msg, Events, never, L> {
   readonly props: Props
   /** The queries' results, as `h.queries` shows them for the Model before this `update`. */
-  readonly queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+  readonly queries: QueryResults<L>
   /** Each owner's current value, by the name `shared` lists it under, as `h.shared` reads it. */
   readonly shared: SharedValues<SR>
   /** Sends `message` to the nearest instance of `owner` above this one, as `Step`'s `send` does. */
@@ -730,7 +730,7 @@ export interface Update<
    * acknowledge with `sent(Component, message)`.
    *
    * Only `$` has it, and not the steps its other methods return, so send
-   * first: `$.send("self", message).set($.model)`.
+   * first: `$.send("self", message).set(next)`.
    */
   send(owner: "self", message: SendMessage<SelfReceives<SR>>): Step<Model, Msg, Events, never, L>
   /**
@@ -745,7 +745,8 @@ export interface Update<
    * type, a slice for one tag is rejected.
    *
    * It is a left fold. Each function gets a `$` holding the Model the
-   * previous one returned, so a Command it runs sees the earlier changes. The Commands, emitted events, `loadMore` and `reset` of every
+   * previous one returned, so a Command it runs sees the earlier
+   * changes. The Commands, emitted events, `loadMore` and `reset` of every
    * function are kept, in call order. `$.props`, `$.queries` and `$.shared` are
    * the same for each, as they were when this `update` started. `R` is the union of
    * the functions' requirements.
@@ -1632,7 +1633,7 @@ export type PartTag<T> = T extends { readonly "~Tag"?: infer Tag extends string 
  * @since 0.1.0
  */
 export type QueryHelpers<L> = [keyof L] extends [never] ? {} : {
-  readonly queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
+  readonly queries: QueryResults<L>
   readonly previous: {
     readonly [K in SingleNames<L>]: L[K] extends QueryOne<infer R> ?
       R extends Query.InfiniteQuery.Any ? Option.Option<Omit<InfiniteData<R>, "more">>
@@ -1913,8 +1914,8 @@ export type QueryServices<L> = ServiceOf<L[keyof L]>
 type ServiceOf<D> = D extends { readonly query: { readonly Identifier: infer Self } } ? Self : never
 
 /**
- * One query as `h.queries` and `$.queries` open it: in a view, and in `update`,
- * `head`, `subscriptions` and a query's `args`.
+ * One query as `h.queries`, `$.queries`, and `queries` in `head`,
+ * `subscriptions` and a query's `args` open it.
  *
  * **Details**
  *
@@ -2564,24 +2565,6 @@ export interface ScopedHelpers<Model, Props, Msg, L, H> {
 }
 
 /**
- * What a scope's predicate is asked with: the current Model, props and query
- * results of the component whose view wrote the scope, and the key of the
- * child it is asked about.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Alive<out Model, out Props, out Queries> {
-  readonly model: Model
-  readonly key: string
-  readonly props: Props
-  readonly queries: Queries
-}
-
-type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
-
-/**
  * What `subscriptions`, `head` and a query's `args` are asked with: the
  * current Model, props and query results of the instance. A query's `args`
  * gets the results of the other queries.
@@ -2595,6 +2578,21 @@ export interface Current<out Model, out Props, out Queries> {
   readonly props: Props
   readonly queries: Queries
 }
+
+/**
+ * What a scope's predicate is asked with: the current Model, props and query
+ * results of the component whose view wrote the scope, and the key of the
+ * child it is asked about.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Alive<out Model, out Props, out Queries> extends Current<Model, Props, Queries> {
+  readonly key: string
+}
+
+type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
 
 /**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
@@ -2613,36 +2611,36 @@ export interface Current<out Model, out Props, out Queries> {
  * steps.
  *
  * `init` and `update` get `$` first, a step holding the current Model and
- * props, and `update` gets the message after it: `($, message) =>`, with the
- * Model read from `$.model`. `view` gets `h` first, bound to the component's
- * message type and carrying the props, with the registered vocabulary's
- * element names mixed in, and the Model after it: `(h, model) =>`. A view
- * that reads only props takes `h` alone. The whole
- * return type of `init`, `update` and `view` is inferred and `R` is read off
- * it, so `R` covers every branch, including conditional views. Framework
- * services such as `Scope` are never part of `R`.
+ * props, and `update` the message after it. `view` gets `h` first, bound to
+ * the component's message type and carrying the props, with the registered
+ * vocabulary's element names mixed in, and the Model after it. A view that
+ * reads only props takes `h` alone. The whole return type of `init`, `update`
+ * and `view` is inferred and `R` is read off it, so `R` covers every branch,
+ * including conditional views. Framework services such as `Scope` are never
+ * part of `R`.
  *
  * The component keeps what `define` returned as its `definition`, so the
  * `name` option is read back as `Component.definition.name`. Paths, messages
  * and the message log use it. A component is a function, so its own `name`
  * is the function's and doesn't carry it.
  *
- * `props` and `events` are optional. `subscriptions` gets `$`, holding the
- * Model, the props and the queries' results, and returns keyed Streams run
- * while their key is listed, and falsy entries are skipped. Two entries with
- * one key fail the instance. `elements` overrides the registered vocabulary
- * for this component.
+ * `props` and `events` are optional. `subscriptions`, `head` and a query's
+ * `args` each get one object: `{ model, props, queries }`. `subscriptions`
+ * returns keyed Streams run while their key is listed, and falsy entries are
+ * skipped. Two entries with one key fail the instance. `elements` overrides
+ * the registered vocabulary for this component.
  *
  * `queries` declares the queries the component shows, by name. Each entry is
  * `{ query: Q, args }` for one query, a list of pages when `Q` is a
  * `Query.InfiniteService`, or `{ queryMany: Q, args }` for one query at many
- * args. `args` gets `$`, holding the Model, the props and the other queries'
- * results as `$.model`, `$.props` and `$.queries`, and returns the query's args, `undefined` to disable it, or for
+ * args. `args` gets the Model, the props and the other queries' results,
+ * and returns the query's args, `undefined` to disable it, or for
  * `queryMany` an array of args. The runtime watches each query at those args
  * and keeps what it last returned as the query's result, beside the Model:
  * the Model plus the results is an instance's state. A result that changes
- * re-renders the instance. `h.queries`, and `$.queries` in `update`, `head`
- * and `subscriptions`, open the results, by query name. Each query is added to `R`.
+ * re-renders the instance. `h.queries`, `$.queries` in `update`, and
+ * `queries` in `head` and `subscriptions` open the results, by
+ * query name. Each query is added to `R`.
  *
  * An entry's `debounce` delays a fetch for changed args by a
  * `Duration.Input` on the Clock. Only a fetch waits: the first args at
@@ -2660,8 +2658,8 @@ export interface Current<out Model, out Props, out Queries> {
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
- * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of `$`,
- * holding the Model, the props and the queries' results, like a view. On every flush that
+ * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
+ * Model, the props and the queries' results, like a view. On every flush that
  * changed a view, the runtime folds the head of the placed tree, a child's
  * `fallback` content included, with the root vocabulary's merge (see
  * `Head`). A `Head.reduce` or `HtmlHead.reduce` entry maps the folded
@@ -2781,7 +2779,7 @@ export interface Current<out Model, out Props, out Queries> {
  * **Example** (A note page whose update is split into slices)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema, UiStruct } from "@effect/ui"
+ * import { Component, UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
  *
  * const NotePageMessage = UiSchema.TaggedEnum({ UpdatedBody: { body: Schema.String }, ClickedSave: {} })
@@ -2799,7 +2797,7 @@ export interface Current<out Model, out Props, out Queries> {
  *
  * // `msg` is the UpdatedBody message.
  * const handleUpdatedBody = NotePageDef.update("UpdatedBody", ($, msg) =>
- *   $.combine(($) => UiStruct.evolve($.model, { body: msg.body }), touch))
+ *   $.combine(($) => $.evolve({ body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))
@@ -3046,7 +3044,7 @@ export const define = <
       ? shares.collects
       : undefined,
     restore: options.restore,
-    // A slice is the function given, with `$` bound to the Model and message it's called with.
+    // A slice is the function given, with `$` bound to the message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
       return ($: Update<any, any, any, any>, msg: unknown) =>

@@ -170,8 +170,8 @@ const makeApp = (options?: {
     update: ($, message) =>
       ToolsMessage.match(message, {
         Get: ({ id }) =>
-          $.set($.model).run(Load.make({ id }).pipe(Command.match({ onSuccess: got, onFailure: () => got("failed") }))),
-        Prefetch: ({ id }) => $.set($.model).run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
+          $.run(Load.make({ id }).pipe(Command.match({ onSuccess: got, onFailure: () => got("failed") }))),
+        Prefetch: ({ id }) => $.run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
         Got: ({ name }) => name
       }),
     view: (h, model) => h.el("p", model)
@@ -754,7 +754,7 @@ describe("Query results", () => {
       }
     }).make({
       init: () => ({}),
-      update: ($) => $.set($.model).emit($.props.id),
+      update: ($) => $.emit($.props.id),
       view: (h) => h.el("p", "emitter")
     })
     const ParentMessage = UiSchema.TaggedEnum({ Switch: {}, Noted: { label: Schema.String } })
@@ -878,7 +878,7 @@ describe("Query results", () => {
       init: () => ({ done: false }),
       update: ($, message) =>
         PollMessage.match(message, {
-          Go: () => $.set($.model).run(Go.make()),
+          Go: () => $.run(Go.make()),
           Done: () => ({ ...$.model, done: true })
         }),
       view: (h, model) => h.el("p", model.done ? "done" : "not yet")
@@ -942,7 +942,7 @@ describe("Query results", () => {
         Message.match(message, {
           UserChanged: () => {
             seen.push("update UserChanged")
-            return $.set($.model).run(Note.make({ text: "fold" }))
+            return $.run(Note.make({ text: "fold" }))
           },
           Noted: () => $.model
         }),
@@ -1294,7 +1294,7 @@ describe("Query results", () => {
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({}),
-      update: ($) => $.set($.model).run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))),
+      update: ($) => $.run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))),
       view: (h) => h.el("p", "breaker")
     })
     return run(

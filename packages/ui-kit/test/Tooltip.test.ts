@@ -124,8 +124,7 @@ const Pages = Component.define({
   init: ($) => $.props.route,
   update: {
     ChangedRoute: (_, { route }) => route,
-    Left: ($) =>
-      $.set($.model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PagesMessage.Navigated()))),
+    Left: ($) => $.run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PagesMessage.Navigated()))),
     Navigated: ($) => $.model
   },
   subscriptions: (

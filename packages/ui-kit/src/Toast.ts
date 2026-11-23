@@ -119,7 +119,7 @@
  *   init: () => null,
  *   update: {
  *     ClickedSave: ($) =>
- *       $.set($.model).send(ToastProvider, {
+ *       $.send(ToastProvider, {
  *         _tag: "RequestedAdd",
  *         toast: { id: "saved", title: "Saved", type: "success" }
  *       })
@@ -568,14 +568,14 @@ const replace = (model: ToastProviderModel, entry: Entry) =>
   model.toasts.map((toast) => (toast.id === entry.id ? entry : toast))
 
 // Start a toast's timer, unless the timers are paused, or stop it.
-const timer = (model: ToastProviderModel, $: ProviderUpdate, entry: Entry) =>
-  timed(entry, $.props) ? (pausedBy(model) ? [] : [wait(entry, $.props)]) : [stop(entry.id)]
+const timer = ($: ProviderUpdate, entry: Entry) =>
+  timed(entry, $.props) ? (pausedBy($.model) ? [] : [wait(entry, $.props)]) : [stop(entry.id)]
 
 // Move to `next`, pausing every timer or starting them again when the pause
 // changes.
-const settle = (model: ToastProviderModel, $: ProviderUpdate, next: ToastProviderModel) => {
+const settle = ($: ProviderUpdate, next: ToastProviderModel) => {
   const step = $.set(next)
-  const paused = pausedBy(model)
+  const paused = pausedBy($.model)
   if (!paused && pausedBy(next)) return step.run(Command.interrupt(WaitBeforeDismissal))
   if (paused && !pausedBy(next)) {
     return step.run(...next.toasts.filter((toast) => timed(toast, $.props)).map((toast) => wait(toast, $.props)))
@@ -585,18 +585,18 @@ const settle = (model: ToastProviderModel, $: ProviderUpdate, next: ToastProvide
 
 // A toast that shows starts closing. Once none shows, the pointer is taken
 // to have left, since a viewport that empties sends no mouseleave.
-const close = (model: ToastProviderModel, $: ProviderUpdate, id: string, user: boolean) => {
-  const entry = shown(model, id)
-  if (entry === undefined) return model
-  const toasts = replace(model, UiStruct.evolve(entry, { transition: "ending", height: 0 }))
+const close = ($: ProviderUpdate, id: string, user: boolean) => {
+  const entry = shown($.model, id)
+  if (entry === undefined) return $.model
+  const toasts = replace($.model, UiStruct.evolve(entry, { transition: "ending", height: 0 }))
   const showing = toasts.some((toast) => toast.transition !== "ending")
-  const step = settle(model, $, UiStruct.evolve(model, { toasts, hovering: showing && model.hovering })).run(stop(id))
+  const step = settle($, UiStruct.evolve($.model, { toasts, hovering: showing && $.model.hovering })).run(stop(id))
   return user ? step.emit(ToastProviderEvents.Dismissed({ id })) : step
 }
 
 // The user closed the toast, with the close part or Escape, or its timeout
 // ran out.
-const dismiss = ($: ProviderUpdate, { id }: { readonly id: string }) => close($.model, $, id, true)
+const dismiss = ($: ProviderUpdate, { id }: { readonly id: string }) => close($, id, true)
 
 // A part that takes the toast it draws with the builder, as `{ element, toast }`.
 const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem], R>) =>
@@ -667,7 +667,7 @@ export const ToastProvider = Component.define({
       const toasts = existing === undefined
         ? [entry, ...$.model.toasts.filter((other) => other.id !== toast.id)]
         : replace($.model, entry)
-      return $.evolve({ toasts }).run(...timer($.model, $, entry))
+      return $.evolve({ toasts }).run(...timer($, entry))
     },
     // A running timer goes on, unless the update sets a timeout. One starts
     // when the update makes the toast timed, as when a loading toast gets
@@ -678,18 +678,18 @@ export const ToastProvider = Component.define({
       const next: Entry = { ...entry, ...changes }
       const step = $.evolve({ toasts: replace($.model, next) })
       const running = timed(entry, $.props) && timed(next, $.props) && changes.timeout === undefined
-      return running ? step : step.run(...timer($.model, $, next))
+      return running ? step : step.run(...timer($, next))
     },
-    RequestedClose: ($, { id }) => close($.model, $, id, false),
+    RequestedClose: ($, { id }) => close($, id, false),
     ClickedClose: dismiss,
     PressedEscape: dismiss,
     CompletedWaitBeforeDismissal: ($, message) => (pausedBy($.model) ? $.model : dismiss($, message)),
-    EnteredViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { hovering: true })),
-    LeftViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { hovering: false })),
-    FocusedViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { focused: true })),
-    BlurredViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { focused: false })),
-    FocusedWindow: ($) => settle($.model, $, UiStruct.evolve($.model, { windowFocused: true })),
-    BlurredWindow: ($) => settle($.model, $, UiStruct.evolve($.model, { windowFocused: false })),
+    EnteredViewport: ($) => settle($, UiStruct.evolve($.model, { hovering: true })),
+    LeftViewport: ($) => settle($, UiStruct.evolve($.model, { hovering: false })),
+    FocusedViewport: ($) => settle($, UiStruct.evolve($.model, { focused: true })),
+    BlurredViewport: ($) => settle($, UiStruct.evolve($.model, { focused: false })),
+    FocusedWindow: ($) => settle($, UiStruct.evolve($.model, { windowFocused: true })),
+    BlurredWindow: ($) => settle($, UiStruct.evolve($.model, { windowFocused: false })),
     FocusedClose: ($, { id }) => $.evolve({ closeFocused: id }),
     BlurredClose: ($, { id }) => ($.model.closeFocused === id ? $.evolve({ closeFocused: null }) : $.model),
     // The first measure ends the starting style. A closing toast keeps its

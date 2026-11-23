@@ -56,8 +56,7 @@ const Page = Component.define({
     SetComboboxInput: ($, { value }) => ({ ...$.model, comboboxInput: value }),
     SetSelectValue: ($, { value }) => ({ ...$.model, selectValue: value }),
     SetSliderValue: ($, { value }) => ({ ...$.model, sliderValue: value }),
-    Left: ($) =>
-      $.set($.model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
+    Left: ($) => $.run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
     Navigated: ($) => $.model
   },
   subscriptions: ({ model }) => [

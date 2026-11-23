@@ -1852,7 +1852,7 @@ describe("scoped children written into closed slots", () => {
         events: Schema.Number
       }).make({
         init: () => null,
-        update: ($) => $.set($.model).emit($.props.n),
+        update: ($) => $.emit($.props.n),
         view: (h) => h.el("button").on("click", LabelMsg.Tell()).children("n:" + h.props.n)
       })
       const PageMsg = UiSchema.TaggedEnum({ Inc: {}, Told: { text: Schema.String } })

@@ -564,11 +564,11 @@ const dismiss = (
     )
     : model
 
-const toggle = (model: SelectModel, $: SelectUpdate, method: SelectInteraction) =>
+const toggle = ($: SelectUpdate, method: SelectInteraction) =>
   $.props.disabled === true
-    ? model
+    ? $.model
     : $.props.open
-    ? dismiss(model, $, "trigger-press", method)
+    ? dismiss($.model, $, "trigger-press", method)
     : open($, "trigger-press", method)
 
 const pick = (model: SelectModel, $: SelectUpdate, value: string, method: SelectInteraction) => {
@@ -592,12 +592,12 @@ const highlight = (model: SelectModel, props: SelectProps, index: number): Selec
 const hover = (model: SelectModel, active: string | null): SelectModel =>
   model.active === active ? model : UiStruct.evolve(model, { active, activeByKey: false })
 
-const typeKey = (model: SelectModel, $: SelectUpdate, key: string) => {
+const typeKey = ($: SelectUpdate, key: string) => {
   const props = $.props
-  const { index, next } = typeahead(model, key, props.items, startOf(model, props))
+  const { index, next } = typeahead($.model, key, props.items, startOf($.model, props))
   const item = props.items[index]
   const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.set(model).evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
+  const typed = $.evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
   return item === undefined || props.open || valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
@@ -1165,9 +1165,9 @@ export const Select = Component.define({
     releaseUnselected: false
   }),
   update: {
-    PressedTrigger: ($, { pointerType }) => toggle($.model, $, methodOf(pointerType)),
+    PressedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
     ReleasedTrigger: ($) => $.evolve({ pressing: false }),
-    ClickedTrigger: ($, { pointerType }) => toggle($.model, $, methodOf(pointerType)),
+    ClickedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
     PressedTriggerKey: ($, { key }) => {
       const props = $.props
       if (props.disabled === true) return $.model
@@ -1175,7 +1175,7 @@ export const Select = Component.define({
         return props.open ? $.model : open($, "list-navigation", "keyboard", key)
       }
       if (!props.open && (props.readOnly === true || props.multiple === true)) return $.model
-      return typeKey($.model, $, key)
+      return typeKey($, key)
     },
     ClickedLabel: focusTrigger,
     FocusedInput: focusTrigger,
@@ -1208,9 +1208,9 @@ export const Select = Component.define({
         case "Tab":
           return dismiss($.model, $, "focus-out", "keyboard")
         case " ":
-          return typing($.model) ? typeKey($.model, $, key) : $.evolve({ spaceDown: true })
+          return typing($.model) ? typeKey($, key) : $.evolve({ spaceDown: true })
         default:
-          return typeKey($.model, $, key)
+          return typeKey($, key)
       }
     },
     ReleasedSpace: ($) => {

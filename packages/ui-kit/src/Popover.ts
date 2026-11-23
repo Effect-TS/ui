@@ -549,9 +549,9 @@ const dismiss = ($: PopoverUpdate, reason: PopoverDismissReason) =>
     PopoverEvents.RequestedClose({ reason })
   )
 
-const pressed = (model: PopoverModel, $: PopoverUpdate) =>
-  model.patient
-    ? openFor(model, $, activeOf(model, $.props), "trigger-press", model.method)
+const pressed = ($: PopoverUpdate) =>
+  $.model.patient
+    ? openFor($.model, $, activeOf($.model, $.props), "trigger-press", $.model.method)
     : dismiss($, "trigger-press")
 
 const left = (next: PopoverModel, $: PopoverUpdate) => {
@@ -804,7 +804,7 @@ export const Popover = Component.define({
   update: {
     RequestedOpenDialog: ($, { triggerId }) => openFor($.model, $, triggerId, "trigger-press"),
     RequestedCloseDialog: ($, { reason }) => {
-      if (reason === "trigger-press") return pressed($.model, $)
+      if (reason === "trigger-press") return pressed($)
       if (reason === "focus-out" && hoverOpened($.model, $.props.open)) return $.model
       return dismiss($, reason)
     },
@@ -842,7 +842,7 @@ export const Popover = Component.define({
     PressedDetachedTrigger: ($, { pointerType, triggerId }) => {
       const active = activeOf($.model, $.props)
       return $.props.open && (active === null || active === triggerId)
-        ? pressed($.model, $)
+        ? pressed($)
         : openFor($.model, $, triggerId, "trigger-press", methodOf(pointerType))
     },
     EnteredPositioner: ($) => $.evolve({ onPositioner: true }).run(Command.interrupt(WaitBeforeClosing)),

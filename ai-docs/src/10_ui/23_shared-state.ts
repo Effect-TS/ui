@@ -80,7 +80,7 @@ export const Tooltip = Component.define({
   update: ($, message) =>
     message._tag === "BlurredTooltip" && $.shared.provider.open !== message.id
       ? $.model
-      : $.set($.model).send(TooltipProvider, message),
+      : $.send(TooltipProvider, message),
   view: (h) => {
     const id = h.id("tip")
     return h.span(

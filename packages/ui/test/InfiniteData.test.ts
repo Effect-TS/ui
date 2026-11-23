@@ -431,7 +431,7 @@ describe("Infinite queries", () => {
         ShellMessage.match(message, {
           ChangedRoute: ({ route }) => route,
           Go: () =>
-            $.set($.model).run(
+            $.run(
               Router.push(ShellRoute, ShellRoute.Home()).pipe(
                 Command.map(() => ShellMessage.Navigated())
               )

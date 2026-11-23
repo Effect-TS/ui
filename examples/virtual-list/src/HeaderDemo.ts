@@ -14,8 +14,8 @@ export const HeaderDemo = Component.define({
 }).make({
   init: () => ({ tall: false, scroller: false }),
   update: {
-    ToggledHeader: ($) => ({ ...$.model, tall: !$.model.tall }),
-    ToggledScroller: ($) => ({ ...$.model, scroller: !$.model.scroller })
+    ToggledHeader: ($) => $.evolve({ tall: (tall) => !tall }),
+    ToggledScroller: ($) => $.evolve({ scroller: (scroller) => !scroller })
   },
   view: (h, model) =>
     h.div.children(

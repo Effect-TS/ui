@@ -32,7 +32,7 @@ const WrappedDialog = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: ($, event) => $.set($.model).emit(event),
+  update: ($, event) => $.emit(event),
   parts: (p) => p.child(Dialog, { props: p.props, onEmit: (event) => event, parts: (dialog) => dialog })
 })
 

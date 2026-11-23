@@ -457,10 +457,10 @@ const changed = (s: Settings, values: ReadonlyArray<number>): Value | undefined 
 // -- update ------------------------------------------------------------------
 
 // A key or the input set a thumb: report the new value and commit it at once.
-const setThumb = (model: SliderModel, $: SliderUpdate, s: Settings, index: number, next: number) => {
-  if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return model
+const setThumb = ($: SliderUpdate, s: Settings, index: number, next: number) => {
+  if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return $.model
   const value = changed(s, withThumb(s, index, next))
-  return value === undefined ? model : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
+  return value === undefined ? $.model : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
 }
 
 const sliderKeys = new Set([
@@ -750,10 +750,10 @@ export const Slider = Component.define({
     PressedKey: ($, { index, key, shift }) => {
       const s = settingsOf($.props)
       const next = keyed(s, index, key, shift)
-      return next === undefined ? $.model : setThumb($.model, $, s, index, next)
+      return next === undefined ? $.model : setThumb($, s, index, next)
     },
     UpdatedThumb: ($, { index, value }) =>
-      value.trim() === "" ? $.model : setThumb($.model, $, settingsOf($.props), index, Number(value)),
+      value.trim() === "" ? $.model : setThumb($, settingsOf($.props), index, Number(value)),
     FocusedThumb: ($, { index }) => $.evolve({ active: index }),
     BlurredThumb: ($, { index }) => $.model.active === index ? $.evolve({ active: -1 }) : $.model
   },

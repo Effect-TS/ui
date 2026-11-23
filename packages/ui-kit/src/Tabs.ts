@@ -375,10 +375,10 @@ const stepOf = (key: string, orientation: TabsOrientation, rtl: boolean): Step |
   return undefined
 }
 
-const navigate = (model: TabsModel, $: TabsUpdate, value: string, to: Step) => {
+const navigate = ($: TabsUpdate, value: string, to: Step) => {
   const tabs = $.props.tabs
   const from = indexOf(tabs, value)
-  if (from < 0) return model
+  if (from < 0) return $.model
   const last = tabs.length - 1
   const target = to === "first"
     ? 0
@@ -386,8 +386,8 @@ const navigate = (model: TabsModel, $: TabsUpdate, value: string, to: Step) => {
     ? last
     : stepped(from, last, to === "next" ? 1 : -1, $.props.loopFocus !== false ? "wrap" : "none")
   const tab = tabs[target]
-  if (tab === undefined || target === from) return model
-  return $.set(model).evolve({ highlighted: tab.value }).run(
+  if (tab === undefined || target === from) return $.model
+  return $.evolve({ highlighted: tab.value }).run(
     DomCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
   )
 }
@@ -749,7 +749,7 @@ export const Tabs = Component.define({
     BlurredTab: ($) => $.evolve({ focused: false }),
     PressedTab: ($, { button, value }) => $.evolve({ secondary: button === 0 ? null : value }),
     ReleasedPointer: ($) => $.evolve({ secondary: null }),
-    PressedKey: ($, { to, value }) => navigate($.model, $, value, to),
+    PressedKey: ($, { to, value }) => navigate($, value, to),
     ChangedValue: ($) => phaseOf($.model, $.props, rtlOf($)),
     RenderedFirstFrame: ($, { value }) => {
       const next = phaseOf($.model, $.props, rtlOf($))

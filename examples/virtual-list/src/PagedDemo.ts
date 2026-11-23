@@ -15,7 +15,7 @@ export const PagedDemo = Component.define({
   elements: Html
 }).make({
   init: () => ({ total: "known" as const }),
-  update: { PickedTotal: ($, { total }) => ({ ...$.model, total }) },
+  update: { PickedTotal: ($, { total }) => $.evolve({ total }) },
   view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(

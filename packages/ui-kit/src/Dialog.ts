@@ -1113,7 +1113,7 @@ export const Dialog = Component.define({
     RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.set($.model).emit(DialogEvents.Settled({ open }))
+      if (open) return $.emit(DialogEvents.Settled({ open }))
       return $.model.mounted && $.props.holdExit !== true
         ? $.evolve({ mounted: false, started: false, openMethod: null }).emit(DialogEvents.Settled({ open }))
         : $.model

@@ -47,8 +47,8 @@ const NoteDef = Component.define({
   queries: { user: { query: GetUser, args: ({ props }) => ({ id: props.id }) } }
 })
 
-const save = NoteDef.update(($) => $.set($.model).run(Save.make()))
-const audit = NoteDef.update(($) => $.set($.model).run(Audit.make()))
+const save = NoteDef.update(($) => $.run(Save.make()))
+const audit = NoteDef.update(($) => $.run(Audit.make()))
 const touch = NoteDef.update(($) => ({ ...$.model, edits: $.model.edits + 1 }))
 
 const shared = { Saved: touch, Deleted: touch }
@@ -111,7 +111,7 @@ describe("Component.define", () => {
       >()
       return $.combine(validate, touch, save, ($, msg) => {
         expect(msg).type.toBe<{ readonly _tag: "SaveClicked" }>()
-        return $.set($.model).run(Audit.make())
+        return $.run(Audit.make())
       })
     })
     const Note = NoteDef.make({
@@ -170,7 +170,7 @@ describe("Component.define", () => {
   it("infers headless requirements from an inline update handler", () => {
     const Note = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
-      update: { Edited: touch, SaveClicked: ($) => $.set($.model).run(Save.make()), Saved: shared.Saved },
+      update: { Edited: touch, SaveClicked: ($) => $.run(Save.make()), Saved: shared.Saved },
       parts: (_, model) => ({ body: model.body })
     })
     expect<Component.Headless.Requirements<typeof Note>>().type.toBe<GetUser | Save>()

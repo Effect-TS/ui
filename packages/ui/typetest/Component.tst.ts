@@ -95,7 +95,7 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: ($) => $.set($.model).run(CA.make()),
+        update: ($) => $.run(CA.make()),
         view: (h) => h.el("div")
       })
       const ChildB = Component.define({
@@ -105,7 +105,7 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: ($) => $.set($.model).run(CB.make()),
+        update: ($) => $.run(CB.make()),
         view: (h) => h.el("div")
       })
       const Parent = Component.define({

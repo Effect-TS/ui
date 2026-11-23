@@ -523,12 +523,12 @@ const openFor = (
     PreviewCardEvents.RequestedOpen({ triggerId, reason })
   )
 
-const dismiss = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
+const dismiss = ($: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
   $.props.open
-    ? $.set(model).evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
+    ? $.evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
       PreviewCardEvents.RequestedClose({ reason })
     )
-    : model
+    : $.model
 
 const cancelled = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardOpenReason) =>
   !$.props.open && model.pending === reason
@@ -1015,7 +1015,7 @@ export const PreviewCard = Component.define({
       cancelled(UiStruct.evolve($.model, { focused: false, focusTrigger: null }), $, "trigger-focus"),
     FocusedPopup: ($) => $.evolve({ focusInside: true }),
     BlurredPopup: ($) => $.evolve({ focusInside: false }),
-    FocusedOutside: ($) => dismiss($.model, $, "trigger-focus"),
+    FocusedOutside: ($) => dismiss($, "trigger-focus"),
     LeftHoverArea: ($) => {
       if ($.model.away) return $.model
       const next = UiStruct.evolve($.model, { away: true })
@@ -1024,9 +1024,9 @@ export const PreviewCard = Component.define({
         : next
     },
     ReturnedToHoverArea: ($) => $.evolve({ away: false }).run(Command.interrupt(WaitBeforeClosing)),
-    PressedOutside: ($) => dismiss($.model, $, "outside-press"),
-    PressedEscape: ($) => dismiss($.model, $, "escape-key"),
-    RemovedTrigger: ($) => dismiss($.model, $, "trigger-removed"),
+    PressedOutside: ($) => dismiss($, "outside-press"),
+    PressedEscape: ($) => dismiss($, "escape-key"),
+    RemovedTrigger: ($) => dismiss($, "trigger-removed"),
     CompletedWaitBeforeOpening: ($) => {
       if ($.props.open || $.model.pending === null) return $.model
       const ready = $.model.pending === "trigger-hover"
@@ -1036,8 +1036,7 @@ export const PreviewCard = Component.define({
         ? openFor($.model, $, $.model.pendingTrigger, $.model.pending)
         : $.evolve({ pending: null, pendingTrigger: null })
     },
-    CompletedWaitBeforeClosing: ($) =>
-      !hovering($.model) && !held($.model) ? dismiss($.model, $, "trigger-hover") : $.model,
+    CompletedWaitBeforeClosing: ($) => !hovering($.model) && !held($.model) ? dismiss($, "trigger-hover") : $.model,
     ShowedPortal: ($) =>
       $.props.open
         ? $.evolve({
@@ -1052,7 +1051,7 @@ export const PreviewCard = Component.define({
     RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.set($.model).emit(PreviewCardEvents.Settled({ open }))
+      if (open) return $.emit(PreviewCardEvents.Settled({ open }))
       return $.model.mounted && $.props.holdExit !== true
         ? $.evolve({ mounted: false, started: false, transition: null }).emit(
           PreviewCardEvents.Settled({ open })

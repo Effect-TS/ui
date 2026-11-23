@@ -1566,9 +1566,9 @@ export const Drawer = Component.define({
     ChangedNested: ($, { count, height, swiping }) =>
       $.evolve({ nestedOpen: count, nestedSwiping: swiping, nestedHeight: height }),
     RequestedOpenDialog: ($, { triggerId }) =>
-      $.set($.model).emit(DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })),
-    RequestedCloseDialog: ($, { reason }) => $.set($.model).emit(DrawerEvents.RequestedClose({ reason })),
-    SettledDialog: ($, { open }) => $.set($.model).emit(DrawerEvents.Settled({ open }))
+      $.emit(DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })),
+    RequestedCloseDialog: ($, { reason }) => $.emit(DrawerEvents.RequestedClose({ reason })),
+    SettledDialog: ($, { open }) => $.emit(DrawerEvents.Settled({ open }))
   },
   parts: (p, model) => {
     const props = p.props

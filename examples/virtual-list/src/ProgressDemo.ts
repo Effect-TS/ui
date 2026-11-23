@@ -38,7 +38,7 @@ export const ProgressDemo = Component.define({
     stops: 0
   }),
   update: {
-    ToggledTracking: ($) => ({ ...$.model, track: !$.model.track, scrolled: 0, moves: 0, stops: 0 }),
+    ToggledTracking: ($) => $.evolve({ track: (track) => !track, scrolled: 0, moves: 0, stops: 0 }),
     Scrolled: ($, { _tag, ...at }) => ({
       ...$.model,
       ...at,

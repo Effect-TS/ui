@@ -34,7 +34,7 @@ const Tip = Component.define({
   shared: { provider: TipsProvider }
 }).make({
   init: () => null,
-  update: ($, message) => $.set($.model).send(TipsProvider, message),
+  update: ($, message) => $.send(TipsProvider, message),
   view: (h) =>
     h.el("button").on("click", TipMessage.Enter({ id: h.props.id })).children(
       `${h.props.id}:${h.shared.provider.open === h.props.id ? "open" : "closed"}${h.shared.provider.label}`
@@ -131,7 +131,7 @@ describe("shared state", () => {
         })
       const Ticker = Component.define({ name: "Ticker", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
-        update: ($, message) => $.set($.model).send(ClockProvider, message),
+        update: ($, message) => $.send(ClockProvider, message),
         view: (h) => h.el("button").on("click", Tick.Tick()).children("tick")
       })
       const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: Tick }).make({
@@ -339,7 +339,7 @@ const Bumper = Component.define({
 }).make({
   init: () => null,
   update: ($, { times }) => {
-    let next = $.set($.model).send(Group, { _tag: "Bumped" })
+    let next = $.send(Group, { _tag: "Bumped" })
     for (let i = 1; i < times; i++) next = next.send(Group, { _tag: "Bumped" })
     return next
   },
@@ -372,7 +372,7 @@ describe("optional owners, reports and onChange", () => {
         shared: { provider: { owner: TipsProvider, optional: true } }
       }).make({
         init: () => null,
-        update: ($, message) => $.set($.model).send(TipsProvider, message),
+        update: ($, message) => $.send(TipsProvider, message),
         view: (h) =>
           h.el("button").on("click", TipMessage.Enter({ id: "a" })).children(
             h.shared.provider === undefined ? "alone" : "grouped"
@@ -549,7 +549,7 @@ describe("shared state in update", () => {
     shared: { clock: Clock }
   }).make({
     init: () => null,
-    update: ($, message) => $.set($.model).send(Clock, message),
+    update: ($, message) => $.send(Clock, message),
     view: (h) => h.el("button").on("click", ClockMessage.Ticked()).children("tick")
   })
   const Face = Component.define({ name: "Face", scoped: false, model: Schema.Null, message: Schema.Never }).make({
@@ -605,7 +605,7 @@ describe("onChange rounds and declarations", () => {
         init: () => null,
         update: ($, message) =>
           message._tag === "ChangedGroup" && message.bumps === 1
-            ? $.set($.model).send(Group, { _tag: "Bumped" })
+            ? $.send(Group, { _tag: "Bumped" })
             : $.model,
         view: (h) => h.text("")
       })

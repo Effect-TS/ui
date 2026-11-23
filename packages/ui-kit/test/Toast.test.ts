@@ -32,9 +32,8 @@ const Poster = Component.define({
             type: $.model === 0 ? "loading" : "success"
           }
         }),
-      CompletedUpload: ($) =>
-        $.set($.model).send(ToastProvider, { _tag: "RequestedUpdate", id: "t1", type: "success" }),
-      ClickedDrop: ($) => $.set($.model).send(ToastProvider, { _tag: "RequestedClose", id: "t" + $.model })
+      CompletedUpload: ($) => $.send(ToastProvider, { _tag: "RequestedUpdate", id: "t1", type: "success" }),
+      ClickedDrop: ($) => $.send(ToastProvider, { _tag: "RequestedClose", id: "t" + $.model })
     },
     view: (h) =>
       h.div(

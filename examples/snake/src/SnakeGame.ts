@@ -96,13 +96,13 @@ export const SnakeGame = Component.define({
     PressedKey: ($, { key }) => {
       const direction = MOVE_DIRECTIONS.get(key)
       if (direction !== undefined) {
-        return $.model.gameState === "Playing" ? { ...$.model, nextDirection: direction } : $.model
+        return $.model.gameState === "Playing" ? $.evolve({ nextDirection: direction }) : $.model
       }
       if (key === " ") {
-        return { ...$.model, gameState: NEXT_ON_SPACE[$.model.gameState] }
+        return $.evolve({ gameState: (gameState) => NEXT_ON_SPACE[gameState] })
       }
       if (key === "r") {
-        return $.set({ ...$.model, ...NEW_GAME }).run(generateApplePosition(NEW_GAME.snake))
+        return $.evolve(NEW_GAME).run(generateApplePosition(NEW_GAME.snake))
       }
       return $.model
     },
@@ -117,7 +117,7 @@ export const SnakeGame = Component.define({
       const snake = willEatApple ? Snake.grow($.model.snake, direction) : Snake.move($.model.snake, direction)
 
       if (Snake.hasCollision(snake)) {
-        return { ...$.model, gameState: "GameOver", highScore: Math.max($.model.points, $.model.highScore) }
+        return $.evolve({ gameState: "GameOver", highScore: Math.max($.model.points, $.model.highScore) })
       }
 
       const next: SnakeGameModel = {
@@ -129,7 +129,7 @@ export const SnakeGame = Component.define({
       return willEatApple ? $.set(next).run(generateApplePosition(snake)) : next
     },
 
-    CompletedGenerateApplePosition: ($, { position }) => ({ ...$.model, apple: position })
+    CompletedGenerateApplePosition: ($, { position }) => $.evolve({ apple: position })
   },
   subscriptions: ({ model }) => [
     model.gameState === "Playing" &&

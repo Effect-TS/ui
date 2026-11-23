@@ -107,7 +107,7 @@ const save = NoteEditorDef.update("RequestedSave", ($) =>
 // the Model, like any other.
 const clickedDiscard = NoteEditorDef.update(
   "ClickedDiscard",
-  ($) => $.combine(closeActions, ($) => UiStruct.evolve($.model, { confirming: true }))
+  ($) => $.combine(closeActions, ($) => $.evolve({ confirming: true }))
 )
 
 // A fragment takes `h` first and any other arguments after it, and is

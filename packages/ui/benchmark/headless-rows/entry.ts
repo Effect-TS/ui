@@ -166,7 +166,7 @@ const Poker = Component.define({
 })
   .make({
     init: () => null,
-    update: ($, message) => $.set($.model).send(Provider, message),
+    update: ($, message) => $.send(Provider, message),
     view: (h) =>
       h.div(
         h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children("touch"),

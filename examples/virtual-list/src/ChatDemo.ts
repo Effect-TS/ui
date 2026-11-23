@@ -36,10 +36,10 @@ const ChatDemoNoDeps = Component.define({
     ApproachedStart: ($) =>
       $.model.loading || $.model.start === 0
         ? $.model
-        : $.set({ ...$.model, loading: true }).run(LoadOlder.make({ before: $.model.start })),
+        : $.evolve({ loading: true }).run(LoadOlder.make({ before: $.model.start })),
     LoadedOlder: ($, { before }) =>
-      before === $.model.start ? { ...$.model, start: Math.max(0, before - page), loading: false } : $.model,
-    ClickedSend: ($) => ({ ...$.model, sent: $.model.sent + 1 })
+      before === $.model.start ? $.evolve({ start: Math.max(0, before - page), loading: false }) : $.model,
+    ClickedSend: ($) => $.evolve({ sent: (sent) => sent + 1 })
   },
   view: (h, model) => {
     const ids = Array.from({ length: total - model.start + model.sent }, (_, i) => "m" + (model.start + i))

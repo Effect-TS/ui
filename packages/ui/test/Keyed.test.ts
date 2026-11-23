@@ -123,7 +123,7 @@ const makeApp = (options?: {
         },
         Rename: ({ id, name }) => {
           order.push(`update ${$.props.tag} Rename`)
-          return $.set($.model).run(
+          return $.run(
             RenameUser.make({ id, name }).pipe(Command.map(() => BoardMessage.Renamed()))
           )
         },
@@ -1184,7 +1184,7 @@ describe("Keyed history restore", () => {
         ShellMessage.match(message, {
           ChangedRoute: ({ route }) => route,
           Go: ({ route }) =>
-            $.set($.model).run(
+            $.run(
               Router.push(ShellRoute, route).pipe(Command.map(() => ShellMessage.Navigated()))
             ),
           Navigated: () => $.model

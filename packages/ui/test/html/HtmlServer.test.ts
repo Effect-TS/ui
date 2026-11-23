@@ -1274,7 +1274,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         }).make({
           init: () => false,
           update: ($, message) =>
-            message._tag === "Look" ? $.set($.model).run(Look.make()) : message._tag === "Move" ? true : $.model,
+            message._tag === "Look" ? $.run(Look.make()) : message._tag === "Move" ? true : $.model,
           view: (h, moved) => {
             const card = Card(h, {
               key: "c",
@@ -2765,7 +2765,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
               Command.map(() => Message.Navigated())
             )
           ),
-        update: ($, message) => message._tag === "Navigated" ? $.set($.model).run(Refresh.make()) : $.model,
+        update: ($, message) => message._tag === "Navigated" ? $.run(Refresh.make()) : $.model,
         view: (h) => h.div(Item(h, { key: "a", props: { id: 1 } }), Slow(h, { key: "s", props: {} }))
       }).pipe(Component.provide(Refresh.layer))
       const { router } = yield* routed("/")

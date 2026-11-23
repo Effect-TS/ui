@@ -379,10 +379,10 @@ const shownBy = (props: TooltipProps): boolean => props.open && props.disabled !
 type TooltipUpdate = Component.Update<typeof TooltipModel.Type, typeof TooltipMessage.Type, TooltipEvents, TooltipProps>
 
 // The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
-const dismiss = (model: typeof TooltipModel.Type, $: TooltipUpdate, instant = model.instant) =>
+const dismiss = ($: TooltipUpdate, instant = $.model.instant) =>
   shownBy($.props)
-    ? $.set(model).evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
-    : model
+    ? $.evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
+    : $.model
 
 // The pointer left the trigger or the positioner: a pending open stops, and
 // an open tooltip closes after `closeDelay` unless keyboard focus holds it.
@@ -623,11 +623,11 @@ export const Tooltip = Component.define({
       const pressed = $.evolve({ pressed: true })
       return $.props.closeOnClick !== false ? pressed.run(Command.interrupt(WaitBeforeOpening)) : pressed
     },
-    ClickedTrigger: ($) => $.props.closeOnClick !== false ? dismiss($.model, $, "dismiss") : $.model,
-    PressedEscape: ($) => dismiss($.model, $, "dismiss"),
+    ClickedTrigger: ($) => $.props.closeOnClick !== false ? dismiss($, "dismiss") : $.model,
+    PressedEscape: ($) => dismiss($, "dismiss"),
     // A press is outside the tooltip when the pointer is on neither the
     // trigger nor the positioner.
-    PressedDocument: ($) => $.model.hovered ? $.model : dismiss($.model, $),
+    PressedDocument: ($) => $.model.hovered ? $.model : dismiss($),
     CompletedWaitBeforeOpening: ($) =>
       $.props.disabled !== true && !$.props.open && $.model.hovered
         ? $.evolve({ instant: null }).emit(requestedOpen)

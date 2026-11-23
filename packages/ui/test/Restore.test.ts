@@ -75,7 +75,7 @@ const makeReader = (name: string, restore: false | undefined) =>
     update: ($, message) =>
       ReaderMessage.match(message, {
         Toggled: () => !$.model,
-        Picked: () => $.set($.model).send(Group, GroupMessage.Picked())
+        Picked: () => $.send(Group, GroupMessage.Picked())
       }),
     view: (h) =>
       h.el(
@@ -115,8 +115,7 @@ const App = Component.define({
   update: ($, message) =>
     AppMessage.match(message, {
       ChangedRoute: (changed) => changed.route,
-      Go: ({ route: next }) =>
-        $.set($.model).run(Router.push(AppRoute, next).pipe(Command.map(() => AppMessage.Navigated()))),
+      Go: ({ route: next }) => $.run(Router.push(AppRoute, next).pipe(Command.map(() => AppMessage.Navigated()))),
       Navigated: () => $.model
     }),
   subscriptions: (

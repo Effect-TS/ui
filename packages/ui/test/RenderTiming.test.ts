@@ -180,14 +180,14 @@ describe("causedBy", () => {
         update: ($, message) => {
           switch (message._tag) {
             case "Start":
-              return $.set($.model).run(
+              return $.run(
                 Load.make().pipe(Command.map((value) => Message.make({ _tag: "Loaded", value }))),
                 Command.asNoop(Hang.make())
               )
             case "Loaded":
               return message.value
             case "Stop":
-              return $.set($.model).run(Command.asNoop(Hang.make()))
+              return $.run(Command.asNoop(Hang.make()))
           }
         },
         view: (h, model) => h.el("p").children(model)

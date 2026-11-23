@@ -1006,19 +1006,18 @@ const opensFor = (model: MenuModel, props: MenuProps, key: string | null, trigge
 }
 
 const enterTrigger = (
-  model: MenuModel,
   $: MenuUpdate,
   message: Extract<MenuMessage, { readonly _tag: "EnteredTrigger" }>
 ) => {
   const props = $.props
   const bar = barOf($)
   if (bar !== undefined) {
-    return (props.open && opensFor(model, props, message.key, message.triggerId)) || disabledOf($) ||
+    return (props.open && opensFor($.model, props, message.key, message.triggerId)) || disabledOf($) ||
         !bar.hasSubmenuOpen
-      ? $.set(model)
-      : open(model, $, "trigger-hover", "mouse", message.key, message.triggerId, { group: true })
+      ? $
+      : open($.model, $, "trigger-hover", "mouse", message.key, message.triggerId, { group: true })
   }
-  const next = UiStruct.evolve(model, {
+  const next = UiStruct.evolve($.model, {
     hovering: true,
     hoverTrigger: message.key,
     hoverTriggerId: message.triggerId,
@@ -1027,7 +1026,7 @@ const enterTrigger = (
   if (disabledOf($)) return $.set(next)
   if (!props.open) return $.set(next).run(WaitBeforeHoverOpen.make({ delay: message.delay }))
   const stay = Command.interrupt(WaitBeforeHoverClose)
-  return opensFor(model, props, message.key, message.triggerId) ? $.set(next).run(stay) : hoverOpen(next, $).run(stay)
+  return opensFor($.model, props, message.key, message.triggerId) ? $.set(next).run(stay) : hoverOpen(next, $).run(stay)
 }
 
 const hoverOpen = (model: MenuModel, $: MenuUpdate) =>
@@ -1041,28 +1040,26 @@ const hoverOpen = (model: MenuModel, $: MenuUpdate) =>
   )
 
 const pressTrigger = (
-  model: MenuModel,
   $: MenuUpdate,
   method: MenuInteraction,
   key: string,
   triggerId: string | null
 ) => {
   const props = $.props
-  if (disabledOf($)) return $.set(model)
-  if (props.open && opensFor(model, props, key, triggerId)) {
-    if (model.stick) {
-      return $.set(model).evolve({ reason: "trigger-press", stick: false, hovering: false })
+  if (disabledOf($)) return $
+  if (props.open && opensFor($.model, props, key, triggerId)) {
+    if ($.model.stick) {
+      return $.evolve({ reason: "trigger-press", stick: false, hovering: false })
         .run(Command.interrupt(WaitBeforeHoverClose))
     }
-    return dismiss(model, $, "trigger-press", method)
+    return dismiss($.model, $, "trigger-press", method)
   }
-  return open(model, $, "trigger-press", method, key, triggerId)
+  return open($.model, $, "trigger-press", method, key, triggerId)
 }
 
 const LongPressDelay = 500
 
 const openAt = (
-  model: MenuModel,
   $: MenuUpdate,
   key: string,
   triggerId: string | null,
@@ -1070,8 +1067,8 @@ const openAt = (
   method: MenuInteraction,
   release: boolean
 ) => {
-  if (disabledOf($)) return $.set(model)
-  return open(model, $, "trigger-press", method, key, triggerId, { context: { point, release } })
+  if (disabledOf($)) return $
+  return open($.model, $, "trigger-press", method, key, triggerId, { context: { point, release } })
     .run(WaitBeforeContextGrace.make({ delay: LongPressDelay }))
 }
 
@@ -2087,11 +2084,10 @@ export const Menu = Component.define({
     barCurrent: null
   }),
   update: {
-    PressedTrigger: ($, { key, pointerType, triggerId }) =>
-      pressTrigger($.model, $, methodOf(pointerType), key, triggerId),
+    PressedTrigger: ($, { key, pointerType, triggerId }) => pressTrigger($, methodOf(pointerType), key, triggerId),
     ReleasedTrigger: ($) => $.evolve({ pressing: false }),
     PressedContextTrigger: ($, { key, pointerType, triggerId, x, y }) =>
-      openAt($.model, $, key, triggerId, contextPoint(x, y, pointerType), methodOf(pointerType), true),
+      openAt($, key, triggerId, contextPoint(x, y, pointerType), methodOf(pointerType), true),
     TouchedContextTrigger: ($, { key, triggerId, x, y }) =>
       disabledOf($)
         ? $.model
@@ -2106,7 +2102,7 @@ export const Menu = Component.define({
       const press = $.model.longPress
       if (press === null) return $.model
       const point = { x: press.x, y: press.y, width: 10, height: 10 }
-      return openAt($.model, $, press.key, press.triggerId, point, "touch", false)
+      return openAt($, press.key, press.triggerId, point, "touch", false)
     },
     CompletedWaitBeforeContextGrace: ($) => $.evolve({ justOpened: false }),
     ReleasedContextPointer: ($, { outside }) => {
@@ -2118,7 +2114,7 @@ export const Menu = Component.define({
       $.props.open || disabledOf($)
         ? $.model
         : open($.model, $, "list-navigation", "keyboard", trigger, triggerId, { last: key === "ArrowUp" }),
-    EnteredTrigger: ($, message) => enterTrigger($.model, $, message),
+    EnteredTrigger: ($, message) => enterTrigger($, message),
     LeftTrigger: ($) => $.evolve($.props.open ? {} : { hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
     CompletedWaitBeforeHoverOpen: ($) =>
       $.props.open || !$.model.hovering || disabledOf($) ? $.model : hoverOpen($.model, $),
@@ -2134,8 +2130,8 @@ export const Menu = Component.define({
         : $.model,
     CompletedWaitBeforeStickExpires: ($) => $.evolve({ stick: false }),
     PressedSubmenuTrigger: ($, { pointerType }) =>
-      hoverOf($.props, true) ? $.model : pressTrigger($.model, $, methodOf(pointerType), "submenu", null),
-    ClickedSubmenuTrigger: ($, { pointerType }) => pressTrigger($.model, $, methodOf(pointerType), "submenu", null),
+      hoverOf($.props, true) ? $.model : pressTrigger($, methodOf(pointerType), "submenu", null),
+    ClickedSubmenuTrigger: ($, { pointerType }) => pressTrigger($, methodOf(pointerType), "submenu", null),
     PressedSubmenuTriggerKey: ($, { key }) => {
       const parent = parentOf($)
       if ($.props.open || parent === undefined || disabledOf($)) return $.model

@@ -43,8 +43,8 @@
  *   init: () => ({ email: "", signedIn: false }),
  *   update: ($, message) =>
  *     Message.match(message, {
- *       ChangedEmail: ({ value }) => ({ ...$.model, email: value }),
- *       SubmittedForm: () => ({ ...$.model, signedIn: true })
+ *       ChangedEmail: ({ value }) => $.evolve({ email: value }),
+ *       SubmittedForm: () => $.evolve({ signedIn: true })
  *     }),
  *   view: (h, model) =>
  *     model.signedIn

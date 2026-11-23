@@ -48,7 +48,7 @@ const Tip = Component.define({
 // Sends to the owner with no `shared` declaration.
 const Sender = Component.define({ name: "Sender", scoped: false, model: Schema.Null, message: TipMessage }).make({
   init: () => null,
-  update: ($, message) => $.set($.model).send(TipsProvider, message),
+  update: ($, message) => $.send(TipsProvider, message),
   view: (h) => h.el("p")
 })
 

@@ -17,11 +17,11 @@ export const AbsoluteDemo = Component.define({
 }).make({
   init: () => ({ absolute: true, grown: [] }),
   update: {
-    ToggledLayout: ($) => ({ ...$.model, absolute: !$.model.absolute }),
-    ToggledRow: ($, { index }) => ({
-      ...$.model,
-      grown: $.model.grown.includes(index) ? $.model.grown.filter((i) => i !== index) : [...$.model.grown, index]
-    })
+    ToggledLayout: ($) => $.evolve({ absolute: (absolute) => !absolute }),
+    ToggledRow: ($, { index }) =>
+      $.evolve({
+        grown: (grown) => grown.includes(index) ? grown.filter((i) => i !== index) : [...grown, index]
+      })
   },
   view: (h, model) =>
     h.div.class("page").children(

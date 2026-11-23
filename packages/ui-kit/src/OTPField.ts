@@ -620,28 +620,27 @@ const navigationKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown
 const editingKeys = new Set(["Backspace", "Delete"])
 
 const pressKey = (
-  model: OTPFieldModel,
-  message: { readonly index: number; readonly key: string; readonly boundary: boolean },
   $: OTPFieldUpdate,
+  message: { readonly index: number; readonly key: string; readonly boundary: boolean },
   rtl: boolean
 ) => {
-  if ($.props.disabled === true || model.composing !== null) return model
-  const s = settingsOf($.props, model.edit)
+  if ($.props.disabled === true || $.model.composing !== null) return $.model
+  const s = settingsOf($.props, $.model.edit)
   const { boundary, key } = message
-  const index = aimedAt(model, s, message.index)
+  const index = aimedAt($.model, s, message.index)
   const end = firstEmpty(s)
-  const go = (target: number) => moveTo(model, $, clamp(target, 0, end))
+  const go = (target: number) => moveTo($.model, $, clamp(target, 0, end))
   if (key === (rtl ? "ArrowRight" : "ArrowLeft")) return go(boundary ? 0 : index - 1)
   if (key === (rtl ? "ArrowLeft" : "ArrowRight")) return go(boundary ? end : index + 1)
   if (key === "Home" || key === "ArrowUp") return go(0)
   if (key === "End" || key === "ArrowDown") return go(end)
-  if (s.readOnly) return model
-  if (key === "Delete") return setValue(model, $, s, without(s.characters, index), "keyboard", { focus: index })
-  if (key !== "Backspace") return model
-  if (boundary) return setValue(model, $, s, [], "keyboard", { focus: 0 })
+  if (s.readOnly) return $.model
+  if (key === "Delete") return setValue($.model, $, s, without(s.characters, index), "keyboard", { focus: index })
+  if (key !== "Backspace") return $.model
+  if (boundary) return setValue($.model, $, s, [], "keyboard", { focus: 0 })
   const target = Math.max(0, index - 1)
   const removed = index < s.characters.length ? index : target
-  return setValue(model, $, s, without(s.characters, removed), "keyboard", { focus: target })
+  return setValue($.model, $, s, without(s.characters, removed), "keyboard", { focus: target })
 }
 
 type SlotOf<B extends View.PartTarget<"input">> = ReturnType<B["attr"]>
@@ -773,7 +772,7 @@ export const OTPField = Component.define({
       locked($.props)
         ? $.model
         : enter($.model, $, settingsOf($.props, $.model.edit), index, Redacted.value(text), "input-paste"),
-    PressedKey: ($, message) => pressKey($.model, message, $, $.shared.provider?.direction === "rtl"),
+    PressedKey: ($, message) => pressKey($, message, $.shared.provider?.direction === "rtl"),
     PressedSlot: ($, { index }) => ($.props.disabled === true ? $.model : reselect($.model, $, index)),
     FocusedSlot: ($, { index }) => {
       if ($.props.disabled === true) return $.model
