@@ -95,6 +95,8 @@ for (const bundle of new Set(variants.map(bundleOf))) {
     platform: "browser",
     target: "es2023",
     define: { "process.env.NODE_ENV": "\"production\"" },
+    // Resolves @effect/ui's #dev import to the module with no checks.
+    conditions: ["production"],
     nodePaths: bundle === bundles.react ? [reactModules] : [],
     outfile: bundle.out,
     logLevel: "error"

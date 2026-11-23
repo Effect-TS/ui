@@ -7,7 +7,8 @@
 // Added gzip bytes are the counter total minus a separately bundled effect-only client.
 // Pass --vocabulary to measure the opt-in counter with the same click assertion.
 // Pass --spike to measure counter-spike.ts, the counter on the EFF-4218 kernel spike.
-// Pass --development to bundle with NODE_ENV=development, which keeps the checks a production build drops.
+// Pass --development to bundle without the `production` export condition, which keeps the checks a
+// production build drops.
 // Pass --features to measure features.ts instead of the counter: an app with a Layer, a slot, a failure
 // fallback and the message log. With --spike it is features-spike.ts.
 //
@@ -34,7 +35,7 @@ const { values: { base, development, features, json, spike, vocabulary } } =
       json: { type: "string" }
     }
   })
-// Vite replaces `process.env.NODE_ENV` with this, whatever the mode.
+// Vite resolves the `production` export condition when this is "production", whatever the mode.
 process.env.NODE_ENV = development ? "development" : "production"
 const ui = path.resolve(import.meta.dirname, "../..")
 const effectDir = path.join(ui, "node_modules/effect")
@@ -233,7 +234,7 @@ const report = [
   "### Counter bundle size",
   "",
   `Vite/Rolldown, production${
-    development ? " with NODE_ENV=development" : ""
+    development ? " without the production condition" : ""
   }, default Oxc minification, ${target}, single ES module, gzip level 9.`,
   "",
   ...[headers, headers.map(() => "---"), row].map((cells) =>
