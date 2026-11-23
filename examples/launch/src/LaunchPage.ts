@@ -111,10 +111,10 @@ export const LaunchPage = Component.define({
           )
         ),
         h.section.attr("aria-labelledby", "architecture").children(
-          h.h2.id("architecture").children("Effect UI handles Messages where they originate"),
+          h.h2.id("architecture").children("Effect UI moves the Model from the root of the app into each Component"),
           P(
             h,
-            "Use the buttons in the diagram to send a Message from a leaf and see how each version handles it."
+            "A Foldkit 0.x app keeps one Model and one update at its root. In Effect UI, every Component has its own Model and update. Use the buttons in the diagram to send a Message from a leaf and see how each version handles it."
           ),
           Architecture(h, {}),
           P(
