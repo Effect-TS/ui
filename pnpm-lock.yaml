@@ -365,6 +365,9 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
+      commonmark-spec:
+        specifier: ^0.31.2
+        version: 0.31.2
       effect:
         specifier: ^4.1.4
         version: 4.1.4
@@ -1963,6 +1966,9 @@ packages:
 
   commondir@1.0.1:
     resolution: {integrity: sha512-W9pAhw0ja1Edb5GVdIF1mjZw/ASI0AlShXM83UUGe2DVr5TdAPEA1OA8m/g8zWp9x6On7gqufY+FatDbC3MDQg==}
+
+  commonmark-spec@0.31.2:
+    resolution: {integrity: sha512-vXKxmclzJPymhOJYD26G0oBjVmIcKC8p5m2DvHIq1A1btr1m0r0dT/PzRA5/nwxUbCAPedMNPEoiQE+zvuOcOw==}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -4268,6 +4274,8 @@ snapshots:
   commander@7.2.0: {}
 
   commondir@1.0.1: {}
+
+  commonmark-spec@0.31.2: {}
 
   convert-source-map@2.0.0: {}
 

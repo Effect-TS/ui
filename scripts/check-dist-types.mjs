@@ -17,9 +17,15 @@ if (!Fs.existsSync(Path.join(dist, "index.d.ts"))) {
 }
 
 const pkg = JSON.parse(Fs.readFileSync(Path.join(pkgDir, "package.json"), "utf8"))
-const entrypoints = Object.entries(pkg.publishConfig.exports)
+const exported = Object.entries(pkg.publishConfig.exports)
   .filter(([key, target]) => target !== null && key !== "./package.json" && !key.includes("*"))
+const entrypoints = exported
+  .filter(([, target]) => typeof target === "string")
   .map(([key, target]) => [Path.posix.join(pkg.name, key), [Path.join(pkgDir, target.replace(/\.js$/, ".d.ts"))]])
+
+const ambient = exported
+  .filter(([, target]) => typeof target === "object")
+  .map(([, target]) => Path.join(pkgDir, target.types))
 
 const dir = Fs.mkdtempSync(Path.join(Os.tmpdir(), "effect-ui-dist-types-"))
 try {
@@ -44,6 +50,15 @@ try {
     },
     files: ["index.ts"]
   }
+  Fs.writeFileSync(
+    Path.join(dir, "content.ts"),
+    [
+      `import document, { frontmatter } from "./post.md"`,
+      `export const blocks: ReadonlyArray<unknown> = document.blocks`,
+      `export const title: string | undefined = frontmatter?.title`
+    ].join("\n")
+  )
+  config.files = ["index.ts", "content.ts", ...ambient]
   Fs.writeFileSync(Path.join(dir, "tsconfig.json"), JSON.stringify(config))
   execFileSync("pnpm", ["exec", "tsc", "-p", Path.join(dir, "tsconfig.json")], { cwd: root, stdio: "inherit" })
 
@@ -54,6 +69,7 @@ try {
     ["@effect/ui", "@effect/ui/Query", "@effect/ui/testing", "@effect/ui/testing/TestQuery"]
       .map((entry, i) => `import * as _${i} from "${entry}"\nexport { _${i} }\n`).join("")
   )
+  config.files = ["index.ts"]
   config.compilerOptions.lib = ["ES2024"]
   config.compilerOptions.exactOptionalPropertyTypes = true
   Fs.writeFileSync(Path.join(dir, "tsconfig.json"), JSON.stringify(config))

@@ -7,7 +7,7 @@
  * @since 0.1.0
  */
 
-// @barrel(!(register|HtmlServerHttp).ts): Auto-generated exports. Do not edit manually.
+// @barrel(!(register|HtmlServerHttp|MarkdownVite|MarkdownContent.d).ts): Auto-generated exports. Do not edit manually.
 
 /**
  * @stability experimental
@@ -56,3 +56,15 @@ export * as HtmlHead from "./HtmlHead.ts"
  * @since 0.1.0
  */
 export * as HtmlServer from "./HtmlServer.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as Markdown from "./Markdown.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as MarkdownParser from "./MarkdownParser.ts"
