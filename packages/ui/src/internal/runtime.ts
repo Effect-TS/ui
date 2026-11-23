@@ -1877,13 +1877,37 @@ const setup = (
     if (rendering || scheduled || dirty.size > 0) committed.push(f)
     else f()
   }
+  let transitionTypes: Set<string> | undefined
+  let mayTransition = false
+  let resume: (() => void) | undefined
   function flush() {
+    // A flush queued before the host was handed this one: the host's call to `resume` renders its work.
+    if (resume !== undefined) return
     scheduled = false
     rendering = true
     flushes++
     sendPasses.clear()
     sharedPasses.clear()
-    drain()
+    mayTransition = true
+    finishFlush()
+  }
+  function finishFlush() {
+    const done = drain()
+    mayTransition = false
+    if (!done) {
+      const types = [...transitionTypes!]
+      transitionTypes = undefined
+      scheduled = true
+      const update = () => {
+        if (resume !== update) return
+        resume = undefined
+        scheduled = false
+        finishFlush()
+      }
+      resume = update
+      return host.viewTransition!(update, types)
+    }
+    transitionTypes = undefined
     if (reportPending) reportAdoption()
     host.commit?.()
     afterCommitHooks()
@@ -1891,17 +1915,17 @@ const setup = (
     runCommitted()
     checkIdle()
   }
-  function drain() {
+  function drain(): boolean {
     draining = true
     try {
-      drainLoop()
+      return drainLoop()
     } finally {
       draining = false
       // What the mount, or a child that adopted once its Layer was ready, published outside a render.
       if (patching === 0) forgetPublished()
     }
   }
-  function drainLoop() {
+  function drainLoop(): boolean {
     do {
       // A mount or a closure that rendered alone leaves its author's placed slots to check.
       checkPendingAuthors()
@@ -1918,6 +1942,7 @@ const setup = (
           else deliverReports(reportsDue.keys().next().value!)
           continue
         }
+        if (mayTransition && transitionTypes !== undefined) return false
         let next: Instance | undefined
         for (const inst of dirty) {
           if (next === undefined || inst.depth < next.depth) next = inst
@@ -1928,6 +1953,7 @@ const setup = (
       }
       foldHead()
     } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
+    return true
   }
   /**
    * Decides whether the server is idle once the current callback has finished:
@@ -2779,6 +2805,7 @@ const setup = (
         events: next.events,
         lists: next.lists ?? [],
         sends: next.sends ?? [],
+        ...(next.viewTransition === undefined ? undefined : { viewTransition: next.viewTransition }),
         // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
         ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty }),
         ...(shared === undefined ? undefined : { shared })
@@ -3637,6 +3664,10 @@ const setup = (
       issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
     }
     if (!initial) markDirty(inst)
+    if (!initial && next.viewTransition !== undefined && attached && host.viewTransition !== undefined) {
+      transitionTypes ??= new Set()
+      for (const type of next.viewTransition) transitionTypes.add(type)
+    }
     syncSubscriptions(inst)
     // After the watches follow the Model, so a load more reaches the args the query returns for it.
     if (!initial && next.lists !== undefined) {
@@ -7339,6 +7370,13 @@ const setup = (
   rootInstance = root
   // Added after the root forked its Scope, so it runs before that Scope closes.
   addFinalizer(rootScope, Effect.sync(() => leave(root)))
+  // Registered last so it runs first: the flush the host holds must not render into a closing tree.
+  addFinalizer(
+    rootScope,
+    Effect.sync(() => {
+      resume = undefined
+    })
+  )
   if (root.failure === undefined) placeEach(container, root.rendered, rootRef)
   started = true
   if (waiting === 0 && !adoptedDone) {
@@ -7543,7 +7581,8 @@ const setup = (
       checkIdle()
     },
     freeze: () => {
-      if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
+      if (resume !== undefined) resume()
+      else if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
       frozen = true
       return cache
     }

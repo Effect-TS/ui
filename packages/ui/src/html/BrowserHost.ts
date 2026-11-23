@@ -464,6 +464,8 @@ const payloadOf = (
   }
 }
 
+const ignore = () => {}
+
 /**
  * Makes a DOM host for `document`, plus `dispose`, which removes its
  * listeners.
@@ -1110,6 +1112,10 @@ export const makeHost = (
     return kept
   }
 
+  let transition: ViewTransition | undefined
+  const typedTransitions = view !== null && typeof view.ViewTransition === "function" &&
+    "types" in view.ViewTransition.prototype
+
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement: (tag) =>
       elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
@@ -1275,7 +1281,32 @@ export const makeHost = (
       for (const dialog of dialogs) showDialog(dialog, "modal")
       showPopovers()
     },
+    viewTransition(update, types) {
+      if (
+        typeof document.startViewTransition !== "function" ||
+        view?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+      ) return update()
+      let ran = false
+      const run = () => {
+        ran = true
+        update()
+      }
+      try {
+        transition = document.startViewTransition(
+          typedTransitions && types.length > 0 ? { update: run, types: [...types] } : run
+        )
+      } catch (error) {
+        if (ran) throw error
+        return update()
+      }
+      // A skipped transition rejects these. `updateCallbackDone` rejects only when `update` throws, and is
+      // left unhandled so that error is reported as a flush's is.
+      transition.ready.catch(ignore)
+      transition.finished.catch(ignore)
+    },
     dispose: () => {
+      transition?.skipTransition()
+      transition = undefined
       syncHead.release()
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
