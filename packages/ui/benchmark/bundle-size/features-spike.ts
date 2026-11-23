@@ -1,5 +1,5 @@
 // SPIKE (EFF-4218): an app with a Layer, a child found through it, a slot, a failure fallback and the
-// message log, on the kernel and its DOM host. `pnpm bundle-size --features --spike` measures it.
+// message log, on the kernel and its DOM host. `pnpm bundle-size --spike` measures it.
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as SpikeDom from "@effect/ui/html/SpikeDom"

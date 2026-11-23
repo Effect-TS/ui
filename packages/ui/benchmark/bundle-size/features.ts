@@ -1,5 +1,3 @@
-// SPIKE (EFF-4218): an app with a Layer, a child found through it, a slot, a failure fallback and the
-// message log. `pnpm bundle-size --features` measures it.
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
