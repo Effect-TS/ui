@@ -15,8 +15,8 @@ describe("Avatar", () => {
   it("each part returns the builder it was given, and children keep their requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Avatar(h, {
           props: { src: "/ada.png" },
           view: (avatar) => {
@@ -37,8 +37,8 @@ describe("Avatar", () => {
   it("root and fallback take only a span builder, and image only an img builder", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Avatar(h, {
           props: {},
           view: (avatar) => {

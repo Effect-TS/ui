@@ -13,7 +13,7 @@ const Log = Component.define({
   model: Schema.Array(Schema.String),
   message: LogMessage,
   shares: { value: (ids) => ids, receives: ["Add"] }
-}).make({ init: () => [], update: (ids, { id }) => [...ids, id], parts: () => ({}) })
+}).make({ init: () => [], update: ($, { id }) => [...$.model, id], parts: () => ({}) })
 
 const ItemMessage = UiSchema.TaggedEnum({ Adds: { ids: Schema.NonEmptyArray(Schema.String) } })
 
@@ -25,21 +25,24 @@ const ItemDef = Component.define({
   shared: { log: Log }
 })
 
+const itemView = ItemDef.view((h) =>
+  h.el("button").on("click", ItemMessage.Adds({ ids: ["b", "a", "b"] })).children(`log:${h.shared.log.join(",")}`)
+)
+
 const Item = ItemDef.make({
   init: () => 0,
-  update: (count, { ids: [first, ...rest] }, $) =>
+  update: ($, { ids: [first, ...rest] }) =>
     rest.reduce(
       (step, id) => step.send(Log, LogMessage.Add({ id })),
-      $.set(count + 1 + rest.length).send(Log, LogMessage.Add({ id: first }))
+      $.set($.model + 1 + rest.length).send(Log, LogMessage.Add({ id: first }))
     ),
-  view: (_, h) =>
-    h.el("button").on("click", ItemMessage.Adds({ ids: ["b", "a", "b"] })).children(`log:${h.shared.log.join(",")}`)
+  view: itemView
 })
 
 const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => Log(h, { key: "log", view: () => Item(h, { key: "i" }) })
+  update: ($) => $.model,
+  view: (h) => Log(h, { key: "log", view: () => Item(h, { key: "i" }) })
 })
 
 const updates = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
@@ -104,8 +107,8 @@ describe("Story and sends", () => {
       assert.deepStrictEqual((wire.find((frame) => frame.seq === sent.seq) as any).sends, recorded)
       const Changed = ItemDef.make({
         init: () => 0,
-        update: (count, { ids }, $) => $.set(count + ids.length).send(Log, LogMessage.Add({ id: "z" })),
-        view: Item.view
+        update: ($, { ids }) => $.set($.model + ids.length).send(Log, LogMessage.Add({ id: "z" })),
+        view: itemView
       })
       for (const entries of [log, wire]) {
         assert.isUndefined(Story.fromLog(Item, entries).divergence)

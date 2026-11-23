@@ -75,8 +75,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ locked: true }),
- *   update: (model) => model,
- *   view: (model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h, model) =>
  *     Fieldset(h, {
  *       props: { disabled: model.locked },
  *       view: (fieldset) =>
@@ -177,8 +177,8 @@ export const Fieldset = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => {
+  update: ($) => $.model,
+  parts: (p) => {
     const disabled = p.props.disabled === true
     const legendId = p.id("legend")
     return {

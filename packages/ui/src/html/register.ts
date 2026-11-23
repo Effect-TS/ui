@@ -21,8 +21,8 @@
  *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_, h) => h.p("Hello")
+ *   update: ($) => $.model,
+ *   view: (h) => h.p("Hello")
  * })
  * ```
  *

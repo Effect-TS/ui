@@ -23,8 +23,8 @@ describe("Form", () => {
   it("the root returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Form(h, {
           onEmit: (event) => {
             expect(event).type.toBe<FormEvents>()

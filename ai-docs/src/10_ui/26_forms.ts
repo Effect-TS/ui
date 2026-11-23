@@ -157,7 +157,7 @@ export const SignupForm = Component.define({
       debounce: "300 millis",
       // Ask only about a username that passes its own rules. `undefined`
       // disables the query, so "ad" is never sent to the server.
-      args: (model) =>
+      args: ({ model }) =>
         SignupValidation.passes(model.form, "username") ? { username: model.form.values.username } : undefined
     }
   }
@@ -177,29 +177,29 @@ export const SignupForm = Component.define({
     // While the account is being created the inputs are disabled, and an
     // edit that still arrives is dropped, so the result always belongs to
     // the values that were sent.
-    UpdatedField: (model, { name, value }, $) =>
-      model.submitting ? model : $.evolve({ form: (form) => SignupValidation.change(form, name, value) }),
-    UpdatedSecret: (model, { name, value }, $) =>
-      model.submitting ? model : $.evolve({ form: (form) => SignupValidation.change(form, name, value) }),
+    UpdatedField: ($, { name, value }) =>
+      $.model.submitting ? $.model : $.evolve({ form: (form) => SignupValidation.change(form, name, value) }),
+    UpdatedSecret: ($, { name, value }) =>
+      $.model.submitting ? $.model : $.evolve({ form: (form) => SignupValidation.change(form, name, value) }),
     // A tried submit shows every field. `value` is `Some` only when every
     // field passes, so it gates the Command.
-    SubmittedForm: (model, _message, $) => {
-      const form = SignupValidation.submit(model.form)
+    SubmittedForm: ($) => {
+      const form = SignupValidation.submit($.model.form)
       return Option.match(validateSignup(form, $.queries.usernameTaken).value, {
         onNone: () => $.evolve({ form }),
         onSome: ({ confirm: _, ...account }) =>
-          model.submitting ? model : $.set({ form, submitting: true }).run(CreateAccount.make(account))
+          $.model.submitting ? $.model : $.set({ form, submitting: true }).run(CreateAccount.make(account))
       })
     },
-    SucceededCreateAccount: (model, _message, $) =>
-      $.evolve({ submitting: false }).emit(SignupFormEvents.SignedUp({ username: model.form.values.username })),
+    SucceededCreateAccount: ($) =>
+      $.evolve({ submitting: false }).emit(SignupFormEvents.SignedUp({ username: $.model.form.values.username })),
     // The server's error sits on its field until that field changes.
-    FailedCreateAccount: (model, { field, message }) => ({
+    FailedCreateAccount: ($, { field, message }) => ({
       submitting: false,
-      form: SignupValidation.reject(model.form, field === "email" ? { email: [message] } : { username: [message] })
+      form: SignupValidation.reject($.model.form, field === "email" ? { email: [message] } : { username: [message] })
     })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const { fields } = validateSignup(model.form, h.queries.usernameTaken)
 
     // One field's markup, by its derived state. With ui-kit's `Field`,

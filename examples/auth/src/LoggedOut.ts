@@ -20,9 +20,9 @@ export const LoggedOut = Component.define({
 }).make({
   init: () => null,
 
-  update: (_model, { session }, $) => $.emit(LoggedOutEvents.SignedIn({ session })),
+  update: ($, { session }) => $.emit(LoggedOutEvents.SignedIn({ session })),
 
-  view: (_model, h) =>
+  view: (h) =>
     h.div.class("py-8").children(
       LoggedOutRoute.match(h.props.route, {
         Home: () => HomePage(h),

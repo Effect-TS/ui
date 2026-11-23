@@ -22,12 +22,12 @@ export const Counter = Component.define({
 }).make({
   init: () => ({ count: 0 }),
   update: {
-    ClickedDecrement: (_model, _message, $) => $.evolve({ count: (count) => count - 1 }),
-    ClickedIncrement: (_model, _message, $) => $.evolve({ count: (count) => count + 1 }),
-    ClickedReset: (_model, _message, $) => $.evolve({ count: 0 })
+    ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
+    ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 }),
+    ClickedReset: ($) => $.evolve({ count: 0 })
   },
-  head: (model) => [Head.title(`Counter: ${model.count}`)],
-  view: (model, h) =>
+  head: ({ model }) => [Head.title(`Counter: ${model.count}`)],
+  view: (h, model) =>
     h.div.class("min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6").children(
       h.p.class("text-6xl font-bold text-gray-800").children(String(model.count)),
       h.div.class("flex flex-wrap justify-center gap-4").children(

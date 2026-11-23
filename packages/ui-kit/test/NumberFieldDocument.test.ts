@@ -34,16 +34,16 @@ const mount = Effect.fnUntraced(function*(
   }).make({
     init: () => ({ value, committed: false }),
     update: {
-      Updated: (model, { reason, value }) => {
+      Updated: ($, { reason, value }) => {
         log.push("updated " + value + " " + reason)
-        return accepts(value) ? { ...model, value } : model
+        return accepts(value) ? { ...$.model, value } : $.model
       },
-      Committed: (model, { reason, value }) => {
+      Committed: ($, { reason, value }) => {
         log.push("committed " + value + " " + reason)
-        return hideScrubOnCommit ? { ...model, committed: true } : model
+        return hideScrubOnCommit ? { ...$.model, committed: true } : $.model
       }
     },
-    view: (model, h) =>
+    view: (h, model) =>
       NumberField(h, {
         props: { ...props, value: model.value },
         onEmit: {

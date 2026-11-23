@@ -21,15 +21,15 @@ export const Counters = Component.define({
 }).make({
   init: () => ({ counterIds: [1, 2, 3], nextCounterId: 4 }),
   update: {
-    ClickedAddCounter: (model, _message, $) =>
+    ClickedAddCounter: ($) =>
       $.evolve({
-        counterIds: Array.append(model.nextCounterId),
+        counterIds: Array.append($.model.nextCounterId),
         nextCounterId: (id) => id + 1
       }),
-    ClickedRemoveCounter: (_model, { id }, $) => $.evolve({ counterIds: Array.filter((counterId) => counterId !== id) })
+    ClickedRemoveCounter: ($, { id }) => $.evolve({ counterIds: Array.filter((counterId) => counterId !== id) })
   },
-  head: (model) => [Head.title(`Counters (${model.counterIds.length})`)],
-  view: (model, h) =>
+  head: ({ model }) => [Head.title(`Counters (${model.counterIds.length})`)],
+  view: (h, model) =>
     h.div.class("min-h-screen bg-white flex flex-col items-center py-12 px-6 gap-6").children(
       h.h1.class("text-2xl font-semibold text-gray-900").children("Counters"),
       h.p.class("text-sm text-gray-500 max-w-md text-center").children(

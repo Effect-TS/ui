@@ -36,7 +36,7 @@ const Ticker = Component.define({
 }).make({
   init: () => 0,
   update: (_, now) => now,
-  view: (now, h) => h.time.onMount(Tick()).children(String(now))
+  view: (h, now) => h.time.onMount(Tick()).children(String(now))
 })
 
 interface NativeTags<Msg> {
@@ -65,8 +65,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.div(h.span("text"), "more")).type.toBe<
           Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
         >()
@@ -87,8 +87,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (draft, h) => {
+      update: ($) => $.model,
+      view: (h, draft) => {
         const form = h.form.onSubmit(Msg.Sent({ title: draft })).children(
           h.input.ref(Field).value(draft).onInput(({ value }) => Msg.Typed({ value })),
           h.button.attr("type", "submit").children("Add"),
@@ -130,8 +130,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const needsClock = {} as View.Node<Msg, Clock>
         const framed = h.button.forward((node) => {
           expect(node).type.toBe<Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">>()
@@ -164,8 +164,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.div).type.not.toBeCallableWith(h.span("ok"), 1)
         expect(h.div.class("x").children).type.not.toBeCallableWith(h.span("ok"), { _tag: "Element" })
         return h.div()
@@ -182,8 +182,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.input.onInput).type.toBeCallableWith(
           ({ checked }: Html.InputPayload) => Msg.Checked({ checked })
         )
@@ -248,8 +248,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.input.value).type.toBeCallableWith("text")
         expect(h.select.value).type.toBeCallableWith("a")
         expect(h.input.checked).type.toBeCallableWith(true)
@@ -290,8 +290,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.input.ref).type.toBeCallableWith(Field)
         expect(h.input.value("a").ref).type.toBeCallableWith(Field)
         expect(h.textarea.ref).type.not.toBeCallableWith(Field)
@@ -313,8 +313,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         h.div.onMount(LogUp())
           .class("box")
           .children(Ticker(h, { key: "ticker" }))
@@ -328,8 +328,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.section(h.p("clock"), [Ticker(h, { key: "ticker" })])
+      update: ($) => $.model,
+      view: (h) => h.section(h.p("clock"), [Ticker(h, { key: "ticker" })])
     })
     expect(Shorthand).type.toBe<Component.Component<"Shorthand", {}, null, Msg, never, Clock, Html.Elements>>()
     const Bare = Component.define({
@@ -340,8 +340,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.input.onMount(LogUp())
+      update: ($) => $.model,
+      view: (h) => h.input.onMount(LogUp())
     })
     expect(Bare).type.toBe<Component.Component<"Bare", {}, null, Msg, never, Logger, Html.Elements>>()
   })
@@ -370,8 +370,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<number> => [],
-      update: (points) => points,
-      view: (points, h) => h.div.onMount(Hello()).children(h.canvas.onMount(DrawChart({ points })))
+      update: ($) => $.model,
+      view: (h, points) => h.div.onMount(Hello()).children(h.canvas.onMount(DrawChart({ points })))
     })
     expect(Chart).type.toBe<
       Component.Component<"Chart", {}, ReadonlyArray<number>, never, never, Logger, Html.Elements>
@@ -439,8 +439,8 @@ describe("Html", () => {
     ) => h.section(...children)
     const Page = PageDef.make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => card(h, h.h1("Title"), ticker)
+      update: ($) => $.model,
+      view: (h) => card(h, h.h1("Title"), ticker)
     })
     expect(Page).type.toBe<Component.Component<"Page", {}, null, Msg, never, Clock, Html.Elements>>()
     expect<View.Requirements<any>>().type.toBe<any>()
@@ -486,8 +486,8 @@ describe("Html", () => {
       elements: Html
     }).make({
       init: () => "",
-      update: (_model, _, $) => $.run(DomCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
-      view: (_, h) => h.input.ref(Field)
+      update: ($) => $.run(DomCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
+      view: (h) => h.input.ref(Field)
     })
     expect(Form).type.toBe<Component.Component<"Form", {}, string, Msg, never, never, Html.Elements>>()
   })
@@ -525,8 +525,8 @@ describe("BrowserHost", () => {
     elements: Html
   }).make({
     init: () => 0,
-    update: (count) => count + 1,
-    view: (count, h) => h.button.onClick(Msg.Mounted()).children(String(count))
+    update: ($) => $.model + 1,
+    view: (h, count) => h.button.onClick(Msg.Mounted()).children(String(count))
   })
 
   it("mountEffect needs only a Scope for an HTML root", () => {
@@ -550,8 +550,8 @@ describe("BrowserHost", () => {
       elements: Html
     }).make({
       init: ($) => $.props.route,
-      update: (route) => route,
-      view: (route, h) => h.h1(route._tag)
+      update: ($) => $.model,
+      view: (h, route) => h.h1(route._tag)
     })
     expect(BrowserHost.mount(App, Router.props(AppRoute), document.body)).type.toBe<
       Layer.Layer<never, never, Router.Router>
@@ -577,8 +577,8 @@ describe("BrowserHost", () => {
       elements: Native
     }).make({
       init: () => 0,
-      update: (count) => count,
-      view: (_, h) => h.view
+      update: ($) => $.model,
+      view: (h) => h.view
     })
     expect(BrowserHost.mount).type.not.toBeCallableWith(App, {}, document.body)
     expect(BrowserHost.mountEffect).type.not.toBeCallableWith(App, {}, document.body)

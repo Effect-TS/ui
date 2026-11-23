@@ -70,8 +70,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ path: "/docs" }),
- *   update: (model) => model,
- *   view: (model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h, model) =>
  *     NavigationMenu(h, {
  *       view: (navigationMenu) =>
  *         navigationMenu.root(h.nav.attr("aria-label", "Main")).children(
@@ -213,8 +213,8 @@ export const NavigationMenu = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => {
+  update: ($) => $.model,
+  parts: (p) => {
     const scope = p.id("list")
     const link = p.part("a", (b, active: boolean) =>
       b.attr("aria-current", active ? "page" : undefined)

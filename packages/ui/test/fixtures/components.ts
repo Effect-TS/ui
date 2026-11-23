@@ -21,12 +21,12 @@ export const Counter = Component.define({
   message: CounterMessage
 }).make({
   init: ($) => ({ count: $.props.initial }),
-  update: (model, message) =>
+  update: ($, message) =>
     CounterMessage.match(message, {
-      Increment: () => ({ count: model.count + 1 }),
-      Decrement: () => ({ count: model.count - 1 })
+      Increment: () => ({ count: $.model.count + 1 }),
+      Decrement: () => ({ count: $.model.count - 1 })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "div",
       h.el("button").on("click", CounterMessage.Decrement()).children("-"),
@@ -78,14 +78,14 @@ export const TodoItem = Component.define({
   events: TodoItemEvents
 }).make({
   init: ($) => $.set({ saving: false }),
-  update: (_model, message, $) =>
+  update: ($, message) =>
     TodoItemMessage.match(message, {
       Toggle: () => $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
       Save: () => $.set({ saving: true }).run(SaveTodo.make($.props.todo)),
       Saved: () => ({ saving: false }),
       SaveFailed: () => ({ saving: false })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "li",
       h.el("button").on("click", TodoItemMessage.Toggle()).children(h.props.todo.done ? "[x]" : "[ ]"),
@@ -112,15 +112,15 @@ export const TodoList = Component.define({
   message: TodoListMessage
 }).make({
   init: ($) => ({ todos: $.props.initial, failed: [] }),
-  update: (model, message) =>
+  update: ($, message) =>
     TodoListMessage.match(message, {
       SetDone: ({ done, id }) => ({
-        ...model,
-        todos: model.todos.map((todo) => todo.id === id ? { ...todo, done } : todo)
+        ...$.model,
+        todos: $.model.todos.map((todo) => todo.id === id ? { ...todo, done } : todo)
       }),
-      RowFailed: ({ id }) => ({ ...model, failed: [...model.failed, id] })
+      RowFailed: ({ id }) => ({ ...$.model, failed: [...$.model.failed, id] })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "ul",
       model.todos.map((todo) =>
@@ -174,17 +174,17 @@ export const SearchBox = Component.define({
   message: SearchMessage
 }).make({
   init: () => ({ text: "", items: [], percent: 0, ticks: 0 }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     SearchMessage.match(message, {
-      Query: ({ text }) => $.set({ ...model, text }).run(Search.make({ text })),
-      Results: ({ items }) => ({ ...model, items }),
+      Query: ({ text }) => $.set({ ...$.model, text }).run(Search.make({ text })),
+      Results: ({ items }) => ({ ...$.model, items }),
       Start: () => $.run(Upload.make({ name: "photo.png" })),
       Cancel: () => $.run(Command.interrupt(Upload, { name: "photo.png" })),
-      Progress: ({ percent }) => ({ ...model, percent }),
-      Tick: () => ({ ...model, ticks: model.ticks + 1 })
+      Progress: ({ percent }) => ({ ...$.model, percent }),
+      Tick: () => ({ ...$.model, ticks: $.model.ticks + 1 })
     }),
-  view: (model, h) => h.el("div", model.text),
-  subscriptions: (model) => [
+  view: (h, model) => h.el("div", model.text),
+  subscriptions: ({ model }) => [
     model.percent > 0 && model.percent < 100 &&
     Subscription.make("tick", Stream.make(SearchMessage.Tick())),
     Subscription.make("query", model.text, () => Stream.empty)

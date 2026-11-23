@@ -11,8 +11,8 @@ class Editor extends Feature.Service<Editor>()("SlotStatus/Editor", { props: Sch
 const EditorView = Component.define({ name: "EditorView", scoped: false, model: Schema.Null, message: Schema.Never })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.text("editor")
+    update: ($) => $.model,
+    view: (h) => h.text("editor")
   })
 const shown = (result: AsyncResult.AsyncResult<never, unknown>) => AsyncResult.isFailure(result) ? "down" : "loading"
 
@@ -32,8 +32,8 @@ const replayed = (component: Parameters<typeof Story.fromLog>[0], entries: Param
 
 const Doc = Component.define({ name: "Doc", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("div", "doc:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
+  update: ($) => $.model,
+  view: (h) => h.el("div", "doc:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
 })
 
 describe("slot status", () => {
@@ -48,8 +48,8 @@ describe("slot status", () => {
         message: Message
       }).make({
         init: () => "a" as const,
-        update: (room, message) => Message.match(message, { Move: ({ room }) => room, Failed: () => room }),
-        view: (room, h) =>
+        update: ($, message) => Message.match(message, { Move: ({ room }) => room, Failed: () => $.model }),
+        view: (h, room) =>
           h.el("div", room + ":", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
       })
       const Keyed = Component.provide(Room, {
@@ -91,15 +91,15 @@ describe("slot status", () => {
       const Spinner = Component.define({ name: "Spinner", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.el("div", "spinner:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
         })
       const Inner = Component.provide(
         Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.el(
               "div",
               Doc(h, { key: "p" }),
@@ -113,8 +113,8 @@ describe("slot status", () => {
       const Outer = Component.provide(
         Component.define({ name: "Outer", scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.el("div", Inner(h, { key: "i" }))
+          update: ($) => $.model,
+          view: (h) => h.el("div", Inner(h, { key: "i" }))
         }),
         Editor.toLayer(EditorView)
       )
@@ -151,12 +151,12 @@ describe("slot status", () => {
       const Msg = UiSchema.TaggedEnum({ Go: {}, Stop: {} })
       const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Msg }).make({
         init: () => null,
-        update: (model, message, $) =>
+        update: ($, message) =>
           Msg.match(message, {
-            Go: () => $.set(model).run(Job.make().pipe(Command.asNoop)),
-            Stop: () => $.set(model).run(Command.interrupt(Job))
+            Go: () => $.run(Job.make().pipe(Command.asNoop)),
+            Stop: () => $.run(Command.interrupt(Job))
           }),
-        view: (_, h) => h.text(h.isRunning(Job) ? "running" : "idle")
+        view: (h) => h.text(h.isRunning(Job) ? "running" : "idle")
       })
       const root = yield* TestHost.mount(Jobs, {})
       const both = () => [root.text(), textOf(replayed(Jobs, root.log()))]

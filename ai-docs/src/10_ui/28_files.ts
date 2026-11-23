@@ -85,18 +85,18 @@ export const CsvImport = Component.define({
 }).make({
   init: () => ImportModel.Idle(),
   update: {
-    ChoseFiles: (model, { files: [file] }, $) =>
-      file === undefined ? model : $.set(ImportModel.Reading({ name: file.name })).run(ReadCsv.make({ file })),
-    PressedOpen: (_model, _message, $) =>
+    ChoseFiles: ($, { files: [file] }) =>
+      file === undefined ? $.model : $.set(ImportModel.Reading({ name: file.name })).run(ReadCsv.make({ file })),
+    PressedOpen: ($) =>
       $.run(DomFile.pick(({ files }) => ImportMessage.ChoseFiles({ files }), { accept: [".csv", "text/csv"] })),
-    ClickedCancel: (model, _message, $) =>
-      model._tag === "Reading"
-        ? $.set(ImportModel.Cancelled({ name: model.name })).run(Command.interrupt(ReadCsv))
-        : model,
-    CompletedReadCsv: (_model, { name, rows }) => ImportModel.Imported({ name, rows }),
-    FailedReadCsv: (_model, { name }) => ImportModel.Failed({ name })
+    ClickedCancel: ($) =>
+      $.model._tag === "Reading"
+        ? $.set(ImportModel.Cancelled({ name: $.model.name })).run(Command.interrupt(ReadCsv))
+        : $.model,
+    CompletedReadCsv: (_, { name, rows }) => ImportModel.Imported({ name, rows }),
+    FailedReadCsv: (_, { name }) => ImportModel.Failed({ name })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.section(
       h.label.children(
         "Import a CSV file",

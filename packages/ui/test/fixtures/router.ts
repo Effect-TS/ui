@@ -32,9 +32,9 @@ export const Home = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   head: () => [Head.title("Home"), HtmlHead.meta({ name: "description", content: "The home page" })],
-  view: (_, h) => h.el("h1", "Home")
+  view: (h) => h.el("h1", "Home")
 })
 
 /**
@@ -96,22 +96,22 @@ export const Person = Component.define({
   queries: {
     person: {
       query: GetPerson,
-      args: (_model, props) => ({ id: props.id }),
+      args: ({ props }) => ({ id: props.id }),
       onChange: (result) => PersonMessage.Loaded({ name: AsyncResult.isSuccess(result) ? result.value : "Loading" })
     }
   }
 }).make({
   init: ($) => $.set({ id: $.props.id, name: "Loading", count: 0, visits: 0 }).run(CountVisit.make()),
-  update: (model, message, $) =>
+  update: ($, message) =>
     PersonMessage.match(message, {
-      Loaded: ({ name }) => ({ ...model, name }),
-      Rename: () => $.run(RenamePerson.make({ id: model.id }).pipe(Command.map(() => PersonMessage.Renamed()))),
-      Renamed: () => model,
-      Visited: () => ({ ...model, visits: model.visits + 1 }),
-      Bump: () => ({ ...model, count: model.count + 1 })
+      Loaded: ({ name }) => ({ ...$.model, name }),
+      Rename: () => $.run(RenamePerson.make({ id: $.model.id }).pipe(Command.map(() => PersonMessage.Renamed()))),
+      Renamed: () => $.model,
+      Visited: () => ({ ...$.model, visits: $.model.visits + 1 }),
+      Bump: () => ({ ...$.model, count: $.model.count + 1 })
     }),
-  head: (model) => [Head.title(model.name), HtmlHead.meta({ name: "description", content: `About ${model.name}` })],
-  view: (model, h) =>
+  head: ({ model }) => [Head.title(model.name), HtmlHead.meta({ name: "description", content: `About ${model.name}` })],
+  view: (h, model) =>
     h.el(
       "div",
       h.el("h1", model.name),
@@ -131,9 +131,9 @@ export const Slow = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   head: () => [Head.title("Slow")],
-  view: (_, h) => h.el("h1", "Slow")
+  view: (h) => h.el("h1", "Slow")
 }).pipe(
   Component.provide(Layer.effect(SlowData, Effect.as(Effect.sleep("1 second"), { text: "ready" })))
 )
@@ -162,21 +162,21 @@ export const App = Component.define({
   elements: Html
 }).make({
   init: ($) => ({ route: $.props.route, outcomes: [], blocked: false }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     AppMessage.match(message, {
-      ChangedRoute: ({ route }) => ({ ...model, route }),
+      ChangedRoute: ({ route }) => ({ ...$.model, route }),
       Go: ({ route }) => $.run(Router.push(AppRoute, route).pipe(Command.map(navigated))),
       Back: () => $.run(Router.Back.make().pipe(Command.map(navigated))),
-      Block: () => ({ ...model, blocked: true }),
-      Unblock: () => ({ ...model, blocked: false }),
-      Navigated: ({ outcome }) => ({ ...model, outcomes: [...model.outcomes, outcome] })
+      Block: () => ({ ...$.model, blocked: true }),
+      Unblock: () => ({ ...$.model, blocked: false }),
+      Navigated: ({ outcome }) => ({ ...$.model, outcomes: [...$.model.outcomes, outcome] })
     }),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route })),
     model.blocked && Router.blocked("editing")
   ],
   head: () => [Head.titleTemplate((title) => `${title} · App`), HtmlHead.lang("en")],
-  view: (model, h) => {
+  view: (h, model) => {
     const go = (label: string, route: AppRoute) => h.el("button").on("click", AppMessage.Go({ route })).children(label)
     return h.el(
       "div",

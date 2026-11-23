@@ -72,8 +72,8 @@ import type * as Renderer from "./Renderer.ts"
  *   message: Schema.Literal("ClickedIncrement")
  * }).make({
  *   init: () => 0,
- *   update: (count) => count + 1,
- *   view: (count, h) => Button(h, String(count), "ClickedIncrement")
+ *   update: ($) => $.model + 1,
+ *   view: (h, count) => Button(h, String(count), "ClickedIncrement")
  * })
  * ```
  *

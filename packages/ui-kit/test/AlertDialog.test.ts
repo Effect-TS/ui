@@ -18,7 +18,7 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: true }),
   update: { RequestedClose: () => ({ open: false }) },
-  view: (model, h) =>
+  view: (h, model) =>
     AlertDialog(h, {
       props: { open: model.open },
       onEmit: {

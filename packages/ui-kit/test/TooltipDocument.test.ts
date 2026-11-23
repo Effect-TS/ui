@@ -152,11 +152,11 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: true, tinted: false }),
   update: {
-    Closed: (model) => ({ ...model, open: false }),
-    RequestedOpen: (model) => ({ ...model, open: true }),
-    Restyled: (model) => ({ ...model, tinted: !model.tinted })
+    Closed: ($) => ({ ...$.model, open: false }),
+    RequestedOpen: ($) => ({ ...$.model, open: true }),
+    Restyled: ($) => ({ ...$.model, tinted: !$.model.tinted })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Tooltip(h, {
       props: {
         open: model.open,

@@ -5,14 +5,16 @@
 Listen for document and window events from `subscriptions`, with `DomSubscription.onDocument` and `DomSubscription.onWindow`.
 
 ```ts
-subscriptions: ;
-;((model) => [
-  model.running && DomSubscription.onDocument(
-    "keydown",
-    ({ key }) => isArrow(key) ? Message.PressedArrow({ key }) : undefined,
-    { preventDefault: true }
-  )
-])
+GameDef.make({
+  // init, update and view as before
+  subscriptions: ({ model }) => [
+    model.running && DomSubscription.onDocument(
+      "keydown",
+      ({ key }) => isArrow(key) ? Message.PressedArrow({ key }) : undefined,
+      { preventDefault: true }
+    )
+  ]
+})
 ```
 
 - `onDocument` takes `keydown` and `keyup` with the element handlers' key payload, and `mousedown`, `mouseup` and `click` with their pointer payload. `onWindow` takes `focus` and `blur`. The handler and `preventDefault` work as they do on an element. The payload also has `defaultPrevented`, so a listener can skip an event an element's handler already cancelled. `capture: true` listens in the capture phase.

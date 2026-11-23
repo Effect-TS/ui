@@ -38,8 +38,8 @@
  *   elements: Html
  * }).make({
  *   init: () => null,
- *   update: (model) => model,
- *   view: (_, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     h.nav(
  *       h.a.attr("href", "/docs").children("Docs"),
  *       Separator(h, { props: { orientation: "vertical" } }).class("rule"),

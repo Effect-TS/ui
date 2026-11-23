@@ -168,11 +168,11 @@
  * }).make({
  *   init: () => ({ open: false, query: "str" }),
  *   update: {
- *     RequestedOpenSuggestions: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseSuggestions: (_model, _message, $) => $.evolve({ open: false }),
- *     UpdatedQuery: (_model, { query }, $) => $.evolve({ query })
+ *     RequestedOpenSuggestions: ($) => $.evolve({ open: true }),
+ *     RequestedCloseSuggestions: ($) => $.evolve({ open: false }),
+ *     UpdatedQuery: ($, { query }) => $.evolve({ query })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.form(
  *       Autocomplete(h, {
  *         props: { open: model.open, value: model.query, items: tags, name: "q" },
@@ -618,8 +618,8 @@ export const Autocomplete = Component.define({
 }).make({
   init: Engine.init,
   update: engine.update,
-  parts: (model, p) =>
-    Struct.omit(engine.parts(model, p), [
+  parts: (p, model) =>
+    Struct.omit(engine.parts(p, model), [
       "selected",
       "selectedItems",
       "placeholder",

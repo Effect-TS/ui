@@ -41,23 +41,23 @@ const Checkout = Component.define({
       notice: "Welcome"
     }),
   update: {
-    ClickedIncrement: (_model, { id }, $) =>
+    ClickedIncrement: ($, { id }) =>
       $.evolve({
         lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
         coupon: UiStruct.evolve({ status: "Idle" }),
         notice: null
       }),
-    ClickedRemove: (model, { id }, $) => {
-      const lines = model.lines.filter((line) => line.id !== id)
+    ClickedRemove: ($, { id }) => {
+      const lines = $.model.lines.filter((line) => line.id !== id)
       const step = $.evolve({ lines })
       return lines.length === 0 ? step.evolve({ notice: "Your basket is empty" }).emit(Events.Emptied()) : step
     },
-    SubmittedOrder: (model, _message, $) =>
-      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(PlaceOrder.make({ lines: model.lines.length })),
+    SubmittedOrder: ($) =>
+      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(PlaceOrder.make({ lines: $.model.lines.length })),
     // Keeps every field, so the Model stays the same object.
-    FailedPlaceOrder: (model) => UiStruct.evolve(model, { submitting: false })
+    FailedPlaceOrder: ($) => UiStruct.evolve($.model, { submitting: false })
   },
-  view: (_model, h) => h.text("checkout")
+  view: (h) => h.text("checkout")
 })
 
 describe("evolve", () => {

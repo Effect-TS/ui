@@ -94,27 +94,27 @@ const Page = Component.define({
     log: []
   }),
   update: {
-    Closed: (model) => ({ ...model, a: false }),
-    ShowedToasts: (model) => ({ ...model, toasts: true }),
-    AddedControl: (model) => ({ ...model, late: true }),
-    Switched: (model) => ({ ...model, config: { ...model.config, modal: model.config.modal === false } }),
-    Removed: (model) => ({ ...model, removed: true }),
-    AllowedFocus: (model) => ({ ...model, config: { ...model.config, initialFocus: true } }),
-    RequestedOpen: (model, { method, triggerId, which }) => ({
-      ...model,
+    Closed: ($) => ({ ...$.model, a: false }),
+    ShowedToasts: ($) => ({ ...$.model, toasts: true }),
+    AddedControl: ($) => ({ ...$.model, late: true }),
+    Switched: ($) => ({ ...$.model, config: { ...$.model.config, modal: $.model.config.modal === false } }),
+    Removed: ($) => ({ ...$.model, removed: true }),
+    AllowedFocus: ($) => ({ ...$.model, config: { ...$.model.config, initialFocus: true } }),
+    RequestedOpen: ($, { method, triggerId, which }) => ({
+      ...$.model,
       [which]: true,
       triggerId,
       method,
-      log: [...model.log, `RequestedOpen ${which} ${triggerId} ${method}`]
+      log: [...$.model.log, `RequestedOpen ${which} ${triggerId} ${method}`]
     }),
-    RequestedClose: (model, { reason, which }) => ({
-      ...model,
-      [which]: model.config.refuse ? model[which as "a" | "b"] : false,
-      log: [...model.log, `RequestedClose ${which} ${reason}`]
+    RequestedClose: ($, { reason, which }) => ({
+      ...$.model,
+      [which]: $.model.config.refuse ? $.model[which as "a" | "b"] : false,
+      log: [...$.model.log, `RequestedClose ${which} ${reason}`]
     }),
-    Settled: (model, { open, which }) => ({ ...model, log: [...model.log, `Settled ${which} ${open}`] })
+    Settled: ($, { open, which }) => ({ ...$.model, log: [...$.model.log, `Settled ${which} ${open}`] })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const props = model.config
     const on = (which: string) => ({
       RequestedOpen: ({ triggerId }: { readonly triggerId: string | null }) =>

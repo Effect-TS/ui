@@ -266,23 +266,24 @@ describe("Validation", () => {
         taken: {
           query: IsUsernameTaken,
           debounce: "300 millis",
-          args: (model) => Account.passes(model.form, "username") ? { username: model.form.values.username } : undefined
+          args: ({ model }) =>
+            Account.passes(model.form, "username") ? { username: model.form.values.username } : undefined
         }
       }
     }).make({
       init: () => ({ form: Account.init({ username: "" }) }),
       update: {
-        UpdatedUsername: (model, { value }) => ({ form: Account.change(model.form, "username", value) }),
-        ClickedSubmit: (model, _message, $) => {
-          const form = Account.submit(model.form)
+        UpdatedUsername: ($, { value }) => ({ form: Account.change($.model.form, "username", value) }),
+        ClickedSubmit: ($) => {
+          const form = Account.submit($.model.form)
           return Option.match(Account.validate(form, { username: taken($.queries.taken) }).value, {
             onNone: () => ({ form }),
             onSome: ({ username }) => $.set({ form }).run(CreateAccount.make({ username }))
           })
         },
-        CreatedAccount: (model) => model
+        CreatedAccount: ($) => $.model
       },
-      view: (model, h) => h.el("p", model.form.values.username)
+      view: (h, model) => h.el("p", model.form.values.username)
     })
 
     it.effect("drops a stale answer and submits once the check passes", () =>

@@ -54,8 +54,8 @@
  *   elements: Html
  * }).make({
  *   init: () => null,
- *   update: (model) => model,
- *   view: (_model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     Avatar(h, {
  *       props: { src: "/ada.png" },
  *       view: (avatar) =>
@@ -254,10 +254,10 @@ export const Avatar = Component.define({
     delayElapsed: !((props.fallbackDelay ?? 0) > 0)
   }),
   update: {
-    ChangedImageStatus: (_model, { source, status }, $) => $.evolve({ report: { source, status } }),
-    ElapsedFallbackDelay: (_model, _message, $) => $.evolve({ delayElapsed: true })
+    ChangedImageStatus: ($, { source, status }) => $.evolve({ report: { source, status } }),
+    ElapsedFallbackDelay: ($) => $.evolve({ delayElapsed: true })
   },
-  subscriptions: (model, props) => [
+  subscriptions: ({ model, props }) => [
     loadImage(sourceOf(props)),
     !model.delayElapsed &&
     Subscription.make(
@@ -266,7 +266,7 @@ export const Avatar = Component.define({
       (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(AvatarMessage.ElapsedFallbackDelay()))
     )
   ],
-  parts: (model, p) => {
+  parts: (p, model) => {
     const source = sourceOf(p.props)
     const status = statusOf(model.report, source)
     const root = p.part("span", (b) => b)

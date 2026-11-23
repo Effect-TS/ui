@@ -16,8 +16,8 @@ describe("Switch", () => {
   it("returns what view returns, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const root = Switch(h, {
           props: { checked: false },
           onToggle: ({ checked }) => Msg.Toggled({ checked }),
@@ -41,8 +41,8 @@ describe("Switch", () => {
   it("root takes only a button, thumb only a span, and onToggle only the consumer's message", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(Switch).type.not.toBeCallableWith(h, {
           props: { checked: false },
           onToggle: () => Other.Pressed(),

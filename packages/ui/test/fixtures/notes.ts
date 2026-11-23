@@ -20,7 +20,7 @@ export const Badge = Component.define({
 }).make({
   init: () => 0,
   update: () => 0,
-  view: (count, h) => h.span(String(count))
+  view: (h, count) => h.span(String(count))
 })
 
 export const NoteMessage = UiSchema.TaggedEnum({
@@ -78,7 +78,7 @@ export const Note = Component.define({
   queries: {
     author: {
       query: users.GetUser,
-      args: (model, props) => {
+      args: ({ model, props }) => {
         const id = model.author ?? props.author
         return id === undefined ? undefined : { id }
       }
@@ -86,21 +86,21 @@ export const Note = Component.define({
   }
 }).make({
   init: () => ({ text: "", saved: false, items: [], lines: 0 }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     NoteMessage.match(message, {
-      Edit: ({ text }) => ({ ...model, text, saved: false }),
-      Save: () => $.run(SaveNote.make({ text: model.text })),
-      Saved: () => $.set({ ...model, saved: true }).emit(NoteEvents.Saved({ text: model.text })),
+      Edit: ({ text }) => ({ ...$.model, text, saved: false }),
+      Save: () => $.run(SaveNote.make({ text: $.model.text })),
+      Saved: () => $.set({ ...$.model, saved: true }).emit(NoteEvents.Saved({ text: $.model.text })),
       Find: ({ text }) => $.run(FindNotes.make({ text })),
-      Found: ({ items }) => ({ ...model, items }),
+      Found: ({ items }) => ({ ...$.model, items }),
       Follow: () => $.run(FollowNotes.make({})),
-      Line: () => ({ ...model, lines: model.lines + 1 }),
+      Line: () => ({ ...$.model, lines: $.model.lines + 1 }),
       Sync: () => $.run(SyncNote.make({})),
-      Synced: () => model,
-      Opened: ({ count }) => ({ ...model, text: `opened ${count}` }),
-      Author: ({ id }) => ({ ...model, author: id })
+      Synced: () => $.model,
+      Opened: ({ count }) => ({ ...$.model, text: `opened ${count}` }),
+      Author: ({ id }) => ({ ...$.model, author: id })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.input.attr("aria-label", "Text").value(model.text).onInput(({ value }) =>
         value === model.text ? undefined : NoteMessage.Edit({ text: value })

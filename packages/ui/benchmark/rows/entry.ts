@@ -2,7 +2,7 @@ import { Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
-import type { Model as TableModel } from "./harness.ts"
+import type { Message as TableMessage, Model as TableModel } from "./harness.ts"
 
 // The keyed table of js-framework-benchmark (krausest), on @effect/ui. Four variants render the same
 // DOM (see harness.ts):
@@ -53,13 +53,13 @@ const RowView = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (_, message, $) =>
+  update: ($, message) =>
     $.emit(
       message._tag === "Select"
         ? Message.Select({ id: $.props.row.id })
         : Message.Remove({ id: $.props.row.id })
     ),
-  view: (_, h) =>
+  view: (h) =>
     h.tr.class(h.props.selected && "danger").children(
       h.td.class("col-md-1").children(String(h.props.row.id)),
       h.td.class("col-md-4").children(h.a.onClick(RowMessage.Select()).children(h.props.row.label)),
@@ -72,7 +72,7 @@ const RowView = Component.define({
     )
 })
 
-const componentRows = (model: TableModel, h: Component.Helper<typeof TableDef>) =>
+const componentRows = (h: Component.Helper<typeof TableDef>, model: TableModel) =>
   h.table.class("table").children(
     h.tbody.children(model.rows.map((row) =>
       RowView(h, {
@@ -83,12 +83,14 @@ const componentRows = (model: TableModel, h: Component.Helper<typeof TableDef>) 
     ))
   )
 
+const tableUpdate = ($: { readonly model: TableModel }, message: TableMessage) => update($.model, message)
+
 /** The variants' table components, starting from `start`'s Model. */
 const tables = (start: () => TableModel) => ({
   plain: Component.define(app).make({
     init: start,
-    update,
-    view: (model, h) =>
+    update: tableUpdate,
+    view: (h, model) =>
       h.table.class("table").children(
         h.tbody.children(model.rows.map((row) =>
           h.tr.key(String(row.id)).class(row.id === model.selected && "danger").children(
@@ -108,14 +110,14 @@ const tables = (start: () => TableModel) => ({
   }),
   lazy: TableDef.make({
     init: start,
-    update,
-    view: (model, h) =>
+    update: tableUpdate,
+    view: (h, model) =>
       h.table.class("table").children(
         h.tbody.children(model.rows.map((row) => h.lazy(lazyRow, row, row.id === model.selected)))
       )
   }),
-  component: TableDef.make({ init: start, update, view: componentRows }),
-  titled: TableDef.make({ init: start, update, head: () => [Head.title("Rows")], view: componentRows })
+  component: TableDef.make({ init: start, update: tableUpdate, view: componentRows }),
+  titled: TableDef.make({ init: start, update: tableUpdate, head: () => [Head.title("Rows")], view: componentRows })
 })
 
 type Table = ReturnType<typeof tables>["plain"]

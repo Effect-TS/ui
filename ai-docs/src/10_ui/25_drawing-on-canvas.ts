@@ -81,18 +81,18 @@ export const Sky = Component.define({
 }).make({
   init: () => ({ running: true, comets: [] }),
   update: {
-    TickedFrame: (_model, { delta }, $) =>
+    TickedFrame: ($, { delta }) =>
       $.evolve({
         comets: (comets) =>
           comets.map((comet) => ({ ...comet, x: (comet.x + comet.speed * Math.min(delta, 50) / 1000) % WIDTH }))
       }),
-    PressedSky: (model, { x, y }, $) => $.evolve({ comets: [...model.comets, { x, y, speed: 120 }] }),
-    ClickedPause: (model, _message, $) => $.evolve({ running: !model.running })
+    PressedSky: ($, { x, y }) => $.evolve({ comets: [...$.model.comets, { x, y, speed: 120 }] }),
+    ClickedPause: ($) => $.evolve({ running: !$.model.running })
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.running && DomSubscription.onAnimationFrame((delta) => SkyMessage.TickedFrame({ delta }))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       Canvas.view(h, {
         width: WIDTH,

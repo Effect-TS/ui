@@ -19,8 +19,8 @@ const Avatar = Component.define({
   elements: Html
 }).make({
   init: () => "avatar from the " + side(inits.avatar++),
-  update: (model) => model,
-  view: (text, h) => h.i(text)
+  update: ($) => $.model,
+  view: (h, text) => h.i(text)
 })
 
 const Badge = Component.define({
@@ -31,8 +31,8 @@ const Badge = Component.define({
   elements: Html
 }).make({
   init: () => "badge from the " + side(inits.badge++),
-  update: (model) => model,
-  view: (text, h) => h.b(text)
+  update: ($) => $.model,
+  view: (h, text) => h.b(text)
 })
 
 const Broken = Component.define({
@@ -43,14 +43,14 @@ const Broken = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
+  update: ($) => $.model,
   view: (): never => {
     throw new Error("broken")
   }
 })
 
 const Pin = Component.define({ name: "Pin", scoped: true, model: Schema.Null, message: Schema.Never, elements: Html })
-  .make({ init: () => null, update: (model) => model, view: (_, h) => h.u("pin") })
+  .make({ init: () => null, update: ($) => $.model, view: (h) => h.u("pin") })
 
 const Profile = Component.define({
   name: "Profile",
@@ -61,8 +61,8 @@ const Profile = Component.define({
 })
   .make({
     init: () => "draft from the " + side(inits.profile++),
-    update: (model) => model,
-    view: (draft, h) =>
+    update: ($) => $.model,
+    view: (h, draft) =>
       h.form(
         h.p(draft),
         Avatar(h, { key: "a" }),
@@ -88,7 +88,7 @@ const Settings = Component.define({
 }).make({
   init: () => false,
   update: (_, shown) => shown,
-  view: (shown, h) => {
+  view: (h, shown) => {
     const billing = AsyncResult.isSuccess(h.queries.tab) && h.queries.tab.value === "billing"
     return h.main(
       h.h1(billing ? "billing" : "profile"),
@@ -104,7 +104,7 @@ const Sketch = Component.define({
   model: Schema.declare((u): u is () => string => typeof u === "function"),
   message: Schema.Never,
   elements: Html
-}).make({ init: () => () => "sketch", update: (model) => model, view: (text, h) => h.em(text()) })
+}).make({ init: () => () => "sketch", update: ($) => $.model, view: (h, text) => h.em(text()) })
 
 const Board = Component.define({
   name: "Board",
@@ -116,7 +116,7 @@ const Board = Component.define({
 }).make({
   init: () => false,
   update: (_, shown) => shown,
-  view: (shown, h) =>
+  view: (h, shown) =>
     h.main(
       h.scoped((s) => Sketch(s, { key: "drawn" })),
       shown || !AsyncResult.isSuccess(h.queries.tab) ? h.scoped((s) => Sketch(s, { key: "kept" })) : null
@@ -162,8 +162,8 @@ const Note = Component.define({
 })
   .make({
     init: () => noteInits++ === 0 ? "server-note" : "client-note",
-    update: (model) => model,
-    view: (note, h) => h.i(note)
+    update: ($) => $.model,
+    view: (h, note) => h.i(note)
   })
 const Leaf = Component.define({
   name: "Leaf",
@@ -174,8 +174,8 @@ const Leaf = Component.define({
 })
   .make({
     init: () => leafInits++ === 0 ? "server-draft" : "client-initial",
-    update: (model) => model,
-    view: (draft, h) => h.div(h.p(draft), Note(h, { key: "n" }))
+    update: ($) => $.model,
+    view: (h, draft) => h.div(h.p(draft), Note(h, { key: "n" }))
   })
 
 const Frame = Component.define({
@@ -185,7 +185,7 @@ const Frame = Component.define({
   message: Schema.Never,
   elements: Html,
   slots: ["body"]
-}).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.section(h.slots.body) })
 
 const Page = Component.define({
   name: "Page",
@@ -197,7 +197,7 @@ const Page = Component.define({
 }).make({
   init: () => null,
   update: (_, where) => where,
-  view: (moved, h) => {
+  view: (h, moved) => {
     const where = moved ?? h.props.where
     return h.scoped((s) =>
       h.main(
@@ -253,7 +253,7 @@ const SlowFrame = Component.define({
   message: Schema.Never,
   elements: Html,
   slots: ["body"]
-}).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.section(h.slots.body) })
   .pipe(Component.provide(Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))))
 const SlowPage = Component.define({
   name: "SlowPage",
@@ -264,8 +264,8 @@ const SlowPage = Component.define({
 })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.scoped((s) => h.main(SlowFrame(h, { key: "f", slots: { body: Leaf(s, { key: "l" }) } })))
+    update: ($) => $.model,
+    view: (h) => h.scoped((s) => h.main(SlowFrame(h, { key: "f", slots: { body: Leaf(s, { key: "l" }) } })))
   })
 
 describe("scoped children in a receiver that waits for its Layer", { concurrent: false }, () => {
@@ -296,7 +296,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     message: Schema.Never,
     elements: Html,
     slots: ["body"]
-  }).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+  }).make({ init: () => null, update: ($) => $.model, view: (h) => h.section(h.slots.body) })
     .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
   const serve = Effect.fnUntraced(function*(page: Effect.Effect<HtmlServer.Rendered<unknown>>) {
     gate = Effect.void
@@ -323,7 +323,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   }).make({
     init: () => "server",
     update: (_, text) => text,
-    view: (text, h) => h.input.value(text).onInput(({ value }) => value)
+    view: (h, text) => h.input.value(text).onInput(({ value }) => value)
   })
   const Box = Component.define({
     name: "Box",
@@ -332,13 +332,13 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     message: Schema.Never,
     elements: Html
   })
-    .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
   const fieldPage = (placed: "bare" | "in an element" | "by a forwarded builder" | "by a headless child's view") =>
     Component.define({ name: "FieldPage", scoped: false, model: Schema.Number, message: Schema.Null, elements: Html })
       .make({
         init: () => 0,
-        update: (renders) => renders + 1,
-        view: (_, h) =>
+        update: ($) => $.model + 1,
+        view: (h) =>
           h.scoped((s) => {
             const field = Field(s, { key: "f" })
             const body = placed === "bare"
@@ -381,7 +381,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   }).make({
     init: () => "server",
     update: (_, text) => text,
-    view: (note, h) => h.input.value(note).onInput(({ value }) => value)
+    view: (h, note) => h.input.value(note).onInput(({ value }) => value)
   })
   const Bare = Component.define({
     name: "Bare",
@@ -390,7 +390,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     message: Schema.Never,
     elements: Html,
     slots: ["body"]
-  }).make({ init: () => null, update: (model) => model, view: (_, h) => h.slots.body })
+  }).make({ init: () => null, update: ($) => $.model, view: (h) => h.slots.body })
     .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
   const Row = Component.define({
     name: "Row",
@@ -400,8 +400,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     elements: Html
   }).make({
     init: () => "",
-    update: (row) => row,
-    view: (row, h) => h.p(row)
+    update: ($) => $.model,
+    view: (h, row) => h.p(row)
   })
   let drafts = 0
   let start: "slot" | "aside" = "slot"
@@ -409,8 +409,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   const draft = (name: string) =>
     Component.define({ name, scoped: true, model: Schema.String, message: Schema.Never, elements: Html }).make({
       init: () => side(drafts++),
-      update: (text) => text,
-      view: (text, h) => h.input.value(text)
+      update: ($) => $.model,
+      view: (h, text) => h.input.value(text)
     })
   const Draft = draft("Draft")
   const SlowDraft = draft("SlowDraft")
@@ -420,7 +420,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       .make({
         init: () => "slot" as const,
         update: (_, where) => where,
-        view: (where, h) =>
+        view: (h, where) =>
           h.scoped(({ model }) => model !== "ended", (s) => {
             const written = Draft(s, { key: "d" })
             const body = where === "slot" || where === "ended" ? written : null
@@ -443,7 +443,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
   }).make({
     init: () => start,
     update: (_, where) => where,
-    view: (where, h) =>
+    view: (h, where) =>
       h.scoped((s) => {
         const written = SlowDraft(s, { key: "d" })
         return h.main(h.p(where === "slot" ? written : null), h.aside(where === "aside" ? written : null))
@@ -532,7 +532,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).make({
         init: () => false,
         update: (_, moved) => moved,
-        view: (moved, h) =>
+        view: (h, moved) =>
           h.scoped((s) => {
             const row = Row(s, { key: "r" })
             return h.main(
@@ -564,8 +564,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         elements: Html
       }).make({
         init: () => "",
-        update: (text, typed) => text + typed,
-        view: (text, h) =>
+        update: ($, typed) => $.model + typed,
+        view: (h, text) =>
           h.scoped((s) => {
             const row = Row(s, { key: "r" })
             return h.main(
@@ -594,7 +594,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
-  }).make({ init: () => null, update: (model) => model, view: (_, h) => h.b(String(h.props.n)) })
+  }).make({ init: () => null, update: ($) => $.model, view: (h) => h.b(String(h.props.n)) })
 
   it.effect("keep the server's nodes of a receiver they draw, when taken out of the document and drawn again while it waits", () =>
     Effect.gen(function*() {
@@ -606,8 +606,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => Bare(h, { key: "g", slots: { body: [h.p("a"), h.p("b")] } })
+        update: ($) => $.model,
+        view: (h) => Bare(h, { key: "g", slots: { body: [h.p("a"), h.p("b")] } })
       })
       const Cards = Component.define({
         name: "Cards",
@@ -618,7 +618,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).make({
         init: () => true,
         update: (_, shown) => shown,
-        view: (shown, h) =>
+        view: (h, shown) =>
           h.scoped((s) => {
             const card = Card(s, { key: "c" })
             return h.main(shown ? card : null)
@@ -648,7 +648,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.aside("stuck") })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.aside("stuck") })
           .pipe(
             Component.provide(Layer.effect(Slow, Effect.suspend(() => stuck ? Effect.never : Effect.succeed("ready"))))
           )
@@ -662,7 +662,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) =>
+          view: (h, shown) =>
             h.scoped((s) => {
               const slots = { body: Item(s, { key: "i", props: { n: 0 } }) }
               passed.push(new WeakRef(slots))
@@ -693,7 +693,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.b("waits") })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.b("waits") })
           .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
         const Shell = Component.define({
           name: "Shell",
@@ -702,7 +702,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           message: Schema.Never,
           elements: Html,
           slots: ["inner"]
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.div(h.slots.inner) })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.div(h.slots.inner) })
         const Page = Component.define({
           name: "Page",
           scoped: false,
@@ -712,7 +712,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) => {
+          view: (h, shown) => {
             const body = h.scoped((s) => Shell(s, { key: "s", slots: { inner: Waits(s, { key: "w" }) } }))
             return h.main(shown ? Frame(h, { key: "f", slots: { body } }) : null)
           }
@@ -740,7 +740,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => false,
           update: (_, changed) => changed,
-          view: (changed, h) => {
+          view: (h, changed) => {
             const body = h.scoped(changed ? ({ model }) => model : ({ model }) => !model, (s) => Leaf(s, { key: "l" }))
             return h.main(Gated(h, { key: "f", slots: { body } }))
           }
@@ -791,14 +791,14 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           model: Schema.String,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => side(tips++), update: (model) => model, view: (tip, h) => h.i(tip) })
+        }).make({ init: () => side(tips++), update: ($) => $.model, view: (h, tip) => h.i(tip) })
         const Dot = Component.define({
           name: "Dot",
           scoped: true,
           model: Schema.String,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => side(dots++), update: (model) => model, view: (dot, h) => h.u(dot) })
+        }).make({ init: () => side(dots++), update: ($) => $.model, view: (h, dot) => h.u(dot) })
         const Mid = Component.define({
           name: "Mid",
           scoped: false,
@@ -807,8 +807,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           elements: Html
         }).make({
           init: () => "mid",
-          update: (model) => model,
-          view: (_, h) => h.div(Tip(h, { key: "t" }), h.scoped((s) => Dot(s, { key: "d" })))
+          update: ($) => $.model,
+          view: (h) => h.div(Tip(h, { key: "t" }), h.scoped((s) => Dot(s, { key: "d" })))
         })
         const Card = Component.define({
           name: "Card",
@@ -816,7 +816,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           model: stored(card),
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => "card", update: (model) => model, view: (_, h) => h.article(Mid(h, { key: "m" })) })
+        }).make({ init: () => "card", update: ($) => $.model, view: (h) => h.article(Mid(h, { key: "m" })) })
         const Page = Component.define({
           name: "Page",
           scoped: false,
@@ -826,7 +826,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => 0,
           update: (_, step) => step,
-          view: (step, h) =>
+          view: (h, step) =>
             h.main(
               step === 0
                 ? Gated(h, { key: "f", slots: { body: h.scoped((s) => Card(s, { key: "c" })) } })
@@ -865,7 +865,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         })),
         message: Schema.Never,
         elements: Html
-      }).make({ init: () => "slowly", update: (model) => model, view: (text, h) => h.b(text) })
+      }).make({ init: () => "slowly", update: ($) => $.model, view: (h, text) => h.b(text) })
       const Page = Component.define({
         name: "Page",
         scoped: false,
@@ -875,7 +875,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).make({
         init: () => true,
         update: (_, shown) => shown,
-        view: (shown, h) => h.main(shown ? h.scoped((s) => Slowly(s, { key: "s" })) : null)
+        view: (h, shown) => h.main(shown ? h.scoped((s) => Slowly(s, { key: "s" })) : null)
       })
       const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
       const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
@@ -900,8 +900,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => {
+          update: ($) => $.model,
+          view: (h) => {
             passed.push(new WeakRef(h.props))
             return h.article(h.props.drawn ? h.scoped((s) => Leaf(s, { key: "l" })) : null)
           }
@@ -916,7 +916,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => 0,
           update: (_, step) => step,
-          view: (step, h) =>
+          view: (h, step) =>
             h.main(
               step === 1 ? null : Author(h, { key: "a", props: { drawn: step === 2 || h.props.drawn } }),
               Gated(h, { key: "g", slots: { body: h.i() } })
@@ -957,8 +957,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       labels.push($.props.label)
       return $.props.label
     },
-    update: (model) => model,
-    view: (label, h) => h.b(label)
+    update: ($) => $.model,
+    view: (h, label) => h.b(label)
   })
 
   it.effect.each(
@@ -980,7 +980,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => false,
           update: (_, changed) => changed,
-          view: (changed, h) => {
+          view: (h, changed) => {
             const keys = last === "order" ? changed ? ["m", "l"] : ["l", "m"] : [changed && last === "key" ? "m" : "l"]
             const body = h.scoped(
               ({ model }) => model || drawn,
@@ -1020,8 +1020,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           slots: ["body", "unplaced"]
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.section(h.props.open ? h.slots.body : null)
+          update: ($) => $.model,
+          view: (h) => h.section(h.props.open ? h.slots.body : null)
         })
           .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
         const Page = Component.define({
@@ -1033,7 +1033,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => false,
           update: (_, moved) => moved,
-          view: (moved, h) => {
+          view: (h, moved) => {
             const written = h.scoped((s) => Labelled(s, { key: "l", props: { label: "drawn" } }))
             const body = out === "a headless child's view"
               ? Box(h, { key: "box", view: () => h.div(moved ? null : written) })
@@ -1066,8 +1066,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
     slots: ["a", "b"]
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.section(h.props.shows.map((slot) => h.slots[slot]))
+    update: ($) => $.model,
+    view: (h) => h.section(h.props.shows.map((slot) => h.slots[slot]))
   })
     .pipe(Component.provide(Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))))
 
@@ -1090,7 +1090,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => false,
           update: (_, changed) => changed,
-          view: (changed, h) => {
+          view: (h, changed) => {
             const fields = (keys: ReadonlyArray<string>) =>
               h.scoped(({ model }) => model, (s) => keys.map((key) => Labelled(s, { key, props: { label: key } })))
             const slots = { a: fields(changed ? left : ["x"]), b: fields(["z"]) }
@@ -1124,7 +1124,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).make({
         init: () => 0,
         update: (_, step) => step,
-        view: (step, h) => {
+        view: (h, step) => {
           const a = h.scoped(
             ({ model }) => model !== 1,
             (s) => Labelled(s, { key: step === 0 ? h.props.first : "l", props: { label: side(step) } })
@@ -1156,7 +1156,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         })),
         message: Schema.Never,
         elements: Html
-      }).make({ init: () => side(inits++), update: (model) => model, view: (text, h) => h.b(text) })
+      }).make({ init: () => side(inits++), update: ($) => $.model, view: (h, text) => h.b(text) })
       const Page = Component.define({
         name: "Page",
         scoped: false,
@@ -1167,7 +1167,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
       }).make({
         init: () => false,
         update: (_, drawn) => drawn,
-        view: (_, h) => {
+        view: (h) => {
           const field = h.scoped((s) => Late(s, { key: "l" }))
           return h.main(Gated(h, { key: "f", slots: { body: h.props.compact ? h.nav(field) : h.header(field) } }))
         }
@@ -1197,8 +1197,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           slots: ["passed"]
         }).make({
           init: () => 0,
-          update: (renders) => renders + 1,
-          view: (_, h) =>
+          update: ($) => $.model + 1,
+          view: (h) =>
             h.div(h.button.onClick(null).children("again"), Gated(h, { key: "f", slots: { body: h.slots.passed } }))
         })
         const Page = Component.define({
@@ -1210,8 +1210,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.main(
               Middle(h, {
                 key: "m",
@@ -1247,8 +1247,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.article(h.scoped((s) => Leaf(s, { key: "l" })))
+          update: ($) => $.model,
+          view: (h) => h.article(h.scoped((s) => Leaf(s, { key: "l" })))
         }).pipe(slow)
         const Outer = Component.define({
           name: "Outer",
@@ -1258,8 +1258,8 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.article(h.scoped((s) => Leaf(s, { key: "l" })))
+          update: ($) => $.model,
+          view: (h) => h.article(h.scoped((s) => Leaf(s, { key: "l" })))
         }).pipe(slow)
         const Page = Component.define({
           name: "Page",
@@ -1270,7 +1270,7 @@ describe("scoped children in a receiver that waits for its Layer", { concurrent:
         }).make({
           init: () => 0,
           update: (_, step) => step,
-          view: (step, h) =>
+          view: (h, step) =>
             h.main(
               removed === "Outer"
                 ? Frame(h, { key: "at" + step, slots: { body: h.scoped((s) => Outer(s, { key: "o" })) } })
@@ -1304,14 +1304,14 @@ describe("scoped children of a headless child", () => {
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.p("editor") })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.p("editor") })
         const Pane = Component.define({
           name: "Pane",
           scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+        }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
         const Page = Component.define({
           name: "Page",
           scoped: false,
@@ -1321,7 +1321,7 @@ describe("scoped children of a headless child", () => {
         }).make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) =>
+          view: (h, shown) =>
             h.scoped((s) =>
               h.main(shown ? Pane(h, { key: "p", view: () => h.div(h.button("pane"), Editor(s, { key: "e" })) }) : null)
             )
@@ -1353,7 +1353,7 @@ describe("scoped children of a headless child", () => {
           message: Schema.Never,
           elements: Html,
           slots: ["body"]
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.section(h.slots.body) })
           .pipe(
             Component.provide(Layer.effect(Slow, Effect.suspend(() => stuck ? Effect.never : Effect.succeed("ready"))))
           )
@@ -1364,7 +1364,7 @@ describe("scoped children of a headless child", () => {
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.b(String(h.props.n)) })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.b(String(h.props.n)) })
         const Rows = Component.define({
           name: "Rows",
           scoped: false,
@@ -1373,8 +1373,8 @@ describe("scoped children of a headless child", () => {
           elements: Html
         }).make({
           init: () => 0,
-          update: (n) => n + 1,
-          view: (n, h) => {
+          update: ($) => $.model + 1,
+          view: (h, n) => {
             const props = { n }
             made.push(new WeakRef(props))
             return h.scoped((s) => h.main(Stuck(h, { key: "f", slots: { body: Item(s, { key: "i", props }) } })))

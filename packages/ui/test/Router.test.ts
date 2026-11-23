@@ -143,8 +143,8 @@ describe("Router", { concurrent: false }, () => {
       }).make({
         init: ($) => ({ route: $.props.route }),
         update: (_, route) => ({ route }),
-        subscriptions: (model) => [Router.subscription(routes, model.route, map)],
-        view: (model, h) => h.el("p", model.route._tag)
+        subscriptions: ({ model }) => [Router.subscription(routes, model.route, map)],
+        view: (h, model) => h.el("p", model.route._tag)
       })
     const Broken = subscriber("Broken", () => {
       throw new Error("bad mapper")
@@ -178,17 +178,17 @@ describe("Router", { concurrent: false }, () => {
       message: Message
     }).make({
       init: ($) => ({ route: $.props.route, following: true }),
-      update: (model, message) =>
-        message._tag === "Changed" ? { ...model, route: message.route } : { ...model, following: message.on },
-      subscriptions: (model) =>
+      update: ($, message) =>
+        message._tag === "Changed" ? { ...$.model, route: message.route } : { ...$.model, following: message.on },
+      subscriptions: ({ model }) =>
         model.following
           ? [Router.subscription(routes, model.route, (route) => {
             onRoute()
             return Message.Changed({ route })
           })]
           : [],
-      head: (model) => [Head.title(model.route._tag)],
-      view: (model, h) => h.el("p", model.route._tag)
+      head: ({ model }) => [Head.title(model.route._tag)],
+      view: (h, model) => h.el("p", model.route._tag)
     })
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Root, Router.props(routes))
@@ -634,9 +634,9 @@ describe("Router", { concurrent: false }, () => {
       message: Schema.Never
     }).make({
       init: () => 0,
-      update: (model) => model,
+      update: ($) => $.model,
       head: () => [Head.title("Ada")],
-      view: (_, h) => h.text("page")
+      view: (h) => h.text("page")
     })
     const Layout = Component.define({
       name: "Layout",
@@ -645,13 +645,13 @@ describe("Router", { concurrent: false }, () => {
       message: Schema.Never
     }).make({
       init: () => 0,
-      update: (model) => model,
+      update: ($) => $.model,
       head: () => [
         Head.titleTemplate(() => {
           throw new Error("bad template")
         })
       ],
-      view: (_, h) => Page(h, { key: "page", props: {} })
+      view: (h) => Page(h, { key: "page", props: {} })
     })
     const Shell = Component.define({
       name: "Shell",
@@ -662,9 +662,9 @@ describe("Router", { concurrent: false }, () => {
     }).make({
       init: ($) => $.props.route,
       update: (_, { route }) => route,
-      subscriptions: (held) => [Router.subscription(AppRoute, held, (route) => ({ route }))],
+      subscriptions: ({ model: held }) => [Router.subscription(AppRoute, held, (route) => ({ route }))],
       head: () => [Head.title("App")],
-      view: (route, h) =>
+      view: (h, route) =>
         route._tag === "Person"
           ? Layout(
             h,
@@ -742,7 +742,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
     message: PageMessage
   }).make({
     init: () => ({ outcomes: [], dirty: false }),
-    update: (model, message, $) =>
+    update: ($, message) =>
       PageMessage.match(message, {
         Write: ({ label }) =>
           $.run(
@@ -752,11 +752,11 @@ describe("Router.patchSearch", { concurrent: false }, () => {
               )
             )
           ),
-        Dirty: () => ({ ...model, dirty: true }),
-        Outcome: ({ outcome }) => ({ ...model, outcomes: [...model.outcomes, outcome] })
+        Dirty: () => ({ ...$.model, dirty: true }),
+        Outcome: ({ outcome }) => ({ ...$.model, outcomes: [...$.model.outcomes, outcome] })
       }),
-    subscriptions: (model) => [model.dirty && Router.blocked("draft")],
-    view: (model, h) =>
+    subscriptions: ({ model }) => [model.dirty && Router.blocked("draft")],
+    view: (h, model) =>
       h.el(
         "div",
         h.el("p", `q=${h.props.route.search.q ?? ""} page=${h.props.route.search.page};`),
@@ -777,10 +777,10 @@ describe("Router.patchSearch", { concurrent: false }, () => {
     }).make({
       init: ($) => ({ route: $.props.route }),
       update: (_, { route }) => ({ route }),
-      subscriptions: (model) => [
+      subscriptions: ({ model }) => [
         Router.subscription(Routes, model.route, (route) => AppMessage.ChangedRoute({ route }))
       ],
-      view: (model, h) =>
+      view: (h, model) =>
         Routes.match(model.route, {
           Search: (route) => SearchPage(h, { key: key(route), props: { route } }),
           Home: () => h.el("h1", "Home"),
@@ -1194,12 +1194,12 @@ describe("Router.prefetch", { concurrent: false }, () => {
           message: Schema.Never
         }).make({
           init: () => ({}),
-          update: (model) => model,
+          update: ($) => $.model,
           subscriptions: () => [
             Router.prefetch(Routes.subset(["Home"]), { Home: () => [] }),
             Router.prefetch(Routes.subset(["Walk"]), { Walk: () => [] })
           ],
-          view: (_, h) => h.el("p", "Twice")
+          view: (h) => h.el("p", "Twice")
         })
         yield* TestHost.mount(Twice, {})
         const error = yield* Effect.flip(TestHost.settle)

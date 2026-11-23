@@ -45,7 +45,7 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
       unusedError: { query: Error, args: () => ({ fail: false }) },
       absent: { query: Optional, args: () => ({}) }
     }
-  }).make({ init: () => ({}), update: (model) => model, view: (_, h) => h.div("safe") })
+  }).make({ init: () => ({}), update: ($) => $.model, view: (h) => h.div("safe") })
   return Effect.gen(function*() {
     const rendered = yield* ssr(App, {})
     const wire = rendered.html + HtmlServer.serializeState(rendered.state)
@@ -87,7 +87,7 @@ const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, exclu
       message: Schema.Never,
       elements: Html,
       queries: { value: { query: Read, args: () => ({}) } }
-    }).make({ init: () => ({ value }), update: (model) => model, view: (_, h) => h.div("safe") })
+    }).make({ init: () => ({ value }), update: ($) => $.model, view: (h) => h.div("safe") })
     return Effect.gen(function*() {
       const rendered = yield* ssr(App, {})
       assert.notInclude(rendered.html + HtmlServer.serializeState(rendered.state), "recursive-secret")

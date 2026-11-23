@@ -24,19 +24,19 @@ const Page = Component.define({
 }).make({
   init: () => ({ outer: false, inner: false, log: [] }),
   update: {
-    RequestedOpen: (model, { menu, reason }) => ({
-      ...model,
+    RequestedOpen: ($, { menu, reason }) => ({
+      ...$.model,
       [menu]: true,
-      log: [...model.log, menu + " RequestedOpen " + reason]
+      log: [...$.model.log, menu + " RequestedOpen " + reason]
     }),
-    RequestedClose: (model, { menu, reason }, $) => ({
-      ...model,
-      [menu]: $.props.refuseClose && model[menu as "outer" | "inner"],
-      log: [...model.log, menu + " RequestedClose " + reason]
+    RequestedClose: ($, { menu, reason }) => ({
+      ...$.model,
+      [menu]: $.props.refuseClose && $.model[menu as "outer" | "inner"],
+      log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: (model, { menu, value }) => ({ ...model, log: [...model.log, menu + " Picked " + value] })
+    Picked: ($, { menu, value }) => ({ ...$.model, log: [...$.model.log, menu + " Picked " + value] })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const menu = (name: "outer" | "inner", inside?: View.Content<typeof PageMessage.Type, any>) =>
       ContextMenu(h, {
         key: name,
@@ -81,7 +81,7 @@ const Hybrid = Component.define({
     RequestedOpen: () => ({ open: true }),
     RequestedClose: () => ({ open: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Menu(h, {
       props: { open: model.open, items },
       onEmit: {

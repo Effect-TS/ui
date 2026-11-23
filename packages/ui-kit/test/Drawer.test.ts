@@ -251,9 +251,9 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false }),
   update: {
-    Toggled: (model, { open }) => ({ ...model, open })
+    Toggled: ($, { open }) => ({ ...$.model, open })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     DrawerProvider(h, {
       view: (drawerProvider) =>
         h.div(
@@ -311,8 +311,8 @@ const Mixed = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     Dialog(h, {
       key: "outer",
       props: { open: true },

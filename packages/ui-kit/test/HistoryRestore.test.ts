@@ -50,20 +50,19 @@ const Page = Component.define({
     sliderValue: 25
   }),
   update: {
-    ChangedRoute: (model, { route }) => ({ ...model, route }),
-    SetPopoverOpen: (model, { open }) => ({ ...model, popoverOpen: open }),
-    SetAutocompleteValue: (model, { value }) => ({ ...model, autocompleteValue: value }),
-    SetComboboxInput: (model, { value }) => ({ ...model, comboboxInput: value }),
-    SetSelectValue: (model, { value }) => ({ ...model, selectValue: value }),
-    SetSliderValue: (model, { value }) => ({ ...model, sliderValue: value }),
-    Left: (model, _message, $) =>
-      $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
-    Navigated: (model) => model
+    ChangedRoute: ($, { route }) => ({ ...$.model, route }),
+    SetPopoverOpen: ($, { open }) => ({ ...$.model, popoverOpen: open }),
+    SetAutocompleteValue: ($, { value }) => ({ ...$.model, autocompleteValue: value }),
+    SetComboboxInput: ($, { value }) => ({ ...$.model, comboboxInput: value }),
+    SetSelectValue: ($, { value }) => ({ ...$.model, selectValue: value }),
+    SetSliderValue: ($, { value }) => ({ ...$.model, sliderValue: value }),
+    Left: ($) => $.run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
+    Navigated: ($) => $.model
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(PageRoute, model.route, (route) => PageMessage.ChangedRoute({ route }))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.attr("data-testid", "away").onClick(PageMessage.Left()).children("Away"),
       model.route._tag === "Edit"

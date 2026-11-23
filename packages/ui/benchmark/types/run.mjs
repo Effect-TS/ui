@@ -41,8 +41,8 @@ export const C${i} = Component.define({
   elements: Html
 }).make({
   init: () => ({ draft: "" }),
-  update: (_model, message, $) => $.set({ draft: message.value }).emit(E${i}.Saved({ id: message.value })),
-  view: (model, h) => h.p(model.draft)
+  update: ($, message) => $.set({ draft: message.value }).emit(E${i}.Saved({ id: message.value })),
+  view: (h, model) => h.p(model.draft)
 })
 `)
   }
@@ -85,8 +85,8 @@ export const Owner = Component.define({
   elements: Html
 }).make({
   init: () => ({ selected: null, order: [] }),
-  update: (model, message, $) => $.set({ ...model, selected: message.id }),
-  view: (model, h) =>
+  update: ($, message) => $.set({ ...$.model, selected: message.id }),
+  view: (h, model) =>
     ${view}
 })
 `
@@ -110,11 +110,11 @@ export const L${i} = Component.define({
   elements: Html
 }).make({
   init: () => ({ draft: "" }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     message._tag === "Typed"
       ? $.set({ draft: message.value })
-      : $.set(model).emit(LE${i}.Saved({ id: message.id })),
-  view: (model, h) => h.div(h.p(model.draft)${last ? "" : `, ${below}`})
+      : $.set($.model).emit(LE${i}.Saved({ id: message.id })),
+  view: (h, model) => h.div(h.p(model.draft)${last ? "" : `, ${below}`})
 })
 `)
   }

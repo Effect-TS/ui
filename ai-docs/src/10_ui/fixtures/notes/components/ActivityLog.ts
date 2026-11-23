@@ -11,6 +11,6 @@ export const ActivityLog = Component.define({
   message: Schema.Never
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) => h.aside(`No activity yet on note ${h.props.noteId}.`)
+  update: ($) => $.model,
+  view: (h) => h.aside(`No activity yet on note ${h.props.noteId}.`)
 })

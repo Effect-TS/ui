@@ -27,8 +27,8 @@ describe("@effect/ui/html/register", () => {
         message: Schema.Never
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_, h) => h.p("Hello")
+        update: ($) => $.model,
+        view: (h) => h.p("Hello")
       })
       const rendered = yield* HtmlServer.renderToHtml(Greeting, {})
       assert.include(rendered.html, "<p>Hello</p>")

@@ -32,9 +32,9 @@
  *   elements: Html
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
+ *   update: ($) => $.model,
  *   head: () => [Head.title("Home"), HtmlHead.lang("en")],
- *   view: (_, h) => h.h1("Home")
+ *   view: (h) => h.h1("Home")
  * })
  *
  * const page = Effect.gen(function*() {

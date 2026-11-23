@@ -27,8 +27,8 @@
  *   elements: Html
  * }).make({
  *   init: (): ReadonlyArray<Canvas.Point> => [],
- *   update: { PressedCanvas: (model, { x, y }) => [...model, { x, y }] },
- *   view: (model, h) =>
+ *   update: { PressedCanvas: ($, { x, y }) => [...$.model, { x, y }] },
+ *   view: (h, model) =>
  *     Canvas.view(h, {
  *       width: 300,
  *       height: 200,

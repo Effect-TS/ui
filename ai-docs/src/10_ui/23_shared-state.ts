@@ -41,10 +41,10 @@ export const TooltipProvider = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: null }),
-  update: (model, message) =>
+  update: ($, message) =>
     TooltipProviderMessage.match(message, {
       FocusedTooltip: ({ id }) => ({ open: id }),
-      BlurredTooltip: ({ id }) => model.open === id ? { open: null } : model
+      BlurredTooltip: ({ id }) => $.model.open === id ? { open: null } : $.model
     }),
   parts: () => ({})
 })
@@ -77,11 +77,11 @@ export const Tooltip = Component.define({
   // of a tooltip that isn't open would change nothing, so it isn't sent. A
   // send is delivered as this update applies, and logged with this update as
   // its source.
-  update: (model, message, $) =>
+  update: ($, message) =>
     message._tag === "BlurredTooltip" && $.shared.provider.open !== message.id
-      ? model
-      : $.set(model).send(TooltipProvider, message),
-  view: (_, h) => {
+      ? $.model
+      : $.send(TooltipProvider, message),
+  view: (h) => {
     const id = h.id("tip")
     return h.span(
       h.button
@@ -120,8 +120,8 @@ export const Toolbar = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     TooltipProvider(h, {
       key: "tips",
       props: {},
@@ -187,7 +187,7 @@ export const PanelGroup = Component.define({
 }).make({
   init: () => ({ anyOpen: false }),
   update: (_, { open }) => ({ anyOpen: open }),
-  parts: (model) => ({ anyOpen: model.anyOpen })
+  parts: (_, model) => ({ anyOpen: model.anyOpen })
 })
 
 const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen: Schema.Boolean } })
@@ -234,12 +234,12 @@ export const Panel = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false, groupOpened: 0 }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     PanelMessage.match(message, {
       Toggled: () => $.evolve({ open: (open) => !open }),
-      ChangedGroup: ({ anyOpen }) => anyOpen ? $.evolve({ groupOpened: (times) => times + 1 }) : model
+      ChangedGroup: ({ anyOpen }) => anyOpen ? $.evolve({ groupOpened: (times) => times + 1 }) : $.model
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.section(
       h.button.onClick(PanelMessage.Toggled()).children(h.props.title),
       model.open && h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
@@ -307,7 +307,7 @@ export const Menu = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (_, message, $) =>
+  update: ($, message) =>
     MenuMessage.match(message, {
       ChangedOpenBelow: ({ count }) => count,
       // A pick goes up to the outermost menu, which tells its consumer.
@@ -320,7 +320,7 @@ export const Menu = Component.define({
           ? $.emit(MenuEvents.Picked({ item }))
           : $.send("self", MenuMessage.PickedItem({ item }))
     }),
-  parts: (below, p) => ({
+  parts: (p, below) => ({
     nested: p.shared.parent !== undefined,
     openBelow: below,
     item: p.part("button", (b, item: string) => b.onClick(MenuMessage.PickedItem({ item })))

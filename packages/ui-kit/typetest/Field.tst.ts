@@ -31,8 +31,8 @@ describe("Field", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           props: { described: true },
           view: (field) => {
@@ -60,8 +60,8 @@ describe("Field", () => {
   it("the control is another kit call's element", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           view: (field) => {
             expect(Input(h, { element: field.control(h.input), props: { value: "" } })).type.toBe<InputElement<Msg>>()
@@ -77,8 +77,8 @@ describe("Field", () => {
   it("the label takes only a label, and the control only a form control", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           view: (field) => {
             expect(field.label).type.not.toBeCallableWith(h.span)

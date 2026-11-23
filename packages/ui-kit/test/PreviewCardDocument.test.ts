@@ -27,16 +27,16 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, triggerId: null, showB: true, log: [] }),
   update: {
-    RequestedOpen: (model, { reason, triggerId }) => ({
-      ...model,
+    RequestedOpen: ($, { reason, triggerId }) => ({
+      ...$.model,
       open: true,
       triggerId,
-      log: [...model.log, `RequestedOpen ${triggerId} ${reason}`]
+      log: [...$.model.log, `RequestedOpen ${triggerId} ${reason}`]
     }),
-    RequestedClose: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `RequestedClose ${reason}`] }),
-    RemovedB: (model) => ({ ...model, showB: false })
+    RequestedClose: ($, { reason }) => ({ ...$.model, open: false, log: [...$.model.log, `RequestedClose ${reason}`] }),
+    RemovedB: ($) => ({ ...$.model, showB: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.attr("id", "outside").onClick(Message.RemovedB()).children("Outside"),
       PreviewCard(h, {

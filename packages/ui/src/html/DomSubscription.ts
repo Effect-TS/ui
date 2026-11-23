@@ -245,9 +245,9 @@ const listenFor = (
  *   elements: Html
  * }).make({
  *   init: () => ({ running: true, heading: "ArrowRight" as const }),
- *   update: { PressedArrow: (_model, { key }, $) => $.evolve({ heading: key }) },
- *   view: (model, h) => h.p(model.heading),
- *   subscriptions: (model) => [
+ *   update: { PressedArrow: ($, { key }) => $.evolve({ heading: key }) },
+ *   view: (h, model) => h.p(model.heading),
+ *   subscriptions: ({ model }) => [
  *     model.running && DomSubscription.onDocument(
  *       "keydown",
  *       // The page doesn't scroll on an arrow key, and other keys keep their default.
@@ -285,7 +285,7 @@ const listenFor = (
  * }).make({
  *   init: () => false,
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
- *   view: (open, h) => h.p(open ? "help open" : "help closed"),
+ *   view: (h, open) => h.p(open ? "help open" : "help closed"),
  *   subscriptions: () => [
  *     DomSubscription.onDocument(
  *       "keydown",
@@ -380,8 +380,8 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: { Received: (_model, { text }) => text },
- *   view: (text, h) => h.p(text),
+ *   update: { Received: (_, { text }) => text },
+ *   view: (h, text) => h.p(text),
  *   subscriptions: () => [
  *     DomSubscription.onCustomEvent("app:notice", ({ detail }) =>
  *       typeof detail === "string" ? Message.Received({ text: detail }) : undefined
@@ -489,10 +489,10 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  *   init: () => ({ running: true, elapsed: 0 }),
  *   update: {
  *     // A tab that comes back from the background sends one long frame.
- *     TickedFrame: (model, { delta }, $) => $.evolve({ elapsed: model.elapsed + Math.min(delta, 100) })
+ *     TickedFrame: ($, { delta }) => $.evolve({ elapsed: $.model.elapsed + Math.min(delta, 100) })
  *   },
- *   view: (model, h) => h.p(`${Math.round(model.elapsed)} ms`),
- *   subscriptions: (model) => [
+ *   view: (h, model) => h.p(`${Math.round(model.elapsed)} ms`),
+ *   subscriptions: ({ model }) => [
  *     model.running && DomSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))
  *   ]
  * })

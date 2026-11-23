@@ -99,9 +99,9 @@ const Sheet = Component.define({
 }).make({
   init: () => ({ bands: [] }),
   update: {
-    ChangedBand: (model, { band }) => ({ bands: [...model.bands, band] })
+    ChangedBand: ($, { band }) => ({ bands: [...$.model.bands, band] })
   },
-  view: (_, h) =>
+  view: (h) =>
     h.div
       .id("sheet")
       .attr("style", "color:red")

@@ -16,8 +16,8 @@ const Page = Component.define({
   events: PageEvents
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.text(`page:${h.props.title}`)
+  update: ($) => $.model,
+  view: (h) => h.text(`page:${h.props.title}`)
 })
 
 const AppMessage = UiSchema.TaggedEnum({ Toggled: {}, Saved: { title: Schema.String } })
@@ -30,12 +30,12 @@ const makeApp = (LazyPage: Component.Lazy<{ readonly title: string }, typeof Pag
     message: AppMessage
   }).make({
     init: () => ({ open: true, saved: "" }),
-    update: (model, message) =>
+    update: ($, message) =>
       AppMessage.match(message, {
-        Toggled: () => ({ ...model, open: !model.open }),
-        Saved: ({ title }) => ({ ...model, saved: title })
+        Toggled: () => ({ ...$.model, open: !$.model.open }),
+        Saved: ({ title }) => ({ ...$.model, saved: title })
       }),
-    view: (model, h) =>
+    view: (h, model) =>
       h.el(
         "p",
         `app${model.saved}:`,
@@ -119,8 +119,8 @@ describe("Component.lazy", () => {
       const Draft = Component.define({ name: "Draft", scoped: true, model: Schema.Number, message: DraftMessage }).make(
         {
           init: () => 0,
-          update: (count) => count + 1,
-          view: (count, h) => h.el("button").on("click", DraftMessage.Typed()).children(`draft:${count}`)
+          update: ($) => $.model + 1,
+          view: (h, count) => h.el("button").on("click", DraftMessage.Typed()).children(`draft:${count}`)
         }
       ).pipe(
         Component.provide(Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => closed++))))
@@ -134,12 +134,12 @@ describe("Component.lazy", () => {
         message: HostMessage
       }).make({
         init: () => ({ open: true, alive: true }),
-        update: (model, message) =>
+        update: ($, message) =>
           HostMessage.match(message, {
-            Toggled: () => ({ ...model, open: !model.open }),
-            Ended: () => ({ ...model, alive: false })
+            Toggled: () => ({ ...$.model, open: !$.model.open }),
+            Ended: () => ({ ...$.model, alive: false })
           }),
-        view: (model, h) =>
+        view: (h, model) =>
           h.el(
             "main",
             h.scoped(({ model }) => model.alive, (s) =>

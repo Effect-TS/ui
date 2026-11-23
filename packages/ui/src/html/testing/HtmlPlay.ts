@@ -41,12 +41,12 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ email: "", signedIn: false }),
- *   update: (model, message) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
- *       ChangedEmail: ({ value }) => ({ ...model, email: value }),
- *       SubmittedForm: () => ({ ...model, signedIn: true })
+ *       ChangedEmail: ({ value }) => $.evolve({ email: value }),
+ *       SubmittedForm: () => $.evolve({ signedIn: true })
  *     }),
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     model.signedIn
  *       ? h.p(`Welcome, ${model.email}`)
  *       : h.form.onSubmit(Message.SubmittedForm()).children(

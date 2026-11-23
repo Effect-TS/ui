@@ -35,15 +35,15 @@ const Page = Component.define({
 }).make({
   init: ($) => ({ open: $.props.initial, order: items, log: [] }),
   update: {
-    Toggled: (model, { value, reason }) => ({
-      ...model,
+    Toggled: ($, { value, reason }) => ({
+      ...$.model,
       open: value,
-      log: [...model.log, `Toggled [${value.join(",")}] ${reason}`]
+      log: [...$.model.log, `Toggled [${value.join(",")}] ${reason}`]
     }),
-    ToggledItem: (model, { item, open }) => ({ ...model, log: [...model.log, `ToggledItem ${item} ${open}`] }),
-    Reversed: (model) => ({ ...model, order: [...model.order].reverse() })
+    ToggledItem: ($, { item, open }) => ({ ...$.model, log: [...$.model.log, `ToggledItem ${item} ${open}`] }),
+    Reversed: ($) => ({ ...$.model, order: [...$.model.order].reverse() })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.main.children(
       h.button.attr("id", "reverse").onClick(PageMessage.Reversed()).children("Reverse"),
       Accordion(h, {

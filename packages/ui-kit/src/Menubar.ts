@@ -99,11 +99,11 @@
  * }).make({
  *   init: () => ({ open: null }),
  *   update: {
- *     RequestedOpenMenu: (_model, { menu }, $) => $.evolve({ open: menu }),
- *     RequestedCloseMenu: (model, { menu }, $) => model.open === menu ? $.evolve({ open: null }) : model,
- *     PickedAction: (model) => model
+ *     RequestedOpenMenu: ($, { menu }) => $.evolve({ open: menu }),
+ *     RequestedCloseMenu: ($, { menu }) => $.model.open === menu ? $.evolve({ open: null }) : $.model,
+ *     PickedAction: ($) => $.model
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Menubar(h, {
  *       props: {},
  *       view: (menubar) =>
@@ -332,24 +332,24 @@ export const Menubar = Component.define({
     moves: 0
   }),
   update: {
-    ChangedMenus: (model, { menus }) => {
+    ChangedMenus: ($, { menus }) => {
       const opened = menus.find((menu) =>
         menu.open && menu.trigger !== null &&
-        !model.menus.some((before) => before.open && before.trigger === menu.trigger)
+        !$.model.menus.some((before) => before.open && before.trigger === menu.trigger)
       )
       return opened?.trigger != null
-        ? { ...model, menus, current: opened.trigger, highlighted: opened.trigger }
-        : { ...model, menus }
+        ? { ...$.model, menus, current: opened.trigger, highlighted: opened.trigger }
+        : { ...$.model, menus }
     },
-    FoundTriggers: (model, { rtl, triggers }) => ({ ...model, triggers, rtl }),
-    Navigated: (model, { from, key, open }, $) => {
+    FoundTriggers: ($, { rtl, triggers }) => ({ ...$.model, triggers, rtl }),
+    Navigated: ($, { from, key, open }) => {
       const props = $.props
-      if (props.disabled === true) return model
-      const triggers = model.triggers
+      if (props.disabled === true) return $.model
+      const triggers = $.model.triggers
       const last = triggers.length - 1
-      const start = from ?? model.current ?? model.highlighted
+      const start = from ?? $.model.current ?? $.model.highlighted
       const at = start === null ? -1 : triggers.indexOf(start)
-      const nav = arrowKeys(orientationOf(props), model.rtl)
+      const nav = arrowKeys(orientationOf(props), $.model.rtl)
       const index = key === "Home"
         ? 0
         : key === "End"
@@ -358,12 +358,12 @@ export const Menubar = Component.define({
         ? stepped(at, last, key === nav.next ? 1 : -1, props.loopFocus !== false ? "wrap" : "none")
         : -1
       const target = triggers[index]
-      if (target === undefined || target === start) return model
-      return { ...model, highlighted: target, opening: open ? target : null, moves: model.moves + 1 }
+      if (target === undefined || target === start) return $.model
+      return { ...$.model, highlighted: target, opening: open ? target : null, moves: $.model.moves + 1 }
     },
-    FocusedTrigger: (model, { trigger }) => ({ ...model, highlighted: trigger, opening: null })
+    FocusedTrigger: ($, { trigger }) => ({ ...$.model, highlighted: trigger, opening: null })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const state = stateOf(model, p.props)
     const { hasSubmenuOpen, modal, orientation } = state
     return {

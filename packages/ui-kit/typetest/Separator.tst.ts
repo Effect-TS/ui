@@ -14,8 +14,8 @@ describe("Separator", () => {
   it("returns a div of the caller's message type, whose chained children keep their requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(Separator(h)).type.toBe<SeparatorElement<typeof Msg.Type>>()
         expect(Separator(h).children(needsClock)).type.toBe<SeparatorElement<typeof Msg.Type, Clock>>()
         expect(Separator).type.not.toBeCallableWith(h, { element: h.span })

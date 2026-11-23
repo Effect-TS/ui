@@ -16,26 +16,26 @@ const Editor = Component.define({
   shares: { value: (text) => ({ text }), receives: ["Clear", "Focus"] }
 }).make({
   init: () => "",
-  update: (text, message) => message._tag === "Typed" ? message.text : message._tag === "Clear" ? "" : text,
+  update: ($, message) => message._tag === "Typed" ? message.text : message._tag === "Clear" ? "" : $.model,
   parts: () => ({})
 })
 
 const Field = Component.define({ name: "Field", scoped: false, model: Schema.String, message: EditorMessage }).make({
   init: () => "",
-  update: (text) => text,
+  update: ($) => $.model,
   parts: () => ({})
 })
 
 const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Null, message: EditorMessage }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("p")
+  update: ($) => $.model,
+  view: (h) => h.el("p")
 })
 
 const Note = Component.define({ name: "Note", scoped: false, model: Schema.String, message: EditorMessage }).make({
   init: () => "",
-  update: (text) => text,
-  view: (text, h) => h.el("p", text)
+  update: ($) => $.model,
+  view: (h, text) => h.el("p", text)
 })
 
 class Store extends Context.Service<Store, { readonly draft: string }>()("typetest/send/Store") {}
@@ -69,23 +69,23 @@ describe("Component receives", () => {
 
 describe("$.send", () => {
   it("takes a message the owner receives, and rejects any other", () => {
-    ParentDef.update((model, _msg, $) => {
+    ParentDef.update(($) => {
       expect($.send(Editor, { _tag: "Clear" })).type.not.toRaiseError()
       expect($.send(Editor, EditorMessage.Focus())).type.not.toRaiseError()
       expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.Typed({ text: "x" }))
       // `make` returns the whole Message, which includes a case Editor doesn't receive.
       expect($.send).type.not.toBeCallableWith(Editor, EditorMessage.make({ _tag: "Clear" }))
       expect($.send).type.not.toBeCallableWith(Editor, untrusted)
-      return model
+      return $.model
     })
   })
 
   it("can't send to a child that isn't an owner", () => {
-    ParentDef.update((model, _msg, $) => {
+    ParentDef.update(($) => {
       expect($.send).type.not.toBeCallableWith(Field, EditorMessage.Clear())
       expect($.send).type.not.toBeCallableWith(Plain, EditorMessage.Clear())
       expect($.send).type.not.toBeCallableWith(anyFeature, { _tag: "Clear" })
-      return model
+      return $.model
     })
   })
 
@@ -95,8 +95,8 @@ describe("$.send", () => {
         expect($.set(null)).type.not.toHaveProperty("send")
         return null
       },
-      update: (model) => model,
-      view: (_, h) => h.el("p")
+      update: ($) => $.model,
+      view: (h) => h.el("p")
     })
   })
 })
@@ -123,32 +123,32 @@ const FlatDef = Component.define({
 
 describe("$.send to self", () => {
   it("takes a message the component receives, and requires nothing", () => {
-    NestDef.update((model, _msg, $) => {
+    NestDef.update(($) => {
       expect($.send("self", NestMessage.Picked())).type.toBe<Component.Step<number, NestMessage, never, never>>()
       expect($.send("self", { _tag: "Picked" })).type.not.toRaiseError()
       expect($.send).type.not.toBeCallableWith("self", NestMessage.Closed())
       expect($.send).type.not.toBeCallableWith("self", { _tag: "Pick" })
-      return model
+      return $.model
     })
   })
 
   it("is rejected in a component that doesn't read its own kind", () => {
-    FlatDef.update((model, _msg, $) => {
+    FlatDef.update(($) => {
       expect($.send).type.not.toBeCallableWith("self", NestMessage.Picked())
-      return model
+      return $.model
     })
   })
 
   it("types in slices and combine, and in a scene as a send to the component", () => {
-    const picked = NestDef.update("Pick", (_, __, $) => $.send("self", NestMessage.Picked()))
+    const picked = NestDef.update("Pick", ($) => $.send("self", NestMessage.Picked()))
     const Nest = NestDef.make({
       init: () => 0,
       update: {
         Pick: picked,
-        Picked: (_, __, $) => $.combine((n, __, $) => $.send("self", NestMessage.Picked()).set(n + 1)),
-        Closed: (model) => model
+        Picked: ($) => $.combine(($) => $.send("self", NestMessage.Picked()).set($.model + 1)),
+        Closed: ($) => $.model
       },
-      parts: (picked) => ({ picked })
+      parts: (_, picked) => ({ picked })
     })
     expect<Component.Requirements<typeof Nest>>().type.toBe<never>()
     const scene = Scene.start(Nest, {}, { view: (_, h) => h.el("p") }).shared(Nest, 0)
@@ -166,7 +166,7 @@ describe("a component child", () => {
     class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
     expect([Panel, Bare]).type.toBeAssignableTo<ReadonlyArray<Feature.Any>>()
     expect([Plain, Note, NeedsStore]).type.toBeAssignableTo<ReadonlyArray<Component.Any>>()
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       const child = Panel.render(h, { key: "p", fallback: () => h.el("p") })
       expect(child.component).type.toBeAssignableFrom(Panel)
       expect(child.component).type.toBeAssignableFrom(Bare)
@@ -177,7 +177,7 @@ describe("a component child", () => {
   })
 
   it("takes an optional key", () => {
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       expect(Plain(h, { key: "a" })).type.not.toRaiseError()
       expect(Plain(h, {})).type.not.toRaiseError()
       return h.el("p")
@@ -185,7 +185,7 @@ describe("a component child", () => {
   })
 
   it("checks a union of components against each member", () => {
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       expect((condition ? Plain : Note)(h, { key: "e" })).type.not.toRaiseError()
       expect(PlainOrNote(h, { key: "p" })).type.toBe<View.Child<typeof ParentMessage.Type, never>>()
       return h.el("p")
@@ -195,7 +195,7 @@ describe("a component child", () => {
   it("takes the parent's message as an explicit type argument", () => {
     type Msg = typeof ParentMessage.Type
     class Bare extends Feature.Service<Bare>()("Bare", { props: Schema.Struct({}) }) {}
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       expect(Plain<Msg>(h, { key: "a" })).type.not.toRaiseError()
       expect(Bare.render<Msg>(h, { key: "b", fallback: () => h.el("p") })).type.not.toRaiseError()
       // `Msg` comes from `h`: a different one is rejected.
@@ -205,7 +205,7 @@ describe("a component child", () => {
   })
 
   it("keeps requirements and provided components", () => {
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       expect(NeedsStore(h, { key: "a" })).type.toBe<View.Child<typeof ParentMessage.Type, Store>>()
       expect(Plain.pipe(Component.provide(Layer.succeed(Store, { draft: "" })))(h, { key: "a" })).type
         .not.toRaiseError()
@@ -231,7 +231,7 @@ describe("Component.provide", () => {
         model: Schema.Null,
         message: Schema.String
       })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) })
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", h.props.name) })
     type Inline = Component.Component<"Inline", { readonly name: string }, null, string, never, never, never, {}, never>
     expect(Component.provide(
       Component.define({
@@ -241,7 +241,7 @@ describe("Component.provide", () => {
         model: Schema.Null,
         message: Schema.String
       })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) }),
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", h.props.name) }),
       (props) => Layer.effect(Store, props.name === "" ? Effect.fail("no") : Effect.succeed({ draft: props.name })),
       { onFailure: () => "failed" }
     )).type.toBe<Inline>()
@@ -253,7 +253,7 @@ describe("Component.provide", () => {
         model: Schema.Null,
         message: Schema.String
       })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", h.props.name) }),
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", h.props.name) }),
       Layer.effect(Store, Effect.fail("no")),
       { onFailure: () => "failed" }
     )).type.toBe<Inline>()
@@ -348,11 +348,11 @@ describe("an erased component", () => {
     model: Schema.Null,
     message: EditorMessage
   })
-    .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
+    .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p") })
 
   it("takes props, with an optional key", () => {
     const erased = Story.start(Plain, {}).current.component
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       expect(any(h, { key: "a", props: {} })).type.toBe<View.Child<typeof ParentMessage.Type, any>>()
       expect(AnyProps(h, { key: "a", props: 1 })).type.not.toRaiseError()
       expect(any).type.not.toBeCallableWith(h, { key: "a" })
@@ -364,7 +364,7 @@ describe("an erased component", () => {
   })
 
   it("checks callbacks against the parent's message", () => {
-    ParentDef.view((_, h) => {
+    ParentDef.view((h) => {
       expect(any(h, { key: "a", props: {}, onEmit: () => ({ _tag: "Go" as const }) })).type.not.toRaiseError()
       expect(any).type.not.toBeCallableWith(h, { key: "a", props: {}, onEmit: () => 1 })
       expect(any).type.not.toBeCallableWith(h, { key: "a", props: {}, onFailure: () => 1 })

@@ -38,13 +38,13 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ zip: "", forecast: "" }),
- *   update: (_model, message, $) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
  *       UpdatedZip: ({ zip }) => $.evolve({ zip }),
  *       SubmittedForm: ({ zip }) => $.run(FetchWeather.make({ zip })),
  *       CompletedFetchWeather: ({ forecast }) => $.evolve({ forecast })
  *     }),
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.div(
  *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),

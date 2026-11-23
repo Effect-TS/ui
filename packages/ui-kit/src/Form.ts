@@ -90,7 +90,7 @@
  *   update: {
  *     SubmittedForm: () => ({ submitted: true })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Form(h, {
  *       onEmit: () => SignupMessage.SubmittedForm(),
  *       view: (form) =>
@@ -218,9 +218,8 @@ export const Form = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (_model, { entries, fields }, $) =>
-    $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
-  parts: (_model, p) => ({
+  update: ($, { entries, fields }) => $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
+  parts: (p) => ({
     root: p.part("form", (b) =>
       b.ref(Root)
         .attr("novalidate", "")

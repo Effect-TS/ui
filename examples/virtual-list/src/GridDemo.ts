@@ -12,8 +12,8 @@ export const GridDemo = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_model, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     VirtualList(h, {
       props: { count: 10_000, itemSize: 120, initialCount: 24 },
       view: (virtualList) =>

@@ -23,14 +23,14 @@ const Page = Component.define({
 }).make({
   init: () => ({ code: Redacted.make(""), log: [] }),
   update: {
-    Updated: (model, { value }, $) =>
+    Updated: ($, { value }) =>
       $.props.locked
-        ? model
-        : { ...model, code: $.props.upper ? Redacted.make(Redacted.value(value).toUpperCase()) : value },
-    Stored: (model, { value }) => ({ ...model, code: value }),
-    Logged: (model, { entry }) => ({ ...model, log: [...model.log, entry] })
+        ? $.model
+        : { ...$.model, code: $.props.upper ? Redacted.make(Redacted.value(value).toUpperCase()) : value },
+    Stored: ($, { value }) => ({ ...$.model, code: value }),
+    Logged: ($, { entry }) => ({ ...$.model, log: [...$.model.log, entry] })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.form.onSubmit(({ fields }) => Message.Logged({ entry: "submitted " + fields.code })).children(
       DirectionProvider(h, {
         props: { direction: "rtl" },
@@ -108,8 +108,8 @@ const Frame = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: { Pressed: (model) => model + 1 },
-  parts: (model, p) => ({
+  update: { Pressed: ($) => $.model + 1 },
+  parts: (p, model) => ({
     root: p.part((b) => b.attr("data-presses", String(model)).on("click", FrameMessage.Pressed()))
   })
 })
@@ -122,8 +122,8 @@ const Labelled = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_model, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.div(
       h.label.attr("for", "otp").children("Verification code"),
       h.p.id("own").children("Fourth digit"),
@@ -280,11 +280,11 @@ describe("OTPField in a document", { concurrent: false }, () => {
       }).make({
         init: () => ({ code: Redacted.make(""), done: false }),
         update: {
-          Updated: (model, { value }) => ({ ...model, code: value }),
-          Completed: (model) => ({ ...model, done: true }),
-          Rejected: (model) => model
+          Updated: ($, { value }) => ({ ...$.model, code: value }),
+          Completed: ($) => ({ ...$.model, done: true }),
+          Rejected: ($) => $.model
         },
-        view: (model, h) =>
+        view: (h, model) =>
           OTPField(h, {
             props: { value: model.code, length: 6, validationType: "alphanumeric" },
             onEmit: {

@@ -36,8 +36,8 @@ const mountArea = Effect.fnUntraced(function*(
     elements: Html
   }).make({
     init: () => ({}),
-    update: (model) => model,
-    view: (_model, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       ScrollArea(h, {
         props,
         view: (scrollArea) =>

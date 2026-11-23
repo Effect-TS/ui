@@ -86,8 +86,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     ScrollArea(h, {
  *       view: (scrollArea) =>
  *         scrollArea.root(h.div.class("area")).children(
@@ -828,7 +828,7 @@ export const ScrollArea = Component.define({
 }).make({
   init: () => ({ measured: false, hovering: false, scrollingX: false, scrollingY: false, ...noOverflow }),
   update: {
-    MeasuredOverflow: (_model, overflow, $) =>
+    MeasuredOverflow: ($, overflow) =>
       $.evolve({
         measured: true,
         hasOverflowX: overflow.hasOverflowX,
@@ -838,14 +838,14 @@ export const ScrollArea = Component.define({
         overflowYStart: overflow.overflowYStart,
         overflowYEnd: overflow.overflowYEnd
       }),
-    StartedScrolling: (_model, { orientation }, $) =>
+    StartedScrolling: ($, { orientation }) =>
       $.evolve(orientation === "vertical" ? { scrollingY: true } : { scrollingX: true }),
-    StoppedScrolling: (_model, { orientation }, $) =>
+    StoppedScrolling: ($, { orientation }) =>
       $.evolve(orientation === "vertical" ? { scrollingY: false } : { scrollingX: false }),
-    EnteredPointer: (_model, _message, $) => $.evolve({ hovering: true }),
-    LeftPointer: (_model, _message, $) => $.evolve({ hovering: false })
+    EnteredPointer: ($) => $.evolve({ hovering: true }),
+    LeftPointer: ($) => $.evolve({ hovering: false })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const id = p.id("scroll-area")
     const scrolling = model.scrollingX || model.scrollingY
     const cornerHidden = !model.hasOverflowX || !model.hasOverflowY

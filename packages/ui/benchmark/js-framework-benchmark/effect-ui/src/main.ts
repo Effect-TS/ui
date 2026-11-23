@@ -87,7 +87,7 @@ const replaceRows = (model: Model, count: number): Model => ({
   nextId: model.nextId + count
 })
 
-const update = (model: Model, message: Message): Model => {
+const update = ({ model }: { readonly model: Model }, message: Message): Model => {
   switch (message._tag) {
     case "Run":
       return replaceRows(model, 1000)
@@ -158,7 +158,7 @@ const row = (h: H, row: Row, selected: boolean) =>
 const Main = MainDef.make({
   init: () => ({ rows: [], selected: 0, nextId: 1 }),
   update,
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("container").children(
       jumbotron(h),
       h.table.class("table", "table-hover", "table-striped", "test-data").children(

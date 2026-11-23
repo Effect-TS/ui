@@ -39,17 +39,17 @@ const Signup = Component.define({
 }).make({
   init: () => ({ form: SignupValidation.init({ plan: "", billing: "yearly", email: "", name: "" }), saving: false }),
   update: {
-    UpdatedField: (model, { name, value }) => ({ ...model, form: SignupValidation.change(model.form, name, value) }),
-    SubmittedForm: (model, _message, $) => {
-      const form = SignupValidation.submit(model.form)
+    UpdatedField: ($, { name, value }) => ({ ...$.model, form: SignupValidation.change($.model.form, name, value) }),
+    SubmittedForm: ($) => {
+      const form = SignupValidation.submit($.model.form)
       return Option.match(SignupValidation.validate(form).value, {
-        onNone: () => ({ ...model, form }),
+        onNone: () => ({ ...$.model, form }),
         onSome: ({ email }) => $.set({ form, saving: true }).run(Save.make({ email }))
       })
     },
-    SucceededSave: (model) => ({ ...model, saving: false })
+    SucceededSave: ($) => ({ ...$.model, saving: false })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const { fields } = SignupValidation.validate(model.form)
     const text = (name: "email" | "name") =>
       Field(h, {

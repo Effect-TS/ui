@@ -253,8 +253,8 @@ describe("RadioGroup", () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_model, viewH) =>
+        update: ($) => $.model,
+        view: (viewH) =>
           Field(viewH, {
             props: { invalid: true },
             view: (field) =>

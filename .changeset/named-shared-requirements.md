@@ -10,8 +10,8 @@ If an update sends to an optional owner, omit its explicit step return type. For
 
 ```diff
 // Required: the annotation could describe a send to any owner named "Provider".
-- update: (_, msg, $): Component.Step<Model, Msg, never, Component.Shared<"Provider">> => $.send(A, msg)
+- update: ($, msg): Component.Step<Model, Msg, never, Component.Shared<"Provider">> => $.send(A, msg)
 
 // Optional: inference keeps A as the target.
-+ update: (_, msg, $) => $.send(A, msg)
++ update: ($, msg) => $.send(A, msg)
 ```

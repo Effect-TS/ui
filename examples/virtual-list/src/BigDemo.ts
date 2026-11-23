@@ -14,8 +14,8 @@ export const BigDemo = Component.define({
   elements: Html
 }).make({
   init: () => ({ index: 0, jump: 0 }),
-  update: { ClickedJump: (model, { index }) => ({ index, jump: model.jump + 1 }) },
-  view: (model, h) =>
+  update: { ClickedJump: ($, { index }) => ({ index, jump: $.model.jump + 1 }) },
+  view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
         h.button.attr("id", "middle").onClick(BigMessage.ClickedJump({ index: 50_000 })).children("Jump to 50,000"),

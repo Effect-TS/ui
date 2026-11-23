@@ -84,28 +84,28 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, modal: true, triggerId: null, share: false, query: "", log: [] }),
   update: {
-    RequestedOpen: (model, { menu, reason, triggerId }) => ({
-      ...model,
+    RequestedOpen: ($, { menu, reason, triggerId }) => ({
+      ...$.model,
       [menu === "root" ? "open" : "share"]: true,
-      triggerId: menu === "root" ? triggerId : model.triggerId,
+      triggerId: menu === "root" ? triggerId : $.model.triggerId,
       log: [
-        ...model.log,
+        ...$.model.log,
         menu + " RequestedOpen " + reason + (triggerId !== null && triggerId !== "trigger" ? " from " + triggerId : "")
       ]
     }),
-    RequestedClose: (model, { menu, reason }, $) => ({
-      ...model,
-      [menu === "root" ? "open" : "share"]: menu === "root" && $.props.refuseClose && model.open,
-      log: [...model.log, menu + " RequestedClose " + reason]
+    RequestedClose: ($, { menu, reason }) => ({
+      ...$.model,
+      [menu === "root" ? "open" : "share"]: menu === "root" && $.props.refuseClose && $.model.open,
+      log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: (model, { menu, value }) => ({
-      ...model,
-      log: [...model.log, menu + " Picked " + value]
+    Picked: ($, { menu, value }) => ({
+      ...$.model,
+      log: [...$.model.log, menu + " Picked " + value]
     }),
-    RequestedQuery: (model, { query }) => ({ ...model, query }),
-    ChangedModal: (model, { modal }) => ({ ...model, modal })
+    RequestedQuery: ($, { query }) => ({ ...$.model, query }),
+    ChangedModal: ($, { modal }) => ({ ...$.model, modal })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Menu(h, {
       props: {
         open: model.open,

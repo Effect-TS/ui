@@ -23,11 +23,11 @@ const Keys = Component.define({
 }).make({
   init: () => ({ listening: true, prefix: "a", log: [] }),
   update: {
-    Pressed: (model, { key }) => ({ ...model, log: [...model.log, key] }),
-    Renamed: (model, { prefix }) => ({ ...model, prefix }),
-    Stopped: (model) => ({ ...model, listening: false })
+    Pressed: ($, { key }) => ({ ...$.model, log: [...$.model.log, key] }),
+    Renamed: ($, { prefix }) => ({ ...$.model, prefix }),
+    Stopped: ($) => ({ ...$.model, listening: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.input.attr("id", "field").onKeyDown(
         ({ key }) => key === "Enter" ? Message.Renamed({ prefix: "field" }) : undefined,
@@ -39,7 +39,7 @@ const Keys = Component.define({
       h.button.attr("id", "stop").onClick(Message.Stopped()),
       h.output(model.log.join(","))
     ),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.listening && DomSubscription.onDocument(
       "keydown",
       ({ defaultPrevented, key }) =>
@@ -61,9 +61,9 @@ const Phases = Component.define({
   elements: Html
 }).make({
   init: (): ReadonlyArray<string> => [],
-  update: (log, { what }) => [...log, what],
-  view: (log, h) => h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
-  subscriptions: (log) => [
+  update: ($, { what }) => [...$.model, what],
+  view: (h, log) => h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
+  subscriptions: ({ model: log }) => [
     !log.includes("capture") &&
     DomSubscription.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), {
       capture: true,
@@ -138,8 +138,8 @@ describe("DomSubscription.onDocument and DomSubscription.onWindow", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.p("throws"),
+        update: ($) => $.model,
+        view: (h) => h.p("throws"),
         subscriptions: () => [
           DomSubscription.onDocument("keydown", (): typeof Message.Type => {
             throw new Error("boom")
@@ -169,9 +169,9 @@ const Listener = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.span(),
-  subscriptions: (_, { preventDefault }) => [
+  update: ($) => $.model,
+  view: (h) => h.span(),
+  subscriptions: ({ props: { preventDefault } }) => [
     DomSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), {
       preventDefault
     })
@@ -187,7 +187,7 @@ const Parent = Component.define({
 }).make({
   init: () => "always" as const,
   update: { Set: (_, { listen }) => listen },
-  view: (listen, h) => h.div(listen === null ? undefined : Listener(h, { props: { preventDefault: listen } }))
+  view: (h, listen) => h.div(listen === null ? undefined : Listener(h, { props: { preventDefault: listen } }))
 })
 
 describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
@@ -271,8 +271,8 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, { what }) => [...log, what],
-        view: (log, h) => h.output(log.join(",")),
+        update: ($, { what }) => [...$.model, what],
+        view: (h, log) => h.output(log.join(",")),
         subscriptions: () => [
           DomSubscription.onCustomEvent(
             "submit",
@@ -352,8 +352,8 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, entry) => [...log, entry],
-        view: (log, h) => h.output(log.join(",")),
+        update: ($, entry) => [...$.model, entry],
+        view: (h, log) => h.output(log.join(",")),
         subscriptions: () => [
           DomSubscription.onDocument("keydown", ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`)
         ]
@@ -387,11 +387,11 @@ const Frames = Component.define({
 }).make({
   init: () => ({ running: true, deltas: [] }),
   update: {
-    TickedFrame: (model, { delta }) => ({ ...model, deltas: [...model.deltas, delta] }),
-    Toggled: (model) => ({ ...model, running: !model.running })
+    TickedFrame: ($, { delta }) => ({ ...$.model, deltas: [...$.model.deltas, delta] }),
+    Toggled: ($) => ({ ...$.model, running: !$.model.running })
   },
-  view: (model, h) => h.p(model.deltas.join(",")),
-  subscriptions: (model) => [
+  view: (h, model) => h.p(model.deltas.join(",")),
+  subscriptions: ({ model }) => [
     model.running && DomSubscription.onAnimationFrame((delta) => FrameMessage.TickedFrame({ delta }))
   ]
 })

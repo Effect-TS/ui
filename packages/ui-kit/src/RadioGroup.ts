@@ -81,9 +81,9 @@
  * }).make({
  *   init: () => ({ storage: "ssd" }),
  *   update: {
- *     PickedStorage: (_model, { value }, $) => $.evolve({ storage: value })
+ *     PickedStorage: ($, { value }) => $.evolve({ storage: value })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     RadioGroup(h, {
  *       props: { value: model.storage, items: storage, name: "storage" },
  *       onEmit: { Picked: ({ value }) => PickerMessage.PickedStorage({ value }) },
@@ -411,54 +411,56 @@ export const RadioGroup = Component.define({
     leaving: []
   }),
   update: {
-    ClickedRadio: (model, { value }, $) => {
+    ClickedRadio: ($, { value }) => {
       const item = itemOf($.props.items, value)
-      if ($.props.disabled === true || !available(item)) return model
+      if ($.props.disabled === true || !available(item)) return $.model
       const highlighted = $.evolve({ highlighted: value })
       return picks($.props, item) ? highlighted.emit(RadioGroupEvents.Picked({ value })) : highlighted
     },
-    FocusedRadio: (model, { value }, $) =>
-      $.props.disabled === true || !available(itemOf($.props.items, value)) ? model : $.evolve({ highlighted: value }),
-    PressedArrow: (model, { direction, value }, $) => {
+    FocusedRadio: ($, { value }) =>
+      $.props.disabled === true || !available(itemOf($.props.items, value))
+        ? $.model
+        : $.evolve({ highlighted: value }),
+    PressedArrow: ($, { direction, value }) => {
       const source = itemOf($.props.items, value)
-      if ($.props.disabled === true || !available(source)) return model
+      if ($.props.disabled === true || !available(source)) return $.model
       const enabled = $.props.items.filter(available)
       const at = enabled.indexOf(source)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
-      if (target === undefined) return model
+      if (target === undefined) return $.model
       const moved = $.evolve({ highlighted: target.value }).run(focusRadio(target.value))
       return source.readOnly !== true && picks($.props, target)
         ? moved.emit(RadioGroupEvents.Picked({ value: target.value }))
         : moved
     },
-    PressedEnter: (model) => model,
-    SyncedValue: (model, { value }, $) => {
-      if (model.current === value) return $.evolve({ highlighted: null })
-      const prev = model.current
-      let leaving = prev !== null && model.mounted.includes(prev) ? withValue(model.leaving, prev) : model.leaving
+    PressedEnter: ($) => $.model,
+    SyncedValue: ($, { value }) => {
+      if ($.model.current === value) return $.evolve({ highlighted: null })
+      const prev = $.model.current
+      let leaving = prev !== null && $.model.mounted.includes(prev) ? withValue($.model.leaving, prev) : $.model.leaving
       if (value !== null) leaving = without(leaving, value)
-      const settled = model.settled === value ? value : null
+      const settled = $.model.settled === value ? value : null
       return $.evolve({ highlighted: null, current: value, settled, leaving })
     },
-    MountedIndicator: (_model, { value }, $) => $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
-    UnmountedIndicator: (model, { value }, $) =>
+    MountedIndicator: ($, { value }) => $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
+    UnmountedIndicator: ($, { value }) =>
       $.evolve({
-        settled: model.settled === value ? null : model.settled,
+        settled: $.model.settled === value ? null : $.model.settled,
         mounted: (mounted) => without(mounted, value),
         leaving: (leaving) => without(leaving, value)
       }),
-    StartedIndicator: (model, { value }, $) =>
-      $.props.value !== value ? model : $.evolve({ settled: value, leaving: (leaving) => without(leaving, value) }),
-    EndedIndicator: (model, { value }, $) =>
+    StartedIndicator: ($, { value }) =>
+      $.props.value !== value ? $.model : $.evolve({ settled: value, leaving: (leaving) => without(leaving, value) }),
+    EndedIndicator: ($, { value }) =>
       $.props.value === value
-        ? model
+        ? $.model
         : $.evolve({
-          settled: model.settled === value ? null : model.settled,
+          settled: $.model.settled === value ? null : $.model.settled,
           leaving: (leaving) => without(leaving, value)
         })
   },
-  subscriptions: (_model, props) => [synced(props.value)],
-  parts: (model, p) => {
+  subscriptions: ({ props }) => [synced(props.value)],
+  parts: (p, model) => {
     const props = p.props
     const disabled = props.disabled === true
     const readOnly = props.readOnly === true

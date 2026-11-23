@@ -28,8 +28,8 @@ const Card = Component.define({
   elements: Html
 }).make({
   init: () => ({ likes: 0 }),
-  update: { ClickedLike: (model, _, $) => $.evolve({ likes: model.likes + 1 }) },
-  view: (model, h) => h.button.onClick(CardMessage.ClickedLike()).children(`Like ${model.likes}`)
+  update: { ClickedLike: ($) => $.evolve({ likes: $.model.likes + 1 }) },
+  view: (h, model) => h.button.onClick(CardMessage.ClickedLike()).children(`Like ${model.likes}`)
 })
 
 const Gallery = Component.define({
@@ -42,15 +42,15 @@ const Gallery = Component.define({
 }).make({
   init: ($) => ({ route: $.props.route, layout: "grid" as const, filter: "" }),
   update: {
-    ClickedLayout: (_, { layout }, $) => $.evolve({ layout }).viewTransition(["layout-change"]),
-    TypedFilter: (_, { value }, $) => $.evolve({ filter: value }),
-    ClickedOpen: (_, __, $) => $.run(Router.push(GalleryRoute, GalleryRoute.Detail()).pipe(Command.asNoop)),
-    ChangedRoute: (_, { route }, $) => $.evolve({ route }).viewTransition(["to-detail"])
+    ClickedLayout: ($, { layout }) => $.evolve({ layout }).viewTransition(["layout-change"]),
+    TypedFilter: ($, { value }) => $.evolve({ filter: value }),
+    ClickedOpen: ($) => $.run(Router.push(GalleryRoute, GalleryRoute.Detail()).pipe(Command.asNoop)),
+    ChangedRoute: ($, { route }) => $.evolve({ route }).viewTransition(["to-detail"])
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(GalleryRoute, model.route, (route) => Message.ChangedRoute({ route }))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.main(
       h.p(`${model.route._tag} ${model.layout} ${model.filter}`),
       h.button.onClick(Message.ClickedLayout({ layout: "grid" })).children("Grid"),

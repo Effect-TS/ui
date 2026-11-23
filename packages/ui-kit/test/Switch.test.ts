@@ -24,10 +24,10 @@ const Settings = Component.define({
 }).make({
   init: () => ({ notify: false, rowClicks: 0 }),
   update: {
-    ToggledNotify: (model, { checked }) => ({ ...model, notify: checked }),
-    ClickedRow: (model) => ({ ...model, rowClicks: model.rowClicks + 1 })
+    ToggledNotify: ($, { checked }) => ({ ...$.model, notify: checked }),
+    ClickedRow: ($) => ({ ...$.model, rowClicks: $.model.rowClicks + 1 })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.onClick(SettingsMessage.ClickedRow()).children(
       Switch(h, {
         props: { checked: model.notify, ...h.props },

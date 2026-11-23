@@ -53,8 +53,8 @@ const Both = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.div(
       users.ListPage(h, { key: "list" }),
       users.DetailPage(h, { key: "detail", props: { id: "1" } })

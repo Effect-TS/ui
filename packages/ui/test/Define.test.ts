@@ -22,9 +22,9 @@ const CounterDef = Component.define({
 })
 
 // Changes the Model, runs a Command and emits, all from the Model it is given.
-const bump = CounterDef.update((model, msg, $) => {
-  const n = model.n + $.props.by
-  return $.set({ n, seen: [...model.seen, msg._tag] })
+const bump = CounterDef.update(($, msg) => {
+  const n = $.model.n + $.props.by
+  return $.set({ n, seen: [...$.model.seen, msg._tag] })
     .run(Log.make({ n }))
     .emit(Events.Stepped({ n }))
 })
@@ -32,20 +32,20 @@ const bump = CounterDef.update((model, msg, $) => {
 const Counter = CounterDef.make({
   init: () => ({ n: 0, seen: [] }),
   update: {
-    Step: (_model, _msg, $) => $.combine(bump, bump),
-    Logged: (model, msg) => ({ ...model, seen: [...model.seen, `logged ${msg.n}`] })
+    Step: ($) => $.combine(bump, bump),
+    Logged: ($, msg) => ({ ...$.model, seen: [...$.model.seen, `logged ${msg.n}`] })
   },
-  view: (model, h) => h.el("p", String(model.n))
+  view: (h, model) => h.el("p", String(model.n))
 })
 
 // `$.combine` in a slice runs `bump` with the message the slice was given.
-const onLogged = CounterDef.update("Logged", (_model, _msg, $) => $.combine(bump))
+const onLogged = CounterDef.update("Logged", ($) => $.combine(bump))
 
 // Calls the slice by hand with a message other than the one it received.
 const ByHand = CounterDef.make({
   init: () => ({ n: 0, seen: [] }),
-  update: (model, msg, $) => msg._tag === "Step" ? onLogged(model, { _tag: "Logged", n: 0 }, $) : model,
-  view: (model, h) => h.el("p", String(model.n))
+  update: ($, msg) => msg._tag === "Step" ? onLogged($, { _tag: "Logged", n: 0 }) : $.model,
+  view: (h, model) => h.el("p", String(model.n))
 })
 
 describe("Component.define", () => {

@@ -88,35 +88,35 @@ export const AppNoDeps = Component.define({
   },
 
   update: {
-    ChangedRoute: (model, { route }, $) => {
-      const next = guard(route, model._tag === "LoggedIn" ? Option.some(model.session) : Option.none())
+    ChangedRoute: ($, { route }) => {
+      const next = guard(route, $.model._tag === "LoggedIn" ? Option.some($.model.session) : Option.none())
       return redirected(next, route) ? $.set(next).run(redirectTo(next.route)) : next
     },
 
-    SignedIn: (_model, { session }, $) =>
+    SignedIn: ($, { session }) =>
       $.set(AppModel.LoggedIn({ route: LoggedInRoute.Dashboard(), session })).run(
         SaveSession.make({ session }),
         redirectTo(LoggedInRoute.Dashboard())
       ),
 
-    SignedOut: (_model, _message, $) =>
+    SignedOut: ($) =>
       $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run(
         ClearSession.make({}),
         redirectTo(LoggedOutRoute.Home())
       ),
 
-    FailedSaveSession: (_model, { error }, $) => $.run(LogError.make({ entries: ["Failed to save session:", error] })),
+    FailedSaveSession: ($, { error }) => $.run(LogError.make({ entries: ["Failed to save session:", error] })),
 
-    FailedClearSession: (_model, { error }, $) => $.run(LogError.make({ entries: ["Failed to clear session:", error] }))
+    FailedClearSession: ($, { error }) => $.run(LogError.make({ entries: ["Failed to clear session:", error] }))
   },
 
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
   ],
 
-  head: (model) => [Head.title(model.route._tag === "Home" ? "Auth" : `${model.route._tag} | Auth`)],
+  head: ({ model }) => [Head.title(model.route._tag === "Home" ? "Auth" : `${model.route._tag} | Auth`)],
 
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("min-h-screen bg-gray-100").children(
       AppModel.match(model, {
         LoggedOut: ({ route }) =>

@@ -36,11 +36,11 @@ const Host = Component.define({
 }).make({
   init: ({ props }) => ({ value: "ssd", readOnly: false, showIndicators: props.showIndicators ?? true }),
   update: {
-    SetValue: (model, { value }) => ({ ...model, value }),
-    SetReadOnly: (model, { readOnly }) => ({ ...model, readOnly }),
-    SetShowIndicators: (model, { show }) => ({ ...model, showIndicators: show })
+    SetValue: ($, { value }) => ({ ...$.model, value }),
+    SetReadOnly: ($, { readOnly }) => ({ ...$.model, readOnly }),
+    SetShowIndicators: ($, { show }) => ({ ...$.model, showIndicators: show })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       RadioGroup(h, {
         props: { value: model.value, items, readOnly: model.readOnly },
