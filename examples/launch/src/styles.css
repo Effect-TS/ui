@@ -147,6 +147,7 @@ a {
   border-radius: 4px;
   background: var(--muted);
   font-size: 0.86em;
+  overflow-wrap: anywhere;
 }
 
 .wide {
@@ -223,6 +224,7 @@ a {
 
 .counter {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -246,8 +248,73 @@ a {
   transition: border-color 0.15s;
 }
 
-.demo button:hover {
+.demo button:hover:not(:disabled) {
   border-color: var(--foreground);
+}
+
+.demo button:disabled {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
+.listing {
+  --wide: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.beside-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  align-items: start;
+  gap: 24px;
+}
+
+.beside-code {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.beside-demo {
+  position: sticky;
+  top: 24px;
+}
+
+.beside-demo > .counter {
+  display: flex;
+}
+
+.beside-demo > .counter > .count {
+  flex-basis: 100%;
+  text-align: start;
+  font-size: 2rem;
+}
+
+.drawings {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.article .scoreboard {
+  margin-top: 0;
+}
+
+.scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.score {
+  font: 650 3.5rem/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
 .code-frame {
@@ -413,8 +480,14 @@ a {
 
 @media (max-width: 900px) {
   .compare-columns,
-  .arch-columns {
+  .arch-columns,
+  .beside-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .beside-demo {
+    position: static;
+    order: -1;
   }
 }
 

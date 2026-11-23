@@ -12,8 +12,24 @@ export const Snippet = Schema.Struct({
 })
 export type Snippet = typeof Snippet.Type
 
-export const Pair = Schema.Struct({
-  foldkit: Schema.Array(Snippet),
-  effect: Schema.Array(Snippet)
+const Files = Schema.Array(Snippet)
+
+export const Snippets = Schema.Struct({
+  intro: Files,
+  split: Files,
+  counterFoldkit: Files,
+  counterEffect: Files,
+  kept: Files,
+  providerFoldkit: Files,
+  providerEffect: Files,
+  noopFoldkit: Files,
+  noopEffect: Files,
+  headless: Files,
+  fragment: Files,
+  storyFoldkit: Files,
+  storyEffect: Files,
+  sceneFoldkit: Files,
+  sceneEffect: Files,
+  play: Files
 })
-export type Pair = typeof Pair.Type
+export type Snippets = typeof Snippets.Type

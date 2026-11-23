@@ -1,9 +1,12 @@
 import { Code } from "#components/Code"
 import { Diagram } from "#components/Diagram"
-import { Pair, Snippet } from "#domain/Snippet"
+import { type Snippet, Snippets } from "#domain/Snippet"
 import { Component, Head, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
+import { Counter } from "./autocounter/Counter.ts"
+import { Counter as FragmentCounter } from "./autocounter/fragment/Counter.ts"
+import { Scoreboard } from "./autocounter/headless/Scoreboard.ts"
 import { Page } from "./counter/effect/Page.ts"
 import { EmbedFoldkitPage } from "./counter/FoldkitEmbed.ts"
 
@@ -16,8 +19,40 @@ const Example = <M>(h: View.H<M>, options: {
     h.h3.class("example-title").children(options.title),
     h.div.class("example-body").children(
       options.demo && h.div.class("demo").children(options.demo),
-      ...options.files.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet)))
+      ...Files(h, options.files)
     )
+  )
+
+const Files = <M>(h: View.H<M>, files: ReadonlyArray<Snippet>) =>
+  files.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet)))
+
+const Caption = <M>(h: View.H<M>, text: string) => h.figcaption.class("caption").children(...Text(h, text))
+
+const Listing = <M>(h: View.H<M>, files: ReadonlyArray<Snippet>, caption?: string) =>
+  h.figure.class("listing wide").children(...Files(h, files), caption && Caption(h, caption))
+
+const Beside = <M>(h: View.H<M>, options: {
+  readonly label: string
+  readonly files: ReadonlyArray<Snippet>
+  readonly demo: View.Content<M>
+  readonly caption: string
+}) =>
+  h.figure.class("beside wide").children(
+    h.div.class("beside-columns").children(
+      h.div.class("beside-code").children(...Files(h, options.files)),
+      h.div.class("demo beside-demo").attr("role", "group").attr("aria-label", options.label).children(options.demo)
+    ),
+    Caption(h, options.caption)
+  )
+
+const Compare = <M>(h: View.H<M>, options: {
+  readonly foldkit: { readonly title: string; readonly files: ReadonlyArray<Snippet> }
+  readonly effect: { readonly title: string; readonly files: ReadonlyArray<Snippet> }
+  readonly caption?: string
+}) =>
+  h.figure.class("compare wide").children(
+    h.div.class("compare-columns").children(Example(h, options.foldkit), Example(h, options.effect)),
+    options.caption && Caption(h, options.caption)
   )
 
 const Text = <M>(h: View.H<M>, text: string) =>
@@ -28,7 +63,7 @@ const P = <M>(h: View.H<M>, text: string) => h.p.children(...Text(h, text))
 export const LaunchPage = Component.define({
   name: "LaunchPage",
   scoped: false,
-  props: Schema.Struct({ counter: Pair, kept: Schema.Array(Snippet), provider: Pair }),
+  props: Schema.Struct({ snippets: Snippets }),
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -45,6 +80,51 @@ export const LaunchPage = Component.define({
           "Foldkit 0.x is the frontend framework published on npm as `foldkit`. Its frontend work continues as Effect UI, which you import from `effect/ui`. Foldkit becomes the full-stack framework built on Effect UI."
         ),
         P(h, "This page shows what is changing and why. It assumes you've built something with Foldkit 0.x.")
+      ),
+      h.section.attr("aria-labelledby", "define").children(
+        h.h2.id("define").children(
+          "In Effect UI, a component declares its Model and Messages, then defines init, update and view"
+        ),
+        P(
+          h,
+          "Here is a counter written as one file. It counts up when you click, resets one second after you ask it to, and counts by itself while auto-count is on."
+        ),
+        Beside(h, {
+          label: "Counter",
+          files: h.props.snippets.intro,
+          demo: Counter(h, { key: "intro" }),
+          caption: "The counter is running. Click Reset in 1 second, or click Auto-count and then Stop."
+        }),
+        P(
+          h,
+          "`Component.define` takes the name and the Schemas, and `make` takes init, update and view. update is a record with one handler per Message."
+        ),
+        P(
+          h,
+          "A Command is one request with one result. The `ClickedResetAfterDelay` handler returns `$.run(DelayReset.make({}))` and starts nothing itself. The runtime sleeps for one second and sends `CompletedDelayReset`, and that handler sets the count to zero. While the Command runs, `h.isRunning(DelayReset)` is true and the button reads Resetting. In Foldkit 0.x the same handler returned `{ model, commands: [DelayReset] }`."
+        ),
+        P(
+          h,
+          "A Subscription runs for as long as the Model asks for it. `subscriptions` is a function of the Model that lists the Streams that should be running. While `isAutoCounting` is true the list contains `tick`, and each tick sends `Ticked`. When it becomes false the entry is gone and the runtime stops the Stream. No handler starts or stops a timer. In Foldkit 0.x the entry declared a dependency Schema with `modelToDependencies` and `dependenciesToStream`. Here the condition is an ordinary `&&`."
+        )
+      ),
+      h.section.attr("aria-labelledby", "split").children(
+        h.h2.id("split").children(
+          ...Text(h, "Separating the definition from `make` lets you write init, update and view on their own")
+        ),
+        P(
+          h,
+          "This is the same counter with the same behaviour, and the two calls pulled apart. The definition types each piece, so none of them needs a type annotation for `$`, `h` or the Message."
+        ),
+        Listing(h, h.props.snippets.split),
+        P(
+          h,
+          "`CounterDef.update(\"ClickedResetAfterDelay\", ...)` writes the handler for one Message away from the component. `CounterDef.update(...)` without a tag writes one that works for any Message, so `increment` serves both `ClickedIncrement` and `Ticked`."
+        ),
+        P(
+          h,
+          "The definition has helpers for update, view and fragment, but none for init or subscriptions. Those two are plain functions annotated with the Model type, as `init` is above. A component that fits in one piece should keep the two calls chained, and split them when it grows."
+        )
       ),
       h.section.attr("aria-labelledby", "one-model").children(
         h.h2.id("one-model").children("In Foldkit 0.x, the entire application state was a single Model"),
@@ -78,12 +158,12 @@ export const LaunchPage = Component.define({
           h.div.class("compare-columns").children(
             Example(h, {
               title: "The Foldkit 0.x page stores the count in its Model",
-              files: h.props.counter.foldkit,
+              files: h.props.snippets.counterFoldkit,
               demo: h.div.class("embed").onMount(EmbedFoldkitPage())
             }),
             Example(h, {
               title: "The Effect UI page renders the Counter without storing its count",
-              files: h.props.counter.effect,
+              files: h.props.snippets.counterEffect,
               demo: Page(h, {})
             })
           ),
@@ -119,7 +199,7 @@ export const LaunchPage = Component.define({
           "Some state should outlast the view that shows it, like a half-filled form on a tab the user has switched away from. Define that component with `scoped: true` and write it inside `h.scoped`. When the view stops writing it, its nodes leave the document and its Model stays, along with its Subscriptions and any Commands in flight. It's kept until the component that wrote it ends, or until a predicate you pass to `h.scoped` returns false."
         ),
         h.figure.class("kept").children(
-          ...h.props.kept.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet))),
+          ...h.props.snippets.kept.map((snippet) => h.div.key(snippet.name).children(Code(h, snippet))),
           h.figcaption.class("caption").children(
             ...Text(h, "With these two lines changed, the Counter above keeps its count while it's hidden.")
           )
@@ -139,21 +219,18 @@ export const LaunchPage = Component.define({
           h,
           "If you leave `Drafts.layer` out of `resources`, the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves. A Command can provide `Drafts` inside its own Effect instead, and then `Drafts` is built again every time the Command runs."
         ),
-        h.figure.class("compare wide").children(
-          h.div.class("compare-columns").children(
-            Example(h, { title: "The Foldkit 0.x app provides Drafts at the root", files: h.props.provider.foldkit }),
-            Example(h, {
-              title: "The Effect UI Editor provides Drafts where the Editor is defined",
-              files: h.props.provider.effect
-            })
-          ),
-          h.figcaption.class("caption").children(
-            ...Text(
-              h,
-              "Foldkit 0.x provides `Drafts` at the root, to every Command. Effect UI provides it on `Editor`, in the editor's own file."
-            )
-          )
-        ),
+        Compare(h, {
+          foldkit: {
+            title: "The Foldkit 0.x app provides Drafts at the root",
+            files: h.props.snippets.providerFoldkit
+          },
+          effect: {
+            title: "The Effect UI Editor provides Drafts where the Editor is defined",
+            files: h.props.snippets.providerEffect
+          },
+          caption:
+            "Foldkit 0.x provides `Drafts` at the root, to every Command. Effect UI provides it on `Editor`, in the editor’s own file."
+        }),
         P(
           h,
           "`Component.provide` is `Effect.provide` for a component and everything below it. The editor's file exports `Editor` with its Layers already provided, so a page writes `Editor` and passes nothing down."
@@ -167,6 +244,106 @@ export const LaunchPage = Component.define({
           "`EditorNoDeps` is the same component without its Layers. Mounting it compiles, but the mounted app then requires `SaveDraft`, and TypeScript won't let you run it until something provides one. A test can mount `EditorNoDeps` with a fake `SaveDraft`."
         )
       ),
+      h.section.attr("aria-labelledby", "noop").children(
+        h.h2.id("noop").children("In Effect UI, a Command whose result update ignores sends no Message"),
+        P(
+          h,
+          "Every Foldkit 0.x Command returns a Message, even when update has no use for it. Saving a draft changes nothing in the Editor’s Model, so the Foldkit 0.x Editor declares `SavedDraft` and handles it by returning the Model it was given."
+        ),
+        Compare(h, {
+          foldkit: {
+            title: "The Foldkit 0.x Editor handles SavedDraft and changes nothing",
+            files: h.props.snippets.noopFoldkit
+          },
+          effect: {
+            title: "The Effect UI Editor runs SaveDraft with Command.asNoop",
+            files: h.props.snippets.noopEffect
+          }
+        }),
+        P(
+          h,
+          "`Command.asNoop` runs the Command and replaces its result with `Component.noop`, which never reaches update. The Effect UI Editor has one Message where the Foldkit 0.x Editor has two."
+        ),
+        P(
+          h,
+          "Use it only when update has nothing to do with the result. The counter’s `DelayReset` is the counter-example, because `CompletedDelayReset` is what sets the count to zero. With `Command.asNoop` it would still sleep for a second, and the count would never reset. That version type-checks, so the compiler won’t catch the mistake."
+        )
+      ),
+      h.section.attr("aria-labelledby", "headless").children(
+        h.h2.id("headless").children(
+          "A headless component keeps its Model and update, and the parent draws it with parts"
+        ),
+        P(
+          h,
+          "Here is the same Counter finished with `parts` in place of `view`. It keeps its Model, update, Command and Subscription, and has no markup of its own. The page below draws it twice: a compact one with the number and a + button, and a scoreboard with a large number, Add a point and Auto-count."
+        ),
+        Beside(h, {
+          label: "Two drawings of the headless Counter",
+          files: h.props.snippets.headless,
+          demo: Scoreboard(h, {}),
+          caption: "Both drawings are running. Each keeps its own count."
+        }),
+        P(
+          h,
+          "The parent chooses the elements, classes and labels. `counter.increment(h.button)` puts Counter’s click handler on the parent’s button, so the click still goes through Counter’s update. Each drawing is its own instance with its own count."
+        ),
+        P(h, "This is how `@effect/ui-kit` components such as Select and Collapsible are written.")
+      ),
+      h.section.attr("aria-labelledby", "fragment").children(
+        h.h2.id("fragment").children("A fragment is part of one component’s view, written as its own function"),
+        P(
+          h,
+          "Here is the reset button from the first counter, pulled out of the view. It disables itself and reads Resetting while `DelayReset` is running."
+        ),
+        Beside(h, {
+          label: "Counter with a reset fragment",
+          files: h.props.snippets.fragment,
+          demo: FragmentCounter(h, { key: "fragment" }),
+          caption: "Click Reset in 1 second. The button is disabled until the count is back at 0."
+        }),
+        P(
+          h,
+          "`CounterDef.fragment` gives the function the same `h` the view gets. It can send Counter’s Messages and call `h.isRunning` with no type parameters, and it takes whatever other arguments you give it after `h`."
+        )
+      ),
+      h.section.attr("aria-labelledby", "testing").children(
+        h.h2.id("testing").children(
+          "In Effect UI, Story and Scene test a component, and Play runs its Commands and Subscriptions"
+        ),
+        P(
+          h,
+          "Each test below follows one interaction: the user asks for a delayed reset, and the count goes to zero."
+        ),
+        Compare(h, {
+          foldkit: { title: "A Foldkit 0.x Story takes update", files: h.props.snippets.storyFoldkit },
+          effect: { title: "An Effect UI Story takes the component", files: h.props.snippets.storyEffect }
+        }),
+        Compare(h, {
+          foldkit: { title: "A Foldkit 0.x Scene takes update and view", files: h.props.snippets.sceneFoldkit },
+          effect: { title: "An Effect UI Scene takes the component", files: h.props.snippets.sceneEffect }
+        }),
+        P(
+          h,
+          "Story still sends Messages and reads the Model. Scene still clicks through the view and reads what it shows. In both, a Command stays pending as data until the test resolves it by name, and the test fails if one is left unresolved."
+        ),
+        P(
+          h,
+          "Three things changed. The test takes the component where Foldkit 0.x took `update`, or `update` and `view`. It starts from init, so this test clicks Increment first where the Foldkit 0.x test was given a Model with a count of 5. And the steps are calls on a cursor, so the test reads `s.model` between steps with an ordinary assertion."
+        ),
+        Listing(h, h.props.snippets.play, "Play has no counterpart in Foldkit 0.x."),
+        P(
+          h,
+          "In a Story and a Scene the test hands update `CompletedDelayReset`, so both pass whatever `DelayReset` actually does. In a Play nothing is resolved. The runtime runs `DelayReset`, the test moves the clock, and the count changes at one second and not before."
+        ),
+        P(
+          h,
+          "The same holds for the Subscription. A Story can check that `tick` is listed and deliver a `Ticked` itself, but only a Play runs the Stream. With `Stream.drop(1)` removed from the counter, the Story still passes, and the Play shows 4 after three seconds where it should show 3."
+        ),
+        P(
+          h,
+          "A Play also runs child components for real, which is what this page’s hide and show test does. In Foldkit 0.x the docs tell you to test a Command’s Effect in a separate test with a mock Layer."
+        )
+      ),
       h.section.attr("aria-labelledby", "carries-over").children(
         h.h2.id("carries-over").children(
           "Messages still describe what happened, and update still decides what changes"
@@ -178,8 +355,7 @@ export const LaunchPage = Component.define({
         P(
           h,
           "A child still knows nothing about its parent. Where a Submodel returned an OutMessage, a component emits an event, and the parent decides what the event means."
-        ),
-        P(h, "A test still performs no effects. Each Command is a value the test resolves by name.")
+        )
       ),
       h.section.attr("aria-labelledby", "next").children(
         h.h2.id("next").children("You can reuse your Models, Messages and update logic when you migrate"),
