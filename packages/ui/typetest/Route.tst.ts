@@ -86,16 +86,16 @@ describe("Router", () => {
       message: Message
     }).make({
       init: () => ({ n: 0 }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         message._tag === "Go"
           ? $.run(
             Router.push(AppRoute, AppRoute.Home()).pipe(
               Command.map(() => Message.Done())
             )
           )
-          : model,
+          : $.model,
       subscriptions: () => [Router.subscription(AppRoute, AppRoute.Home(), () => Message.Done())],
-      view: (_, h) => h.text("")
+      view: (h) => h.text("")
     })
     expect<Component.Requirements<typeof Nav>>().type.toBe<Router.Push | Router.Router>()
   })
@@ -141,9 +141,9 @@ describe("Router", () => {
       message: Schema.Never
     }).make({
       init: () => ({ dirty: false }),
-      update: (model) => model,
-      subscriptions: (model) => [model.dirty && Router.blocked("form")],
-      view: (_, h) => h.text("")
+      update: ($) => $.model,
+      subscriptions: ({ model }) => [model.dirty && Router.blocked("form")],
+      view: (h) => h.text("")
     })
     expect<Component.Requirements<typeof Form>>().type.toBe<Router.Router>()
     expect(Router).type.not.toHaveProperty("Block")
@@ -159,13 +159,13 @@ describe("Router", () => {
       message: Schema.Never
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      head: (_model, props, queries) => {
+      update: ($) => $.model,
+      head: ({ props, queries }) => {
         expect(props).type.toBe<{ readonly title: string }>()
         expect(queries).type.toBe<{}>()
         return [Head.title(props.title)]
       },
-      view: (_, h) => h.text("")
+      view: (h) => h.text("")
     })
     expect<Component.Requirements<typeof Page>>().type.toBe<never>()
   })
@@ -183,11 +183,11 @@ const PersonPage = Component.define({
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
-  queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+  queries: { person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) } }
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) => h.text(AsyncResult.isSuccess(h.queries.person) ? h.queries.person.value : "person")
+  update: ($) => $.model,
+  view: (h) => h.text(AsyncResult.isSuccess(h.queries.person) ? h.queries.person.value : "person")
 })
 
 const HomePage = Component.define({
@@ -197,8 +197,8 @@ const HomePage = Component.define({
   message: Schema.Never
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) => h.text("home")
+  update: ($) => $.model,
+  view: (h) => h.text("home")
 })
 
 /** Declares the person page, which provides its own read. */
@@ -209,7 +209,7 @@ const Declarer = Component.define({
   message: Schema.Never
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   subscriptions: () => [
     Router.prefetch(AppRoute, {
       Home: () => [Router.page(HomePage)],
@@ -218,7 +218,7 @@ const Declarer = Component.define({
       NotFound: () => []
     })
   ],
-  view: (_, h) => h.text("app")
+  view: (h) => h.text("app")
 })
 
 describe("Router.prefetch", () => {
@@ -253,7 +253,7 @@ describe("Router.prefetch", () => {
       message: Schema.Never
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       subscriptions: () => [
         Router.prefetch(AppRoute, {
           Home: () => [],
@@ -262,7 +262,7 @@ describe("Router.prefetch", () => {
           NotFound: () => []
         })
       ],
-      view: (_, h) => h.text("app")
+      view: (h) => h.text("app")
     })
     expect<Component.Requirements<typeof UnionDeclarer>>().type.toBe<Router.Router | GetPerson>()
   })

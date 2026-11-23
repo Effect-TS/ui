@@ -114,7 +114,7 @@ describe("Scene", () => {
         .make({
           init: () => "",
           update: (_, message) => message,
-          view: (seen, h) =>
+          view: (h, seen) =>
             h.div(h.p(seen), Panel.render(h, { key: "panel", fallback: () => h.i(), onEmit: (event) => event.to }))
         })
       const s = yield* Scene.make(Page, {})
@@ -137,7 +137,7 @@ describe("Scene", () => {
         .make({
           init: () => "",
           update: (_, message) => message,
-          view: (seen, h) =>
+          view: (h, seen) =>
             h.div(
               h.p(seen),
               Note(h, { onEmit: () => "note", onFailure: () => "note failed" }),
@@ -165,8 +165,8 @@ describe("Scene", () => {
     })
       .make({
         init: () => false,
-        update: (open) => !open,
-        parts: (open) => ({ open })
+        update: ($) => !$.model,
+        parts: (_, open) => ({ open })
       })
     const state = (open: boolean) => (open ? "open" : "closed")
 
@@ -179,8 +179,8 @@ describe("Scene", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Disclosure(h, {
             key: "outer",
             view: (outerDisclosure) =>
@@ -204,8 +204,8 @@ describe("Scene", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.div(
             Disclosure(h, { key: "a", view: () => Badge(h, {}) }),
             Disclosure(h, { key: "b", view: () => Badge(h, {}) }),
@@ -223,8 +223,8 @@ describe("Scene", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.div(Badge(h, {}), Disclosure(h, { view: () => Note(h, { fallback: () => Badge(h, {}) }) }))
+        update: ($) => $.model,
+        view: (h) => h.div(Badge(h, {}), Disclosure(h, { view: () => Note(h, { fallback: () => Badge(h, {}) }) }))
       })
       const fallback = Scene.fallback(Scene.start(Root, {}).view, Note, AsyncResult.initial())
       assert.strictEqual((fallback as View.Child<never, any>).component, Badge)
@@ -238,8 +238,8 @@ describe("Scene", () => {
       const page = (name: string, nested: boolean) =>
         Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => nested ? Disclosure(h, { key: "outer", view: () => inner(h) }) : h.el("div", inner(h))
+          update: ($) => $.model,
+          view: (h) => nested ? Disclosure(h, { key: "outer", view: () => inner(h) }) : h.el("div", inner(h))
         })
       const top = Scene.start(page("Top", false), {})
       void top.view
@@ -270,8 +270,8 @@ describe("Scene", () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<string> => [],
-      update: (log, message) => [...log, message],
-      view: (log, h) =>
+      update: ($, message) => [...$.model, message],
+      view: (h, log) =>
         h.div(
           h.props.shown && h.ul.onMount(Hello()).children(
             ["a", "b"].map((id) =>
@@ -340,7 +340,7 @@ describe("Scene", () => {
     it.effect("a root headless child with a new key is a new child, so its mounts are new, its view node cached or not", () =>
       Effect.gen(function*() {
         const Wrapper = Component.define({ name: "Wrapper", scoped: false, model: Schema.Null, message: Schema.Never })
-          .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+          .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
         const rootOf = (cache: boolean) => {
           let cached: View.Node<never> | undefined
           return Component.define({
@@ -352,8 +352,8 @@ describe("Scene", () => {
             elements: Html
           }).make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => {
+            update: ($) => $.model,
+            view: (h) => {
               const fresh = View.build(h.div.onMount(Hello()), [])
               const tree = cache ? cached ??= fresh : fresh
               return Wrapper(h, { key: h.props.childKey, view: () => tree })
@@ -388,8 +388,8 @@ describe("Scene", () => {
         })
           .make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.div.onMount(Connect({ token: Redacted.make("secret") }))
+            update: ($) => $.model,
+            view: (h) => h.div.onMount(Connect({ token: Redacted.make("secret") }))
           })
         const s = yield* Scene.make(Socket, {})
         const error = assert.throws(() => s.expectMount(Connect({ token: Redacted.make("other") })))
@@ -413,7 +413,7 @@ describe("Scene", () => {
           .make({
             init: () => 0,
             update: (_, width) => width,
-            parts: (width, p) => ({
+            parts: (p, width) => ({
               width,
               anchor: p.part("button", (b) => b.onMount(Place().pipe(Mount.map((width) => width * 2))))
             })
@@ -434,7 +434,7 @@ describe("Scene", () => {
           message: Schema.Never,
           elements: Html,
           slots: ["body"]
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.section(h.slots.body) })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.section(h.slots.body) })
         const Page = Component.define({
           name: "Page",
           scoped: false,
@@ -445,7 +445,7 @@ describe("Scene", () => {
           .make({
             init: () => "",
             update: (_, message) => message,
-            view: (seen, h) =>
+            view: (h, seen) =>
               h.div(
                 Frame(h, {
                   key: "frame",

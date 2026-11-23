@@ -1,8 +1,8 @@
 /**
  * The HTML element vocabulary for `@effect/ui`: element names on `h`, typed
  * events with plain payloads, controlled properties, and refs typed by tag.
- * The Commands that use those refs are in `DomCommand`, and document and
- * window events in `DomSubscription`.
+ * The Commands that use those refs are in `HtmlCommand`, and document and
+ * window events in `HtmlSubscription`.
  *
  * The module is itself a vocabulary. Register it once for the app by
  * importing `@effect/ui/html/register`, or set it on one component with
@@ -27,7 +27,9 @@
  * Model's value back after every patch and after every event that could have
  * changed it, so the element always shows what the Model says. While an input
  * method composes text in a field, its `value` is left alone until
- * `compositionend`.
+ * `compositionend`. When the host writes a focused field's `value`, the
+ * selection stays where the user left it: a rejected edit puts it back, and a
+ * normalized value keeps it with the text around it.
  *
  * A `dialog` is closed, open, or open as a modal: `.open(b)` and `.modal(b)`
  * set the same state, and the last call wins. A modal's close requests, such
@@ -67,8 +69,8 @@
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: (draft, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
- *   view: (draft, h) =>
+ *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
+ *   view: (h, draft) =>
  *     h.form.onSubmit(Message.SubmittedForm()).children(
  *       h.input.ref(NewTodo).attr("aria-label", "New todo").value(draft)
  *         .onInput(({ value }) => Message.UpdatedDraft({ value })),
@@ -94,8 +96,8 @@
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: (draft, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
- *   view: (draft, h) =>
+ *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
+ *   view: (h, draft) =>
  *     h.textarea.attr("aria-label", "Message").value(draft)
  *       .onInput(({ value }) => Message.UpdatedDraft({ value }))
  *       // Enter that ends an IME composition only confirms the text.
@@ -130,7 +132,8 @@ import * as HtmlHead from "./HtmlHead.ts"
  * type error. It's a framework service, so a Command may use it without it
  * appearing in a component's requirements. It holds the element operations
  * the ref Commands use, which a test on `TestHost` fakes with
- * `Layer.succeed(Html.Host, ...)`.
+ * `Layer.succeed(Html.Host, ...)`. `showPicker` returns whether the browser
+ * opened the picker.
  *
  * @stability experimental
  * @category services
@@ -143,6 +146,7 @@ export class Host extends Context.Service<Host, {
   readonly measure: (element: globalThis.Element) => Rect
   readonly select: (element: globalThis.Element) => void
   readonly requestSubmit: (element: globalThis.Element) => boolean
+  readonly showPicker: (element: globalThis.Element) => boolean
 }>()("@effect/ui/html/Html/Host") {}
 
 declare module "../Command.ts" {
@@ -261,6 +265,15 @@ export interface HoverPayload {
  *
  * **Details**
  *
+ * `repeat` is true while a key is held down and firing auto-repeats.
+ *
+ * `editable` is true when the event's innermost target (through open shadow
+ * roots) takes typed characters: a `textarea`, a `select`, an `input` other
+ * than `button`, `checkbox`, `color`, `file`, `image`, `radio`, `range`,
+ * `reset` or `submit`, or an element with `isContentEditable` true. A
+ * `readonly` field still counts. On element handlers `editable` describes the
+ * event's target, not the element holding the handler.
+ *
  * `selectionStart` and `selectionEnd` are the caret or selection of the
  * event's target, as the key finds it, when the target is a `textarea` or
  * an `input` whose type has a selection, such as `text` or `search`. They
@@ -278,6 +291,8 @@ export interface KeyPayload {
   readonly alt: boolean
   readonly meta: boolean
   readonly composing: boolean
+  readonly repeat: boolean
+  readonly editable: boolean
   readonly selectionStart: number | null
   readonly selectionEnd: number | null
 }
@@ -307,8 +322,21 @@ export interface ValuePayload {
 
 /**
  * The payload of `input` and `change` on an `input`: its value, whether
- * it's checked (a checkbox or radio button), and how the edit was made, as
- * `ValuePayload` describes.
+ * it's checked (a checkbox or radio button), the files it holds (a file
+ * input), and how the edit was made, as `ValuePayload` describes.
+ *
+ * **Details**
+ *
+ * `files` is empty unless the input is `type="file"`. A `File` isn't plain
+ * data: send it on to a Command whose args type it with
+ * `Schema.instanceOf(File)`, and keep plain facts about it, such as its name
+ * and size, in the Model, which must stay encodable. A `Schema.File` in the
+ * Model encodes the file's bytes into the page state.
+ *
+ * Give a file input `.value("")` to report each choice once: the browser
+ * host sends the files in `change`, then empties the input, so choosing the
+ * same file again sends `change` again. Without `.value` the input keeps
+ * what the user chose.
  *
  * @stability experimental
  * @category events
@@ -316,6 +344,7 @@ export interface ValuePayload {
  */
 export interface InputPayload extends ValuePayload {
   readonly checked: boolean
+  readonly files: ReadonlyArray<File>
 }
 
 /**
@@ -828,6 +857,9 @@ export class VoidElement<
   /**
    * The controlled `value` of an `input`, `textarea` or `select`. The element
    * always shows it, whatever the user types, until the Model changes.
+   *
+   * A browser lets a file input's value only be emptied, so the browser host
+   * writes `""` to one and skips any other value. See `InputPayload`.
    *
    * @since 0.1.0
    */
@@ -1560,7 +1592,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = m
  * }).make({
  *   init: () => undefined,
  *   update: () => undefined,
- *   view: (_, h) => h.span.children("Ready")
+ *   view: (h) => h.span.children("Ready")
  * })
  * ```
  *

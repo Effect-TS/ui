@@ -15,8 +15,8 @@ const Board = Component.define({
   elements: Html
 }).make({
   init: (): ReadonlyArray<string> => [],
-  update: (log, message) => [...log, message],
-  view: (log, h) =>
+  update: ($, message) => [...$.model, message],
+  view: (h, log) =>
     h.section.onDrop(
       ({ data, files }) => `outer ${data["application/x-todo"] ?? files.map((file) => file.name).join(",")}`,
       { accepts: ["application/x-todo", "Files"] }
@@ -86,12 +86,12 @@ describe("HtmlScene", () => {
         elements: Html
       }).make({
         init: () => ({ points: [1, 2], width: 0 }),
-        update: (model, message) =>
+        update: ($, message) =>
           Message.match(message, {
-            Add: ({ point }) => ({ ...model, points: [...model.points, point] }),
-            Drawn: ({ width }) => ({ ...model, width })
+            Add: ({ point }) => ({ ...$.model, points: [...$.model.points, point] }),
+            Drawn: ({ width }) => ({ ...$.model, width })
           }),
-        view: (model, h) =>
+        view: (h, model) =>
           h.div(
             h.canvas.onMount(
               DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.Drawn({ width })))
@@ -132,17 +132,25 @@ describe("HtmlScene", () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<string> => [],
-      update: (log, message) => [...log, message],
-      view: (log, h) => {
+      update: ($, message) => [...$.model, message],
+      view: (h, log) => {
         const saw = (event: string) => (payload: object) => `${event} ${JSON.stringify(payload)}`
         return h.div(
           h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
             .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
+          h.input.prop("type", "checkbox").attr("aria-label", "PropBox").onKeyDown(saw("keydown")),
+          h.div.attr("contenteditable", "true").onKeyDown(saw("keydown")).children(
+            h.span.attr("id", "ce-child").children("Edit"),
+            h.div.attr("contenteditable", "false").children(
+              h.button.attr("id", "ce-island-btn").children("Stop")
+            )
+          ),
           h.output(log.join("\n"))
         )
       }
     })
     const name = HtmlLocator.label("Name")
+    const propBox = HtmlLocator.label("PropBox")
     const s = HtmlScene.start(Field, {})
       .type(name, "A")
       .type(name, "Ad", { composing: true, inputType: "insertCompositionText" })
@@ -151,18 +159,50 @@ describe("HtmlScene", () => {
       .change(name, "Ada")
       .change(name, { inputType: "insertReplacementText" })
       .keydown(name, "a")
-      .keydown(name, "a", { composing: true, selectionStart: 1, selectionEnd: 3 })
+      .keydown(name, "a", { composing: true, repeat: true, editable: false, selectionStart: 1, selectionEnd: 3 })
+      .keydown(propBox, " ")
+      .keydown(Locator.attr("id", "ce-child"), "g")
+      .keydown(Locator.attr("id", "ce-island-btn"), "g")
     assert.deepStrictEqual(s.get(log).children?.map((child) => child.text).join("").split("\n"), [
-      `input {"value":"A","checked":false,"composing":false,"inputType":"insertText"}`,
-      `input {"value":"Ad","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+      `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText"}`,
+      `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
       `compositionend {"value":"Adam"}`,
       `compositionend {"value":"Ada"}`,
-      `change {"value":"Ada","checked":false,"composing":false,"inputType":""}`,
-      `change {"value":"Ada","checked":false,"composing":false,"inputType":"insertReplacementText"}`,
-      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"selectionStart":null,"selectionEnd":null}`,
-      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"selectionStart":1,"selectionEnd":3}`
+      `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":""}`,
+      `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText"}`,
+      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
+      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+      `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
     ])
   })
+
+  it.effect("change with files sends them to a file input's change, and other inputs get none", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Changed: { names: Schema.Array(Schema.String) } })
+      const Upload = Component.define({
+        name: "Upload",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Message,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: ($, { names }) => [...$.model, names.join(",")],
+        view: (h, log) =>
+          h.div(
+            h.input.attrs({ type: "file", "aria-label": "File" }).value("")
+              .onChange(({ files }) => Message.Changed({ names: files.map((file) => file.name) })),
+            h.input.attr("aria-label", "Name").onChange(({ files }) => Message.Changed({ names: [`${files.length}`] })),
+            h.output(log.join(" | "))
+          )
+      })
+      const s = yield* HtmlScene.make(Upload, {})
+      s.change(HtmlLocator.label("File"), { files: [new File(["a"], "a.txt"), new File(["b"], "b.txt")] })
+        .change(HtmlLocator.label("Name"), { value: "Ada", files: [new File(["c"], "c.txt")] })
+        .expect(Locator.text("a.txt,b.txt | 0")).toExist()
+    }))
 
   it.effect("a submit button submits its form with the fields read from the view", () =>
     Effect.gen(function*() {
@@ -246,11 +286,11 @@ describe("HtmlScene", () => {
       elements: Html
     }).make({
       init: () => ({ log: [], zip: "old" }),
-      update: (model, message) => ({
-        log: [...model.log, message],
-        zip: message === "fill" ? "new" : model.zip
+      update: ($, message) => ({
+        log: [...$.model.log, message],
+        zip: message === "fill" ? "new" : $.model.zip
       }),
-      view: (model, h) =>
+      view: (h, model) =>
         h.div(
           h.form.attr("id", "f").onSubmit(({ entries }) =>
             `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`

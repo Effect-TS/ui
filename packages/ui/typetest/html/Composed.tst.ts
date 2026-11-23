@@ -20,7 +20,7 @@ const Timed = Component.define({
 }).make({
   init: () => 0,
   update: (_, now) => now,
-  parts: (now, p) => ({ now, clock: p.part("time", (b) => b.onMount(Tick())) })
+  parts: (p, now) => ({ now, clock: p.part("time", (b) => b.onMount(Tick())) })
 })
 
 const Msg = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Closed: {} })
@@ -44,8 +44,8 @@ describe("p.child", () => {
   it("infers the consumer's parts from the merge, with no annotations", () => {
     const Combo = define().make({
       init: () => 0,
-      update: (count) => count,
-      parts: (count, p) => {
+      update: ($) => $.model,
+      parts: (p, count) => {
         const badge = p.part("output", (b) => b.attr("data-count", String(count)))
         return p.child(Dialog, {
           props: { label: "Confirm" },
@@ -79,8 +79,8 @@ describe("p.child", () => {
   it("two levels deep, the innermost merge is what the consumer gets", () => {
     const Combo = define().make({
       init: () => 0,
-      update: (count) => count,
-      parts: (_, p) =>
+      update: ($) => $.model,
+      parts: (p) =>
         p.child(Dialog, {
           props: { label: "Confirm" },
           parts: (dialog) =>
@@ -102,8 +102,8 @@ describe("p.child", () => {
   it("the child's requirements, and the own parts', are the component's", () => {
     const Combo = define().make({
       init: () => 0,
-      update: (count) => count,
-      parts: (_, p) => {
+      update: ($) => $.model,
+      parts: (p) => {
         const seen = p.part("div", (b) => b.onMount(MarkSeen().pipe(Mount.map(() => Component.noop))))
         return p.child(Timed, { parts: (timed) => ({ timed, seen }) })
       }
@@ -119,7 +119,7 @@ describe("p.child", () => {
       message: Msg,
       shares: () => ({ open: true })
     })
-      .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
     const Tip = Component.define({
       name: "Tip",
       scoped: false,
@@ -128,19 +128,19 @@ describe("p.child", () => {
       shared: { tips: Tips }
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.el("p")
+      update: ($) => $.model,
+      view: (h) => h.el("p")
     })
     const Bar = define().make({
       init: () => 0,
-      update: (count) => count,
-      parts: (_, p) => p.child(Tips, { parts: (tips) => tips })
+      update: ($) => $.model,
+      parts: (p) => p.child(Tips, { parts: (tips) => tips })
     })
     const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
       {
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => Bar(h, { props: { items: [] }, view: () => Tip(h, {}) })
+        update: ($) => $.model,
+        view: (h) => Bar(h, { props: { items: [] }, view: () => Tip(h, {}) })
       }
     )
     expect<Component.Requirements<typeof Tip>>().type.toBe<Component.Shared<"Tips">>()
@@ -150,8 +150,8 @@ describe("p.child", () => {
   it("checks the child's props, that its events map to this component's messages, and refuses view and fallback", () => {
     define().make({
       init: () => 0,
-      update: (count) => count,
-      parts: (_, p) => {
+      update: ($) => $.model,
+      parts: (p) => {
         expect(p.child).type.not.toBeCallableWith(Dialog, { parts: (dialog: unknown) => ({ dialog }) })
         expect(p.child).type.not.toBeCallableWith(Dialog, {
           props: { label: "Confirm" },
@@ -179,8 +179,8 @@ describe("Scene.childEmit", () => {
     const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html })
       .make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Dialog(h, {
             props: { label: "Confirm" },
             onEmit: () => Msg.Closed(),

@@ -1,5 +1,5 @@
 import { Component, UiSchema } from "@effect/ui"
-import { DomCommand, Html } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
 import { Schema } from "effect"
 
 // `kit/` holds components that belong to no feature: a design system's
@@ -53,7 +53,7 @@ const step = (options: ReadonlyArray<ListboxOption>, from: string | null, direct
 const activeIn = (shown: ReadonlyArray<ListboxOption>, active: string | null) =>
   shown.some((o) => o.id === active && o.disabled !== true) ? active : null
 
-// `DomCommand.focus` and `DomCommand.scrollIntoView` act on the element a
+// `HtmlCommand.focus` and `HtmlCommand.scrollIntoView` act on the element a
 // ref from `Html.ref` names, once the render is committed, and report
 // whether the ref was rendered. Nothing here depends on it, so they end in
 // `Component.noop`, which sends nothing, and the Message union has no no-op
@@ -86,18 +86,18 @@ export const Listbox = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false, query: "", active: null, typed: "" }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     ListboxMessage.match(message, {
       // The popup is an auto popover. The browser opens it from the trigger
       // and closes it on Escape or a click outside, and the Model follows.
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
         $.evolve({ open, query: "", active: open ? $.props.selected : null })
-          .run(open ? DomCommand.focus(Input, silent) : DomCommand.focus(Trigger, silent)),
+          .run(open ? HtmlCommand.focus(Input, silent) : HtmlCommand.focus(Trigger, silent)),
       UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
       PressedKey: ({ key }) => {
-        const shown = filter($.props.options, model.query)
-        const active = activeIn(shown, model.active)
+        const shown = filter($.props.options, $.model.query)
+        const active = activeIn(shown, $.model.active)
         switch (key) {
           case "ArrowDown":
           case "ArrowUp": {
@@ -107,11 +107,11 @@ export const Listbox = Component.define({
             return next === null
               ? $.evolve({ open: true })
               : $.evolve({ open: true, active: next })
-                .run(DomCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
+                .run(HtmlCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
           }
           case "Enter":
             return active === null
-              ? model
+              ? $.model
               : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id: active }))
           case "Escape":
             return $.evolve({ open: false })
@@ -121,7 +121,7 @@ export const Listbox = Component.define({
             // is never longer than a label and needs no timer to reset it.
             const find = (prefix: string) =>
               $.props.options.find((o) => o.disabled !== true && o.label.toLowerCase().startsWith(prefix))
-            const extended = model.typed + key.toLowerCase()
+            const extended = $.model.typed + key.toLowerCase()
             const typed = find(extended) !== undefined ? extended : key.toLowerCase()
             const hit = find(typed)
             return hit === undefined
@@ -132,7 +132,7 @@ export const Listbox = Component.define({
       },
       ClickedOption: ({ id }) =>
         activeIn($.props.options, id) === null
-          ? model
+          ? $.model
           : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id }))
     }),
   // `parts` returns plain values for the consumer to read, and parts to
@@ -146,7 +146,7 @@ export const Listbox = Component.define({
   // Parts need no runtime. A test of the Listbox builds them from a Model and
   // props with `Story.parts(Listbox, { model, props })`, and `Scene.make`
   // runs it with a stand-in view for the consumer.
-  parts: (model, p) => {
+  parts: (p, model) => {
     const shown = filter(p.props.options, model.query)
     const active = activeIn(shown, model.active)
     return {

@@ -21,8 +21,8 @@ describe("PreviewCard", () => {
   it("each part returns the builder it was given, and the portal may be absent", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         PreviewCard(h, {
           key: "p",
           props: { open: false },
@@ -52,8 +52,8 @@ describe("PreviewCard", () => {
   it("the trigger takes only a link, and the events report why the card opened and closed", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         PreviewCard(h, {
           key: "p",
           props: { open: false },
@@ -82,8 +82,8 @@ describe("PreviewCard", () => {
   it("a trigger drawn elsewhere returns the link it was given", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const link = PreviewCardTrigger(h, { element: h.a.attr("href", "/a"), props: { open: false, popupId: "card" } })
         expect(link).type.toBe<PreviewCardTriggerElement<Msg>>()
         expect(PreviewCardTrigger).type.not.toBeCallableWith(h, {

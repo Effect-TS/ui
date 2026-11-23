@@ -1,4 +1,6 @@
 import * as View from "@effect/ui/View"
+import * as Schema from "effect/Schema"
+import type { Keyed } from "./attributes.ts"
 
 export interface Labelled {
   readonly label: string
@@ -20,6 +22,22 @@ export const keyed = <Tag extends string, Rest extends ReadonlyArray<unknown>, R
     ): ReturnType<B["attr"]> => part(element.key(value), value, ...rest)
   )
 
+export const valued = <Tag extends string, R>(part: View.Part<Tag, [value: string], R>) =>
+  View.wrapPart(
+    part,
+    <B extends Keyed<Tag>>(
+      { element, value }: { readonly element: B; readonly value: string }
+    ): ReturnType<B["attr"]> => part(element.key(value), value)
+  )
+
+export const grouped = <Tag extends string, R>(part: View.Part<Tag, [group: string], R>) =>
+  View.wrapPart(
+    part,
+    <B extends View.PartTarget<Tag>>(
+      { element, group }: { readonly element: B; readonly group: string }
+    ): ReturnType<B["attr"]> => part(element, group)
+  )
+
 export type Loop = "none" | "wrap" | "escape"
 
 export const stepped = (at: number, last: number, direction: 1 | -1, loop: Loop): number => {
@@ -30,7 +48,9 @@ export const stepped = (at: number, last: number, direction: 1 | -1, loop: Loop)
   return loop === "none" ? at : loop === "escape" ? -1 : direction === 1 ? 0 : last
 }
 
-export type Orientation = "horizontal" | "vertical"
+export const Orientation = Schema.Literals(["horizontal", "vertical"])
+
+export type Orientation = typeof Orientation.Type
 
 export const arrowKeys = (orientation: Orientation, rtl: boolean) =>
   orientation === "vertical"

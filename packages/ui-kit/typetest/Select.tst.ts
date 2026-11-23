@@ -26,8 +26,8 @@ describe("Select", () => {
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Select(h, {
           key: "s",
           props: { open: false, items },
@@ -37,12 +37,14 @@ describe("Select", () => {
             expect(select.label(h.div)).type.toBe<Div>()
             expect(select.positioner(h.div)).type.toBe<Div>()
             expect(select.popup(h.div)).type.toBe<Div>()
-            expect(select.item(h.div, "light")).type.toBe<Div>()
-            expect(select.group(h.div, "all")).type.toBe<Div>()
+            expect(select.item({ element: h.div, value: "light" })).type.toBe<Div>()
+            expect(select.group({ element: h.div, group: "all" })).type.toBe<Div>()
             expect(select.arrow(h.div)).type.toBe<Div | undefined>()
-            expect(select.itemIndicator(h.span, "light")).type.toBe<Span | undefined>()
-            expect(select.itemIndicator(h.span, "light", true)).type.toBe<Span | undefined>()
-            expect(select.scrollUpArrow(h.div, true)).type.toBe<Div | undefined>()
+            expect(select.itemIndicator({ element: h.span, value: "light" })).type.toBe<Span | undefined>()
+            expect(select.itemIndicator({ element: h.span, value: "light", keepMounted: true })).type.toBe<
+              Span | undefined
+            >()
+            expect(select.scrollUpArrow({ element: h.div, keepMounted: true })).type.toBe<Div | undefined>()
             expect(select.finalFocus(h.button)).type.toBe<Button>()
             return select.trigger(h.button)
           }
@@ -53,15 +55,17 @@ describe("Select", () => {
   it("the trigger takes only a button, and an item needs its value", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Select(h, {
           key: "s",
           props: { open: false, items },
           view: (select) => {
             expect(select.trigger).type.not.toBeCallableWith(h.a)
             expect(select.positioner).type.not.toBeCallableWith(h.span)
-            expect(select.item).type.not.toBeCallableWith(h.div)
+            expect(select.item).type.not.toBeCallableWith({ element: h.div })
+            expect(select.item).type.not.toBeCallableWith(h.div, "light")
+            expect(select.scrollUpArrow).type.not.toBeCallableWith(h.div)
             return select.trigger(h.button)
           }
         })
@@ -71,8 +75,8 @@ describe("Select", () => {
   it("draws its trigger with a field's member, inside the field's focusWithin", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           props: {},
           view: (field) =>
@@ -92,8 +96,8 @@ describe("Select", () => {
   it("requires open and items", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         // @ts-expect-error Property 'items' is missing
         Select(h, { key: "s", props: { open: false }, view: (select) => select.trigger(h.button) })
         return h.div

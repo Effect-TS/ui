@@ -33,12 +33,14 @@
  * | `finalFocus`      | any focusable element, focused on close              |
  *
  * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children. `item`, `itemIndicator`,
- * `group` and `groupLabel` take the item's value or the group's key as
- * well. `arrow`, `itemIndicator` and the scroll arrows return `undefined`
- * while they're hidden; `keepMounted` keeps the indicator and the scroll
- * arrows drawn. Every `item` value has to be in `items`, and `item` keys
- * its element with the value.
+ * applied, and the consumer adds the children. `item` and `itemIndicator`
+ * take an options object, `{ element, value }`, and `group` and
+ * `groupLabel` take `{ element, group }`, where `group` is the `group` of
+ * the items inside. The scroll arrows take `{ element }`. `arrow`,
+ * `itemIndicator` and the scroll arrows return `undefined` while they're
+ * hidden; a `keepMounted` field keeps the indicator and the scroll arrows
+ * drawn. Every `item` value has to be in `items`, and `item` keys its
+ * element with the value.
  *
  * In a `Field`, wrap the trigger and the positioner in `field.focusWithin`
  * and draw the trigger with `field.member`, so focus moving into the popup
@@ -89,7 +91,8 @@
  *
  * On the trigger, Enter, Space, ArrowDown and ArrowUp open the popup and
  * move focus to the selected item, or to the first or, for ArrowUp, the
- * last item. Typing a letter selects the next matching item without
+ * last item. Inside a vertical `Toolbar`, ArrowDown and ArrowUp move focus
+ * instead. Typing a letter selects the next matching item without
  * opening. In the popup, ArrowDown, ArrowUp, Home and End move between
  * items, disabled ones included, and typing moves to the next item whose
  * label starts with what's typed, skipping disabled ones. Enter and Space
@@ -149,11 +152,11 @@
  * }).make({
  *   init: () => ({ open: false, theme: "system" }),
  *   update: {
- *     RequestedOpenTheme: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseTheme: (_model, _message, $) => $.evolve({ open: false }),
- *     PickedTheme: (_model, { theme }, $) => $.evolve({ theme })
+ *     RequestedOpenTheme: ($) => $.evolve({ open: true }),
+ *     RequestedCloseTheme: ($) => $.evolve({ open: false }),
+ *     PickedTheme: ($, { theme }) => $.evolve({ theme })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Field(h, {
  *       props: { filled: true },
  *       view: (field) =>
@@ -173,9 +176,9 @@
  *                 select.positioner(h.div).children(
  *                   select.popup(h.div).children(
  *                     ...themes.map(({ label, value }) =>
- *                       select.item(h.div, value).children(
+ *                       select.item({ element: h.div, value }).children(
  *                         select.itemText(h.div).children(label),
- *                         select.itemIndicator(h.span, value)?.children("✓")
+ *                         select.itemIndicator({ element: h.span, value })?.children("✓")
  *                       )
  *                     )
  *                   )
@@ -196,8 +199,8 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as UiStruct from "@effect/ui/UiStruct"
@@ -212,7 +215,7 @@ import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { available, keyed, stepped } from "./internal/list.ts"
+import { available, grouped, stepped, valued } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
@@ -220,6 +223,7 @@ import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
+import { Toolbar } from "./Toolbar.ts"
 
 /**
  * One option of a `Select`: the value it submits, the text the trigger shows
@@ -560,11 +564,11 @@ const dismiss = (
     )
     : model
 
-const toggle = (model: SelectModel, $: SelectUpdate, method: SelectInteraction) =>
+const toggle = ($: SelectUpdate, method: SelectInteraction) =>
   $.props.disabled === true
-    ? model
+    ? $.model
     : $.props.open
-    ? dismiss(model, $, "trigger-press", method)
+    ? dismiss($.model, $, "trigger-press", method)
     : open($, "trigger-press", method)
 
 const pick = (model: SelectModel, $: SelectUpdate, value: string, method: SelectInteraction) => {
@@ -588,19 +592,18 @@ const highlight = (model: SelectModel, props: SelectProps, index: number): Selec
 const hover = (model: SelectModel, active: string | null): SelectModel =>
   model.active === active ? model : UiStruct.evolve(model, { active, activeByKey: false })
 
-const typeKey = (model: SelectModel, $: SelectUpdate, key: string) => {
+const typeKey = ($: SelectUpdate, key: string) => {
   const props = $.props
-  const { index, next } = typeahead(model, key, props.items, startOf(model, props))
+  const { index, next } = typeahead($.model, key, props.items, startOf($.model, props))
   const item = props.items[index]
   const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.set(model).evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
+  const typed = $.evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
   return item === undefined || props.open || valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = (_model: SelectModel, _message: unknown, $: SelectUpdate) =>
-  $.run(DomCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+const focusTrigger = ($: SelectUpdate) => $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 
@@ -1135,6 +1138,9 @@ export const Select = Component.define({
   message: SelectMessage,
   events: SelectEvents,
   restore: false,
+  shared: {
+    toolbar: { owner: Toolbar, optional: true }
+  },
   elements: Html
 }).make({
   init: () => ({
@@ -1159,83 +1165,83 @@ export const Select = Component.define({
     releaseUnselected: false
   }),
   update: {
-    PressedTrigger: (model, { pointerType }, $) => toggle(model, $, methodOf(pointerType)),
-    ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
-    ClickedTrigger: (model, { pointerType }, $) => toggle(model, $, methodOf(pointerType)),
-    PressedTriggerKey: (model, { key }, $) => {
+    PressedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
+    ReleasedTrigger: ($) => $.evolve({ pressing: false }),
+    ClickedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
+    PressedTriggerKey: ($, { key }) => {
       const props = $.props
-      if (props.disabled === true) return model
+      if (props.disabled === true) return $.model
       if (key === "ArrowDown" || key === "ArrowUp") {
-        return props.open ? model : open($, "list-navigation", "keyboard", key)
+        return props.open ? $.model : open($, "list-navigation", "keyboard", key)
       }
-      if (!props.open && (props.readOnly === true || props.multiple === true)) return model
-      return typeKey(model, $, key)
+      if (!props.open && (props.readOnly === true || props.multiple === true)) return $.model
+      return typeKey($, key)
     },
     ClickedLabel: focusTrigger,
     FocusedInput: focusTrigger,
-    Autofilled: (model, { value }, $) => {
+    Autofilled: ($, { value }) => {
       const props = $.props
-      if (props.disabled === true || props.readOnly === true || props.multiple === true) return model
+      if (props.disabled === true || props.readOnly === true || props.multiple === true) return $.model
       const item = autofillMatch(props.items, value)
       return !available(item) || valuesOf(props).includes(item.value)
-        ? model
+        ? $.model
         : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
     },
-    PressedPopupKey: (model, { key }, $) => {
+    PressedPopupKey: ($, { key }) => {
       const props = $.props
-      if (!props.open) return model
+      if (!props.open) return $.model
       const last = props.items.length - 1
-      const at = indexOf(props, model.active)
+      const at = indexOf(props, $.model.active)
       switch (key) {
         case "ArrowDown":
-          return highlight(model, props, stepped(at, last, 1, "none"))
+          return highlight($.model, props, stepped(at, last, 1, "none"))
         case "ArrowUp":
-          return highlight(model, props, stepped(at, last, -1, "none"))
+          return highlight($.model, props, stepped(at, last, -1, "none"))
         case "Home":
-          return highlight(model, props, 0)
+          return highlight($.model, props, 0)
         case "End":
-          return highlight(model, props, last)
+          return highlight($.model, props, last)
         case "Enter":
-          return model.active === null ? model : pick(model, $, model.active, "keyboard")
+          return $.model.active === null ? $.model : pick($.model, $, $.model.active, "keyboard")
         case "Escape":
-          return dismiss(model, $, "escape-key", "keyboard")
+          return dismiss($.model, $, "escape-key", "keyboard")
         case "Tab":
-          return dismiss(model, $, "focus-out", "keyboard")
+          return dismiss($.model, $, "focus-out", "keyboard")
         case " ":
-          return typing(model) ? typeKey(model, $, key) : $.evolve({ spaceDown: true })
+          return typing($.model) ? typeKey($, key) : $.evolve({ spaceDown: true })
         default:
-          return typeKey(model, $, key)
+          return typeKey($, key)
       }
     },
-    ReleasedSpace: (model, _message, $) => {
-      if (!model.spaceDown) return model
-      const next = UiStruct.evolve(model, { spaceDown: false })
-      return $.props.open && model.active !== null ? pick(next, $, model.active, "keyboard") : next
+    ReleasedSpace: ($) => {
+      if (!$.model.spaceDown) return $.model
+      const next = UiStruct.evolve($.model, { spaceDown: false })
+      return $.props.open && $.model.active !== null ? pick(next, $, $.model.active, "keyboard") : next
     },
-    EnteredItem: (model, { value }) => hover(model, value),
-    LeftItem: (model) => hover(model, null),
-    PressedItem: (_model, _message, $) => $.evolve({ pressedItem: true }),
-    ReleasedItem: (model, { pointerType, value }, $) => {
-      if (model.pressedItem || !$.props.open) return model
+    EnteredItem: ($, { value }) => hover($.model, value),
+    LeftItem: ($) => hover($.model, null),
+    PressedItem: ($) => $.evolve({ pressedItem: true }),
+    ReleasedItem: ($, { pointerType, value }) => {
+      if ($.model.pressedItem || !$.props.open) return $.model
       const selected = valuesOf($.props).includes(value)
-      if (selected ? !model.releaseSelected : !model.releaseUnselected) return model
-      return pick(model, $, value, methodOf(pointerType))
+      if (selected ? !$.model.releaseSelected : !$.model.releaseUnselected) return $.model
+      return pick($.model, $, value, methodOf(pointerType))
     },
-    ClickedItem: (model, { pointerType, value }, $) => {
-      const next = UiStruct.evolve(model, { pressedItem: false })
+    ClickedItem: ($, { pointerType, value }) => {
+      const next = UiStruct.evolve($.model, { pressedItem: false })
       if (!$.props.open) return next
-      return pointerType === "touch" || pointerType === "" || model.pressedItem
+      return pointerType === "touch" || pointerType === "" || $.model.pressedItem
         ? pick(next, $, value, methodOf(pointerType))
         : next
     },
-    CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
-    ShowedPopup: (_model, _message, $) =>
+    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    ShowedPopup: ($) =>
       $.evolve($.props.open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
-      if (open !== $.props.open) return model
+    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
+      if (open !== $.props.open) return $.model
       if (open) return $.emit(SelectEvents.Settled({ open }))
-      return model.mounted && $.props.holdExit !== true
+      return $.model.mounted && $.props.holdExit !== true
         ? $.evolve({
           mounted: false,
           started: false,
@@ -1244,25 +1250,25 @@ export const Select = Component.define({
           scrollDown: false,
           pressedItem: false
         }).emit(SelectEvents.Settled({ open }))
-        : model
+        : $.model
     },
-    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
-    PressedOutside: (model, { pointerType }, $) => dismiss(model, $, "outside-press", methodOf(pointerType)),
-    FocusedOutside: (model, _message, $) => dismiss(model, $, "focus-out", null, true),
-    FocusedTrigger: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "none", null) : model,
-    ReleasedPointer: (model, { outside }, $) => {
-      if (!model.pressing) return model
-      const next = UiStruct.evolve(model, { pressing: false })
+    ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
+    PressedOutside: ($, { pointerType }) => dismiss($.model, $, "outside-press", methodOf(pointerType)),
+    FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
+    FocusedTrigger: ($) => alignedOf($.model, $.props) ? dismiss($.model, $, "none", null) : $.model,
+    ReleasedPointer: ($, { outside }) => {
+      if (!$.model.pressing) return $.model
+      const next = UiStruct.evolve($.model, { pressing: false })
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
-    ResizedWindow: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "window-resize", null) : model,
-    FellBack: (_model, _message, $) => $.evolve({ fellBack: true }),
-    ChangedScrollArrows: (_model, { down, up }, $) => $.evolve({ scrollUp: up, scrollDown: down }),
-    ScrolledByArrow: (model) => hover(model, null),
-    AllowedRelease: (_model, _message, $) => $.evolve({ releaseSelected: true, releaseUnselected: true }),
-    DraggedPointer: (_model, _message, $) => $.evolve({ releaseUnselected: true })
+    ResizedWindow: ($) => alignedOf($.model, $.props) ? dismiss($.model, $, "window-resize", null) : $.model,
+    FellBack: ($) => $.evolve({ fellBack: true }),
+    ChangedScrollArrows: ($, { down, up }) => $.evolve({ scrollUp: up, scrollDown: down }),
+    ScrolledByArrow: ($) => hover($.model, null),
+    AllowedRelease: ($) => $.evolve({ releaseSelected: true, releaseUnselected: true }),
+    DraggedPointer: ($) => $.evolve({ releaseUnselected: true })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const open = props.open
     const shown = open || model.mounted
@@ -1271,6 +1277,7 @@ export const Select = Component.define({
     const readOnly = props.readOnly === true
     const required = props.required === true
     const multiple = props.multiple === true
+    const arrowsOpen = p.shared.toolbar?.orientation !== "vertical"
     const values = valuesOf(props)
     const chosen = new Set(values)
     const filled = filledOf(props)
@@ -1361,7 +1368,7 @@ export const Select = Component.define({
           ({ alt, composing, ctrl, key, meta }) =>
             composing
               ? undefined
-              : key === "ArrowDown" || key === "ArrowUp" ||
+              : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
                   (printable(key, alt, ctrl, meta) && (key !== " " || typing(model)))
               ? SelectMessage.PressedTriggerKey({ key })
               : undefined,
@@ -1501,7 +1508,7 @@ export const Select = Component.define({
         )
         .onClick(({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType }))
     })
-    const item = keyed(itemPart)
+    const item = valued(itemPart)
 
     const itemText = p.part("div", (b) => b.attr("data-select-item-text", ""))
 
@@ -1509,17 +1516,23 @@ export const Select = Component.define({
     const itemIndicator = View.wrapPart(
       indicatorPart,
       <B extends View.PartTarget<"span">>(
-        element: B,
-        value: string,
-        keepMounted?: boolean
+        { element, keepMounted, value }: {
+          readonly element: B
+          readonly value: string
+          readonly keepMounted?: boolean | undefined
+        }
       ): ReturnType<B["attr"]> | undefined => {
         const applied = indicatorPart(element)
         return chosen.has(itemOf(value).value) || keepMounted === true ? applied : undefined
       }
     )
 
-    const group = p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
-    const groupLabel = p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    const group = grouped(
+      p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
+    )
+    const groupLabel = grouped(
+      p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    )
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const scrollArrow = (direction: "up" | "down") => {
@@ -1535,7 +1548,9 @@ export const Select = Component.define({
           .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "position:absolute"))))
       return View.wrapPart(
         part,
-        <B extends View.PartTarget<"div">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined => {
+        <B extends View.PartTarget<"div">>(
+          { element, keepMounted }: { readonly element: B; readonly keepMounted?: boolean | undefined }
+        ): ReturnType<B["attr"]> | undefined => {
           const applied = part(element)
           return visible || keepMounted === true ? applied : undefined
         }

@@ -37,9 +37,9 @@
  *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
+ *   update: ($) => $.model,
  *   head: () => [Head.title("Home")],
- *   view: (_, h) => h.el("h1", "Home")
+ *   view: (h) => h.el("h1", "Home")
  * })
  *
  * const test = Effect.gen(function*() {

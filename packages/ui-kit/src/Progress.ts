@@ -61,8 +61,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ sent: 40 }),
- *   update: (model) => model,
- *   view: (model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h, model) =>
  *     Progress(h, {
  *       props: { value: model.sent },
  *       view: (progress) =>
@@ -195,8 +195,8 @@ export const Progress = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => {
+  update: ($) => $.model,
+  parts: (p) => {
     const { max, min, percentage, status, value } = resolve(p.props)
     const valueText = p.props.valueText ?? (percentage === null ? undefined : percentText(percentage))
     // What the indicator adds to its inline style: nothing while indeterminate.

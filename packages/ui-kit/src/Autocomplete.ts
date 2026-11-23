@@ -36,11 +36,13 @@
  * | `status`     | `<div>`, a live region for a message such as a count  |
  *
  * Each part takes the consumer's builder and returns it with the part
- * applied, and the consumer adds the children. `item` takes the value as
- * well, and keys its element with it, and `group` and `groupLabel` take
- * the group's key. `clear` returns `undefined` while the text is empty;
- * `keepMounted` keeps it drawn. `empty` drops its children while the list
- * has items, so the live region stays in the page.
+ * applied, and the consumer adds the children. `item` takes an options
+ * object, `{ element, value }`, and keys its element with the value, and
+ * `group` and `groupLabel` take `{ element, group }`, where `group` is the
+ * `group` of the items inside. `clear` takes `{ element }` and returns
+ * `undefined` while the text is empty; a `keepMounted` field keeps it
+ * drawn. `empty` drops its children while the list has items, so the live
+ * region stays in the page.
  *
  * Draw `autocomplete.items`, not `items`: it's the filtered list, which
  * keeps its contents while the popup animates out. `autocomplete.groups`
@@ -166,11 +168,11 @@
  * }).make({
  *   init: () => ({ open: false, query: "str" }),
  *   update: {
- *     RequestedOpenSuggestions: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseSuggestions: (_model, _message, $) => $.evolve({ open: false }),
- *     UpdatedQuery: (_model, { query }, $) => $.evolve({ query })
+ *     RequestedOpenSuggestions: ($) => $.evolve({ open: true }),
+ *     RequestedCloseSuggestions: ($) => $.evolve({ open: false }),
+ *     UpdatedQuery: ($, { query }) => $.evolve({ query })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.form(
  *       Autocomplete(h, {
  *         props: { open: model.open, value: model.query, items: tags, name: "q" },
@@ -185,13 +187,15 @@
  *           h.div(
  *             autocomplete.inputGroup(h.div).children(
  *               autocomplete.input(h.input.attr("aria-label", "Search tags")),
- *               autocomplete.clear(h.button)?.children("×")
+ *               autocomplete.clear({ element: h.button })?.children("×")
  *             ),
  *             autocomplete.positioner(h.div).children(
  *               autocomplete.popup(h.div).children(
  *                 autocomplete.empty(h.div).children("No tags"),
  *                 autocomplete.list(h.div).children(
- *                   ...autocomplete.items.map(({ label, value }) => autocomplete.item(h.div, value).children(label))
+ *                   ...autocomplete.items.map(({ label, value }) =>
+ *                     autocomplete.item({ element: h.div, value }).children(label)
+ *                   )
  *                 )
  *               )
  *             )
@@ -614,8 +618,8 @@ export const Autocomplete = Component.define({
 }).make({
   init: Engine.init,
   update: engine.update,
-  parts: (model, p) =>
-    Struct.omit(engine.parts(model, p), [
+  parts: (p, model) =>
+    Struct.omit(engine.parts(p, model), [
       "selected",
       "selectedItems",
       "placeholder",

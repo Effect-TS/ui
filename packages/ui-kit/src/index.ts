@@ -22,6 +22,12 @@
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./Accordion.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./AlertDialog.ts"
 
 /**
@@ -119,6 +125,12 @@ export * from "./Input.ts"
  * @since 0.1.0
  */
 export * from "./Menu.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./Menubar.ts"
 
 /**
  * @stability experimental
@@ -227,6 +239,12 @@ export * from "./Toggle.ts"
  * @since 0.1.0
  */
 export * from "./ToggleGroup.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * from "./Toolbar.ts"
 
 /**
  * @stability experimental

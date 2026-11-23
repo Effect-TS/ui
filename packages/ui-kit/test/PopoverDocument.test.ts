@@ -37,19 +37,19 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, triggerId: null, hovered: false, third: "on" as const, log: [] }),
   update: {
-    Shown: (model) => ({ ...model, open: true, hovered: false }),
-    Changed: (model, { third }) => ({ ...model, third }),
-    RequestedOpen: (model, { reason, triggerId }) => ({
-      ...model,
+    Shown: ($) => ({ ...$.model, open: true, hovered: false }),
+    Changed: ($, { third }) => ({ ...$.model, third }),
+    RequestedOpen: ($, { reason, triggerId }) => ({
+      ...$.model,
       open: true,
       triggerId,
       hovered: reason === "trigger-hover",
-      log: [...model.log, `RequestedOpen ${triggerId} ${reason}`]
+      log: [...$.model.log, `RequestedOpen ${triggerId} ${reason}`]
     }),
-    RequestedClose: (model, { reason }) => ({ ...model, open: false, log: [...model.log, `RequestedClose ${reason}`] }),
-    Settled: (model) => model
+    RequestedClose: ($, { reason }) => ({ ...$.model, open: false, log: [...$.model.log, `RequestedClose ${reason}`] }),
+    Settled: ($) => $.model
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.attr("id", "show").onClick(Message.Shown()).children("Show"),
       h.span.attr("id", "anchor"),

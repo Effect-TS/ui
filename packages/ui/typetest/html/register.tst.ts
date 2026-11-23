@@ -19,7 +19,7 @@ describe("@effect/ui/html/register", () => {
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Number,
       message: Schema.Literal("Save")
-    }).view((_, h) => {
+    }).view((h) => {
       expect(Button<"Save">).type.not.toBeCallableWith(h, "Delete")
       return Button(h, "Save")
     })
@@ -41,8 +41,8 @@ describe("@effect/ui/html/register", () => {
       message: Schema.Never
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.p).type.toBe<Html.Tags<never>["p"]>()
         return h.p(Label(h, "Hello"))
       }
@@ -64,8 +64,8 @@ it("shared wrappers preserve unspread options.children requirements across compo
   const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
     {
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const clock = {} as View.Node<Msg, Clock>
         const logger = {} as View.Node<Msg, Logger>
         type Label<R> = Html.Element<Msg, R, Html.EventsOf<"label">, HTMLLabelElement, "label">
@@ -87,8 +87,8 @@ it("shared wrappers preserve unspread options.children requirements across compo
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       Field(h, { label: h.props.title, children: [h.button.onClick("clicked"), {} as View.Node<string, Logger>] })
   })
   expect<Component.Requirements<typeof Other>>().type.toBe<Logger>()

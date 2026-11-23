@@ -7,10 +7,14 @@
 import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as View from "../View.ts"
+import * as lazy from "./lazy.ts"
 
 /** @internal */
-export const childName = (component: Component.Any | Feature.Any): string =>
-  Feature.isService(component) ? component[Feature.TypeId].name : component.definition.name
+export const childName = (component: Component.Any | Component.Lazy.Any | Feature.Any): string => {
+  const definition = (component as Component.Any).definition
+  if (definition !== undefined) return definition.name
+  return (Feature.TypeId in component ? component[Feature.TypeId] : (component as Component.Lazy.Any)[lazy.TypeId]).name
+}
 
 /**
  * The segment a child adds to its parent's path: `Name[key]`.
@@ -31,7 +35,7 @@ export const segment = (view: View.Child<any, any>): string => segmentOf(view.co
  *
  * @internal
  */
-export const segmentOf = (component: Component.Any | Feature.Any, key: string): string =>
+export const segmentOf = (component: Component.Any | Component.Lazy.Any | Feature.Any, key: string): string =>
   escapeName(childName(component)) + "[" + escapeKey(key) + "]"
 
 /**

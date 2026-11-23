@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema, View } from "@effect/ui"
-import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -37,8 +37,8 @@ const Checkbox = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => ({
+  update: ($) => $.model,
+  parts: (p) => ({
     root: p.part("button", (b) => b.attr("role", "checkbox").children(hidden(p.props.name)))
   })
 })
@@ -50,8 +50,8 @@ const Described = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => ({
+  update: ($) => $.model,
+  parts: (p) => ({
     control: p.part(
       "button",
       (b) => b.attr("aria-describedby", "why").children(new Html.Element<never>("i").children("why"))
@@ -72,8 +72,8 @@ const render = Effect.fnUntraced(function*(
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_model, h) => view(h)
+    update: ($) => $.model,
+    view: (h) => view(h)
   })
   const { html } = yield* HtmlServer.renderToHtml(App, {})
   return html.replace(/<!--.*?-->/g, "")
@@ -221,15 +221,15 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
     elements: Html
   }).make({
     init: () => ({ ids: ["a", "b", "c"], log: [] as ReadonlyArray<string> }),
-    update: (model, message, $) =>
+    update: ($, message) =>
       Message.match(message, {
-        Clicked: () => model,
-        Reversed: () => ({ ...model, ids: [...model.ids].reverse() }),
-        Focus: () => $.run(DomCommand.focus(First, ({ found }) => Message.Found({ found }))),
-        Found: ({ found }) => ({ ...model, log: [...model.log, `found ${found}`] }),
-        Mounted: ({ id, tag }) => ({ ...model, log: [...model.log, `mounted ${id} on ${tag}`] })
+        Clicked: () => $.model,
+        Reversed: () => ({ ...$.model, ids: [...$.model.ids].reverse() }),
+        Focus: () => $.run(HtmlCommand.focus(First, ({ found }) => Message.Found({ found }))),
+        Found: ({ found }) => ({ ...$.model, log: [...$.model.log, `found ${found}`] }),
+        Mounted: ({ id, tag }) => ({ ...$.model, log: [...$.model.log, `mounted ${id} on ${tag}`] })
       }),
-    view: (model, h) =>
+    view: (h, model) =>
       h.section.children(model.ids.map((id) => {
         const row = framed(h.button.attr("aria-label", id), id)
           .key(id)

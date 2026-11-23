@@ -20,8 +20,8 @@ describe("ToggleGroup", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         ToggleGroup(h, {
           props,
           onEmit: ({ value }) => Msg.ToggledAlign({ value }),
@@ -43,8 +43,8 @@ describe("ToggleGroup", () => {
   it("root takes only a div, item only a button with a value, and onEmit only the consumer's message", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(ToggleGroup).type.not.toBeCallableWith(h, {
           props,
           onEmit: () => UiSchema.TaggedEnum({ Other: {} }).Other(),

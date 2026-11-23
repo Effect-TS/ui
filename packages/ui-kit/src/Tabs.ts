@@ -97,9 +97,9 @@
  * }).make({
  *   init: () => ({ tab: "overview" }),
  *   update: {
- *     SelectedTab: (_model, { value }, $) => $.evolve({ tab: value })
+ *     SelectedTab: ($, { value }) => $.evolve({ tab: value })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Tabs(h, {
  *       props: {
  *         value: model.tab,
@@ -132,9 +132,9 @@
  */
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -375,10 +375,10 @@ const stepOf = (key: string, orientation: TabsOrientation, rtl: boolean): Step |
   return undefined
 }
 
-const navigate = (model: TabsModel, $: TabsUpdate, value: string, to: Step) => {
+const navigate = ($: TabsUpdate, value: string, to: Step) => {
   const tabs = $.props.tabs
   const from = indexOf(tabs, value)
-  if (from < 0) return model
+  if (from < 0) return $.model
   const last = tabs.length - 1
   const target = to === "first"
     ? 0
@@ -386,9 +386,9 @@ const navigate = (model: TabsModel, $: TabsUpdate, value: string, to: Step) => {
     ? last
     : stepped(from, last, to === "next" ? 1 : -1, $.props.loopFocus !== false ? "wrap" : "none")
   const tab = tabs[target]
-  if (tab === undefined || target === from) return model
-  return $.set(model).evolve({ highlighted: tab.value }).run(
-    DomCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
+  if (tab === undefined || target === from) return $.model
+  return $.evolve({ highlighted: tab.value }).run(
+    HtmlCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
   )
 }
 
@@ -659,8 +659,8 @@ const TrackIndicator = Mount.makeStream(
 )
 
 const releasedPointer = [
-  DomSubscription.onDocument("pointerup", TabsMessage.ReleasedPointer()),
-  DomSubscription.onDocument("pointercancel", TabsMessage.ReleasedPointer())
+  HtmlSubscription.onDocument("pointerup", TabsMessage.ReleasedPointer()),
+  HtmlSubscription.onDocument("pointercancel", TabsMessage.ReleasedPointer())
 ]
 
 type Keyed<Tag extends string> = View.PartTarget<Tag> & { readonly key: (key: string) => View.PartTarget<Tag> }
@@ -741,34 +741,34 @@ export const Tabs = Component.define({
     indicator: false
   }),
   update: {
-    ClickedTab: (model, { value }, $) => activate(model, $, value),
-    FocusedTab: (model, { value }, $) => {
-      const next = UiStruct.evolve(model, { focused: true, highlighted: value })
-      return $.props.activateOnFocus === true && model.secondary !== value ? activate(next, $, value) : next
+    ClickedTab: ($, { value }) => activate($.model, $, value),
+    FocusedTab: ($, { value }) => {
+      const next = UiStruct.evolve($.model, { focused: true, highlighted: value })
+      return $.props.activateOnFocus === true && $.model.secondary !== value ? activate(next, $, value) : next
     },
-    BlurredTab: (_model, _message, $) => $.evolve({ focused: false }),
-    PressedTab: (_model, { button, value }, $) => $.evolve({ secondary: button === 0 ? null : value }),
-    ReleasedPointer: (_model, _message, $) => $.evolve({ secondary: null }),
-    PressedKey: (model, { to, value }, $) => navigate(model, $, value, to),
-    ChangedValue: (model, _message, $) => phaseOf(model, $.props, rtlOf($)),
-    RenderedFirstFrame: (model, { value }, $) => {
-      const next = phaseOf(model, $.props, rtlOf($))
+    BlurredTab: ($) => $.evolve({ focused: false }),
+    PressedTab: ($, { button, value }) => $.evolve({ secondary: button === 0 ? null : value }),
+    ReleasedPointer: ($) => $.evolve({ secondary: null }),
+    PressedKey: ($, { to, value }) => navigate($, value, to),
+    ChangedValue: ($) => phaseOf($.model, $.props, rtlOf($)),
+    RenderedFirstFrame: ($, { value }) => {
+      const next = phaseOf($.model, $.props, rtlOf($))
       return value === next.shown ? UiStruct.evolve(next, { started: true }) : next
     },
-    FinishedTransition: (model, { value }, $) => {
-      const next = phaseOf(model, $.props, rtlOf($))
+    FinishedTransition: ($, { value }) => {
+      const next = phaseOf($.model, $.props, rtlOf($))
       return next.leaving.includes(value)
         ? UiStruct.evolve(next, { leaving: (leaving) => leaving.filter((v) => v !== value) })
         : next
     },
-    MeasuredActiveTab: (_model, { sized }, $) => $.evolve({ indicator: sized })
+    MeasuredActiveTab: ($, { sized }) => $.evolve({ indicator: sized })
   },
-  subscriptions: (model, props) => [
+  subscriptions: ({ model, props }) => [
     props.value !== model.shown &&
     Subscription.make("changedValue", [props.value], () => Stream.make(TabsMessage.ChangedValue())),
     ...(model.secondary === null ? [] : releasedPointer)
   ],
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const tabs = props.tabs
     const orientation = props.orientation ?? "horizontal"

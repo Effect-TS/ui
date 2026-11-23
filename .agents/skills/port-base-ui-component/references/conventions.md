@@ -293,7 +293,9 @@ model.advanced
   tabs.tab({ element: h.button, value: "a" }).children("Account")
   ```
 
-  Each part has one form, with no overloads. A part that may not show
+  Each part has one form, with no overloads. A part whose extra arguments
+  are all optional takes the object every time, as
+  `menu.trigger({ element: h.button })` does. A part that may not show
   returns `undefined`, and the consumer writes
   `avatar.fallback(h.span)?.children("AL")`. Apply the part before deciding, so
   a wrong tag throws in every state.
@@ -448,11 +450,14 @@ model.advanced
   union with one member. A reader sees every message handled, and a new
   message is a type error until it has a key. Use the function form only
   for a catch-all, or for an `update` that doesn't dispatch on the tag,
-  such as `update: (model) => model`.
+  such as `update: ($) => $.model`.
 - Logic that several tags share is a function above the component. When
   it is the whole handler, give it a handler's parameters,
-  `(model, message, $)`, so it is the key's value: `LeftTrigger: left`.
-  Otherwise the handlers call it with `model` and `$`. Type its `$` as
+  `($, message)`, so it is the key's value: `LeftTrigger: left`. It reads
+  the Model from `$.model`. Otherwise the handlers call it with `$`
+  first, and it reads the Model from `$.model` the same way. It takes a
+  Model of its own only when a handler hands it a derived one, as
+  `left(next, $)` in `Popover.ts` does. Type its `$` as
   `Component.Update` over the component's Model, message, events and
   props types, which every tag's `$` fits. `Tooltip.ts` has both.
 
@@ -504,7 +509,7 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   delay or the consumer keeps open. A popup that opens with focus inside
   handles Escape on the focused part. One that opens without focus, such
   as `Tooltip` on hover, hears neither on a part, so it listens on its
-  document: `subscriptions` holds `DomSubscription.onDocument` entries gated
+  document: `subscriptions` holds `HtmlSubscription.onDocument` entries gated
   on the popup showing, one for Escape and one for mouse presses in the capture
   phase, as `Tooltip` does. The Escape entry cancels the key's default and
   skips one that's `defaultPrevented`, so a field inside or an enclosing

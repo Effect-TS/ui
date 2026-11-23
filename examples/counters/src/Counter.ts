@@ -22,10 +22,10 @@ export const Counter = Component.define({
 }).make({
   init: () => ({ count: 0 }),
   update: {
-    ClickedDecrement: (_model, _message, $) => $.evolve({ count: (count) => count - 1 }),
-    ClickedIncrement: (_model, _message, $) => $.evolve({ count: (count) => count + 1 })
+    ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
+    ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-3").children(
       Button(h, { onPress: CounterMessage.ClickedDecrement() }).attr("aria-label", "Decrement").class(BUTTON_CLASS)
         .children("-"),

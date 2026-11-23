@@ -15,8 +15,8 @@ describe("Toggle", () => {
   it("returns a button of the consumer's message type, whose chained children keep their requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const onToggle = ({ pressed }: { readonly pressed: boolean }) => Msg.ToggledBold({ pressed })
         expect(Toggle(h, { props: { pressed: false }, onToggle })).type.toBe<ToggleElement<typeof Msg.Type>>()
         expect(Toggle(h, { props: { pressed: false } }).children("B", needsClock)).type.toBe<

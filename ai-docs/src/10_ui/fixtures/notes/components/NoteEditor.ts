@@ -84,28 +84,30 @@ const NoteEditorDef = Component.define({
 // An update function without a tag takes every message, so `$.combine` in
 // any slice can run it. `$.combine` in a slice also runs slices for the
 // same tag and functions written inline, each with the slice's message.
-const closeActions = NoteEditorDef.update((_model, _message, $) => $.evolve({ actionsOpen: false }))
-const clearError = NoteEditorDef.update((_model, _message, $) => $.evolve({ error: null }))
+const closeActions = NoteEditorDef.update(($) => $.evolve({ actionsOpen: false }))
+const clearError = NoteEditorDef.update(($) => $.evolve({ error: null }))
 
-// A slice for one tag: `message` is the RequestedSave message, and the Model, props
-// and `$` come from the definition. `init`, `update` and `view` are pure.
+// A slice for one tag: `$` comes first and holds the Model and props, typed
+// from the definition, and the RequestedSave message would come second. This
+// slice reads only `$`, so it leaves the message out. `init`, `update` and
+// `view` are pure.
 // They read props from `$.props` and `h.props`. A props change re-renders,
 // but never reaches `update`.
-const save = NoteEditorDef.update("RequestedSave", (model, _message, $) =>
-  model.draft === model.saved
+const save = NoteEditorDef.update("RequestedSave", ($) =>
+  $.model.draft === $.model.saved
     // With nothing to run or emit, return the next Model.
-    ? model
+    ? $.model
     // `$.combine` runs the functions in order, each from the Model the one
     // before returned, and returns a step, so `.run` follows it. Ctrl+S can
     // save while the menu is open, so a save closes it. `$.run` only takes
     // Commands whose result is one of this component's messages.
-    : $.combine(closeActions, clearError).run(SaveNote.make({ note: { ...$.props.note, body: model.draft } })))
+    : $.combine(closeActions, clearError).run(SaveNote.make({ note: { ...$.props.note, body: $.model.draft } })))
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
 const clickedDiscard = NoteEditorDef.update(
   "ClickedDiscard",
-  (_model, _message, $) => $.combine(closeActions, (model) => UiStruct.evolve(model, { confirming: true }))
+  ($) => $.combine(closeActions, ($) => $.evolve({ confirming: true }))
 )
 
 // A fragment takes `h` first and any other arguments after it, and is
@@ -135,7 +137,8 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
     )
 )
 
-// The view takes `(model, h)`, as `view` in `make` does.
+// The view takes `(h, model)`, as `view` in `make` does: `h` first, like a
+// fragment, a child call and `h.lazy`.
 //
 // `h.form`, `h.button` and the other HTML elements are on `h` because the
 // entry module imports `@effect/ui/html/register`. Attributes and handlers
@@ -147,7 +150,7 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 // several tokens and skips `false`, `null` and `undefined` the same way,
 // so a conditional class is `cond && "name"`. `Html.classNames` builds
 // the same string anywhere else.
-const noteEditorView = NoteEditorDef.view((model, h) =>
+const noteEditorView = NoteEditorDef.view((h, model) =>
   h.div(
     h.form.attr("aria-label", "Edit note").onSubmit(NoteEditorMessage.RequestedSave()).children(
       h.h2(h.props.note.title),
@@ -214,25 +217,25 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     // takes its new value, or a function of its old value. It returns a step,
     // so `.run`, `.emit` and another `.evolve` chain after it. `$.set`
     // replaces the whole Model instead.
-    UpdatedBody: (_model, { body }, $) => $.evolve({ draft: body, edits: (edits) => edits + 1 }),
+    UpdatedBody: ($, { body }) => $.evolve({ draft: body, edits: (edits) => edits + 1 }),
     RequestedSave: save,
     // `$.emit` reports to the parent.
-    SucceededSaveNote: (_model, { note }, $) => $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
+    SucceededSaveNote: ($, { note }) => $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
     // A handler that returns a bare Model can use `UiStruct.evolve`, which
     // takes the same fields.
-    FailedSaveNote: (model, { reason }) => UiStruct.evolve(model, { error: reason }),
+    FailedSaveNote: ($, { reason }) => UiStruct.evolve($.model, { error: reason }),
     ClickedDiscard: clickedDiscard,
     // An auto popover is followed: the browser opens it from its button and
     // closes it on Escape or a click outside, and the Model keeps up.
-    ToggledActions: (_model, { open }, $) => $.evolve({ actionsOpen: open }),
-    SubmittedDiscardForm: (model, { choice }, $) =>
+    ToggledActions: ($, { open }) => $.evolve({ actionsOpen: open }),
+    SubmittedDiscardForm: ($, { choice }) =>
       choice === "discard"
-        ? $.evolve({ draft: model.saved, confirming: false })
+        ? $.evolve({ draft: $.model.saved, confirming: false })
         : $.evolve({ confirming: false }),
-    CancelledDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false }),
+    CancelledDiscardDialog: ($) => $.evolve({ confirming: false }),
     // `close` also fires after the editor's own close. `confirming` is
     // already false by then, so this changes nothing.
-    ClosedDiscardDialog: (_model, _message, $) => $.evolve({ confirming: false })
+    ClosedDiscardDialog: ($) => $.evolve({ confirming: false })
   },
   // A Subscription is a keyed Stream that runs while it is listed. Use one
   // when you can say "while ...", and a Command for a single event. This one
@@ -240,7 +243,7 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
   // each keystroke restarts the timer, which makes it a debounce. Save
   // continuously like this instead of in a finalizer when the editor leaves.
   // Its source has to be the clock or a service so that tests can drive it.
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.draft !== model.saved &&
     Subscription.make(
       "autosave",

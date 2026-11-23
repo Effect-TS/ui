@@ -150,13 +150,13 @@ describe("HtmlHead", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        head: (_, { post }) => [
+        update: ($) => $.model,
+        head: ({ props: { post } }) => [
           Head.title(post.title),
           HtmlHead.meta({ name: "description", content: post.description }),
           HtmlHead.jsonLd({ "@type": "BlogPosting", headline: post.title })
         ],
-        view: (_, h) => h.article(h.props.post.title)
+        view: (h) => h.article(h.props.post.title)
       })
       const Blog = Component.define({
         name: "Blog",
@@ -167,13 +167,13 @@ describe("HtmlHead", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [
           Head.titleTemplate((title) => `${title} | Blog`),
           Head.title("Blog"),
           HtmlHead.meta({ name: "description", content: "Posts about Foldkit" })
         ],
-        view: (_, h) => {
+        view: (h) => {
           const post = h.props.post
           return h.section(post === undefined ? h.p("All posts") : BlogPost(h, { key: post.slug, props: { post } }))
         }
@@ -197,7 +197,7 @@ describe("HtmlHead", () => {
             meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "Foldkit" })]
           }))
         ],
-        view: (model, h) => h.main(Blog(h, { key: "blog", props: { post: model.post } }))
+        view: (h, model) => h.main(Blog(h, { key: "blog", props: { post: model.post } }))
       })
 
       const root = yield* TestHost.mount(Site, {})
@@ -247,9 +247,9 @@ describe("HtmlHead", () => {
 
   const Neutral = Component.define({ name: "Neutral", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model) => model,
+    update: ($) => $.model,
     head: () => [Head.reduce(() => ({ title: "Neutral" }))],
-    view: (_, h) => h.text("neutral")
+    view: (h) => h.text("neutral")
   })
   const Page = Component.define({
     name: "Page",
@@ -259,15 +259,15 @@ describe("HtmlHead", () => {
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
+    update: ($) => $.model,
     head: () => [HtmlHead.lang("en"), HtmlHead.meta({ name: "description", content: "Page" })],
-    view: (_, h) => h.main(Neutral(h, { key: "n", props: {} }))
+    view: (h) => h.main(Neutral(h, { key: "n", props: {} }))
   })
   const Shell = Component.define({ name: "Shell", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model) => model,
+    update: ($) => $.model,
     head: () => [Head.title("Shell")],
-    view: (_, h) => Page(h, { key: "p", props: {} })
+    view: (h) => Page(h, { key: "p", props: {} })
   })
 
   it.effect("lets a host-neutral reducer under an Html root change the title and keep the Html fields", () =>

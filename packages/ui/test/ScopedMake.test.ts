@@ -18,8 +18,8 @@ const Greeting = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) => h.p.onMount(Hello()).children("hello")
+  update: ($) => $.model,
+  view: (h) => h.p.onMount(Hello()).children("hello")
 })
 
 // The tests that fail on purpose run with the scope `it.effect` provides, so the end check runs as that

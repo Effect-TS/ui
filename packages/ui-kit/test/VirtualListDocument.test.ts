@@ -78,8 +78,8 @@ const Steps = Effect.fnUntraced(function*(
     elements: Html
   }).make({
     init: () => ({ step: 0 }),
-    update: { Advanced: (model) => ({ step: model.step + 1 }) },
-    view: (model, h) =>
+    update: { Advanced: ($) => ({ step: $.model.step + 1 }) },
+    view: (h, model) =>
       h.div.children(
         h.button.class("next").onClick(Message.Advanced()).children("Next"),
         VirtualList(h, {

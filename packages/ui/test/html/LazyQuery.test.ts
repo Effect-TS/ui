@@ -56,8 +56,8 @@ const lateSave = Effect.gen(function*() {
           queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_model, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.p.children(AsyncResult.match(h.queries.note, {
               onInitial: () => "loading",
               onFailure: () => "failed",
@@ -80,14 +80,14 @@ const lateSave = Effect.gen(function*() {
   const App = Component.define({ name: "App", scoped: false, model: Schema.Boolean, message: Message, elements: Html })
     .make({
       init: () => false,
-      update: (shown, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
           Save: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
           Replace: () => $.run(Replace.make({}).pipe(Command.as(Message.Show()))),
           Show: () => true,
-          Saved: () => shown
+          Saved: () => $.model
         }),
-      view: (shown, h) =>
+      view: (h, shown) =>
         h.div.children(
           h.button.onClick(Message.Save()).children("Save"),
           h.button.onClick(Message.Replace()).children("Replace"),
@@ -138,12 +138,12 @@ const savedWith = Effect.fnUntraced(function*(writes: (saved: string) => Readonl
     elements: Html
   }).make({
     init: () => "idle",
-    update: (_model, message, $) =>
+    update: ($, message) =>
       Message.match(message, {
         Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
         Saved: () => "saved"
       }),
-    view: (model, h) => h.button.onClick(Message.Clicked()).children(model)
+    view: (h, model) => h.button.onClick(Message.Clicked()).children(model)
   }).pipe(Component.provide(Save.layer))
   const App = Component.define({
     name: "App",
@@ -153,8 +153,8 @@ const savedWith = Effect.fnUntraced(function*(writes: (saved: string) => Readonl
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_model, h) => h.div.children(Saver(h, {}), h.p.children(" in app"))
+    update: ($) => $.model,
+    view: (h) => h.div.children(Saver(h, {}), h.p.children(" in app"))
   })
   const app = yield* container
   yield* BrowserHost.mountEffect(App, {}, app)
@@ -188,7 +188,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       }).make({
         init: () => false,
         update: () => true,
-        view: (open, h) =>
+        view: (h, open) =>
           h.div.children(
             h.button.onClick(Message.Opened()).children("Open"),
             open && child !== undefined ? child(h) : h.p.children("closed")
@@ -214,8 +214,8 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_model, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.p.children(AsyncResult.match(h.queries.note, {
             onInitial: () => "loading",
             onFailure: () => "failed",
@@ -276,8 +276,8 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
               queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
             }).make({
               init: () => null,
-              update: (model) => model,
-              view: (_model, h) =>
+              update: ($) => $.model,
+              view: (h) =>
                 h.p.children(AsyncResult.match(h.queries.note, {
                   onInitial: () => "loading",
                   onFailure: () => "failed",
@@ -299,12 +299,12 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => false,
-        update: (_model, message, $) =>
+        update: ($, message) =>
           Message.match(message, {
             Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
             Saved: () => true
           }),
-        view: (saved, h) =>
+        view: (h, saved) =>
           h.div.children(
             h.button.onClick(Message.Clicked()).children("Save"),
             saved && child !== undefined ? child(h) : h.p.children("unsaved")

@@ -83,8 +83,10 @@ export default defineConfig({
       ...project("@effect/ui-kit", "packages/ui-kit"),
       ...project("@effect/ui-devtools", "packages/ui-devtools"),
       ...example("auth"),
+      ...example("canvas-art"),
       ...example("counter"),
       ...example("counters"),
+      ...example("file-preview"),
       ...example("interrupting-commands"),
       ...example("routing"),
       ...example("snake")

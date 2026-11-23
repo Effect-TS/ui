@@ -68,7 +68,7 @@ const expectFocus = (
     s.resolve(command as never, { found: true } as never)
     return command.name + " " + (command.args as { readonly ref: { readonly key: string } }).ref.key
   })
-  assert.deepStrictEqual(targets, ["DomCommand.focus RadioGroupRadio[" + value + "]"])
+  assert.deepStrictEqual(targets, ["HtmlCommand.focus RadioGroupRadio[" + value + "]"])
 }
 
 describe("RadioGroup", () => {
@@ -253,8 +253,8 @@ describe("RadioGroup", () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_model, viewH) =>
+        update: ($) => $.model,
+        view: (viewH) =>
           Field(viewH, {
             props: { invalid: true },
             view: (field) =>

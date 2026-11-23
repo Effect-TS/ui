@@ -23,22 +23,25 @@ const FormModel = Schema.Struct({ open: Schema.Boolean, value: Schema.String, lo
 type FormModel = typeof FormModel.Type
 
 const formUpdate = {
-  RequestedOpen: (model: FormModel, { reason }: { readonly reason: string }) => ({
+  RequestedOpen: ({ model }: { readonly model: FormModel }, { reason }: { readonly reason: string }) => ({
     ...model,
     open: true,
     log: [...model.log, "RequestedOpen " + reason]
   }),
-  RequestedClose: (model: FormModel, { reason }: { readonly reason: string }) => ({
+  RequestedClose: ({ model }: { readonly model: FormModel }, { reason }: { readonly reason: string }) => ({
     ...model,
     open: false,
     log: [...model.log, "RequestedClose " + reason]
   }),
-  Updated: (model: FormModel, { reason, value }: { readonly reason: string; readonly value: string }) => ({
+  Updated: (
+    { model }: { readonly model: FormModel },
+    { reason, value }: { readonly reason: string; readonly value: string }
+  ) => ({
     ...model,
     value,
     log: [...model.log, "Updated " + JSON.stringify(value) + " " + reason]
   }),
-  Submitted: (model: FormModel, { query }: { readonly query: string }) => ({
+  Submitted: ({ model }: { readonly model: FormModel }, { query }: { readonly query: string }) => ({
     ...model,
     log: [...model.log, "Submitted " + JSON.stringify(query)]
   })
@@ -53,7 +56,7 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
-  view: (model, h) =>
+  view: (h, model) =>
     h.form.onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })).children(
       Field(h, {
         props: { filled: model.value !== "" },
@@ -75,7 +78,7 @@ const Page = Component.define({
                   autocomplete.popup(h.div).children(
                     autocomplete.list(h.div).children(
                       ...autocomplete.items.map(({ label, value }) =>
-                        autocomplete.item(h.div.attr("data-testid", value), value).children(label)
+                        autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
                       )
                     )
                   )
@@ -95,7 +98,7 @@ const InPopup = Component.define({
 }).make({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.form.attr("id", "search").onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })),
       Autocomplete(h, {
@@ -123,7 +126,7 @@ const InPopup = Component.define({
                 autocomplete.input(h.input.class("input")),
                 autocomplete.list(h.div).children(
                   ...autocomplete.items.map(({ label, value }) =>
-                    autocomplete.item(h.div.attr("data-testid", value), value).children(label)
+                    autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
                   )
                 )
               )
@@ -151,13 +154,13 @@ const Nested = Component.define({
 }).make({
   init: () => ({ outer: true, inner: true, picker: false, log: [] }),
   update: {
-    Toggled: (model, { open, reason, which }) => ({
-      ...model,
+    Toggled: ($, { open, reason, which }) => ({
+      ...$.model,
       [which]: open,
-      log: [...model.log, which + (open ? " RequestedOpen " : " RequestedClose ") + reason]
+      log: [...$.model.log, which + (open ? " RequestedOpen " : " RequestedClose ") + reason]
     })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Combobox(h, {
       props: { open: model.outer, value: null, inputValue: "", items },
       onEmit: {
@@ -191,7 +194,7 @@ const Nested = Component.define({
                         autocomplete.popup(h.div).children(
                           autocomplete.list(h.div).children(
                             ...autocomplete.items.map(({ label, value }) =>
-                              autocomplete.item(h.div, value).children(label)
+                              autocomplete.item({ element: h.div, value }).children(label)
                             )
                           )
                         )
@@ -219,7 +222,7 @@ const Nested = Component.define({
                       )
                     )
                 }),
-                ...combobox.items.map(({ label, value }) => combobox.item(h.div, value).children(label))
+                ...combobox.items.map(({ label, value }) => combobox.item({ element: h.div, value }).children(label))
               )
             )
           )

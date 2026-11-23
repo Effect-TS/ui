@@ -14,10 +14,10 @@ export const ShellDemo = Component.define({
 }).make({
   init: () => ({ count: 10_000, jump: 0 }),
   update: {
-    ClickedJump: (model) => ({ ...model, jump: model.jump + 1 }),
-    ClickedAppend: (model) => ({ ...model, count: model.count + 1 })
+    ClickedJump: ($) => $.evolve({ jump: (jump) => jump + 1 }),
+    ClickedAppend: ($) => $.evolve({ count: (count) => count + 1 })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("shell").children(
       h.aside.class("sidebar").children(
         h.strong.children("Inbox"),

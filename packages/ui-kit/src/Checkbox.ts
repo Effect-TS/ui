@@ -98,9 +98,9 @@
  * }).make({
  *   init: () => ({ terms: false }),
  *   update: {
- *     ToggledTerms: (_model, { checked }, $) => $.evolve({ terms: checked })
+ *     ToggledTerms: ($, { checked }) => $.evolve({ terms: checked })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Checkbox(h, {
  *       props: { checked: model.terms, name: "terms", required: true },
  *       onEmit: { Toggled: ({ checked }) => SignupMessage.ToggledTerms({ checked }) },
@@ -344,9 +344,9 @@ export const Checkbox = Component.define({
 }).make({
   init: () => ({}),
   update: {
-    ClickedRoot: (model, _message, $) => {
+    ClickedRoot: ($) => {
       const resolved = resolve($.props, $.shared.group)
-      if (!interactive(resolved)) return model
+      if (!interactive(resolved)) return $.model
       const toggled = $.emit(CheckboxEvents.Toggled({ checked: !resolved.checked }))
       switch (resolved.role) {
         case "member":
@@ -358,9 +358,9 @@ export const Checkbox = Component.define({
       }
     },
     // Enter means nothing to a checkbox: the message only cancels it.
-    PressedEnter: (model) => model
+    PressedEnter: ($) => $.model
   },
-  parts: (_model, p) => {
+  parts: (p) => {
     const resolved = resolve(p.props, p.shared.group)
     const hidden = field(resolved.field)
     const id = resolved.role === "member" ? memberId(p.props, p.id) : p.props.id

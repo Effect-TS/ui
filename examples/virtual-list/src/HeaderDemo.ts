@@ -14,10 +14,10 @@ export const HeaderDemo = Component.define({
 }).make({
   init: () => ({ tall: false, scroller: false }),
   update: {
-    ToggledHeader: (model) => ({ ...model, tall: !model.tall }),
-    ToggledScroller: (model) => ({ ...model, scroller: !model.scroller })
+    ToggledHeader: ($) => $.evolve({ tall: (tall) => !tall }),
+    ToggledScroller: ($) => $.evolve({ scroller: (scroller) => !scroller })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.children(
       h.div.class("toolbar fixed").children(
         h.button.attr("id", "grow-header").onClick(HeaderMessage.ToggledHeader()).children(

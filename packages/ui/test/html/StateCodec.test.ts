@@ -28,8 +28,8 @@ const Upload = Component.define({
     label: "Attached",
     count: 0
   }),
-  update: (model) => ({ ...model, count: model.count + 1 }),
-  view: (model, h) =>
+  update: ($) => ({ ...$.model, count: $.model.count + 1 }),
+  view: (h, model) =>
     h.el("button").on("click", Bumped.Bumped()).children(
       `${model.label} ${
         Option.match(model.file, { onNone: () => "nothing", onSome: (file) => file.name })
@@ -61,7 +61,7 @@ describe("state codecs", () => {
         extra: Schema.Struct({ value: Schema.declare((u): u is () => void => typeof u === "function") })
       }),
       message: Schema.Never
-    }).make({ init: () => ({ extra: { value: () => {} } }), update: (model) => model, view: (_, h) => h.text("") })
+    }).make({ init: () => ({ extra: { value: () => {} } }), update: ($) => $.model, view: (h) => h.text("") })
     return Effect.gen(function*() {
       const first = yield* Renderer.prerender(Callback, {})
       yield* Renderer.prerender(Callback, {})
@@ -84,14 +84,16 @@ describe("state codecs", () => {
       elements: Html
     }).make({
       init: ($) => $.props.route,
-      update: (route, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
           ChangedRoute: (changed) => changed.route,
           Go: () => $.run(Router.push(Routes, Routes.Other()).pipe(Command.map(() => Message.Went()))),
-          Went: () => route
+          Went: () => $.model
         }),
-      subscriptions: (route) => [Router.subscription(Routes, route, (route) => Message.ChangedRoute({ route }))],
-      view: (route, h) =>
+      subscriptions: (
+        { model: route }
+      ) => [Router.subscription(Routes, route, (route) => Message.ChangedRoute({ route }))],
+      view: (h, route) =>
         h.el(
           "div",
           h.el("a").on("click", Message.Go()).children("Other"),

@@ -240,8 +240,8 @@ type AnyComponent =
  *   message: Message
  * }).make({
  *   init: () => ({ count: 0 }),
- *   update: (model) => ({ count: model.count + 1 }),
- *   view: (model, h) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
+ *   update: ($) => ({ count: $.model.count + 1 }),
+ *   view: (h, model) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
  * })
  *
  * const quiet = <S extends Steps.Steps.Any>(s: S): S =>

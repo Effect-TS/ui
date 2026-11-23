@@ -90,11 +90,11 @@
  * }).make({
  *   init: () => ({ open: false }),
  *   update: {
- *     RequestedOpenMenu: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseMenu: (_model, _message, $) => $.evolve({ open: false }),
- *     PickedAction: (model) => model
+ *     RequestedOpenMenu: ($) => $.evolve({ open: true }),
+ *     RequestedCloseMenu: ($) => $.evolve({ open: false }),
+ *     PickedAction: ($) => $.model
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     ContextMenu(h, {
  *       props: { open: model.open, items: actions },
  *       onEmit: {
@@ -109,7 +109,7 @@
  *           contextMenu.trigger(h.div.class("row")).children("report.pdf"),
  *           contextMenu.positioner(h.div).children(
  *             contextMenu.popup(h.div).children(
- *               ...actions.map(({ label, value }) => contextMenu.item(h.div, value).children(label))
+ *               ...actions.map(({ label, value }) => contextMenu.item({ element: h.div, value }).children(label))
  *             )
  *           )
  *         )

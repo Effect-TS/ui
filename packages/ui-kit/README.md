@@ -21,6 +21,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 
 ## Components
 
+- [Accordion](src/Accordion.ts): a set of panels under headings, each opened and closed by its own button, whose open items live in your Model. One item opens at a time, or several with `multiple`. Each item is a `Collapsible`, with its size transitions and find-in-page.
 - [AlertDialog](src/AlertDialog.ts): a modal dialog that asks the user to answer before going on, which a press outside doesn't close.
 - [Autocomplete](src/Autocomplete.ts): an input that suggests completions from a list as the user types, whose open state and text live in your Model, with inline completion, grids, inline lists, and an input that submits with its form.
 - [Avatar](src/Avatar.ts): an image with a fallback.
@@ -39,6 +40,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Form](src/Form.ts): a native form that focuses its first invalid control after a submit.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
+- [Menubar](src/Menubar.ts): a row of menus, as in a desktop application, with one Tab stop, arrow keys that move between the triggers and switch between open menus, and hover that switches while a menu is open.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [NavigationMenu](src/NavigationMenu.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
@@ -56,6 +58,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.
 - [Toggle](src/Toggle.ts): a controlled two-state button, pressed or not.
 - [ToggleGroup](src/ToggleGroup.ts): a row of toggle buttons whose pressed values live in your Model, one at a time or several, with the arrow keys moving focus between them.
+- [Toolbar](src/Toolbar.ts): a row or column of buttons, links, inputs, toggle groups and menu or select triggers with one tab stop, the arrow keys moving focus between them.
 - [Tooltip](src/Tooltip.ts): a popup shown when its trigger is hovered or focused, with `TooltipProvider` to open neighbouring tooltips without the delay.
 - [VirtualList](src/VirtualList.ts): a list or table body that renders only the items near the visible part of its scroll container or the page, with measured item sizes, grids whose lanes follow the CSS, scrolling to an item or the end, following the end of a chat or log, loading earlier items, positions in a paged set, and the focused item kept rendered.
 

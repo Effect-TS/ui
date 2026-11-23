@@ -6,7 +6,7 @@ import {
   type ComboboxProps,
   makeComboboxFilter
 } from "@effect/ui-kit"
-import { DomCommand, Html } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -29,7 +29,7 @@ const standIn = {
     h.div(
       combobox.inputGroup(h.div.class("group")).children(
         combobox.input(h.input.class("input")),
-        combobox.clear(h.button.class("clear"))?.children("×"),
+        combobox.clear({ element: h.button.class("clear") })?.children("×"),
         combobox.trigger(h.button.class("trigger")).children(combobox.icon(h.span.class("icon")).children("▾"))
       ),
       combobox.positioner(h.div.class("positioner")).children(
@@ -37,9 +37,9 @@ const standIn = {
           combobox.empty(h.div.class("empty")).children("No fruit found"),
           combobox.list(h.div.class("list")).children(
             ...combobox.items.map(({ label, value }) =>
-              combobox.item(h.div.attr("data-testid", value), value).children(
+              combobox.item({ element: h.div.attr("data-testid", value), value }).children(
                 label,
-                combobox.itemIndicator(h.span.class("check"), value)?.children("✓")
+                combobox.itemIndicator({ element: h.span.class("check"), value })?.children("✓")
               )
             )
           )
@@ -55,9 +55,9 @@ const chipsStandIn = {
     h.div(
       combobox.chips(h.div.class("chips")).children(
         ...combobox.selectedItems.map(({ label, value }) =>
-          combobox.chip(h.div.attr("data-testid", "chip-" + value), value).children(
+          combobox.chip({ element: h.div.attr("data-testid", "chip-" + value), value }).children(
             label,
-            combobox.chipRemove(h.button.attr("data-testid", "remove-" + value), value).children("×")
+            combobox.chipRemove({ element: h.button.attr("data-testid", "remove-" + value), value }).children("×")
           )
         ),
         combobox.input(h.input.class("input"))
@@ -66,7 +66,7 @@ const chipsStandIn = {
         combobox.popup(h.div.class("popup")).children(
           combobox.list(h.div.class("list")).children(
             ...combobox.items.map(({ label, value }) =>
-              combobox.item(h.div.attr("data-testid", value), value).children(label)
+              combobox.item({ element: h.div.attr("data-testid", value), value }).children(label)
             )
           )
         )
@@ -85,7 +85,7 @@ const inPopupStandIn = {
           combobox.input(h.input.class("input")),
           combobox.list(h.div.class("list")).children(
             ...combobox.items.map(({ label, value }) =>
-              combobox.item(h.div.attr("data-testid", value), value).children(label)
+              combobox.item({ element: h.div.attr("data-testid", value), value }).children(label)
             )
           )
         )
@@ -102,7 +102,9 @@ const gridStandIn = {
         ...combobox.groups.flatMap((group) =>
           group.rows.map((cells) =>
             combobox.row(h.div.class("row")).children(
-              ...cells.map(({ label, value }) => combobox.item(h.div.attr("data-testid", value), value).children(label))
+              ...cells.map(({ label, value }) =>
+                combobox.item({ element: h.div.attr("data-testid", value), value }).children(label)
+              )
             )
           )
         )
@@ -204,7 +206,7 @@ describe("Combobox", () => {
       assert.deepInclude(s.get(clearButton).attrs, { type: "button", tabindex: "-1", "data-visible": "" })
       s.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
       s.fire(clearButton, "click", pointer("mouse")).emitted(edited("", "clear-press"), picked(null, "clear-press"))
-      s.resolve(DomCommand.Focus, { found: true })
+      s.resolve(HtmlCommand.Focus, { found: true })
       s.props({ ...base, name: "fruit" })
       assert.isUndefined(s.query(clearButton))
     }))
@@ -284,11 +286,11 @@ describe("Combobox", () => {
       )
       s.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
       s.fire(trigger, "mousedown", pointer("mouse")).emitted(dismissed("trigger-press")).expectDefaultPrevented()
-      s.resolve(DomCommand.Focus, { found: true })
+      s.resolve(HtmlCommand.Focus, { found: true })
       s.props(base)
       s.fire(group, "mousedown", pointer("mouse")).emitted(opened("input-press"), highlighted(null, -1, "none"))
         .expectDefaultPrevented()
-      s.resolve(DomCommand.Focus, { found: true })
+      s.resolve(HtmlCommand.Focus, { found: true })
       s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
       s.fire(trigger, "click", pointer("touch")).emitted(opened("trigger-press"))
       s.props({ ...base, open: true, highlightItemOnHover: false })
@@ -427,11 +429,11 @@ describe("Combobox", () => {
       assert.deepInclude(s.get(item("chip-apple")).attrs, { tabindex: "-1" })
       s.fire(input, "keydown", key("Backspace")).emitted(picked(["apple"], "none"))
       s.fire(input, "keydown", key("ArrowLeft", { selectionStart: 0, selectionEnd: 0 })).expectDefaultPrevented()
-      s.resolve(DomCommand.Focus, { found: true })
+      s.resolve(HtmlCommand.Focus, { found: true })
       s.fire(input, "keydown", key("ArrowLeft", { selectionStart: 1, selectionEnd: 1 })).expectIgnored()
       s.fire(item("remove-apple"), "mousedown", pointer("mouse")).expectIgnored().expectDefaultPrevented()
       s.fire(item("remove-apple"), "click", pointer("mouse")).emitted(picked(["grape"], "chip-remove-press"))
-      s.resolve(DomCommand.Focus, { found: true })
+      s.resolve(HtmlCommand.Focus, { found: true })
       s.props({ ...base, multiple: true, value: ["apple"], inputValue: "a" })
       s.fire(input, "keydown", key("Backspace")).expectIgnored()
       s.props({ ...base, multiple: true, value: ["apple"], readOnly: true })
@@ -548,10 +550,13 @@ describe("Combobox", () => {
             combobox.value(h.span.class("custom-value")).children("Chosen"),
             combobox.input(h.input.class("input").attr("aria-disabled", "true")),
             combobox.trigger(h.button.class("trigger").attr("aria-disabled", "true")),
-            combobox.clear(h.button.class("clear").attr("aria-disabled", "true")),
+            combobox.clear({ element: h.button.class("clear").attr("aria-disabled", "true") }),
             combobox.chips(h.div.class("chips")).children(
-              combobox.chip(h.div.class("chip"), "apple").children(
-                combobox.chipRemove(h.button.class("chip-remove").attr("aria-disabled", "true"), "apple")
+              combobox.chip({ element: h.div.class("chip"), value: "apple" }).children(
+                combobox.chipRemove({
+                  element: h.button.class("chip-remove").attr("aria-disabled", "true"),
+                  value: "apple"
+                })
               )
             )
           )
@@ -569,8 +574,8 @@ describe("Combobox", () => {
       }
       s.expectMount(chipsTracked(s))
       const hiddenTagCases: ReadonlyArray<(combobox: Parts, h: H) => View.Content<never>> = [
-        (combobox, h) => h.div(combobox.clear(h.div as never)),
-        (combobox, h) => h.div(combobox.itemIndicator(h.div as never, "apple"))
+        (combobox, h) => h.div(combobox.clear({ element: h.div as never })),
+        (combobox, h) => h.div(combobox.itemIndicator({ element: h.div as never, value: "apple" }))
       ]
       for (const render of hiddenTagCases) {
         const exit = yield* Effect.exit(

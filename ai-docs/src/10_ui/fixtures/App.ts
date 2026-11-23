@@ -32,7 +32,7 @@ export const App = Component.define({
   message: AppMessage
 }).make({
   init: ($) => ({ route: $.props.route }),
-  update: (_model, message, $) =>
+  update: ($, message) =>
     AppMessage.match(message, {
       ChangedRoute: ({ route }) => ({ route }),
       // The new route comes back through the Router subscription, so the
@@ -41,14 +41,14 @@ export const App = Component.define({
       // navigation a guard blocked, which this one has no use for.
       ClickedBackToNotes: () => $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
     }),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
   ],
   // App-wide head defaults go in the root's `head`, not in the HTML shell.
   // The template wraps the title a page below sets, giving
   // "All notes · Notes".
   head: () => [Head.titleTemplate((title) => `${title} · Notes`), HtmlHead.lang("en")],
-  view: ({ route }, h) =>
+  view: (h, { route }) =>
     h.div(
       h.header(
         h.a.attr("href", AppRoute.print(indexRoute)).children("Notes"),

@@ -96,14 +96,13 @@ export const LoginPageNoDeps = Component.define({
   }),
 
   update: {
-    ChangedEmail: (_model, { value }, $) => $.evolve({ form: (form) => LoginValidation.change(form, "email", value) }),
+    ChangedEmail: ($, { value }) => $.evolve({ form: (form) => LoginValidation.change(form, "email", value) }),
 
-    ChangedPassword: (_model, { value }, $) =>
-      $.evolve({ form: (form) => LoginValidation.change(form, "password", value) }),
+    ChangedPassword: ($, { value }) => $.evolve({ form: (form) => LoginValidation.change(form, "password", value) }),
 
-    SubmittedForm: (model, _message, $) => {
-      if (model.submitting) return model
-      const form = LoginValidation.submit(model.form)
+    SubmittedForm: ($) => {
+      if ($.model.submitting) return $.model
+      const form = LoginValidation.submit($.model.form)
       return Option.match(LoginValidation.validate(form).value, {
         onNone: () => $.evolve({ form }),
         onSome: ({ email, password }) =>
@@ -111,13 +110,13 @@ export const LoginPageNoDeps = Component.define({
       })
     },
 
-    SucceededSimulateAuthRequest: (_model, { session }, $) => $.emit(LoginPageEvents.SignedIn({ session })),
+    SucceededSimulateAuthRequest: ($, { session }) => $.emit(LoginPageEvents.SignedIn({ session })),
 
-    FailedSimulateAuthRequest: (_model, { error }, $) =>
+    FailedSimulateAuthRequest: ($, { error }) =>
       $.evolve({ submitting: false, form: (form) => LoginValidation.reject(form, { password: [error] }) })
   },
 
-  view: (model, h) => {
+  view: (h, model) => {
     const validated = LoginValidation.validate(model.form)
     const canSubmit = Option.isSome(validated.value) && !model.submitting
     return h.div.class("max-w-md mx-auto px-4").children(

@@ -24,19 +24,19 @@ const Page = Component.define({
 }).make({
   init: () => ({ outer: false, inner: false, log: [] }),
   update: {
-    RequestedOpen: (model, { menu, reason }) => ({
-      ...model,
+    RequestedOpen: ($, { menu, reason }) => ({
+      ...$.model,
       [menu]: true,
-      log: [...model.log, menu + " RequestedOpen " + reason]
+      log: [...$.model.log, menu + " RequestedOpen " + reason]
     }),
-    RequestedClose: (model, { menu, reason }, $) => ({
-      ...model,
-      [menu]: $.props.refuseClose && model[menu as "outer" | "inner"],
-      log: [...model.log, menu + " RequestedClose " + reason]
+    RequestedClose: ($, { menu, reason }) => ({
+      ...$.model,
+      [menu]: $.props.refuseClose && $.model[menu as "outer" | "inner"],
+      log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: (model, { menu, value }) => ({ ...model, log: [...model.log, menu + " Picked " + value] })
+    Picked: ($, { menu, value }) => ({ ...$.model, log: [...$.model.log, menu + " Picked " + value] })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const menu = (name: "outer" | "inner", inside?: View.Content<typeof PageMessage.Type, any>) =>
       ContextMenu(h, {
         key: name,
@@ -54,7 +54,7 @@ const Page = Component.define({
             contextMenu.backdrop(h.div.attr("id", name + "-backdrop")),
             contextMenu.positioner(h.div.attr("id", name + "-positioner")).children(
               contextMenu.popup(h.div).children(
-                contextMenu.item(h.div.attr("data-testid", name + "-copy"), "copy").children("Copy")
+                contextMenu.item({ element: h.div.attr("data-testid", name + "-copy"), value: "copy" }).children("Copy")
               )
             )
           )
@@ -81,7 +81,7 @@ const Hybrid = Component.define({
     RequestedOpen: () => ({ open: true }),
     RequestedClose: () => ({ open: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Menu(h, {
       props: { open: model.open, items },
       onEmit: {
@@ -94,10 +94,10 @@ const Hybrid = Component.define({
       },
       view: (menu) =>
         h.div(
-          menu.trigger(h.button.attr("id", "more")).children("More"),
+          menu.trigger({ element: h.button.attr("id", "more") }).children("More"),
           menu.contextTrigger(h.div.attr("id", "area")).children("Area"),
           menu.positioner(h.div.attr("id", "hybrid-positioner")).children(
-            menu.popup(h.div).children(menu.item(h.div, "copy").children("Copy"))
+            menu.popup(h.div).children(menu.item({ element: h.div, value: "copy" }).children("Copy"))
           )
         )
     })

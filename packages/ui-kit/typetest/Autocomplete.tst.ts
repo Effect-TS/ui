@@ -33,8 +33,8 @@ describe("Autocomplete", () => {
   it("each part returns the builder it was given, and clear can return undefined", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Autocomplete(h, {
           key: "a",
           props: { open: false, value: "", items },
@@ -45,9 +45,9 @@ describe("Autocomplete", () => {
             expect(autocomplete.value(h.span)).type.toBe<Span>()
             expect(autocomplete.positioner(h.div)).type.toBe<Div>()
             expect(autocomplete.list(h.div)).type.toBe<Div>()
-            expect(autocomplete.item(h.div, "apple")).type.toBe<Div>()
-            expect(autocomplete.group(h.div, "fruit")).type.toBe<Div>()
-            expect(autocomplete.clear(h.button)).type.toBe<Button | undefined>()
+            expect(autocomplete.item({ element: h.div, value: "apple" })).type.toBe<Div>()
+            expect(autocomplete.group({ element: h.div, group: "fruit" })).type.toBe<Div>()
+            expect(autocomplete.clear({ element: h.button })).type.toBe<Button | undefined>()
             expect(autocomplete).type.not.toHaveProperty("chips")
             expect(autocomplete).type.not.toHaveProperty("itemIndicator")
             expect(autocomplete).type.not.toHaveProperty("selected")
@@ -60,8 +60,8 @@ describe("Autocomplete", () => {
   it("draws its input with a field's control", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           props: {},
           view: (field) =>
@@ -77,8 +77,8 @@ describe("Autocomplete", () => {
   it("requires open, value and items, and has no selection props", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         Autocomplete(h, {
           key: "a",
           // @ts-expect-error Property 'value' is missing

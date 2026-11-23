@@ -1,42 +1,23 @@
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
-import * as Subscription from "@effect/ui/Subscription"
-import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
-import * as Stream from "effect/Stream"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
+import type * as Subscription from "@effect/ui/Subscription"
+import * as Predicate from "effect/Predicate"
 
 export interface DetachedChannel<M> {
   readonly send: (document: Document, popupId: string, message: M) => void
   readonly subscription: (popupId: string) => Subscription.Subscription<M>
 }
 
-// A trigger reaches only the popups of its own document, through an event dispatched there. The host
-// hands a listener the event's payload, not the event, so the message waits in `sending` meanwhile.
 export const detachedChannel = <M>(name: string): DetachedChannel<M> => {
+  const tag = Symbol(name)
   const typeOf = (popupId: string) => `effect-ui-kit:${name}:${popupId}`
-  let sending: M | undefined
   return {
     send: (document, popupId, message) => {
-      sending = message
-      document.dispatchEvent(new Event(typeOf(popupId)))
-      sending = undefined
+      document.dispatchEvent(new CustomEvent(typeOf(popupId), { detail: { [tag]: message } }))
     },
     subscription: (popupId) =>
-      Subscription.make(
-        name,
-        popupId,
-        (id) =>
-          Stream.callback<M>((queue) =>
-            DomSubscription.GlobalEvents.use((events) =>
-              Effect.acquireRelease(
-                Effect.sync(() =>
-                  events.listen("document", typeOf(id), { capture: false }, () => {
-                    if (sending !== undefined) Queue.offerUnsafe(queue, sending)
-                  })
-                ),
-                (close) => Effect.sync(close)
-              )
-            )
-          )
+      HtmlSubscription.onCustomEvent(
+        typeOf(popupId),
+        ({ detail }) => Predicate.hasProperty(detail, tag) ? detail[tag] as M : undefined
       )
   }
 }

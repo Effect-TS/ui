@@ -37,7 +37,7 @@ export const SearchPageNoDeps = Component.define({
       // fresh, such as a page seen moments ago, show at once, and so does the
       // first fetch at mount.
       debounce: "300 millis",
-      args: (_model, props) => {
+      args: ({ props }) => {
         const { page, q, sort } = props.route.search
         return { q: q ?? "", page, sort }
       }
@@ -45,7 +45,7 @@ export const SearchPageNoDeps = Component.define({
   }
 }).make({
   init: () => ({}),
-  update: (_model, message, $) =>
+  update: ($, message) =>
     SearchPageMessage.match(message, {
       // `patchSearch` writes some of the search and keeps the rest. It
       // replaces the history entry by default, so typing doesn't fill the
@@ -67,7 +67,7 @@ export const SearchPageNoDeps = Component.define({
         )
     }),
   head: () => [Head.title("Search notes")],
-  view: (_model, h) => {
+  view: (h) => {
     const { page, q, sort } = h.props.route.search
 
     const resultsView = (results: NoteResults) =>

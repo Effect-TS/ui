@@ -39,13 +39,13 @@
  *   message: Message
  * }).make({
  *   init: () => ({ saved: false }),
- *   update: (model, message, $) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
  *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
  *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
  *   // In a scene, `h.isRunning` is derived from the pending Commands.
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.el("button").on("click", Message.ClickedSave()).children(
  *       model.saved ? "saved" : h.isRunning(SaveTodo) ? "saving" : "save"
  *     )
@@ -160,8 +160,9 @@ export interface Expect<S> {
   toHaveCount(count: number): S
 }
 
-/** The events a child emits: a component's, a headless component's or a feature's. */
+/** The events a child emits: a component's, a headless component's, a lazy component's or a feature's. */
 type EventsOf<Child> = Child extends Feature.Service<any, any, infer E> ? E
+  : Child extends Component.Lazy.Members<any, infer E, any, never> ? E
   : Child extends Component.Headless<any, infer E, any, any, infer _Rcv, never> ? E
   : Component.Events<Child>
 
@@ -237,12 +238,12 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    *
    * **Details**
    *
-   * `child` is the component, a provided copy of it, or the feature
-   * service the child was rendered from. Throws when the view has no such
+   * `child` is the component, a provided copy of it, the lazy component or
+   * the feature service the child was rendered from. Throws when the view has no such
    * child, or several, as two unkeyed children in different headless
    * closures would be.
    */
-  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Feature.Any>(
+  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any>(
     child: Child,
     event: EventsOf<Child>
   ): this
@@ -250,7 +251,7 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * Sends the message the parent's `onEmit` maps `event` from the child of
    * `child` at `key` to, if any. A message step.
    */
-  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Feature.Any>(
+  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any>(
     child: Child,
     key: string,
     event: EventsOf<Child>
@@ -262,13 +263,16 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * to, if any. The failure is passed as an `AsyncResult.Failure`. A message
    * step.
    */
-  childFailure(child: Component.Any | Component.Headless.Any | Feature.Any, cause: Cause.Cause<unknown>): this
+  childFailure(
+    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+    cause: Cause.Cause<unknown>
+  ): this
   /**
    * Fails the child of `child` at `key`, as `childFailure` without a key
    * does. A message step.
    */
   childFailure(
-    child: Component.Any | Component.Headless.Any | Feature.Any,
+    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
     key: string,
     cause: Cause.Cause<unknown>
   ): this
@@ -283,12 +287,12 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * scene, until a `childFailure` step fails it. Throws when the child has no
    * `fallback`, as the runtime does for a feature slot.
    */
-  childPending(child: Component.Any | Component.Headless.Any | Feature.Any): this
+  childPending(child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any): this
   /**
    * Shows the slot of the child of `child` at `key` as pending.
    */
   childPending(
-    child: Component.Any | Component.Headless.Any | Feature.Any,
+    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
     key: string
   ): this
   /**
@@ -485,18 +489,18 @@ export const children = <Msg>(
 export const fallback: {
   <Msg>(
     view: View.Node<Msg, any>,
-    child: Component.Any | Component.Headless.Any | Feature.Any,
+    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
     result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
   ): View.Node<Msg, any> | undefined
   <Msg>(
     view: View.Node<Msg, any>,
-    child: Component.Any | Component.Headless.Any | Feature.Any,
+    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
     key: string,
     result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
   ): View.Node<Msg, any> | undefined
 } = <Msg>(
   view: View.Node<Msg, any>,
-  component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
+  component: Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
   ...args: ReadonlyArray<any>
 ): View.Node<Msg, any> | undefined => {
   const [key, result] = args.length === 1 ? [undefined, args[0]] : args

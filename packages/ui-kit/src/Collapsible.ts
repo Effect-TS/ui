@@ -81,9 +81,9 @@
  * }).make({
  *   init: () => ({ details: true }),
  *   update: {
- *     ToggledDetails: (_model, { open }, $) => $.evolve({ details: open })
+ *     ToggledDetails: ($, { open }) => $.evolve({ details: open })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Collapsible(h, {
  *       props: { open: model.details },
  *       onEmit: {
@@ -121,6 +121,7 @@ import * as Stream from "effect/Stream"
 import { type Attributed, flag, idOf, ownStyle, withTokens } from "./internal/attributes.ts"
 import { override } from "./internal/dom.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
+import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while
@@ -384,7 +385,12 @@ const TrackPanel = Mount.makeStream(
  * every part; on the trigger `type`, `disabled`, `aria-disabled`, which it
  * removes, `aria-expanded` and `aria-controls`, which it sets only while the
  * panel is open; on the panel `hidden`. The panel keeps an `id` the consumer
- * gives it, and gets a generated one otherwise. The panel's CSS variables, and
+ * gives it, and gets a generated one otherwise. A trigger inside another
+ * element, such as a heading, is built before the panel's `id` is known, so
+ * the root points that trigger's `aria-controls` at the consumer's `id`, on
+ * the button even when the consumer wraps it with `forward`, and leaves every
+ * other element's alone: draw the root around both when the
+ * panel has an `id` of its own. The panel's CSS variables, and
  * the `animation-name` and durations it overrides to skip an animation, are
  * added after the consumer's inline style. A handler the consumer adds to a
  * part runs after the collapsible's own.
@@ -418,36 +424,36 @@ export const Collapsible = Component.define({
     openOnLoad: $.props.open
   }),
   update: {
-    ClickedTrigger: (model, _message, $) =>
+    ClickedTrigger: ($) =>
       $.props.disabled === true
-        ? model
+        ? $.model
         : $.emit(CollapsibleEvents.Toggled({ open: !$.props.open, reason: "trigger-press" })),
-    MeasuredPanel: (_model, { size }, $) =>
+    MeasuredPanel: ($, { size }) =>
       $.evolve(
         $.props.open
           ? { size, mounted: true, ending: false }
           : { size, mounted: true, ending: false, instant: false, openOnLoad: false }
       ),
-    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
-    RenderedSize: (model, _message, $) => !$.props.open && model.mounted ? $.evolve({ ending: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
-      if (open !== $.props.open) return model
+    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    RenderedSize: ($) => !$.props.open && $.model.mounted ? $.evolve({ ending: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
+      if (open !== $.props.open) return $.model
       if (open) return $.evolve({ size: null, instant: false }).emit(CollapsibleEvents.Settled({ open }))
-      return model.ending && $.props.holdExit !== true
+      return $.model.ending && $.props.holdExit !== true
         ? $.evolve({ mounted: false, started: false, ending: false, size: null }).emit(
           CollapsibleEvents.Settled({ open })
         )
-        : model
+        : $.model
     },
-    MatchedFind: (model, _message, $) =>
+    MatchedFind: ($) =>
       $.props.open || $.props.disabled === true
-        ? model
+        ? $.model
         : $.evolve({ started: true, instant: true }).emit(
           CollapsibleEvents.Toggled({ open: true, reason: "find-in-page" })
         ),
-    StayedHidden: (model, _message, $) => $.props.open ? model : $.evolve({ started: false, instant: false })
+    StayedHidden: ($) => $.props.open ? $.model : $.evolve({ started: false, instant: false })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const open = props.open
     const disabled = props.disabled === true
@@ -461,7 +467,22 @@ export const Collapsible = Component.define({
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus).attr("data-disabled", flag(disabled))
 
-    const root = p.part("div", (b) => states(b))
+    const triggers = new Map<
+      View.Owned,
+      { readonly controls: string | undefined; readonly consumer: string | undefined }
+    >()
+    const root = p.part("div", (b) =>
+      states(b).forward((node) => {
+        const target = open ? panelId : undefined
+        if (![...triggers.values()].some(({ controls }) => controls !== target)) return node
+        return rewrite(View.build(node, []), (element) => {
+          if (element._tag !== "Element") return undefined
+          const layer = element.owned?.find((l) => triggers.has(l))
+          return layer === undefined
+            ? undefined
+            : withAttr(element, "aria-controls", withTokens(triggers.get(layer)!.consumer, target))
+        })
+      }))
 
     const trigger = p.part("button", (b) =>
       b
@@ -476,9 +497,12 @@ export const Collapsible = Component.define({
         })
         .disabled(disabled)
         .onClick(CollapsibleMessage.ClickedTrigger())
-        .forward((node) =>
-          node.attr("aria-controls", withTokens(node.elementAttrs["aria-controls"], open ? panelId : undefined))
-        ))
+        .forward((node) => {
+          const consumer = node.elementAttrs["aria-controls"]
+          const controls = open ? panelId : undefined
+          triggers.set(layerOf(node), { controls, consumer })
+          return node.attr("aria-controls", withTokens(consumer, controls))
+        }))
 
     const panelPart = p.part("div", (b, id: string) =>
       states(b)

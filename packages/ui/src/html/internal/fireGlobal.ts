@@ -1,16 +1,17 @@
 /**
  * How the test tools deliver a document or window event: `HtmlScene`'s
- * `fireDocument` and `fireWindow`, and `TestGlobalEvents.fire`.
+ * `fireDocument`, `fireCustomEvent` and `fireWindow`, and
+ * `TestGlobalEvents`' `fire` and `fireCustomEvent`.
  *
  * @internal
  */
 import * as scene from "../../internal/scene.ts"
+import * as defaults from "./defaults.ts"
 
 /** @internal */
 export type Listener = (payload: unknown, preventDefault: () => void) => void
 
-const { alt, ctrl, meta, shift } = scene.pointer
-const key = { key: "", shift, ctrl, alt, meta, composing: false, selectionStart: null, selectionEnd: null }
+const key = defaults.keyPayload("", undefined)
 const pointerEvents: ReadonlySet<string> = new Set(["click", "mousedown", "mouseup", "pointerup", "pointercancel"])
 
 /**
@@ -47,3 +48,8 @@ export const fire = (
   }
   return cancelled
 }
+
+export const custom = (given: { readonly detail?: unknown } | undefined): object => ({
+  ...given,
+  detail: given?.detail ?? null
+})

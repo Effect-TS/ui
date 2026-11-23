@@ -36,7 +36,7 @@ const PeoplePageDef = Component.define({
   message: PeoplePageMessage,
   events: PeoplePageEvents,
   queries: {
-    people: { query: SearchPeople, args: (_model, props) => props.route.search }
+    people: { query: SearchPeople, args: ({ props }) => props.route.search }
   }
 })
 
@@ -44,9 +44,9 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
   init: () => ({}),
 
   update: {
-    ChangedSearchInput: (_model, { value }, $) => $.emit(PeoplePageEvents.ChangedSearchInput({ value })),
+    ChangedSearchInput: ($, { value }) => $.emit(PeoplePageEvents.ChangedSearchInput({ value })),
 
-    SubmittedSearch: (_model, _message, $) =>
+    SubmittedSearch: ($) =>
       $.run(
         Router.patchSearch(AppRoute, $.props.route, { searchText: $.props.searchInput }, { history: "push" }).pipe(
           Command.asNoop
@@ -54,7 +54,7 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
       )
   },
 
-  view: (_model, h) => {
+  view: (h) => {
     const people = h.queries.people
     const { searchText } = h.props.route.search
     return h.div.children(

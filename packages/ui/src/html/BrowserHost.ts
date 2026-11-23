@@ -1,5 +1,5 @@
 /**
- * The DOM host for `@effect/ui`: mounts a component tree into an element of a
+ * The browser host for `@effect/ui`: mounts a component tree into an element of a
  * real document.
  *
  * Events are delegated: the host keeps one listener per event name on the
@@ -68,6 +68,13 @@
  * after the element's children exist, skips a no-op so the caret doesn't jump,
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
+ * A focused `input` or `textarea` keeps its selection when the host writes
+ * its `value`. A rejected edit, typed or composed, puts back the selection
+ * from before it. A value `update` changed, such as uppercased text or
+ * grouped digits, or one the Model set, keeps each end of the selection with
+ * the unchanged text before it, else after it, and a caret at the end stays at
+ * the end. When the text changed on both sides of the caret, as when a
+ * character typed next to a separator moves it, the caret keeps its offset.
  * A field's `value` isn't written while an input method composes text in it,
  * from `compositionstart`, or an `input` that says it's composing, to
  * `compositionend`, so a patch or a rejected `input` can't replace the text
@@ -100,8 +107,8 @@
  *   elements: Html
  * }).make({
  *   init: () => 0,
- *   update: (count) => count + 1,
- *   view: (count, h) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
+ *   update: ($) => $.model + 1,
+ *   view: (h, count) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
  * })
  *
  * // The tree is mounted for as long as the Layer is built.
@@ -121,16 +128,20 @@ import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
-import * as DomImages from "./DomImages.ts"
-import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
+import * as HtmlFiles from "./HtmlFiles.ts"
+import * as HtmlImages from "./HtmlImages.ts"
+import * as HtmlSubscription from "./HtmlSubscription.ts"
+import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import { ownEvents } from "./internal/ownEvents.ts"
+import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
+const HTML = "http://www.w3.org/1999/xhtml"
 const SVG = "http://www.w3.org/2000/svg"
 
 /** Events after which a controlled property may differ from what the Model says. */
@@ -146,7 +157,7 @@ const dropTargetEvents: ReadonlySet<string> = new Set(["dragenter", "dragleave",
 const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 
 /** Events the host listens to whether or not a handler wants them. */
-const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart"]
+const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart", "beforeinput"]
 
 /** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
 const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
@@ -259,16 +270,6 @@ const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Recor
 }
 
 /**
- * What a pointer event's `pointerType` names, or `undefined` for an event
- * with none, such as a `mousedown` in a browser that sends it as a plain
- * `MouseEvent`, or a type no browser sends today.
- */
-const pointerTypeOf = (event: Event): Html.PointerType | undefined => {
-  const type = (event as { readonly pointerType?: unknown }).pointerType
-  return type === "mouse" || type === "touch" || type === "pen" || type === "" ? type : undefined
-}
-
-/**
  * The `pointerType` of a click-like event's payload. A click with `detail`
  * 0, or a pointer event with an empty `pointerType`, came from no pointer:
  * the keyboard, or a script. Otherwise the last `pointerdown` says which
@@ -279,11 +280,6 @@ const pressedWith = (name: string, event: Event, last: Html.PointerType | undefi
   const own = pointerTypeOf(event)
   if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) return ""
   return last ?? own ?? "mouse"
-}
-
-const modifiers = (event: Event) => {
-  const e = event as KeyboardEvent
-  return { shift: e.shiftKey === true, ctrl: e.ctrlKey === true, alt: e.altKey === true, meta: e.metaKey === true }
 }
 
 const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
@@ -311,11 +307,32 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
   const composing = e?.isComposing === true
   const inputType = typeof e?.inputType === "string" ? e.inputType : ""
   return control.localName === "input"
-    ? { value: control.value, checked: control.checked === true, composing, inputType }
+    ? {
+      value: control.value,
+      checked: control.checked === true,
+      files: control.files ? Array.from(control.files) : noFiles,
+      composing,
+      inputType
+    }
     : { value: String(control.value ?? ""), composing, inputType }
 }
 
+const noFiles: ReadonlyArray<File> = []
+
+const isFileInput = (node: globalThis.Node): boolean =>
+  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "file"
+
 const noSelection = { selectionStart: null, selectionEnd: null }
+
+const isEditable = (target: EventTarget | null): boolean => {
+  const element = target as HTMLElement | null
+  if (element?.namespaceURI === HTML) {
+    const tag = element.localName
+    if (tag === "textarea" || tag === "select") return true
+    if (tag === "input") return !nonTextInputTypes.has((element as HTMLInputElement).type)
+  }
+  return element?.isContentEditable === true
+}
 
 const selectionOf = (target: EventTarget | null) => {
   const field = target as HTMLInputElement | null
@@ -331,6 +348,34 @@ const selectionOf = (target: EventTarget | null) => {
     // Older browsers throw, rather than return `null`, for an input type without a selection.
     return noSelection
   }
+}
+
+interface FieldState {
+  readonly value: string
+  readonly start: number
+  readonly end: number
+  readonly direction: "forward" | "backward" | "none"
+}
+
+const fieldStateOf = (target: EventTarget | null): FieldState | undefined => {
+  const { selectionEnd, selectionStart } = selectionOf(target)
+  if (selectionStart === null || selectionEnd === null) return undefined
+  const field = target as HTMLInputElement
+  return { value: field.value, start: selectionStart, end: selectionEnd, direction: field.selectionDirection ?? "none" }
+}
+
+const offsetIn = (current: string, next: string, offset: number): number => {
+  const max = Math.min(current.length, next.length)
+  let prefix = 0
+  while (prefix < max && current.charCodeAt(prefix) === next.charCodeAt(prefix)) prefix++
+  if (offset <= prefix) return offset
+  let suffix = 0
+  while (
+    suffix < max - prefix &&
+    current.charCodeAt(current.length - 1 - suffix) === next.charCodeAt(next.length - 1 - suffix)
+  ) suffix++
+  const fromEnd = current.length - offset
+  return fromEnd <= suffix ? next.length - fromEnd : Math.min(offset, next.length - suffix)
 }
 
 /** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
@@ -413,7 +458,14 @@ const payloadOf = (
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
       const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
-      return { key: e.key ?? "", ...modifiers(event), composing, ...selectionOf(target) }
+      return {
+        key: e.key ?? "",
+        ...modifiers(event),
+        composing,
+        repeat: e.repeat === true,
+        editable: isEditable(event.composedPath()[0] ?? target),
+        ...selectionOf(target)
+      }
     }
     case "input":
     case "change":
@@ -464,8 +516,10 @@ const payloadOf = (
   }
 }
 
+const ignore = () => {}
+
 /**
- * Makes a DOM host for `document`, plus `dispose`, which removes its
+ * Makes a browser host for `document`, plus `dispose`, which removes its
  * listeners.
  *
  * **Details**
@@ -506,6 +560,58 @@ export const makeHost = (
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
+  const beforeEdits = new WeakMap<globalThis.Node, Map<string, FieldState>>()
+  let pendingEdit:
+    | { readonly node: globalThis.Node; readonly state: FieldState; readonly event: Partial<InputEvent> }
+    | undefined
+  const expectEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
+    const state = fieldStateOf(node)
+    const edit = pendingEdit = state === undefined ? undefined : { node, state, event }
+    // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
+    if (edit !== undefined) {
+      setTimeout(() => {
+        if (pendingEdit === edit) pendingEdit = undefined
+      }, 0)
+    }
+  }
+  const recordEdit = (node: globalThis.Node, state: FieldState | undefined) => {
+    if (state === undefined) return
+    let edits = beforeEdits.get(node)
+    if (edits === undefined) beforeEdits.set(node, edits = new Map())
+    edits.set(state.value, state)
+  }
+  const settleEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
+    const edit = pendingEdit
+    pendingEdit = undefined
+    if (edit?.node === node && edit.event.defaultPrevented !== true && edit.event.inputType === event.inputType) {
+      recordEdit(node, edit.state)
+    }
+  }
+  const retireEdits = (node: globalThis.Node) => {
+    if (!composing.has(node)) beforeEdits.delete(node)
+  }
+  const writeControlled = (element: any, name: string, value: unknown) => {
+    if (name === "value" && value !== "" && isFileInput(element)) return
+    const state = name === "value" && element.getRootNode().activeElement === element
+      ? fieldStateOf(element)
+      : undefined
+    if (state === undefined) {
+      element[name] = value
+      return
+    }
+    const { scrollLeft, scrollTop } = element
+    element.value = value
+    const shown: string = element.value
+    const before = beforeEdits.get(element)?.get(shown)
+    if (before !== undefined) element.setSelectionRange(before.start, before.end, before.direction)
+    else if (state.start !== state.end || state.end !== state.value.length) {
+      const start = offsetIn(state.value, shown, state.start)
+      const end = state.end === state.start ? start : offsetIn(state.value, shown, state.end)
+      element.setSelectionRange(start, end, state.direction)
+    } else return
+    element.scrollLeft = scrollLeft
+    element.scrollTop = scrollTop
+  }
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
   let lastPointer: Html.PointerType | undefined
@@ -711,7 +817,7 @@ export const makeHost = (
         if ((node as globalThis.Element).getAttribute("popover") === "manual") {
           applyPopover(node as HTMLElement, value === true, true)
         }
-      } else if (element[name] !== value) element[name] = value
+      } else if (element[name] !== value) writeControlled(element, name, value)
     }
   }
   /** Restores `node` and what changing it also changes. */
@@ -748,7 +854,10 @@ export const makeHost = (
       later(() => {
         const nodes = restoring!
         restoring = undefined
-        for (const node of nodes) restoreAffected(node)
+        for (const node of nodes) {
+          restoreAffected(node)
+          retireEdits(node)
+        }
       })
     }
     restoring.add(target as globalThis.Node)
@@ -1006,11 +1115,18 @@ export const makeHost = (
     }
     const path = event.composedPath() as Array<globalThis.Node>
     const target = path[0] ?? event.target
-    if (name === "compositionstart" || name === "compositionend" || name === "input") {
+    if (name === "compositionstart" || name === "compositionend" || name === "input" || name === "beforeinput") {
       if (target !== null && target !== undefined && "nodeType" in target) {
-        if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
-          composing.add(target as globalThis.Node)
-        } else composing.delete(target as globalThis.Node)
+        const node = target as globalThis.Node
+        const e = event as Partial<InputEvent>
+        if (name === "beforeinput") {
+          if (e.isComposing !== true && !composing.has(node)) expectEdit(node, e)
+        } else {
+          if (name === "compositionstart") recordEdit(node, fieldStateOf(node))
+          else if (name === "input") settleEdit(node, e)
+          if (name === "compositionstart" || e.isComposing === true) composing.add(node)
+          else composing.delete(node)
+        }
       }
     }
     const entries = eventsAlong(path)
@@ -1110,6 +1226,10 @@ export const makeHost = (
     return kept
   }
 
+  let transition: ViewTransition | undefined
+  const typedTransitions = view !== null && typeof view.ViewTransition === "function" &&
+    "types" in view.ViewTransition.prototype
+
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement: (tag) =>
       elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
@@ -1197,7 +1317,8 @@ export const makeHost = (
         if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
         if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
-        if (element[name] !== value) element[name] = value
+        if (element[name] !== value) writeControlled(element, name, value)
+        if (name === "value") retireEdits(node)
         return
       }
       if (value === undefined) {
@@ -1275,7 +1396,32 @@ export const makeHost = (
       for (const dialog of dialogs) showDialog(dialog, "modal")
       showPopovers()
     },
+    viewTransition(update, types) {
+      if (
+        typeof document.startViewTransition !== "function" ||
+        view?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+      ) return update()
+      let ran = false
+      const run = () => {
+        ran = true
+        update()
+      }
+      try {
+        transition = document.startViewTransition(
+          typedTransitions && types.length > 0 ? { update: run, types: [...types] } : run
+        )
+      } catch (error) {
+        if (ran) throw error
+        return update()
+      }
+      // `ready` rejects when the transition is skipped. `finished` and `updateCallbackDone` reject only when
+      // `update` throws, and `updateCallbackDone` is left unhandled so that error is reported once, as a flush's is.
+      transition.ready.catch(ignore)
+      transition.finished.catch(ignore)
+    },
     dispose: () => {
+      transition?.skipTransition()
+      transition = undefined
       syncHead.release()
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
@@ -1289,8 +1435,9 @@ export const makeHost = (
 }
 
 /**
- * The element operations behind `DomCommand.focus`, `blur`,
- * `scrollIntoView`, `measure`, `select` and `requestSubmit`, on DOM elements.
+ * The element operations behind `HtmlCommand.focus`, `blur`,
+ * `scrollIntoView`, `measure`, `select`, `requestSubmit` and `showPicker`,
+ * on DOM elements.
  *
  * @stability experimental
  * @category constructors
@@ -1328,6 +1475,17 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
     if (form === null || typeof form.requestSubmit !== "function") return false
     form.requestSubmit()
     return true
+  },
+  showPicker: (element) => {
+    const field = element as HTMLInputElement
+    try {
+      if (typeof field.showPicker === "function") field.showPicker()
+      else if (field.type === "file" && !field.matches(":disabled")) field.click()
+      else return false
+      return true
+    } catch {
+      return false
+    }
   }
 }
 
@@ -1354,16 +1512,18 @@ const signals = (document: Document) => {
   }
 }
 
-// `DomSubscription.onDocument` and `DomSubscription.onWindow` listen here. Each Subscription
+// `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
-  listen: (target, name, { capture }, listener) => {
+const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
+  listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
     const f = (event: Event) =>
       listener(
         {
-          ...(payloadOf(name, event, event.target, document.documentElement, undefined) as object),
+          ...(custom === true
+            ? { detail: (event as CustomEvent).detail ?? null }
+            : payloadOf(name, event, event.target, document.documentElement, undefined) as object),
           defaultPrevented: event.defaultPrevented
         },
         () => event.preventDefault()
@@ -1373,8 +1533,24 @@ const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   }
 })
 
+const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
+  const view = document.defaultView
+  return {
+    now: () => view?.performance.now() ?? 0,
+    listen: (listener) => {
+      if (view === null || typeof view.requestAnimationFrame !== "function") return () => {}
+      const frame = (time: number) => {
+        id = view.requestAnimationFrame(frame)
+        listener(time)
+      }
+      let id = view.requestAnimationFrame(frame)
+      return () => view.cancelAnimationFrame(id)
+    }
+  }
+}
+
 // Loads in a detached <img>. A cached image may already be complete.
-const imagesOf = (document: Document): DomImages.Images => ({
+const imagesOf = (document: Document): HtmlImages.Images => ({
   load: (source) =>
     Effect.callback((resume) => {
       const image = document.createElement("img")
@@ -1394,17 +1570,38 @@ const imagesOf = (document: Document): DomImages.Images => ({
     })
 })
 
+const filesOf = (document: Document): HtmlFiles.Files => ({
+  pick: (options) =>
+    Effect.callback((resume) => {
+      const input = document.createElement("input")
+      input.type = "file"
+      input.multiple = options.multiple === true
+      if (options.accept !== undefined) input.accept = options.accept.join(",")
+      if (options.capture !== undefined) input.setAttribute("capture", options.capture)
+      const settle = (files: ReadonlyArray<File>) => resume(Effect.succeed({ opened: true, files }))
+      input.onchange = () => settle(Array.from(input.files ?? []))
+      input.oncancel = () => settle([])
+      if (!htmlHost.showPicker(input)) return resume(Effect.succeed({ opened: false, files: [] }))
+      return Effect.sync(() => {
+        input.onchange = null
+        input.oncancel = null
+      })
+    })
+})
+
 /**
- * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
+ * Provides the browser host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `DomSubscription.GlobalEvents`, and a `DomImages.Images` over it, for the
- * life of the Layer.
+ * `HtmlSubscription.GlobalEvents`, its window's frames as
+ * `HtmlSubscription.AnimationFrames`, and an `HtmlImages.Images` and
+ * `HtmlFiles.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `DomSubscription.GlobalEvents` and
- * `DomImages.Images` use the document and its `defaultView`, never globals.
+ * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
+ * `HtmlSubscription.AnimationFrames`, `HtmlImages.Images` and `HtmlFiles.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1423,8 +1620,10 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
-      Context.add(DomImages.Images, imagesOf(document))
+      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
+      Context.add(HtmlImages.Images, imagesOf(document)),
+      Context.add(HtmlFiles.Files, filesOf(document))
     )
   }))
 
@@ -1536,8 +1735,8 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *   elements: Html
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_, h) => h.h1("Hello")
+ *   update: ($) => $.model,
+ *   view: (h) => h.h1("Hello")
  * })
  *
  * // In the browser entry module.

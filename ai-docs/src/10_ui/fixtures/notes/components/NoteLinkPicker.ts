@@ -30,8 +30,8 @@ export const NoteLinkPickerNoDeps = Component.define({
   queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ linked: null }),
-  update: (_model, { id }, $) => $.set({ linked: id }).emit(NoteLinkPickerEvents.Linked({ id })),
-  view: (model, h) =>
+  update: ($, { id }) => $.set({ linked: id }).emit(NoteLinkPickerEvents.Linked({ id })),
+  view: (h, model) =>
     AsyncResult.match(h.queries.notes, {
       onInitial: () => h.p("Loading notes…"),
       onFailure: () => h.p("The notes couldn't be loaded."),

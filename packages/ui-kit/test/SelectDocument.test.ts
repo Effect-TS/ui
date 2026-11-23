@@ -132,16 +132,16 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: null, log: [] }),
   update: {
-    RequestedOpen: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "RequestedOpen " + reason] }),
-    RequestedClose: (model, { reason }, $) => ({
-      ...model,
+    RequestedOpen: ($, { reason }) => ({ ...$.model, open: true, log: [...$.model.log, "RequestedOpen " + reason] }),
+    RequestedClose: ($, { reason }) => ({
+      ...$.model,
       open: $.props.refuseFocusOut && reason === "focus-out",
-      log: [...model.log, "RequestedClose " + reason]
+      log: [...$.model.log, "RequestedClose " + reason]
     }),
-    Picked: (model, { value }) => ({ ...model, value, log: [...model.log, "Picked " + value] }),
-    RequestedCloseDialog: (model, { reason }) => ({ ...model, log: [...model.log, "RequestedCloseDialog " + reason] })
+    Picked: ($, { value }) => ({ ...$.model, value, log: [...$.model.log, "Picked " + value] }),
+    RequestedCloseDialog: ($, { reason }) => ({ ...$.model, log: [...$.model.log, "RequestedCloseDialog " + reason] })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const select = Field(h, {
       props: {},
       view: (field) =>
@@ -171,7 +171,7 @@ const Page = Component.define({
                 select.positioner(h.div.attr("id", "positioner")).children(
                   select.popup(h.div.class("popup")).children(
                     ...items.map(({ label, value }) =>
-                      select.item(h.div.attr("data-testid", value), value).children(
+                      select.item({ element: h.div.attr("data-testid", value), value }).children(
                         select.itemText(h.div.attr("data-geo", "text-" + value)).children(label)
                       )
                     )

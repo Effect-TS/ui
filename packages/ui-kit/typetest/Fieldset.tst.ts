@@ -23,8 +23,8 @@ describe("Fieldset", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Fieldset(h, {
           props: { disabled: true },
           view: (fieldset) => {
@@ -46,8 +46,8 @@ describe("Fieldset", () => {
   it("the root takes only a fieldset", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Fieldset(h, {
           view: (fieldset) => {
             expect(fieldset.root).type.not.toBeCallableWith(h.div)

@@ -17,8 +17,8 @@ const Item = Component.define({
   elements: Html
 }).make({
   init: ($) => $.props.title,
-  update: (model) => model,
-  view: (title, h) => h.li(title)
+  update: ($) => $.model,
+  view: (h, title) => h.li(title)
 })
 const helper = () => View.makeHelper<TodoMessage, {}, Html.Elements>({}, Html)
 const element = (
@@ -76,8 +76,8 @@ describe("Html", () => {
           elements: Html
         }).make({
           init: () => "draft",
-          update: (model) => model,
-          view: (draft, h) =>
+          update: ($) => $.model,
+          view: (h, draft) =>
             h.form.onSubmit(add).children(
               h.input.ref(NewTodo).value(draft).onInput(onInput),
               h.button.attr("type", "submit").children("Add"),
@@ -252,8 +252,8 @@ describe("Html", () => {
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.div.style({ color: "red" }).children(h.input.style({ width: "2px" }))
+          update: ($) => $.model,
+          view: (h) => h.div.style({ color: "red" }).children(h.input.style({ width: "2px" }))
         })
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
         assert.strictEqual(
@@ -374,8 +374,8 @@ describe("Html", () => {
           elements: Html
         }).make({
           init: () => ({ saving: false }),
-          update: (model) => model,
-          view: (model, h) =>
+          update: ($) => $.model,
+          view: (h, model) =>
             h.div(
               h.button.class("rounded", model.saving && "opacity-50", "px-3").children("Save"),
               h.p.class(model.saving && "busy").children("Idle")

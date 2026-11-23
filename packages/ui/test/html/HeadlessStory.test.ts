@@ -22,8 +22,8 @@ const Toolbar = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (log, message) => [...log, message._tag + " " + message.id],
-  view: (log, h) =>
+  update: ($, message) => [...$.model, message._tag + " " + message.id],
+  view: (h, log) =>
     h.div(
       Menu(h, {
         key: "actions",
@@ -72,8 +72,8 @@ const standIn = {
 const Ids = Component.define({ name: "Ids", scoped: false, model: Schema.Null, message: Schema.Never, elements: Html })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       h.div(
         h.span.id(h.id("item-a", "b")).children("one"),
         h.span.id(h.id("item", "a-b")).children("two"),
@@ -138,8 +138,8 @@ describe("headless components in a story", () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.div(menu.trigger(h.button).children("Actions"), h.span.id(h.id("label")).children("label"))
+      update: ($) => $.model,
+      view: (h) => h.div(menu.trigger(h.button).children("Actions"), h.span.id(h.id("label")).children("label"))
     })
     const view = Bare.view(null, {}) as View.Element<never>
     const [button, span] = view.children as ReadonlyArray<View.Element<never>>
@@ -211,8 +211,8 @@ describe("headless components in a story", () => {
       const Neutral = Component.define({ name: "Neutral", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          parts: (_, p) => ({ root: p.part((b) => b.attr("role", "button")) })
+          update: ($) => $.model,
+          parts: (p) => ({ root: p.part((b) => b.attr("role", "button")) })
         })
       const s = yield* Scene.make(Neutral, {}, {
         elements: Html,
@@ -231,8 +231,8 @@ describe("headless components in a story", () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: (count, message) => count + (message === "one" ? 1 : 10),
-        parts: (count, p) => ({
+        update: ($, message) => $.model + (message === "one" ? 1 : 10),
+        parts: (p, count) => ({
           count,
           one: p.part("button", (b) => b.onClick("one", { preventDefault: true })),
           ten: p.part("button", (b) => b.onClick("ten"))
@@ -258,8 +258,8 @@ describe("headless components in a story", () => {
       }).make(
         {
           init: () => null,
-          update: (model) => model,
-          parts: (_, p) => ({ link: p.part("a", (b) => b.onClick(() => undefined, { preventDefault: "always" })) })
+          update: ($) => $.model,
+          parts: (p) => ({ link: p.part("a", (b) => b.onClick(() => undefined, { preventDefault: "always" })) })
         }
       )
       const Clicked = UiSchema.TaggedEnum({ Clicked: {} })
@@ -271,8 +271,8 @@ describe("headless components in a story", () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: (count) => count + 1,
-        view: (_, h) =>
+        update: ($) => $.model + 1,
+        view: (h) =>
           Guard(
             h,
             { key: "g", view: (guard) => guard.link(h.a).onClick(Clicked.Clicked()).children("go") }
@@ -288,7 +288,7 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         parts: () => ({})
       })
       const Outer = Component.define({
@@ -299,8 +299,8 @@ describe("headless components in a story", () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: (count, message) => count + (message === "one" ? 1 : message === "ten" ? 10 : 100),
-        parts: (count, p) => ({
+        update: ($, message) => $.model + (message === "one" ? 1 : message === "ten" ? 10 : 100),
+        parts: (p, count) => ({
           count,
           one: p.part("div", (b) => b.onClick("one", { preventDefault: true })),
           ten: p.part("div", (b) => b.onClick("ten")),
@@ -334,7 +334,7 @@ describe("headless components in a story", () => {
         .make({
           init: () => "",
           update: (_, message) => message,
-          parts: (dropped, p) => ({
+          parts: (p, dropped) => ({
             dropped,
             zone: p.part("div", (b) => b.onDrop((payload) => payload.data["text/plain"], { accepts: ["text/plain"] }))
           })

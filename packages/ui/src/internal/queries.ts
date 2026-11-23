@@ -14,6 +14,7 @@ import * as Predicate from "effect/Predicate"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import type * as Component from "../Component.ts"
 import type * as Query from "../Query.ts"
 import * as Subscription from "../Subscription.ts"
 import * as queryCore from "./queryCore.ts"
@@ -22,7 +23,7 @@ import * as queryCore from "./queryCore.ts"
 const queryModule = (): queryCore.Loaded => queryCore.loaded!
 const QueryTypeId: Query.TypeId = "~@effect/ui/Query"
 
-type QueryFn = (model: any, props: any, queries: any) => unknown
+type QueryFn = ($: Component.Current<any, any, any>) => unknown
 
 /**
  * One entry of `queries`.
@@ -293,14 +294,12 @@ export interface Bound {
 }
 
 interface State {
-  readonly model: any
-  readonly props: any
+  $: Component.Current<any, any, any>
   readonly results: Results
   readonly memo: Map<string, Current>
   /** The opened keyed results, built at the first read. */
   readonly opened: Map<string, unknown>
   readonly running: Array<string>
-  queries: any
 }
 
 /**
@@ -342,7 +341,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     state.running.push(entry.name)
     let args: unknown
     try {
-      args = entry.args(state.model, state.props, state.queries)
+      args = entry.args(state.$)
     } finally {
       state.running.pop()
     }
@@ -425,9 +424,9 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
       ]
     })
   const make = (model: any, props: any, results: Results): Context => {
-    const state: State = { model, props, results, memo: new Map(), opened: new Map(), running: [], queries: undefined }
+    const state: State = { $: undefined!, results, memo: new Map(), opened: new Map(), running: [] }
     const queries = viewOf(queriesProto, state)
-    state.queries = queries
+    state.$ = { model, props, queries }
     return {
       queries,
       previous: viewOf(previousProto, state),

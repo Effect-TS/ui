@@ -20,18 +20,18 @@ const NoteEditor = Component.define({
   elements: Html
 }).make({
   init: () => "",
-  update: (text, message) => message._tag === "Typed" ? message.text : text,
-  view: (text, h) => h.textarea().value(text)
+  update: ($, message) => message._tag === "Typed" ? message.text : $.model,
+  view: (h, text) => h.textarea().value(text)
 })
 
 const ProfileForm = Component.define({ name: "ProfileForm", scoped: true, model: Schema.String, message: Schema.Never })
-  .make({ init: () => "", update: (model) => model, view: (text, h) => h.el("p", text) })
+  .make({ init: () => "", update: ($) => $.model, view: (h, text) => h.el("p", text) })
 
 const BillingForm = Component.define({ name: "BillingForm", scoped: true, model: Schema.String, message: Schema.Never })
-  .make({ init: () => "", update: (model) => model, view: (text, h) => h.el("p", text) })
+  .make({ init: () => "", update: ($) => $.model, view: (h, text) => h.el("p", text) })
 
 const Tooltip = Component.define({ name: "Tooltip", scoped: false, model: Schema.Null, message: Schema.Never })
-  .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("span") })
+  .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("span") })
 
 const Message = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 type Message = typeof Message.Type
@@ -180,8 +180,8 @@ describe("scoped", () => {
     const options = { name: "Wide" as const, scoped: true, model: Schema.Null, message: Schema.Never }
     const Wide = Component.define(options).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.el("p")
+      update: ($) => $.model,
+      view: (h) => h.el("p")
     })
     // @ts-expect-error "written inside h.scoped((s) => ...)"
     Wide(h, {})
@@ -203,7 +203,7 @@ describe("scoped", () => {
   it("rejects scoped: true on a headless component", () => {
     const Def = Component.define({ name: "Headless", scoped: true, model: Schema.Null, message: Schema.Never })
     // @ts-expect-error No overload matches this call
-    Def.make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    Def.make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
   })
 
   it("rejects a scoped implementation of a feature", () => {

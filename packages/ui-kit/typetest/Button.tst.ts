@@ -15,8 +15,8 @@ describe("Button", () => {
   it("returns a button of the caller's message type, whose chained children keep their requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const save = Msg.PressedSave()
         expect(Button(h, { onPress: save })).type.toBe<ButtonElement<typeof Msg.Type>>()
         expect(Button(h, { onPress: save }).children("Save", needsClock)).type.toBe<

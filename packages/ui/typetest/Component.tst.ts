@@ -61,13 +61,13 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: (model, message, $) =>
+        update: ($, message) =>
           Message.match(message, {
             X: () => $.run(CA.make()),
             Y: () => $.run(CB.make()),
-            Done: () => model
+            Done: () => $.model
           }),
-        view: (_, h) => h.el("div")
+        view: (h) => h.el("div")
       })
       expect<Component.Requirements<typeof C>>().type.toBe<CA | CB>()
     })
@@ -81,8 +81,8 @@ describe("Component", () => {
         message: Message
       }).make({
         init: ($) => $.props.a ? $.set({}).run(CA.make()) : $.set({}).run(CB.make()),
-        update: (model) => model,
-        view: (_, h) => h.el("div")
+        update: ($) => $.model,
+        view: (h) => h.el("div")
       })
       expect<Component.Requirements<typeof C>>().type.toBe<CA | CB>()
     })
@@ -95,8 +95,8 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: (model, _, $) => $.set(model).run(CA.make()),
-        view: (_, h) => h.el("div")
+        update: ($) => $.run(CA.make()),
+        view: (h) => h.el("div")
       })
       const ChildB = Component.define({
         name: "ChildB",
@@ -105,8 +105,8 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: (model, _, $) => $.set(model).run(CB.make()),
-        view: (_, h) => h.el("div")
+        update: ($) => $.run(CB.make()),
+        view: (h) => h.el("div")
       })
       const Parent = Component.define({
         name: "Parent",
@@ -115,8 +115,8 @@ describe("Component", () => {
         message: Schema.Never
       }).make({
         init: () => ({ a: true }),
-        update: (model) => model,
-        view: (model, h) => model.a ? ChildA(h, { key: "a" }) : ChildB(h, { key: "b" })
+        update: ($) => $.model,
+        view: (h, model) => model.a ? ChildA(h, { key: "a" }) : ChildB(h, { key: "b" })
       })
       expect<Component.Requirements<typeof Parent>>().type.toBe<CA | CB>()
     })
@@ -137,8 +137,8 @@ describe("Component", () => {
         message: Message
       }).make({
         init: ($) => $.set({}).run(UsesScope.make()),
-        update: (model) => model,
-        view: (_, h) => h.el("div")
+        update: ($) => $.model,
+        view: (h) => h.el("div")
       })
       expect<Component.Requirements<typeof C>>().type.toBe<never>()
     })
@@ -297,8 +297,8 @@ describe("Component", () => {
         message: Schema.Never
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.el(
             "div",
             Todos.render(h, {
@@ -313,6 +313,56 @@ describe("Component", () => {
     })
   })
 
+  describe("lazy", () => {
+    const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
+    type ParentMessage = typeof ParentMessage.Type
+    const ParentDef = Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: ParentMessage })
+    const todo = { id: "", title: "", done: false }
+    const LazyTodo = Component.lazy("LazyTodo", () => Promise.resolve(TodoItem))
+
+    it("reads props, events, requirements and fallback result from the loaded component", () => {
+      expect(LazyTodo).type.toBe<
+        Component.Lazy<{ readonly todo: typeof Todo.Type }, typeof TodoItemEvents.Type, SaveTodo>
+      >()
+      ParentDef.view((h) => {
+        expect(
+          LazyTodo(h, {
+            props: { todo },
+            onEmit: (events) => ParentMessage.make(events),
+            fallback: (result) => {
+              expect(result).type.toBe<AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>>()
+              return h.el("p")
+            }
+          })
+        ).type.toBe<View.Child<ParentMessage, SaveTodo>>()
+        expect(LazyTodo).type.not.toBeCallableWith(h, { props: { todo }, onEmit: () => Message.X() })
+        expect(LazyTodo).type.not.toBeCallableWith(h, {})
+        return h.el("p")
+      })
+    })
+
+    it("keeps a scoped component's call: it takes the s of h.scoped, and not h", () => {
+      const Scoped = Component.define({ name: "Scoped", scoped: true, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p") })
+      const LazyScoped = Component.lazy("LazyScoped", () => Promise.resolve(Scoped))
+      expect(LazyScoped).type.toBe<Component.Lazy.Scoped<{}, never>>()
+      expect(LazyScoped).type.toBeAssignableTo<Component.Lazy.Any>()
+      ParentDef.view((h) => {
+        expect(LazyScoped).type.not.toBeCallableWith(h, { key: "s" })
+        return h.scoped((s) => {
+          expect(LazyScoped(s, { key: "s", fallback: () => h.el("p") })).type.toBe<View.Child<ParentMessage, never>>()
+          return LazyScoped(s, { key: "s" })
+        })
+      })
+    })
+
+    it("takes no headless component", () => {
+      const Headless = Component.define({ name: "Headless", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
+      expect(Component.lazy).type.not.toBeCallableWith("Headless", () => Promise.resolve(Headless))
+    })
+  })
+
   describe("calling a component", () => {
     const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
     type ParentMessage = typeof ParentMessage.Type
@@ -320,7 +370,7 @@ describe("Component", () => {
     const todo = { id: "", title: "", done: false }
 
     it("builds a child typed by h's messages, requiring what the component does", () => {
-      ParentDef.view((_, h) => {
+      ParentDef.view((h) => {
         expect(TodoItem(h, { key: "t", props: { todo } })).type.toBe<View.Child<ParentMessage, SaveTodo>>()
         expect(TodoItem(h, { key: "t", props: { todo }, onEmit: (events) => ParentMessage.make(events) })).type
           .toBe<View.Child<ParentMessage, SaveTodo>>()
@@ -338,8 +388,8 @@ describe("Component", () => {
     it("adds a fallback's requirements to the parent's", () => {
       const Parent = ParentDef.make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Counter(h, { key: "c", props: { initial: 0 }, fallback: () => TodoItem(h, { key: "t", props: { todo } }) })
       })
       // As with any child, the fallback's requirements come back as `NoInfer<SaveTodo>`.

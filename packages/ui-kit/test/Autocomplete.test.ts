@@ -6,7 +6,7 @@ import {
   type AutocompleteProps,
   makeAutocompleteFilter
 } from "@effect/ui-kit"
-import { DomCommand, Html } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -29,7 +29,7 @@ const standIn = {
     h.div(
       autocomplete.inputGroup(h.div.class("group")).children(
         autocomplete.input(h.input.class("input")),
-        autocomplete.clear(h.button.class("clear"))?.children("×"),
+        autocomplete.clear({ element: h.button.class("clear") })?.children("×"),
         autocomplete.trigger(h.button.class("trigger")).children(autocomplete.icon(h.span.class("icon")).children("▾"))
       ),
       autocomplete.value(h.span.class("value")),
@@ -38,7 +38,7 @@ const standIn = {
           autocomplete.empty(h.div.class("empty")).children("No fruit found"),
           autocomplete.list(h.div.class("list")).children(
             ...autocomplete.items.map(({ label, value }) =>
-              autocomplete.item(h.div.attr("data-testid", value), value).children(label)
+              autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
             )
           )
         )
@@ -120,7 +120,7 @@ describe("Autocomplete", () => {
       assert.strictEqual(Locator.textOf(s.get(Locator.attr("class", "value"))), "Ban")
       assert.deepInclude(s.get(clearButton).attrs, { "data-visible": "" })
       s.fire(clearButton, "click", pointer("mouse")).emitted(updated("", "clear-press"))
-      s.resolve(DomCommand.Focus, { found: true })
+      s.resolve(HtmlCommand.Focus, { found: true })
       s.props({ ...base, name: "q" })
       assert.isUndefined(s.query(clearButton))
     }))
@@ -163,8 +163,8 @@ describe("Autocomplete", () => {
       s.props({ ...props, submitOnItemClick: true })
       s.fire(item("grape"), "click", pointer("mouse"))
         .emitted(updated("Grape", "item-press"), dismissed("item-press"))
-        .expectExact(DomCommand.RequestSubmit)
-      s.resolve(DomCommand.RequestSubmit, { found: true, submitted: true })
+        .expectExact(HtmlCommand.RequestSubmit)
+      s.resolve(HtmlCommand.RequestSubmit, { found: true, submitted: true })
     }))
 
   it.effect("autoHighlight always follows open and value without previewing, and keepHighlight outlasts the pointer", () =>

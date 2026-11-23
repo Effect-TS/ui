@@ -28,19 +28,19 @@ export const Confirm = Component.define({
   elements: Html
 }).make({
   init: ($) => ({ state: $.props.state, acceptEscape: $.props.acceptEscape, shown: true, log: [] }),
-  update: (model, message) =>
+  update: ($, message) =>
     ConfirmMessage.match(message, {
-      Ask: () => ({ ...model, state: "modal" as const }),
+      Ask: () => ({ ...$.model, state: "modal" as const }),
       Escaped: ({ forced }) =>
-        model.acceptEscape
-          ? { ...model, state: "closed" as const, log: [...model.log, "escape"] }
-          : { ...model, log: [...model.log, forced ? "escape rejected, forced" : "escape rejected"] },
-      Chosen: ({ choice }) => ({ ...model, state: "closed" as const, log: [...model.log, choice] }),
-      Closed: () => ({ ...model, log: [...model.log, "closed"] }),
-      Mode: ({ state }) => ({ ...model, state }),
-      Remove: () => ({ ...model, shown: false })
+        $.model.acceptEscape
+          ? { ...$.model, state: "closed" as const, log: [...$.model.log, "escape"] }
+          : { ...$.model, log: [...$.model.log, forced ? "escape rejected, forced" : "escape rejected"] },
+      Chosen: ({ choice }) => ({ ...$.model, state: "closed" as const, log: [...$.model.log, choice] }),
+      Closed: () => ({ ...$.model, log: [...$.model.log, "closed"] }),
+      Mode: ({ state }) => ({ ...$.model, state }),
+      Remove: () => ({ ...$.model, shown: false })
     }),
-  view: (model, h) => {
+  view: (h, model) => {
     const dialog = h.dialog.attr("aria-label", "Delete note?")
       .onCancel(({ cancelable }) => ConfirmMessage.Escaped({ forced: cancelable === false }))
       .onClose(ConfirmMessage.Closed())
@@ -70,8 +70,8 @@ export const Nested = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.dialog
       .attr("aria-label", "Outer").modal(true).children(
         h.p("Outer"),

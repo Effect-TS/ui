@@ -13,7 +13,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlServer, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -172,8 +172,8 @@ describe("BrowserHost", { concurrent: false }, () => {
     }).make({
       init: () => ({ text: "fixed", checked: false, open: true }),
       // Every change is rejected.
-      update: (model) => model,
-      view: (model, h) =>
+      update: ($) => $.model,
+      view: (h, model) =>
         h.div(
           // A handler that ignores the event: nothing reaches update.
           h.input.attr("aria-label", "Ignored").value(model.text).onInput(() => undefined),
@@ -227,8 +227,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.form(
               h.input.attr("aria-label", "Name").value("fixed"),
               h.input.attrs({ type: "checkbox", "aria-label": "Agree" }).checked(true),
@@ -264,6 +264,144 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(field.value).toBe("abXcdef")
         expect(field.selectionStart).toBe(3)
       }).pipe(Effect.scoped))
+
+    describe("the selection of a focused field the host writes", () => {
+      const Edited = UiSchema.TaggedEnum({
+        Upper: { value: Schema.String },
+        Card: { value: Schema.String },
+        Push: {},
+        ResetUpper: {}
+      })
+      const Fields = Component.define({
+        name: "Fields",
+        scoped: false,
+        model: Schema.Struct({ upper: Schema.String, card: Schema.String, pushed: Schema.String }),
+        message: Edited,
+        elements: Html
+      }).make({
+        init: () => ({ upper: "ABCDEF", card: "1234", pushed: "hello world" }),
+        update: ($, message) =>
+          Edited.match(message, {
+            Upper: ({ value }) => ({ ...$.model, upper: value.toUpperCase() }),
+            Card: ({ value }) => ({ ...$.model, card: value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ") }),
+            Push: () => ({ ...$.model, pushed: $.model.pushed === "hello world" ? "hello" : "hello world" }),
+            ResetUpper: () => ({ ...$.model, upper: "ABCDEF" })
+          }),
+        view: (h, model) =>
+          h.div(
+            h.input.attr("aria-label", "Fixed").value("123456").onInput(() => undefined),
+            h.textarea.attr("aria-label", "Upper").value(model.upper).onInput(({ value }) => Edited.Upper({ value })),
+            h.input.attr("aria-label", "Card").value(model.card).onInput(({ value }) => Edited.Card({ value })),
+            h.input.attr("aria-label", "Pushed").value(model.pushed),
+            h.input.attr("aria-label", "Other").value(model.pushed),
+            h.input.attrs({ type: "email", "aria-label": "Email" }).value(model.pushed),
+            h.button.onClick(Edited.Push()).children("Push"),
+            h.button.onClick(Edited.ResetUpper()).children("Reset")
+          )
+      })
+      const mountFields = Effect.gen(function*() {
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Fields, {}, app)
+        return {
+          field: (name: string) => HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement,
+          press: (name: string) => HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name }))
+        }
+      })
+      const beforeInput = (field: HTMLInputElement, cancel = false) => {
+        if (cancel) field.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
+        field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" }))
+      }
+      const edit = (field: HTMLInputElement, value: string, caret: number) => {
+        beforeInput(field)
+        field.value = value
+        field.setSelectionRange(caret, caret)
+        field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }))
+      }
+      const selection = (field: HTMLInputElement) => [field.value, field.selectionStart, field.selectionEnd]
+
+      it.effect("a rejected edit puts back the selection it started from", () =>
+        Effect.gen(function*() {
+          const field = (yield* mountFields).field("Fixed")
+          field.focus()
+          field.setSelectionRange(3, 3)
+          edit(field, "123a456", 4)
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 3])
+          field.setSelectionRange(3, 6)
+          edit(field, "123a", 4)
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 6])
+          field.setSelectionRange(1, 1)
+          beforeInput(field, true)
+          field.value = "123x456"
+          field.setSelectionRange(4, 4)
+          field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }))
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 3])
+        }).pipe(Effect.scoped))
+
+      it.effect("a normalized value keeps the caret with the text around it, and at the end", () =>
+        Effect.gen(function*() {
+          const { field, press } = yield* mountFields
+          const upper = field("Upper")
+          upper.focus()
+          upper.setSelectionRange(1, 1)
+          edit(upper, "AXBCDEF", 2)
+          yield* Effect.promise(() => Promise.resolve())
+          upper.setSelectionRange(5, 5)
+          press("Reset")
+          yield* tick
+          expect(selection(upper)).toEqual(["ABCDEF", 4, 4])
+          upper.setSelectionRange(3, 3)
+          edit(upper, "ABCxDEF", 4)
+          yield* tick
+          expect(selection(upper)).toEqual(["ABCXDEF", 4, 4])
+
+          const card = field("Card")
+          card.focus()
+          edit(card, "12345", 5)
+          yield* tick
+          expect(selection(card)).toEqual(["1234 5", 6, 6])
+          card.setSelectionRange(2, 2)
+          edit(card, "12934 5", 3)
+          yield* tick
+          expect(selection(card)).toEqual(["1293 45", 3, 3])
+        }).pipe(Effect.scoped))
+
+      it.effect("a value the Model pushes keeps a focused field's selection, clamped", () =>
+        Effect.gen(function*() {
+          const { field, press } = yield* mountFields
+          const [pushed, other] = [field("Pushed"), field("Other")]
+          pushed.setSelectionRange(2, 8)
+          other.setSelectionRange(2, 8)
+          pushed.focus()
+          press("Push")
+          yield* tick
+          expect(selection(pushed)).toEqual(["hello", 2, 5])
+          expect(selection(other)).toEqual(["hello", 5, 5])
+          field("Email").focus()
+          press("Push")
+          yield* tick
+          expect(field("Email").value).toBe("hello world")
+        }).pipe(Effect.scoped))
+
+      it.effect("a rejected composition puts back the selection it started from after compositionend", () =>
+        Effect.gen(function*() {
+          const field = (yield* mountFields).field("Fixed")
+          field.focus()
+          field.setSelectionRange(1, 4)
+          field.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
+          field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, isComposing: true }))
+          field.value = "1か56"
+          field.setSelectionRange(2, 2)
+          field.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }))
+          yield* tick
+          expect(selection(field)).toEqual(["1か56", 2, 2])
+          field.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 1, 4])
+        }).pipe(Effect.scoped))
+    })
   })
 
   describe("a field bound to the URL", () => {
@@ -285,19 +423,19 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Html
     }).make({
       init: () => ({}),
-      update: (model, message, $) =>
+      update: ($, message) =>
         SearchMessage.match(message, {
           Typed: ({ value }) =>
             /\d/.test(value)
-              ? model
+              ? $.model
               : $.run(
                 Router.patchSearch(SearchRoute, $.props.route, { q: value || undefined }).pipe(
                   Command.map((outcome) => SearchMessage.Patched({ outcome }))
                 )
               ),
-          Patched: () => model
+          Patched: () => $.model
         }),
-      view: (_, h) =>
+      view: (h) =>
         h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
           SearchMessage.Typed({ value })
         )
@@ -313,10 +451,10 @@ describe("BrowserHost", { concurrent: false }, () => {
     }).make({
       init: ($) => ({ route: $.props.route }),
       update: (_, { route }) => ({ route }),
-      subscriptions: (model) => [
+      subscriptions: ({ model }) => [
         Router.subscription(SearchRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
       ],
-      view: (model, h) =>
+      view: (h, model) =>
         SearchRoute.match(model.route, {
           Search: (route) => SearchPage(h, { key: SearchRoute.printPath(route), props: { route } }),
           NotFound: () => h.p("Not found")
@@ -434,8 +572,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.props.rows.length === 0 ? h.span("none") : h.em(h.props.rows.join(""))
+      update: ($) => $.model,
+      view: (h) => h.props.rows.length === 0 ? h.span("none") : h.em(h.props.rows.join(""))
     })
     const Lists = Component.define({
       name: "Lists",
@@ -446,7 +584,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     }).make({
       init: (): ReadonlyArray<string> => ["a", "b", "c"],
       update: (_, message) => message.rows,
-      view: (rows, h) =>
+      view: (h, rows) =>
         h.div(
           h.ul(rows.map((row) => h.li.key(row).children(row))),
           h.ol(h.li("first"), rows.map((row) => h.li.key(row).children(row)), "last"),
@@ -490,7 +628,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: (): ReadonlyArray<string> => ["p", "a", "one"],
           update: (_, message) => message.rows,
-          view: ([tag, key, text], h) =>
+          view: (h, [tag, key, text]) =>
             h.div(tag === "p" ? h.p.key(key!).children(text!) : h.span.key(key!).children(text!))
         })
         const app = yield* container
@@ -530,7 +668,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: (): ReadonlyArray<string> => ["a"],
           update: (_, message) => message.rows,
-          view: ([name], h) => h.div(h.el("x-classed").attr("class", name))
+          view: (h, [name]) => h.div(h.el("x-classed").attr("class", name))
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Page, {}, app)
@@ -568,17 +706,17 @@ describe("BrowserHost", { concurrent: false }, () => {
         selected: 0,
         ticks: 0
       }),
-      update: (model, message) =>
+      update: ($, message) =>
         LazyMessage.match(message, {
-          Select: ({ id }) => ({ ...model, selected: id }),
+          Select: ({ id }) => ({ ...$.model, selected: id }),
           Rename: ({ id, label }) => ({
-            ...model,
-            items: model.items.map((item) => item.id === id ? { id, label } : item)
+            ...$.model,
+            items: $.model.items.map((item) => item.id === id ? { id, label } : item)
           }),
-          Remove: ({ id }) => ({ ...model, items: model.items.filter((item) => item.id !== id) }),
-          Tick: () => ({ ...model, ticks: model.ticks + 1 })
+          Remove: ({ id }) => ({ ...$.model, items: $.model.items.filter((item) => item.id !== id) }),
+          Tick: () => ({ ...$.model, ticks: $.model.ticks + 1 })
         }),
-      view: (model, h) =>
+      view: (h, model) =>
         h.div(
           h.p(String(model.ticks)),
           h.ul(model.items.map((item) => h.lazy(row, item, item.id === model.selected)))
@@ -628,7 +766,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             message: Schema.Never,
             elements: Html
           })
-            .make({ init: () => null, update: (m) => m, view: (_, h) => h.p("ready") })
+            .make({ init: () => null, update: ($) => $.model, view: (h) => h.p("ready") })
           const ready = yield* Deferred.make<void>()
           const FrameDef = Component.define({
             name: "Frame",
@@ -643,7 +781,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               Leaf.render(h, { key: "leaf", props: {}, fallback: () => h.p("loading") })
             )
           const Frame = Component.provide(
-            FrameDef.make({ init: () => null, update: (m) => m, view: (_, h) => h.lazy(frame, "Title") }),
+            FrameDef.make({ init: () => null, update: ($) => $.model, view: (h) => h.lazy(frame, "Title") }),
             Layer.merge(Leaf.toLayer(LeafImpl), Layer.effectDiscard(Deferred.await(ready)))
           )
           const app = yield* container
@@ -678,8 +816,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         let kept: View.Node<typeof LazyMessage.Type> | undefined
         const Fields = FieldsDef.make({
           init: () => 0,
-          update: (ticks) => ticks + 1,
-          view: (ticks, h) =>
+          update: ($) => $.model + 1,
+          view: (h, ticks) =>
             h.div(
               h.p(String(ticks)),
               field(h, "built"),
@@ -705,8 +843,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       let fails = true
       const Failing = ItemsDef.make({
         init: () => ({ items: [], selected: 0, ticks: 0 }),
-        update: (model) => model,
-        view: (model, h) => {
+        update: ($) => $.model,
+        view: (h, model) => {
           const node = h.lazy(row, model.items[0]!, false)
           if (fails) throw new Error("boom")
           return node
@@ -740,17 +878,17 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<string> => [],
-      update: (log, message) =>
+      update: ($, message) =>
         Message.match(message, {
-          Clicked: ({ where }) => [...log, `click ${where}`],
-          PointerClicked: ({ pointerType }) => [...log, pointerType],
-          Key: ({ key, shift }) => [...log, `key ${key}${shift ? " shift" : ""}`],
-          Hovered: ({ x, y }) => [...log, `hover ${x},${y}`],
-          Submitted: ({ tags, title }) => [...log, `submit ${title} [${tags.join(",")}]`],
-          Focused: ({ where }) => [...log, `focus ${where}`],
-          FocusMoved: ({ event, within }) => [...log, `${event}${within ? " within" : ""}`]
+          Clicked: ({ where }) => [...$.model, `click ${where}`],
+          PointerClicked: ({ pointerType }) => [...$.model, pointerType],
+          Key: ({ key, shift }) => [...$.model, `key ${key}${shift ? " shift" : ""}`],
+          Hovered: ({ x, y }) => [...$.model, `hover ${x},${y}`],
+          Submitted: ({ tags, title }) => [...$.model, `submit ${title} [${tags.join(",")}]`],
+          Focused: ({ where }) => [...$.model, `focus ${where}`],
+          FocusMoved: ({ event, within }) => [...$.model, `${event}${within ? " within" : ""}`]
         }),
-      view: (_, h) =>
+      view: (h) =>
         h.div(
           h.section.attr("aria-label", "Outer").onClick(Message.Clicked({ where: "outer" })).children(
             h.button.onClick(Message.Clicked({ where: "inner" })).children("Inner"),
@@ -823,13 +961,13 @@ describe("BrowserHost", { concurrent: false }, () => {
     const logPage = (view: Parameters<typeof LogPage.make>[0]["view"]) =>
       LogPage.make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, message) => [...log, message],
+        update: ($, message) => [...$.model, message],
         view
       })
 
     it.effect("an event an insertion fires reaches the inserted element and its ancestors' post-patch handlers", () =>
       Effect.gen(function*() {
-        const Page = logPage((log, h) => {
+        const Page = logPage((h, log) => {
           // The patch changes the outer handler and takes the inner one away, as it inserts the element.
           const inner = log.length === 0 ? h.el("section").on("click", "inner") : h.el("section")
           return h.el("div").on("click", log.length === 0 ? "old" : "new").children(
@@ -860,14 +998,14 @@ describe("BrowserHost", { concurrent: false }, () => {
           message: Schema.String
         }).make({
           init: () => 0,
-          update: (count) => count + 1,
-          view: (count, h) => h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children(`Hit ${count}`))
+          update: ($) => $.model + 1,
+          view: (h, count) => h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children(`Hit ${count}`))
         })
         const Outer = Component.define({ name: "Outer", scoped: true, model: Schema.Null, message: Schema.Never })
           .make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.scoped((s) => h.el("section", Counter(s, { key: "c" })))
+            update: ($) => $.model,
+            view: (h) => h.scoped((s) => h.el("section", Counter(s, { key: "c" })))
           })
         const Shell = Component.define({
           name: "Shell",
@@ -878,7 +1016,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           .make({
             init: () => true,
             update: (_, shown) => shown,
-            view: (shown, h) => h.el("div", h.scoped((s) => shown ? Outer(s, { key: "o" }) : null))
+            view: (h, shown) => h.el("div", h.scoped((s) => shown ? Outer(s, { key: "o" }) : null))
           })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Shell, {}, app)
@@ -901,7 +1039,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           model: Schema.Struct({ email: Schema.String }),
           message: Schema.Never,
           elements: Html
-        }).make({ init: () => ({ email: "server" }), update: (model) => model, view: (model, h) => h.p(model.email) })
+        }).make({ init: () => ({ email: "server" }), update: ($) => $.model, view: (h, model) => h.p(model.email) })
         const history = Router.memoryHistory("/")
         history.replace("/", { "@effect/ui": { index: 0, snapshot: { "/Login": { email: "saved" } } } })
         const rendered = yield* HtmlServer.renderToHtml(Login, {})
@@ -917,7 +1055,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("an element hydration rebuilds gets the events it fires as it goes in", () =>
       Effect.gen(function*() {
-        const Page = logPage((_, h) =>
+        const Page = logPage((h) =>
           h.el("main", h.el("x-clicks-on-connect", h.el("button").on("click", "hit").children("Hit")))
         )
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
@@ -954,7 +1092,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       it.effect(`a submission during a patch is the app's: ${name}`, () =>
         Effect.gen(function*() {
           prevented.length = 0
-          const Page = logPage((log, h) =>
+          const Page = logPage((h, log) =>
             form(h, log.length > 0).children(log.length > 0 ? h.el("x-submits-on-insert") : h.el("span"))
           )
           const app = yield* container
@@ -973,15 +1111,15 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Rows = Component.define({ name: "Rows", scoped: false, model: Schema.Number, message: Schema.String })
           .make({
             init: () => 0,
-            update: (count) => count + 1,
-            view: (count, h) =>
+            update: ($) => $.model + 1,
+            view: (h, count) =>
               h.el(
                 "div",
                 h.el("button").on("click", "more").children("More"),
                 ...Array.from({ length: count }, (_, index) => h.el("p", `${index}`))
               )
           })
-        const Page = logPage((log, h) =>
+        const Page = logPage((h, log) =>
           h.el(
             "div",
             Rows(h, { key: "r" }),
@@ -1033,8 +1171,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: (): ReadonlyArray<string> => [],
-          update: (log, message) => message._tag === "Clicked" ? [...log, message.where] : log,
-          view: (log, h) =>
+          update: ($, message) => message._tag === "Clicked" ? [...$.model, message.where] : $.model,
+          view: (h, log) =>
             h.section.onClick(Message.Clicked({ where: "outer" })).children(
               // The inner handler goes after the first click lands on it.
               log.length === 0
@@ -1095,8 +1233,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: (): ReadonlyArray<string> => [],
-          update: (log, { disabled, event }) => [...log, `${event}${disabled ? " disabled" : ""}`],
-          view: (_, h) =>
+          update: ($, { disabled, event }) => [...$.model, `${event}${disabled ? " disabled" : ""}`],
+          view: (h) =>
             h.div.on("focusout", ({ disabled }) => Left.Left({ event: "focusout", disabled })).children(
               h.input.onBlur(({ disabled }) => Left.Left({ event: "blur", disabled })),
               h.form.attr("tabindex", "0").onBlur(({ disabled }) => Left.Left({ event: "blur", disabled })).children(
@@ -1133,8 +1271,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: (): ReadonlyArray<boolean> => [],
-          update: (log, { focusVisible }) => [...log, focusVisible],
-          view: (_, h) => h.a.attr("href", "/a").onFocus(({ focusVisible }) => Seen.Focused({ focusVisible }))
+          update: ($, { focusVisible }) => [...$.model, focusVisible],
+          view: (h) => h.a.attr("href", "/a").onFocus(({ focusVisible }) => Seen.Focused({ focusVisible }))
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Focusing, {}, app)
@@ -1173,8 +1311,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, { entry }) => [...log, entry],
-        view: (_, h) => {
+        update: ($, { entry }) => [...$.model, entry],
+        view: (h) => {
           const saw = (label: string) => (payload: object) => Seen.Saw({ entry: `${label} ${JSON.stringify(payload)}` })
           return h.div(
             h.input.attr("aria-label", "Text").on("input", saw("input")).on("change", saw("change"))
@@ -1203,9 +1341,9 @@ describe("BrowserHost", { concurrent: false }, () => {
           area.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
           yield* tick
           expect(root.model()).toEqual([
-            `input {"value":"ka","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+            `input {"value":"ka","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
             `compositionend {"value":"ka"}`,
-            `change {"value":"ka","checked":false,"composing":false,"inputType":""}`,
+            `change {"value":"ka","checked":false,"files":[],"composing":false,"inputType":""}`,
             `input {"value":"auto","composing":false,"inputType":"insertReplacementText"}`,
             `compositionend {"value":"auto"}`
           ])
@@ -1243,6 +1381,93 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
         }).pipe(Effect.scoped))
 
+      it.effect("keydown and keyup report editable targets and auto-repeat on elements and the document", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const shadowHost = yield* container
+          const shadow = shadowHost.attachShadow({ mode: "open" })
+          const shadowInput = document.createElement("input")
+          shadow.appendChild(shadowInput)
+          const editableIds = ["kt-readonly", "kt-unknown", "kt-area", "kt-select", "kt-ce", "kt-ce-child"]
+          const nonEditableTypes = [
+            "button",
+            "checkbox",
+            "color",
+            "file",
+            "image",
+            "radio",
+            "range",
+            "reset",
+            "submit"
+          ] as const
+          const KeyTargets = Component.define({
+            name: "KeyTargets",
+            scoped: false,
+            model: Schema.Array(Schema.String),
+            message: Schema.String,
+            elements: Html
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h) =>
+              h.div
+                .onKeyDown(({ editable, key, repeat }) => `el:down:${key}:${editable}:${repeat}`)
+                .onKeyUp(({ editable, key, repeat }) => `el:up:${key}:${editable}:${repeat}`)
+                .children(
+                  h.input.attr("id", "kt-text"),
+                  h.input.attr("id", "kt-readonly").attr("readonly", ""),
+                  h.input.attr("id", "kt-unknown").attr("type", "futuretype"),
+                  h.textarea.attr("id", "kt-area"),
+                  h.select.attr("id", "kt-select").children(h.option.attr("value", "a").children("A")),
+                  ...nonEditableTypes.map((type) => h.input.attr("id", `kt-${type}`).attr("type", type)),
+                  h.div.attr("id", "kt-ce").attr("contenteditable", "true").children(
+                    h.span.attr("id", "kt-ce-child").children("hi"),
+                    h.div.attr("id", "kt-ce-island").attr("contenteditable", "false").children(
+                      h.button.attr("id", "kt-ce-btn").children("x")
+                    )
+                  )
+                ),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ editable, key, repeat }) => `doc:down:${key}:${editable}:${repeat}`
+              ),
+              HtmlSubscription.onDocument("keyup", ({ editable, key, repeat }) => `doc:up:${key}:${editable}:${repeat}`)
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(KeyTargets, {}, app)
+          yield* tick
+          const fire = (target: EventTarget, type: "keydown" | "keyup", key: string, repeat = false) =>
+            target.dispatchEvent(new KeyboardEvent(type, { key, repeat, bubbles: true, composed: true }))
+          const byId = (id: string) => app.querySelector(`#${id}`)!
+          fire(byId("kt-text"), "keydown", "g", true)
+          fire(byId("kt-text"), "keyup", "g")
+          for (const id of editableIds) fire(byId(id), "keydown", id)
+          fire(byId("kt-ce-btn"), "keydown", "island")
+          for (const type of nonEditableTypes) fire(byId(`kt-${type}`), "keydown", type)
+          const shadowEvent = new KeyboardEvent("keydown", { key: "s", bubbles: true, composed: true })
+          Object.defineProperty(shadowEvent, "composedPath", {
+            value: () => [shadowInput, shadow, shadowHost, document.body, document, window]
+          })
+          shadowHost.dispatchEvent(shadowEvent)
+          const svgInput = document.createElementNS("http://www.w3.org/2000/svg", "input")
+          app.appendChild(svgInput)
+          fire(svgInput, "keydown", "svg")
+          yield* tick
+          expect(root.model()).toEqual([
+            "el:down:g:true:true",
+            "doc:down:g:true:true",
+            "el:up:g:true:false",
+            "doc:up:g:true:false",
+            ...editableIds.flatMap((id) => [`el:down:${id}:true:false`, `doc:down:${id}:true:false`]),
+            "el:down:island:false:false",
+            "doc:down:island:false:false",
+            ...nonEditableTypes.flatMap((type) => [`el:down:${type}:false:false`, `doc:down:${type}:false:false`]),
+            "doc:down:s:true:false",
+            "doc:down:svg:false:false"
+          ])
+        }).pipe(Effect.scoped))
+
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
@@ -1255,7 +1480,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           }).make({
             init: () => "",
             update: (_, { value }) => value.toUpperCase(),
-            view: (text, h) =>
+            view: (h, text) =>
               h.div(
                 h.input.attr("aria-label", "Upper").value(text).onInput(({ value }) => Typed.Typed({ value })),
                 h.input.attr("aria-label", "Fixed").value("fixed").onInput(() => undefined)
@@ -1321,8 +1546,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.form(h.input.attr("name", "q"))
+          update: ($) => $.model,
+          view: (h) => h.form(h.input.attr("name", "q"))
         })
         const bare = yield* container
         yield* BrowserHost.mountEffect(Bare, {}, bare)
@@ -1343,8 +1568,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
           .make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.el("FORM", h.input.attr("name", "q"))
+            update: ($) => $.model,
+            view: (h) => h.el("FORM", h.input.attr("name", "q"))
           })
         const upper = yield* container
         yield* BrowserHost.mountEffect(Upper, {}, upper)
@@ -1363,11 +1588,11 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: () => 0,
-          update: (count, message) => {
+          update: ($, message) => {
             seen.push(`${message} prevented=${event?.defaultPrevented}`)
-            return count + 1
+            return $.model + 1
           },
-          view: (_, h) =>
+          view: (h) =>
             h.div.on("contextmenu", "Menu", { preventDefault: true }).children(
               h.textarea.attr("aria-label", "Message").onKeyDown(
                 ({ composing, key, shift }) => key === "Enter" && !shift && !composing ? "Send" : undefined,
@@ -1405,8 +1630,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.form.onSubmit((payload) => {
               seen.push(payload)
               return undefined
@@ -1469,8 +1694,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<string> => [],
-      update: (log, message) => [...log, message],
-      view: (_, h) =>
+      update: ($, message) => [...$.model, message],
+      view: (h) =>
         h.div(
           // Either order keeps the data and the handler.
           h.p.attr("aria-label", "Milk").draggable({ "application/x-todo": "milk" }, { effectAllowed: "move" })
@@ -1556,8 +1781,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: (): ReadonlyArray<string> => [],
           // Plain facts about the files go in the Model; the files themselves would go on to a Command.
-          update: (names, { files }) => [...names, ...files.map((file) => `${file.name} ${file.size}`)],
-          view: (_, h) =>
+          update: ($, { files }) => [...$.model, ...files.map((file) => `${file.name} ${file.size}`)],
+          view: (h) =>
             h.div.attr("aria-label", "Upload").onDrop(
               ({ files }) => Message.Dropped({ files }),
               { accepts: ["Files"], dropEffect: "copy" }
@@ -1796,6 +2021,34 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(calls).toEqual(["showModal Delete note?", "close Delete note?"])
       }).pipe(Effect.scoped))
 
+    it.effect("a file input in a modal keeps its cancel to itself, and is never given a non-empty value", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Cancelled: {} })
+        const Upload = Component.define({
+          name: "Upload",
+          scoped: false,
+          model: Schema.Number,
+          message: Message,
+          elements: Html
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          view: (h) =>
+            h.dialog.attr("aria-label", "Upload").modal(true).onCancel(Message.Cancelled()).children(
+              h.input.attrs({ type: "file", "aria-label": "File" }).value("notes.txt")
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Upload, {}, app)
+        yield* tick
+        const input = app.querySelector("input")!
+        const dismissed = new Event("cancel", { bubbles: true, cancelable: true })
+        input.dispatchEvent(dismissed)
+        yield* tick
+        expect([dismissed.defaultPrevented, root.model(), app.querySelector("dialog")!.open, input.value])
+          .toEqual([false, 0, true, ""])
+      }).pipe(Effect.scoped))
+
     it.effect("a modal removed while open is forgotten, and switching mode closes without telling the app", () =>
       Effect.gen(function*() {
         const { calls } = yield* dialogCalls
@@ -1928,7 +2181,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: () => true,
           update: () => false,
-          view: (open, h) =>
+          view: (h, open) =>
             h.div(
               h.button.onClick(DrawerMessage.Close()).children("Close"),
               open && Nested(h, { key: "nested" })
@@ -1951,7 +2204,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: () => 0,
           update: (_, step) => step,
-          view: (step, h) =>
+          view: (h, step) =>
             h.div(
               step < 2 && h.div(
                 h.dialog.attr("aria-label", "First").key("first").modal(step === 1).children(h.p("First")),
@@ -2178,16 +2431,16 @@ describe("BrowserHost", { concurrent: false }, () => {
         elements
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, message, $) =>
+        update: ($, message) =>
           Message.match(message, {
-            Focus: () => $.run(DomCommand.focus(Field, ({ found }) => Message.Found({ found }))),
-            FocusMissing: () => $.run(DomCommand.focus(Missing, ({ found }) => Message.Found({ found }))),
-            Measure: () => $.run(DomCommand.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
-            Found: ({ found }) => [...log, `found ${found}`],
-            Measured: ({ some }) => [...log, `measured ${some}`],
-            Mounted: ({ tag }) => [...log, `mounted ${tag}`]
+            Focus: () => $.run(HtmlCommand.focus(Field, ({ found }) => Message.Found({ found }))),
+            FocusMissing: () => $.run(HtmlCommand.focus(Missing, ({ found }) => Message.Found({ found }))),
+            Measure: () => $.run(HtmlCommand.measure(Field, (rect) => Message.Measured({ some: Option.isSome(rect) }))),
+            Found: ({ found }) => [...$.model, `found ${found}`],
+            Measured: ({ some }) => [...$.model, `measured ${some}`],
+            Mounted: ({ tag }) => [...$.model, `mounted ${tag}`]
           }),
-        view: (_, h) =>
+        view: (h) =>
           h.div(
             h.input.attr("aria-label", "Field").ref(Field)
               .onMount(ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag }))))
@@ -2233,19 +2486,19 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<string> => [],
-      update: (log, message, $) =>
+      update: ($, message) =>
         EntryMessage.match(message, {
-          Pasted: ({ text }) => [...log, `pasted ${text}`],
-          Select: () => $.run(DomCommand.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
-          Selected: ({ found }) => [...log, `selected ${found}`],
+          Pasted: ({ text }) => [...$.model, `pasted ${text}`],
+          Select: () => $.run(HtmlCommand.select(Code, ({ found }) => EntryMessage.Selected({ found }))),
+          Selected: ({ found }) => [...$.model, `selected ${found}`],
           Submit: ({ loose }) =>
             $.run(
-              DomCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))
+              HtmlCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) => EntryMessage.Submitted({ submitted }))
             ),
-          Submitted: ({ submitted }) => [...log, `submitted ${submitted}`],
-          Sent: ({ code }) => [...log, `sent ${code}`]
+          Submitted: ({ submitted }) => [...$.model, `submitted ${submitted}`],
+          Sent: ({ code }) => [...$.model, `sent ${code}`]
         }),
-      view: (_, h) =>
+      view: (h) =>
         h.div(
           h.form.onSubmit(({ fields }) => EntryMessage.Sent({ code: fields.code ?? "" })).children(
             h.input.attrs({ "aria-label": "Code", name: "code" }).ref(Code).value("7")
@@ -2299,8 +2552,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Native
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => h.view
+      update: ($) => $.model,
+      view: (h) => h.view
     })
     const Page = Component.define({
       name: "Page",
@@ -2310,8 +2563,8 @@ describe("BrowserHost", { concurrent: false }, () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         h.div(
           h.p("before"),
           NativeBox(h, {
@@ -2376,14 +2629,14 @@ describe("BrowserHost", { concurrent: false }, () => {
                 model = new WeakRef(value)
                 return value
               },
-              update: (value) => value,
-              view: (_, h) => h.el("button").on("click", null).children("Item")
+              update: ($) => $.model,
+              view: (h) => h.el("button").on("click", null).children("Item")
             })
           const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Null })
             .make({
               init: () => true,
               update: () => false,
-              view: (shown, h) => h.el("div", h.text("Remove"), shown ? Item(h, { key: "i" }) : null)
+              view: (h, shown) => h.el("div", h.text("Remove"), shown ? Item(h, { key: "i" }) : null)
             })
           const app = yield* container
           const root = yield* BrowserHost.mountEffect(Page, {}, app)
@@ -2410,12 +2663,12 @@ describe("BrowserHost", { concurrent: false }, () => {
             model: Schema.Null,
             message: Schema.Never
           })
-            .make({ init: () => null, update: (model) => model, view: (_, h) => h.text("item") })
+            .make({ init: () => null, update: ($) => $.model, view: (h) => h.text("item") })
           const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
             .make({
               init: () => null,
-              update: (model) => model,
-              view: (_, h) => {
+              update: ($) => $.model,
+              view: (h) => {
                 const value = {}
                 props = new WeakRef(value)
                 // Two elements with one key: the render fails once its child paths are checked.
@@ -2463,9 +2716,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         subscriptions: () => [Subscription.make("held", Stream.onExit(Stream.never, record))],
-        view: (_, h) => h.p.onMount(Held()).children("held")
+        view: (h) => h.p.onMount(Held()).children("held")
       })
       const app = yield* container
       const scope = yield* Scope.make()
@@ -2495,8 +2748,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: ($) => $.set(0).run(Load.make({ id: 1 }), Load.make({ id: 2 }), Load.make({ id: 3 })),
-          update: (loaded) => loaded + 1,
-          view: (loaded, h) => {
+          update: ($) => $.model + 1,
+          view: (h, loaded) => {
             renders++
             return h.p(`${loaded} loaded`)
           }
@@ -2530,7 +2783,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           }).make({
             init: () => 0,
             update: (_, next) => next,
-            view: (step, h) => {
+            view: (h, step) => {
               const div = h.div.onMount(Position())
               return step === 0
                 ? div
@@ -2596,7 +2849,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: () => false,
           update: (_, next) => next,
-          view: (changed, h) =>
+          view: (h, changed) =>
             changed
               ? h.div.attr("style", "color: blue; margin-top: 8px")
               : h.div.attrs({ STYLE: "color: green", style: "color: red; margin-top: 4px" })
@@ -2621,8 +2874,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.div.attr("style", "color: blue")
+          update: ($) => $.model,
+          view: (h) => h.div.attr("style", "color: blue")
         })
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
         const app = yield* container

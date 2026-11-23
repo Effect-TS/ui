@@ -278,6 +278,8 @@ export interface Update extends InstanceBase {
   readonly lists: ReadonlyArray<Component.ListIssue>
   /** The `$.send` calls, in order. */
   readonly sends: ReadonlyArray<Component.Send>
+  /** The types of the `$.viewTransition` request, when `update` made one. */
+  readonly viewTransition?: ReadonlyArray<string> | undefined
   /**
    * The query results `update` read as `$.queries`, by query name: what
    * `Story.fromLog` gives it back, as it gives back `props`. Only a
@@ -1153,6 +1155,7 @@ export const Wire = Schema.Union([
     events: Schema.Array(Schema.Json),
     lists: Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) })),
     sends: Schema.Array(Schema.Struct({ owner: Schema.String, message: Schema.Json })),
+    viewTransition: Schema.optionalKey(Schema.Array(Schema.String)),
     boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
@@ -1444,6 +1447,7 @@ export const makeEncoder = (options?: {
               const encoded = encodeSend(send)
               return { ...encoded, message: cap(encoded.message) }
             }),
+            ...(entry.viewTransition === undefined ? undefined : { viewTransition: entry.viewTransition }),
             ...boundaryOf(entry)
           }
         case "PropsChanged":

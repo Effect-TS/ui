@@ -32,8 +32,8 @@ const WrappedDialog = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model, event, $) => $.set(model).emit(event),
-  parts: (_, p) => p.child(Dialog, { props: p.props, onEmit: (event) => event, parts: (dialog) => dialog })
+  update: ($, event) => $.emit(event),
+  parts: (p) => p.child(Dialog, { props: p.props, onEmit: (event) => event, parts: (dialog) => dialog })
 })
 
 const ComboMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Closed: {} })
@@ -49,12 +49,12 @@ const Combo = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (log, message, $) =>
+  update: ($, message) =>
     ComboMessage.match(message, {
-      Picked: ({ id }) => $.set([...log, "picked " + id]).emit(ComboEvents.Picked({ id })),
-      Closed: () => [...log, "closed"]
+      Picked: ({ id }) => $.set([...$.model, "picked " + id]).emit(ComboEvents.Picked({ id })),
+      Closed: () => [...$.model, "closed"]
     }),
-  parts: (log, p) => {
+  parts: (p, log) => {
     const badge = p.part("output", (b) => b.attr("data-count", String(log.length)))
     return p.child(WrappedDialog, {
       props: { label: "Confirm" },
@@ -81,12 +81,12 @@ const App = Component.define({
 })
   .make({
     init: () => [],
-    update: (log, message) =>
+    update: ($, message) =>
       AppMessage.match(message, {
-        Picked: ({ id }) => [...log, "picked " + id],
-        Clicked: ({ id }) => [...log, "clicked " + id]
+        Picked: ({ id }) => [...$.model, "picked " + id],
+        Clicked: ({ id }) => [...$.model, "clicked " + id]
       }),
-    view: (log, h) =>
+    view: (h, log) =>
       Combo(h, {
         key: "combo",
         props: { items },
@@ -116,7 +116,7 @@ const Hello = Component.define({
   elements: Html
 }).make({
   init: ($) => $.set(null).emit({ _tag: "Said" }),
-  update: (model) => model,
+  update: ($) => $.model,
   parts: () => ({})
 })
 const Broken = Component.define({
@@ -127,7 +127,7 @@ const Broken = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
+  update: ($) => $.model,
   parts: (): {} => {
     throw new Error("broken")
   }
@@ -147,12 +147,12 @@ const owning = (
     elements: Html
   }).make({
     init: () => [],
-    update: (heard, message, $) =>
+    update: ($, message) =>
       ChildFailed.match(message, {
-        Said: () => [...heard, "said"],
-        Failed: () => $.set([...heard, "failed"]).emit({ _tag: "Lost" })
+        Said: () => [...$.model, "said"],
+        Failed: () => $.set([...$.model, "failed"]).emit({ _tag: "Lost" })
       }),
-    parts: (heard, p) =>
+    parts: (p, heard) =>
       p.child(child as typeof Hello, {
         ...(extra as {}),
         onEmit: () => ChildFailed.Said(),
@@ -169,8 +169,8 @@ const owning = (
   })
     .make({
       init: () => [],
-      update: (log, message) => [...log, message],
-      view: (log, h) =>
+      update: ($, message) => [...$.model, message],
+      view: (h, log) =>
         h.div(
           Owner(h, {
             onEmit: () => "lost",
@@ -288,8 +288,8 @@ describe("p.child in a Scene", () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         h.div(
           ["a", "b"].map((key) => Combo(h, { key, props: { items }, view: (combo) => combo.dialog.popup(h.dialog) }))
         )

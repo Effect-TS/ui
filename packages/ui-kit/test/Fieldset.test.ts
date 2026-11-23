@@ -22,8 +22,8 @@ const Billing = Component.define({
   elements: Html
 }).make({
   init: () => ({ locked: false }),
-  update: { ToggledLock: (model) => ({ locked: !model.locked }) },
-  view: (model, h) => {
+  update: { ToggledLock: ($) => ({ locked: !$.model.locked }) },
+  view: (h, model) => {
     const formField = (name: string) =>
       Field(h, {
         key: name,

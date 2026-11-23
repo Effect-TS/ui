@@ -76,17 +76,17 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: [], inputValue: "", log: [] }),
   update: {
-    RequestedOpen: (model, { reason }) => ({ ...model, open: true, log: [...model.log, "RequestedOpen " + reason] }),
-    RequestedClose: (model, { reason }) => ({ ...model, open: false, log: [...model.log, "RequestedClose " + reason] }),
-    Picked: (model, { value }) => ({ ...model, value, log: [...model.log, "Picked " + value.join(",")] }),
-    RequestedInputValue: (model, { inputValue, reason }) => ({
-      ...model,
+    RequestedOpen: ($, { reason }) => ({ ...$.model, open: true, log: [...$.model.log, "RequestedOpen " + reason] }),
+    RequestedClose: ($, { reason }) => ({ ...$.model, open: false, log: [...$.model.log, "RequestedClose " + reason] }),
+    Picked: ($, { value }) => ({ ...$.model, value, log: [...$.model.log, "Picked " + value.join(",")] }),
+    RequestedInputValue: ($, { inputValue, reason }) => ({
+      ...$.model,
       inputValue,
-      log: [...model.log, "RequestedInputValue " + JSON.stringify(inputValue) + " " + reason]
+      log: [...$.model.log, "RequestedInputValue " + JSON.stringify(inputValue) + " " + reason]
     }),
-    RequestedCloseDialog: (model, { reason }) => ({ ...model, log: [...model.log, "RequestedCloseDialog " + reason] })
+    RequestedCloseDialog: ($, { reason }) => ({ ...$.model, log: [...$.model.log, "RequestedCloseDialog " + reason] })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const multiple = h.props.multiple
     const inPopup = h.props.inputInPopup
     const combobox = Field(h, {
@@ -120,7 +120,7 @@ const Page = Component.define({
             )
             const list = combobox.list(h.div.attr("id", "list")).children(
               ...combobox.items.map(({ label, value }) =>
-                combobox.item(h.div.attr("data-testid", value), value).children(label)
+                combobox.item({ element: h.div.attr("data-testid", value), value }).children(label)
               )
             )
             return field.root(h.div.attr("id", "field")).children(
@@ -132,7 +132,7 @@ const Page = Component.define({
                 : multiple
                 ? combobox.chips(h.div.attr("id", "group")).children(
                   ...combobox.selectedItems.map(({ label, value }) =>
-                    combobox.chip(h.div.attr("data-testid", "chip-" + value), value).children(label)
+                    combobox.chip({ element: h.div.attr("data-testid", "chip-" + value), value }).children(label)
                   ),
                   input
                 )

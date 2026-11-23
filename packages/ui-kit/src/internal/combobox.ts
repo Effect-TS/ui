@@ -1,7 +1,7 @@
 import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
-import * as DomCommand from "@effect/ui/html/DomCommand"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -17,7 +17,7 @@ import { byAttribute, focusFinal } from "./dom.ts"
 import { textFilter } from "./filter.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./formInputs.ts"
 import { methodOf } from "./interaction.ts"
-import { available, keyed, type Loop, stepped } from "./list.ts"
+import { available, grouped, type Loop, stepped, valued } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
@@ -305,7 +305,7 @@ const groupsOf = (items: ReadonlyArray<Item>): ReadonlyArray<Group> => {
 }
 
 const focus = <E>(step: Step<E>, ref: typeof Input | typeof Trigger | typeof Chip): Step<E> =>
-  step.run(DomCommand.Focus.make({ ref }).pipe(Command.asNoop))
+  step.run(HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop))
 
 const picked = <E>(
   step: Step<E>,
@@ -460,7 +460,7 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
   )
   return props.submitOnItemClick === true
     ? closed.run(
-      DomCommand.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop)
+      HtmlCommand.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop)
     )
     : closed
 }
@@ -864,60 +864,59 @@ const TrackComboboxChips = Mount.makeStream(
 
 type Handlers<P, E> = {
   readonly [K in Message["_tag"]]: (
-    model: Model,
-    message: Extract<Message, { readonly _tag: K }>,
-    $: Component.Update<Model, Message, E, P>
+    $: Component.Update<Model, Message, E, P>,
+    message: Extract<Message, { readonly _tag: K }>
   ) => Model | Step<E>
 }
 
 export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) => {
   const s = ($: { readonly props: P }): Settings<E> => settingsOf($.props)
 
-  const focusInput = (_model: Model, _message: unknown, $: Component.Update<Model, Message, E, P>) => {
+  const focusInput = ($: Component.Update<Model, Message, E, P>) => {
     const props = s($)
     return focus($, props.inputInPopup === true && !props.open ? Trigger : Input)
   }
 
   const update: Handlers<P, E> = {
-    PressedInput: (_model, { pointerType }, $) => open($, s($), "input-press", methodOf(pointerType)),
-    PressedGroup: (model, { pointerType }, $) => {
+    PressedInput: ($, { pointerType }) => open($, s($), "input-press", methodOf(pointerType)),
+    PressedGroup: ($, { pointerType }) => {
       const props = s($)
-      if (props.disabled === true) return model
+      if (props.disabled === true) return $.model
       const focused = focus($, Input)
       return props.openOnInputClick === false ? focused : open(focused, props, "input-press", methodOf(pointerType))
     },
-    ChangedInput: (_model, { composing, inputType, value }, $) => edit($, s($), value, inputType, composing),
-    PressedInputKey: (_model, { chips, key }, $) => pressInputKey($, s($), key, chips),
-    ReleasedInputKey: (_model, { key }, $) =>
+    ChangedInput: ($, { composing, inputType, value }) => edit($, s($), value, inputType, composing),
+    PressedInputKey: ($, { chips, key }) => pressInputKey($, s($), key, chips),
+    ReleasedInputKey: ($, { key }) =>
       key === "Enter" ? dismiss($, s($), "none", "keyboard") : clear($, s($), "escape-key"),
-    FocusedInput: (model, _message, $) => {
-      if (model.saved === null) return model
+    FocusedInput: ($) => {
+      if ($.model.saved === null) return $.model
       const props = s($)
-      return highlight($, props, shownOf(model, props), model.saved, "none").evolve({ saved: null })
+      return highlight($, props, shownOf($.model, props), $.model.saved, "none").evolve({ saved: null })
     },
-    BlurredInput: (model, _message, $) => {
+    BlurredInput: ($) => {
       const props = s($)
-      const shown = shownOf(model, props)
-      const highlighted = highlightedOf(model, props, shown)
-      return highlighted === null ? model : highlight($, props, shown, null, "none").evolve({ saved: highlighted })
+      const shown = shownOf($.model, props)
+      const highlighted = highlightedOf($.model, props, shown)
+      return highlighted === null ? $.model : highlight($, props, shown, null, "none").evolve({ saved: highlighted })
     },
-    PressedTrigger: (_model, { pointerType }, $) => {
+    PressedTrigger: ($, { pointerType }) => {
       const props = s($)
       return toggle(props.inputInPopup === true ? $ : focus($, Input), props, methodOf(pointerType))
     },
-    ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
-    ClickedTrigger: (_model, { pointerType }, $) => toggle($, s($), methodOf(pointerType)),
-    PressedTriggerKey: (model, { key }, $) => {
+    ReleasedTrigger: ($) => $.evolve({ pressing: false }),
+    ClickedTrigger: ($, { pointerType }) => toggle($, s($), methodOf(pointerType)),
+    PressedTriggerKey: ($, { key }) => {
       const props = s($)
-      if (props.disabled === true) return model
+      if (props.disabled === true) return $.model
       if (key === "ArrowDown" || key === "ArrowUp") {
         const opened = open($, props, "list-navigation", "keyboard", key)
         return props.inputInPopup === true ? opened : focus(opened, Input)
       }
-      if (props.readOnly === true) return model
+      if (props.readOnly === true) return $.model
       const values = valuesOf(props)
       const { index, next } = typeahead(
-        model,
+        $.model,
         key,
         props.items,
         props.items.findIndex((item) => values.includes(item.value))
@@ -930,41 +929,41 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     },
     ClickedLabel: focusInput,
     FocusedFormInput: focusInput,
-    Autofilled: (model, { value }, $) => {
+    Autofilled: ($, { value }) => {
       const props = s($)
-      if (lockedOf(props) || props.multiple === true) return model
+      if (lockedOf(props) || props.multiple === true) return $.model
       if (!selectableOf(props)) return rewrite($, props, value, "none")
       const item = autofillMatch(props.items, value)
-      if (!available(item) || valuesOf(props).includes(item.value)) return model
+      if (!available(item) || valuesOf(props).includes(item.value)) return $.model
       const chosen = picked($, props, item.value, "none")
       return props.inputInPopup === true ? chosen : rewrite(chosen, props, item.label, "none")
     },
-    PressedClear: (model, _message, $) => {
+    PressedClear: ($) => {
       const props = s($)
-      return lockedOf(props) ? model : focus(clear(unhighlight($, props, "pointer"), props, "clear-press"), Input)
+      return lockedOf(props) ? $.model : focus(clear(unhighlight($, props, "pointer"), props, "clear-press"), Input)
     },
-    RequestedChipRemoval: (_model, { reason, value }, $) => removeChip($, s($), value, reason),
-    PressedChipArrow: (_model, { key }, $) => open($, s($), "list-navigation", "keyboard", key),
-    EnteredItem: (_model, { value }, $) => hover($, s($), value),
-    LeftItem: (_model, _message, $) => hover($, s($), null),
-    PressedItem: (_model, { value }, $) => $.evolve({ pressedItem: value }),
-    ReleasedItem: (model, { button, value }, $) => {
+    RequestedChipRemoval: ($, { reason, value }) => removeChip($, s($), value, reason),
+    PressedChipArrow: ($, { key }) => open($, s($), "list-navigation", "keyboard", key),
+    EnteredItem: ($, { value }) => hover($, s($), value),
+    LeftItem: ($) => hover($, s($), null),
+    PressedItem: ($, { value }) => $.evolve({ pressedItem: value }),
+    ReleasedItem: ($, { button, value }) => {
       const props = s($)
       const next = $.evolve({ pressedItem: null })
-      if (model.pressedItem === value || button !== 0 || !navigableOf(props)) return next
-      return highlightedOf(model, props, shownOf(model, props)) === value ? pick(next, props, value, "mouse") : next
+      if ($.model.pressedItem === value || button !== 0 || !navigableOf(props)) return next
+      return highlightedOf($.model, props, shownOf($.model, props)) === value ? pick(next, props, value, "mouse") : next
     },
-    ClickedItem: (_model, { pointerType, value }, $) => pick($, s($), value, methodOf(pointerType)),
-    PressedDismiss: (_model, _message, $) => dismiss($, s($), "close-press", null),
-    CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
-    ShowedPopup: (_model, _message, $) =>
+    ClickedItem: ($, { pointerType, value }) => pick($, s($), value, methodOf(pointerType)),
+    PressedDismiss: ($) => dismiss($, s($), "close-press", null),
+    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    ShowedPopup: ($) =>
       $.evolve(s($).open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => s($).open ? $.evolve({ started: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
+    RenderedFirstFrame: ($) => s($).open ? $.evolve({ started: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
       const props = s($)
-      if (open !== props.open) return model
+      if (open !== props.open) return $.model
       if (open) return $.emit(props.emits.settled(open))
-      if (!model.mounted || props.holdExit === true) return model
+      if (!$.model.mounted || props.holdExit === true) return $.model
       const rest = props.inputInPopup === true ? "" : selectedLabelOf(props)
       const closed = unhighlight($, props, "none").evolve({
         mounted: false,
@@ -977,17 +976,17 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       const settled = selectableOf(props) ? rewrite(closed, props, rest, rest === "" ? "input-clear" : "none") : closed
       return settled.emit(props.emits.settled(open))
     },
-    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
-    PressedOutside: (_model, { pointerType }, $) => dismiss($, s($), "outside-press", methodOf(pointerType)),
-    FocusedOutside: (_model, _message, $) => dismiss($, s($), "focus-out", null, true),
-    ReleasedPointer: (model, { outside }, $) => {
-      if (!model.pressing) return model
+    ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
+    PressedOutside: ($, { pointerType }) => dismiss($, s($), "outside-press", methodOf(pointerType)),
+    FocusedOutside: ($) => dismiss($, s($), "focus-out", null, true),
+    ReleasedPointer: ($, { outside }) => {
+      if (!$.model.pressing) return $.model
       const next = $.evolve({ pressing: false })
       return outside ? dismiss(next, s($), "cancel-open", "mouse") : next
     }
   }
 
-  const parts = (model: Model, p: Component.PartsHelper<Message, P, Html.Elements>) => {
+  const parts = (p: Component.PartsHelper<Message, P, Html.Elements>, model: Model) => {
     const props = settingsOf(p.props)
     const open = props.open
     const inline = props.inline === true
@@ -1263,7 +1262,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .onClick(Message.PressedClear()))
     const clearButton = View.wrapPart(
       clearPart,
-      <B extends View.PartTarget<"button">>(element: B, keepMounted?: boolean): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"button">>(
+        { element, keepMounted }: { readonly element: B; readonly keepMounted?: boolean | undefined }
+      ): ReturnType<B["attr"]> | undefined => {
         const applied = clearPart(element)
         return filled || keepMounted === true ? applied : undefined
       }
@@ -1286,9 +1287,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "aria-readonly": readOnly ? "true" : undefined,
           "data-disabled": flag(disabled)
         }))
-    const chip = keyed(chipPart)
+    const chip = valued(chipPart)
 
-    const chipRemove = p.part("button", (b, value: string) =>
+    const chipRemovePart = p.part("button", (b, value: string) =>
       inside(b)
         .attrs({
           type: "button",
@@ -1299,6 +1300,11 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
         .onClick(Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })))
+    const chipRemove = View.wrapPart(
+      chipRemovePart,
+      <B extends View.PartTarget<"button">>({ element, value }: { readonly element: B; readonly value: string }) =>
+        chipRemovePart(element, value)
+    )
 
     const backdrop = p.part("div", (b) =>
       states(b)
@@ -1425,26 +1431,32 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         )
         .onClick(({ pointerType }) => off ? undefined : Message.ClickedItem({ value, pointerType }))
     })
-    const item = keyed(itemPart)
+    const item = valued(itemPart)
 
     const indicatorPart = p.part("span", (b) => b.attr("aria-hidden", "true"))
     const itemIndicator = View.wrapPart(
       indicatorPart,
       <B extends View.PartTarget<"span">>(
-        element: B,
-        value: string,
-        keepMounted?: boolean
+        { element, keepMounted, value }: {
+          readonly element: B
+          readonly value: string
+          readonly keepMounted?: boolean | undefined
+        }
       ): ReturnType<B["attr"]> | undefined => {
         const applied = indicatorPart(element)
         return chosen.has(value) || keepMounted === true ? applied : undefined
       }
     )
 
-    const group = p.part(
-      "div",
-      (b, key: string) => b.attrs({ role: grid ? "rowgroup" : "group", "aria-labelledby": groupLabelId(key) })
+    const group = grouped(
+      p.part(
+        "div",
+        (b, key: string) => b.attrs({ role: grid ? "rowgroup" : "group", "aria-labelledby": groupLabelId(key) })
+      )
     )
-    const groupLabel = p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    const groupLabel = grouped(
+      p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+    )
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const live = <B extends Attributed<B>>(builder: B): B =>

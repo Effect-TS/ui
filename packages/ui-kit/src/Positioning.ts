@@ -1514,9 +1514,9 @@ export const trackPosition = (
  * }).make({
  *   init: () => ({ placement: null }),
  *   update: {
- *     ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement })
+ *     ChangedPlacement: ($, { placement }) => $.evolve({ placement })
  *   },
- *   view: (model, h) => {
+ *   view: (h, model) => {
  *     const anchorId = h.id("anchor")
  *     const args = Positioning.trackArgs(h.props, { side: "bottom", anchorSelector: `[id="${anchorId}"]` })
  *     const positioner = h.div

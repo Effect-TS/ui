@@ -53,9 +53,9 @@
  * }).make({
  *   init: () => ({ name: "Ada" }),
  *   update: {
- *     UpdatedName: (_model, { value }, $) => $.evolve({ name: value })
+ *     UpdatedName: ($, { value }) => $.evolve({ name: value })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.label(
  *       "Name",
  *       Input(h, {

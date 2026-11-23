@@ -51,11 +51,11 @@
 //
 // Treat results as exploratory: compare paired runs of the same command across revisions on one
 // machine; absolute figures depend on the machine and the browser.
+import { build } from "esbuild"
 import { execSync } from "node:child_process"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { parseArgs } from "node:util"
-import { build } from "esbuild"
 import { chromium } from "playwright"
 
 const { values: args } = parseArgs({
@@ -70,7 +70,6 @@ const { values: args } = parseArgs({
     chromium: { type: "string" }
   }
 })
-
 
 const variants = (args.profile?.split(":")[0] ?? args.variants).split(",")
 const isReact = (variant) => variant.startsWith("react-")
@@ -159,10 +158,14 @@ if (args.profile !== undefined) {
       total += dt.get(node.id)
     }
   }
-  console.log("wrote the last step's profile to " + file + "; self time over " + profiles.length + " steps, " +
-    (total / 1000).toFixed(1) + " ms busy:")
+  console.log(
+    "wrote the last step's profile to " + file + "; self time over " + profiles.length + " steps, " +
+      (total / 1000).toFixed(1) + " ms busy:"
+  )
   for (const [name, time] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 40)) {
-    console.log((time / 1000).toFixed(2).padStart(9) + " ms  " + (100 * time / total).toFixed(1).padStart(5) + "%  " + name)
+    console.log(
+      (time / 1000).toFixed(2).padStart(9) + " ms  " + (100 * time / total).toFixed(1).padStart(5) + "%  " + name
+    )
   }
   await browser.close()
   process.exit(0)
@@ -251,7 +254,11 @@ if ((only === undefined || only === "ssr") && ssrVariants.length > 0) {
       await page.close()
     }
   }
-  console.log("first-hydrate, 1k rows (fresh client page):", ssrVariants.map((v) => v + " " + stat(first[v])).join(" | "), "ms")
+  console.log(
+    "first-hydrate, 1k rows (fresh client page):",
+    ssrVariants.map((v) => v + " " + stat(first[v])).join(" | "),
+    "ms"
+  )
   console.log("warm server rendering, 1k rows: " + rounds + " rounds, median (min-max) ms")
   for (const key of keys) {
     console.log(key.padEnd(11), ssrVariants.map((v) => v + " " + stat(results[v][key])).join(" | "))

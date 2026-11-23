@@ -128,7 +128,7 @@ const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
  * }).make({
  *   init: ($) => $.set({ lines: [{ id: "a", quantity: 1 }], coupon: { code: "TEN", status: "Applied" }, notice: null }),
  *   update: {
- *     ClickedIncrement: (_model, { id }, $) =>
+ *     ClickedIncrement: ($, { id }) =>
  *       $.evolve({
  *         // A function of the old value, data-first for one row.
  *         lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
@@ -138,7 +138,7 @@ const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
  *         notice: null
  *       })
  *   },
- *   view: (model, h) => h.el("p", `${model.lines.length} lines`)
+ *   view: (h, model) => h.el("p", `${model.lines.length} lines`)
  * })
  * ```
  *

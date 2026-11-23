@@ -24,8 +24,8 @@ const Counter = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (n, _, $) => $.set(n + 1).emit({ _tag: "Added", count: n + 1 }),
-  view: (n, h) => h.button.onClick(CounterMsg.Add()).children("add " + n)
+  update: ($) => $.set($.model + 1).emit({ _tag: "Added", count: $.model + 1 }),
+  view: (h, n) => h.button.onClick(CounterMsg.Add()).children("add " + n)
 })
 
 const Card = Component.define({
@@ -37,9 +37,9 @@ const Card = Component.define({
   slots: ["title", "body", "aside"]
 }).make({
   init: () => null,
-  update: (model) => model,
+  update: ($) => $.model,
   // Text either side of the title, and an aside its parent leaves empty.
-  view: (_, h) => h.article(h.h2("[", h.slots.title, "]"), h.slots.body, h.aside(h.slots.aside))
+  view: (h) => h.article(h.h2("[", h.slots.title, "]"), h.slots.body, h.aside(h.slots.aside))
 })
 
 const where = { server: true }
@@ -53,7 +53,7 @@ const Page = Component.define({
 }).make({
   init: () => 0,
   update: (_, msg) => msg.count,
-  view: (n, h) =>
+  view: (h, n) =>
     h.main(
       Card(h, {
         key: "c",
@@ -123,8 +123,8 @@ describe("slots on the server", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => Card(h, { key: "c", slots: { body: h.p(renders++ === 0 ? "server" : "client") } })
+        update: ($) => $.model,
+        view: (h) => Card(h, { key: "c", slots: { body: h.p(renders++ === 0 ? "server" : "client") } })
       })
       const error = yield* Effect.flip(ssr(Flip, {}))
       assert.include(

@@ -11,12 +11,12 @@ export const Settings = Component.define({
   elements: Html
 }).make({
   init: () => ({ log: [], agree: false, zip: "" }),
-  update: (model, message) => ({
-    log: [...model.log, message],
-    agree: message === "agree:true" ? true : message === "agree:false" ? false : model.agree,
-    zip: message.startsWith("zip:") ? message.slice(4) : model.zip
+  update: ($, message) => ({
+    log: [...$.model.log, message],
+    agree: message === "agree:true" ? true : message === "agree:false" ? false : $.model.agree,
+    zip: message.startsWith("zip:") ? message.slice(4) : $.model.zip
   }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.form.onSubmit(({ entries }) => `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`)
         .children(

@@ -18,8 +18,8 @@ const makeApp = () => {
     message: ChildMessage
   }).make({
     init: () => ({ seen: -1 }),
-    update: (_model, _message, $) => ({ seen: $.props.n }),
-    view: (model, h) => {
+    update: ($) => ({ seen: $.props.n }),
+    view: (h, model) => {
       views.push(`child ${h.props.n}/${model.seen}`)
       return h.el("button").on("click", ChildMessage.make({ _tag: "Read" })).children(`${h.props.n}/${model.seen}`)
     }
@@ -32,8 +32,8 @@ const makeApp = () => {
     message: ParentMessage
   }).make({
     init: () => ({ n: 0, shown: true }),
-    update: (model, message) => message._tag === "Inc" ? { ...model, n: model.n + 1 } : { ...model, shown: false },
-    view: (model, h) => {
+    update: ($, message) => message._tag === "Inc" ? { ...$.model, n: $.model.n + 1 } : { ...$.model, shown: false },
+    view: (h, model) => {
       views.push(`parent ${model.n}`)
       return h.el("div").children(model.shown ? Child(h, { key: "child", props: { n: model.n } }) : "gone")
     }
@@ -60,14 +60,14 @@ describe("render timing", () => {
         queries: { name: { query: GetName, args: () => ({}), onChange: () => ReaderMessage.make({ _tag: "Named" }) } }
       }).make({
         init: () => -1,
-        update: (_model, _message, $) => $.props.n,
-        view: (model, h) => h.el("i").children(`${h.props.n}/${model}`)
+        update: ($) => $.props.n,
+        view: (h, model) => h.el("i").children(`${h.props.n}/${model}`)
       })
       const Holder = Component.define({ name: "Holder", scoped: false, model: Schema.Number, message: Schema.Null })
         .make({
           init: () => 0,
-          update: (model) => model + 1,
-          view: (model, h) => h.el("div").children(Reader(h, { key: "reader", props: { n: model } }))
+          update: ($) => $.model + 1,
+          view: (h, model) => h.el("div").children(Reader(h, { key: "reader", props: { n: model } }))
         })
       return Effect.gen(function*() {
         const root = yield* TestHost.mount(Holder, {})
@@ -93,12 +93,12 @@ describe("render timing", () => {
       scoped: false,
       model: Schema.Number,
       message: Schema.Literals(["click", "again"]),
-      queries: { number: { query: GetNumber, args: (model: number) => ({ n: model }) } }
+      queries: { number: { query: GetNumber, args: ({ model }) => ({ n: model }) } }
     }).make({
       init: () => 0,
       // The Command's result arrives before the flush or after it.
-      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again.make({})) : model + 1,
-      view: (model, h) => h.el("button").on("click", "click").children(String(model))
+      update: ($, message) => message === "click" ? $.set($.model + 1).run(Again.make({})) : $.model + 1,
+      view: (h, model) => h.el("button").on("click", "click").children(String(model))
     })
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Counter, {})
@@ -177,20 +177,20 @@ describe("causedBy", () => {
       const Message = Schema.TaggedUnion({ Start: {}, Loaded: { value: Schema.String }, Stop: {} })
       const App = Component.define({ name: "App", scoped: false, model: Schema.String, message: Message }).make({
         init: () => "",
-        update: (model, message, $) => {
+        update: ($, message) => {
           switch (message._tag) {
             case "Start":
-              return $.set(model).run(
+              return $.run(
                 Load.make().pipe(Command.map((value) => Message.make({ _tag: "Loaded", value }))),
                 Command.asNoop(Hang.make())
               )
             case "Loaded":
               return message.value
             case "Stop":
-              return $.set(model).run(Command.asNoop(Hang.make()))
+              return $.run(Command.asNoop(Hang.make()))
           }
         },
-        view: (model, h) => h.el("p").children(model)
+        view: (h, model) => h.el("p").children(model)
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -265,8 +265,8 @@ describe("TestHost.layer flush", () => {
       message: Schema.Literals(["click", "again"])
     }).make({
       init: () => 0,
-      update: (model, message, $) => message === "click" ? $.set(model + 1).run(Again.make({})) : model + 1,
-      view: (model, h) => {
+      update: ($, message) => message === "click" ? $.set($.model + 1).run(Again.make({})) : $.model + 1,
+      view: (h, model) => {
         count++
         return h.el("button").on("click", "click").children(String(model))
       }

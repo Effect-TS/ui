@@ -63,7 +63,8 @@ const Message = UiSchema.TaggedEnum({
   RequestedOpen: { menu: Schema.String, reason: Schema.String, triggerId: Schema.NullOr(Schema.String) },
   RequestedClose: { menu: Schema.String, reason: Schema.String },
   Picked: { menu: Schema.String, value: Schema.String },
-  RequestedQuery: { query: Schema.String }
+  RequestedQuery: { query: Schema.String },
+  ChangedModal: { modal: Schema.Boolean }
 })
 
 const Page = Component.define({
@@ -72,6 +73,7 @@ const Page = Component.define({
   props: Config,
   model: Schema.Struct({
     open: Schema.Boolean,
+    modal: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
     share: Schema.Boolean,
     query: Schema.String,
@@ -80,34 +82,36 @@ const Page = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: false, triggerId: null, share: false, query: "", log: [] }),
+  init: () => ({ open: false, modal: true, triggerId: null, share: false, query: "", log: [] }),
   update: {
-    RequestedOpen: (model, { menu, reason, triggerId }) => ({
-      ...model,
+    RequestedOpen: ($, { menu, reason, triggerId }) => ({
+      ...$.model,
       [menu === "root" ? "open" : "share"]: true,
-      triggerId: menu === "root" ? triggerId : model.triggerId,
+      triggerId: menu === "root" ? triggerId : $.model.triggerId,
       log: [
-        ...model.log,
+        ...$.model.log,
         menu + " RequestedOpen " + reason + (triggerId !== null && triggerId !== "trigger" ? " from " + triggerId : "")
       ]
     }),
-    RequestedClose: (model, { menu, reason }, $) => ({
-      ...model,
-      [menu === "root" ? "open" : "share"]: menu === "root" && $.props.refuseClose && model.open,
-      log: [...model.log, menu + " RequestedClose " + reason]
+    RequestedClose: ($, { menu, reason }) => ({
+      ...$.model,
+      [menu === "root" ? "open" : "share"]: menu === "root" && $.props.refuseClose && $.model.open,
+      log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: (model, { menu, value }) => ({
-      ...model,
-      log: [...model.log, menu + " Picked " + value]
+    Picked: ($, { menu, value }) => ({
+      ...$.model,
+      log: [...$.model.log, menu + " Picked " + value]
     }),
-    RequestedQuery: (model, { query }) => ({ ...model, query })
+    RequestedQuery: ($, { query }) => ({ ...$.model, query }),
+    ChangedModal: ($, { modal }) => ({ ...$.model, modal })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Menu(h, {
       props: {
         open: model.open,
         items,
         id: "menu",
+        modal: model.modal,
         triggerId: h.props.viewport ? model.triggerId : undefined,
         ...(h.props.filter ? { query: model.query } : {})
       },
@@ -122,21 +126,23 @@ const Page = Component.define({
       view: (menu) =>
         h.div(
           h.button.attrs({ id: "before", type: "button" }).children("Before"),
-          menu.trigger(h.button.attr("id", "trigger")).children("Edit"),
+          menu.trigger({ element: h.button.attr("id", "trigger") }).children("Edit"),
           h.props.viewport
-            ? menu.trigger(h.button.attr("id", "trigger-2"), { openOnHover: true, delay: 0, closeDelay: 300 })
+            ? menu.trigger({ element: h.button.attr("id", "trigger-2"), openOnHover: true, delay: 0, closeDelay: 300 })
               .children("View")
             : null,
-          h.props.viewport ? menu.trigger(h.button.attr("id", "trigger-3"), { disabled: true }).children("Off") : null,
+          h.props.viewport
+            ? menu.trigger({ element: h.button.attr("id", "trigger-3"), disabled: true }).children("Off")
+            : null,
           menu.positioner(h.div.attr("id", "positioner")).children(
             menu.popup(h.div).children(
               h.props.viewport
                 ? menu.viewport(h.div.attr("id", "viewport")).children(h.span.children("Content"))
                 : null,
               h.props.filter ? menu.input(h.input.attr("data-testid", "input")) : null,
-              menu.item(h.div.attr("data-testid", "copy"), "copy").children("Copy"),
-              menu.item(h.div.attr("data-testid", "cut"), "cut").children("Cut"),
-              menu.item(h.div.attr("data-testid", "paste"), "paste").children("Paste"),
+              menu.item({ element: h.div.attr("data-testid", "copy"), value: "copy" }).children("Copy"),
+              menu.item({ element: h.div.attr("data-testid", "cut"), value: "cut" }).children("Cut"),
+              menu.item({ element: h.div.attr("data-testid", "paste"), value: "paste" }).children("Paste"),
               Menu(h, {
                 props: {
                   open: model.share,
@@ -155,11 +161,12 @@ const Page = Component.define({
                 },
                 view: (share) =>
                   h.div(
-                    menu.item(share.submenuTrigger(h.div.attr("data-testid", "share")), "share").children("Share"),
+                    menu.item({ element: share.submenuTrigger(h.div.attr("data-testid", "share")), value: "share" })
+                      .children("Share"),
                     share.positioner(h.div.attr("id", "share-positioner")).children(
                       share.popup(h.div).children(
-                        share.item(h.div.attr("data-testid", "email"), "email").children("Email"),
-                        share.item(h.div.attr("data-testid", "link"), "link").children("Copy link")
+                        share.item({ element: h.div.attr("data-testid", "email"), value: "email" }).children("Email"),
+                        share.item({ element: h.div.attr("data-testid", "link"), value: "link" }).children("Copy link")
                       )
                     )
                   )
@@ -462,7 +469,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
-  it.effect("a modal menu blocks the page behind it but for a cut-out around the trigger", () =>
+  it.effect("a modal menu blocks the page behind it but for a cut-out around the trigger, once it is cut", () =>
     Effect.gen(function*() {
       yield* mountPage()
       mousedown(byId("trigger"))
@@ -470,10 +477,39 @@ describe("Menu in a document", { concurrent: false }, () => {
       const blocker = byId("positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
       assert.isNotNull(blocker)
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
+      assert.isFalse(blocker.inert)
       assert.strictEqual(document.body.style.overflowY, "hidden")
       keydown(item("copy"), "Escape")
       yield* tick
       assert.strictEqual(document.body.style.overflowY, "")
+      assert.isTrue(blocker.inert)
+    }))
+
+  it.effect("the positioner lets the pointer through until its first frames, before it may be placed", () =>
+    Effect.gen(function*() {
+      yield* mountPage()
+      const styles: Array<string> = []
+      const observer = new MutationObserver(() => styles.push(byId("positioner").style.pointerEvents))
+      observer.observe(byId("positioner"), { attributes: true, attributeFilter: ["style"] })
+      mousedown(byId("trigger"))
+      yield* tick
+      observer.disconnect()
+      assert.include(styles, "none")
+      assert.strictEqual(byId("positioner").style.pointerEvents, "")
+    }))
+
+  it.effect("a menu that becomes modal while open blocks the page but for the trigger", () =>
+    Effect.gen(function*() {
+      const { root } = yield* mountPage()
+      root.send(Message.ChangedModal({ modal: false }))
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.isNull(byId("positioner").querySelector("[data-menu-blocker]"))
+      root.send(Message.ChangedModal({ modal: true }))
+      yield* tick
+      const blocker = byId("positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
+      assert.isFalse(blocker.inert)
+      assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
     }))
 
   it.effect("the viewport keeps the previous content while the popup moves to another trigger", () =>

@@ -18,8 +18,8 @@ const Page = Component.define({
   elements: Html
 }).make({
   init: () => ({ vertical: false }),
-  update: { ClickedTurn: () => ({ vertical: true }), PressedRight: (model) => model },
-  view: (model, h) =>
+  update: { ClickedTurn: () => ({ vertical: true }), PressedRight: ($) => $.model },
+  view: (h, model) =>
     h.div(
       NavigationMenu(h, {
         key: "outer",
