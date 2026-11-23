@@ -91,7 +91,8 @@ a {
   --nav-inset: max(clamp(20px, 5vw, 48px), calc((100% - 68ch) / 2));
 }
 
-.nav-layout h2 {
+.nav-layout h2,
+.nav-layout section h3 {
   scroll-margin-top: calc(var(--nav-bar) + 24px);
 }
 
@@ -156,11 +157,23 @@ a {
   margin-top: 72px;
 }
 
+.article section section {
+  margin-top: 48px;
+}
+
 .article h2 {
   font-size: 1.375rem;
   font-weight: 620;
   line-height: 1.3;
   letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.article section h3 {
+  font-size: 1.125rem;
+  font-weight: 620;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
@@ -193,6 +206,7 @@ a {
 }
 
 .article h2 + p,
+.article section h3 + p,
 .article p + p,
 .article .wide + p,
 .article p + figure {

@@ -17,7 +17,7 @@ const Example = <M>(h: View.H<M>, options: {
   readonly demo?: View.Content<M>
 }) =>
   h.section.class("example").attr("aria-label", options.title).children(
-    h.h3.class("example-title").children(options.title),
+    h.p.class("example-title").children(options.title),
     h.div.class("example-body").children(
       options.demo && h.div.class("demo").children(options.demo),
       ...Files(h, options.files)
@@ -111,7 +111,7 @@ export const LaunchPage = Component.define({
           )
         ),
         h.section.attr("aria-labelledby", "architecture").children(
-          h.h2.id("architecture").children("Effect UI moves the Model from the root of the app into each Component"),
+          h.h2.id("architecture").children("Change: Component-based architecture"),
           P(
             h,
             "A Foldkit 0.x app keeps one Model and one update at its root. In Effect UI, every Component has its own Model and update. Use the buttons in the diagram to send a Message from a leaf and see how each version handles it."
@@ -120,80 +120,80 @@ export const LaunchPage = Component.define({
           P(
             h,
             "In Foldkit 0.x, the Message travels up to the root update and back down to the leaf's update, then the new value is written into the root Model. In Effect UI, the Component that sent the Message handles it in its own update and the runtime stores the result in that Component's Model."
-          )
-        ),
-        h.section.attr("aria-labelledby", "define").children(
-          h.h2.id("define").children("An Effect UI Component is a small Elm Architecture program"),
-          P(
-            h,
-            "If you can read a counter in Foldkit 0.x, you can read one in Effect UI. It has a Model, Messages, init, update and view. It can also have Subscriptions."
           ),
-          Beside(h, {
-            label: "Live auto-counter",
-            files: h.props.snippets.intro,
-            demo: Counter(h, { key: "intro" }),
-            caption: "Click \"Increment\", then turn \"Auto-count\" on and off."
-          }),
-          P(
-            h,
-            "Those familiar pieces have a streamlined API. You build an app by composing Components."
-          )
-        ),
-        h.section.attr("aria-labelledby", "split").children(
-          h.h2.id("split").children("You can pull functions out as a Component grows"),
-          P(
-            h,
-            "The first counter defines everything inline in one call. That's easy to read for a small Component, but the call gets harder to follow as the Component grows. Separate named functions are easier to scan and can move into their own files. If you organize your Foldkit 0.x modules this way, the layout will look familiar."
-          ),
-          Listing(h, h.props.snippets.split, "The counter from the first example, written as separate functions."),
-          P(
-            h,
-            "The Component definition's helpers supply the types for init, update, subscriptions and view, so you don't have to annotate the separate functions."
-          )
-        ),
-        h.section.attr("aria-labelledby", "one-model").children(
-          h.h2.id("one-model").children("In Foldkit 0.x, the entire application state is a single Model"),
-          P(
-            h,
-            "In Foldkit 0.x, you can break an app into Submodels, but there is still one Model and one update at the root. Every change goes through the root update and DevTools can show every Message in order."
-          ),
-          P(
-            h,
-            "As an app grows, every part of it stays tied to the root. Each parent stores its children's state and forwards their Messages, even when it has no use for that state. Because the app is composed as one program before it starts, its code ships as one bundle and an error that escapes any part can stop the whole app."
-          )
-        ),
-        h.section.attr("aria-labelledby", "components").children(
-          h.h2.id("components").children("Effect UI applies the Elm Architecture to each Component"),
-          P(
-            h,
-            "A Component is self-contained. You can write, test and reuse it on its own or remove it without changing how its parent manages state or handles Messages."
-          ),
-          P(
-            h,
-            "The runtime keeps a Model for each Component instance and delivers its Messages to its own update. To render a child Component, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages."
-          ),
-          h.figure.class("compare wide").children(
-            h.div.class("compare-columns").children(
-              Example(h, {
-                title: "Foldkit 0.x: Page stores and forwards for Counter",
-                files: h.props.snippets.counterFoldkit,
-                demo: h.div.class("embed").onMount(EmbedFoldkitPage())
-              }),
-              Example(h, {
-                title: "Effect UI: Page renders Counter",
-                files: h.props.snippets.counterEffect,
-                demo: Page(h, {})
-              })
+          h.section.attr("aria-labelledby", "define").children(
+            h.h3.id("define").children("An Effect UI Component is a small Elm Architecture program"),
+            P(
+              h,
+              "If you can read a counter in Foldkit 0.x, you can read one in Effect UI. It has a Model, Messages, init, update and view. It can also have Subscriptions."
             ),
-            Caption(h, "Both counters are live. Click \"+\" in each.")
+            Beside(h, {
+              label: "Live auto-counter",
+              files: h.props.snippets.intro,
+              demo: Counter(h, { key: "intro" }),
+              caption: "Click \"Increment\", then turn \"Auto-count\" on and off."
+            }),
+            P(
+              h,
+              "Those familiar pieces have a streamlined API. You build an app by composing Components."
+            )
           ),
-          P(
-            h,
-            "Inside each Component, the rules are unchanged: its state is its Model, only its own update changes that Model and every Message goes through update. Being self-contained also lets a Component bring its own services, load its code on demand and fail without stopping the rest of the app."
+          h.section.attr("aria-labelledby", "split").children(
+            h.h3.id("split").children("You can pull functions out as a Component grows"),
+            P(
+              h,
+              "The first counter defines everything inline in one call. That's easy to read for a small Component, but the call gets harder to follow as the Component grows. Separate named functions are easier to scan and can move into their own files. If you organize your Foldkit 0.x modules this way, the layout will look familiar."
+            ),
+            Listing(h, h.props.snippets.split, "The counter from the first example, written as separate functions."),
+            P(
+              h,
+              "The Component definition's helpers supply the types for init, update, subscriptions and view, so you don't have to annotate the separate functions."
+            )
+          ),
+          h.section.attr("aria-labelledby", "one-model").children(
+            h.h3.id("one-model").children("In Foldkit 0.x, the entire application state is a single Model"),
+            P(
+              h,
+              "In Foldkit 0.x, you can break an app into Submodels, but there is still one Model and one update at the root. Every change goes through the root update and DevTools can show every Message in order."
+            ),
+            P(
+              h,
+              "As an app grows, every part of it stays tied to the root. Each parent stores its children's state and forwards their Messages, even when it has no use for that state. Because the app is composed as one program before it starts, its code ships as one bundle and an error that escapes any part can stop the whole app."
+            )
+          ),
+          h.section.attr("aria-labelledby", "components").children(
+            h.h3.id("components").children("Effect UI applies the Elm Architecture to each Component"),
+            P(
+              h,
+              "A Component is self-contained. You can write, test and reuse it on its own or remove it without changing how its parent manages state or handles Messages."
+            ),
+            P(
+              h,
+              "The runtime keeps a Model for each Component instance and delivers its Messages to its own update. To render a child Component, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages."
+            ),
+            h.figure.class("compare wide").children(
+              h.div.class("compare-columns").children(
+                Example(h, {
+                  title: "Foldkit 0.x: Page stores and forwards for Counter",
+                  files: h.props.snippets.counterFoldkit,
+                  demo: h.div.class("embed").onMount(EmbedFoldkitPage())
+                }),
+                Example(h, {
+                  title: "Effect UI: Page renders Counter",
+                  files: h.props.snippets.counterEffect,
+                  demo: Page(h, {})
+                })
+              ),
+              Caption(h, "Both counters are live. Click \"+\" in each.")
+            ),
+            P(
+              h,
+              "Inside each Component, the rules are unchanged: its state is its Model, only its own update changes that Model and every Message goes through update. Being self-contained also lets a Component bring its own services, load its code on demand and fail without stopping the rest of the app."
+            )
           )
         ),
         h.section.attr("aria-labelledby", "queries").children(
-          h.h2.id("queries").children("Queries let the runtime fetch and refresh server data"),
+          h.h2.id("queries").children("Change: Built-in queries"),
           P(
             h,
             "In Foldkit 0.x, fetched data lives in the Model like any other state. Each resource needs a field in the Model, a Command to fetch it, a Message for the result and update branches for loading, success and failure. Foldkit 0.x's experimental `Query` packages that loop, but it's still a Submodel: the parent stores its Model, wraps its Messages and decides when to load or refresh. As the Foldkit 0.x docs put it, Query does not \"react to rendering, expire data after a duration, poll, or refresh related resources on its own\"."
@@ -220,7 +220,7 @@ export const LaunchPage = Component.define({
           )
         ),
         h.section.attr("aria-labelledby", "testing").children(
-          h.h2.id("testing").children("Story and Scene carry over, and Play runs real Commands and Subscriptions"),
+          h.h2.id("testing").children("Change: Play tests"),
           P(
             h,
             "Story tests update and Scene tests update through the view. In Foldkit 0.x, you pass the functions under test and a starting Model. In Effect UI, you pass the Component and the test starts from its init, so you don't have to supply that starting state separately."
@@ -247,7 +247,7 @@ export const LaunchPage = Component.define({
           Listing(h, h.props.snippets.play)
         ),
         h.section.attr("aria-labelledby", "performance").children(
-          h.h2.id("performance").children("Effect UI is faster than Foldkit 0.x in the benchmark"),
+          h.h2.id("performance").children("Change: Improved performance"),
           h.p.children(
             "In ",
             h.a.attr("href", links.harness).children("js-framework-benchmark"),
@@ -257,7 +257,7 @@ export const LaunchPage = Component.define({
           AllResults(h)
         ),
         h.section.attr("aria-labelledby", "more").children(
-          h.h2.id("more").children("More that is new in Effect UI"),
+          h.h2.id("more").children("More changes"),
           h.ul.class("more").children(
             h.li.children(
               h.strong.children(...Text(h, "Services:")),
@@ -311,7 +311,7 @@ export const LaunchPage = Component.define({
           )
         ),
         h.section.attr("aria-labelledby", "carries-over").children(
-          h.h2.id("carries-over").children("Foldkit's values, features and guarantees carry over"),
+          h.h2.id("carries-over").children("Unchanged: Values, features and guarantees"),
           P(
             h,
             "The app-wide Model has become one Model per Component instance. The Model is still the source of truth for state, Messages are facts about what happened and every change to a Model goes through update. Side effects happen at explicit boundaries, never inside update or view."
