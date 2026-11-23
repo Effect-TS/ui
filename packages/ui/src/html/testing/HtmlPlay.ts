@@ -188,8 +188,8 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError> {
     return this.one("change", locator, "change", (node) => defaults.changePayload(node, value), (node, payload) => {
-      const { files: _, ...props } = payload as Html.InputPayload
-      Object.assign(node.props, props)
+      node.props.value = payload.value
+      if ("checked" in payload) node.props.checked = payload.checked
     })
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError> {

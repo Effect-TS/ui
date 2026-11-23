@@ -78,25 +78,13 @@ export class FileReadError extends Data.TaggedError("FileReadError")<{
  * @category reading
  * @since 0.1.0
  */
-export const readAsBytes = (blob: Blob): Effect.Effect<Uint8Array, FileReadError> =>
+export const readAsBytes = (blob: Blob): Effect.Effect<Uint8Array, FileReadError> => Stream.mkUint8Array(bytesOf(blob))
+
+const bytesOf = (blob: Blob): Stream.Stream<Uint8Array, FileReadError> =>
   Stream.fromReadableStream({
     evaluate: () => blob.stream(),
     onError: (cause) => new FileReadError({ cause })
-  }).pipe(
-    Stream.runCollect,
-    Effect.map((chunks) => {
-      if (chunks.length === 1) return chunks[0]
-      let length = 0
-      for (const chunk of chunks) length += chunk.length
-      const bytes = new Uint8Array(length)
-      let offset = 0
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset)
-        offset += chunk.length
-      }
-      return bytes
-    })
-  )
+  })
 
 /**
  * Reads `blob` as text in `encoding`, UTF-8 by default, as `TextDecoder`
@@ -107,7 +95,7 @@ export const readAsBytes = (blob: Blob): Effect.Effect<Uint8Array, FileReadError
  * @since 0.1.0
  */
 export const readAsText = (blob: Blob, encoding?: string): Effect.Effect<string, FileReadError> =>
-  Effect.map(readAsBytes(blob), (bytes) => new TextDecoder(encoding).decode(bytes))
+  bytesOf(blob).pipe(Stream.decodeText({ encoding }), Stream.mkString)
 
 /**
  * Reads `blob` as a `data:` URL with its type and base64 content, as

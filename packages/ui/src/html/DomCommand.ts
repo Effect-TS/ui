@@ -170,7 +170,6 @@ export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> },
  * import { DomCommand, Html } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  * import { Schema } from "effect"
- * import { Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ SubmittedForm: {}, CompletedFocusNewTodo: {} })
  * const NewTodo = Html.ref("NewTodo", "input")
@@ -323,7 +322,7 @@ export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Op
  *
  * **Details**
  *
- * It calls the element's `showPicker()`, or `click()` on an `input` in a
+ * It calls the element's `showPicker()`, or `click()` on a file input in a
  * browser without it. `opened` is `false` when the browser refuses, as it
  * does outside a user's action and for a disabled element. A Command issued
  * from a click or key press runs within that action.
@@ -333,6 +332,7 @@ export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Op
  * ```ts
  * import { DomCommand, Html } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
+ * import { Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ CompletedShowPicker: { opened: Schema.Boolean } })
  * const Attachment = Html.ref("Attachment", "input")

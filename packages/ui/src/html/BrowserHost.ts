@@ -1494,7 +1494,7 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
     const field = element as HTMLInputElement
     try {
       if (typeof field.showPicker === "function") field.showPicker()
-      else if (field.localName === "input") field.click()
+      else if (field.type === "file") field.click()
       else return false
       return true
     } catch {
