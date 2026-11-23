@@ -680,7 +680,6 @@ export interface Root {
   readonly send: (message: unknown) => void
   /** The Commands still running, queued, awaiting or stopping anywhere in the tree. */
   readonly pending: () => ReadonlyArray<Pending>
-  /** The lazy components whose modules a slot in the tree waits for, at the slot's path. */
   readonly loads: () => ReadonlyArray<Load>
   /** The query cache the runtime owns, read where the `Query` module is loaded. */
   readonly cache: ReturnType<typeof Query.internals>

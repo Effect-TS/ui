@@ -26,17 +26,11 @@ export const stateOf = (lazy: Component.Lazy.Any): State => (lazy as Lazy).state
 
 const ComponentTypeId: Component.TypeId = "~@effect/ui/Component"
 
-// A headless component carries only its own type id.
 const isRenderable = (u: unknown): u is Component.Any => Predicate.hasProperty(u, ComponentTypeId)
 
 const pendingAlive = new WeakMap<View.Child<any, any>, NonNullable<View.Child<any, any>["alive"]>>()
 
-/**
- * `view` as the call writes it once the module has loaded: with the scope's `alive` when the
- * component is scoped.
- *
- * @internal
- */
+/** @internal */
 export const scopedOnceLoaded = (view: View.Child<any, any>): View.Child<any, any> => {
   if (view.alive !== undefined) return view
   const alive = pendingAlive.get(view)
@@ -74,7 +68,6 @@ export const make = (name: string, load: () => Promise<Component.Any>): Componen
   }
   const call = (h: any, options: child.Options) => {
     const state = self.state
-    // As a component's own call does, `~alive` is read only for a scoped one.
     if (state._tag === "Loaded") {
       return child.make(self, options, state.component.definition.scoped ? h["~alive"] : undefined)
     }

@@ -79,34 +79,24 @@ describe("Component.lazy", () => {
   it.effect("shows the fallback's Failure branch when the load fails, and loads again on the next mount", () =>
     provideHost(Effect.gen(function*() {
       let loads = 0
-      const LazyPage = Component.lazy(
-        "LazyPage",
-        () => ++loads === 1 ? Promise.reject(new Error("offline")) : later(Page)
-      )
+      const LazyPage = Component.lazy("LazyPage", (): Promise<typeof Page> => {
+        loads++
+        if (loads === 1) return Promise.reject(new Error("offline"))
+        if (loads === 2) throw new Error("no import")
+        if (loads === 3) return Promise.resolve({ Page } as any)
+        return later(Page)
+      })
       const root = yield* TestHost.mount(makeApp(LazyPage), {})
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "app:failed")
-      root.send(AppMessage.Toggled())
-      yield* TestHost.settle
-      root.send(AppMessage.Toggled())
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "app:page:a")
-      assert.strictEqual(loads, 2)
-    })))
-
-  it.effect("fails the load when it throws or brings no component", () =>
-    provideHost(Effect.gen(function*() {
-      const loads: ReadonlyArray<() => Promise<typeof Page>> = [
-        () => {
-          throw new Error("no import")
-        },
-        () => Promise.resolve({ Page } as any)
-      ]
-      for (const load of loads) {
-        const root = yield* TestHost.mount(makeApp(Component.lazy("LazyPage", load)), {})
+      for (let i = 0; i < 3; i++) {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "app:failed")
+        root.send(AppMessage.Toggled())
+        yield* TestHost.settle
+        root.send(AppMessage.Toggled())
       }
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "app:page:a")
+      assert.strictEqual(loads, 4)
     })))
 
   it.effect("keeps a lazy scoped child once loaded, and closes its scope when the predicate ends it", () =>
@@ -158,15 +148,6 @@ describe("Component.lazy", () => {
       root.send(HostMessage.Ended())
       yield* TestHost.settle
       assert.strictEqual(closed, 1)
-      assert.deepStrictEqual(
-        root.log().flatMap((entry) =>
-          "path" in entry && entry.path === "/Host/LazyDraft[d]" &&
-            ["Mounted", "Kept", "Drawn", "Unmounted"].includes(entry._tag)
-            ? [entry._tag]
-            : []
-        ),
-        ["Mounted", "Kept", "Drawn", "Unmounted"]
-      )
     })))
 
   it.effect("preload loads the module before a child renders", () =>

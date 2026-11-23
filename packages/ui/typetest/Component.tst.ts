@@ -320,29 +320,25 @@ describe("Component", () => {
     const todo = { id: "", title: "", done: false }
     const LazyTodo = Component.lazy("LazyTodo", () => Promise.resolve(TodoItem))
 
-    it("reads props, events and requirements from the loaded component", () => {
+    it("reads props, events, requirements and fallback result from the loaded component", () => {
       expect(LazyTodo).type.toBe<
         Component.Lazy<{ readonly todo: typeof Todo.Type }, typeof TodoItemEvents.Type, SaveTodo>
       >()
       ParentDef.view((_, h) => {
-        expect(LazyTodo(h, { props: { todo }, onEmit: (events) => ParentMessage.make(events) })).type
-          .toBe<View.Child<ParentMessage, SaveTodo>>()
+        expect(
+          LazyTodo(h, {
+            props: { todo },
+            onEmit: (events) => ParentMessage.make(events),
+            fallback: (result) => {
+              expect(result).type.toBe<AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>>()
+              return h.el("p")
+            }
+          })
+        ).type.toBe<View.Child<ParentMessage, SaveTodo>>()
         expect(LazyTodo).type.not.toBeCallableWith(h, { props: { todo }, onEmit: () => Message.X() })
         expect(LazyTodo).type.not.toBeCallableWith(h, {})
         return h.el("p")
       })
-    })
-
-    it("passes the fallback Initial or Failure", () => {
-      ParentDef.view((_, h) =>
-        LazyTodo(h, {
-          props: { todo },
-          fallback: (result) => {
-            expect(result).type.toBe<AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>>()
-            return h.el("p")
-          }
-        })
-      )
     })
 
     it("keeps a scoped component's call: it takes the s of h.scoped, and not h", () => {
