@@ -163,6 +163,7 @@ const sessionOf = (feed: Feed): Session | undefined => {
 const Header = (h: H, session: Session | undefined, count: number, model: OverlayModel) => {
   const following = model.selected === null && model.pinned
   return h.header.class("bar").children(
+    h.span.class("logo").attr("aria-hidden", "true"),
     h.h2.class("title").children("Effect UI inspector"),
     session?.app === undefined ? null : h.span.class("app").children(session.app),
     h.span.class("spacer"),
