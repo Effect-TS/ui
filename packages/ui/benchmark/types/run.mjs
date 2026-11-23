@@ -97,7 +97,9 @@ const deep = (scoped, depth) => {
   for (let i = depth - 1; i >= 0; i--) {
     const last = i === depth - 1
     const child = (at) =>
-      `L${i + 1}(${at}, { key: "below", props: { id: model.draft }, onEmit: { Saved: (e) => LM${i}.Below({ id: e.id }) } })`
+      `L${
+        i + 1
+      }(${at}, { key: "below", props: { id: model.draft }, onEmit: { Saved: (e) => LM${i}.Below({ id: e.id }) } })`
     const below = scoped ? `h.scoped((s) => ${child("s")})` : child("h")
     out.push(`const LM${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Below: { id: Schema.String } })
 const LE${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
@@ -329,7 +331,9 @@ console.log("| Measure | main | Inline | Scoped | Scoped / main | Ceiling | |")
 console.log("| --- | ---: | ---: | ---: | ---: | ---: | --- |")
 for (const row of rows) {
   console.log(
-    `| ${row.name} | ${row.main} | ${row.inline} | ${row.scoped} | ${row.ofMain} | ${row.ceiling} | ${row.pass ? "pass" : "OVER"} |`
+    `| ${row.name} | ${row.main} | ${row.inline} | ${row.scoped} | ${row.ofMain} | ${row.ceiling} | ${
+      row.pass ? "pass" : "OVER"
+    } |`
   )
 }
 if (editor !== undefined) {
