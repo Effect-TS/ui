@@ -204,9 +204,11 @@ describe("parseMarkdown", () => {
   })
 
   it("rejects a line holding only :Name as a mistyped island", () => {
-    expect(() => parseMarkdown(lines("Prose.", ":Counter"))).toThrowError(
-      /Unsupported markdown node "textDirective" \(line 2\)/
-    )
+    for (const line of [":Counter", "  :Counter", "\t:Counter"]) {
+      expect(() => parseMarkdown(lines("Prose.", line))).toThrowError(
+        /Unsupported markdown node "textDirective" \(line 2\)/
+      )
+    }
   })
 
   it("keeps a :name line inside a multiline code span", () => {

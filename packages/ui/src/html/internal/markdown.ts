@@ -1213,7 +1213,11 @@ export const parse = (
         text(entity === null ? "&" : decodeEntity(entity[0]))
       } else if (char === ":" || char === "!") {
         const after = subject.slice(pos)
-        const lineStart = pos === 0 || subject[pos - 1] === "\n"
+        let start = pos
+        while (isSpaceOrTab(subject[start - 1])) {
+          start--
+        }
+        const lineStart = start === 0 || subject[start - 1] === "\n"
         if (
           char === ":" && subject[pos - 1] !== ":" &&
           (reTextDirective.test(after) || (paragraph && lineStart && reLoneTextDirective.test(after)))
