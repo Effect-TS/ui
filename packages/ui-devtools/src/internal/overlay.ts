@@ -8,6 +8,7 @@ import * as Renderer from "@effect/ui/Renderer"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import type * as View from "@effect/ui/View"
+import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
@@ -20,7 +21,19 @@ export interface Feed {
   readonly inspector: Inspector.Inspector
   readonly origin: (session: string) => number | undefined
   readonly changes: Stream.Stream<void>
+  readonly paintable: (session: string, seq: number) => boolean
+  readonly pausing: () => boolean
 }
+
+export interface Painted {
+  readonly fellBack: ReadonlyArray<string>
+  readonly fallbacks: ReadonlyArray<string>
+}
+
+export class Pages extends Context.Service<Pages, {
+  readonly paint: (session: string, seq: number) => Effect.Effect<Painted | undefined>
+  readonly resume: Effect.Effect<void>
+}>()("@effect/ui-devtools/Pages") {}
 
 const FeedSchema = Schema.declare(
   (u: unknown): u is Feed => Predicate.hasProperty(u, "inspector") && Predicate.hasProperty(u, "changes")
@@ -31,6 +44,13 @@ const Filter = Schema.Literals(["messages", "commands", "all"])
 const Pane = Schema.Literals(["timeline", "entry"])
 
 const OverlayProps = Schema.Struct({ feed: FeedSchema })
+
+const Paused = Schema.Struct({
+  session: Schema.String,
+  seq: Schema.Number,
+  fellBack: Schema.Array(Schema.String),
+  fallbacks: Schema.Array(Schema.String)
+})
 
 type OverlayProps = typeof OverlayProps.Type
 
@@ -46,7 +66,8 @@ const OverlayModel = Schema.Struct({
   atStart: Schema.Boolean,
   reveal: Schema.NullOr(Schema.Number),
   pins: Schema.Number,
-  pane: Pane
+  pane: Pane,
+  paused: Schema.NullOr(Paused)
 })
 
 type OverlayModel = typeof OverlayModel.Type
@@ -65,7 +86,16 @@ const OverlayMessage = UiSchema.TaggedEnum({
   SelectedTab: { value: Schema.String },
   ClickedCopyFrame: { seq: Schema.Number, text: Schema.String },
   SucceededCopyFrame: { seq: Schema.Number },
-  FailedCopyFrame: {}
+  FailedCopyFrame: {},
+  ClickedShowOnPage: { session: Schema.String, seq: Schema.Number },
+  ScrubbedPage: { seq: Schema.Number },
+  ClickedResume: {},
+  Painted: {
+    session: Schema.String,
+    seq: Schema.Number,
+    fellBack: Schema.Array(Schema.String),
+    fallbacks: Schema.Array(Schema.String)
+  }
 })
 
 type OverlayMessage = typeof OverlayMessage.Type
@@ -89,6 +119,21 @@ const CopyFrame = Command.make(
       })
     )
 )
+
+export class Paint extends Command.Service<Paint>()(
+  "devtools/Paint",
+  { args: { session: Schema.String, seq: Schema.NullOr(Schema.Number) }, mode: "switch" },
+  Effect.gen(function*() {
+    const pages = yield* Pages
+    return ({ seq, session }) =>
+      seq === null
+        ? Effect.as(pages.resume, Component.noop)
+        : Effect.map(
+          pages.paint(session, seq),
+          (painted) => painted === undefined ? Component.noop : OverlayMessage.Painted({ session, seq, ...painted })
+        )
+  })
+) {}
 
 type Children = View.Children<OverlayMessage, never>
 type H = View.Helper<OverlayMessage, OverlayProps> & View.Tags<Html.Elements, OverlayMessage>
@@ -160,6 +205,42 @@ const sessionOf = (feed: Feed): Session | undefined => {
   return sessions[sessions.length - 1]
 }
 
+const PausedBadge = (h: H, seq: number) =>
+  h.span.class("paused").children(
+    h.span.class("paused-label").children("Paused at #" + seq),
+    h.button.class("resume").attr("aria-label", "Resume the live page").onClick(OverlayMessage.ClickedResume())
+      .children("Resume")
+  )
+
+const paths = (h: H, list: ReadonlyArray<string>) =>
+  list.flatMap((path, at) => [at === 0 ? null : ", ", h.code.class("path").children(path)])
+
+const PausedBar = (h: H, paused: typeof Paused.Type, timeline: ReadonlyArray<Entry>, paintable: Feed["paintable"]) => {
+  const stops = timeline.filter((entry) => paintable(entry.session, entry.seq)).reverse()
+  const at = stops.findIndex((entry) => entry.seq === paused.seq)
+  return h.section.class("pausebar").attr("aria-label", "Page shown at an earlier entry").children(
+    h.div.class("scrub").children(
+      h.span.class("muted").children("Page at"),
+      h.input.attr("type", "range").attr("aria-label", "Entry shown on the page").attr("min", "0")
+        .attr("max", String(Math.max(0, stops.length - 1))).attr("aria-valuetext", "#" + paused.seq)
+        .value(String(Math.max(0, at)))
+        .onInput(({ value }) => {
+          const entry = stops[Number(value)]
+          return entry === undefined ? undefined : OverlayMessage.ScrubbedPage({ seq: entry.seq })
+        }),
+      h.span.class("at").children("#" + paused.seq)
+    ),
+    paused.fellBack.length === 0 ? null : h.p.class("pause-note", "tone-open").children(
+      "No state at #" + paused.seq + ", shown from init: ",
+      paths(h, paused.fellBack)
+    ),
+    paused.fallbacks.length === 0 ? null : h.p.class("pause-note", "tone-open").children(
+      "A feature slot shows its fallback, since its Layer isn't built on the painted page, in: ",
+      paths(h, paused.fallbacks)
+    )
+  )
+}
+
 const Header = (h: H, session: Session | undefined, count: number, model: OverlayModel) => {
   const following = model.selected === null && model.pinned
   return h.header.class("bar").children(
@@ -167,6 +248,7 @@ const Header = (h: H, session: Session | undefined, count: number, model: Overla
     h.h2.class("title").children("Effect UI inspector"),
     session?.app === undefined ? null : h.span.class("app").children(session.app),
     h.span.class("spacer"),
+    model.paused === null ? null : PausedBadge(h, model.paused.seq),
     h.span.class("count").children(count === 1 ? "1 entry" : count + " entries"),
     h.button.class("follow", following && "on").attr("aria-pressed", String(following))
       .onClick(OverlayMessage.ClickedFollowLatest()).children("Follow latest"),
@@ -792,9 +874,18 @@ const Inspected = (
   const label = Read.labelOf(entry)
   const origin = feed.origin(entry.session)
   const kind = entry._tag === "Update" ? "Update" : label.text === entry._tag ? "Entry" : entry._tag
+  const paintable = feed.paintable(entry.session, entry.seq)
+  const shown = model.paused?.session === entry.session && model.paused.seq === entry.seq
   return [
     h.section.class("ehead").children(
-      h.h3.class("headline").children(label.text, label.detail === undefined ? null : " " + label.detail),
+      h.div.class("ehead-top").children(
+        h.h3.class("headline").children(label.text, label.detail === undefined ? null : " " + label.detail),
+        h.button.class("show", shown && "on").attr("aria-pressed", String(shown)).disabled(!paintable)
+          .attr("title", paintable ? undefined : "No longer held, or no page to show it on")
+          .onClick(OverlayMessage.ClickedShowOnPage({ session: entry.session, seq: entry.seq })).children(
+            "Show on page"
+          )
+      ),
       h.p.class("sub").children(
         kind + " #" + entry.seq,
         "path" in entry ? " on " + Read.nameOf(entry.path) : "",
@@ -828,12 +919,13 @@ const Panel = (h: H, model: OverlayModel) => {
   const steps = entry === undefined ? [] : Read.chainOf(session, entry)
   const owner = entry === undefined ? undefined : Read.instanceOf(entry)
   const shown = model.instance ?? owner
-  return h.div.class("panel").attr("role", "dialog").attr("aria-label", "Effect UI inspector").attr(
-    "data-pane",
-    model.pane
-  ).children(
+  return h.div.class("panel", model.paused !== null && "pausing").attr("role", "dialog").attr(
+    "aria-label",
+    "Effect UI inspector"
+  ).attr("data-pane", model.pane).children(
     h.span.class("grip").attr("aria-hidden", "true"),
     Header(h, session, entries.length, model),
+    model.paused === null ? null : PausedBar(h, model.paused, timeline, feed.paintable),
     h.div.class("body").children(
       h.div.class("left").children(
         Instances(h, session, instances, model, owner),
@@ -852,6 +944,15 @@ const Panel = (h: H, model: OverlayModel) => {
       )
     )
   )
+}
+
+const paintAt = (feed: Feed, seq: number) => Paint.make({ session: sessionOf(feed)?.id ?? "", seq })
+
+const resumePage = () => Paint.make({ session: "", seq: null })
+
+const repaints = (model: OverlayModel, feed: Feed, seq: number) => {
+  const session = sessionOf(feed)
+  return model.paused !== null && session !== undefined && feed.paintable(session.id, seq)
 }
 
 export const Overlay = Component.define({
@@ -874,25 +975,40 @@ export const Overlay = Component.define({
     atStart: true,
     reveal: null,
     pins: 0,
-    pane: "timeline"
+    pane: "timeline",
+    paused: null
   }),
   update: {
     ReceivedFrames: ($) =>
       $.evolve({
         revision: increment,
-        ...($.model.reveal === null ? {} : { reveal: null, pinned: $.model.atStart, pins: increment })
+        ...($.model.reveal === null ? {} : { reveal: null, pinned: $.model.atStart, pins: increment }),
+        ...($.model.paused === null || $.props.feed.pausing() ? {} : { paused: null })
       }),
     ClickedOpen: ($) =>
       $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: increment, pane: "timeline" }),
     ClickedClose: ($) => $.evolve({ open: false }),
-    ClickedEntry: ($, { seq }) =>
-      $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: increment } : {}) }),
-    ClickedLink: ($, { seq }) =>
-      $.evolve({ selected: seq, filter: "all", instance: null, pinned: false, reveal: seq, pins: increment }),
+    ClickedEntry: ($, { seq }) => {
+      const next = $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: increment } : {}) })
+      return repaints($.model, $.props.feed, seq) ? next.run(paintAt($.props.feed, seq)) : next
+    },
+    ClickedLink: ($, { seq }) => {
+      const next = $.evolve({
+        selected: seq,
+        filter: "all",
+        instance: null,
+        pinned: false,
+        reveal: seq,
+        pins: increment
+      })
+      return repaints($.model, $.props.feed, seq) ? next.run(paintAt($.props.feed, seq)) : next
+    },
     ClickedInstance: ($, { instance }) => $.evolve({ instance: $.model.instance === instance ? null : instance }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
-    ClickedFollowLatest: ($) =>
-      $.evolve({ selected: null, pinned: true, reveal: null, pins: increment, pane: "timeline" }),
+    ClickedFollowLatest: ($) => {
+      const next = $.evolve({ selected: null, pinned: true, reveal: null, pins: increment, pane: "timeline" })
+      return $.model.paused === null ? next : next.evolve({ paused: null }).run(resumePage())
+    },
     ClickedBack: ($) => $.evolve({ pane: "timeline" }),
     ScrolledTimeline: ($, { atStart }) =>
       atStart
@@ -903,7 +1019,15 @@ export const Overlay = Component.define({
     SelectedTab: ($, { value }) => $.evolve({ tab: value }),
     ClickedCopyFrame: ($, { seq, text }) => $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
     SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
-    FailedCopyFrame: ($) => $.evolve({ copied: null })
+    FailedCopyFrame: ($) => $.evolve({ copied: null }),
+    ClickedShowOnPage: ($, { session, seq }) =>
+      $.model.paused?.session === session && $.model.paused.seq === seq
+        ? $.evolve({ paused: null }).run(resumePage())
+        : $.run(Paint.make({ session, seq })),
+    ScrubbedPage: ($, { seq }) =>
+      $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment }).run(paintAt($.props.feed, seq)),
+    ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
+    Painted: ($, paused) => $.evolve({ paused })
   },
   subscriptions: ({ props }) => [
     Subscription.make("devtools/frames", props.feed.changes.pipe(Stream.map(() => OverlayMessage.ReceivedFrames())))
@@ -912,12 +1036,14 @@ export const Overlay = Component.define({
     h.div.class("overlay").children(
       model.open
         ? Panel(h, model)
-        : h.button.class("launcher").attr("aria-label", "Open the Effect UI inspector").onClick(
-          OverlayMessage.ClickedOpen()
-        )
-          .children(
+        : h.div.class("launch").children(
+          h.button.class("launcher").attr("aria-label", "Open the Effect UI inspector").onClick(
+            OverlayMessage.ClickedOpen()
+          ).children(
             "Effect UI",
             h.span.class("launcher-count").children(String(sessionOf(h.props.feed)?.entries().length ?? 0))
-          )
+          ),
+          model.paused === null ? null : PausedBadge(h, model.paused.seq)
+        )
     )
 })

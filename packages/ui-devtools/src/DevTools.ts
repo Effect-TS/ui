@@ -8,12 +8,16 @@
  * its Model with what changed, its message, Commands and raw frame, and the
  * Layer builds, Subscriptions, mounts and Command runs of its instance.
  *
+ * Show on page paints the page as it was at the selected entry, beside the
+ * live tree, which keeps running hidden until Resume. See `layer`.
+ *
  * The overlay is an Effect UI component tree in its own document, mounted
  * with `MessageLog.noop`: it never records its own updates, the page's
  * styles don't reach it, and its input never reaches the app's
- * `HtmlSubscription.onDocument` or `onWindow` listeners. It reads Wire frames only, so a
- * `Schema.Redacted` value reaches it, and a copied frame, as the encoder's
- * placeholder. It keeps frames in memory only.
+ * `HtmlSubscription.onDocument` or `onWindow` listeners. It shows Wire
+ * frames only, so a `Schema.Redacted` value reaches it, and a copied frame,
+ * as the encoder's placeholder. It keeps frames, and the raw entries it
+ * paints the page from, in memory only.
  *
  * **Example** (Adding the overlay in development)
  *
@@ -74,6 +78,14 @@ export type Position = internal.Position
  * `MessageLog.makeEncoded`. The inspector keeps the last 1,000 entries of
  * each session. To send entries to another sink as well, combine both with
  * `MessageLog.fanout`.
+ *
+ * The Layer also provides `BrowserHost.Pausables`, so each root mounted
+ * with `BrowserHost.mount` or `mountEffect` under it can be paused. Show
+ * on page, on a selected entry, hides the root's container and paints an
+ * `inert` copy from each instance's state at that entry, folded from the
+ * raw entries the overlay keeps beside the frames. Resume removes it. While
+ * the copy is shown, the overlay's iframe is in the top layer, so the
+ * copy's dialogs and popovers never cover it.
  *
  * Browser only: building the Layer needs `document`.
  *
