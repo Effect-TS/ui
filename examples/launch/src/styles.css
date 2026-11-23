@@ -10,6 +10,9 @@
   --foreground: oklch(21% 0.006 285.885);
   --muted: oklch(96.7% 0.001 286.375);
   --muted-foreground: oklch(44.2% 0.017 285.786);
+  --subtle-foreground: oklch(70.5% 0.015 286.067);
+  --prose-foreground: oklch(37% 0.013 285.805);
+  --card: oklch(98.5% 0 0);
   --border: oklch(92% 0.004 286.32);
   --border-strong: oklch(87.1% 0.006 286.286);
   --ring: color-mix(in oklab, var(--foreground) 14%, transparent);
@@ -26,6 +29,9 @@
     --foreground: oklch(98.5% 0 0);
     --muted: oklch(21% 0.006 285.885);
     --muted-foreground: oklch(70.5% 0.015 286.067);
+    --subtle-foreground: oklch(55.2% 0.016 285.938);
+    --prose-foreground: oklch(87.1% 0.006 286.286);
+    --card: oklch(21% 0.006 285.885);
     --border: oklch(27.4% 0.006 286.033);
     --border-strong: oklch(37% 0.013 285.805);
     --ring: color-mix(in oklab, var(--foreground) 22%, transparent);
@@ -192,13 +198,19 @@ a {
   font-weight: 600;
 }
 
-.more {
+.more,
+.changes {
   display: grid;
   gap: 0.6em;
   margin-top: 1.1em;
   padding-left: 1.25em;
   list-style: disc;
   text-wrap: pretty;
+}
+
+.changes {
+  gap: 0.25em;
+  margin-top: 0.6em;
 }
 
 .more strong {
@@ -208,18 +220,21 @@ a {
 .article h2 + p,
 .article section h3 + p,
 .article p + p,
+.article ul + p,
 .article .wide + p,
 .article p + figure {
   margin-top: 1.1em;
 }
 
 .article p a,
+.changes a,
 .terms a {
   text-underline-offset: 3px;
   text-decoration-color: var(--border-strong);
 }
 
 .article p a:hover,
+.changes a:hover,
 .terms a:hover {
   text-decoration-color: currentColor;
 }
@@ -288,14 +303,6 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--muted);
-}
-
-.counter-page {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  min-height: 40px;
 }
 
 .counter {
@@ -433,27 +440,107 @@ a {
 
 .perf-all {
   margin-top: 1.6em;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.perf-all:hover {
+  border-color: var(--subtle-foreground);
+  background: var(--card);
 }
 
 .perf-all summary {
-  padding: 12px 16px;
-  font-weight: 560;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-radius: 6px;
+  list-style: none;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.375;
+  color: var(--prose-foreground);
   cursor: pointer;
 }
 
-.perf-all[open] summary {
-  border-bottom: 1px solid var(--border);
+.perf-all summary::-webkit-details-marker {
+  display: none;
+}
+
+.perf-all summary:hover {
+  color: var(--foreground);
+}
+
+.perf-all-chevron {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 8px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  transition: background-color 0.2s;
+}
+
+.perf-all:hover .perf-all-chevron {
+  background: var(--border-strong);
+}
+
+.perf-all-chevron::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition: transform 0.2s;
+}
+
+.perf-all[open] .perf-all-chevron::before {
+  transform: rotate(180deg);
+}
+
+.perf-all-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@supports selector(::details-content) {
+  .perf-all::details-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    content-visibility: hidden;
+    transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1), content-visibility 0.2s allow-discrete;
+  }
+
+  .perf-all[open]::details-content {
+    grid-template-rows: 1fr;
+    content-visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .perf-all::details-content,
+  .perf-all-chevron,
+  .perf-all-chevron::before {
+    transition: none;
+  }
 }
 
 .table-scroll {
   position: relative;
   overflow-x: auto;
-  padding: 16px;
+  padding: 4px 20px 20px;
+}
+
+.table-scroll:focus-visible {
+  outline-offset: -2px;
 }
 
 .table-scroll + .table-scroll {
+  padding-top: 20px;
   border-top: 1px solid var(--border);
 }
 
