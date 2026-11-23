@@ -117,7 +117,7 @@ const Node = <M>(h: View.H<M>, side: Side, highlighted: ReadonlyArray<Name>, nam
 const Panel = <M>(h: View.H<M>, side: Side, model: ArchitectureModel) => {
   const { sentence, status, highlighted, handled } = progress(side, model)
   return h.div.class("arch2-panel").attrs({ role: "group", "aria-label": side.title }).children(
-    h.h3.class("arch2-title").children(side.title),
+    h.p.class("arch2-title").children(side.title),
     h.p.class("arch2-subtitle").children(side.subtitle),
     h.div.class("arch2-tree").attr("aria-hidden", "true").children(
       Node(h, side, highlighted, "Root"),

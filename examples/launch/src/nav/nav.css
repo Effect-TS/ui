@@ -49,6 +49,10 @@
     cursor: pointer;
   }
 
+  .nav-toggle span {
+    white-space: nowrap;
+  }
+
   .nav-toggle:focus-visible {
     outline-offset: -2px;
   }
@@ -96,6 +100,10 @@
   .nav-link {
     padding: 10px 14px;
   }
+
+  .nav-nested {
+    padding-inline-start: 30px;
+  }
 }
 
 @media (width >= 1200px) {
@@ -124,6 +132,10 @@
 
   .nav-link {
     padding: 5px 0 5px 12px;
+  }
+
+  .nav-nested {
+    padding-inline-start: 26px;
   }
 }
 

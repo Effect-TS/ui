@@ -3,18 +3,18 @@ import { DomCommand, DomSubscription, Html } from "@effect/ui/html"
 import { Array, Option, Schema, Stream } from "effect"
 
 export const sections = [
-  { id: "terms", label: "Terms" },
-  { id: "architecture", label: "The architecture" },
-  { id: "define", label: "Components" },
-  { id: "split", label: "Separate functions" },
-  { id: "one-model", label: "One Model in Foldkit 0.x" },
-  { id: "components", label: "A Model per Component" },
-  { id: "queries", label: "Queries" },
-  { id: "testing", label: "Testing" },
-  { id: "performance", label: "Performance" },
-  { id: "more", label: "More that is new" },
-  { id: "carries-over", label: "What carries over" },
-  { id: "next", label: "What happens next" }
+  { id: "terms", label: "Terms", isNested: false },
+  { id: "architecture", label: "Change: Component-based architecture", isNested: false },
+  { id: "define", label: "A first Component", isNested: true },
+  { id: "split", label: "Separate functions", isNested: true },
+  { id: "one-model", label: "One Model in Foldkit 0.x", isNested: true },
+  { id: "components", label: "A Model per Component", isNested: true },
+  { id: "queries", label: "Change: Built-in queries", isNested: false },
+  { id: "testing", label: "Change: Play tests", isNested: false },
+  { id: "performance", label: "Change: Improved performance", isNested: false },
+  { id: "more", label: "More changes", isNested: false },
+  { id: "carries-over", label: "Unchanged: Values, features and guarantees", isNested: false },
+  { id: "next", label: "You can keep building on Foldkit 0.x", isNested: false }
 ] as const
 
 const ids = sections.map(({ id }) => id)
@@ -92,9 +92,9 @@ export const Nav = Component.define({
         current && h.span.class("nav-current").children(current.label)
       ),
       h.ol.id(list).class("nav-list").children(
-        ...sections.map(({ id, label }) =>
+        ...sections.map(({ id, label, isNested }) =>
           h.li.key(id).children(
-            h.a.class("nav-link").attrs({
+            h.a.class("nav-link", isNested && "nav-nested").attrs({
               href: `#${id}`,
               "aria-current": id === model.current ? "location" : undefined
             }).onClick(NavMessage.ClickedSection()).children(label)
