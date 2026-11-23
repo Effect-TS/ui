@@ -1,6 +1,6 @@
+import { fileURLToPath } from "node:url"
 import { chromium } from "playwright"
 import { createServer } from "vite"
-import { fileURLToPath } from "node:url"
 
 const at = process.argv.indexOf("--executable")
 const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM
@@ -169,8 +169,8 @@ const walkthrough = async (width, height) => {
   const at = width + "x" + height + ": "
   const context = await browser.newContext({ viewport: { width, height } })
   const { frame, page } = await setup(context, "?capture=interrupted")
-  await frame.locator('[data-instance="Editor[n2]"]').click()
-  await frame.locator('.row-button[aria-label$="Update ClickedSave"]').last().click()
+  await frame.locator("[data-instance=\"Editor[n2]\"]").click()
+  await frame.locator(".row-button[aria-label$=\"Update ClickedSave\"]").last().click()
 
   let seen = await readable(frame, ".ehead .headline")
   expect(seen.ok && seen.text === "ClickedSave", at + "the selected entry's title is readable", seen)

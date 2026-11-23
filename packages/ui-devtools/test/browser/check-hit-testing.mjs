@@ -1,6 +1,6 @@
+import { fileURLToPath } from "node:url"
 import { chromium } from "playwright"
 import { createServer } from "vite"
-import { fileURLToPath } from "node:url"
 
 const at = process.argv.indexOf("--executable")
 const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM

@@ -2551,13 +2551,13 @@ describe("Runtime", () => {
         const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Number, message: Message }).make(
           {
             init: ($) => $.set(0).run(Quit.make().pipe(Command.map(() => Message.Saved()))),
-            update: (n, message, $) =>
+            update: ($, message) =>
               message._tag === "Save"
-                ? $.set(n + 1).run(Save.make().pipe(Command.map(() => Message.Saved())))
+                ? $.set($.model + 1).run(Save.make().pipe(Command.map(() => Message.Saved())))
                 : message._tag === "Stop"
-                ? $.set(n).run(Command.interrupt(Save))
-                : n,
-            view: (n, h) => h.text(String(n))
+                ? $.set($.model).run(Command.interrupt(Save))
+                : $.model,
+            view: (h, n) => h.text(String(n))
           }
         )
         const root = yield* TestHost.mount(Editor, {})
@@ -2649,7 +2649,7 @@ describe("Runtime", () => {
           }).make({
             init: () => state,
             update: (_, message) => message.state,
-            view: (_, h) => h.text("vault")
+            view: (h) => h.text("vault")
           })
           const root = yield* TestHost.mount(Vault, state)
           root.send(Message.Set({
@@ -2713,8 +2713,8 @@ describe("Runtime", () => {
                 done
               )
             ),
-          update: (model) => model,
-          view: (_, h) => h.text("holder")
+          update: ($) => $.model,
+          view: (h) => h.text("holder")
         })
         const Middle = Component.define({ name: "Middle", scoped: false, model: Schema.Null, message: Message }).make({
           init: ($) =>
@@ -2722,13 +2722,13 @@ describe("Runtime", () => {
               Command.make("test/Quit", { args: {} }, () => Effect.andThen(Deferred.await(quit), Effect.interrupt))
                 .make().pipe(done)
             ),
-          update: (model) => model,
-          view: (_, h) => h.el("div", Holder(h, { key: "h", props: {} }))
+          update: ($) => $.model,
+          view: (h) => h.el("div", Holder(h, { key: "h", props: {} }))
         })
         const Top = Component.define({ name: "Top", scoped: false, model: Schema.Boolean, message: Message }).make({
           init: () => true,
-          update: (open, message) => message._tag === "Close" ? false : open,
-          view: (open, h) => h.el("div", open ? Middle(h, { key: "m", props: {} }) : null)
+          update: ($, message) => message._tag === "Close" ? false : $.model,
+          view: (h, open) => h.el("div", open ? Middle(h, { key: "m", props: {} }) : null)
         })
         const root = yield* TestHost.mount(Top, {})
         yield* TestHost.settle
@@ -2756,9 +2756,11 @@ describe("Runtime", () => {
         const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Number, message: Message }).make(
           {
             init: () => 0,
-            update: (n, message, $) =>
-              message._tag === "Save" ? $.set(n + 1).run(Save.make({ n }).pipe(Command.map(() => Message.Saved()))) : n,
-            view: (n, h) => h.text(String(n))
+            update: ($, message) =>
+              message._tag === "Save"
+                ? $.set($.model + 1).run(Save.make({ n: $.model }).pipe(Command.map(() => Message.Saved())))
+                : $.model,
+            view: (h, n) => h.text(String(n))
           }
         )
         const root = yield* TestHost.mount(Editor, {})
@@ -2796,8 +2798,8 @@ describe("Runtime", () => {
           const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Message }).make(
             {
               init: ($) => $.set(null).run(command),
-              update: (model) => model,
-              view: (_, h) => h.text("editor")
+              update: ($) => $.model,
+              view: (h) => h.text("editor")
             }
           )
           const root = yield* TestHost.mount(Editor, {})

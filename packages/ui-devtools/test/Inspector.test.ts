@@ -202,8 +202,8 @@ describe("Inspector", () => {
       const save = (id: string) => Save.make({ id }).pipe(Command.map(() => Message.Saved()))
       const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Message }).make({
         init: ($) => $.set(null).run(save("a")).run(save("b")),
-        update: (model) => model,
-        view: (_, h) => h.text("editor")
+        update: ($) => $.model,
+        view: (h) => h.text("editor")
       })
       const root = yield* TestHost.mount(Editor, {})
       yield* Effect.exit(TestHost.settle)

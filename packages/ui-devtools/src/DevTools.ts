@@ -11,7 +11,7 @@
  * The overlay is an Effect UI component tree in its own document, mounted
  * with `MessageLog.noop`: it never records its own updates, the page's
  * styles don't reach it, and its input never reaches the app's
- * `DomSubscription.onDocument` or `onWindow` listeners. It reads Wire frames only, so a
+ * `HtmlSubscription.onDocument` or `onWindow` listeners. It reads Wire frames only, so a
  * `Schema.Redacted` value reaches it, and a copied frame, as the encoder's
  * placeholder. It keeps frames in memory only.
  *

@@ -895,38 +895,38 @@ export const Overlay = Component.define({
     pane: "timeline"
   }),
   update: {
-    ReceivedFrames: (model, _message, $) =>
+    ReceivedFrames: ($) =>
       $.evolve({
         revision: (revision) => revision + 1,
-        ...(model.reveal === null ? {} : { reveal: null, pinned: model.atStart, pins: (pins) => pins + 1 })
+        ...($.model.reveal === null ? {} : { reveal: null, pinned: $.model.atStart, pins: (pins) => pins + 1 })
       }),
-    ClickedOpen: (_model, _message, $) =>
+    ClickedOpen: ($) =>
       $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: (pins) => pins + 1, pane: "timeline" }),
-    ClickedClose: (_model, _message, $) => $.evolve({ open: false }),
-    ClickedEntry: (model, { seq }, $) =>
-      $.evolve({ selected: seq, pane: "entry", ...(model.pinned ? { pins: (pins: number) => pins + 1 } : {}) }),
-    ClickedLink: (_model, { seq }, $) =>
+    ClickedClose: ($) => $.evolve({ open: false }),
+    ClickedEntry: ($, { seq }) =>
+      $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: (pins: number) => pins + 1 } : {}) }),
+    ClickedLink: ($, { seq }) =>
       $.evolve({ selected: seq, filter: "all", instance: null, pinned: false, reveal: seq, pins: (pins) => pins + 1 }),
-    ClickedInstance: (model, { instance }, $) => $.evolve({ instance: model.instance === instance ? null : instance }),
-    ClickedFilter: (_model, { filter }, $) => $.evolve({ filter }),
-    ClickedFollowLatest: (_model, _message, $) =>
+    ClickedInstance: ($, { instance }) => $.evolve({ instance: $.model.instance === instance ? null : instance }),
+    ClickedFilter: ($, { filter }) => $.evolve({ filter }),
+    ClickedFollowLatest: ($) =>
       $.evolve({ selected: null, pinned: true, reveal: null, pins: (pins) => pins + 1, pane: "timeline" }),
-    ClickedBack: (_model, _message, $) => $.evolve({ pane: "timeline" }),
-    ScrolledTimeline: (model, { atStart }, $) =>
+    ClickedBack: ($) => $.evolve({ pane: "timeline" }),
+    ScrolledTimeline: ($, { atStart }) =>
       atStart
-        ? model.reveal !== null || model.pinned
+        ? $.model.reveal !== null || $.model.pinned
           ? $.evolve({ atStart })
           : $.evolve({ atStart, pinned: true, pins: (pins) => pins + 1 })
         : $.evolve({ atStart, pinned: false, reveal: null }),
-    SelectedTab: (_model, { value }, $) => $.evolve({ tab: value }),
-    ClickedCopyFrame: (_model, { seq, text }, $) => $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
-    SucceededCopyFrame: (_model, { seq }, $) => $.evolve({ copied: seq }),
-    FailedCopyFrame: (_model, _message, $) => $.evolve({ copied: null })
+    SelectedTab: ($, { value }) => $.evolve({ tab: value }),
+    ClickedCopyFrame: ($, { seq, text }) => $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
+    SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
+    FailedCopyFrame: ($) => $.evolve({ copied: null })
   },
-  subscriptions: (_model, props) => [
+  subscriptions: ({ props }) => [
     Subscription.make("devtools/frames", props.feed.changes.pipe(Stream.map(() => OverlayMessage.ReceivedFrames())))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("overlay").children(
       model.open
         ? Panel(h, model)

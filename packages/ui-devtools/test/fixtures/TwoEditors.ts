@@ -1,5 +1,5 @@
 import { Command, Component, MessageLog, Mount, UiSchema } from "@effect/ui"
-import { BrowserHost, DomSubscription, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Effect, Redacted, Schema } from "effect"
 
@@ -54,22 +54,22 @@ const EditorNoDeps = Component.define({
 }).make({
   init: () => ({ draft: "", saved: "", status: "Clean" as const, viewers: 1, linkPickerOpen: false }),
   update: {
-    UpdatedDraft: (_model, { text }, $) => $.evolve({ draft: text, status: "Dirty" as const }),
-    ClickedSave: (model, _message, $) =>
+    UpdatedDraft: ($, { text }) => $.evolve({ draft: text, status: "Dirty" as const }),
+    ClickedSave: ($) =>
       $.evolve({ status: "Saving" as const }).run(
-        SaveNote.make({ noteId: $.props.noteId, text: model.draft, token: $.props.token })
+        SaveNote.make({ noteId: $.props.noteId, text: $.model.draft, token: $.props.token })
       ),
-    SucceededSaveNote: (model, _message, $) => $.evolve({ saved: model.draft, status: "Saved" as const }),
-    FailedSaveNote: (_model, _message, $) => $.evolve({ status: "Dirty" as const }),
-    PressedEscape: (_model, _message, $) =>
+    SucceededSaveNote: ($) => $.evolve({ saved: $.model.draft, status: "Saved" as const }),
+    FailedSaveNote: ($) => $.evolve({ status: "Dirty" as const }),
+    PressedEscape: ($) =>
       $.evolve({ linkPickerOpen: false }).run(Command.interrupt(SaveNote, { noteId: $.props.noteId })),
-    ReceivedPresence: (_model, { viewers }, $) => $.evolve({ viewers }),
-    CompletedFocusBody: (model) => model
+    ReceivedPresence: ($, { viewers }) => $.evolve({ viewers }),
+    CompletedFocusBody: ($) => $.model
   },
   subscriptions: () => [
-    DomSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? EditorMessage.PressedEscape() : undefined)
+    HtmlSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? EditorMessage.PressedEscape() : undefined)
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.section.attr("aria-label", "Editor " + h.props.noteId).children(
       h.textarea.attr("aria-label", "Body " + h.props.noteId).value(model.draft)
         .onInput(({ value }) => EditorMessage.UpdatedDraft({ text: value }))
@@ -90,9 +90,9 @@ const Workspace = Component.define({
 }).make({
   init: () => ({ open: ["n1", "n2"] }),
   update: {
-    ClickedClose: (model, { noteId }, $) => $.evolve({ open: model.open.filter((id) => id !== noteId) })
+    ClickedClose: ($, { noteId }) => $.evolve({ open: $.model.open.filter((id) => id !== noteId) })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.main(
       model.open.map((noteId) =>
         h.div.key(noteId).children(

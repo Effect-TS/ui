@@ -278,8 +278,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: { ClickedUpload: (_model, _message, $) => $.run(Upload.make()) },
-        view: (_model, h) => h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
+        update: { ClickedUpload: ($) => $.run(Upload.make()) },
+        view: (h) => h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
       })
       const Page = Component.define({
         name: "Page",
@@ -289,8 +289,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) => h.main(Uploader(h, { key: "uploader", props: {} }))
+        update: ($) => $.model,
+        view: (h) => h.main(Uploader(h, { key: "uploader", props: {} }))
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
@@ -336,11 +336,11 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: ($) => $.set(null).run(save("a")).run(save("b")),
         update: {
-          Escaped: (model, _message, $) =>
-            $.set(model).run(Command.interrupt(Save, { id: "b" })).run(Command.interrupt(Save, { id: "a" })),
-          Saved: (model) => model
+          Escaped: ($) =>
+            $.set($.model).run(Command.interrupt(Save, { id: "b" })).run(Command.interrupt(Save, { id: "a" })),
+          Saved: ($) => $.model
         },
-        view: (_, h) => h.button.onClick(Message.Escaped()).children("Escape")
+        view: (h) => h.button.onClick(Message.Escaped()).children("Escape")
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
