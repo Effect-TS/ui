@@ -172,46 +172,22 @@ describe("view transitions", { concurrent: false }, () => {
       expect(updates.map((entry) => entry.viewTransition)).toEqual([["layout-change"], undefined, undefined])
     }).pipe(Effect.scoped))
 
-  it.effect("a route change that a navigation delivers within the flush still animates", () =>
-    Effect.gen(function*() {
-      const transitions = yield* fakeTransitions()
-      const { click, shown } = yield* start
-      click("Open")
-      yield* tick
-      expect(transitions.started.map((started) => started.types)).toEqual([["to-detail"]])
-      expect(shown()).toBe("Grid grid ")
-      transitions.started[0]!.update()
-      expect(shown()).toBe("Detail grid ")
-    }).pipe(Effect.scoped))
-
   it.effect("without the API, or with reduced motion, the update commits at once", () =>
     Effect.gen(function*() {
       for (const setup of [Effect.void, Effect.asVoid(fakeTransitions({ reducedMotion: true }))]) {
         yield* Effect.gen(function*() {
           yield* setup
-          const { click, shown } = yield* start
+          const { click, commits, shown } = yield* start
+          const before = commits()
           click("List")
           yield* tick
           expect(shown()).toBe("Grid list ")
+          expect(commits()).toBe(before + 1)
         }).pipe(Effect.scoped)
       }
     }))
 
-  it.effect("closing the root skips its transition, and the held flush never runs", () =>
-    Effect.gen(function*() {
-      const transitions = yield* fakeTransitions()
-      const scope = yield* Scope.make()
-      const { click, log } = yield* Scope.provide(start, scope)
-      click("List")
-      yield* tick
-      yield* Scope.close(scope, Exit.void)
-      expect(transitions.skipped()).toBe(1)
-      const logged = log.entries().length
-      transitions.started[0]!.update()
-      expect(log.entries()).toHaveLength(logged)
-    }).pipe(Effect.scoped))
-
-  it.effect("a flush queued before the hand-off commits nothing once the held flush has", () =>
+  it.effect("a mid-flush route transition commits once across callback, freeze, and close", () =>
     Effect.gen(function*() {
       const transitions = yield* fakeTransitions()
       for (const consume of ["callback", "freeze", "close"] as const) {
@@ -219,16 +195,30 @@ describe("view transitions", { concurrent: false }, () => {
           const scope = yield* Scope.make()
           const app = yield* Scope.provide(held, scope)
           const before = transitions.started.length
+          const skippedBefore = transitions.skipped()
           app.click("Open")
           while (transitions.started.length === before) {
             if (app.tasks.length > 0) app.tasks.shift()!()
             else yield* tick
           }
+          const started = transitions.started.at(-1)!
+          expect(started.types).toEqual(["to-detail"])
+          expect(app.shown()).toBe("Grid grid ")
           const queued = app.tasks.length
           const commits = app.commits()
-          if (consume === "callback") transitions.started.at(-1)!.update()
-          else if (consume === "freeze") app.freeze()
-          else yield* Scope.close(scope, Exit.void)
+          if (consume === "callback") {
+            started.update()
+            expect(app.shown()).toBe("Detail grid ")
+          } else if (consume === "freeze") {
+            app.freeze()
+            expect(app.shown()).toBe("Detail grid ")
+          } else {
+            yield* Scope.close(scope, Exit.void)
+            expect(transitions.skipped()).toBe(skippedBefore + 1)
+            const logged = app.log.entries().length
+            started.update()
+            expect(app.log.entries()).toHaveLength(logged)
+          }
           app.runTasks()
           expect({ consume, queued: queued > 0, commits: app.commits() }).toEqual({
             consume,
