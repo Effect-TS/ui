@@ -55,9 +55,9 @@ export interface Outside {
  * **Details**
  *
  * - A Command run: `"ended"` for `CommandEnded`, `"server"` for
- *   `CommandDropped`, and the entry's own `reason` for
- *   `CommandInterrupted`: `"interrupt"`, `"switch"`, `"unmount"`,
- *   `"layer"` or `"self"`.
+ *   `CommandDropped`, `"failed"` for a `Failed` whose `issued` is the
+ *   run's, and the entry's own `reason` for `CommandInterrupted`:
+ *   `"interrupt"`, `"switch"`, `"unmount"`, `"layer"` or `"self"`.
  * - A mount: `MountEnded`'s `reason`, `"completed"`, `"closed"` or
  *   `"failed"`.
  * - A Layer build: `"ready"` for `LayerReady`, `"failed"` for
@@ -102,7 +102,9 @@ export type Reason =
  *   record begins when an `Update` or a `Mounted` issues the Command, and
  *   `start` is its `CommandStarted`. A run without `start` hasn't begun
  *   its work: it's queued in its group, it waits for its instance's Layer,
- *   or it was stopped first, and then it has an `end` and no `start`.
+ *   or it was stopped first, and then it has an `end` and no `start`. An
+ *   entry ends the run its `issued` names and no other: a `Failed` without
+ *   `issued` ends none, whatever Command it names.
  *
  * A record is made from the entry that begins it. An entry about something
  * the session never saw begin makes none, so a session that was given the
@@ -171,7 +173,7 @@ export interface Instance {
  * - `"causedBy"`: the entry's `causedBy`.
  * - `"issued"`: the `issued` of a `CommandStarted`, `CommandAwaiting`,
  *   `CommandEnded`, `CommandInterrupted`, `CommandDropped` or
- *   `SendDropped`. `index` is its index.
+ *   `SendDropped`, and of a `Failed` that has one. `index` is its index.
  * - `"source"`: what sent the message of an `Update`, or of a `Failed`
  *   whose `update` threw. A Command's result names the entry that issued the
  *   run, with its `index`. A Subscription's message names the
@@ -438,6 +440,12 @@ const makeSession = (id: string, size: number) => {
     push(ended, seq, record)
   }
 
+  const end = (seq: number, issued: MessageLog.Issued, reason: Reason) => {
+    link(seq, "issued", issued.seq, issued.index)
+    const run = runs.get(runKey(issued))
+    if (run !== undefined && run.end === undefined) close(run, seq, reason)
+  }
+
   const linkSource = (inst: InstanceState, from: number, source: Source) => {
     switch (source._tag) {
       case "Command":
@@ -490,8 +498,11 @@ const makeSession = (id: string, size: number) => {
         }
         return
       }
-      case "Failed":
-        return entry.update === undefined ? undefined : linkSource(inst, seq, entry.update.source)
+      case "Failed": {
+        if (entry.update !== undefined) linkSource(inst, seq, entry.update.source)
+        if (entry.issued !== undefined) end(seq, entry.issued, "failed")
+        return
+      }
       case "Unmounted": {
         inst.info.unmounted = seq
         if (inst.layer !== undefined) close(inst.layer, seq, "unmount")
@@ -550,14 +561,8 @@ const makeSession = (id: string, size: number) => {
         return link(seq, "issued", entry.issued.seq, entry.issued.index)
       case "CommandEnded":
       case "CommandInterrupted":
-      case "CommandDropped": {
-        link(seq, "issued", entry.issued.seq, entry.issued.index)
-        const run = runs.get(runKey(entry.issued))
-        if (run !== undefined && run.end === undefined) {
-          close(run, seq, entry._tag === "CommandEnded" ? "ended" : entry.reason)
-        }
-        return
-      }
+      case "CommandDropped":
+        return end(seq, entry.issued, entry._tag === "CommandEnded" ? "ended" : entry.reason)
     }
   }
 

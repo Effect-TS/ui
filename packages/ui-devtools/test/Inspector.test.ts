@@ -1,7 +1,9 @@
+import { Command, Component, UiSchema } from "@effect/ui"
 import { Inspector } from "@effect/ui-devtools"
 import * as MessageLog from "@effect/ui/MessageLog"
+import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import * as fs from "node:fs"
 
 type Entry = MessageLog.WireEntry
@@ -188,6 +190,56 @@ describe("Inspector", () => {
     )
     assert.strictEqual(session.run({ seq: 0, index: 0 }), undefined)
   })
+
+  it.effect("ends only the run a Failed names, of two running the same Command", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Saved: {} })
+      const Save = Command.make(
+        "test/Save",
+        { args: { id: Schema.String } },
+        ({ id }) => id === "b" ? Effect.die("boom") : Effect.never
+      )
+      const save = (id: string) => Save.make({ id }).pipe(Command.map(() => Message.Saved()))
+      const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Message }).make({
+        init: ($) => $.set(null).run(save("a")).run(save("b")),
+        update: (model) => model,
+        view: (_, h) => h.text("editor")
+      })
+      const root = yield* TestHost.mount(Editor, {})
+      yield* Effect.exit(TestHost.settle)
+      const encoder = MessageLog.makeEncoder()
+      const logged = root.log().map((entry) => encoder.encode(entry))
+      const failed = logged.find((frame) => frame._tag === "Failed")!
+      const before = logged.filter((frame) => frame.seq < failed.seq)
+      const mounted = before.find((frame) => frame._tag === "Mounted")!
+      const linked: Inspector.Link = { rel: "issued", seq: failed.seq, index: 1 }
+      const runs = (session: Inspector.Session) =>
+        session.records().map((record) => [record.name, record.issued?.index, record.end, record.reason])
+
+      const inspector = Inspector.make()
+      inspector.ingest([...before, failed])
+      const session = inspector.sessions()[0]
+      assert.deepStrictEqual(runs(session), [
+        ["test/Save", 0, undefined, undefined],
+        ["test/Save", 1, failed.seq, "failed"]
+      ])
+      assert.deepInclude(session.back(failed.seq), { rel: "issued", seq: mounted.seq, index: 1 })
+      assert.deepInclude(session.forward(mounted.seq), linked)
+
+      inspector.ingest(logged)
+      const other = session.run({ seq: mounted.seq, index: 0 })!
+      assert.deepStrictEqual([session.resolve(other.end!)._tag, other.reason], ["CommandInterrupted", "unmount"])
+      assert.strictEqual(session.run({ seq: mounted.seq, index: 1 })!.end, failed.seq)
+
+      const { issued: _, ...unlinked } = failed as Extract<Entry, { readonly _tag: "Failed" }>
+      const unnamed = Inspector.make()
+      unnamed.ingest([...before, unlinked])
+      assert.deepStrictEqual(runs(unnamed.sessions()[0]), [
+        ["test/Save", 0, undefined, undefined],
+        ["test/Save", 1, undefined, undefined]
+      ])
+      assert.notDeepInclude(unnamed.sessions()[0].forward(mounted.seq), linked)
+    }).pipe(Effect.provide(TestHost.layer())))
 
   it("drops entries past its size and keeps what is still open", () => {
     const { entries, inspector, instanceOf, session } = load("interrupted", 6)
