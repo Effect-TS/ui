@@ -129,18 +129,18 @@ export const Menu = Component.define({
   elements: Html
 }).make({
   init: ($) => ({ ...$.props, shown: true, log: [] }),
-  update: (model, message) =>
+  update: ($, message) =>
     MenuMessage.match(message, {
-      Set: ({ open }) => ({ ...model, open }),
+      Set: ({ open }) => ({ ...$.model, open }),
       Toggled: ({ newState, oldState, open }) => ({
-        ...model,
-        open: model.follow ? open : model.open,
-        log: [...model.log, `${oldState}->${newState}`]
+        ...$.model,
+        open: $.model.follow ? open : $.model.open,
+        log: [...$.model.log, `${oldState}->${newState}`]
       }),
-      Mode: ({ mode }) => ({ ...model, mode }),
-      Remove: () => ({ ...model, shown: false })
+      Mode: ({ mode }) => ({ ...$.model, mode }),
+      Remove: () => ({ ...$.model, shown: false })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       model.shown && h.div.attrs({ "aria-label": "Menu", role: "menu" })
         .popover(model.mode, model.open)
@@ -158,8 +158,8 @@ export const ModalMenu = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.dialog
       .attr("aria-label", "Settings").modal(true).children(
         h.div.attr("aria-label", "Menu").popover("auto", true).children(h.button("Rename"))
@@ -175,8 +175,8 @@ const Popup = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.div.attr("aria-label", h.props.label).popover(h.props.mode, true).children(h.button(h.props.label))
+  update: ($) => $.model,
+  view: (h) => h.div.attr("aria-label", h.props.label).popover(h.props.mode, true).children(h.button(h.props.label))
 })
 
 /**
@@ -193,7 +193,7 @@ export const Rows = Component.define({
 }).make({
   init: () => false,
   update: (_, reversed) => reversed,
-  view: (reversed, h) => {
+  view: (h, reversed) => {
     const rows = ["A", "B"].map((label) =>
       h.div.key(label).children(Popup(h, { key: label, props: { label, mode: h.props.mode } }))
     )

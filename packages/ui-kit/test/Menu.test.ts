@@ -153,16 +153,16 @@ const Page = Component.define({
 }).make({
   init: ($) => ({ route: $.props.route, open: false }),
   update: {
-    ChangedRoute: (_model, { route }, $) => $.evolve({ route }),
-    RequestedOpen: (_model, _message, $) => $.evolve({ open: true }),
-    Left: (model, _message, $) =>
-      $.set(model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
-    Navigated: (model) => model
+    ChangedRoute: ($, { route }) => $.evolve({ route }),
+    RequestedOpen: ($) => $.evolve({ open: true }),
+    Left: ($) =>
+      $.set($.model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PageMessage.Navigated()))),
+    Navigated: ($) => $.model
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(PageRoute, model.route, (route) => PageMessage.ChangedRoute({ route }))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.a.onClick(PageMessage.Left()).children("Away"),
       model.route._tag === "Edit"

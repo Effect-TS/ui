@@ -17,8 +17,8 @@ it.effect("a range slider in a field is named by the legend, described, and focu
     })
       .make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.div(
             Field(h, {
               props: { invalid: true, described: true },

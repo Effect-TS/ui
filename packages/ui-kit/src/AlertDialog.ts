@@ -84,11 +84,11 @@
  * }).make({
  *   init: () => ({ confirming: true }),
  *   update: {
- *     RequestedOpenConfirm: (_model, _message, $) => $.evolve({ confirming: true }),
- *     RequestedCloseConfirm: (_model, _message, $) => $.evolve({ confirming: false }),
- *     ClickedDiscard: (_model, _message, $) => $.evolve({ confirming: false })
+ *     RequestedOpenConfirm: ($) => $.evolve({ confirming: true }),
+ *     RequestedCloseConfirm: ($) => $.evolve({ confirming: false }),
+ *     ClickedDiscard: ($) => $.evolve({ confirming: false })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     AlertDialog(h, {
  *       props: { open: model.confirming },
  *       onEmit: {

@@ -31,7 +31,7 @@ export const NotesIndexNoDeps = Component.define({
   restore: (model) => UiStruct.evolve(model, { over: false })
 }).make({
   init: () => ({ pinned: [], over: false }),
-  update: (_model, message, $) =>
+  update: ($, message) =>
     Match.valueTags(message, {
       PinnedNote: ({ id }) => $.evolve({ pinned: (pinned) => pinned.includes(id) ? pinned : [...pinned, id] }),
       DraggedIntoPins: () => $.evolve({ over: true }),
@@ -40,7 +40,7 @@ export const NotesIndexNoDeps = Component.define({
   // Every mounted instance contributes head entries. They merge in document
   // order, and the later entry wins.
   head: () => [Head.title("All notes"), HtmlHead.meta({ name: "description", content: "Every note you wrote" })],
-  view: (model, h) =>
+  view: (h, model) =>
     AsyncResult.match(h.queries.notes, {
       onInitial: () => h.p("Loading notes…"),
       onFailure: () => h.p("The notes couldn't be loaded."),

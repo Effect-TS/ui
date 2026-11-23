@@ -439,8 +439,8 @@ describe("OTPField", () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           OTPField(h, {
             key: "otp",
             props: { value: Redacted.make(secret), length: 6, name: "code" },

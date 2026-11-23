@@ -33,8 +33,8 @@ describe("Autocomplete", () => {
   it("each part returns the builder it was given, and clear can return undefined", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Autocomplete(h, {
           key: "a",
           props: { open: false, value: "", items },
@@ -60,8 +60,8 @@ describe("Autocomplete", () => {
   it("draws its input with a field's control", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           props: {},
           view: (field) =>
@@ -77,8 +77,8 @@ describe("Autocomplete", () => {
   it("requires open, value and items, and has no selection props", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         Autocomplete(h, {
           key: "a",
           // @ts-expect-error Property 'value' is missing

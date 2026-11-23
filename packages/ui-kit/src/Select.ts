@@ -152,11 +152,11 @@
  * }).make({
  *   init: () => ({ open: false, theme: "system" }),
  *   update: {
- *     RequestedOpenTheme: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseTheme: (_model, _message, $) => $.evolve({ open: false }),
- *     PickedTheme: (_model, { theme }, $) => $.evolve({ theme })
+ *     RequestedOpenTheme: ($) => $.evolve({ open: true }),
+ *     RequestedCloseTheme: ($) => $.evolve({ open: false }),
+ *     PickedTheme: ($, { theme }) => $.evolve({ theme })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Field(h, {
  *       props: { filled: true },
  *       view: (field) =>
@@ -603,8 +603,7 @@ const typeKey = (model: SelectModel, $: SelectUpdate, key: string) => {
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = (_model: SelectModel, _message: unknown, $: SelectUpdate) =>
-  $.run(DomCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+const focusTrigger = ($: SelectUpdate) => $.run(DomCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 
@@ -1166,83 +1165,83 @@ export const Select = Component.define({
     releaseUnselected: false
   }),
   update: {
-    PressedTrigger: (model, { pointerType }, $) => toggle(model, $, methodOf(pointerType)),
-    ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
-    ClickedTrigger: (model, { pointerType }, $) => toggle(model, $, methodOf(pointerType)),
-    PressedTriggerKey: (model, { key }, $) => {
+    PressedTrigger: ($, { pointerType }) => toggle($.model, $, methodOf(pointerType)),
+    ReleasedTrigger: ($) => $.evolve({ pressing: false }),
+    ClickedTrigger: ($, { pointerType }) => toggle($.model, $, methodOf(pointerType)),
+    PressedTriggerKey: ($, { key }) => {
       const props = $.props
-      if (props.disabled === true) return model
+      if (props.disabled === true) return $.model
       if (key === "ArrowDown" || key === "ArrowUp") {
-        return props.open ? model : open($, "list-navigation", "keyboard", key)
+        return props.open ? $.model : open($, "list-navigation", "keyboard", key)
       }
-      if (!props.open && (props.readOnly === true || props.multiple === true)) return model
-      return typeKey(model, $, key)
+      if (!props.open && (props.readOnly === true || props.multiple === true)) return $.model
+      return typeKey($.model, $, key)
     },
     ClickedLabel: focusTrigger,
     FocusedInput: focusTrigger,
-    Autofilled: (model, { value }, $) => {
+    Autofilled: ($, { value }) => {
       const props = $.props
-      if (props.disabled === true || props.readOnly === true || props.multiple === true) return model
+      if (props.disabled === true || props.readOnly === true || props.multiple === true) return $.model
       const item = autofillMatch(props.items, value)
       return !available(item) || valuesOf(props).includes(item.value)
-        ? model
+        ? $.model
         : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
     },
-    PressedPopupKey: (model, { key }, $) => {
+    PressedPopupKey: ($, { key }) => {
       const props = $.props
-      if (!props.open) return model
+      if (!props.open) return $.model
       const last = props.items.length - 1
-      const at = indexOf(props, model.active)
+      const at = indexOf(props, $.model.active)
       switch (key) {
         case "ArrowDown":
-          return highlight(model, props, stepped(at, last, 1, "none"))
+          return highlight($.model, props, stepped(at, last, 1, "none"))
         case "ArrowUp":
-          return highlight(model, props, stepped(at, last, -1, "none"))
+          return highlight($.model, props, stepped(at, last, -1, "none"))
         case "Home":
-          return highlight(model, props, 0)
+          return highlight($.model, props, 0)
         case "End":
-          return highlight(model, props, last)
+          return highlight($.model, props, last)
         case "Enter":
-          return model.active === null ? model : pick(model, $, model.active, "keyboard")
+          return $.model.active === null ? $.model : pick($.model, $, $.model.active, "keyboard")
         case "Escape":
-          return dismiss(model, $, "escape-key", "keyboard")
+          return dismiss($.model, $, "escape-key", "keyboard")
         case "Tab":
-          return dismiss(model, $, "focus-out", "keyboard")
+          return dismiss($.model, $, "focus-out", "keyboard")
         case " ":
-          return typing(model) ? typeKey(model, $, key) : $.evolve({ spaceDown: true })
+          return typing($.model) ? typeKey($.model, $, key) : $.evolve({ spaceDown: true })
         default:
-          return typeKey(model, $, key)
+          return typeKey($.model, $, key)
       }
     },
-    ReleasedSpace: (model, _message, $) => {
-      if (!model.spaceDown) return model
-      const next = UiStruct.evolve(model, { spaceDown: false })
-      return $.props.open && model.active !== null ? pick(next, $, model.active, "keyboard") : next
+    ReleasedSpace: ($) => {
+      if (!$.model.spaceDown) return $.model
+      const next = UiStruct.evolve($.model, { spaceDown: false })
+      return $.props.open && $.model.active !== null ? pick(next, $, $.model.active, "keyboard") : next
     },
-    EnteredItem: (model, { value }) => hover(model, value),
-    LeftItem: (model) => hover(model, null),
-    PressedItem: (_model, _message, $) => $.evolve({ pressedItem: true }),
-    ReleasedItem: (model, { pointerType, value }, $) => {
-      if (model.pressedItem || !$.props.open) return model
+    EnteredItem: ($, { value }) => hover($.model, value),
+    LeftItem: ($) => hover($.model, null),
+    PressedItem: ($) => $.evolve({ pressedItem: true }),
+    ReleasedItem: ($, { pointerType, value }) => {
+      if ($.model.pressedItem || !$.props.open) return $.model
       const selected = valuesOf($.props).includes(value)
-      if (selected ? !model.releaseSelected : !model.releaseUnselected) return model
-      return pick(model, $, value, methodOf(pointerType))
+      if (selected ? !$.model.releaseSelected : !$.model.releaseUnselected) return $.model
+      return pick($.model, $, value, methodOf(pointerType))
     },
-    ClickedItem: (model, { pointerType, value }, $) => {
-      const next = UiStruct.evolve(model, { pressedItem: false })
+    ClickedItem: ($, { pointerType, value }) => {
+      const next = UiStruct.evolve($.model, { pressedItem: false })
       if (!$.props.open) return next
-      return pointerType === "touch" || pointerType === "" || model.pressedItem
+      return pointerType === "touch" || pointerType === "" || $.model.pressedItem
         ? pick(next, $, value, methodOf(pointerType))
         : next
     },
-    CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
-    ShowedPopup: (_model, _message, $) =>
+    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    ShowedPopup: ($) =>
       $.evolve($.props.open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
-      if (open !== $.props.open) return model
+    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
+      if (open !== $.props.open) return $.model
       if (open) return $.emit(SelectEvents.Settled({ open }))
-      return model.mounted && $.props.holdExit !== true
+      return $.model.mounted && $.props.holdExit !== true
         ? $.evolve({
           mounted: false,
           started: false,
@@ -1251,25 +1250,25 @@ export const Select = Component.define({
           scrollDown: false,
           pressedItem: false
         }).emit(SelectEvents.Settled({ open }))
-        : model
+        : $.model
     },
-    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
-    PressedOutside: (model, { pointerType }, $) => dismiss(model, $, "outside-press", methodOf(pointerType)),
-    FocusedOutside: (model, _message, $) => dismiss(model, $, "focus-out", null, true),
-    FocusedTrigger: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "none", null) : model,
-    ReleasedPointer: (model, { outside }, $) => {
-      if (!model.pressing) return model
-      const next = UiStruct.evolve(model, { pressing: false })
+    ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
+    PressedOutside: ($, { pointerType }) => dismiss($.model, $, "outside-press", methodOf(pointerType)),
+    FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
+    FocusedTrigger: ($) => alignedOf($.model, $.props) ? dismiss($.model, $, "none", null) : $.model,
+    ReleasedPointer: ($, { outside }) => {
+      if (!$.model.pressing) return $.model
+      const next = UiStruct.evolve($.model, { pressing: false })
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
-    ResizedWindow: (model, _message, $) => alignedOf(model, $.props) ? dismiss(model, $, "window-resize", null) : model,
-    FellBack: (_model, _message, $) => $.evolve({ fellBack: true }),
-    ChangedScrollArrows: (_model, { down, up }, $) => $.evolve({ scrollUp: up, scrollDown: down }),
-    ScrolledByArrow: (model) => hover(model, null),
-    AllowedRelease: (_model, _message, $) => $.evolve({ releaseSelected: true, releaseUnselected: true }),
-    DraggedPointer: (_model, _message, $) => $.evolve({ releaseUnselected: true })
+    ResizedWindow: ($) => alignedOf($.model, $.props) ? dismiss($.model, $, "window-resize", null) : $.model,
+    FellBack: ($) => $.evolve({ fellBack: true }),
+    ChangedScrollArrows: ($, { down, up }) => $.evolve({ scrollUp: up, scrollDown: down }),
+    ScrolledByArrow: ($) => hover($.model, null),
+    AllowedRelease: ($) => $.evolve({ releaseSelected: true, releaseUnselected: true }),
+    DraggedPointer: ($) => $.evolve({ releaseUnselected: true })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const open = props.open
     const shown = open || model.mounted

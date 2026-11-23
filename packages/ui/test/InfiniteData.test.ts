@@ -50,20 +50,20 @@ const makeApp = () => {
     queries: {
       messages: {
         query: ListMessages,
-        args: (_model, props) => props.room === "" ? undefined : { room: props.room },
+        args: ({ props }) => props.room === "" ? undefined : { room: props.room },
         onChange: () => ChatMessage.Changed()
       }
     }
   }).make({
     init: () => ({}),
-    update: (model, message, $) =>
+    update: ($, message) =>
       ChatMessage.match(message, {
         // On the server, a load more is dropped and reported.
-        Changed: () => $.props.room === "ssr" ? $.loadMore("messages") : model,
+        Changed: () => $.props.room === "ssr" ? $.loadMore("messages") : $.model,
         More: () => $.loadMore("messages"),
         Refresh: () => $.reset("messages")
       }),
-    view: (_model, h) =>
+    view: (h) =>
       h.el("div").children(
         h.el("p").on("click", ChatMessage.More()).children(
           AsyncResult.match(h.queries.messages, {
@@ -175,18 +175,18 @@ describe("Infinite queries", () => {
       queries: { codes: { query: ListCodes, args: () => ({}) } }
     }).make({
       init: () => "",
-      update: (model, message, $) =>
+      update: ($, message) =>
         CodesMessage.match(message, {
           More: () => $.loadMore("codes"),
           // What update reads of the failed load more, so a replay reproduces it only with the error.
           Look: () => {
             const codes = $.queries.codes
-            if (!AsyncResult.isSuccess(codes)) return model
+            if (!AsyncResult.isSuccess(codes)) return $.model
             const more = codes.value.more
             return more._tag === "Failed" ? "failed " + more.error : more._tag
           }
         }),
-      view: (model, h) => h.p(model)
+      view: (h, model) => h.p(model)
     })
     const warnings: Array<string> = []
     const encoder = MessageLog.makeEncoder({ onWarning: (warning) => warnings.push(warning) })
@@ -427,21 +427,21 @@ describe("Infinite queries", () => {
       elements: Html
     }).make({
       init: ($) => $.props.route,
-      update: (model, message, $) =>
+      update: ($, message) =>
         ShellMessage.match(message, {
           ChangedRoute: ({ route }) => route,
           Go: () =>
-            $.set(model).run(
+            $.set($.model).run(
               Router.push(ShellRoute, ShellRoute.Home()).pipe(
                 Command.map(() => ShellMessage.Navigated())
               )
             ),
-          Navigated: () => model
+          Navigated: () => $.model
         }),
-      subscriptions: (model) => [
+      subscriptions: ({ model }) => [
         Router.subscription(ShellRoute, model, (route) => ShellMessage.ChangedRoute({ route }))
       ],
-      view: (model, h) => model._tag === "Chat" ? app.Chat(h, { key: "chat", props: { room: "r" } }) : h.el("p", "home")
+      view: (h, model) => model._tag === "Chat" ? app.Chat(h, { key: "chat", props: { room: "r" } }) : h.el("p", "home")
     })
     const history = Router.memoryHistory("/chat")
     const hosted = (effect: Effect.Effect<void, unknown, any>) =>

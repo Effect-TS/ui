@@ -18,8 +18,8 @@ describe("Checkbox", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Checkbox(h, {
           props: { checked: false },
           view: (checkbox) => {
@@ -37,8 +37,8 @@ describe("Checkbox", () => {
   it("root takes only a button, and indicator only a span", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Checkbox(h, {
           props: { checked: false },
           view: (checkbox) => {

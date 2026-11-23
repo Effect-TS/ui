@@ -102,8 +102,8 @@
  *   elements: Html
  * }).make({
  *   init: () => null,
- *   update: (model) => model,
- *   view: (_, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     Toolbar(h, {
  *       props: { items: [{ value: "bold" }, { value: "italic" }, { value: "help" }] },
  *       view: (toolbar) =>
@@ -417,23 +417,23 @@ export const Toolbar = Component.define({
 }).make({
   init: () => ({ active: null }),
   update: {
-    FocusedItem: (model, { value }) => model.active === value ? model : { ...model, active: value },
-    PressedItemKey: (model, { key, value }, $) => {
+    FocusedItem: ($, { value }) => $.model.active === value ? $.model : { ...$.model, active: value },
+    PressedItemKey: ($, { key, value }) => {
       const target = targetOf(value, key, keysOf($), $)
-      return target === undefined ? model : moveTo(model, target, $)
+      return target === undefined ? $.model : moveTo($.model, target, $)
     },
-    PressedInputKey: (model, { caret, key, value }, $) => {
+    PressedInputKey: ($, { caret, key, value }) => {
       const keys = keysOf($)
       const target = targetOf(value, key, keys, $)
-      if (target === undefined) return model
-      if (caret === null) return moveTo(model, target, $)
+      if (target === undefined) return $.model
+      if (caret === null) return moveTo($.model, target, $)
       if (key === keys.next) {
         return $.run(FocusItem.make({ ref: Item.at(target.value), leaving: { ref: Item.at(value), caret } }))
       }
-      return caret > 0 ? model : moveTo(model, target, $)
+      return caret > 0 ? $.model : moveTo($.model, target, $)
     }
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const disabled = props.disabled === true
     const orientation = props.orientation ?? "horizontal"

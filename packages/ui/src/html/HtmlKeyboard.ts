@@ -76,7 +76,7 @@ export interface Shortcut<Msg> {
  * }).make({
  *   init: () => false,
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
- *   view: (open, h) => h.p(open ? "help open" : "help closed"),
+ *   view: (h, open) => h.p(open ? "help open" : "help closed"),
  *   subscriptions: () => [
  *     DomSubscription.onDocument(
  *       "keydown",

@@ -30,8 +30,8 @@
  *   message: Msg
  * }).make({
  *   init: () => 0,
- *   update: (count) => count + 1,
- *   view: (count, h) => h.el("button").on("click", Msg.ClickedIncrement()).children(String(count))
+ *   update: ($) => $.model + 1,
+ *   view: (h, count) => h.el("button").on("click", Msg.ClickedIncrement()).children(String(count))
  * })
  *
  * const program = Effect.gen(function*() {
@@ -1109,8 +1109,8 @@ export const stub = <Self, Props, Events>(
     events: feature.events
   }).make({
     init: () => 0,
-    update: (count, message, $) => $.set(count + 1).emit(message.events),
-    view: (_, h) => {
+    update: ($, message) => $.set($.model + 1).emit(message.events),
+    view: (h) => {
       if (seen.length === 0 || seen[seen.length - 1] !== h.props) seen.push(h.props)
       return h.el("stub").attr("data-stub", name)
     },

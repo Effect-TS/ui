@@ -83,8 +83,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ align: ["left"] }),
- *   update: { ToggledAlign: (_model, { value }) => ({ align: value }) },
- *   view: (model, h) =>
+ *   update: { ToggledAlign: (_, { value }) => ({ align: value }) },
+ *   view: (h, model) =>
  *     ToggleGroup(h, {
  *       props: { value: model.align, items: alignments.map((value) => ({ value })) },
  *       onEmit: ({ value }) => EditorMessage.ToggledAlign({ value }),
@@ -318,12 +318,12 @@ export const ToggleGroup = Component.define({
 }).make({
   init: () => ({ active: null }),
   update: {
-    ClickedItem: (model, { value }, $) =>
+    ClickedItem: ($, { value }) =>
       enabled($.props, $.shared.toolbar, value)
         ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) }))
-        : model,
-    FocusedItem: (_model, { value }, $) => $.evolve({ active: value }),
-    PressedKey: (model, { key, value }, $) => {
+        : $.model,
+    FocusedItem: ($, { value }) => $.evolve({ active: value }),
+    PressedKey: ($, { key, value }) => {
       const items = enabledOf($.props, $.shared.toolbar)
       const last = items.length - 1
       const { next } = arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
@@ -339,13 +339,13 @@ export const ToggleGroup = Component.define({
             $.props.loopFocus !== false ? "wrap" : "none"
           )
       ]
-      if (target === undefined || target.value === value) return model
+      if (target === undefined || target.value === value) return $.model
       return $.evolve({ active: target.value }).run(
         DomCommand.Focus.make({ ref: Item.at(target.value) }).pipe(Command.asNoop)
       )
     }
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const toolbar = p.shared.toolbar
     const disabled = disabledOf(props, toolbar)

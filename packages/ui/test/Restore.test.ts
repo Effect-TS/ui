@@ -17,7 +17,7 @@ const login = <Scoped extends boolean>(scoped: Scoped) =>
   }).make({
     init: () => ({ email: "", password: "" }),
     update: () => ({ email: "ada@example.com", password: "hunter2" }),
-    view: (model, h) =>
+    view: (h, model) =>
       h.el("button").on("click", LoginMessage.Filled()).children(`login ${model.email}|${model.password}`)
   })
 const Login = login(false)
@@ -34,8 +34,8 @@ const Counter = Component.define({
 })
   .make({
     init: () => 0,
-    update: (count) => count + 1,
-    view: (count, h) => h.el("button").on("click", CounterMessage.Clicked()).children(`counter ${count}`)
+    update: ($) => $.model + 1,
+    view: (h, count) => h.el("button").on("click", CounterMessage.Clicked()).children(`counter ${count}`)
   })
 
 const GroupMessage = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean }, Picked: {} })
@@ -52,10 +52,10 @@ const Group = Component.define({
   }
 }).make({
   init: () => ({ on: false, picks: 0 }),
-  update: (model, message) =>
+  update: ($, message) =>
     GroupMessage.match(message, {
-      ChangedOn: ({ on }) => ({ ...model, on }),
-      Picked: () => ({ ...model, picks: model.picks + 1 })
+      ChangedOn: ({ on }) => ({ ...$.model, on }),
+      Picked: () => ({ ...$.model, picks: $.model.picks + 1 })
     }),
   parts: () => ({})
 })
@@ -72,12 +72,12 @@ const makeReader = (name: string, restore: false | undefined) =>
     shared: { group: { owner: Group, report: (on) => on } }
   }).make({
     init: () => false,
-    update: (on, message, $) =>
+    update: ($, message) =>
       ReaderMessage.match(message, {
-        Toggled: () => !on,
-        Picked: () => $.set(on).send(Group, GroupMessage.Picked())
+        Toggled: () => !$.model,
+        Picked: () => $.set($.model).send(Group, GroupMessage.Picked())
       }),
-    view: (_, h) =>
+    view: (h) =>
       h.el(
         "p",
         h.el("button").on("click", ReaderMessage.Toggled()).children(`toggle ${name}`),
@@ -91,8 +91,8 @@ const Fresh = makeReader("Fresh", false)
 
 const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.el(
       "main",
       Login(h, { key: "login" }),
@@ -112,15 +112,17 @@ const App = Component.define({
   message: AppMessage
 }).make({
   init: ($) => $.props.route,
-  update: (route, message, $) =>
+  update: ($, message) =>
     AppMessage.match(message, {
       ChangedRoute: (changed) => changed.route,
       Go: ({ route: next }) =>
-        $.set(route).run(Router.push(AppRoute, next).pipe(Command.map(() => AppMessage.Navigated()))),
-      Navigated: () => route
+        $.set($.model).run(Router.push(AppRoute, next).pipe(Command.map(() => AppMessage.Navigated()))),
+      Navigated: () => $.model
     }),
-  subscriptions: (route) => [Router.subscription(AppRoute, route, (next) => AppMessage.ChangedRoute({ route: next }))],
-  view: (route, h) =>
+  subscriptions: (
+    { model: route }
+  ) => [Router.subscription(AppRoute, route, (next) => AppMessage.ChangedRoute({ route: next }))],
+  view: (h, route) =>
     h.el(
       "div",
       h.el("button").on("click", AppMessage.Go({ route: AppRoute.Home() })).children("Home"),
@@ -137,15 +139,15 @@ const collectedAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
 
 const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.scoped((s) => ScopedLogin(s, { key: "login" }))
+  update: ($) => $.model,
+  view: (h) => h.scoped((s) => ScopedLogin(s, { key: "login" }))
 })
 
 const desk = (restore?: false) =>
   Component.define({ name: "Desk", scoped: true, model: Schema.Number, message: CounterMessage, restore }).make({
     init: () => 0,
-    update: (count) => count + 1,
-    view: (count, h) =>
+    update: ($) => $.model + 1,
+    view: (h, count) =>
       h.el(
         "div",
         h.el("button").on("click", CounterMessage.Clicked()).children(`desk ${count}`),
@@ -156,8 +158,8 @@ const Desk = desk()
 const office = (child: typeof Desk) =>
   Component.define({ name: "Office", scoped: false, model: Schema.Null, message: Schema.Never, restore: false }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.scoped((s) => child(s, { key: "desk" }))
+    update: ($) => $.model,
+    view: (h) => h.scoped((s) => child(s, { key: "desk" }))
   })
 const Office = office(Desk)
 const OptedOffice = office(desk(false))
@@ -172,12 +174,12 @@ const Shell = Component.define({
   restore: (model) => ({ ...model, shown: false })
 }).make({
   init: () => ({ count: 0, shown: false }),
-  update: (model, message) =>
+  update: ($, message) =>
     ShellMessage.match(message, {
-      Counted: () => ({ ...model, count: model.count + 1 }),
-      Shown: () => ({ ...model, shown: true })
+      Counted: () => ({ ...$.model, count: $.model.count + 1 }),
+      Shown: () => ({ ...$.model, shown: true })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "div",
       h.el("button").on("click", ShellMessage.Counted()).children(`shell ${model.count}`),

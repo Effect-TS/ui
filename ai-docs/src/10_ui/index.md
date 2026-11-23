@@ -55,7 +55,7 @@ a render fails the author. So do an ordinary child and a scoped child of
 the same name and key that resolve to one path.
 
 ```ts
-const view = (model: SettingsModel, h: H) =>
+const view = (h: H, model: SettingsModel) =>
   model.tab === "profile"
     ? h.scoped((s) => Profile(s, { key: "profile" }))
     : h.scoped((s) => Billing(s, { key: "billing" }))
@@ -288,20 +288,20 @@ function from its old value to the new one. It returns a step, so `.run`,
 `.emit` and another `.evolve` chain after it:
 
 ```ts
-const submittedOrder = CheckoutDef.update("SubmittedOrder", (model, _message, $) =>
-  model.submitting
-    ? model
+const submittedOrder = CheckoutDef.update("SubmittedOrder", ($) =>
+  $.model.submitting
+    ? $.model
     : $.evolve({ form: submit, submitting: true, attempts: (n) => n + 1, notice: null })
-      .run(placeOrder(model.form.values)))
+      .run(placeOrder($.model.form.values)))
 ```
 
 `UiStruct.evolve` takes the same fields for a struct inside the Model:
 data-first for a row of a list, and data-last for a struct field, where it
 takes the struct's type from the field. It also changes the Model in a
-handler that returns a bare Model, with no `$`:
+handler that returns a bare Model rather than a step:
 
 ```ts
-const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id }, $) =>
+const clickedIncrement = CheckoutDef.update("ClickedIncrement", ($, { id }) =>
   $.evolve({
     lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
     coupon: UiStruct.evolve({ status: "Idle" })
@@ -309,7 +309,7 @@ const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id },
 
 const failedSaveNote = NoteEditorDef.update(
   "FailedSaveNote",
-  (model, { reason }) => UiStruct.evolve(model, { error: reason })
+  ($, { reason }) => UiStruct.evolve($.model, { error: reason })
 )
 ```
 
@@ -332,7 +332,7 @@ updater, so a field whose type is a function can't be set through
 encoded for hydration or history.
 
 A function sees only its own field. One that depends on another field
-reads the handler's `model`, which is the Model before this step.
+reads `$.model`, which is the Model before this step.
 
 `evolve` doesn't take a union, and a nullable struct counts as one. Match
 the union first and evolve the member:
@@ -340,7 +340,7 @@ the union first and evolve the member:
 ```ts
 const updatedName = AuthDef.update(
   "UpdatedName",
-  (model, { value }) => Auth.match(model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
+  ($, { value }) => Auth.match($.model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
 )
 
 // A union field in a struct Model, with `match` data-last.
@@ -406,16 +406,16 @@ Framed(h).class("wide").children(h.input)
 ### Loading data
 
 A component declares the queries it shows in `queries`, by name. Each entry
-names a `Query` and returns its args from the Model, the props and the other
-queries' results, or `undefined` to disable it:
+names a `Query` and returns its args from `$`, holding the Model, the props
+and the other queries' results, or `undefined` to disable it:
 
 ```ts
 queries: {
-  note: { query: GetNote, args: (_model, props) => ({ id: props.id }) },
+  note: { query: GetNote, args: ({ props }) => ({ id: props.id }) },
   // Waits for the args to hold still before it fetches.
-  results: { query: SearchNotes, debounce: "300 millis", args: (model) => ({ q: model.q }) },
+  results: { query: SearchNotes, debounce: "300 millis", args: ({ model }) => ({ q: model.q }) },
   // One query at many args, one entry per args.
-  authors: { queryMany: GetUser, args: (_model, props) => props.authorIds.map((id) => ({ id })) }
+  authors: { queryMany: GetUser, args: ({ props }) => props.authorIds.map((id) => ({ id })) }
 }
 ```
 
@@ -427,8 +427,8 @@ keeps it as `{ model, queries }`, so a hydrated or restored instance starts
 with the results it had.
 
 Every function of the component can read the results, by query name:
-`h.queries` in `view`, `$.queries` in `update`, and the `queries` argument of
-`head(model, props, queries)` and `subscriptions(model, props, queries)`. Give an entry
+`h.queries` in `view`, and `$.queries` in `update`, `head` and
+`subscriptions`, whose `$` holds `model`, `props` and `queries`. Give an entry
 an `onChange` only when `update` has to react to a new result, such as
 moving focus once a query fails. It returns a message, which `update` gets
 after the result is written.

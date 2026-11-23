@@ -55,9 +55,9 @@ describe("Head", () => {
         message: Schema.Never
       }).make({
         init: () => 0,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [Head.title("Ada")],
-        view: (_, h) => h.text("page")
+        view: (h) => h.text("page")
       })
       const Layout = Component.define({
         name: "Layout",
@@ -66,13 +66,13 @@ describe("Head", () => {
         message: Schema.Never
       }).make({
         init: () => 0,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [
           Head.titleTemplate(() => {
             throw new Error("bad template")
           })
         ],
-        view: (_, h) => Page(h, { key: "page", props: {} })
+        view: (h) => Page(h, { key: "page", props: {} })
       })
       const App = Component.define({
         name: "App",
@@ -81,9 +81,9 @@ describe("Head", () => {
         message: Schema.Never
       }).make({
         init: () => 0,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [Head.title("App")],
-        view: (_, h) => h.el("main", Layout(h, { key: "layout", props: {}, fallback: () => h.text("down") }))
+        view: (h) => h.el("main", Layout(h, { key: "layout", props: {}, fallback: () => h.text("down") }))
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -102,9 +102,9 @@ describe("Head", () => {
         message: Schema.Never
       }).make({
         init: () => 0,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [Head.title("Ada")],
-        view: (_, h) => h.text("page")
+        view: (h) => h.text("page")
       })
       const App = Component.define({
         name: "App",
@@ -114,13 +114,13 @@ describe("Head", () => {
       }).make({
         init: () => false,
         update: (_, broken) => broken,
-        head: (broken) => [
+        head: ({ model: broken }) => [
           Head.titleTemplate((title) => {
             if (broken) throw new Error("bad template")
             return `${title} · App`
           })
         ],
-        view: (_, h) => Page(h, { key: "page", props: {} })
+        view: (h) => Page(h, { key: "page", props: {} })
       })
       const root = yield* TestHost.mount(App, {}, { fallback: (_, h) => h.text("down") })
       yield* TestHost.settle
@@ -150,9 +150,9 @@ describe("Head", () => {
       const leaf = (name: string, head?: ReadonlyArray<Head.Entry>) =>
         Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
           init: () => null,
-          update: (model) => model,
+          update: ($) => $.model,
           head: head === undefined ? undefined : () => head,
-          view: (_, h) => h.label(name)
+          view: (h) => h.label(name)
         })
       const Page = leaf("Page", [Head.title("Page")])
       const Aside = leaf("Aside")
@@ -160,8 +160,8 @@ describe("Head", () => {
       const holding = (name: string, ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>) =>
         Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.box(...children.map(([key, child]) => child(h, { key, props: {} })))
+          update: ($) => $.model,
+          view: (h) => h.box(...children.map(([key, child]) => child(h, { key, props: {} })))
         })
       // One with a child that has a head, and one with nothing that has a head anywhere below it.
       const Layout = holding("Layout", ["page", Page], ["aside", Aside])
@@ -195,14 +195,14 @@ describe("Head", () => {
       })
         .make({
           init: () => null,
-          update: (model) => model,
-          head: (_model, props) => [Head.title(`Note ${props.id}`)],
-          view: (_, h) => h.text(h.props.id)
+          update: ($) => $.model,
+          head: ({ props }) => [Head.title(`Note ${props.id}`)],
+          view: (h) => h.text(h.props.id)
         })
       const App = Component.define({ name: "App", scoped: false, model: Schema.String, message: Schema.String }).make({
         init: () => "a",
         update: (_, id) => id,
-        view: (id, h) => Page(h, { key: "page", props: { id } })
+        view: (h, id) => Page(h, { key: "page", props: { id } })
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -216,15 +216,15 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [Head.title("Page")],
-        view: (_, h) => h.text("page")
+        view: (h) => h.text("page")
       })
       const App = Component.define({ name: "App", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make(
         {
           init: () => false,
           update: (_, shown) => shown,
-          view: (shown, h) => h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
+          view: (h, shown) => h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
         }
       )
       const root = yield* TestHost.mount(App, {})
@@ -246,14 +246,14 @@ describe("Head", () => {
       const Notice = Component.define({ name: "Notice", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
+          update: ($) => $.model,
           head: () => [Head.title("Unavailable")],
-          view: (_, h) => h.text("unavailable")
+          view: (h) => h.text("unavailable")
         })
       const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
+          update: ($) => $.model,
           head: () => [Head.title("Broken")],
           view: (): never => {
             throw new Error("view")
@@ -261,9 +261,9 @@ describe("Head", () => {
         })
       const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [Head.titleTemplate((title) => `${title} · App`)],
-        view: (_, h) =>
+        view: (h) =>
           h.el("main", Broken(h, { key: "b", props: {}, fallback: () => Notice(h, { key: "n", props: {} }) }))
       })
       const root = yield* TestHost.mount(App, {})
@@ -280,9 +280,9 @@ describe("Head", () => {
     message: Schema.Never
   }).make({
     init: () => null,
-    update: (model) => model,
-    head: (_, props) => [Head.title(props.title)],
-    view: (_, h) => h.text(h.props.title)
+    update: ($) => $.model,
+    head: ({ props }) => [Head.title(props.title)],
+    view: (h) => h.text(h.props.title)
   })
   const ordered = <A>(swapped: boolean, a: A, b: A): readonly [A, A] => swapped ? [b, a] : [a, b]
 
@@ -296,9 +296,9 @@ describe("Head", () => {
         message: Schema.Never
       }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         head: () => [Head.title("App")],
-        view: (_, h) =>
+        view: (h) =>
           h.el(
             "main",
             ...ordered(

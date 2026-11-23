@@ -23,8 +23,8 @@ describe("CheckboxGroup", () => {
   it("the root returns the builder it was given, of any tag, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         CheckboxGroup(h, {
           props: { value: ["a"], allValues: ["a", "b"] },
           view: (checkboxGroup) => {

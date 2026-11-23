@@ -115,43 +115,43 @@ const UploadRow = UploadsDef.fragment((h, upload: Upload) =>
 export const UploadsNoDeps = UploadsDef.make({
   init: () => ({ uploadId: 0, uploads: [] }),
   update: {
-    ClickedStartUpload: (model, _message, $) => {
-      const file = FAKE_FILES[model.uploadId % FAKE_FILES.length]
+    ClickedStartUpload: ($) => {
+      const file = FAKE_FILES[$.model.uploadId % FAKE_FILES.length]
       const upload: Upload = {
-        id: model.uploadId,
+        id: $.model.uploadId,
         fileName: file.name,
         sizeMegabytes: file.sizeMegabytes,
         status: "Uploading"
       }
-      return $.set({ uploadId: model.uploadId + 1, uploads: [...model.uploads, upload] }).run(
+      return $.set({ uploadId: $.model.uploadId + 1, uploads: [...$.model.uploads, upload] }).run(
         UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
       )
     },
 
-    ClickedCancelUpload: (model, { uploadId }, $) =>
-      model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
+    ClickedCancelUpload: ($, { uploadId }) =>
+      $.model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
         ? $.evolve({ uploads: withStatus(uploadId, "Cancelled") }).run(Command.interrupt(UploadFile, { uploadId }))
-        : model,
+        : $.model,
 
-    ClickedCancelAllUploads: (_model, _message, $) =>
+    ClickedCancelAllUploads: ($) =>
       $.evolve({
         uploads: (uploads) =>
           uploads.map((upload) => isUploading(upload) ? UiStruct.evolve(upload, { status: "Cancelled" }) : upload)
       }).run(Command.interrupt(UploadFile)),
 
-    ClickedRestartUpload: (model, { uploadId }, $) => {
-      const upload = model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
+    ClickedRestartUpload: ($, { uploadId }) => {
+      const upload = $.model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
       return upload === undefined
-        ? model
+        ? $.model
         : $.evolve({ uploads: withStatus(uploadId, "Uploading") }).run(
           UploadFile.make({ uploadId, sizeMegabytes: upload.sizeMegabytes })
         )
     },
 
-    CompletedUploadFile: (_model, { uploadId }, $) => $.evolve({ uploads: withStatus(uploadId, "Done") })
+    CompletedUploadFile: ($, { uploadId }) => $.evolve({ uploads: withStatus(uploadId, "Done") })
   },
   head: () => [Head.title("Effect UI Interrupting Commands Example")],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("min-h-screen bg-gray-100 py-8").children(
       h.div.class("max-w-lg mx-auto flex flex-col gap-6 px-4").children(
         h.h1.class("text-3xl font-bold text-gray-800 text-center").children("File Uploads"),

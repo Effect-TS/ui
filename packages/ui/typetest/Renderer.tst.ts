@@ -18,8 +18,8 @@ describe("Renderer", () => {
       elements: Tiny
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => h.box(h.field)
+      update: ($) => $.model,
+      view: (h) => h.box(h.field)
     })
     expect(Renderer.mount(Form, {}, null)).type.toBe<
       Effect.Effect<Renderer.Root<string, typeof Msg.Type>, never, TinyHost | Renderer.Renderer | Scope.Scope>
@@ -45,8 +45,8 @@ describe("Renderer", () => {
       elements: Tiny
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => h.box(h.field)
+      update: ($) => $.model,
+      view: (h) => h.box(h.field)
     })
     expect(TestHost.mount(Form, {})).type.toBe<
       Effect.Effect<TestHost.TestRoot<string, typeof Msg.Type, never>, never, TestHost.TestHost | Scope.Scope>
@@ -65,8 +65,8 @@ describe("Effect props", () => {
     message: Schema.Never
   }).make({
     init: ($) => $.props.route,
-    update: (route) => route,
-    view: (route, h) => h.text(route._tag)
+    update: ($) => $.model,
+    view: (h, route) => h.text(route._tag)
   })
 
   it("Router.props reads the route props from the Router", () => {
@@ -110,8 +110,8 @@ describe("View elements", () => {
       elements: Tiny
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.field.ref(Field)).type.not.toRaiseError()
         expect(h.box.ref).type.not.toBeCallableWith(Field)
         return h.box()
@@ -142,8 +142,8 @@ describe("View elements", () => {
       elements: Tiny
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.field.onMount).type.toBeCallableWith(ForAny())
         expect(h.field.onMount).type.not.toBeCallableWith(ForOther())
         return h.field.onMount(ForField())
@@ -160,8 +160,8 @@ describe("View elements", () => {
       elements: Tiny
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.field.on).type.toBeCallableWith(
           "input",
           ({ value }: { readonly value: string }) => Msg.Typed({ value })
@@ -181,8 +181,8 @@ describe("View elements", () => {
       message: Msg
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.el("x-foo")).type.toBe<View.ContainerBuilder<typeof Msg.Type>>()
         // The shorthand and `children` return the builder, so the chain goes on.
         expect(h.el("x-foo", "a")).type.toBe<View.ContainerBuilder<typeof Msg.Type>>()
@@ -207,8 +207,8 @@ describe("View elements", () => {
       elements: Tiny
     }).make({
       init: () => "",
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(h.field).type.not.toHaveProperty("children")
         expect(h.field.value("a")).type.not.toHaveProperty("children")
         expect(h.box.on("click", Msg.Mounted()).children).type.toBeCallableWith(h.field)

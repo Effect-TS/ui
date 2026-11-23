@@ -25,9 +25,9 @@ export const Home = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   head: () => [Head.title("Home"), HtmlHead.meta({ name: "description", content: "Home page" })],
-  view: (_, h) => h.h1("Home")
+  view: (h) => h.h1("Home")
 })
 
 /** Where person pages read their bio. Tests swap in a slow one. */
@@ -52,16 +52,16 @@ export const Person = Component.define({
   model: Schema.Struct({ id: Schema.Number }),
   message: Schema.Never,
   elements: Html,
-  queries: { bio: { query: GetBio, args: (_model, props) => ({ id: props.id }) } }
+  queries: { bio: { query: GetBio, args: ({ props }) => ({ id: props.id }) } }
 }).make({
   init: ($) => ({ id: $.props.id }),
-  update: (model) => model,
-  head: (model) => [
+  update: ($) => $.model,
+  head: ({ model }) => [
     Head.title(`Person ${model.id}`),
     HtmlHead.meta({ name: "description", content: `About person ${model.id}` }),
     HtmlHead.jsonLd({ "@type": "Person", identifier: model.id })
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.h1(`Person ${model.id}`),
       h.p.attr("id", "bio").children(AsyncResult.isSuccess(h.queries.bio) ? h.queries.bio.value : "Loading")
@@ -79,9 +79,9 @@ export const Slow = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   head: () => [Head.title("Slow")],
-  view: (_, h) => h.h1("Slow")
+  view: (h) => h.h1("Slow")
 }).pipe(Component.provide(Layer.effect(SlowData, Effect.as(Effect.sleep("1 second"), "ready"))))
 
 export const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute }, Block: {}, Filter: {} })
@@ -95,18 +95,18 @@ export const App = Component.define({
   elements: Html
 }).make({
   init: ($) => ({ route: $.props.route, blocked: false }),
-  update: (model, message) =>
+  update: ($, message) =>
     Message.match(message, {
-      ChangedRoute: ({ route }) => ({ ...model, route }),
-      Block: () => ({ ...model, blocked: true }),
-      Filter: () => model
+      ChangedRoute: ({ route }) => ({ ...$.model, route }),
+      Block: () => ({ ...$.model, blocked: true }),
+      Filter: () => $.model
     }),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route })),
     model.blocked && Router.blocked("editing")
   ],
   head: () => [Head.titleTemplate((title) => `${title} · App`), HtmlHead.lang("en"), HtmlHead.htmlClass("routed")],
-  view: ({ route }, h) =>
+  view: (h, { route }) =>
     h.div(
       h.nav(
         h.a.attr("href", AppRoute.print(AppRoute.Home())).children("Home"),

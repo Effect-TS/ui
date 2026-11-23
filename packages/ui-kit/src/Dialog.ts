@@ -169,10 +169,10 @@
  * }).make({
  *   init: () => ({ settings: true }),
  *   update: {
- *     RequestedOpenSettings: (_model, _message, $) => $.evolve({ settings: true }),
- *     RequestedCloseSettings: (_model, _message, $) => $.evolve({ settings: false })
+ *     RequestedOpenSettings: ($) => $.evolve({ settings: true }),
+ *     RequestedCloseSettings: ($) => $.evolve({ settings: false })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Dialog(h, {
  *       props: { open: model.settings },
  *       onEmit: {
@@ -1085,9 +1085,9 @@ export const Dialog = Component.define({
     closeMethod: null
   }),
   update: {
-    ClickedTrigger: (model, { key, pointerType, triggerId }, $) => {
+    ClickedTrigger: ($, { key, pointerType, triggerId }) => {
       const method = methodOf(pointerType)
-      const active = $.props.triggerId ?? model.trigger
+      const active = $.props.triggerId ?? $.model.trigger
       if ($.props.open && (active === null || active === key)) {
         return dismiss($, "trigger-press", method)
       }
@@ -1095,35 +1095,32 @@ export const Dialog = Component.define({
         DialogEvents.RequestedOpen({ triggerId })
       )
     },
-    ClickedClose: (model, { pointerType }, $) =>
-      $.props.open ? dismiss($, "close-press", methodOf(pointerType)) : model,
-    PressedEscape: (model, _message, $) =>
-      $.props.open && topmost(model) ? dismiss($, "escape-key", "keyboard") : model,
-    PressedOutside: (model, { pointerType }, $) =>
-      $.props.open && topmost(model) && $.props.disablePointerDismissal !== true
+    ClickedClose: ($, { pointerType }) => $.props.open ? dismiss($, "close-press", methodOf(pointerType)) : $.model,
+    PressedEscape: ($) => $.props.open && topmost($.model) ? dismiss($, "escape-key", "keyboard") : $.model,
+    PressedOutside: ($, { pointerType }) =>
+      $.props.open && topmost($.model) && $.props.disablePointerDismissal !== true
         ? dismiss($, "outside-press", methodOf(pointerType))
-        : model,
-    CancelledCloseWatcher: (model, _message, $) =>
-      $.props.open && topmost(model) ? dismiss($, "close-watcher", null) : model,
-    FocusedOutside: (model, _message, $) =>
-      $.props.open && topmost(model) && $.props.modal === false && $.props.disablePointerDismissal !== true
+        : $.model,
+    CancelledCloseWatcher: ($) => $.props.open && topmost($.model) ? dismiss($, "close-watcher", null) : $.model,
+    FocusedOutside: ($) =>
+      $.props.open && topmost($.model) && $.props.modal === false && $.props.disablePointerDismissal !== true
         ? dismiss($, "focus-out", null)
-        : model,
-    ShowedPortal: (_model, _message, $) =>
+        : $.model,
+    ShowedPortal: ($) =>
       $.props.open
         ? $.evolve({ mounted: true, reason: null, closeMethod: null })
         : $.evolve({ mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
-      if (open !== $.props.open) return model
-      if (open) return $.set(model).emit(DialogEvents.Settled({ open }))
-      return model.mounted && $.props.holdExit !== true
+    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
+      if (open !== $.props.open) return $.model
+      if (open) return $.set($.model).emit(DialogEvents.Settled({ open }))
+      return $.model.mounted && $.props.holdExit !== true
         ? $.evolve({ mounted: false, started: false, openMethod: null }).emit(DialogEvents.Settled({ open }))
-        : model
+        : $.model
     },
-    ChangedNested: (_model, { count }, $) => $.evolve({ nestedOpen: count })
+    ChangedNested: ($, { count }) => $.evolve({ nestedOpen: count })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const modal = props.modal ?? true
     const open = props.open

@@ -37,15 +37,15 @@ const Page = Component.define({
 }).make({
   init: ($) => ({ config: $.props, open: $.props.initialOpen, holdExit: $.props.holdExit, log: [] }),
   update: {
-    Toggled: (model, { open, reason }) => ({
-      ...model,
-      open: model.config.refuse ? model.open : open,
-      log: [...model.log, `Toggled ${open} ${reason}`]
+    Toggled: ($, { open, reason }) => ({
+      ...$.model,
+      open: $.model.config.refuse ? $.model.open : open,
+      log: [...$.model.log, `Toggled ${open} ${reason}`]
     }),
-    Settled: (model, { open }) => ({ ...model, log: [...model.log, `Settled ${open}`] }),
-    ReleaseHold: (model) => ({ ...model, holdExit: false })
+    Settled: ($, { open }) => ({ ...$.model, log: [...$.model.log, `Settled ${open}`] }),
+    ReleaseHold: ($) => ({ ...$.model, holdExit: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Collapsible(h, {
       props: {
         open: model.open,

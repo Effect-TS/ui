@@ -44,12 +44,12 @@ const NoteDef = Component.define({
   message: Message,
   events: Events,
   elements: Html,
-  queries: { user: { query: GetUser, args: (_model, props) => ({ id: props.id }) } }
+  queries: { user: { query: GetUser, args: ({ props }) => ({ id: props.id }) } }
 })
 
-const save = NoteDef.update((model, _msg, $) => $.set(model).run(Save.make()))
-const audit = NoteDef.update((model, _msg, $) => $.set(model).run(Audit.make()))
-const touch = NoteDef.update((model) => ({ ...model, edits: model.edits + 1 }))
+const save = NoteDef.update(($) => $.set($.model).run(Save.make()))
+const audit = NoteDef.update(($) => $.set($.model).run(Audit.make()))
+const touch = NoteDef.update(($) => ({ ...$.model, edits: $.model.edits + 1 }))
 
 const shared = { Saved: touch, Deleted: touch }
 
@@ -57,32 +57,32 @@ describe("Component.define", () => {
   it("H supports pure views without a registered vocabulary", () => {
     expect<View.H<Message>>().type.toBe<View.Helper<Message, unknown>>()
     const Row = <Msg>(h: View.H<Msg>, label: string) => h.el("li", label)
-    NoteDef.view((model, h) => h.ul(Row(h, model.body)))
+    NoteDef.view((h, model) => h.ul(Row(h, model.body)))
   })
 
   it("types an untagged update over the whole message, from the definition", () => {
-    NoteDef.update((model, msg, $) => {
-      expect(model).type.toBe<Model>()
+    NoteDef.update(($, msg) => {
+      expect($.model).type.toBe<Model>()
       expect(msg).type.toBe<Message>()
       expect($.props).type.toBe<{ readonly id: string }>()
       expect($.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
-      return model
+      return $.model
     })
   })
 
   it("narrows the message of a slice by tag", () => {
-    NoteDef.update("Edited", (model, msg) => {
+    NoteDef.update("Edited", ($, msg) => {
       expect(msg).type.toBe<{ readonly _tag: "Edited"; readonly body: string }>()
-      return { ...model, body: msg.body }
+      return { ...$.model, body: msg.body }
     })
   })
 
   it("rejects an unknown tag", () => {
-    expect(NoteDef.update).type.not.toBeCallableWith("Deleted", (model: Model) => model)
+    expect(NoteDef.update).type.not.toBeCallableWith("Deleted", ($: { readonly model: Model }) => $.model)
   })
 
   it("types h from the definition, with its queries and elements", () => {
-    NoteDef.view((model, h) => {
+    NoteDef.view((h, model) => {
       expect(model).type.toBe<Model>()
       expect(h.props).type.toBe<{ readonly id: string }>()
       expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
@@ -91,14 +91,14 @@ describe("Component.define", () => {
   })
 
   it("unions the requirements of the functions $.combine runs", () => {
-    const both = NoteDef.update((_model, _msg, $) => $.combine(touch, save, audit))
-    const Note = NoteDef.make({ init: () => ({ body: "", edits: 0 }), update: both, view: (_, h) => h.p() })
+    const both = NoteDef.update(($) => $.combine(touch, save, audit))
+    const Note = NoteDef.make({ init: () => ({ body: "", edits: 0 }), update: both, view: (h) => h.p() })
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save | Audit>()
   })
 
   it("narrows $ in a slice, and $.combine there takes same-tag slices, whole-message and inline functions", () => {
-    const validate = NoteDef.update("SaveClicked", (model) => model)
-    const handle = NoteDef.update("SaveClicked", (_model, _msg, $) => {
+    const validate = NoteDef.update("SaveClicked", ($) => $.model)
+    const handle = NoteDef.update("SaveClicked", ($) => {
       expect($).type.toBe<
         Component.Update<
           Model,
@@ -109,40 +109,40 @@ describe("Component.define", () => {
           { readonly _tag: "SaveClicked" }
         >
       >()
-      return $.combine(validate, touch, save, (m, msg) => {
+      return $.combine(validate, touch, save, ($, msg) => {
         expect(msg).type.toBe<{ readonly _tag: "SaveClicked" }>()
-        return $.set(m).run(Audit.make())
+        return $.set($.model).run(Audit.make())
       })
     })
     const Note = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
       update: { Edited: touch, SaveClicked: handle, Saved: touch },
-      view: (_, h) => h.p()
+      view: (h) => h.p()
     })
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save | Audit>()
   })
 
   it("rejects another tag's slice in $.combine in a slice", () => {
-    const edited = NoteDef.update("Edited", (model, msg) => ({ ...model, body: msg.body }))
-    NoteDef.update("SaveClicked", (model, _msg, $) => {
+    const edited = NoteDef.update("Edited", ($, msg) => ({ ...$.model, body: msg.body }))
+    NoteDef.update("SaveClicked", ($) => {
       expect($.combine).type.not.toBeCallableWith(edited)
-      return model
+      return $.model
     })
   })
 
   it("calls a slice by hand from an update over the whole message", () => {
-    const edited = NoteDef.update("Edited", (model, msg, $) => $.combine(() => ({ ...model, body: msg.body }), save))
+    const edited = NoteDef.update("Edited", ($, msg) => $.combine(() => ({ ...$.model, body: msg.body }), save))
     const Note = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
-      update: (model, msg, $) => msg._tag === "Edited" ? edited(model, msg, $) : model,
-      view: (_, h) => h.p()
+      update: ($, msg) => msg._tag === "Edited" ? edited($, msg) : $.model,
+      view: (h) => h.p()
     })
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
   })
 
   it("rejects a tagged slice in $.combine", () => {
-    const edited = NoteDef.update("Edited", (model, msg) => ({ ...model, body: msg.body }))
-    NoteDef.update((_model, _msg, $) => {
+    const edited = NoteDef.update("Edited", ($, msg) => ({ ...$.model, body: msg.body }))
+    NoteDef.update(($) => {
       expect($.combine).type.not.toBeCallableWith(edited)
       return $.combine(touch)
     })
@@ -152,15 +152,17 @@ describe("Component.define", () => {
     const Note = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
       update: {
-        Edited: (model, msg, $) => {
+        Edited: ($, msg) => {
           expect(msg).type.toBe<{ readonly _tag: "Edited"; readonly body: string }>()
-          expect($.combine).type.not.toBeCallableWith(touch as (model: Model, msg: { readonly _tag: "Saved" }) => Model)
-          return { ...model, body: msg.body }
+          expect($.combine).type.not.toBeCallableWith(
+            touch as ($: Parameters<typeof touch>[0], msg: { readonly _tag: "Saved" }) => Model
+          )
+          return { ...$.model, body: msg.body }
         },
-        SaveClicked: NoteDef.update("SaveClicked", (_model, _msg, $) => $.combine(touch, save)),
+        SaveClicked: NoteDef.update("SaveClicked", ($) => $.combine(touch, save)),
         Saved: touch
       },
-      view: (_, h) => h.p()
+      view: (h) => h.p()
     })
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
   })
@@ -168,8 +170,8 @@ describe("Component.define", () => {
   it("infers headless requirements from an inline update handler", () => {
     const Note = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
-      update: { Edited: touch, SaveClicked: (model, _msg, $) => $.set(model).run(Save.make()), Saved: shared.Saved },
-      parts: (model) => ({ body: model.body })
+      update: { Edited: touch, SaveClicked: ($) => $.set($.model).run(Save.make()), Saved: shared.Saved },
+      parts: (_, model) => ({ body: model.body })
     })
     expect<Component.Headless.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
   })
@@ -185,7 +187,7 @@ describe("Component.define", () => {
     expect(NoteDef.make).type.not.toBeCallableWith({
       init,
       update,
-      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+      view: (h: Component.Helper<typeof NoteDef>) => h.p()
     })
   })
 
@@ -193,7 +195,7 @@ describe("Component.define", () => {
     expect(NoteDef.make).type.not.toBeCallableWith({
       init: () => ({ body: "", edits: 0 }),
       update: { Edited: touch, SaveClicked: touch },
-      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+      view: (h: Component.Helper<typeof NoteDef>) => h.p()
     })
   })
 
@@ -207,13 +209,13 @@ describe("Component.define", () => {
         // @ts-expect-error 'Deleted' is not a tag of this component's message
         Deleted: touch
       },
-      view: (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+      view: (h: Component.Helper<typeof NoteDef>) => h.p()
     })
   })
 
   it("rejects stale handlers in a spread and in a record variable", () => {
     const init = () => ({ body: "", edits: 0 })
-    const view = (_: Model, h: Component.Helper<typeof NoteDef>) => h.p()
+    const view = (h: Component.Helper<typeof NoteDef>) => h.p()
     const record = { ...shared, Edited: touch, SaveClicked: touch }
     expect(NoteDef.make).type.not.toBeCallableWith({
       init,
@@ -223,7 +225,7 @@ describe("Component.define", () => {
     expect(NoteDef.make).type.not.toBeCallableWith({
       init,
       update: record,
-      parts: (model: Model) => ({ body: model.body })
+      parts: (_: unknown, model: Model) => ({ body: model.body })
     })
   })
 
@@ -235,7 +237,7 @@ describe("Component.define", () => {
       return h.li(`${label} ${count}`)
     })
     expect<Parameters<typeof row>>().type.toBe<[h: Component.Helper<typeof NoteDef>, label: string, count: number]>()
-    NoteDef.view((model, h) => {
+    NoteDef.view((h, model) => {
       expect(row).type.not.toBeCallableWith(h, model.body)
       return h.ul(row(h, model.body, model.edits))
     })
@@ -246,6 +248,6 @@ describe("Component.define", () => {
       expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
       return h.li(label)
     }
-    NoteDef.view((model, h) => h.ul(row(h, model.body)))
+    NoteDef.view((h, model) => h.ul(row(h, model.body)))
   })
 })

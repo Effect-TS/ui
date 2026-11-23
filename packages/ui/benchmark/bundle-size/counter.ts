@@ -12,8 +12,8 @@ const Counter = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (model, message) => message._tag === "Increment" ? model + 1 : model - 1,
-  view: (model, h) =>
+  update: ($, message) => message._tag === "Increment" ? $.model + 1 : $.model - 1,
+  view: (h, model) =>
     h.div.children(
       h.button.onClick(Message.Decrement()).children("-"),
       h.span.children(String(model)),

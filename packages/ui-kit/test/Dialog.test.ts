@@ -271,9 +271,9 @@ const Nested = Component.define({
 }).make({
   init: () => ({ inner: true }),
   update: {
-    RequestedCloseInner: (model) => ({ ...model, inner: false })
+    RequestedCloseInner: ($) => ({ ...$.model, inner: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Dialog(h, {
       key: "outer",
       props: { open: true },

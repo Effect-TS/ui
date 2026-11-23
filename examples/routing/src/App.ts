@@ -65,7 +65,7 @@ export const App = AppDef.make({
   },
 
   update: {
-    ChangedRoute: (_model, { route }, $) => {
+    ChangedRoute: ($, { route }) => {
       const searchText = searchTextOf(route)
       return $.evolve({
         route,
@@ -74,16 +74,16 @@ export const App = AppDef.make({
       })
     },
 
-    ChangedSearchInput: (_model, { value }, $) => $.evolve({ searchInput: value })
+    ChangedSearchInput: ($, { value }) => $.evolve({ searchInput: value })
   },
 
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
   ],
 
-  head: (model) => [Head.title(routeTitle(model.route))],
+  head: ({ model }) => [Head.title(routeTitle(model.route))],
 
-  view: ({ route, searchHistory, searchInput }, h) =>
+  view: (h, { route, searchHistory, searchInput }) =>
     h.div.class("min-h-screen bg-gray-100").children(
       h.header.children(
         NavigationMenu(h, {

@@ -33,12 +33,12 @@ export const TodoItem = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (_, message, $) =>
+  update: ($, message) =>
     TodoItemMessage.match(message, {
       Toggle: ({ done }) => $.emit(TodoItemEvents.Toggled({ id: $.props.todo.id, done })),
       Delete: () => $.emit(TodoItemEvents.Deleted({ id: $.props.todo.id }))
     }),
-  view: (_, h) =>
+  view: (h) =>
     h.li.class(h.props.todo.done && "done").children(
       h.label(
         h.input.attr("type", "checkbox").checked(h.props.todo.done)
@@ -78,27 +78,27 @@ export const TodoApp = Component.define({
   elements: Html
 }).make({
   init: (): TodoAppModel => ({ draft: "", nextId: 1, todos: [] }),
-  update: (model, message): TodoAppModel =>
+  update: ($, message): TodoAppModel =>
     TodoAppMessage.match(message, {
       // Rejected: the field keeps showing the Model's draft.
-      Draft: ({ value }) => value.length > maxTitle ? model : { ...model, draft: value },
+      Draft: ({ value }) => value.length > maxTitle ? $.model : { ...$.model, draft: value },
       Add: () => {
-        const title = model.draft.trim()
-        if (title === "") return model
+        const title = $.model.draft.trim()
+        if (title === "") return $.model
         return {
           draft: "",
-          nextId: model.nextId + 1,
-          todos: [...model.todos, { id: `t${model.nextId}`, title, done: false }]
+          nextId: $.model.nextId + 1,
+          todos: [...$.model.todos, { id: `t${$.model.nextId}`, title, done: false }]
         }
       },
       Toggled: ({ done, id }) => ({
-        ...model,
-        todos: model.todos.map((todo) => todo.id === id ? { ...todo, done } : todo)
+        ...$.model,
+        todos: $.model.todos.map((todo) => todo.id === id ? { ...todo, done } : todo)
       }),
-      Deleted: ({ id }) => ({ ...model, todos: model.todos.filter((todo) => todo.id !== id) }),
-      ClearDone: () => ({ ...model, todos: model.todos.filter((todo) => !todo.done) })
+      Deleted: ({ id }) => ({ ...$.model, todos: $.model.todos.filter((todo) => todo.id !== id) }),
+      ClearDone: () => ({ ...$.model, todos: $.model.todos.filter((todo) => !todo.done) })
     }),
-  view: (model, h) => {
+  view: (h, model) => {
     const left = model.todos.filter((todo) => !todo.done).length
     return h.main(
       h.h1("Todos"),

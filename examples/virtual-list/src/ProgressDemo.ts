@@ -38,19 +38,19 @@ export const ProgressDemo = Component.define({
     stops: 0
   }),
   update: {
-    ToggledTracking: (model) => ({ ...model, track: !model.track, scrolled: 0, moves: 0, stops: 0 }),
-    Scrolled: (model, { _tag, ...at }) => ({
-      ...model,
+    ToggledTracking: ($) => ({ ...$.model, track: !$.model.track, scrolled: 0, moves: 0, stops: 0 }),
+    Scrolled: ($, { _tag, ...at }) => ({
+      ...$.model,
       ...at,
-      scrolled: model.scrolled + 1,
-      moves: at.first !== model.first || at.last !== model.last || at.atStart !== model.atStart ||
-          at.atEnd !== model.atEnd
-        ? model.moves + 1
-        : model.moves,
-      stops: model.scrolling && !at.scrolling ? model.stops + 1 : model.stops
+      scrolled: $.model.scrolled + 1,
+      moves: at.first !== $.model.first || at.last !== $.model.last || at.atStart !== $.model.atStart ||
+          at.atEnd !== $.model.atEnd
+        ? $.model.moves + 1
+        : $.model.moves,
+      stops: $.model.scrolling && !at.scrolling ? $.model.stops + 1 : $.model.stops
     })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const progress = model.length > model.height ? model.offset / (model.length - model.height) : 0
     return h.div.children(
       h.div.class("toolbar fixed").children(

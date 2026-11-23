@@ -34,8 +34,8 @@ const Tip = Component.define({
   shared: { provider: TipsProvider }
 }).make({
   init: () => null,
-  update: (model, message, $) => $.set(model).send(TipsProvider, message),
-  view: (_, h) =>
+  update: ($, message) => $.set($.model).send(TipsProvider, message),
+  view: (h) =>
     h.el("button").on("click", TipMessage.Enter({ id: h.props.id })).children(
       `${h.props.id}:${h.shared.provider.open === h.props.id ? "open" : "closed"}${h.shared.provider.label}`
     )
@@ -51,8 +51,8 @@ const Trigger = Component.define({
 })
   .make({
     init: () => null,
-    update: (model) => model,
-    parts: (_, p) => ({ open: p.shared.provider.open, label: p.shared.provider.label })
+    update: ($) => $.model,
+    parts: (p) => ({ open: p.shared.provider.open, label: p.shared.provider.label })
   })
 
 /** TipsProvider with a Tip and a Trigger in its closure. Its Model is the label it passes to TipsProvider. */
@@ -64,7 +64,7 @@ const App = Component.define({
 }).make({
   init: () => "",
   update: (_, message) => message.label,
-  view: (label, h) =>
+  view: (h, label) =>
     TipsProvider(h, {
       key: "tips",
       props: { label },
@@ -112,7 +112,7 @@ describe("shared state", () => {
         model: Schema.Number,
         message: Tick,
         shares: { value: (ticks) => new Date(Math.floor(ticks / 2)), receives: ["Tick"] }
-      }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
+      }).make({ init: () => 0, update: ($) => $.model + 1, parts: () => ({}) })
       let renders = 0
       const Face = Component.define({
         name: "Face",
@@ -123,21 +123,21 @@ describe("shared state", () => {
       })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => {
+          update: ($) => $.model,
+          view: (h) => {
             renders++
             return h.el("p", String(h.shared.provider.getTime()))
           }
         })
       const Ticker = Component.define({ name: "Ticker", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
-        update: (model, message, $) => $.set(model).send(ClockProvider, message),
-        view: (_, h) => h.el("button").on("click", Tick.Tick()).children("tick")
+        update: ($, message) => $.set($.model).send(ClockProvider, message),
+        view: (h) => h.el("button").on("click", Tick.Tick()).children("tick")
       })
       const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: Tick }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           ClockProvider(h, {
             key: "clock",
             view: () => h.el("div", [Face(h, { key: "face" }), Ticker(h, { key: "tick" })])
@@ -163,11 +163,11 @@ describe("shared state", () => {
         shares: (): string => {
           throw new Error("boom")
         }
-      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
       const Host = Component.define({ name: "Host", scoped: false, model: Schema.Null, message: TipMessage }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           BrokenProvider(h, { key: "b", view: () => h.el("p", "inside"), fallback: () => h.el("p", "broken") })
       })
       const root = yield* TestHost.mount(Host, {})
@@ -210,8 +210,8 @@ describe("shared state in a Scene", () => {
         slots: ["body"]
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
+        update: ($) => $.model,
+        view: (h) => TipsProvider(h, { key: "tips", props: { label: "placed" }, view: () => h.slots.body })
       })
       const s = yield* Scene.make(Frame, {}, {
         slots: (h) => ({ body: Trigger(h, { key: "t", view: (trigger) => h.el("i", trigger.label) }) })
@@ -223,8 +223,8 @@ describe("shared state in a Scene", () => {
     assert.deepStrictEqual(Story.parts(Trigger, { model: null, props: {} }), { open: null, label: "" })
     const Tagged = Component.define({ name: "Tagged", scoped: false, model: Schema.Null, message: TipMessage }).make({
       init: () => null,
-      update: (model) => model,
-      parts: (_, p) =>
+      update: ($) => $.model,
+      parts: (p) =>
         p.child(TipsProvider, {
           props: { label: "inside" },
           parts: () => p.child(Trigger, { parts: (trigger) => trigger })
@@ -245,7 +245,7 @@ describe("shared state in a Scene", () => {
             model: Schema.Number,
             message: TipMessage,
             shares: (model) => model
-          }).make({ init: ($) => $.props.value, update: (model) => model, parts: () => ({}) })
+          }).make({ init: ($) => $.props.value, update: ($) => $.model, parts: () => ({}) })
         const AProvider = required("AProvider")
         const BProvider = required("BProvider")
         const Sum = Component.define({
@@ -257,8 +257,8 @@ describe("shared state in a Scene", () => {
         })
           .make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.el("p", String(h.shared.a + h.shared.b))
+            update: ($) => $.model,
+            view: (h) => h.el("p", String(h.shared.a + h.shared.b))
           })
         const shared = yield* Scene.make(Sum, {})
         assert.strictEqual(Locator.textOf(shared.shared(AProvider, 1).shared(BProvider, 2).root), "3")
@@ -293,12 +293,12 @@ const Group = Component.define({
   }
 }).make({
   init: () => ({ on: false, bumps: 0 }),
-  update: (model, message) =>
+  update: ($, message) =>
     GroupMessage.match(message, {
-      ChangedOn: ({ on }) => ({ ...model, on }),
-      Bumped: () => ({ ...model, bumps: model.bumps + 1 })
+      ChangedOn: ({ on }) => ({ ...$.model, on }),
+      Bumped: () => ({ ...$.model, bumps: $.model.bumps + 1 })
     }),
-  parts: (model) => ({ on: model.on })
+  parts: (_, model) => ({ on: model.on })
 })
 
 const ReaderMessage = UiSchema.TaggedEnum({
@@ -322,8 +322,9 @@ const makeReader = (answer: (told: boolean) => boolean) =>
     }
   }).make({
     init: () => false,
-    update: (on, message) => ReaderMessage.match(message, { Clicked: () => !on, ChangedGroup: ({ on }) => answer(on) }),
-    view: (_, h) => h.el("button").on("click", ReaderMessage.Clicked()).children("reader")
+    update: ($, message) =>
+      ReaderMessage.match(message, { Clicked: () => !$.model, ChangedGroup: ({ on }) => answer(on) }),
+    view: (h) => h.el("button").on("click", ReaderMessage.Clicked()).children("reader")
   })
 
 const BumperMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
@@ -337,19 +338,19 @@ const Bumper = Component.define({
   shared: { group: Group }
 }).make({
   init: () => null,
-  update: (model, { times }, $) => {
-    let next = $.set(model).send(Group, { _tag: "Bumped" })
+  update: ($, { times }) => {
+    let next = $.set($.model).send(Group, { _tag: "Bumped" })
     for (let i = 1; i < times; i++) next = next.send(Group, { _tag: "Bumped" })
     return next
   },
-  view: (_, h) => h.el("button").on("click", BumperMessage.Bump({ times: h.props.times })).children("bump")
+  view: (h) => h.el("button").on("click", BumperMessage.Bump({ times: h.props.times })).children("bump")
 })
 
 const makePage = (Reader: ReturnType<typeof makeReader>) =>
   Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       Group(h, {
         key: "g",
         fallback: () => h.text("looped"),
@@ -371,8 +372,8 @@ describe("optional owners, reports and onChange", () => {
         shared: { provider: { owner: TipsProvider, optional: true } }
       }).make({
         init: () => null,
-        update: (model, message, $) => $.set(model).send(TipsProvider, message),
-        view: (_, h) =>
+        update: ($, message) => $.set($.model).send(TipsProvider, message),
+        view: (h) =>
           h.el("button").on("click", TipMessage.Enter({ id: "a" })).children(
             h.shared.provider === undefined ? "alone" : "grouped"
           )
@@ -394,12 +395,12 @@ describe("optional owners, reports and onChange", () => {
         model: Schema.Null,
         message: Schema.Never,
         shared: { group: { owner: Group, report: (_, props) => props.open } }
-      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
+      }).make({ init: () => null, update: ($) => $.model, view: (h) => h.text("") })
       const Open = UiSchema.TaggedEnum({ Open: { which: Schema.String } })
       const Bar = Component.define({ name: "Bar", scoped: false, model: Schema.String, message: Open }).make({
         init: () => "a",
         update: (_, { which }) => which,
-        view: (open, h) =>
+        view: (h, open) =>
           Group(h, {
             key: "g",
             view: () =>
@@ -435,18 +436,18 @@ describe("optional owners, reports and onChange", () => {
           value: () => null,
           collects: { schema: Schema.String, onChange: (ids) => IdsMessage.ChangedIds({ ids: [...ids].sort() }) }
         }
-      }).make({ init: () => [], update: (_, { ids }) => ids, parts: (ids) => ({ ids }) })
+      }).make({ init: () => [], update: (_, { ids }) => ids, parts: (_, ids) => ({ ids }) })
       const Box = Component.define({
         name: "Box",
         scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         shared: { controls: { owner: Controls, report: (_, __, id) => id("box") } }
-      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("span").attr("id", h.id("box")) })
+      }).make({ init: () => null, update: ($) => $.model, view: (h) => h.el("span").attr("id", h.id("box")) })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Controls(h, {
             key: "c",
             view: (controls) =>
@@ -522,7 +523,7 @@ describe("shared state in update", () => {
       receives: ["Ticked"],
       schema: Schema.Struct({ at: Schema.Date, "~redacted": Schema.Boolean })
     }
-  }).make({ init: () => 0, update: (ticks) => ticks + 1, parts: () => ({}) })
+  }).make({ init: () => 0, update: ($) => $.model + 1, parts: () => ({}) })
   const WatchMessage = UiSchema.TaggedEnum({ Clicked: {} })
   const Watch = Component.define({
     name: "Watch",
@@ -532,13 +533,13 @@ describe("shared state in update", () => {
     shared: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
   }).make({
     init: () => [],
-    update: (seen, _, $) =>
+    update: ($) =>
       $.set([
-        ...seen,
+        ...$.model,
         Object.hasOwn($.shared, "tips") && $.shared.tips === undefined ? $.shared.clock.at.getTime() : -1
       ])
         .send(Clock, ClockMessage.Ticked()),
-    view: (seen, h) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
+    view: (h, seen) => h.el("button").on("click", WatchMessage.Clicked()).children(`saw [${seen.join(",")}]`)
   })
   const Ticker = Component.define({
     name: "Ticker",
@@ -548,13 +549,13 @@ describe("shared state in update", () => {
     shared: { clock: Clock }
   }).make({
     init: () => null,
-    update: (model, message, $) => $.set(model).send(Clock, message),
-    view: (_, h) => h.el("button").on("click", ClockMessage.Ticked()).children("tick")
+    update: ($, message) => $.set($.model).send(Clock, message),
+    view: (h) => h.el("button").on("click", ClockMessage.Ticked()).children("tick")
   })
   const Face = Component.define({ name: "Face", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => Clock(h, { key: "clock", view: () => h.el("div", Watch(h, { key: "w" }), Ticker(h, { key: "t" })) })
+    update: ($) => $.model,
+    view: (h) => Clock(h, { key: "clock", view: () => h.el("div", Watch(h, { key: "w" }), Ticker(h, { key: "t" })) })
   })
 
   it.effect("reads the owner's value as update runs, logs it, and replays it from entries and Wire frames", () =>
@@ -602,15 +603,17 @@ describe("onChange rounds and declarations", () => {
         shared: { group: { owner: Group, onChange: (value) => ReaderMessage.ChangedGroup({ ...value }) } }
       }).make({
         init: () => null,
-        update: (model, message, $) =>
-          message._tag === "ChangedGroup" && message.bumps === 1 ? $.set(model).send(Group, { _tag: "Bumped" }) : model,
-        view: (_, h) => h.text("")
+        update: ($, message) =>
+          message._tag === "ChangedGroup" && message.bumps === 1
+            ? $.set($.model).send(Group, { _tag: "Bumped" })
+            : $.model,
+        view: (h) => h.text("")
       })
       const Reader = makeReader((told) => told)
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Group(h, {
             key: "g",
             view: () =>
@@ -672,12 +675,12 @@ describe("optional owners, reports and onChange in a Story", () => {
     }
   }).make({
     init: () => false,
-    update: (on, message, $) =>
+    update: ($, message) =>
       ReaderMessage.match(message, {
-        Clicked: () => $.set(!on).send(Group, { _tag: "Bumped" }),
+        Clicked: () => $.set(!$.model).send(Group, { _tag: "Bumped" }),
         ChangedGroup: ({ on }) => on
       }),
-    view: (_, h) =>
+    view: (h) =>
       h.el("button").on("click", ReaderMessage.Clicked()).children(
         h.shared.group === undefined ? "alone" : `bumps ${h.shared.group.bumps}`
       )
@@ -740,13 +743,13 @@ describe("a component that reads its own kind", () => {
   }).make({
     init: () => 0,
     update: (_, message) => NestMessage.match(message, { ChangedBelow: ({ open }) => open }),
-    parts: (below, p) => ({ nested: p.shared.parent !== undefined, below })
+    parts: (p, below) => ({ nested: p.shared.parent !== undefined, below })
   })
   const Toggle = UiSchema.TaggedEnum({ Toggled: {} })
   const Nests = Component.define({ name: "Nests", scoped: false, model: Schema.Boolean, message: Toggle }).make({
     init: () => true,
-    update: (open) => !open,
-    view: (open, h) => {
+    update: ($) => !$.model,
+    view: (h, open) => {
       const label = (name: string, nest: { readonly nested: boolean; readonly below: number }) =>
         h.el("span", `${name} ${nest.nested ? "nested" : "outer"} ${nest.below}`)
       return Nest(h, {
@@ -799,12 +802,12 @@ describe("a component that reads its own kind", () => {
     shared: { parent: { owner: "self", optional: true } }
   }).make({
     init: () => 0,
-    update: (picked, message, $) =>
+    update: ($, message) =>
       MenuMessage.match(message, {
         Pick: () => $.send("self", MenuMessage.Picked()),
-        Picked: () => $.send("self", MenuMessage.Picked()).set(picked + 1)
+        Picked: () => $.send("self", MenuMessage.Picked()).set($.model + 1)
       }),
-    parts: (picked, p) => ({ picked, item: p.part("button", (b) => b.onClick(MenuMessage.Pick())) })
+    parts: (p, picked) => ({ picked, item: p.part("button", (b) => b.onClick(MenuMessage.Pick())) })
   })
   const Menus = Component.define({
     name: "Menus",
@@ -814,8 +817,8 @@ describe("a component that reads its own kind", () => {
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       Menu(h, {
         key: "outer",
         view: (outer) =>

@@ -32,9 +32,9 @@ const NavLink = LoggedInDef.fragment((h, label: string, route: LoggedInRoute) =>
 export const LoggedIn = LoggedInDef.make({
   init: () => null,
 
-  update: (_model, _message, $) => $.emit(LoggedInEvents.SignedOut()),
+  update: ($) => $.emit(LoggedInEvents.SignedOut()),
 
-  view: (_model, h) => {
+  view: (h) => {
     const { route, session } = h.props
     return h.div.class("min-h-screen").children(
       h.nav.class("bg-blue-500 text-white p-4").children(

@@ -39,7 +39,7 @@ export const TagPicker = Component.define({
   elements: Html
 }).make({
   init: () => ({ announced: "" }),
-  update: (_model, message, $) => {
+  update: ($, message) => {
     const label = (id: string) => $.props.options.find((option) => option.id === id)?.label ?? id
     return TagPickerMessage.match(message, {
       PickedTag: ({ id }) =>
@@ -64,7 +64,7 @@ export const TagPicker = Component.define({
   // If the Listbox fails, it shows nothing, the closure with it, and an
   // `onFailure` here hears of it. The failure stops there: this component
   // goes on.
-  parts: (model, p) => {
+  parts: (p, model) => {
     const picked = new Set(p.props.tags)
     return p.child(Listbox, {
       // Only the tags not picked yet are offered.
@@ -107,11 +107,11 @@ export const NoteTags = Component.define({
   elements: Html
 }).make({
   init: () => ({ tags: [] }),
-  update: (_model, { tags }) => ({ tags }),
+  update: (_, { tags }) => ({ tags }),
   // A consumer places a composed component as it places any headless one.
   // It doesn't know a Listbox is inside: it sees one set of parts, and hears
   // only the picker's `Updated`.
-  view: (model, h) =>
+  view: (h, model) =>
     TagPicker(h, {
       props: { options, tags: model.tags },
       onEmit: { Updated: ({ tags }) => NoteTagsMessage.UpdatedTags({ tags }) },

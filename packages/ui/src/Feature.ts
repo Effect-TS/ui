@@ -29,8 +29,8 @@
  *   events: TodosEvents
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_, h) => h.el("ul")
+ *   update: ($) => $.model,
+ *   view: (h) => h.el("ul")
  * })
  *
  * // The app picks the implementation. A test provides a fake the same way.
@@ -181,8 +181,8 @@ export const isService = (u: unknown): u is Any => Predicate.hasProperty(u, Type
  *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_, h) => h.el("p", "no todos")
+ *   update: ($) => $.model,
+ *   view: (h) => h.el("p", "no todos")
  * })
  *
  * const TodosFake = Todos.toLayer(FakeTodos)

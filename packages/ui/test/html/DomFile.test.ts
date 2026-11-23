@@ -106,13 +106,13 @@ describe("DomFile", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, message, $) =>
+        update: ($, message) =>
           Message.match(message, {
             PressedOpen: () => $.run(DomCommand.showPicker(Attachment, Message.ShowedPicker)),
-            ShowedPicker: ({ found, opened }) => [...log, `found ${found}, opened ${opened}`],
-            Chose: ({ files }) => [...log, `chose ${files.map((file) => file.name).join(", ")}`]
+            ShowedPicker: ({ found, opened }) => [...$.model, `found ${found}, opened ${opened}`],
+            Chose: ({ files }) => [...$.model, `chose ${files.map((file) => file.name).join(", ")}`]
           }),
-        view: (_, h) =>
+        view: (h) =>
           h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(Attachment).value("")
             .onChange(({ files }) => Message.Chose({ files }))
       })
@@ -151,15 +151,15 @@ describe("DomFile", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, message, $) =>
+        update: ($, message) =>
           Message.match(message, {
             OpenSubmit: () => $.run(DomCommand.showPicker(Submit, Message.ShowedPicker)),
             OpenFile: () => $.run(DomCommand.showPicker(Attachment, Message.ShowedPicker)),
             OpenLocked: () => $.run(DomCommand.showPicker(Locked, Message.ShowedPicker)),
-            ShowedPicker: ({ found, opened }) => [...log, `found ${found}, opened ${opened}`],
-            Submitted: () => [...log, "submitted"]
+            ShowedPicker: ({ found, opened }) => [...$.model, `found ${found}, opened ${opened}`],
+            Submitted: () => [...$.model, "submitted"]
           }),
-        view: (_, h) =>
+        view: (h) =>
           h.form.onSubmit(Message.Submitted()).children(
             h.input.attr("type", "submit").ref(Submit),
             h.input.attr("type", "file").ref(Attachment),

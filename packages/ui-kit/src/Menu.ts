@@ -180,13 +180,13 @@
  * }).make({
  *   init: () => ({ open: false, share: false, wrap: true }),
  *   update: {
- *     RequestedOpenMenu: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseMenu: (_model, _message, $) => $.evolve({ open: false }),
- *     RequestedOpenShare: (_model, _message, $) => $.evolve({ share: true }),
- *     RequestedCloseShare: (_model, _message, $) => $.evolve({ share: false }),
- *     PickedAction: (model, { checked, value }, $) => value === "wrap" ? $.evolve({ wrap: checked === true }) : model
+ *     RequestedOpenMenu: ($) => $.evolve({ open: true }),
+ *     RequestedCloseMenu: ($) => $.evolve({ open: false }),
+ *     RequestedOpenShare: ($) => $.evolve({ share: true }),
+ *     RequestedCloseShare: ($) => $.evolve({ share: false }),
+ *     PickedAction: ($, { checked, value }) => value === "wrap" ? $.evolve({ wrap: checked === true }) : $.model
  *   },
- *   view: (model, h) => {
+ *   view: (h, model) => {
  *     const events = {
  *       Picked: ({ checked, value }: { readonly value: string; readonly checked?: boolean | undefined }) =>
  *         EditorMessage.PickedAction({ value, checked }),
@@ -2087,93 +2087,90 @@ export const Menu = Component.define({
     barCurrent: null
   }),
   update: {
-    PressedTrigger: (model, { key, pointerType, triggerId }, $) =>
-      pressTrigger(model, $, methodOf(pointerType), key, triggerId),
-    ReleasedTrigger: (_model, _message, $) => $.evolve({ pressing: false }),
-    PressedContextTrigger: (model, { key, pointerType, triggerId, x, y }, $) =>
-      openAt(model, $, key, triggerId, contextPoint(x, y, pointerType), methodOf(pointerType), true),
-    TouchedContextTrigger: (model, { key, triggerId, x, y }, $) =>
+    PressedTrigger: ($, { key, pointerType, triggerId }) =>
+      pressTrigger($.model, $, methodOf(pointerType), key, triggerId),
+    ReleasedTrigger: ($) => $.evolve({ pressing: false }),
+    PressedContextTrigger: ($, { key, pointerType, triggerId, x, y }) =>
+      openAt($.model, $, key, triggerId, contextPoint(x, y, pointerType), methodOf(pointerType), true),
+    TouchedContextTrigger: ($, { key, triggerId, x, y }) =>
       disabledOf($)
-        ? model
+        ? $.model
         : $.evolve({ longPress: { key, triggerId, x, y } }).run(
           WaitBeforeLongPress.make({ delay: LongPressDelay })
         ),
-    CancelledLongPress: (model, _message, $) =>
-      model.longPress === null
-        ? model
+    CancelledLongPress: ($) =>
+      $.model.longPress === null
+        ? $.model
         : $.evolve({ longPress: null }).run(Command.interrupt(WaitBeforeLongPress)),
-    CompletedWaitBeforeLongPress: (model, _message, $) => {
-      const press = model.longPress
-      if (press === null) return model
+    CompletedWaitBeforeLongPress: ($) => {
+      const press = $.model.longPress
+      if (press === null) return $.model
       const point = { x: press.x, y: press.y, width: 10, height: 10 }
-      return openAt(model, $, press.key, press.triggerId, point, "touch", false)
+      return openAt($.model, $, press.key, press.triggerId, point, "touch", false)
     },
-    CompletedWaitBeforeContextGrace: (_model, _message, $) => $.evolve({ justOpened: false }),
-    ReleasedContextPointer: (model, { outside }, $) => {
-      if (!model.releaseArmed) return model
-      const next = UiStruct.evolve(model, { releaseArmed: false })
-      return outside && !model.justOpened ? dismiss(next, $, "cancel-open", "mouse") : $.set(next)
+    CompletedWaitBeforeContextGrace: ($) => $.evolve({ justOpened: false }),
+    ReleasedContextPointer: ($, { outside }) => {
+      if (!$.model.releaseArmed) return $.model
+      const next = UiStruct.evolve($.model, { releaseArmed: false })
+      return outside && !$.model.justOpened ? dismiss(next, $, "cancel-open", "mouse") : $.set(next)
     },
-    PressedTriggerKey: (model, { key, trigger, triggerId }, $) =>
+    PressedTriggerKey: ($, { key, trigger, triggerId }) =>
       $.props.open || disabledOf($)
-        ? model
-        : open(model, $, "list-navigation", "keyboard", trigger, triggerId, { last: key === "ArrowUp" }),
-    EnteredTrigger: (model, message, $) => enterTrigger(model, $, message),
-    LeftTrigger: (_model, _message, $) =>
-      $.evolve($.props.open ? {} : { hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
-    CompletedWaitBeforeHoverOpen: (model, _message, $) =>
-      $.props.open || !model.hovering || disabledOf($) ? model : hoverOpen(model, $),
-    LeftHoverArea: (model, _message, $) =>
-      $.props.open && hoverOpened(model.reason, $)
-        ? $.evolve({ hovering: false }).run(WaitBeforeHoverClose.make({ delay: model.closeDelay }))
-        : model,
-    ReturnedToHoverArea: (_model, _message, $) =>
-      $.evolve({ hovering: true }).run(Command.interrupt(WaitBeforeHoverClose)),
-    CompletedWaitBeforeHoverClose: (model, _message, $) =>
-      $.props.open && hoverOpened(model.reason, $) && !model.hovering &&
-        !model.submenus.some((submenu) => submenu.open)
-        ? dismiss(model, $, "trigger-hover", "mouse")
-        : model,
-    CompletedWaitBeforeStickExpires: (_model, _message, $) => $.evolve({ stick: false }),
-    PressedSubmenuTrigger: (model, { pointerType }, $) =>
-      hoverOf($.props, true) ? model : pressTrigger(model, $, methodOf(pointerType), "submenu", null),
-    ClickedSubmenuTrigger: (model, { pointerType }, $) =>
-      pressTrigger(model, $, methodOf(pointerType), "submenu", null),
-    PressedSubmenuTriggerKey: (model, { key }, $) => {
+        ? $.model
+        : open($.model, $, "list-navigation", "keyboard", trigger, triggerId, { last: key === "ArrowUp" }),
+    EnteredTrigger: ($, message) => enterTrigger($.model, $, message),
+    LeftTrigger: ($) => $.evolve($.props.open ? {} : { hovering: false }).run(Command.interrupt(WaitBeforeHoverOpen)),
+    CompletedWaitBeforeHoverOpen: ($) =>
+      $.props.open || !$.model.hovering || disabledOf($) ? $.model : hoverOpen($.model, $),
+    LeftHoverArea: ($) =>
+      $.props.open && hoverOpened($.model.reason, $)
+        ? $.evolve({ hovering: false }).run(WaitBeforeHoverClose.make({ delay: $.model.closeDelay }))
+        : $.model,
+    ReturnedToHoverArea: ($) => $.evolve({ hovering: true }).run(Command.interrupt(WaitBeforeHoverClose)),
+    CompletedWaitBeforeHoverClose: ($) =>
+      $.props.open && hoverOpened($.model.reason, $) && !$.model.hovering &&
+        !$.model.submenus.some((submenu) => submenu.open)
+        ? dismiss($.model, $, "trigger-hover", "mouse")
+        : $.model,
+    CompletedWaitBeforeStickExpires: ($) => $.evolve({ stick: false }),
+    PressedSubmenuTrigger: ($, { pointerType }) =>
+      hoverOf($.props, true) ? $.model : pressTrigger($.model, $, methodOf(pointerType), "submenu", null),
+    ClickedSubmenuTrigger: ($, { pointerType }) => pressTrigger($.model, $, methodOf(pointerType), "submenu", null),
+    PressedSubmenuTriggerKey: ($, { key }) => {
       const parent = parentOf($)
-      if ($.props.open || parent === undefined || disabledOf($)) return model
+      if ($.props.open || parent === undefined || disabledOf($)) return $.model
       const reason = key === keys(parent.orientation, parent.rtl).open ? "list-navigation" : "trigger-press"
-      return open(model, $, reason, "keyboard", "submenu", null)
+      return open($.model, $, reason, "keyboard", "submenu", null)
     },
-    PressedKey: (model, { action, key }, $) => pressKey(model, $, key, action),
-    ReleasedSpace: (model, { action }, $) => {
-      if (!model.spaceDown) return model
-      const next = UiStruct.evolve(model, { spaceDown: false })
+    PressedKey: ($, { action, key }) => pressKey($.model, $, key, action),
+    ReleasedSpace: ($, { action }) => {
+      if (!$.model.spaceDown) return $.model
+      const next = UiStruct.evolve($.model, { spaceDown: false })
       return action !== null && $.props.open ? activate(next, $, action, "keyboard") : next
     },
-    EnteredItem: (model, { value }, $) =>
-      $.props.open && $.props.highlightItemOnHover !== false && model.active !== value
-        ? commit($, model, UiStruct.evolve(model, { active: value, activeByKey: false }), "pointer")
-        : model,
-    LeftItem: (model, _message, $) =>
-      model.active === null || model.submenus.some((submenu) => submenu.open && submenu.item === model.active) ||
+    EnteredItem: ($, { value }) =>
+      $.props.open && $.props.highlightItemOnHover !== false && $.model.active !== value
+        ? commit($, $.model, UiStruct.evolve($.model, { active: value, activeByKey: false }), "pointer")
+        : $.model,
+    LeftItem: ($) =>
+      $.model.active === null || $.model.submenus.some((submenu) => submenu.open && submenu.item === $.model.active) ||
         filteringOf($.props)
-        ? model
-        : commit($, model, UiStruct.evolve(model, { active: null, activeByKey: false }), "pointer"),
-    PressedItem: (_model, _message, $) => $.evolve({ pressedItem: true }),
-    ReleasedItem: (model, { action, pointerType }, $) =>
-      model.pressing && model.releaseAllowed && !model.pressedItem && action.kind !== "link"
-        ? activate(UiStruct.evolve(model, { pressing: false }), $, action, methodOf(pointerType))
-        : model,
-    ClickedItem: (model, { action, pointerType }, $) => activate(model, $, action, methodOf(pointerType)),
-    CompletedWaitBeforeResetTyping: (_model, _message, $) => $.evolve({ typed: "" }),
-    ShowedPopup: (_model, _message, $) =>
+        ? $.model
+        : commit($, $.model, UiStruct.evolve($.model, { active: null, activeByKey: false }), "pointer"),
+    PressedItem: ($) => $.evolve({ pressedItem: true }),
+    ReleasedItem: ($, { action, pointerType }) =>
+      $.model.pressing && $.model.releaseAllowed && !$.model.pressedItem && action.kind !== "link"
+        ? activate(UiStruct.evolve($.model, { pressing: false }), $, action, methodOf(pointerType))
+        : $.model,
+    ClickedItem: ($, { action, pointerType }) => activate($.model, $, action, methodOf(pointerType)),
+    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    ShowedPopup: ($) =>
       $.evolve($.props.open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
-    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
-      if (open !== $.props.open) return model
+    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
+      if (open !== $.props.open) return $.model
       if (open) return $.emit(MenuEvents.Settled({ open }))
-      if (!model.mounted || $.props.holdExit === true) return model
+      if (!$.model.mounted || $.props.holdExit === true) return $.model
       const closed = $.evolve({
         mounted: false,
         started: false,
@@ -2181,34 +2178,34 @@ export const Menu = Component.define({
         active: null,
         transitioning: false,
         direction: null,
-        instant: model.instant === "trigger-change" ? null : model.instant
+        instant: $.model.instant === "trigger-change" ? null : $.model.instant
       }).emit(MenuEvents.Settled({ open }))
-      const highlighted = model.active === null
+      const highlighted = $.model.active === null
         ? closed
         : closed.emit(MenuEvents.Highlighted({ value: null, reason: "none" }))
       return $.props.query !== undefined && $.props.query !== ""
         ? highlighted.emit(MenuEvents.RequestedQuery({ query: "", reason: "none" }))
         : highlighted
     },
-    ChangedPlacement: (_model, { placement }, $) => $.evolve({ placement }),
-    ChangedDirection: (_model, { rtl }, $) => $.evolve({ rtl }),
-    FoundTrigger: (_model, { id }, $) => $.evolve({ triggerElement: id }),
-    PressedOutside: (model, { pointerType }, $) =>
-      model.context && model.justOpened && model.openMethod === "touch"
-        ? model
-        : dismiss(model, $, "outside-press", methodOf(pointerType)),
-    FocusedOutside: (model, _message, $) => dismiss(model, $, "focus-out", null, true),
-    TabbedOut: (model, _message, $) => dismiss(model, $, "focus-out", "keyboard", true),
-    ReleasedPointer: (model, { outside }, $) => {
-      if (!model.pressing) return model
-      const next = UiStruct.evolve(model, { pressing: false })
+    ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
+    ChangedDirection: ($, { rtl }) => $.evolve({ rtl }),
+    FoundTrigger: ($, { id }) => $.evolve({ triggerElement: id }),
+    PressedOutside: ($, { pointerType }) =>
+      $.model.context && $.model.justOpened && $.model.openMethod === "touch"
+        ? $.model
+        : dismiss($.model, $, "outside-press", methodOf(pointerType)),
+    FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
+    TabbedOut: ($) => dismiss($.model, $, "focus-out", "keyboard", true),
+    ReleasedPointer: ($, { outside }) => {
+      if (!$.model.pressing) return $.model
+      const next = UiStruct.evolve($.model, { pressing: false })
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
-    AllowedRelease: (model, _message, $) => model.pressing ? $.evolve({ releaseAllowed: true }) : model,
-    ChangedSubmenus: (_model, { submenus }, $) => $.evolve({ submenus }),
-    ChangedParent: (model, { parent }, $) => {
-      if ($.props.parentItem === undefined) return model
-      const next = UiStruct.evolve(model, { rtl: parent.rtl })
+    AllowedRelease: ($) => $.model.pressing ? $.evolve({ releaseAllowed: true }) : $.model,
+    ChangedSubmenus: ($, { submenus }) => $.evolve({ submenus }),
+    ChangedParent: ($, { parent }) => {
+      if ($.props.parentItem === undefined) return $.model
+      const next = UiStruct.evolve($.model, { rtl: parent.rtl })
       if (!$.props.open) return next
       if (!parent.open) return dismiss(next, $, parent.reason ?? "none", null)
       if (parent.active !== null && parent.active !== $.props.parentItem) {
@@ -2216,69 +2213,69 @@ export const Menu = Component.define({
       }
       return next
     },
-    RequestedCloseByChild: (model, { reason }, $) =>
-      $.props.open ? closeTree(model, $, reason, reason === "escape-key" ? "keyboard" : null) : model,
-    MovedViewport: (_model, { direction }, $) => $.evolve({ transitioning: true, direction, instant: null }),
-    SettledViewport: (_model, _message, $) => $.evolve({ transitioning: false }),
-    SettledTriggerChange: (model, _message, $) => $.props.open ? $.evolve({ instant: "trigger-change" }) : model,
-    ChangedInput: (model, { value }, $) => {
+    RequestedCloseByChild: ($, { reason }) =>
+      $.props.open ? closeTree($.model, $, reason, reason === "escape-key" ? "keyboard" : null) : $.model,
+    MovedViewport: ($, { direction }) => $.evolve({ transitioning: true, direction, instant: null }),
+    SettledViewport: ($) => $.evolve({ transitioning: false }),
+    SettledTriggerChange: ($) => $.props.open ? $.evolve({ instant: "trigger-change" }) : $.model,
+    ChangedInput: ($, { value }) => {
       const props = $.props
-      if (!props.open || disabledOf($)) return model
+      if (!props.open || disabledOf($)) return $.model
       const reason = value === "" ? "input-clear" : "input-change"
-      const next = UiStruct.evolve(model, { active: autoHighlighted(props, value), activeByKey: false })
-      return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: value, reason }))
+      const next = UiStruct.evolve($.model, { active: autoHighlighted(props, value), activeByKey: false })
+      return commit($, $.model, next, "none").emit(MenuEvents.RequestedQuery({ query: value, reason }))
     },
-    PressedInputKey: (model, { key, modified }, $) => {
+    PressedInputKey: ($, { key, modified }) => {
       const props = $.props
-      const next = UiStruct.evolve(model, { keyboard: true })
+      const next = UiStruct.evolve($.model, { keyboard: true })
       if (!props.open || modified) return next
       const hasValue = (props.query ?? "") !== ""
-      const nav = keys(props.orientation ?? "vertical", model.rtl)
+      const nav = keys(props.orientation ?? "vertical", $.model.rtl)
       if (key === nav.next || key === nav.previous) {
-        if (props.orientation === "horizontal" && hasValue && model.active === null) return next
+        if (props.orientation === "horizontal" && hasValue && $.model.active === null) return next
         return navigate(next, $, key)
       }
       if (key === "Home" || key === "End") {
-        return model.active !== null && !hasValue ? navigate(next, $, key) : next
+        return $.model.active !== null && !hasValue ? navigate(next, $, key) : next
       }
       if (key === "Escape") return pressKey(next, $, key, null)
       return hasValue ? next : toSibling(next, $, key, nav.open) ?? next
     },
-    FocusedInput: (_model, _message, $) => $.evolve({ inputFocused: true }),
-    BlurredInput: (_model, _message, $) => $.evolve({ inputFocused: false }),
-    PressedInput: (model, _message, $) => model.keyboard ? $.evolve({ keyboard: false }) : model,
-    ClickedClear: (model, _message, $) => {
+    FocusedInput: ($) => $.evolve({ inputFocused: true }),
+    BlurredInput: ($) => $.evolve({ inputFocused: false }),
+    PressedInput: ($) => $.model.keyboard ? $.evolve({ keyboard: false }) : $.model,
+    ClickedClear: ($) => {
       const props = $.props
-      if (!props.open || disabledOf($) || (props.query ?? "") === "") return model
-      const next = UiStruct.evolve(model, { active: autoHighlighted(props, ""), activeByKey: false })
-      return commit($, model, next, "none").emit(MenuEvents.RequestedQuery({ query: "", reason: "clear-press" }))
+      if (!props.open || disabledOf($) || (props.query ?? "") === "") return $.model
+      const next = UiStruct.evolve($.model, { active: autoHighlighted(props, ""), activeByKey: false })
+      return commit($, $.model, next, "none").emit(MenuEvents.RequestedQuery({ query: "", reason: "clear-press" }))
     },
-    PressedBarKey: (model, { key, trigger }, $) =>
-      disabledOf($) ? model : $.send(Menubar, MenubarMessage.Navigated({ from: trigger, key, open: $.props.open })),
-    FocusedBarTrigger: (model, { key, triggerId }, $) => {
+    PressedBarKey: ($, { key, trigger }) =>
+      disabledOf($) ? $.model : $.send(Menubar, MenubarMessage.Navigated({ from: trigger, key, open: $.props.open })),
+    FocusedBarTrigger: ($, { key, triggerId }) => {
       const bar = barOf($)
-      if (bar === undefined) return model
+      if (bar === undefined) return $.model
       const reason = bar.opening === key
         ? "list-navigation"
         : bar.hasSubmenuOpen && bar.current !== key
         ? "trigger-focus"
         : null
-      const stays = reason === null || ($.props.open && opensFor(model, $.props, key, triggerId)) || disabledOf($)
-      return (stays ? $ : open(model, $, reason, "keyboard", key, triggerId, { group: true }))
+      const stays = reason === null || ($.props.open && opensFor($.model, $.props, key, triggerId)) || disabledOf($)
+      return (stays ? $ : open($.model, $, reason, "keyboard", key, triggerId, { group: true }))
         .send(Menubar, MenubarMessage.FocusedTrigger({ trigger: key }))
     },
-    ChangedMenubar: (model, { menubar }, $) => {
+    ChangedMenubar: ($, { menubar }) => {
       const current = menubar.current
-      if (current === model.barCurrent) return model
-      const next = UiStruct.evolve(model, { barCurrent: current })
-      const own = ownTrigger(model, $.props)
+      if (current === $.model.barCurrent) return $.model
+      const next = UiStruct.evolve($.model, { barCurrent: current })
+      const own = ownTrigger($.model, $.props)
       return $.props.parentItem === undefined && $.props.open && current !== null && own !== null && current !== own
         ? dismiss(next, $, "sibling-open", null)
         : next
     }
   },
-  subscriptions: (_model, props) => props.open && props.parentItem === undefined ? escapes : [],
-  parts: (model, p) => {
+  subscriptions: ({ props }) => props.open && props.parentItem === undefined ? escapes : [],
+  parts: (p, model) => {
     const props = p.props
     const parent = parentOf(p)
     const nested = parent !== undefined

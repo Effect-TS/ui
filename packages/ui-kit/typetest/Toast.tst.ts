@@ -21,8 +21,8 @@ describe("ToastProvider", () => {
   it("each part returns the builder it was given, with the consumer's message type", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         ToastProvider(h, {
           view: (toastProvider) => {
             expect(toastProvider.toasts).type.toBe<ReadonlyArray<ToastItem>>()
@@ -42,8 +42,8 @@ describe("ToastProvider", () => {
   it("the buttons take only a button, and the containers only a div", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         ToastProvider(h, {
           view: (toastProvider) => {
             expect(toastProvider.viewport).type.not.toBeCallableWith(h.section)
@@ -60,15 +60,15 @@ describe("ToastProvider", () => {
   it("a sender posts only the add, update and close messages", () => {
     Component.define({ name: "Sender", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model, _message, $) => {
+      update: ($) => {
         expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "RequestedAdd", toast: { id: "a", title: "A" } })
         expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "RequestedUpdate", id: "a", type: "success" })
         expect($.send).type.toBeCallableWith(ToastProvider, { _tag: "RequestedClose", id: "a" })
         expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "ClickedClose", id: "a" })
         expect($.send).type.not.toBeCallableWith(ToastProvider, { _tag: "RequestedAdd", toast: { title: "A" } })
-        return model
+        return $.model
       },
-      view: (_, h) => h.div
+      view: (h) => h.div
     })
   })
 })

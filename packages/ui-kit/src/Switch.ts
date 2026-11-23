@@ -67,9 +67,9 @@
  * }).make({
  *   init: () => ({ notify: false }),
  *   update: {
- *     ToggledNotify: (_model, { checked }, $) => $.evolve({ notify: checked })
+ *     ToggledNotify: ($, { checked }) => $.evolve({ notify: checked })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Switch(h, {
  *       props: { checked: model.notify, name: "notify" },
  *       onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),

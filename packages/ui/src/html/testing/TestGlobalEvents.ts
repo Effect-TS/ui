@@ -28,8 +28,8 @@
  * }).make({
  *   init: () => true,
  *   update: { PressedEscape: () => false },
- *   view: (open, h) => h.p(open ? "open" : "closed"),
- *   subscriptions: (open) => [
+ *   view: (h, open) => h.p(open ? "open" : "closed"),
+ *   subscriptions: ({ model: open }) => [
  *     open && DomSubscription.onDocument("keydown", ({ key }) =>
  *       key === "Escape" ? Message.PressedEscape() : undefined
  *     )

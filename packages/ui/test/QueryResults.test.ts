@@ -57,7 +57,8 @@ const makeApp = (options?: {
   ) {}
 
   // An empty id disables the query.
-  const userArgs = (_model: unknown, props: { readonly id: string }) => props.id === "" ? undefined : { id: props.id }
+  const userArgs = ({ props }: { readonly props: { readonly id: string } }) =>
+    props.id === "" ? undefined : { id: props.id }
   const CardMessage = UiSchema.TaggedEnum({
     UserChanged: { state: Schema.String },
     Rename: { name: Schema.String },
@@ -80,24 +81,24 @@ const makeApp = (options?: {
     }
   }).make({
     init: () => ({ saving: false }),
-    update: (model, message, $) =>
+    update: ($, message) =>
       CardMessage.match(message, {
         UserChanged: () => {
           order.push(`update ${$.props.tag} UserChanged`)
-          return model
+          return $.model
         },
         Rename: ({ name }) => {
           order.push(`update ${$.props.tag} Rename`)
-          return $.set({ ...model, saving: true }).run(
+          return $.set({ ...$.model, saving: true }).run(
             RenameUser.make({ id: $.props.id, name }).pipe(Command.match({
               onSuccess: () => CardMessage.Renamed(),
               onFailure: () => CardMessage.Renamed()
             }))
           )
         },
-        Renamed: () => ({ ...model, saving: false })
+        Renamed: () => ({ ...$.model, saving: false })
       }),
-    view: (model, h) => {
+    view: (h, model) => {
       const text = AsyncResult.match(h.queries.user, {
         onInitial: (initial) =>
           Option.isSome(h.previous.user)
@@ -124,8 +125,8 @@ const makeApp = (options?: {
     message: ListMessage
   }).make({
     init: ($) => $.props.cards,
-    update: (_model, message) => message.cards,
-    view: (cards, h) =>
+    update: (_, message) => message.cards,
+    view: (h, cards) =>
       h.el(
         "div",
         cards.map((card) => {
@@ -166,14 +167,14 @@ const makeApp = (options?: {
     message: ToolsMessage
   }).make({
     init: () => "",
-    update: (model, message, $) =>
+    update: ($, message) =>
       ToolsMessage.match(message, {
         Get: ({ id }) =>
-          $.set(model).run(Load.make({ id }).pipe(Command.match({ onSuccess: got, onFailure: () => got("failed") }))),
-        Prefetch: ({ id }) => $.set(model).run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
+          $.set($.model).run(Load.make({ id }).pipe(Command.match({ onSuccess: got, onFailure: () => got("failed") }))),
+        Prefetch: ({ id }) => $.set($.model).run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
         Got: ({ name }) => name
       }),
-    view: (model, h) => h.el("p", model)
+    view: (h, model) => h.el("p", model)
   })
 
   return {
@@ -372,8 +373,8 @@ describe("Query results", () => {
       message: Schema.Boolean
     }).make({
       init: () => false,
-      update: (_model, message) => message,
-      view: (swapped, h) =>
+      update: (_, message) => message,
+      view: (h, swapped) =>
         h.el(
           "div",
           h.el("section", swapped ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })] : []),
@@ -431,8 +432,8 @@ describe("Query results", () => {
       message: Schema.Never
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_model, h) => h.el("div", h.props.show ? [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })] : [])
+      update: ($) => $.model,
+      view: (h) => h.el("div", h.props.show ? [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })] : [])
     })
     const Page = Component.define({
       name: "Page",
@@ -441,8 +442,8 @@ describe("Query results", () => {
       message: Schema.Boolean
     }).make({
       init: () => false,
-      update: (_model, message) => message,
-      view: (swapped, h) =>
+      update: (_, message) => message,
+      view: (h, swapped) =>
         h.el(
           "div",
           h.el("section", swapped ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })] : []),
@@ -500,17 +501,17 @@ describe("Query results", () => {
       queries: {
         user: {
           query: app.GetUser,
-          args: (_model, props) => ({ id: props.id }),
+          args: ({ props }) => ({ id: props.id }),
           onChange: (result) => WatchMessage.Changed({ state: `${result._tag}:${result.waiting}` })
         }
       }
     }).make({
       init: () => ({}),
-      update: (model, message, $) => {
+      update: ($, message) => {
         messages.push(`${$.props.tag} ${message.state}`)
-        return model
+        return $.model
       },
-      view: (_model, h) => h.el("p", `${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`)
+      view: (h) => h.el("p", `${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`)
     })
   }
 
@@ -527,8 +528,8 @@ describe("Query results", () => {
         message: Schema.Never
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_model, h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })] : [])
+        update: ($) => $.model,
+        view: (h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })] : [])
       })
       const Page = Component.define({
         name: "Page",
@@ -537,8 +538,8 @@ describe("Query results", () => {
         message: Schema.Boolean
       }).make({
         init: () => false,
-        update: (_model, message) => message,
-        view: (swapped, h) =>
+        update: (_, message) => message,
+        view: (h, swapped) =>
           h.el(
             "div",
             h.el("section", swapped ? [Watcher(h, { key: "new", props: { id: "9", tag: "n" } })] : []),
@@ -610,11 +611,11 @@ describe("Query results", () => {
         }
       }).make({
         init: () => ({}),
-        update: (model, message, $) => {
+        update: ($, message) => {
           messages.push(`${$.props.tag} ${message.state}`)
-          return model
+          return $.model
         },
-        view: (_model, h) => h.el("p", `${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`)
+        view: (h) => h.el("p", `${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`)
       })
       const Shell = Component.define({
         name: "Shell",
@@ -624,8 +625,8 @@ describe("Query results", () => {
         message: Schema.Never
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_model, h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { tag: "o" } })] : [])
+        update: ($) => $.model,
+        view: (h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { tag: "o" } })] : [])
       })
       const PageMessage = UiSchema.TaggedEnum({
         Enable: {},
@@ -636,15 +637,15 @@ describe("Query results", () => {
         scoped: false,
         model: Schema.Struct({ enabled: Schema.Boolean, swapped: Schema.Boolean }),
         message: PageMessage,
-        queries: { other: { query: Read, args: (model) => model.enabled ? { id: "other" } : undefined } }
+        queries: { other: { query: Read, args: ({ model }) => model.enabled ? { id: "other" } : undefined } }
       }).make({
         init: () => ({ enabled: false, swapped: false }),
-        update: (model, message) =>
+        update: ($, message) =>
           PageMessage.match(message, {
-            Enable: () => ({ ...model, enabled: true }),
-            Swap: () => ({ ...model, swapped: true })
+            Enable: () => ({ ...$.model, enabled: true }),
+            Swap: () => ({ ...$.model, swapped: true })
           }),
-        view: (model, h) =>
+        view: (h, model) =>
           h.el(
             "div",
             h.el("section", model.swapped ? [Watcher(h, { key: "new", props: { tag: "n" } })] : []),
@@ -704,8 +705,8 @@ describe("Query results", () => {
       message: Schema.Boolean
     }).make({
       init: () => false,
-      update: (_model, message) => message,
-      view: (joined, h) =>
+      update: (_, message) => message,
+      view: (h, joined) =>
         h.el(
           "div",
           Watcher(h, { key: "a", props: { id: "9", tag: "a" } }),
@@ -747,14 +748,14 @@ describe("Query results", () => {
       queries: {
         user: {
           query: app.GetUser,
-          args: (_model, props) => ({ id: props.id }),
+          args: ({ props }) => ({ id: props.id }),
           onChange: () => EmitterMessage.UserChanged()
         }
       }
     }).make({
       init: () => ({}),
-      update: (model, _message, $) => $.set(model).emit($.props.id),
-      view: (_model, h) => h.el("p", "emitter")
+      update: ($) => $.set($.model).emit($.props.id),
+      view: (h) => h.el("p", "emitter")
     })
     const ParentMessage = UiSchema.TaggedEnum({ Switch: {}, Noted: { label: Schema.String } })
     const Parent = Component.define({
@@ -764,11 +765,11 @@ describe("Query results", () => {
       message: ParentMessage
     }).make({
       init: () => ({ switched: false, labels: [] }),
-      update: (model, message) =>
+      update: ($, message) =>
         message._tag === "Switch"
-          ? { ...model, switched: true }
-          : { ...model, labels: [...model.labels, message.label] },
-      view: (model, h) =>
+          ? { ...$.model, switched: true }
+          : { ...$.model, labels: [...$.model.labels, message.label] },
+      view: (h, model) =>
         h.el(
           "div",
           app.Card(h, { key: "warm", props: { id: "2", tag: "w" } }),
@@ -815,7 +816,7 @@ describe("Query results", () => {
       update: (): {} => {
         throw new Error("crash")
       },
-      view: (_model, h) => h.el("p").on("click", BadMessage.Crash()).children("bad")
+      view: (h) => h.el("p").on("click", BadMessage.Crash()).children("bad")
     })
     const Host = Component.define({
       name: "Host",
@@ -824,8 +825,8 @@ describe("Query results", () => {
       message: Schema.Never
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_model, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Bad(h, {
           key: "bad",
           fallback: () => app.Card(h, { key: "fallback", props: { id: "1", tag: "f" } })
@@ -875,12 +876,12 @@ describe("Query results", () => {
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({ done: false }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         PollMessage.match(message, {
-          Go: () => $.set(model).run(Go.make()),
-          Done: () => ({ ...model, done: true })
+          Go: () => $.set($.model).run(Go.make()),
+          Done: () => ({ ...$.model, done: true })
         }),
-      view: (model, h) => h.el("p", model.done ? "done" : "not yet")
+      view: (h, model) => h.el("p", model.done ? "done" : "not yet")
     })
     return run(
       app.layer,
@@ -937,15 +938,15 @@ describe("Query results", () => {
       }
     }).make({
       init: ($) => $.set({}).run(Note.make({ text: "init" })),
-      update: (model, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
           UserChanged: () => {
             seen.push("update UserChanged")
-            return $.set(model).run(Note.make({ text: "fold" }))
+            return $.set($.model).run(Note.make({ text: "fold" }))
           },
-          Noted: () => model
+          Noted: () => $.model
         }),
-      view: (_model, h) => {
+      view: (h) => {
         seen.push(`view ${h.queries.user._tag}`)
         return h.el("i", "noter")
       }
@@ -957,8 +958,8 @@ describe("Query results", () => {
       message: Schema.Boolean
     }).make({
       init: () => false,
-      update: (_model, message) => message,
-      view: (show, h) =>
+      update: (_, message) => message,
+      view: (h, show) =>
         h.el("div", app.Card(h, { key: "a", props: { id: "1", tag: "a" } }), show && Noter(h, { key: "n" }))
     })
     return run(
@@ -1164,8 +1165,8 @@ describe("Query results", () => {
         queries
       } as any).make({
         init: () => ({}),
-        update: (model: any) => model,
-        view: (_: any, h: any) => h.text("")
+        update: ($: any) => $.model,
+        view: (h: any) => h.text("")
       } as any)
     const args = () => ({ id: "1" })
     assert.throws(() => make(42), /Bad: queries must be a record/)
@@ -1196,13 +1197,13 @@ describe("Query results", () => {
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: {
-        a: { query: app.GetUser, args: (_model: any, _props: any, queries: any) => (queries.b, { id: "1" }) },
-        b: { query: app.GetUser, args: (_model: any, _props: any, queries: any) => (queries.a, { id: "2" }) }
+        a: { query: app.GetUser, args: ({ queries }: any) => (queries.b, { id: "1" }) },
+        b: { query: app.GetUser, args: ({ queries }: any) => (queries.a, { id: "2" }) }
       }
     } as any).make({
       init: () => ({}),
-      update: (model: any) => model,
-      view: (_model: any, h: any) => h.el("p", "never")
+      update: ($: any) => $.model,
+      view: (h: any) => h.el("p", "never")
     } as any)
     return run(
       app.layer,
@@ -1235,11 +1236,11 @@ describe("Query results", () => {
       props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
       model: Schema.Struct({}),
       message: Schema.Never,
-      queries: { account: { query: GetAccount, args: (_model, props) => ({ token: props.token }) } }
+      queries: { account: { query: GetAccount, args: ({ props }) => ({ token: props.token }) } }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         h.el("p", AsyncResult.isSuccess(h.queries.account) ? Redacted.value(h.queries.account.value.secret) : "…")
     })
     return run(
@@ -1293,9 +1294,8 @@ describe("Query results", () => {
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({}),
-      update: (model, _message, $) =>
-        $.set(model).run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))),
-      view: (_model, h) => h.el("p", "breaker")
+      update: ($) => $.set($.model).run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))),
+      view: (h) => h.el("p", "breaker")
     })
     return run(
       Layer.merge(app.layer, BadRename.layer),
@@ -1335,8 +1335,8 @@ describe("Query results", () => {
     }).make({
       init: ($) => $.set(0).run(Wait.make()),
       // Each Tick issues the next: the work never runs out.
-      update: (count, _message, $) => $.set(count + 1).run(Spin.make()),
-      view: (count, h) => h.el("p", String(count))
+      update: ($) => $.set($.model + 1).run(Spin.make()),
+      view: (h, count) => h.el("p", String(count))
     })
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Spinner, {})

@@ -64,50 +64,50 @@ const MenuDef = Component.define({
  */
 export const Menu = MenuDef.make({
   init: ($) => $.set({ open: false, query: "", active: null, typed: "", focused: [] }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     MenuMessage.match(message, {
-      Toggle: () => ({ ...model, open: !model.open }),
+      Toggle: () => ({ ...$.model, open: !$.model.open }),
       // The browser's report of an auto popover: the Model follows, and focus moves with it.
       Toggled: ({ open }) =>
-        $.set({ ...model, open, query: open ? model.query : "", active: open ? model.active : null }).run(
+        $.set({ ...$.model, open, query: open ? $.model.query : "", active: open ? $.model.active : null }).run(
           open
             ? DomCommand.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
             : DomCommand.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
         ),
-      Query: ({ value }) => ({ ...model, query: value, active: step(filter($.props.items, value), null, 1) }),
+      Query: ({ value }) => ({ ...$.model, query: value, active: step(filter($.props.items, value), null, 1) }),
       Key: ({ key }) => {
-        const visible = filter($.props.items, model.query)
-        const active = activeIn(visible, model.active)
+        const visible = filter($.props.items, $.model.query)
+        const active = activeIn(visible, $.model.active)
         switch (key) {
           case "ArrowDown":
-            return { ...model, open: true, active: step(visible, active, 1) }
+            return { ...$.model, open: true, active: step(visible, active, 1) }
           case "ArrowUp":
-            return { ...model, open: true, active: step(visible, active, -1) }
+            return { ...$.model, open: true, active: step(visible, active, -1) }
           case "Escape":
-            return { ...model, open: false }
+            return { ...$.model, open: false }
           case "Enter":
             return active === null
-              ? model
-              : $.set({ ...model, open: false }).emit(MenuEvents.Picked({ id: active }))
+              ? $.model
+              : $.set({ ...$.model, open: false }).emit(MenuEvents.Picked({ id: active }))
           default: {
             // Typeahead: a printable key on the trigger moves to the first label that starts with what was typed.
             // A key that no label continues with starts over from that key, so the buffer is never longer than a label.
             const find = (prefix: string) =>
               $.props.items.find((item) => item.disabled !== true && item.label.toLowerCase().startsWith(prefix))
-            const next = model.typed + key.toLowerCase()
+            const next = $.model.typed + key.toLowerCase()
             const typed = find(next) !== undefined ? next : key.toLowerCase()
             const hit = find(typed)
-            return { ...model, typed: hit === undefined ? "" : typed, active: hit === undefined ? active : hit.id }
+            return { ...$.model, typed: hit === undefined ? "" : typed, active: hit === undefined ? active : hit.id }
           }
         }
       },
-      Pick: ({ id }) => $.set({ ...model, open: false }).emit(MenuEvents.Picked({ id })),
+      Pick: ({ id }) => $.set({ ...$.model, open: false }).emit(MenuEvents.Picked({ id })),
       Focused: ({ found }) => ({
-        ...model,
-        focused: [...model.focused, (model.open ? "input" : "trigger") + ":" + String(found)]
+        ...$.model,
+        focused: [...$.model.focused, ($.model.open ? "input" : "trigger") + ":" + String(found)]
       })
     }),
-  parts: (model, p) => {
+  parts: (p, model) => {
     const visible = filter(p.props.items, model.query)
     const active = activeIn(visible, model.active)
     return {
@@ -177,12 +177,12 @@ export const Dialog = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false }),
-  update: (_, message, $) =>
+  update: ($, message) =>
     DialogMessage.match(message, {
       Open: () => $.set({ open: true }),
       Close: () => $.set({ open: false }).emit(DialogEvents.Closed())
     }),
-  parts: (model, p) => ({
+  parts: (p, model) => ({
     open: model.open,
     trigger: p.part("button", (b) => b.onClick(DialogMessage.Open())),
     popup: p.part("dialog", (b) =>

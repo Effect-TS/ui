@@ -118,19 +118,19 @@
  * const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: EditorMessage, elements: Html }).make({
  *   init: () => null,
  *   update: {
- *     ClickedSave: (model, _message, $) =>
- *       $.set(model).send(ToastProvider, {
+ *     ClickedSave: ($) =>
+ *       $.set($.model).send(ToastProvider, {
  *         _tag: "RequestedAdd",
  *         toast: { id: "saved", title: "Saved", type: "success" }
  *       })
  *   },
- *   view: (_, h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
+ *   view: (h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
  * })
  *
  * const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never, elements: Html }).make({
  *   init: () => null,
- *   update: (model) => model,
- *   view: (_, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     ToastProvider(h, {
  *       view: (toastProvider) =>
  *         h.div(
@@ -596,8 +596,7 @@ const close = (model: ToastProviderModel, $: ProviderUpdate, id: string, user: b
 
 // The user closed the toast, with the close part or Escape, or its timeout
 // ran out.
-const dismiss = (model: ToastProviderModel, { id }: { readonly id: string }, $: ProviderUpdate) =>
-  close(model, $, id, true)
+const dismiss = ($: ProviderUpdate, { id }: { readonly id: string }) => close($.model, $, id, true)
 
 // A part that takes the toast it draws with the builder, as `{ element, toast }`.
 const withToast = <Tag extends string, R>(part: View.Part<Tag, [toast: ToastItem], R>) =>
@@ -662,50 +661,52 @@ export const ToastProvider = Component.define({
   update: {
     // A toast that shows is replaced in place. One that is closing is added
     // again, as new.
-    RequestedAdd: (model, { toast }, $) => {
-      const existing = shown(model, toast.id)
+    RequestedAdd: ($, { toast }) => {
+      const existing = shown($.model, toast.id)
       const entry: Entry = { ...toast, transition: existing?.transition ?? "starting", height: existing?.height ?? 0 }
       const toasts = existing === undefined
-        ? [entry, ...model.toasts.filter((other) => other.id !== toast.id)]
-        : replace(model, entry)
-      return $.evolve({ toasts }).run(...timer(model, $, entry))
+        ? [entry, ...$.model.toasts.filter((other) => other.id !== toast.id)]
+        : replace($.model, entry)
+      return $.evolve({ toasts }).run(...timer($.model, $, entry))
     },
     // A running timer goes on, unless the update sets a timeout. One starts
     // when the update makes the toast timed, as when a loading toast gets
     // its result.
-    RequestedUpdate: (model, { _tag, id, ...changes }, $) => {
-      const entry = shown(model, id)
-      if (entry === undefined) return model
+    RequestedUpdate: ($, { _tag, id, ...changes }) => {
+      const entry = shown($.model, id)
+      if (entry === undefined) return $.model
       const next: Entry = { ...entry, ...changes }
-      const step = $.evolve({ toasts: replace(model, next) })
+      const step = $.evolve({ toasts: replace($.model, next) })
       const running = timed(entry, $.props) && timed(next, $.props) && changes.timeout === undefined
-      return running ? step : step.run(...timer(model, $, next))
+      return running ? step : step.run(...timer($.model, $, next))
     },
-    RequestedClose: (model, { id }, $) => close(model, $, id, false),
+    RequestedClose: ($, { id }) => close($.model, $, id, false),
     ClickedClose: dismiss,
     PressedEscape: dismiss,
-    CompletedWaitBeforeDismissal: (model, message, $) => (pausedBy(model) ? model : dismiss(model, message, $)),
-    EnteredViewport: (model, _message, $) => settle(model, $, UiStruct.evolve(model, { hovering: true })),
-    LeftViewport: (model, _message, $) => settle(model, $, UiStruct.evolve(model, { hovering: false })),
-    FocusedViewport: (model, _message, $) => settle(model, $, UiStruct.evolve(model, { focused: true })),
-    BlurredViewport: (model, _message, $) => settle(model, $, UiStruct.evolve(model, { focused: false })),
-    FocusedWindow: (model, _message, $) => settle(model, $, UiStruct.evolve(model, { windowFocused: true })),
-    BlurredWindow: (model, _message, $) => settle(model, $, UiStruct.evolve(model, { windowFocused: false })),
-    FocusedClose: (_model, { id }, $) => $.evolve({ closeFocused: id }),
-    BlurredClose: (model, { id }, $) => (model.closeFocused === id ? $.evolve({ closeFocused: null }) : model),
+    CompletedWaitBeforeDismissal: ($, message) => (pausedBy($.model) ? $.model : dismiss($, message)),
+    EnteredViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { hovering: true })),
+    LeftViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { hovering: false })),
+    FocusedViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { focused: true })),
+    BlurredViewport: ($) => settle($.model, $, UiStruct.evolve($.model, { focused: false })),
+    FocusedWindow: ($) => settle($.model, $, UiStruct.evolve($.model, { windowFocused: true })),
+    BlurredWindow: ($) => settle($.model, $, UiStruct.evolve($.model, { windowFocused: false })),
+    FocusedClose: ($, { id }) => $.evolve({ closeFocused: id }),
+    BlurredClose: ($, { id }) => ($.model.closeFocused === id ? $.evolve({ closeFocused: null }) : $.model),
     // The first measure ends the starting style. A closing toast keeps its
     // height at 0, so the toasts behind it move up.
-    MeasuredToast: (model, { id, height }, $) => {
-      const entry = shown(model, id)
+    MeasuredToast: ($, { id, height }) => {
+      const entry = shown($.model, id)
       return entry === undefined
-        ? model
-        : $.evolve({ toasts: replace(model, UiStruct.evolve(entry, { transition: "shown", height })) })
+        ? $.model
+        : $.evolve({ toasts: replace($.model, UiStruct.evolve(entry, { transition: "shown", height })) })
     },
-    FinishedExit: (model, { id }, $) =>
-      shown(model, id) === undefined ? $.evolve({ toasts: model.toasts.filter((toast) => toast.id !== id) }) : model
+    FinishedExit: ($, { id }) =>
+      shown($.model, id) === undefined
+        ? $.evolve({ toasts: $.model.toasts.filter((toast) => toast.id !== id) })
+        : $.model
   },
   subscriptions: () => windowFocus,
-  parts: (model, p) => {
+  parts: (p, model) => {
     const expanded = expandedBy(model)
     const stack = stackOf(model.toasts, p.props.limit ?? 3)
     const toasts: ReadonlyArray<ToastItem> = model.toasts.map(({ height: _, transition, ...data }) => ({

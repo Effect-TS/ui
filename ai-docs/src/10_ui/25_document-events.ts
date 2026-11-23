@@ -47,15 +47,15 @@ export const Snake = Component.define({
 }).make({
   init: () => ({ running: false, heading: "right" as const }),
   update: {
-    ClickedStart: (_model, _message, $) => $.evolve({ running: true }),
-    PressedArrow: (_model, { direction }, $) => $.evolve({ heading: direction }),
-    PressedEscape: (_model, _message, $) => $.evolve({ running: false })
+    ClickedStart: ($) => $.evolve({ running: true }),
+    PressedArrow: ($, { direction }) => $.evolve({ heading: direction }),
+    PressedEscape: ($) => $.evolve({ running: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     model.running
       ? h.p(`heading ${model.heading}`)
       : h.button.onClick(SnakeMessage.ClickedStart()).children("Start"),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.running && DomSubscription.onDocument(
       "keydown",
       ({ composing, defaultPrevented, editable, key, repeat }) => {

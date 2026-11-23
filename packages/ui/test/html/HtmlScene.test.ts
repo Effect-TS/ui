@@ -15,8 +15,8 @@ const Board = Component.define({
   elements: Html
 }).make({
   init: (): ReadonlyArray<string> => [],
-  update: (log, message) => [...log, message],
-  view: (log, h) =>
+  update: ($, message) => [...$.model, message],
+  view: (h, log) =>
     h.section.onDrop(
       ({ data, files }) => `outer ${data["application/x-todo"] ?? files.map((file) => file.name).join(",")}`,
       { accepts: ["application/x-todo", "Files"] }
@@ -86,12 +86,12 @@ describe("HtmlScene", () => {
         elements: Html
       }).make({
         init: () => ({ points: [1, 2], width: 0 }),
-        update: (model, message) =>
+        update: ($, message) =>
           Message.match(message, {
-            Add: ({ point }) => ({ ...model, points: [...model.points, point] }),
-            Drawn: ({ width }) => ({ ...model, width })
+            Add: ({ point }) => ({ ...$.model, points: [...$.model.points, point] }),
+            Drawn: ({ width }) => ({ ...$.model, width })
           }),
-        view: (model, h) =>
+        view: (h, model) =>
           h.div(
             h.canvas.onMount(
               DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.Drawn({ width })))
@@ -132,8 +132,8 @@ describe("HtmlScene", () => {
       elements: Html
     }).make({
       init: (): ReadonlyArray<string> => [],
-      update: (log, message) => [...log, message],
-      view: (log, h) => {
+      update: ($, message) => [...$.model, message],
+      view: (h, log) => {
         const saw = (event: string) => (payload: object) => `${event} ${JSON.stringify(payload)}`
         return h.div(
           h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
@@ -189,8 +189,8 @@ describe("HtmlScene", () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, { names }) => [...log, names.join(",")],
-        view: (log, h) =>
+        update: ($, { names }) => [...$.model, names.join(",")],
+        view: (h, log) =>
           h.div(
             h.input.attrs({ type: "file", "aria-label": "File" }).value("")
               .onChange(({ files }) => Message.Changed({ names: files.map((file) => file.name) })),
@@ -286,11 +286,11 @@ describe("HtmlScene", () => {
       elements: Html
     }).make({
       init: () => ({ log: [], zip: "old" }),
-      update: (model, message) => ({
-        log: [...model.log, message],
-        zip: message === "fill" ? "new" : model.zip
+      update: ($, message) => ({
+        log: [...$.model.log, message],
+        zip: message === "fill" ? "new" : $.model.zip
       }),
-      view: (model, h) =>
+      view: (h, model) =>
         h.div(
           h.form.attr("id", "f").onSubmit(({ entries }) =>
             `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`

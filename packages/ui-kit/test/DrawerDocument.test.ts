@@ -53,20 +53,20 @@ const Page = Component.define({
 }).make({
   init: ({ props }) => ({ open: props.open, snapPoint: null, events: [], config: props }),
   update: {
-    RequestedOpen: (model, { reason }) => ({
-      ...model,
-      open: !model.config.refuse,
-      events: [...model.events, "RequestedOpen:" + reason]
+    RequestedOpen: ($, { reason }) => ({
+      ...$.model,
+      open: !$.model.config.refuse,
+      events: [...$.model.events, "RequestedOpen:" + reason]
     }),
-    RequestedClose: (model, { reason }) => ({
-      ...model,
-      open: model.config.refuse,
-      events: [...model.events, "RequestedClose:" + reason]
+    RequestedClose: ($, { reason }) => ({
+      ...$.model,
+      open: $.model.config.refuse,
+      events: [...$.model.events, "RequestedClose:" + reason]
     }),
-    Snapped: (model, { snapPoint }) => ({ ...model, snapPoint, events: [...model.events, "Snapped:" + snapPoint] }),
-    Settled: (model, { open }) => ({ ...model, events: [...model.events, "Settled:" + open] })
+    Snapped: ($, { snapPoint }) => ({ ...$.model, snapPoint, events: [...$.model.events, "Snapped:" + snapPoint] }),
+    Settled: ($, { open }) => ({ ...$.model, events: [...$.model.events, "Settled:" + open] })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const props = model.config
     const drawer = Drawer(h, {
       props: {

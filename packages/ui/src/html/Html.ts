@@ -69,8 +69,8 @@
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: (draft, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
- *   view: (draft, h) =>
+ *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
+ *   view: (h, draft) =>
  *     h.form.onSubmit(Message.SubmittedForm()).children(
  *       h.input.ref(NewTodo).attr("aria-label", "New todo").value(draft)
  *         .onInput(({ value }) => Message.UpdatedDraft({ value })),
@@ -96,8 +96,8 @@
  *   elements: Html
  * }).make({
  *   init: () => "",
- *   update: (draft, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
- *   view: (draft, h) =>
+ *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
+ *   view: (h, draft) =>
  *     h.textarea.attr("aria-label", "Message").value(draft)
  *       .onInput(({ value }) => Message.UpdatedDraft({ value }))
  *       // Enter that ends an IME composition only confirms the text.
@@ -1592,7 +1592,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = m
  * }).make({
  *   init: () => undefined,
  *   update: () => undefined,
- *   view: (_, h) => h.span.children("Ready")
+ *   view: (h) => h.span.children("Ready")
  * })
  * ```
  *

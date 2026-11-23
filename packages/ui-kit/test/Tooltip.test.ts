@@ -44,11 +44,11 @@ const Toolbar = Component.define({
 }).make({
   init: () => ({ open: true, pressed: 0, dismissed: 0 }),
   update: {
-    PressedBold: (model) => ({ ...model, pressed: model.pressed + 1 }),
-    RequestedOpenBoldTip: (model) => ({ ...model, open: true }),
-    RequestedCloseBoldTip: (model) => ({ ...model, open: false, dismissed: model.dismissed + 1 })
+    PressedBold: ($) => ({ ...$.model, pressed: $.model.pressed + 1 }),
+    RequestedOpenBoldTip: ($) => ({ ...$.model, open: true }),
+    RequestedCloseBoldTip: ($) => ({ ...$.model, open: false, dismissed: $.model.dismissed + 1 })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       Tooltip(h, {
         key: "bold",
@@ -83,10 +83,10 @@ const Grouped = Component.define({
 }).make({
   init: () => ({ tip: null }),
   update: {
-    RequestedOpenTip: (_model, { tip }) => ({ tip }),
-    RequestedCloseTip: (model, { tip }) => (model.tip === tip ? { tip: null } : model)
+    RequestedOpenTip: (_, { tip }) => ({ tip }),
+    RequestedCloseTip: ($, { tip }) => ($.model.tip === tip ? { tip: null } : $.model)
   },
-  view: (model, h) =>
+  view: (h, model) =>
     TooltipProvider(h, {
       props: {},
       view: () =>
@@ -123,13 +123,15 @@ const Pages = Component.define({
 }).make({
   init: ($) => $.props.route,
   update: {
-    ChangedRoute: (_route, { route }) => route,
-    Left: (route, _message, $) =>
-      $.set(route).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PagesMessage.Navigated()))),
-    Navigated: (route) => route
+    ChangedRoute: (_, { route }) => route,
+    Left: ($) =>
+      $.set($.model).run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PagesMessage.Navigated()))),
+    Navigated: ($) => $.model
   },
-  subscriptions: (route) => [Router.subscription(PageRoute, route, (to) => PagesMessage.ChangedRoute({ route: to }))],
-  view: (route, h) =>
+  subscriptions: (
+    { model: route }
+  ) => [Router.subscription(PageRoute, route, (to) => PagesMessage.ChangedRoute({ route: to }))],
+  view: (h, route) =>
     h.div(
       h.a.onClick(PagesMessage.Left()).children("Away"),
       route._tag === "Tips" ? Grouped(h, { key: "tips" }) : null
@@ -150,13 +152,13 @@ const Independent = Component.define({
 }).make({
   init: () => ({ bold: false, italic: false, requests: 0 }),
   update: {
-    RequestedOpenTip: (model, { tip }) => ({ ...model, [tip]: true }),
-    RequestedCloseTip: (model, { tip }, $) =>
+    RequestedOpenTip: ($, { tip }) => ({ ...$.model, [tip]: true }),
+    RequestedCloseTip: ($, { tip }) =>
       tip === "bold"
-        ? { ...model, bold: $.props.keep, requests: model.requests + 1 }
-        : { ...model, italic: false }
+        ? { ...$.model, bold: $.props.keep, requests: $.model.requests + 1 }
+        : { ...$.model, italic: false }
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       TooltipProvider(h, {
         props: {},
@@ -209,13 +211,13 @@ const Deferred = Component.define({
 }).make({
   init: () => ({ bold: false, italic: false, underline: false, requests: 0 }),
   update: {
-    RequestedOpen: (model) => model,
-    RequestedClose: (model, { tip }) =>
-      tip === "bold" ? { ...model, requests: model.requests + 1 } : { ...model, [tip]: false },
-    AcceptedOpen: (model, { tip }) => ({ ...model, [tip]: true }),
-    AcceptedClose: (model, { tip }) => ({ ...model, [tip]: false })
+    RequestedOpen: ($) => $.model,
+    RequestedClose: ($, { tip }) =>
+      tip === "bold" ? { ...$.model, requests: $.model.requests + 1 } : { ...$.model, [tip]: false },
+    AcceptedOpen: ($, { tip }) => ({ ...$.model, [tip]: true }),
+    AcceptedClose: ($, { tip }) => ({ ...$.model, [tip]: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       TooltipProvider(h, {
         props: {},

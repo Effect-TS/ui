@@ -184,12 +184,12 @@
  * }).make({
  *   init: () => ({ open: false, fruit: "banana", text: "Banana" }),
  *   update: {
- *     RequestedOpenFruit: (_model, _message, $) => $.evolve({ open: true }),
- *     RequestedCloseFruit: (_model, _message, $) => $.evolve({ open: false }),
- *     PickedFruit: (_model, { fruit }, $) => $.evolve({ fruit }),
- *     RequestedInputValueFruit: (_model, { text }, $) => $.evolve({ text })
+ *     RequestedOpenFruit: ($) => $.evolve({ open: true }),
+ *     RequestedCloseFruit: ($) => $.evolve({ open: false }),
+ *     PickedFruit: ($, { fruit }) => $.evolve({ fruit }),
+ *     RequestedInputValueFruit: ($, { text }) => $.evolve({ text })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Field(h, {
  *       props: { filled: model.fruit !== null },
  *       view: (field) =>

@@ -50,8 +50,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     DirectionProvider(h, {
  *       props: { direction: "rtl" },
  *       view: (directionProvider) => h.main.attr("dir", directionProvider.direction).children("مرحبا")
@@ -140,6 +140,6 @@ export const DirectionProvider = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => ({ direction: p.props.direction ?? "ltr" })
+  update: ($) => $.model,
+  parts: (p) => ({ direction: p.props.direction ?? "ltr" })
 })

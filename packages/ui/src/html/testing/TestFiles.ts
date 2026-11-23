@@ -29,11 +29,11 @@
  * }).make({
  *   init: () => [],
  *   update: {
- *     ClickedAttach: (names, _, $) =>
+ *     ClickedAttach: ($) =>
  *       $.run(DomFile.pick(({ files }) => Message.Picked({ names: files.map((file) => file.name) }))),
  *     Picked: (_, { names }) => names
  *   },
- *   view: (names, h) => h.button.onClick(Message.ClickedAttach()).children(names.join(", ") || "Attach")
+ *   view: (h, names) => h.button.onClick(Message.ClickedAttach()).children(names.join(", ") || "Attach")
  * })
  *
  * Effect.gen(function*() {

@@ -60,9 +60,9 @@
  * }).make({
  *   init: () => ({ saving: false }),
  *   update: {
- *     PressedSave: (_model, _message, $) => $.evolve({ saving: true })
+ *     PressedSave: ($) => $.evolve({ saving: true })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Button(h, {
  *       props: { disabled: model.saving, focusableWhenDisabled: true },
  *       onPress: EditorMessage.PressedSave()

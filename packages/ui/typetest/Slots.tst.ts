@@ -17,8 +17,8 @@ const PanelDef = Component.define({
 })
 const Panel = PanelDef.make({
   init: () => true,
-  update: (open) => !open,
-  view: (open, h) => h.section(open && h.slots.body, h.footer(h.slots.footer))
+  update: ($) => !$.model,
+  view: (h, open) => h.section(open && h.slots.body, h.footer(h.slots.footer))
 })
 
 const Plain = Component.define({
@@ -29,8 +29,8 @@ const Plain = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.p("plain")
+  update: ($) => $.model,
+  view: (h) => h.p("plain")
 })
 
 // Needs Clock to render.
@@ -56,7 +56,7 @@ declare const conditionalForeign:
 
 describe("slots", () => {
   it("types h.slots in the view, fragments and Component.Helper", () => {
-    PanelDef.view((_, h) => {
+    PanelDef.view((h) => {
       expect(h.slots).type.toBe<{ readonly body: View.Outlet; readonly footer: View.Outlet }>()
       return h.slots.body
     })
@@ -64,7 +64,7 @@ describe("slots", () => {
     expect<Component.Helper<typeof PanelDef>["slots"]>().type.toBe<
       { readonly body: View.Outlet; readonly footer: View.Outlet }
     >()
-    Component.define({ name: "None", scoped: false, model: Schema.Null, message: Schema.Never }).view((_, h) => {
+    Component.define({ name: "None", scoped: false, model: Schema.Null, message: Schema.Never }).view((h) => {
       expect(h).type.not.toHaveProperty("slots")
       return h.el("p")
     })
@@ -145,7 +145,7 @@ describe("slots", () => {
       message: Schema.Never,
       elements: Html
     })
-      .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
     class Badge extends Feature.Service<Badge>()("typetest/slots/Badge", { props: Schema.Struct({}) }) {}
     const options = { key: "p", slots: { body: "x" }, view: () => h.p("x"), fallback: () => h.p("wait") }
     expect(Headless).type.not.toBeCallableWith(h, options)

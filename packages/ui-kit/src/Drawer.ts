@@ -122,7 +122,7 @@
  *     RequestedOpenFilters: () => ({ open: true }),
  *     RequestedCloseFilters: () => ({ open: false })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Drawer(h, {
  *       props: { open: model.open },
  *       onEmit: {
@@ -1420,10 +1420,10 @@ export const DrawerProvider = Component.define({
 }).make({
   init: () => ({ active: false, indent: null }),
   update: {
-    ChangedOpen: (_model, { active }, $) => $.evolve({ active }),
-    MountedIndent: (_model, { id }, $) => $.evolve({ indent: id })
+    ChangedOpen: ($, { active }) => $.evolve({ active }),
+    MountedIndent: ($, { id }) => $.evolve({ indent: id })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const active = model.active
     const indentPart = p.part("div", (b, id: string) =>
       b
@@ -1531,11 +1531,11 @@ export const Drawer = Component.define({
     nestedHeight: 0
   }),
   update: {
-    StartedSwipe: (_model, _message, $) => $.evolve({ swiping: true }),
-    ReleasedSwipe: (model, release, $) => {
+    StartedSwipe: ($) => $.evolve({ swiping: true }),
+    ReleasedSwipe: ($, release) => {
       const released = $.evolve({ swiping: false, releases: (releases) => releases + 1 })
       if (!$.props.open) return released
-      const decision = decide($.props, snappingOf($.props, model), release)
+      const decision = decide($.props, snappingOf($.props, $.model), release)
       switch (decision._tag) {
         case "Dismiss":
           return released.evolve({ dismissed: true, strength: decision.strength }).emit(
@@ -1547,31 +1547,30 @@ export const Drawer = Component.define({
           return released
       }
     },
-    CancelledSwipe: (_model, _message, $) => $.evolve({ swiping: false }),
-    RefusedSwipe: (_model, _message, $) => $.evolve({ dismissed: false, strength: null }),
-    ShowedPopup: (model, _message, $) =>
-      $.props.open && model.dismissed ? $.evolve({ dismissed: false, strength: null }) : model,
-    Measured: (_model, { fontSize, height, viewport }, $) => $.evolve({ fontSize, height, viewport }),
-    StartedAreaSwipe: (model, { key }, $) =>
-      $.props.open || model.area !== null
-        ? model
+    CancelledSwipe: ($) => $.evolve({ swiping: false }),
+    RefusedSwipe: ($) => $.evolve({ dismissed: false, strength: null }),
+    ShowedPopup: ($) => $.props.open && $.model.dismissed ? $.evolve({ dismissed: false, strength: null }) : $.model,
+    Measured: ($, { fontSize, height, viewport }) => $.evolve({ fontSize, height, viewport }),
+    StartedAreaSwipe: ($, { key }) =>
+      $.props.open || $.model.area !== null
+        ? $.model
         : $.evolve({ area: key, dismissed: false, strength: null }).emit(
           DrawerEvents.RequestedOpen({ triggerId: null, reason: "swipe" })
         ),
-    ReleasedAreaSwipe: (model, { displacement: moved, size, velocity: speed }, $) => {
+    ReleasedAreaSwipe: ($, { displacement: moved, size, velocity: speed }) => {
       const released = $.evolve({ area: null })
-      if (!$.props.open || opensOnRelease(moved, speed, size) || model.area === null) return released
+      if (!$.props.open || opensOnRelease(moved, speed, size) || $.model.area === null) return released
       return released.evolve({ dismissed: true, strength: null }).emit(DrawerEvents.RequestedClose({ reason: "swipe" }))
     },
-    CancelledAreaSwipe: (_model, _message, $) => $.evolve({ area: null }),
-    ChangedNested: (_model, { count, height, swiping }, $) =>
+    CancelledAreaSwipe: ($) => $.evolve({ area: null }),
+    ChangedNested: ($, { count, height, swiping }) =>
       $.evolve({ nestedOpen: count, nestedSwiping: swiping, nestedHeight: height }),
-    RequestedOpenDialog: (model, { triggerId }, $) =>
-      $.set(model).emit(DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })),
-    RequestedCloseDialog: (model, { reason }, $) => $.set(model).emit(DrawerEvents.RequestedClose({ reason })),
-    SettledDialog: (model, { open }, $) => $.set(model).emit(DrawerEvents.Settled({ open }))
+    RequestedOpenDialog: ($, { triggerId }) =>
+      $.set($.model).emit(DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })),
+    RequestedCloseDialog: ($, { reason }) => $.set($.model).emit(DrawerEvents.RequestedClose({ reason })),
+    SettledDialog: ($, { open }) => $.set($.model).emit(DrawerEvents.Settled({ open }))
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const open = props.open
     const swipeDirection = props.swipeDirection ?? "down"

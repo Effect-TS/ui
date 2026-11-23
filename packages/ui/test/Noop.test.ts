@@ -44,8 +44,8 @@ const Recorder = Component.define({
   message: Message
 }).make({
   init: () => [],
-  update: (model, message, $) => {
-    const next = [...model, message._tag === "Got" ? `Got ${message.n}` : message._tag]
+  update: ($, message) => {
+    const next = [...$.model, message._tag === "Got" ? `Got ${message.n}` : message._tag]
     switch (message._tag) {
       case "Fire":
         return $.set(next).run(commands[message.command]())
@@ -55,7 +55,7 @@ const Recorder = Component.define({
         return next
     }
   },
-  view: (model, h) => h.el("p", model.join(","))
+  view: (h, model) => h.el("p", model.join(","))
 })
 
 const run = <A, E>(effect: Effect.Effect<A, E, any>) =>
@@ -166,8 +166,8 @@ describe("Component.noop", () => {
       const Silent = Component.define({ name: "Silent", scoped: false, model: Schema.Number, message: Schema.Never })
         .make({
           init: ($) => $.set(0).run(Quiet.make()),
-          update: (model) => model,
-          view: (model, h) => h.el("p", String(model))
+          update: ($) => $.model,
+          view: (h, model) => h.el("p", String(model))
         })
       const s = yield* Story.make(Silent, {})
       s.resolve(Quiet, Component.noop).expectNone()
@@ -189,15 +189,15 @@ describe("Component.noop", () => {
               return Component.noop
             }))
           ),
-        update: (model) => model,
-        view: (_, h) => h.text("child")
+        update: ($) => $.model,
+        view: (h) => h.text("child")
       })
       const Close = UiSchema.TaggedEnum({ Close: {} })
       const Parent = Component.provide(
         Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Close }).make({
           init: () => true,
           update: () => false,
-          view: (open, h) => h.el("div", [open ? Child(h, { key: "child", props: {} }) : null])
+          view: (h, open) => h.el("div", [open ? Child(h, { key: "child", props: {} }) : null])
         }),
         Slow.layer
       )

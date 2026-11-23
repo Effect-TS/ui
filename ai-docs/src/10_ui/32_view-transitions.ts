@@ -43,10 +43,10 @@ export const NoteBoardNoDeps = Component.define({
   update: {
     // The types tag the transition, so the stylesheet can give this
     // animation its own timing with `:active-view-transition-type(layout)`.
-    ClickedLayout: (_model, { layout }, $) => $.evolve({ layout }).viewTransition(["layout"]),
-    TypedFilter: (_model, { value }, $) => $.evolve({ filter: value })
+    ClickedLayout: ($, { layout }) => $.evolve({ layout }).viewTransition(["layout"]),
+    TypedFilter: ($, { value }) => $.evolve({ filter: value })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.section(
       h.div(
         h.input.attr("aria-label", "Filter").value(model.filter).onInput(({ value }) =>
@@ -104,11 +104,11 @@ export const TransitionApp = Component.define({
   elements: Html
 }).make({
   init: ($) => $.props.route,
-  update: (route, { route: next }, $) => $.set(next).viewTransition(directionOf(route, next)),
-  subscriptions: (route) => [
+  update: ($, { route: next }) => $.set(next).viewTransition(directionOf($.model, next)),
+  subscriptions: ({ model: route }) => [
     Router.subscription(AppRoute, route, (next) => TransitionAppMessage.ChangedRoute({ route: next }))
   ],
-  view: (route, h) =>
+  view: (h, route) =>
     h.main(
       AppRoute.match(route, {
         Index: (route) => NotesIndex(h, { key: AppRoute.printPath(route) }),

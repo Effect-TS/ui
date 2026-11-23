@@ -16,16 +16,16 @@ const RowDef = Component.define({
 
 const Row = RowDef.make({
   init: () => "",
-  update: (text) => text,
-  view: (text, h) => h.el("li", text)
+  update: ($) => $.model,
+  view: (h, text) => h.el("li", text)
 })
 
 const ListboxDef = Component.define({ name: "Listbox", scoped: false, model: Schema.Null, message: Schema.Never })
 
 const Listbox = ListboxDef.make({
   init: () => null,
-  update: (model) => model,
-  parts: (_, p) => ({ id: p.id("list") })
+  update: ($) => $.model,
+  parts: (p) => ({ id: p.id("list") })
 })
 
 class Todos extends Feature.Service<Todos>()("Todos", { props: Schema.Struct({}), events: RowEvents }) {}

@@ -21,12 +21,12 @@ const Saver = Component.define({
   events: SaverEvents
 }).make({
   init: () => null,
-  update: (_, message, $) =>
+  update: ($, message) =>
     SaverMessage.match(message, {
       ClickedSave: () => $.run(Save.make({})),
       SucceededSave: () => $.emit(SaverEvents.Saved())
     }),
-  view: (_, h) => h.el("button").on("click", SaverMessage.ClickedSave()).children("Save")
+  view: (h) => h.el("button").on("click", SaverMessage.ClickedSave()).children("Save")
 })
 
 const Page = Component.define({
@@ -36,8 +36,8 @@ const Page = Component.define({
   message: Schema.Literals(["Saved", "Ignored"])
 }).make({
   init: () => 0,
-  update: (saves, message) => message === "Saved" ? saves + 1 : saves,
-  view: (saves, h) =>
+  update: ($, message) => message === "Saved" ? $.model + 1 : $.model,
+  view: (h, saves) =>
     h.el("div").children(
       Saver(h, { props: {}, onEmit: () => "Saved" }),
       h.el("button").on("click", () => undefined).children("Nothing"),

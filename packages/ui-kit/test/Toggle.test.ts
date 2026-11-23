@@ -18,10 +18,10 @@ const Toolbar = Component.define({
 }).make({
   init: () => ({ bold: false, open: true }),
   update: {
-    ToggledBold: (model, { pressed }) => ({ ...model, bold: pressed }),
-    RequestedCloseTip: (model) => ({ ...model, open: false })
+    ToggledBold: ($, { pressed }) => ({ ...$.model, bold: pressed }),
+    RequestedCloseTip: ($) => ({ ...$.model, open: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Tooltip(h, {
       key: "bold",
       props: { open: model.open },

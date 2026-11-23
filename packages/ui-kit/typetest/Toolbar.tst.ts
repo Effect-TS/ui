@@ -25,8 +25,8 @@ describe("Toolbar", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Toolbar(h, {
           props,
           view: (toolbar) => {
@@ -54,8 +54,8 @@ describe("Toolbar", () => {
   it("each part takes only its element, and the item parts a value", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(Toolbar).type.not.toBeCallableWith(h, {
           props: { groups: [] },
           view: (toolbar: Component.Headless.Parts<typeof Toolbar>) => toolbar.root(h.div)

@@ -14,8 +14,8 @@ export const TableDemo = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_model, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.div.class("page").children(
       VirtualList(h, {
         props: { count: 10_000, itemSize: 37, firstPosition: 2 },

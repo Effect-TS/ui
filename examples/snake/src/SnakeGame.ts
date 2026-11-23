@@ -93,45 +93,45 @@ export const SnakeGame = Component.define({
     $.set({ ...NEW_GAME, apple: { x: 15, y: 15 }, highScore: 0 })
       .run(generateApplePosition(NEW_GAME.snake)),
   update: {
-    PressedKey: (model, { key }, $) => {
+    PressedKey: ($, { key }) => {
       const direction = MOVE_DIRECTIONS.get(key)
       if (direction !== undefined) {
-        return model.gameState === "Playing" ? { ...model, nextDirection: direction } : model
+        return $.model.gameState === "Playing" ? { ...$.model, nextDirection: direction } : $.model
       }
       if (key === " ") {
-        return { ...model, gameState: NEXT_ON_SPACE[model.gameState] }
+        return { ...$.model, gameState: NEXT_ON_SPACE[$.model.gameState] }
       }
       if (key === "r") {
-        return $.set({ ...model, ...NEW_GAME }).run(generateApplePosition(NEW_GAME.snake))
+        return $.set({ ...$.model, ...NEW_GAME }).run(generateApplePosition(NEW_GAME.snake))
       }
-      return model
+      return $.model
     },
 
-    TickedClock: (model, _message, $) => {
-      if (model.gameState !== "Playing") return model
+    TickedClock: ($) => {
+      if ($.model.gameState !== "Playing") return $.model
 
-      const direction = Direction.isOpposite(model.direction, model.nextDirection)
-        ? model.direction
-        : model.nextDirection
-      const willEatApple = Position.equivalence(Position.move(model.snake[0], direction), model.apple)
-      const snake = willEatApple ? Snake.grow(model.snake, direction) : Snake.move(model.snake, direction)
+      const direction = Direction.isOpposite($.model.direction, $.model.nextDirection)
+        ? $.model.direction
+        : $.model.nextDirection
+      const willEatApple = Position.equivalence(Position.move($.model.snake[0], direction), $.model.apple)
+      const snake = willEatApple ? Snake.grow($.model.snake, direction) : Snake.move($.model.snake, direction)
 
       if (Snake.hasCollision(snake)) {
-        return { ...model, gameState: "GameOver", highScore: Math.max(model.points, model.highScore) }
+        return { ...$.model, gameState: "GameOver", highScore: Math.max($.model.points, $.model.highScore) }
       }
 
       const next: SnakeGameModel = {
-        ...model,
+        ...$.model,
         snake,
         direction,
-        points: willEatApple ? model.points + GAME.POINTS_PER_APPLE : model.points
+        points: willEatApple ? $.model.points + GAME.POINTS_PER_APPLE : $.model.points
       }
       return willEatApple ? $.set(next).run(generateApplePosition(snake)) : next
     },
 
-    CompletedGenerateApplePosition: (model, { position }) => ({ ...model, apple: position })
+    CompletedGenerateApplePosition: ($, { position }) => ({ ...$.model, apple: position })
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.gameState === "Playing" &&
     Subscription.make(
       "gameClock",
@@ -151,8 +151,8 @@ export const SnakeGame = Component.define({
       { preventDefault: true }
     )
   ],
-  head: (model) => [Head.title(`Snake | ${model.points} pts`)],
-  view: (model, h) =>
+  head: ({ model }) => [Head.title(`Snake | ${model.points} pts`)],
+  view: (h, model) =>
     h.div.class("flex flex-col items-center justify-center min-h-screen bg-black text-white p-8").children(
       h.h1.class("text-4xl font-bold mb-4").children("Snake Game"),
       h.div.class("flex gap-8 mb-4").children(

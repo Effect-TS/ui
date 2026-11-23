@@ -22,7 +22,7 @@ import * as queryCore from "./queryCore.ts"
 const queryModule = (): queryCore.Loaded => queryCore.loaded!
 const QueryTypeId: Query.TypeId = "~@effect/ui/Query"
 
-type QueryFn = (model: any, props: any, queries: any) => unknown
+type QueryFn = ($: { readonly model: any; readonly props: any; readonly queries: any }) => unknown
 
 /**
  * One entry of `queries`.
@@ -342,7 +342,7 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     state.running.push(entry.name)
     let args: unknown
     try {
-      args = entry.args(state.model, state.props, state.queries)
+      args = entry.args({ model: state.model, props: state.props, queries: state.queries })
     } finally {
       state.running.pop()
     }

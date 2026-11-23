@@ -45,7 +45,7 @@ describe("Avatar", () => {
       }).make({
         init: () => ada.src,
         update: { Picked: (_, { src }) => src },
-        view: (src, h) =>
+        view: (h, src) =>
           Avatar(h, {
             props: { src },
             view: (avatar) =>

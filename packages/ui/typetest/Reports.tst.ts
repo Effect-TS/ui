@@ -25,7 +25,7 @@ const Provider = Component.define({
   }
 }).make({
   init: () => ({ open: false, instant: false }),
-  update: (model) => model,
+  update: ($) => $.model,
   parts: () => ({})
 })
 
@@ -37,7 +37,7 @@ const Plain = Component.define({
   shares: (model) => ({ model })
 }).make({
   init: () => null,
-  update: (model) => model,
+  update: ($) => $.model,
   parts: () => ({})
 })
 
@@ -66,8 +66,8 @@ const Tip = Component.define({
   elements: Html
 }).make({
   init: () => ({ hovered: false }),
-  update: (model, _, $) => $.set(model).send(Provider, { _tag: "Completed" }),
-  view: (_, h) => {
+  update: ($) => $.set($.model).send(Provider, { _tag: "Completed" }),
+  view: (h) => {
     expect(h.shared.provider).type.toBe<{ open: boolean; instant: boolean } | undefined>()
     return h.span()
   }
@@ -81,8 +81,8 @@ const Required = Component.define({
   shared: { provider: { owner: Provider, report: () => true }, plain: Plain }
 }).make({
   init: () => null,
-  update: (model) => model,
-  parts: (_, p) => {
+  update: ($) => $.model,
+  parts: (p) => {
     expect(p.shared.provider).type.toBe<{ open: boolean; instant: boolean }>()
     expect(p.shared.plain).type.toBe<{ model: null }>()
     return {}
@@ -107,7 +107,7 @@ describe("reports", () => {
       model: Schema.Null,
       message: TipMessage,
       shares: { value: () => 1, receives: ["Entered"] }
-    }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+    }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
     const sender = Component.define({
       name: "Sender",
       scoped: false,
@@ -117,14 +117,14 @@ describe("reports", () => {
     })
     const sendsB = sender.make({
       init: () => null,
-      update: (_, __, $) => $.send(B, { _tag: "Entered" }),
+      update: ($) => $.send(B, { _tag: "Entered" }),
       parts: () => ({})
     })
     const widened = sender.make({
       init: () => null,
-      update: (_, __, $): Component.Step<null, typeof TipMessage.Type, never, Component.Shared<"Provider">> =>
+      update: ($): Component.Step<null, typeof TipMessage.Type, never, Component.Shared<"Provider">> =>
         $.send(Provider, { _tag: "Completed" }),
-      view: (_, h) => h.text("")
+      view: (h) => h.text("")
     })
     expect<Component.Requirements<typeof widened>>().type.toBe<Component.Shared<"Provider">>()
     expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<Component.Shared<"Provider">>()
@@ -140,8 +140,8 @@ describe("reports", () => {
     })
       .make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => {
+        update: ($) => $.model,
+        view: (h) => {
           // `| undefined` from the index signature, as for any record.
           expect(h.shared["provider"]).type.toBe<{ open: boolean; instant: boolean } | undefined>()
           return h.text("")
@@ -157,7 +157,7 @@ describe("reports", () => {
       message: Schema.Never,
       shared: { p: Provider }
     })
-      .make({ init: () => null, update: (model) => model, view: (_, h) => h.text("") })
+      .make({ init: () => null, update: ($) => $.model, view: (h) => h.text("") })
     const Wrapper = Component.define({
       name: "Wrapper",
       scoped: false,
@@ -166,8 +166,8 @@ describe("reports", () => {
       shared: { p: { owner: Provider, optional: true } }
     }).make({
       init: () => null,
-      update: (model, _, $) => $.set(model).send(Provider, { _tag: "Completed" }),
-      view: (_, h) => Child(h, { key: "c" })
+      update: ($) => $.set($.model).send(Provider, { _tag: "Completed" }),
+      view: (h) => Child(h, { key: "c" })
     })
     expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared.Of<typeof Provider>>()
   })

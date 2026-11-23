@@ -39,13 +39,13 @@
  *   message: Message
  * }).make({
  *   init: () => ({ saved: false }),
- *   update: (model, message, $) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
  *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
  *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
  *   // In a scene, `h.isRunning` is derived from the pending Commands.
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.el("button").on("click", Message.ClickedSave()).children(
  *       model.saved ? "saved" : h.isRunning(SaveTodo) ? "saving" : "save"
  *     )

@@ -39,14 +39,14 @@
  *   events: TodoItemEvents
  * }).make({
  *   init: ($) => $.set({}),
- *   update: (_model, message, $) =>
+ *   update: ($, message) =>
  *     TodoItemMessage.match(message, {
  *       ClickedToggle: () => $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
  *       // Nothing to report: the save ends in `Component.noop`.
  *       ClickedSave: () => $.run(SaveTodo.make($.props.todo).pipe(Command.asNoop))
  *     }),
  *   // `h.isRunning` is true from `ClickedSave` until the save ends.
- *   view: (_, h) =>
+ *   view: (h) =>
  *     h.el(
  *       "li",
  *       h.el("button").on("click", TodoItemMessage.ClickedToggle()).children(h.props.todo.done ? "[x]" : "[ ]"),
@@ -655,10 +655,10 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * }).make({
    *   init: () => ({ layout: "grid" as const, filter: "" }),
    *   update: {
-   *     ClickedLayout: (_model, { layout }, $) => $.evolve({ layout }).viewTransition(["layout-change"]),
-   *     TypedFilter: (_model, { value }, $) => $.evolve({ filter: value })
+   *     ClickedLayout: ($, { layout }) => $.evolve({ layout }).viewTransition(["layout-change"]),
+   *     TypedFilter: ($, { value }) => $.evolve({ filter: value })
    *   },
-   *   view: (model, h) =>
+   *   view: (h, model) =>
    *     h.ul.class(model.layout).children(
    *       ...["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
    *     )
@@ -730,7 +730,7 @@ export interface Update<
    * acknowledge with `sent(Component, message)`.
    *
    * Only `$` has it, and not the steps its other methods return, so send
-   * first: `$.send("self", message).set(model)`.
+   * first: `$.send("self", message).set($.model)`.
    */
   send(owner: "self", message: SendMessage<SelfReceives<SR>>): Step<Model, Msg, Events, never, L>
   /**
@@ -744,9 +744,8 @@ export interface Update<
    * type, and functions written inline. In an update over the whole message
    * type, a slice for one tag is rejected.
    *
-   * It is a left fold. Each function gets the Model the previous one returned
-   * and a `$` holding that Model, so a Command it runs sees the earlier
-   * changes. The Commands, emitted events, `loadMore` and `reset` of every
+   * It is a left fold. Each function gets a `$` holding the Model the
+   * previous one returned, so a Command it runs sees the earlier changes. The Commands, emitted events, `loadMore` and `reset` of every
    * function are kept, in call order. `$.props`, `$.queries` and `$.shared` are
    * the same for each, as they were when this `update` started. `R` is the union of
    * the functions' requirements.
@@ -754,9 +753,8 @@ export interface Update<
   combine<
     F extends ReadonlyArray<
       (
-        model: Model,
-        msg: Cur,
-        $: Update<Model, Msg, Events, Props, L, Cur, SR>
+        $: Update<Model, Msg, Events, Props, L, Cur, SR>,
+        msg: Cur
       ) => Model | Step<Model, Msg, Events, any, L>
     >
   >(...updates: F): Step<Model, Msg, Events, RawStepRequirements<ReturnType<F[number]>>, L>
@@ -841,7 +839,7 @@ const stepWith = (
     change
   )
 
-type AnyUpdate = (model: unknown, msg: unknown, $: Update<any, any, any, any>) => unknown
+type AnyUpdate = ($: Update<any, any, any, any>, msg: unknown) => unknown
 
 type AnyUpdate$ = Update<any, any, any, any> & { readonly "~message": unknown; readonly "~self": Any }
 
@@ -860,7 +858,7 @@ const UpdateProto = {
     let viewTransitionTypes = this.viewTransitionTypes
     for (const update of updates) {
       const next = toNext(
-        update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg, this["~self"]))
+        update(makeUpdate(model, this.props, this.queries, this.shared, msg, this["~self"]), msg)
       )
       model = next.model
       commands.push(...next.commands)
@@ -1481,12 +1479,12 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *   events: DialogEvents
    * }).make({
    *   init: () => false,
-   *   update: (_, message, $) =>
+   *   update: ($, message) =>
    *     DialogMessage.match(message, {
    *       Opened: () => true,
    *       Closed: () => $.set(false).emit(DialogEvents.Dismissed())
    *     }),
-   *   parts: (open, p) => ({
+   *   parts: (p, open) => ({
    *     open,
    *     trigger: p.part("button", (b) => b.onClick(DialogMessage.Opened())),
    *     close: p.part("button", (b) => b.onClick(DialogMessage.Closed()))
@@ -1502,8 +1500,8 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *   message: DrawerMessage
    * }).make({
    *   init: () => 0,
-   *   update: (dismissals) => dismissals + 1,
-   *   parts: (dismissals, p) =>
+   *   update: ($) => $.model + 1,
+   *   parts: (p, dismissals) =>
    *     p.child(Dialog, {
    *       onEmit: () => DrawerMessage.DismissedDialog(),
    *       parts: (dialog) => ({ ...dialog, dismissals })
@@ -1915,8 +1913,8 @@ export type QueryServices<L> = ServiceOf<L[keyof L]>
 type ServiceOf<D> = D extends { readonly query: { readonly Identifier: infer Self } } ? Self : never
 
 /**
- * One query as `h.queries`, `$.queries`, and the `queries` argument of `head`,
- * `subscriptions` and a query's `args` open it.
+ * One query as `h.queries` and `$.queries` open it: in a view, and in `update`,
+ * `head`, `subscriptions` and a query's `args`.
  *
  * **Details**
  *
@@ -2187,9 +2185,8 @@ type UnknownTag<T> = `'${T & string}' is not a tag of this component's message` 
 // record, so a key that is no tag is in it too, and its value is the error.
 type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
   readonly [T in keyof UR]: T extends TagOf<Msg> ? (
-      model: Model,
-      msg: Tagged<Msg, T>,
-      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>, SR>
+      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, T>, SR>,
+      msg: Tagged<Msg, T>
     ) => UR[T]
     : UnknownTag<T>
 }
@@ -2261,24 +2258,23 @@ export interface Definition<
   update<const Tag extends TagOf<Msg>, U extends Model | Step<Model, Msg, Events, any, L>>(
     tag: Tag,
     update: (
-      model: Model,
-      msg: Tagged<Msg, Tag>,
-      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, Tag>, SR>
+      $: Update<Model, Msg, Events, Props, L, Tagged<Msg, Tag>, SR>,
+      msg: Tagged<Msg, Tag>
     ) => U
-  ): (model: Model, msg: Tagged<Msg, Tag>, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U
+  ): ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Tagged<Msg, Tag>) => U
   /** An update function over the whole message type. */
   update<U extends Model | Step<Model, Msg, Events, any, L>>(
-    update: (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U
-  ): (model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U
+    update: ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
+  ): ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (
-      model: Model,
-      h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>
+      h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>,
+      model: Model
     ) => UV
   ): (
-    model: Model,
-    h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>
+    h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>,
+    model: Model
   ) => UV
   /**
    * A view fragment: a function that takes `h` first and any other
@@ -2311,7 +2307,7 @@ export interface Definition<
       & {
         readonly init: ($: Init<Model, Msg, Events, Props>) => UI
         readonly update:
-          | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U)
+          | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
           | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
         /**
          * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
@@ -2319,22 +2315,14 @@ export interface Definition<
          */
         readonly parts: [Sl] extends [never] ?
           [Sc] extends [false] ?
-            (model: Model, p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>) => Parts
+            (p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>, model: Model) => Parts
           : never
           : never
         readonly subscriptions?:
-          | ((
-            model: Model,
-            props: Props,
-            queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-          ) => ReadonlyArray<Sub | false | null | undefined>)
+          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>)
           | undefined
         readonly head?:
-          | ((
-            model: Model,
-            props: Props,
-            queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-          ) => ReadonlyArray<View.HeadEntry<V>>)
+          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
       & SelfShares<SR, SV>
@@ -2371,25 +2359,17 @@ export interface Definition<
       & {
         readonly init: ($: Init<Model, Msg, Events, Props>) => UI
         readonly update:
-          | ((model: Model, msg: Msg, $: Update<Model, Msg, Events, Props, L, Msg, SR>) => U)
+          | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
           | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
         readonly view: (
-          model: Model,
-          h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>
+          h: ViewHelper<Model, Props, Msg, V, L, Sl, SR>,
+          model: Model
         ) => UV
         readonly subscriptions?:
-          | ((
-            model: Model,
-            props: Props,
-            queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-          ) => ReadonlyArray<Sub | false | null | undefined>)
+          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>)
           | undefined
         readonly head?:
-          | ((
-            model: Model,
-            props: Props,
-            queries: { readonly [K in keyof L]: QueryResultOf<L[K]> }
-          ) => ReadonlyArray<View.HeadEntry<V>>)
+          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
       & OwnersAreHeadless<SV>
@@ -2511,8 +2491,8 @@ export declare namespace Definition {
  *
  * export const NoteList = NoteListDef.make({
  *   init: () => ({ notes: [] }),
- *   update: (model) => model,
- *   view: (model, h) => h.el("ul", ...model.notes.map((note) => noteRow(h, note)))
+ *   update: ($) => $.model,
+ *   view: (h, model) => h.el("ul", ...model.notes.map((note) => noteRow(h, note)))
  * })
  * ```
  *
@@ -2602,6 +2582,21 @@ export interface Alive<out Model, out Props, out Queries> {
 type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
 
 /**
+ * What `subscriptions`, `head` and a query's `args` are asked with: the
+ * current Model, props and query results of the instance. A query's `args`
+ * gets the results of the other queries.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Current<out Model, out Props, out Queries> {
+  readonly model: Model
+  readonly props: Props
+  readonly queries: Queries
+}
+
+/**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
  * `queries` and `elements`, and `make` on the definition it returns takes
  * `init`, `update`, `view`, `subscriptions` and `head`.
@@ -2617,9 +2612,12 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * usually stays unexported. A component written in one piece chains the two
  * steps.
  *
- * `init` and `update` get `$`, a step holding the current Model and props.
- * `view` gets `h`, bound to the component's message type and carrying the
- * props, with the registered vocabulary's element names mixed in. The whole
+ * `init` and `update` get `$` first, a step holding the current Model and
+ * props, and `update` gets the message after it: `($, message) =>`, with the
+ * Model read from `$.model`. `view` gets `h` first, bound to the component's
+ * message type and carrying the props, with the registered vocabulary's
+ * element names mixed in, and the Model after it: `(h, model) =>`. A view
+ * that reads only props takes `h` alone. The whole
  * return type of `init`, `update` and `view` is inferred and `R` is read off
  * it, so `R` covers every branch, including conditional views. Framework
  * services such as `Scope` are never part of `R`.
@@ -2629,7 +2627,8 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * and the message log use it. A component is a function, so its own `name`
  * is the function's and doesn't carry it.
  *
- * `props` and `events` are optional. `subscriptions` returns keyed Streams run
+ * `props` and `events` are optional. `subscriptions` gets `$`, holding the
+ * Model, the props and the queries' results, and returns keyed Streams run
  * while their key is listed, and falsy entries are skipped. Two entries with
  * one key fail the instance. `elements` overrides the registered vocabulary
  * for this component.
@@ -2637,14 +2636,13 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * `queries` declares the queries the component shows, by name. Each entry is
  * `{ query: Q, args }` for one query, a list of pages when `Q` is a
  * `Query.InfiniteService`, or `{ queryMany: Q, args }` for one query at many
- * args. `args` gets the Model, the props and the other queries' results,
- * and returns the query's args, `undefined` to disable it, or for
+ * args. `args` gets `$`, holding the Model, the props and the other queries'
+ * results as `$.model`, `$.props` and `$.queries`, and returns the query's args, `undefined` to disable it, or for
  * `queryMany` an array of args. The runtime watches each query at those args
  * and keeps what it last returned as the query's result, beside the Model:
  * the Model plus the results is an instance's state. A result that changes
- * re-renders the instance. `h.queries`, `$.queries` in `update`, and the
- * `queries` argument of `head` and `subscriptions` open the results, by
- * query name. Each query is added to `R`.
+ * re-renders the instance. `h.queries`, and `$.queries` in `update`, `head`
+ * and `subscriptions`, open the results, by query name. Each query is added to `R`.
  *
  * An entry's `debounce` delays a fetch for changed args by a
  * `Duration.Input` on the Clock. Only a fetch waits: the first args at
@@ -2662,8 +2660,8 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
- * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
- * Model, the props and the queries' results, like a view. On every flush that
+ * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of `$`,
+ * holding the Model, the props and the queries' results, like a view. On every flush that
  * changed a view, the runtime folds the head of the placed tree, a child's
  * `fallback` content included, with the root vocabulary's merge (see
  * `Head`). A `Head.reduce` or `HtmlHead.reduce` entry maps the folded
@@ -2671,8 +2669,8 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * `og:title` from the title that won, say. The root's result is final.
  *
  * `update` is a function over the whole message type, or a record with a
- * function for every `_tag` of the message, which gets that tag's member and
- * a `$` for it. The record has no default key, so a component that wants a
+ * function for every `_tag` of the message, which gets a `$` for that tag's
+ * member and the member. The record has no default key, so a component that wants a
  * catch-all uses the function form. `Def.update(tag, f)` is a slice for one
  * tag, and `Def.update(f)` an update function over the whole message type.
  * `$.combine` runs update functions one after another. `Def.view(f)` is a
@@ -2715,12 +2713,12 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *   message: CounterMessage
  * }).make({
  *   init: ($) => ({ count: $.props.initial }),
- *   update: (model, message) =>
+ *   update: ($, message) =>
  *     CounterMessage.match(message, {
- *       ClickedIncrement: () => ({ count: model.count + 1 }),
- *       ClickedDecrement: () => ({ count: model.count - 1 })
+ *       ClickedIncrement: () => ({ count: $.model.count + 1 }),
+ *       ClickedDecrement: () => ({ count: $.model.count - 1 })
  *     }),
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.el(
  *       "div",
  *       h.el("button").on("click", CounterMessage.ClickedDecrement()).children("-"),
@@ -2736,7 +2734,7 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * import { Component } from "@effect/ui"
  * import { Effect, Schema } from "effect"
  * import { AsyncResult } from "effect/reactivity"
-import { Query } from "@effect/ui"
+ * import { Query } from "@effect/ui"
  *
  * class GetUser extends Query.Service<GetUser>()("GetUser", {
  *   args: { id: Schema.String },
@@ -2759,18 +2757,18 @@ import { Query } from "@effect/ui"
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   queries: {
- *     user: { query: GetUser, args: (_model, props) => ({ id: props.id }) },
+ *     user: { query: GetUser, args: ({ props }) => ({ id: props.id }) },
  *     // Disabled until the user has loaded.
  *     team: {
  *       query: GetTeam,
- *       args: (_model, _props, queries) =>
+ *       args: ({ queries }) =>
  *         AsyncResult.isSuccess(queries.user) ? { id: queries.user.value.teamId } : undefined
  *     }
  *   }
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     AsyncResult.match(h.queries.user, {
  *       onInitial: () => h.el("p", "Loading…"),
  *       onFailure: () => h.el("p", "No such user"),
@@ -2796,23 +2794,23 @@ import { Query } from "@effect/ui"
  * })
  *
  * // Over the whole message type, so `$.combine` takes them.
- * const touch = NotePageDef.update((_model, _msg, $) => $.evolve({ edits: (edits) => edits + 1 }))
- * const validate = NotePageDef.update((model, _msg, $) => $.evolve({ error: model.body === "" ? "Empty" : null }))
+ * const touch = NotePageDef.update(($) => $.evolve({ edits: (edits) => edits + 1 }))
+ * const validate = NotePageDef.update(($) => $.evolve({ error: $.model.body === "" ? "Empty" : null }))
  *
  * // `msg` is the UpdatedBody message.
- * const handleUpdatedBody = NotePageDef.update("UpdatedBody", (_model, msg, $) =>
- *   $.combine((model) => UiStruct.evolve(model, { body: msg.body }), touch))
+ * const handleUpdatedBody = NotePageDef.update("UpdatedBody", ($, msg) =>
+ *   $.combine(($) => UiStruct.evolve($.model, { body: msg.body }), touch))
  *
  * // `h` first, then any other arguments.
  * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))
  *
- * const noteView = NotePageDef.view((model, h) => h.el("div", h.el("p", model.body), counter(h, model.edits)))
+ * const noteView = NotePageDef.view((h, model) => h.el("div", h.el("p", model.body), counter(h, model.edits)))
  *
  * export const NotePage = NotePageDef.make({
  *   init: () => ({ body: "", edits: 0, error: null }),
  *   update: {
  *     UpdatedBody: handleUpdatedBody,
- *     ClickedSave: (_model, _msg, $) => $.combine(validate)
+ *     ClickedSave: ($) => $.combine(validate)
  *   },
  *   view: noteView
  * })
@@ -2832,8 +2830,8 @@ import { Query } from "@effect/ui"
  *   slots: ["title", "body"]
  * }).make({
  *   init: () => true,
- *   update: (open) => !open,
- *   view: (open, h) =>
+ *   update: ($) => !$.model,
+ *   view: (h, open) =>
  *     h.el("section", h.el("h2", h.slots.title), h.el("button").onClick("ClickedToggle"), open && h.slots.body)
  * })
  *
@@ -2844,9 +2842,9 @@ import { Query } from "@effect/ui"
  *   message: Schema.Literal("ClickedLike")
  * }).make({
  *   init: () => 0,
- *   update: (likes) => likes + 1,
+ *   update: ($) => $.model + 1,
  *   // The button is the page's, so a click sends the page's `ClickedLike`.
- *   view: (likes, h) =>
+ *   view: (h, likes) =>
  *     Card(h, {
  *       key: "card",
  *       slots: { title: "Likes", body: h.el("button").onClick("ClickedLike").children(`${likes} likes`) }
@@ -2905,9 +2903,11 @@ export const define = <
           readonly [K in keyof S]: {
             readonly query?: S[K] & OneQuery<M[K & keyof M]>
             readonly args: (
-              model: Model,
-              props: Props,
-              queries: { readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<NoInfer<L>[P]> }
+              $: Current<
+                Model,
+                Props,
+                { readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<NoInfer<L>[P]> }
+              >
             ) => ArgsFor<S[K], M[K & keyof M]>
             readonly debounce?: Duration.Input | undefined
             readonly onChange?: OnChange<S[K], M[K & keyof M], NoInfer<Msg>> | undefined
@@ -3049,8 +3049,8 @@ export const define = <
     // A slice is the function given, with `$` bound to the Model and message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
-      return (model: unknown, msg: unknown, $: Update<any, any, any, any>) =>
-        update(model, msg, makeUpdate(model, $.props, $.queries, $.shared, msg, ($ as AnyUpdate$)["~self"]))
+      return ($: Update<any, any, any, any>, msg: unknown) =>
+        update(makeUpdate($.model, $.props, $.queries, $.shared, msg, ($ as AnyUpdate$)["~self"]), msg)
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
@@ -3086,16 +3086,12 @@ const finish = (
   options: {
     readonly init: ($: Init<any, any, any, any>) => unknown
     readonly update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
-    readonly view?: ((model: any, h: any) => View.Content<any, any>) | undefined
-    readonly parts?: ((model: any, p: any) => unknown) | undefined
+    readonly view?: ((h: any, model: any) => View.Content<any, any>) | undefined
+    readonly parts?: ((p: any, model: any) => unknown) | undefined
     readonly subscriptions?:
-      | ((
-        model: any,
-        props: any,
-        queries: any
-      ) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
+      | (($: Current<any, any, any>) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
       | undefined
-    readonly head?: ((model: any, props: any, queries: any) => ReadonlyArray<unknown>) | undefined
+    readonly head?: (($: Current<any, any, any>) => ReadonlyArray<unknown>) | undefined
   }
 ): Any => {
   const bound = bindQueries(definition.name, definition.queries)
@@ -3105,7 +3101,7 @@ const finish = (
   // A record dispatches on the message's `_tag`.
   const updateFn: AnyUpdate = typeof update === "function"
     ? update
-    : (model, msg, $) => update[(msg as { readonly _tag: string })._tag](model, msg, $)
+    : ($, msg) => update[(msg as { readonly _tag: string })._tag]($, msg)
   const subscriptions = options.subscriptions
   const head = options.head
   const elements = definition.elements
@@ -3135,11 +3131,7 @@ const finish = (
     init: (props: unknown) => toNext(options.init(makeInit(props))),
     update: (model: unknown, msg: unknown, props: unknown, results?: Results, shared?: SharedRecord) =>
       toNext(
-        updateFn(
-          model,
-          msg,
-          makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg, component)
-        )
+        updateFn(makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg, component), msg)
       ),
     view: view === undefined
       ? undefined
@@ -3170,7 +3162,7 @@ const finish = (
         const lazies = lazy?.lazy as View.Lazies | undefined
         lazies?.begin()
         try {
-          const node = View.toNode(view(model, h))
+          const node = View.toNode(view(h, model))
           lazies?.end()
           return node
         } catch (error) {
@@ -3203,15 +3195,16 @@ const finish = (
           p.patched = opened.patched
         }
         if (reads.length > 0) p.shared = sharedReads.values(definition.name, reads, context.shared)
-        return parts(model, p)
+        return parts(p, model)
       },
     subscriptions: subscriptions === undefined
       ? undefined
       : (model: unknown, props: unknown, results?: Results) =>
-        subscriptions(model, props, open(model, props, results)).filter((entry) => !!entry),
+        subscriptions({ model, props, queries: open(model, props, results) }).filter((entry) => !!entry),
     head: head === undefined
       ? undefined
-      : (model: unknown, props: unknown, results?: Results) => head(model, props, open(model, props, results)),
+      : (model: unknown, props: unknown, results?: Results) =>
+        head({ model, props, queries: open(model, props, results) }),
     elements: () => elements ?? View.registeredElements(),
     layer: undefined,
     layerKeys: undefined,
@@ -3597,11 +3590,11 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   message: RowMessage
  * }).make({
  *   init: () => ({}),
- *   update: (_model, message, $) =>
+ *   update: ($, message) =>
  *     RowMessage.match(message, {
  *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id }).pipe(Command.asNoop))
  *     }),
- *   view: (_, h) => h.el("li", h.props.id)
+ *   view: (h) => h.el("li", h.props.id)
  * })
  *
  * const RowLive = Component.provide(Row, [SaveTodo.layer])            // shared per Env
@@ -3638,13 +3631,13 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" ext
  *   message: RoomMessage
  * }).make({
  *   init: ($) => $.set({ room: "lobby", joined: "" }).run(JoinRoom.make()),
- *   update: (_model, message, $) =>
+ *   update: ($, message) =>
  *     RoomMessage.match(message, {
  *       // Selects the new room's Layer: JoinRoom runs against it.
  *       SelectedRoom: ({ room }) => $.evolve({ room }).run(JoinRoom.make()),
  *       CompletedJoinRoom: ({ room }) => $.evolve({ joined: room })
  *     }),
- *   view: (model, h) => h.el("p", model.joined)
+ *   view: (h, model) => h.el("p", model.joined)
  * })
  *
  * // Requires `Rooms`, provided above, so the rooms outlive a switch.

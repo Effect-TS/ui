@@ -49,13 +49,13 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   }).make({
     head: () => [Head.title("Profile")],
     init: () => ({ draft: "", saved: "" }),
-    update: (model, message, $) =>
+    update: ($, message) =>
       FormMsg.match(message, {
-        Typed: () => ({ ...model, draft: model.draft + "a" }),
-        Save: () => $.run(Save.make({ text: model.draft })),
-        Saved: ({ text }) => $.set({ ...model, saved: text }).emit(FormEvents.Saved({ text }))
+        Typed: () => ({ ...$.model, draft: $.model.draft + "a" }),
+        Save: () => $.run(Save.make({ text: $.model.draft })),
+        Saved: ({ text }) => $.set({ ...$.model, saved: text }).emit(FormEvents.Saved({ text }))
       }),
-    view: (model, h) =>
+    view: (h, model) =>
       h.el(
         "form",
         h.el("button").on("click", FormMsg.Typed()).children("draft:" + model.draft),
@@ -67,8 +67,8 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
 
 const Billing = Component.define({ name: "Billing", scoped: true, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("p", "billing")
+  update: ($) => $.model,
+  view: (h) => h.el("p", "billing")
 })
 
 const SettingsMsg = UiSchema.TaggedEnum({
@@ -81,12 +81,12 @@ const makeSettings = (Profile: ReturnType<typeof makeForm>) =>
   Component.define({ name: "Settings", scoped: false, model: SettingsModel, message: SettingsMsg }).make({
     head: () => [Head.title("Settings")],
     init: () => ({ tab: "profile", saved: [] }),
-    update: (model, message) =>
+    update: ($, message) =>
       SettingsMsg.match(message, {
-        Show: ({ tab }) => ({ ...model, tab }),
-        Saved: ({ text }) => ({ ...model, saved: [...model.saved, text] })
+        Show: ({ tab }) => ({ ...$.model, tab }),
+        Saved: ({ text }) => ({ ...$.model, saved: [...$.model.saved, text] })
       }),
-    view: (model, h) =>
+    view: (h, model) =>
       h.el(
         "main",
         model.tab === "profile"
@@ -198,8 +198,8 @@ const Row = Component.define({
   message: Schema.Literal("inc")
 }).make({
   init: () => 0,
-  update: (count) => count + 1,
-  view: (count, h) => h.el("li").on("click", "inc").children(`${h.props.label}:${count}`)
+  update: ($) => $.model + 1,
+  view: (h, count) => h.el("li").on("click", "inc").children(`${h.props.label}:${count}`)
 })
 
 const ListMsg = UiSchema.TaggedEnum({
@@ -211,16 +211,16 @@ const ListModel = Schema.Struct({ items: Schema.Record(Schema.String, Schema.Str
 
 const List = Component.define({ name: "List", scoped: false, model: ListModel, message: ListMsg }).make({
   init: () => ({ items: { a: "apple", b: "banana" }, filter: "" }),
-  update: (model, message) =>
+  update: ($, message) =>
     ListMsg.match(message, {
-      Filter: ({ text }) => ({ ...model, filter: text }),
+      Filter: ({ text }) => ({ ...$.model, filter: text }),
       Delete: ({ id }) => {
-        const { [id]: _, ...items } = model.items
-        return { ...model, items }
+        const { [id]: _, ...items } = $.model.items
+        return { ...$.model, items }
       },
-      Add: ({ id, label }) => ({ ...model, items: { ...model.items, [id]: label } })
+      Add: ({ id, label }) => ({ ...$.model, items: { ...$.model.items, [id]: label } })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "ul",
       h.scoped(({ key, model }) => key in model.items, (s) =>
@@ -236,8 +236,8 @@ const failureOf = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }
 const host = <Model, Message>(Inner: Component.Component<"Inner", {}, Model, Message, never>) =>
   Component.define({ name: "Host", scoped: false, model: Schema.Null, message: Schema.Never }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.el("main", Inner(h, { key: "i", fallback: () => h.el("p", "down") }))
+    update: ($) => $.model,
+    view: (h) => h.el("main", Inner(h, { key: "i", fallback: () => h.el("p", "down") }))
   })
 
 describe("scoped lists", () => {
@@ -280,8 +280,8 @@ describe("scope predicates", () => {
         const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
           .make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.el("div", h.scoped(alive, (s) => Billing(s, { key: "b" })))
+            update: ($) => $.model,
+            view: (h) => h.el("div", h.scoped(alive, (s) => Billing(s, { key: "b" })))
           })
         const root = yield* TestHost.mount(host(Inner), {})
         yield* TestHost.settle
@@ -305,7 +305,7 @@ describe("scope predicates", () => {
           .make({
             init: () => false,
             update: () => true,
-            view: (gone, h) =>
+            view: (h, gone) =>
               h.el(
                 "div",
                 h.el("button").on("click", "go").children("go"),
@@ -332,9 +332,8 @@ describe("scoped paths", () => {
       const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
-            h.el("div", h.scoped((s) => Billing(s, { key: "b" })), h.scoped((s) => Billing(s, { key: "b" })))
+          update: ($) => $.model,
+          view: (h) => h.el("div", h.scoped((s) => Billing(s, { key: "b" })), h.scoped((s) => Billing(s, { key: "b" })))
         })
       const root = yield* TestHost.mount(host(Inner), {})
       yield* TestHost.settle
@@ -350,13 +349,13 @@ describe("scoped lifetimes", () => {
         .make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) => h.el("div", h.scoped((s) => shown ? Billing(s, { key: "b" }) : null))
+          view: (h, shown) => h.el("div", h.scoped((s) => shown ? Billing(s, { key: "b" }) : null))
         })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) => h.el("main", shown ? Inner(h, { key: "i" }) : null)
+          view: (h, shown) => h.el("main", shown ? Inner(h, { key: "i" }) : null)
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -379,14 +378,14 @@ describe("scoped lifetimes", () => {
       const Fragile = Component.define({ name: "Fragile", scoped: true, model: Schema.Null, message: Schema.Never })
         .make({
           init: ($) => $.set(null).run(Boom.make()),
-          update: (model) => model,
-          view: (_, h) => h.el("p", "fine")
+          update: ($) => $.model,
+          view: (h) => h.el("p", "fine")
         })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) =>
+          view: (h, shown) =>
             h.el("div", h.scoped((s) => shown ? Fragile(s, { key: "F", fallback: () => h.el("p", "down") }) : null))
         })
       const root = yield* TestHost.mount(Page, {})
@@ -412,14 +411,14 @@ describe("scoped lifetimes", () => {
         message: Schema.Never
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.el("div", h.scoped((s) => h.props.shown ? Billing(s, { key: "b" }) : null))
+        update: ($) => $.model,
+        view: (h) => h.el("div", h.scoped((s) => h.props.shown ? Billing(s, { key: "b" }) : null))
       })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) => Tabs(h, { key: "t", props: { shown }, fallback: () => h.el("p", "down") })
+          view: (h, shown) => Tabs(h, { key: "t", props: { shown }, fallback: () => h.el("p", "down") })
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -445,14 +444,14 @@ describe("scoped lifetimes", () => {
         )()
       const Leaf = Component.define({ name: "Leaf", scoped: true, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.el("i").onMount(track("leaf"))
+        update: ($) => $.model,
+        view: (h) => h.el("i").onMount(track("leaf"))
       })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) => h.el("div", h.scoped((s) => shown ? Leaf(s, { key: "l" }) : null))
+          view: (h, shown) => h.el("div", h.scoped((s) => shown ? Leaf(s, { key: "l" }) : null))
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -486,14 +485,14 @@ describe("scoped lifetimes", () => {
       })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) => h.el("div", h.scoped((s) => h.props ? Billing(s, { key: "b" }) : null))
+          update: ($) => $.model,
+          view: (h) => h.el("div", h.scoped((s) => h.props ? Billing(s, { key: "b" }) : null))
         })
       const State = Schema.Struct({ key: Schema.String, shown: Schema.Boolean, tracked: Schema.Boolean })
       const Page = Component.define({ name: "Page", scoped: false, model: State, message: State }).make({
         init: () => ({ key: "a", shown: true, tracked: false }),
         update: (_, next) => next,
-        view: (state, h) =>
+        view: (h, state) =>
           h.el(
             "main",
             Tabs(h, { key: state.key, props: state.shown }),
@@ -525,12 +524,12 @@ describe("scoped lifetimes", () => {
       message: Schema.Never,
       slots: ["body"]
     })
-      .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+      .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("article", h.slots.body) })
     const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make(
       {
         init: () => false,
-        update: (shown) => !shown,
-        view: (_, h) =>
+        update: ($) => !$.model,
+        view: (h) =>
           h.el(
             "div",
             h.el("button").on("click", true).children("toggle"),
@@ -561,8 +560,8 @@ const withoutContainer = () => {
 const Draft = Component.define({ name: "Draft", scoped: true, model: Schema.String, message: Schema.Literal("type") })
   .make({
     init: () => "",
-    update: (draft) => draft + "a",
-    view: (draft, h) => h.el("button").on("click", "type").children("draft:" + draft)
+    update: ($) => $.model + "a",
+    view: (h, draft) => h.el("button").on("click", "type").children("draft:" + draft)
   })
 
 const TabsRoute = Route.union({ Home: Route.make("/"), Tabs: Route.make("/tabs") })
@@ -571,7 +570,7 @@ const TabsPage = Component.define({ name: "TabsPage", scoped: false, model: Sche
   .make({
     init: () => "profile",
     update: (_, tab) => tab,
-    view: (tab, h) =>
+    view: (h, tab) =>
       h.el(
         "section",
         h.el("button").on("click", tab === "profile" ? "billing" : "profile").children("switch"),
@@ -588,14 +587,16 @@ const TabsApp = Component.define({
   message: TabsMsg
 }).make({
   init: ($) => $.props.route,
-  update: (route, message, $) =>
+  update: ($, message) =>
     TabsMsg.match(message, {
       Changed: (changed) => changed.route,
       Go: (go) => $.run(Router.push(TabsRoute, go.route).pipe(Command.map(() => TabsMsg.Done()))),
-      Done: () => route
+      Done: () => $.model
     }),
-  subscriptions: (route) => [Router.subscription(TabsRoute, route, (changed) => TabsMsg.Changed({ route: changed }))],
-  view: (route, h) =>
+  subscriptions: (
+    { model: route }
+  ) => [Router.subscription(TabsRoute, route, (changed) => TabsMsg.Changed({ route: changed }))],
+  view: (h, route) =>
     h.el(
       "div",
       h.el("button").on("click", TabsMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })).children("Home"),
@@ -672,8 +673,8 @@ const Card = Component.define({
   slots: ["body"]
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("section", h.slots.body)
+  update: ($) => $.model,
+  view: (h) => h.el("section", h.slots.body)
 })
 
 const Collapsible = Component.define({
@@ -684,8 +685,8 @@ const Collapsible = Component.define({
   slots: ["body"]
 }).make({
   init: () => true,
-  update: (open) => !open,
-  view: (open, h) =>
+  update: ($) => !$.model,
+  view: (h, open) =>
     h.el("section", h.el("button").on("click", "toggle").children("toggle"), open ? h.slots.body : null)
 })
 
@@ -696,7 +697,7 @@ describe("EFF-4038 probes, scoped", () => {
         .make({
           init: () => false,
           update: (_, wide) => wide,
-          view: (wide, h) =>
+          view: (h, wide) =>
             h.scoped((s) =>
               h.el(
                 "main",
@@ -723,7 +724,7 @@ describe("EFF-4038 probes, scoped", () => {
         .make({
           init: () => false,
           update: (_, moved) => moved,
-          view: (moved, h) =>
+          view: (h, moved) =>
             h.scoped((s) =>
               h.el(
                 "main",
@@ -750,8 +751,8 @@ describe("EFF-4038 probes, scoped", () => {
     provideHost(Effect.gen(function*() {
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.scoped((s) => Collapsible(h, { key: "c", slots: { body: Draft(s, { key: "f" }) } }))
+        update: ($) => $.model,
+        view: (h) => h.scoped((s) => Collapsible(h, { key: "c", slots: { body: Draft(s, { key: "f" }) } }))
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -786,7 +787,7 @@ describe("scoped children of a headless child", () => {
       }).make({
         init: () => ({ anyOpen: false }),
         update: (_, { open }) => ({ anyOpen: open }),
-        parts: (model) => ({ anyOpen: model.anyOpen })
+        parts: (_, model) => ({ anyOpen: model.anyOpen })
       })
       const Panel = Component.define({
         name: "Panel",
@@ -797,14 +798,14 @@ describe("scoped children of a headless child", () => {
         shared: { group: { owner: PanelGroup, optional: true, report: (open) => open } }
       }).make({
         init: () => false,
-        update: (open) => !open,
-        view: (open, h) => h.el("button").on("click", "toggle").children(h.props.title + (open ? "+" : "-"))
+        update: ($) => !$.model,
+        view: (h, open) => h.el("button").on("click", "toggle").children(h.props.title + (open ? "+" : "-"))
       })
       const App = Component.define({ name: "App", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => true,
           update: (_, shown) => shown,
-          view: (shown, h) =>
+          view: (h, shown) =>
             h.scoped((s) =>
               PanelGroup(h, {
                 key: "g",
@@ -838,8 +839,8 @@ describe("scoped children of a headless child", () => {
       const owner = <Name extends string>(name: Name) =>
         Component.define({ name, scoped: false, model: Schema.Null, message: HitMsg }).make({
           init: () => null,
-          update: (model) => model,
-          parts: (_, p) => ({ hit: p.part((b) => b.on("click", HitMsg.Hit())) })
+          update: ($) => $.model,
+          parts: (p) => ({ hit: p.part((b) => b.on("click", HitMsg.Hit())) })
         })
       const Outer = owner("Outer")
       const Inner = owner("Inner")
@@ -851,7 +852,7 @@ describe("scoped children of a headless child", () => {
       }).make({
         init: () => false,
         update: () => true,
-        view: (nested, h) =>
+        view: (h, nested) =>
           h.el(
             "div",
             h.el("button").on("click", "nest").children("nest"),
@@ -868,7 +869,7 @@ describe("scoped children of a headless child", () => {
         .make({
           init: () => true,
           update: (_, deep) => deep,
-          view: (deep, h) =>
+          view: (h, deep) =>
             h.scoped((s) => {
               const tree = Tree(s, { key: "t" })
               return h.el("main", deep ? Box(s, { key: "b", slots: { body: tree } }) : tree)
@@ -893,12 +894,12 @@ const Counter = Component.define({
   message: CounterMsg
 }).make({
   init: () => 0,
-  update: (count) => count + 1,
-  view: (count, h) => h.el("button").on("click", CounterMsg.Inc()).children("count:" + count)
+  update: ($) => $.model + 1,
+  view: (h, count) => h.el("button").on("click", CounterMsg.Inc()).children("count:" + count)
 })
 
 const Box = Component.define({ name: "Box", scoped: true, model: Schema.Null, message: Schema.Never, slots: ["body"] })
-  .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("section", h.slots.body) })
+  .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("section", h.slots.body) })
 
 const Shut = Component.define({
   name: "Shut",
@@ -908,8 +909,8 @@ const Shut = Component.define({
   slots: ["body"]
 }).make({
   init: () => false,
-  update: (open) => !open,
-  view: (open, h) =>
+  update: ($) => !$.model,
+  view: (h, open) =>
     h.el("section", h.el("button").on("click", "toggle").children("toggle"), open ? h.slots.body : null)
 })
 
@@ -924,13 +925,13 @@ describe("scoped children drawn by other children", () => {
       }).make({
         init: () => "a" as const,
         update: () => "b" as const,
-        view: (room, h) => h.el("button").on("click", "move").children("room:" + room)
+        view: (h, room) => h.el("button").on("click", "move").children("room:" + room)
       })
       const Keyed = Component.provide(Room, { key: (_, room) => room, layer: () => Layer.empty })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.scoped((s) => h.el("main", Keyed(s, { key: "r" })))
+        update: ($) => $.model,
+        view: (h) => h.scoped((s) => h.el("main", Keyed(s, { key: "r" })))
       })
       const root = yield* TestHost.mount(Page, {})
       click(root, "room:a")
@@ -951,13 +952,13 @@ describe("scoped children drawn by other children", () => {
         update: () => {
           throw new Error("broken")
         },
-        view: (_, h) => h.el("section", h.el("button").on("click", "break").children("break"), h.slots.body)
+        view: (h) => h.el("section", h.el("button").on("click", "break").children("break"), h.slots.body)
       })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => false,
           update: (_, direct) => direct,
-          view: (direct, h) =>
+          view: (h, direct) =>
             h.scoped((s) => {
               const counter = Counter(s, { key: "c" })
               return h.el(
@@ -988,7 +989,7 @@ describe("scoped children drawn by other children", () => {
       }).make({
         init: () => "a" as const,
         update: () => "b" as const,
-        view: (room, h) =>
+        view: (h, room) =>
           h.el("section", h.el("button").on("click", "move").children("move"), room === "a" ? h.slots.body : null)
       })
       const Keyed = Component.provide(Room, {
@@ -997,8 +998,8 @@ describe("scoped children drawn by other children", () => {
       })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.scoped((s) => h.el("main", Keyed(h, { key: "r", slots: { body: Counter(s, { key: "c" }) } })))
+        update: ($) => $.model,
+        view: (h) => h.scoped((s) => h.el("main", Keyed(h, { key: "r", slots: { body: Counter(s, { key: "c" }) } })))
       })
       const root = yield* TestHost.mount(Page, {})
       click(root, "count:0")
@@ -1016,14 +1017,14 @@ describe("scoped children drawn by other children", () => {
           init: (): null => {
             throw new Error("boom")
           },
-          update: (model) => model,
-          view: (_, h) => h.el("p", "fine")
+          update: ($) => $.model,
+          view: (h) => h.el("p", "fine")
         })
       const Where = Schema.Literals(["slot", "direct", "gone"])
       const Page = Component.define({ name: "Page", scoped: false, model: Where, message: Where }).make({
         init: () => "slot" as const,
         update: (_, where) => where,
-        view: (where, h) =>
+        view: (h, where) =>
           h.scoped(({ model }) => model !== "gone", (s) => {
             const fragile = Fragile(s, { key: "f", fallback: () => h.el("p", "down") })
             return h.el(
@@ -1050,7 +1051,7 @@ describe("scoped children drawn by other children", () => {
       const Page = Component.define({ name: "Page", scoped: false, model: Shown, message: Shown }).make({
         init: () => ({ box: true, direct: false }),
         update: (_, shown) => shown,
-        view: (shown, h) =>
+        view: (h, shown) =>
           h.el(
             "main",
             h.scoped(({ model }) => model.box, (s) =>
@@ -1078,8 +1079,8 @@ describe("scoped children drawn by other children", () => {
       const Tracked = Component.define({ name: "Tracked", scoped: true, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.el("i").onMount(
               Mount.make("track", { args: {} }, () =>
                 Effect.acquireRelease(
@@ -1093,7 +1094,7 @@ describe("scoped children drawn by other children", () => {
         .make({
           init: () => "box",
           update: (_, where) => where,
-          view: (where, h) =>
+          view: (h, where) =>
             h.scoped((s) =>
               h.el(
                 "main",
@@ -1128,15 +1129,15 @@ describe("scoped children drawn by other children", () => {
       const Fragile = Component.define({ name: "Fragile", scoped: true, model: Schema.Null, message: FragileMsg }).make(
         {
           init: () => null,
-          update: (_, __, $) => $.run(Boom.make()),
-          view: (_, h) => h.el("button").on("click", FragileMsg.Break()).children("fine")
+          update: ($) => $.run(Boom.make()),
+          view: (h) => h.el("button").on("click", FragileMsg.Break()).children("fine")
         }
       )
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.el(
               "div",
               "before",
@@ -1164,7 +1165,7 @@ describe("scoped children that read shared state", () => {
           model: Schema.String,
           message: Schema.Never,
           shares: { value: (name) => ({ name }) }
-        }).make({ init: ($) => $.props.name, update: (model) => model, parts: () => ({}) })
+        }).make({ init: ($) => $.props.name, update: ($) => $.model, parts: () => ({}) })
         const Reader = Component.define({
           name: "Reader",
           scoped: false,
@@ -1173,8 +1174,8 @@ describe("scoped children that read shared state", () => {
           shared: { side: { owner: Side, optional: optional as true, onChange: () => "changed" as const } }
         }).make({
           init: () => 0,
-          update: (changes) => changes + 1,
-          view: (changes, h) => h.el("p", (h.shared.side?.name ?? "none") + ":" + changes)
+          update: ($) => $.model + 1,
+          view: (h, changes) => h.el("p", (h.shared.side?.name ?? "none") + ":" + changes)
         })
         const Open = Component.define({
           name: "Open",
@@ -1182,19 +1183,19 @@ describe("scoped children that read shared state", () => {
           model: Schema.Null,
           message: Schema.Never,
           slots: ["body"]
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.el("article", h.slots.body) })
         const Frame = Component.define({ name: "Frame", scoped: true, model: Schema.Null, message: Schema.Never }).make(
           {
             init: () => null,
-            update: (model) => model,
-            view: (_, h) => h.el("section", Reader(h, { key: "r", fallback: () => h.el("p", "absent") }))
+            update: ($) => $.model,
+            view: (h) => h.el("section", Reader(h, { key: "r", fallback: () => h.el("p", "absent") }))
           }
         )
         const Page = Component.define({ name: "Page", scoped: false, model: Schema.String, message: Schema.String })
           .make({
             init: () => "left",
             update: (_, where) => where,
-            view: (where, h) =>
+            view: (h, where) =>
               h.scoped((s) =>
                 h.el(
                   "main",
@@ -1242,8 +1243,8 @@ const Nested = Component.define({
 })
   .make({
     init: () => "",
-    update: (draft) => draft + "a",
-    view: (draft, h) => h.el("button").on("click", "type").children("nested:" + draft)
+    update: ($) => $.model + "a",
+    view: (h, draft) => h.el("button").on("click", "type").children("nested:" + draft)
   })
 const Holder = Component.define({
   name: "Holder",
@@ -1253,8 +1254,8 @@ const Holder = Component.define({
   message: Schema.Never
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("div", h.props.bare ? null : Nested(h, { key: "n", fallback: () => h.el("p", "down") }))
+  update: ($) => $.model,
+  view: (h) => h.el("div", h.props.bare ? null : Nested(h, { key: "n", fallback: () => h.el("p", "down") }))
 })
 
 const FormPage = Component.define({
@@ -1265,8 +1266,8 @@ const FormPage = Component.define({
   message: Schema.Never
 }).make({
   init: () => Redacted.make(""),
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.el(
       "section",
       h.scoped(
@@ -1288,7 +1289,7 @@ const ShellMsg = UiSchema.TaggedEnum({
 const Aside = Component.define({ name: "Aside", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make({
   init: () => false,
   update: (_, hidden) => hidden,
-  view: (hidden, h) => h.el("aside", h.scoped((s) => hidden ? null : Draft(s, { key: "d" })))
+  view: (h, hidden) => h.el("aside", h.scoped((s) => hidden ? null : Draft(s, { key: "d" })))
 })
 
 const Shell = Component.define({
@@ -1305,20 +1306,20 @@ const Shell = Component.define({
   message: ShellMsg
 }).make({
   init: ($) => ({ route: $.props.route, hidden: false, ended: false, bare: false, omitted: false }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     ShellMsg.match(message, {
-      Changed: ({ route }) => ({ ...model, route }),
+      Changed: ({ route }) => ({ ...$.model, route }),
       Go: ({ route }) => $.run(Router.push(TabsRoute, route).pipe(Command.map(() => ShellMsg.Done()))),
-      Done: () => model,
-      Hide: ({ hidden }) => ({ ...model, hidden }),
-      End: ({ ended }) => ({ ...model, ended }),
-      Bare: ({ bare }) => ({ ...model, bare }),
-      Omit: ({ omitted }) => ({ ...model, omitted })
+      Done: () => $.model,
+      Hide: ({ hidden }) => ({ ...$.model, hidden }),
+      End: ({ ended }) => ({ ...$.model, ended }),
+      Bare: ({ bare }) => ({ ...$.model, bare }),
+      Omit: ({ omitted }) => ({ ...$.model, omitted })
     }),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(TabsRoute, model.route, (route) => ShellMsg.Changed({ route }))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "div",
       h.el("button").on("click", ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })).children("Home"),
@@ -1489,20 +1490,20 @@ describe("scoped children across a router restore", () => {
       message: ShellMsg
     }).make({
       init: ($) => ({ route: $.props.route, hidden: false }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         ShellMsg.match(message, {
-          Changed: ({ route }) => ({ ...model, route }),
+          Changed: ({ route }) => ({ ...$.model, route }),
           Go: ({ route }) => $.run(Router.push(TabsRoute, route).pipe(Command.map(() => ShellMsg.Done()))),
-          Hide: ({ hidden }) => ({ ...model, hidden }),
-          Done: () => model,
-          End: () => model,
-          Bare: () => model,
-          Omit: () => model
+          Hide: ({ hidden }) => ({ ...$.model, hidden }),
+          Done: () => $.model,
+          End: () => $.model,
+          Bare: () => $.model,
+          Omit: () => $.model
         }),
-      subscriptions: (model) => [
+      subscriptions: ({ model }) => [
         Router.subscription(TabsRoute, model.route, (route) => ShellMsg.Changed({ route }))
       ],
-      view: (model, h) => {
+      view: (h, model) => {
         const page = (hidden: boolean) => FormPage(h, { key: "/tabs", props: { hidden, ended: false, bare: true } })
         return h.el(
           "div",
@@ -1570,8 +1571,8 @@ describe("scoped children whose state encodes after the push that left them", ()
     })
       .make({
         init: () => "new",
-        update: (text) => text + "!",
-        view: (text, h) => h.el("button").on("click", null).children(`${h.props.label}:${text} `)
+        update: ($) => $.model + "!",
+        view: (h, text) => h.el("button").on("click", null).children(`${h.props.label}:${text} `)
       })
   const SlowNote = note("SlowNote", Slow)
   const Note = note("Note", Schema.String)
@@ -1583,8 +1584,8 @@ describe("scoped children whose state encodes after the push that left them", ()
     message: Schema.Never
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       h.el(
         "section",
         h.scoped((s) => {
@@ -1615,17 +1616,17 @@ describe("scoped children whose state encodes after the push that left them", ()
       message: Message
     }).make({
       init: ($) => ({ route: $.props.route, hidden: false, bare: false }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
-          Changed: ({ route }) => ({ ...model, route }),
+          Changed: ({ route }) => ({ ...$.model, route }),
           Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => Message.Done()))),
           Query: () =>
             $.run(Router.push(Routes, Routes.Notes({ search: { q: "q" } })).pipe(Command.map(() => Message.Done()))),
-          Done: () => model,
-          Show: ({ bare, hidden }) => ({ ...model, bare, hidden })
+          Done: () => $.model,
+          Show: ({ bare, hidden }) => ({ ...$.model, bare, hidden })
         }),
-      subscriptions: (model) => [Router.subscription(Routes, model.route, (route) => Message.Changed({ route }))],
-      view: (model, h) =>
+      subscriptions: ({ model }) => [Router.subscription(Routes, model.route, (route) => Message.Changed({ route }))],
+      view: (h, model) =>
         h.el(
           "div",
           h.el("a").on("click", Message.Go()).children("Away "),
@@ -1759,7 +1760,7 @@ describe("scoped children written into closed slots", () => {
           value: (count) => ({ count }),
           collects: { schema: Schema.Boolean, onChange: (reports) => GroupMsg.Counted({ count: reports.length }) }
         }
-      }).make({ init: () => 0, update: (_, { count }) => count, parts: (count) => ({ count }) })
+      }).make({ init: () => 0, update: (_, { count }) => count, parts: (_, count) => ({ count }) })
       const Member = Component.define({
         name: "Member",
         scoped: true,
@@ -1768,8 +1769,8 @@ describe("scoped children written into closed slots", () => {
         shared: { group: { owner: Group, optional: true, report: () => true } }
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.el("i").onMount(
             Mount.make("track", { args: {} }, () =>
               Effect.acquireRelease(Effect.sync(() => running.add("m")), () =>
@@ -1780,8 +1781,8 @@ describe("scoped children written into closed slots", () => {
       const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () =>
           null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.scoped((s) =>
             Group(h, {
               key: "g",
@@ -1815,14 +1816,14 @@ describe("scoped children written into closed slots", () => {
           inits++
           return 0
         },
-        update: (count) => count + 1,
-        view: (count, h) => h.el("b", "count:" + count)
+        update: ($) => $.model + 1,
+        view: (h, count) => h.el("b", "count:" + count)
       })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.scoped((s) =>
               h.el(
                 "main",
@@ -1851,19 +1852,19 @@ describe("scoped children written into closed slots", () => {
         events: Schema.Number
       }).make({
         init: () => null,
-        update: (model, _, $) => $.set(model).emit($.props.n),
-        view: (_, h) => h.el("button").on("click", LabelMsg.Tell()).children("n:" + h.props.n)
+        update: ($) => $.set($.model).emit($.props.n),
+        view: (h) => h.el("button").on("click", LabelMsg.Tell()).children("n:" + h.props.n)
       })
       const PageMsg = UiSchema.TaggedEnum({ Inc: {}, Told: { text: Schema.String } })
       const Model = Schema.Struct({ n: Schema.Number, told: Schema.String })
       const Page = Component.define({ name: "Page", scoped: false, model: Model, message: PageMsg }).make({
         init: () => ({ n: 0, told: "" }),
-        update: (model, message) =>
+        update: ($, message) =>
           PageMsg.match(message, {
-            Inc: () => ({ ...model, n: model.n + 1 }),
-            Told: ({ text }) => ({ ...model, told: text })
+            Inc: () => ({ ...$.model, n: $.model.n + 1 }),
+            Told: ({ text }) => ({ ...$.model, told: text })
           }),
-        view: ({ n, told }, h) =>
+        view: (h, { n, told }) =>
           h.scoped((s) =>
             h.el(
               "main",
@@ -1911,8 +1912,8 @@ describe("scoped children written into closed slots", () => {
         slots: ["body"]
       }).make({
         init: () => true,
-        update: (open) => !open,
-        view: (open, h) =>
+        update: ($) => !$.model,
+        view: (h, open) =>
           h.el("section", h.el("button").on("click", ToggleMsg.Toggle()).children("flip"), open ? h.slots.body : null)
       })
       const Page = Component.define({
@@ -1923,7 +1924,7 @@ describe("scoped children written into closed slots", () => {
       }).make({
         init: () => false,
         update: () => true,
-        view: (moved, h) =>
+        view: (h, moved) =>
           h.scoped((s) =>
             h.el(
               "main",
@@ -1957,8 +1958,8 @@ describe("scoped children written into closed slots", () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: (count) => count + 1,
-        view: (count, h) => h.button.onClick("inc").children("count:" + count)
+        update: ($) => $.model + 1,
+        view: (h, count) => h.button.onClick("inc").children("count:" + count)
       })
       const Writer = Component.define({
         name: "Writer",
@@ -1966,7 +1967,7 @@ describe("scoped children written into closed slots", () => {
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
-      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
       const Switch = Component.define({
         name: "Switch",
         scoped: false,
@@ -1975,8 +1976,8 @@ describe("scoped children written into closed slots", () => {
         elements: Html
       }).make({
         init: () => "a" as const,
-        update: (which) => which === "a" ? "b" : "a",
-        parts: (which, p) => ({ which, flip: p.part("button", (b) => b.onClick("flip")) })
+        update: ($) => $.model === "a" ? "b" : "a",
+        parts: (p, which) => ({ which, flip: p.part("button", (b) => b.onClick("flip")) })
       })
       const Page = Component.define({
         name: "Page",
@@ -1986,8 +1987,8 @@ describe("scoped children written into closed slots", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.scoped((s) =>
             Switch(h, {
               key: "s",
@@ -2017,8 +2018,8 @@ describe("scoped children written into closed slots", () => {
             starts++
             return null
           },
-          update: (model) => model,
-          view: (_, h) => h.el("i", "probe")
+          update: ($) => $.model,
+          view: (h) => h.el("i", "probe")
         })
       const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
       const Toggling = Component.define({
@@ -2029,8 +2030,8 @@ describe("scoped children written into closed slots", () => {
         slots: ["body"]
       }).make({
         init: () => true,
-        update: (open) => !open,
-        view: (open, h) =>
+        update: ($) => !$.model,
+        view: (h, open) =>
           h.el("section", h.el("button").on("click", ToggleMsg.Toggle()).children("flip"), open ? h.slots.body : null)
       })
       const Page = Component.define({
@@ -2041,7 +2042,7 @@ describe("scoped children written into closed slots", () => {
       }).make({
         init: () => "box" as const,
         update: (_, message) => message === "end" ? "ended" : "page",
-        view: (mode, h) =>
+        view: (h, mode) =>
           h.el(
             "main",
             h.scoped((s) => mode === "box" ? Toggling(s, { key: "B", slots: { body: Probe(s, { key: "p" }) } }) : null),
@@ -2067,7 +2068,7 @@ describe("scoped children written into closed slots", () => {
     provideHost(Effect.gen(function*() {
       const define = () =>
         Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
-          .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "row") })
+          .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", "row") })
       const [First, Second] = [define(), define()]
       const Open = Component.define({
         name: "Open",
@@ -2075,12 +2076,12 @@ describe("scoped children written into closed slots", () => {
         model: Schema.Null,
         message: Schema.Never,
         slots: ["body"]
-      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("article", h.slots.body) })
+      }).make({ init: () => null, update: ($) => $.model, view: (h) => h.el("article", h.slots.body) })
       const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.scoped((s) =>
               h.el(
                 "div",
@@ -2100,21 +2101,21 @@ describe("scoped children written into closed slots", () => {
     (where) =>
       provideHost(Effect.gen(function*() {
         const Kept = Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
-          .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "kept") })
+          .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", "kept") })
         const Plain = Component.define({
           name: "Row",
           scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           slots: ["body"]
-        }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "plain", h.slots.body) })
+        }).make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", "plain", h.slots.body) })
         const Headless = Component.define({ name: "Row", scoped: false, model: Schema.Null, message: Schema.Never })
-          .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+          .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
         const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never })
           .make({
             init: () => null,
-            update: (model) => model,
-            view: (_, h) =>
+            update: ($) => $.model,
+            view: (h) =>
               h.scoped((s) => {
                 const kept = Kept(s, { key: "k" })
                 const slot = () => Plain(h, { key: "o", slots: { body: kept } })
@@ -2138,14 +2139,14 @@ describe("scoped children written into closed slots", () => {
   it.effect("a scoped child takes the path of an ordinary one of its name and key that the same render ends", () =>
     provideHost(Effect.gen(function*() {
       const Kept = Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "kept") })
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", "kept") })
       const Plain = Component.define({
         name: "Row",
         scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         slots: ["body"]
-      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "plain", h.slots.body) })
+      }).make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", "plain", h.slots.body) })
       const Inner = Component.define({
         name: "Inner",
         scoped: false,
@@ -2154,7 +2155,7 @@ describe("scoped children written into closed slots", () => {
       }).make({
         init: () => false,
         update: () => true,
-        view: (swapped, h) =>
+        view: (h, swapped) =>
           h.scoped((s) =>
             h.el(
               "div",
@@ -2176,8 +2177,8 @@ describe("scoped children written into closed slots", () => {
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Number, message: Schema.Null })
         .make({
           init: () => 0,
-          update: (count) => count + 1,
-          view: (_, h) => h.scoped((s) => h.el("div", cached ??= Billing(s, { key: "b" })))
+          update: ($) => $.model + 1,
+          view: (h) => h.scoped((s) => h.el("div", cached ??= Billing(s, { key: "b" })))
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -2191,7 +2192,7 @@ describe("scoped children written into closed slots", () => {
       const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
+          update: ($) => $.model,
           view: () => {
             throw new Error("broken")
           }
@@ -2199,8 +2200,8 @@ describe("scoped children written into closed slots", () => {
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.scoped((s) =>
               h.el(
                 "div",
@@ -2218,13 +2219,13 @@ describe("scoped children written into closed slots", () => {
   it("a Scene fails the author that writes two components of one name and key, in two slots", () => {
     const define = () =>
       Component.define({ name: "Row", scoped: true, model: Schema.Null, message: Schema.Never })
-        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p", "row") })
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("p", "row") })
     const [First, Second] = [define(), define()]
     const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
       .make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.scoped((s) =>
             h.el(
               "div",
@@ -2250,19 +2251,19 @@ describe("scoped children that report to shared state", () => {
           value: (count) => ({ count }),
           collects: { schema: Schema.Boolean, onChange: (reports) => CountMsg.Counted({ count: reports.length }) }
         }
-      }).make({ init: () => 0, update: (_, { count }) => count, parts: (count) => ({ count }) })
+      }).make({ init: () => 0, update: (_, { count }) => count, parts: (_, count) => ({ count }) })
       const Member = Component.define({
         name: "Member",
         scoped: true,
         model: Schema.Null,
         message: Schema.Never,
         shared: { count: { owner: Count, optional: true, report: () => true } }
-      }).make({ init: () => null, update: (model) => model, view: (_, h) => h.el("i") })
+      }).make({ init: () => null, update: ($) => $.model, view: (h) => h.el("i") })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Boolean, message: Schema.Boolean })
         .make({
           init: () => true,
           update: (_, left) => left,
-          view: (left, h) =>
+          view: (h, left) =>
             h.scoped((s) =>
               h.el(
                 "main",

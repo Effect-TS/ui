@@ -71,17 +71,17 @@ const Status = FilePreviewDef.fragment((h, preview: Preview) =>
 export const FilePreview = FilePreviewDef.make({
   init: () => Preview.NoFile(),
   update: {
-    ChoseFiles: (preview, { files: [file] }, $) =>
-      file === undefined ? preview : $.set(Preview.Reading({ name: file.name })).run(ReadFile.make({ file })),
-    ClickedCancel: (preview, _, $) =>
-      preview._tag === "Reading"
-        ? $.set(Preview.Cancelled({ name: preview.name })).run(Command.interrupt(ReadFile))
-        : preview,
+    ChoseFiles: ($, { files: [file] }) =>
+      file === undefined ? $.model : $.set(Preview.Reading({ name: file.name })).run(ReadFile.make({ file })),
+    ClickedCancel: ($) =>
+      $.model._tag === "Reading"
+        ? $.set(Preview.Cancelled({ name: $.model.name })).run(Command.interrupt(ReadFile))
+        : $.model,
     CompletedReadFile: (_, { head, lines, name }) => Preview.Read({ name, lines, head }),
     FailedReadFile: (_, { name }) => Preview.Failed({ name })
   },
   head: () => [Head.title("Effect UI File Preview Example")],
-  view: (preview, h) =>
+  view: (h, preview) =>
     h.div.class("min-h-screen bg-gray-100 py-8").children(
       h.div.class("max-w-lg mx-auto flex flex-col gap-6 px-4").children(
         h.h1.class("text-3xl font-bold text-gray-800 text-center").children("File Preview"),

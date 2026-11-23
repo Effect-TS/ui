@@ -16,8 +16,8 @@ describe("Input", () => {
   it("returns an input of the caller's message type, keeps the element's requirements, and rejects another tag or message", () => {
     Component.define({ name: "App", scoped: false, model: Schema.String, message: Msg, elements: Html }).make({
       init: () => "",
-      update: (model) => model,
-      view: (model, h) => {
+      update: ($) => $.model,
+      view: (h, model) => {
         const onUpdate = ({ value }: { readonly value: string }) => Msg.UpdatedName({ value })
         expect(Input(h, { props: { value: model }, onUpdate })).type.toBe<InputElement<typeof Msg.Type>>()
         expect(Input(h, { element: needsClock, props: { value: model }, onUpdate })).type.toBe<

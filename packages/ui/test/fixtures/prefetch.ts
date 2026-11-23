@@ -34,11 +34,11 @@ const reader = <const Name extends string>(name: Name) =>
     props: Schema.Struct({ id: Schema.Number }),
     model: Schema.Struct({}),
     message: Schema.Never,
-    queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+    queries: { person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) } }
   }).make({
     init: () => ({}),
-    update: (model) => model,
-    view: (_, h) => h.el("p", name)
+    update: ($) => $.model,
+    view: (h) => h.el("p", name)
   })
 
 export const Sidebar = reader("Sidebar")
@@ -52,11 +52,11 @@ export const Note = Component.define({
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
-  queries: { note: { query: GetNote, args: (_model, props) => ({ id: props.id }) } }
+  queries: { note: { query: GetNote, args: ({ props }) => ({ id: props.id }) } }
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) => h.el("p", "Note")
+  update: ($) => $.model,
+  view: (h) => h.el("p", "Note")
 })
 
 /** Places what its parent passes, so a walk reaches the parent's content through it. */
@@ -67,7 +67,7 @@ export const Frame = Component.define({
   message: Schema.Never,
   slots: ["body"]
 })
-  .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("section", h.slots.body) })
+  .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("section", h.slots.body) })
 
 export class Badge extends Feature.Service<Badge>()("test/Badge", { props: Schema.Struct({}) }) {}
 
@@ -80,8 +80,8 @@ export const Walked = Component.define({
   queries: { person: { query: GetPerson, args: () => ({ id: 1 }) } }
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.el(
       "div",
       Frame(h, { key: "frame", slots: { body: Card(h, { key: "card", props: { id: 2 } }) } }),
@@ -100,7 +100,7 @@ export const Broken = Component.define({
   queries: { person: { query: GetPerson, args: () => ({ id: 3 }) } }
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   view: () => {
     throw new Error("Broken view")
   }
@@ -116,8 +116,8 @@ export const Failing = Component.define({
   message: Schema.Never
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_, h) => h.el("p", "Failing")
+  update: ($) => $.model,
+  view: (h) => h.el("p", "Failing")
 }).pipe(Component.provide(Layer.effect(Nothing, Effect.die("no build"))))
 
 /** What the Person handler saw as the current location when it ran. */
@@ -134,7 +134,7 @@ export const App = Component.define({
 }).make({
   init: ($) => ({ route: $.props.route }),
   update: (_, message) => ({ route: message.route }),
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     Router.subscription(Routes, model.route, (route) => AppMessage.ChangedRoute({ route })),
     Router.prefetch(Routes, {
       // The sidebar is mounted already: the check after a push skips it.
@@ -151,7 +151,7 @@ export const App = Component.define({
       Failing: () => [Router.page(Detail, { id: 6 })]
     })
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.el(
       "div",
       Sidebar(h, { key: "sidebar", props: { id: 0 } }),

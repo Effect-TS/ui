@@ -17,7 +17,7 @@ declare const content: View.Content<never, any>
 
 const base = {
   init: () => null,
-  update: (model: null) => model
+  update: ($: { readonly model: null }) => $.model
 }
 
 describe("Head and HtmlHead", () => {

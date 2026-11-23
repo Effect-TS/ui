@@ -86,7 +86,7 @@ export const Listbox = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false, query: "", active: null, typed: "" }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     ListboxMessage.match(message, {
       // The popup is an auto popover. The browser opens it from the trigger
       // and closes it on Escape or a click outside, and the Model follows.
@@ -96,8 +96,8 @@ export const Listbox = Component.define({
           .run(open ? DomCommand.focus(Input, silent) : DomCommand.focus(Trigger, silent)),
       UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
       PressedKey: ({ key }) => {
-        const shown = filter($.props.options, model.query)
-        const active = activeIn(shown, model.active)
+        const shown = filter($.props.options, $.model.query)
+        const active = activeIn(shown, $.model.active)
         switch (key) {
           case "ArrowDown":
           case "ArrowUp": {
@@ -111,7 +111,7 @@ export const Listbox = Component.define({
           }
           case "Enter":
             return active === null
-              ? model
+              ? $.model
               : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id: active }))
           case "Escape":
             return $.evolve({ open: false })
@@ -121,7 +121,7 @@ export const Listbox = Component.define({
             // is never longer than a label and needs no timer to reset it.
             const find = (prefix: string) =>
               $.props.options.find((o) => o.disabled !== true && o.label.toLowerCase().startsWith(prefix))
-            const extended = model.typed + key.toLowerCase()
+            const extended = $.model.typed + key.toLowerCase()
             const typed = find(extended) !== undefined ? extended : key.toLowerCase()
             const hit = find(typed)
             return hit === undefined
@@ -132,7 +132,7 @@ export const Listbox = Component.define({
       },
       ClickedOption: ({ id }) =>
         activeIn($.props.options, id) === null
-          ? model
+          ? $.model
           : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id }))
     }),
   // `parts` returns plain values for the consumer to read, and parts to
@@ -146,7 +146,7 @@ export const Listbox = Component.define({
   // Parts need no runtime. A test of the Listbox builds them from a Model and
   // props with `Story.parts(Listbox, { model, props })`, and `Scene.make`
   // runs it with a stand-in view for the consumer.
-  parts: (model, p) => {
+  parts: (p, model) => {
     const shown = filter(p.props.options, model.query)
     const active = activeIn(shown, model.active)
     return {

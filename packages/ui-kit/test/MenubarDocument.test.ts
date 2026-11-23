@@ -62,20 +62,20 @@ const Page = Component.define({
 }).make({
   init: ($) => ({ open: $.props.initial, modal: true, share: false, log: [] }),
   update: {
-    RequestedOpen: (model, { menu, reason }, $) => ({
-      ...model,
-      ...(menu === "share" ? { share: true } : { open: $.props.independent ? [...model.open, menu] : [menu] }),
-      log: [...model.log, menu + " RequestedOpen " + reason]
+    RequestedOpen: ($, { menu, reason }) => ({
+      ...$.model,
+      ...(menu === "share" ? { share: true } : { open: $.props.independent ? [...$.model.open, menu] : [menu] }),
+      log: [...$.model.log, menu + " RequestedOpen " + reason]
     }),
-    RequestedClose: (model, { menu, reason }) => ({
-      ...model,
-      ...(menu === "share" ? { share: false } : { open: model.open.filter((name) => name !== menu) }),
-      log: [...model.log, menu + " RequestedClose " + reason]
+    RequestedClose: ($, { menu, reason }) => ({
+      ...$.model,
+      ...(menu === "share" ? { share: false } : { open: $.model.open.filter((name) => name !== menu) }),
+      log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: (model, { menu, value }) => ({ ...model, log: [...model.log, menu + " Picked " + value] }),
-    ChangedModal: (model, { modal }) => ({ ...model, modal })
+    Picked: ($, { menu, value }) => ({ ...$.model, log: [...$.model.log, menu + " Picked " + value] }),
+    ChangedModal: ($, { modal }) => ({ ...$.model, modal })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const onEmit = (menu: string) => ({
       RequestedOpen: ({ reason }: { readonly reason: string }) => Message.RequestedOpen({ menu, reason }),
       RequestedClose: ({ reason }: { readonly reason: string }) => Message.RequestedClose({ menu, reason }),

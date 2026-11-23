@@ -38,8 +38,8 @@ const ByArgs = Component.define({
   queries: { value: { query: GetByKey, args: () => ({ key: Redacted.make("args-secret") }) } }
 }).make({
   init: () => 0,
-  update: (n) => n,
-  view: (n, h) => h.text(String(n))
+  update: ($) => $.model,
+  view: (h, n) => h.text(String(n))
 })
 const ByError = Component.define({
   name: "ByError",
@@ -49,8 +49,8 @@ const ByError = Component.define({
   queries: { value: { query: GetFailing, args: () => ({}) } }
 }).make({
   init: () => 0,
-  update: (n) => n,
-  view: (n, h) => h.text(String(n))
+  update: ($) => $.model,
+  view: (h, n) => h.text(String(n))
 })
 const ByKeys = Component.define({
   name: "ByKeys",
@@ -60,8 +60,8 @@ const ByKeys = Component.define({
   queries: { value: { queryMany: GetByKey, args: () => [{ key: Redacted.make("keyed-secret") }] } }
 }).make({
   init: () => 0,
-  update: (n) => n,
-  view: (n, h) => h.text(String(n))
+  update: ($) => $.model,
+  view: (h, n) => h.text(String(n))
 })
 
 const Secret = Component.define({
@@ -71,8 +71,8 @@ const Secret = Component.define({
   message: Schema.Never
 }).make({
   init: () => ({ token: Redacted.make("model-secret"), n: 0 }),
-  update: (model) => model,
-  view: (model, h) => h.text(String(model.n))
+  update: ($) => $.model,
+  view: (h, model) => h.text(String(model.n))
 })
 
 const Loaded = Component.define({
@@ -83,8 +83,8 @@ const Loaded = Component.define({
   queries: { token: { query: GetToken, args: () => ({}) } }
 }).make({
   init: () => 0,
-  update: (n) => n,
-  view: (n, h) => h.text(String(n))
+  update: ($) => $.model,
+  view: (h, n) => h.text(String(n))
 })
 
 interface Tree {
@@ -116,15 +116,15 @@ const legacyState = (component: Component.Any, model: unknown) => {
 
 const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Number, message: Schema.Never }).make({
   init: () => 1,
-  update: (n) => n,
-  view: (n, h) => h.text(String(n))
+  update: ($) => $.model,
+  view: (h, n) => h.text(String(n))
 })
 
 const QueryPage = Component.define({ name: "QueryPage", scoped: false, model: Schema.Null, message: Schema.Never })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       h.el(
         "main",
         ByArgs(h, { key: "args" }),
@@ -136,8 +136,8 @@ const QueryPage = Component.define({ name: "QueryPage", scoped: false, model: Sc
 
 const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.el(
       "main",
       Secret(h, { key: "secret" }),
@@ -250,15 +250,15 @@ describe("Redacted state", () => {
         model: Schema.suspend(() => Schema.Number),
         message: Schema.Never
       })
-        .make({ init: () => 1, update: (n) => n, view: (n, h) => h.text(String(n)) })
+        .make({ init: () => 1, update: ($) => $.model, view: (h, n) => h.text(String(n)) })
       const rendered = yield* Renderer.prerender(Lazy, {}).pipe(Effect.provide(Logger.layer([])))
       assert.deepStrictEqual(rendered.state["~deferred"], [])
       assert.strictEqual(rendered.state["/Lazy"], 1)
       const component = (model: Schema.Codec<any, any>) =>
         Component.define({ name: "Tree", scoped: false, model, message: Schema.Never }).make({
           init: () => null as any,
-          update: (m) => m,
-          view: (_, h) => h.text("")
+          update: ($) => $.model,
+          view: (h) => h.text("")
         })
       assert.isFalse(runtime.stateCodecOf(component(Tree)).redacted)
       assert.isTrue(runtime.stateCodecOf(component(SecretTree)).redacted)

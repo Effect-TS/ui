@@ -54,8 +54,8 @@ describe("HtmlKeyboard.shortcuts", () => {
         elements: Html
       }).make({
         init: (): ReadonlyArray<string> => [],
-        update: (log, entry) => [...log, entry],
-        view: (log, h) =>
+        update: ($, entry) => [...$.model, entry],
+        view: (h, log) =>
           h.div(
             h.button.onKeyDown(HtmlKeyboard.shortcuts([{ key: "j", message: "el:j" }]), { preventDefault: true })
               .children("Row"),

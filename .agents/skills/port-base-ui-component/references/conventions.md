@@ -450,11 +450,12 @@ model.advanced
   union with one member. A reader sees every message handled, and a new
   message is a type error until it has a key. Use the function form only
   for a catch-all, or for an `update` that doesn't dispatch on the tag,
-  such as `update: (model) => model`.
+  such as `update: ($) => $.model`.
 - Logic that several tags share is a function above the component. When
   it is the whole handler, give it a handler's parameters,
-  `(model, message, $)`, so it is the key's value: `LeftTrigger: left`.
-  Otherwise the handlers call it with `model` and `$`. Type its `$` as
+  `($, message)`, so it is the key's value: `LeftTrigger: left`. It reads
+  the Model from `$.model`. Otherwise the handlers call it with `$`, and
+  with `$.model` when it takes the Model on its own. Type its `$` as
   `Component.Update` over the component's Model, message, events and
   props types, which every tag's `$` fits. `Tooltip.ts` has both.
 

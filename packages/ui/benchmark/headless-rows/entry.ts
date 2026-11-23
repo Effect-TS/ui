@@ -12,10 +12,10 @@ const flip = Flip.Flip()
 
 const init = ($: { readonly props: { readonly count: number } }): ReadonlyArray<Row> =>
   Array.from({ length: $.props.count }, (_, i) => ({ id: "r" + i, label: "Row " + i, done: false }))
-const update = (rows: ReadonlyArray<Row>, message: AppMessage): ReadonlyArray<Row> =>
+const update = ({ model }: { readonly model: ReadonlyArray<Row> }, message: AppMessage): ReadonlyArray<Row> =>
   AppMessage.match(message, {
-    Toggle: ({ id }) => rows.map((row) => row.id === id ? { ...row, done: !row.done } : row),
-    Reverse: () => [...rows].reverse()
+    Toggle: ({ id }) => model.map((row) => row.id === id ? { ...row, done: !row.done } : row),
+    Reverse: () => [...model].reverse()
   })
 const app = {
   name: "App",
@@ -33,7 +33,7 @@ const app = {
 const Plain = Component.define(app).make({
   init,
   update,
-  view: (rows, h) =>
+  view: (h, rows) =>
     h.ul.children(rows.map((row) =>
       h.li.key(row.id).class("row").attr("data-done", row.done ? "" : undefined).children(
         h.button.attrs({ "aria-expanded": "false", "aria-controls": h.id("panel", row.id) })
@@ -54,8 +54,8 @@ const NormalRow = Component.define({
   elements: Html
 }).make({
   init: () => false,
-  update: (open) => !open,
-  view: (open, h) =>
+  update: ($) => !$.model,
+  view: (h, open) =>
     h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
       h.button.attrs({ "aria-expanded": String(open), "aria-controls": h.id("panel") }).onClick(flip)
         .children(h.props.row.label),
@@ -66,7 +66,7 @@ const NormalRow = Component.define({
 const Normal = Component.define(app).make({
   init,
   update,
-  view: (rows, h) => h.ul.children(rows.map((row) => NormalRow(h, { key: row.id, props: { row } })))
+  view: (h, rows) => h.ul.children(rows.map((row) => NormalRow(h, { key: row.id, props: { row } })))
 })
 
 /** The same disclosure, headless: the list's closure owns the markup. */
@@ -78,8 +78,8 @@ const Disclosure = Component.define({
   elements: Html
 }).make({
   init: () => false,
-  update: (open) => !open,
-  parts: (open, p) => ({
+  update: ($) => !$.model,
+  parts: (p, open) => ({
     open,
     trigger: p.part(
       "button",
@@ -91,7 +91,7 @@ const Disclosure = Component.define({
 const Headless = Component.define(app).make({
   init,
   update,
-  view: (rows, h) =>
+  view: (h, rows) =>
     h.ul.children(rows.map((row) =>
       Disclosure(h, {
         key: row.id,
@@ -115,8 +115,8 @@ const WrappedRow = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
@@ -130,7 +130,7 @@ const WrappedRow = Component.define({
 const Wrapped = Component.define(app).make({
   init,
   update,
-  view: (rows, h) => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } })))
+  view: (h, rows) => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } })))
 })
 
 // -- under an owner of shared state ---------------------------------------------------------------
@@ -148,12 +148,12 @@ const Provider = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: null, touches: 0 }),
-  update: (model, message) =>
+  update: ($, message) =>
     ProviderMessage.match(message, {
-      Touch: () => ({ ...model, touches: model.touches + 1 }),
-      Open: ({ id }) => ({ ...model, open: model.open === id ? null : id })
+      Touch: () => ({ ...$.model, touches: $.model.touches + 1 }),
+      Open: ({ id }) => ({ ...$.model, open: $.model.open === id ? null : id })
     }),
-  parts: (model) => model
+  parts: (_, model) => model
 })
 
 /** Sends to the Provider from inside its closure: a normal component with no props, so it's skipped. */
@@ -166,8 +166,8 @@ const Poker = Component.define({
 })
   .make({
     init: () => null,
-    update: (model, message, $) => $.set(model).send(Provider, message),
-    view: (_, h) =>
+    update: ($, message) => $.set($.model).send(Provider, message),
+    view: (h) =>
       h.div(
         h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children("touch"),
         h.button.class("poke-open").onClick(ProviderMessage.Open({ id: "r0" })).children("open")
@@ -194,7 +194,7 @@ const underProvider = <RV>(h: H, rows: () => View.Content<AppMessage, RV>) =>
 const OwnerHeadless = Component.define(app).make({
   init,
   update,
-  view: (rows, h) =>
+  view: (h, rows) =>
     underProvider(h, () =>
       h.ul.children(rows.map((row) =>
         Disclosure(h, {
@@ -213,7 +213,7 @@ const OwnerHeadless = Component.define(app).make({
 const OwnerWrapped = Component.define(app).make({
   init,
   update,
-  view: (rows, h) =>
+  view: (h, rows) =>
     underProvider(h, () => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } }))))
 })
 
@@ -227,8 +227,8 @@ const Body = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.ul.children(h.props.rows.map((row) =>
       Disclosure(h, {
         key: row.id,
@@ -244,7 +244,7 @@ const Body = Component.define({
 const OwnerBoundary = Component.define(app).make({
   init,
   update,
-  view: (rows, h) => underProvider(h, () => Body(h, { key: "body", props: { rows } }))
+  view: (h, rows) => underProvider(h, () => Body(h, { key: "body", props: { rows } }))
 })
 
 /** Wrapped rows that each read the Provider: every row re-renders when what it shares changes. */
@@ -258,8 +258,8 @@ const ReaderRow = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
@@ -276,7 +276,7 @@ const ReaderRow = Component.define({
 const OwnerReaders = Component.define(app).make({
   init,
   update,
-  view: (rows, h) =>
+  view: (h, rows) =>
     underProvider(h, () => h.ul.children(rows.map((row) => ReaderRow(h, { key: row.id, props: { row } }))))
 })
 
