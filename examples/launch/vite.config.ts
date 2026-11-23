@@ -2,34 +2,67 @@ import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 import { codeToTokens } from "shiki"
 import { defineConfig, type Plugin } from "vite"
-import type { Snippet } from "./src/domain/Snippet.ts"
+import type { Snippet, Snippets } from "./src/domain/Snippet.ts"
 
 const id = "virtual:snippets"
 const resolved = `\0${id}`
 
-const counter = {
-  foldkit: ["src/counter/foldkit/Counter.ts", "src/counter/foldkit/Page.ts"],
-  effect: ["src/counter/effect/Counter.ts", "src/counter/effect/Page.ts"]
+type Select = (source: string) => string
+
+const declared = (block: string): string | undefined => /^(?:export )?(?:const|class|type) (\w+)/.exec(block)?.[1]
+
+const whole: Select = (source) => source.replace(/^(?:\/\/ @vitest[^\n]*\n|import [^]*?"\n|\n)+/, "").trimEnd()
+
+const names = (...wanted: ReadonlyArray<string>): Select => (source) =>
+  source.split("\n\n").filter((block) => wanted.includes(declared(block) ?? "")).join("\n\n").trimEnd()
+
+const line = (text: string): Select => (source) => source.split("\n").find((line) => line.includes(text))?.trim() ?? ""
+
+const indent = (line: string): number => line.length - line.trimStart().length
+
+const member = (key: string): Select => (source) => {
+  const lines = source.split("\n")
+  const start = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`))
+  const depth = indent(lines[start] ?? "")
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex((line) => line.trim() !== "" && indent(line) <= depth)
+  const closes = end !== -1 && indent(rest[end]!) === depth && /^[)\]}]/.test(rest[end]!.trimStart())
+  const body = [lines[start]!, ...rest.slice(0, end === -1 ? rest.length : end + (closes ? 1 : 0))]
+  return body.map((line) => line.slice(depth)).join("\n").replace(/,$/, "").trimEnd()
 }
 
-const provider = {
-  foldkit: [["src/provider/foldkit/editor.ts", ["SaveDraft"]], ["src/provider/foldkit/main.ts", ["app"]]],
-  effect: [["src/provider/effect/Editor.ts", ["SaveDraft", "Editor"]], ["src/provider/effect/main.ts", ["root"]]]
-} as const
+const both = (...selects: ReadonlyArray<Select>): Select => (source) =>
+  selects.map((select) => select(source)).join("\n\n")
 
-const kept = [["src/counter/kept/Counter.ts", "scoped: true"], ["src/counter/kept/Page.ts", "h.scoped("]] as const
+const sources: { readonly [K in keyof Snippets]: ReadonlyArray<readonly [string, Select]> } = {
+  intro: [["src/autocounter/Counter.ts", whole]],
+  split: [["src/autocounter/split/Counter.ts", whole]],
+  counterFoldkit: [["src/counter/foldkit/Counter.ts", whole], ["src/counter/foldkit/Page.ts", whole]],
+  counterEffect: [["src/counter/effect/Counter.ts", whole], ["src/counter/effect/Page.ts", whole]],
+  kept: [["src/counter/kept/Counter.ts", line("scoped: true")], ["src/counter/kept/Page.ts", line("h.scoped(")]],
+  providerFoldkit: [["src/provider/foldkit/editor.ts", names("SaveDraft")], [
+    "src/provider/foldkit/main.ts",
+    names("app")
+  ]],
+  providerEffect: [
+    ["src/provider/effect/Editor.ts", names("SaveDraft", "Editor")],
+    ["src/provider/effect/main.ts", names("root")]
+  ],
+  noopFoldkit: [["src/provider/foldkit/editor.ts", names("Message", "update")]],
+  noopEffect: [["src/provider/effect/Editor.ts", both(names("EditorMessage"), member("update"))]],
+  headless: [["src/autocounter/headless/Counter.ts", member("parts")], [
+    "src/autocounter/headless/Scoreboard.ts",
+    member("view")
+  ]],
+  fragment: [["src/autocounter/fragment/Counter.ts", names("resetButton", "view")]],
+  storyFoldkit: [["src/autocounter/foldkit/counter.story.test.ts", names("delayedReset")]],
+  storyEffect: [["src/autocounter/Counter.story.test.ts", names("delayedReset")]],
+  sceneFoldkit: [["src/autocounter/foldkit/counter.scene.test.ts", names("delayedReset")]],
+  sceneEffect: [["src/autocounter/Counter.scene.test.ts", names("delayedReset")]],
+  play: [["src/autocounter/Counter.play.test.ts", names("delayedReset")]]
+}
 
-const declared = (block: string): string | undefined => /^(?:export )?(?:const|class) (\w+)/.exec(block)?.[1]
-
-const excerpt = (source: string, names: ReadonlyArray<string>): string =>
-  source.split("\n\n").filter((block) => names.includes(declared(block) ?? "")).join("\n\n").trimEnd()
-
-const withoutImports = (source: string): string => source.replace(/^(?:import [^]*?"\n|\n)+/, "").trimEnd()
-
-const lineWith = (source: string, text: string): string =>
-  source.split("\n").find((line) => line.includes(text))?.trim() ?? ""
-
-const tokenize = async (file: string, select: (source: string) => string): Promise<Snippet> => {
+const tokenize = async (file: string, select: Select): Promise<Snippet> => {
   const source = await readFile(file, "utf8")
   const result = await codeToTokens(select(source), {
     lang: "ts",
@@ -56,27 +89,17 @@ const snippets = (): Plugin => {
     },
     async load(module) {
       if (module !== resolved) return
-      const read = (source: string, select: (source: string) => string) => {
-        const file = path.join(root, source)
-        this.addWatchFile(file)
-        return tokenize(file, select)
-      }
-      const whole = (files: ReadonlyArray<string>) => Promise.all(files.map((file) => read(file, withoutImports)))
-      const excerpts = (files: ReadonlyArray<readonly [string, ReadonlyArray<string>]>) =>
-        Promise.all(files.map(([file, names]) => read(file, (source) => excerpt(source, names))))
-      const [counterFoldkit, counterEffect, providerFoldkit, providerEffect, keptLines] = await Promise.all([
-        whole(counter.foldkit),
-        whole(counter.effect),
-        excerpts(provider.foldkit),
-        excerpts(provider.effect),
-        Promise.all(kept.map(([file, text]) => read(file, (source) => lineWith(source, text))))
-      ])
-      return [
-        `export const counter = ${JSON.stringify({ foldkit: counterFoldkit, effect: counterEffect })}`,
-        `export const provider = ${JSON.stringify({ foldkit: providerFoldkit, effect: providerEffect })}`,
-        `export const kept = ${JSON.stringify(keptLines)}`,
-        ""
-      ].join("\n")
+      const entries = await Promise.all(
+        Object.entries(sources).map(async ([key, files]) => {
+          const snippets = await Promise.all(files.map(([source, select]) => {
+            const file = path.join(root, source)
+            this.addWatchFile(file)
+            return tokenize(file, select)
+          }))
+          return [key, snippets] as const
+        })
+      )
+      return `export const snippets = ${JSON.stringify(Object.fromEntries(entries))}\n`
     }
   }
 }
