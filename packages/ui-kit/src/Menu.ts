@@ -2500,7 +2500,7 @@ export const Menu = Component.define({
           "data-unchecked": flag(!checked)
         })
 
-    const closing = <Tag extends string, R>(part: View.Part<Tag, [value: string, closeOnClick?: boolean], R>) => {
+    const closable = <Tag extends string, R>(part: View.Part<Tag, [value: string, closeOnClick?: boolean], R>) => {
       const keyedPart = keyed(part)
       return View.wrapPart(
         keyedPart,
@@ -2514,7 +2514,7 @@ export const Menu = Component.define({
       )
     }
 
-    const item = closing(
+    const item = closable(
       p.part(
         "div",
         (b, value: string, closeOnClick?: boolean) =>
@@ -2522,7 +2522,7 @@ export const Menu = Component.define({
       )
     )
 
-    const linkItem = closing(
+    const linkItem = closable(
       p.part(
         "a",
         (b, value: string, closeOnClick?: boolean) =>
@@ -2566,7 +2566,7 @@ export const Menu = Component.define({
         radioGroupPart(element, value)
     )
 
-    const radioItem = closing(
+    const radioItem = closable(
       p.part("div", (b, value: string, closeOnClick?: boolean) => {
         const checked = radio === value
         checks.set(value, checked)

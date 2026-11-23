@@ -209,12 +209,12 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idSelector, type Keyed, separatorAttrs, withStyle } from "./internal/attributes.ts"
+import { type Attributed, flag, idSelector, separatorAttrs, withStyle } from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { available, grouped, keyed, stepped } from "./internal/list.ts"
+import { available, grouped, stepped, valued } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
@@ -1503,12 +1503,7 @@ export const Select = Component.define({
         )
         .onClick(({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType }))
     })
-    const keyedItem = keyed(itemPart)
-    const item = View.wrapPart(
-      keyedItem,
-      <B extends Keyed<"div">>({ element, value }: { readonly element: B; readonly value: string }) =>
-        keyedItem(element, value)
-    )
+    const item = valued(itemPart)
 
     const itemText = p.part("div", (b) => b.attr("data-select-item-text", ""))
 

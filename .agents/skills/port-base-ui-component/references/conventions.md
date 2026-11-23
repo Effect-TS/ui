@@ -287,14 +287,15 @@ model.advanced
 
   A part takes an options object only when it has more than one argument,
   such as a tab's `value`. It still returns the builder, and `children` is
-  never a field of it. A part whose extra arguments are all optional takes
-  the object every time, as `menu.trigger({ element: h.button })` does:
+  never a field of it:
 
   ```ts
   tabs.tab({ element: h.button, value: "a" }).children("Account")
   ```
 
-  Each part has one form, with no overloads. A part that may not show
+  Each part has one form, with no overloads. A part whose extra arguments
+  are all optional takes the object every time, as
+  `menu.trigger({ element: h.button })` does. A part that may not show
   returns `undefined`, and the consumer writes
   `avatar.fallback(h.span)?.children("AL")`. Apply the part before deciding, so
   a wrong tag throws in every state.

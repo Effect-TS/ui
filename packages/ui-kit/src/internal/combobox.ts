@@ -11,21 +11,13 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Positioning from "../Positioning.ts"
-import {
-  type Attributed,
-  attrSelector,
-  flag,
-  type Keyed,
-  separatorAttrs,
-  visuallyHidden,
-  withStyle
-} from "./attributes.ts"
+import { type Attributed, attrSelector, flag, separatorAttrs, visuallyHidden, withStyle } from "./attributes.ts"
 import { backdropBox, blockers, cutPath } from "./blocker.ts"
 import { byAttribute, focusFinal } from "./dom.ts"
 import { textFilter } from "./filter.ts"
 import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./formInputs.ts"
 import { methodOf } from "./interaction.ts"
-import { available, grouped, keyed, type Loop, stepped } from "./list.ts"
+import { available, grouped, type Loop, stepped, valued } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
@@ -1296,12 +1288,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "aria-readonly": readOnly ? "true" : undefined,
           "data-disabled": flag(disabled)
         }))
-    const keyedChip = keyed(chipPart)
-    const chip = View.wrapPart(
-      keyedChip,
-      <B extends Keyed<"div">>({ element, value }: { readonly element: B; readonly value: string }) =>
-        keyedChip(element, value)
-    )
+    const chip = valued(chipPart)
 
     const chipRemovePart = p.part("button", (b, value: string) =>
       inside(b)
@@ -1445,12 +1432,7 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         )
         .onClick(({ pointerType }) => off ? undefined : Message.ClickedItem({ value, pointerType }))
     })
-    const keyedItem = keyed(itemPart)
-    const item = View.wrapPart(
-      keyedItem,
-      <B extends Keyed<"div">>({ element, value }: { readonly element: B; readonly value: string }) =>
-        keyedItem(element, value)
-    )
+    const item = valued(itemPart)
 
     const indicatorPart = p.part("span", (b) => b.attr("aria-hidden", "true"))
     const itemIndicator = View.wrapPart(
