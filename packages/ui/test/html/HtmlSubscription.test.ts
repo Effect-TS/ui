@@ -376,6 +376,43 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
     }))
 })
 
+describe("HtmlSubscription.shortcuts", () => {
+  it.effect("defaults to keydown with preventDefault: true and forwards capture and preventDefault", () =>
+    Effect.gen(function*() {
+      const mount = (options?: HtmlSubscription.GlobalEventOptions) =>
+        HtmlScene.make(
+          Component.define({
+            name: "Shortcuts",
+            scoped: false,
+            model: Schema.Array(Schema.String),
+            message: Schema.String,
+            elements: Html
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h, log) => h.output(log.join(",")),
+            subscriptions: () => [HtmlSubscription.shortcuts([{ key: "?", message: "help" }], options)]
+          }),
+          {}
+        )
+
+      const defaults = yield* mount()
+      defaults.fireDocument("keydown", { key: "x" }).expectIgnored().expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "?" }).expectDefaultPrevented()
+        .expect(Locator.tag("output")).toHaveText("help")
+
+      const options = { capture: true, preventDefault: false } as const
+      assert.strictEqual(
+        HtmlSubscription.shortcuts([{ key: "?", message: "help" }], options).key,
+        `@effect/ui/html/document:"keydown","capture"`
+      )
+      const custom = yield* mount(options)
+      custom.fireDocument("keydown", { key: "?" })
+        .expectDefaultPrevented(false)
+        .expect(Locator.tag("output")).toHaveText("help")
+    }))
+})
+
 const FrameMessage = UiSchema.TaggedEnum({ TickedFrame: { delta: Schema.Number }, Toggled: {} })
 
 const Frames = Component.define({

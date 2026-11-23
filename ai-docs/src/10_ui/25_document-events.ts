@@ -11,12 +11,12 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { Effect, Layer, Schema } from "effect"
 
 const Direction = Schema.Literals(["up", "down", "left", "right"])
-const directions: Record<string, typeof Direction.Type> = {
-  ArrowUp: "up",
-  ArrowDown: "down",
-  ArrowLeft: "left",
-  ArrowRight: "right"
-}
+const arrows: ReadonlyArray<readonly [key: string, direction: typeof Direction.Type]> = [
+  ["ArrowUp", "up"],
+  ["ArrowDown", "down"],
+  ["ArrowLeft", "left"],
+  ["ArrowRight", "right"]
+]
 
 const SnakeMessage = UiSchema.TaggedEnum({
   ClickedStart: {},
@@ -31,13 +31,14 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // `HtmlSubscription` holds the listeners on the live document and window,
 // apart from `Html`, which only describes elements. Each entry is a
 // Subscription, keyed by target, event and phase, so the game listens only
-// while `running` is true. The handler returns a message
-// or `undefined`; with `preventDefault: true` the page doesn't scroll for
-// an arrow the game took, and keeps every other key. The handler may read
-// the Model: the listener runs the one from the latest `subscriptions`.
-// `defaultPrevented` skips a key an element's handler already took,
-// `repeat` skips a held key's auto-repeats, and `editable` skips keys typed
-// into a field, while `Escape` still gets through.
+// while `running` is true. `HtmlSubscription.shortcuts` wraps
+// `HtmlSubscription.onDocument("keydown", ...)` with `preventDefault: true`
+// so the page doesn't scroll for a matched key and keeps every other key.
+// By default it skips `defaultPrevented` (a key an element's handler already
+// took), `composing`, `repeat` (a held key's auto-repeats), `ctrl`/`alt`/`meta`
+// combos, and `editable` (keys typed into a field); `whileTyping: true` lets
+// `Escape` through. The listener runs the declaration from the latest
+// `subscriptions`, so omitting the opposite direction updates with `model.heading`.
 export const Snake = Component.define({
   name: "Snake",
   scoped: false,
@@ -56,20 +57,13 @@ export const Snake = Component.define({
       ? h.p(`heading ${model.heading}`)
       : h.button.onClick(SnakeMessage.ClickedStart()).children("Start"),
   subscriptions: ({ model }) => [
-    model.running && HtmlSubscription.onDocument(
-      "keydown",
-      ({ composing, defaultPrevented, editable, key, repeat }) => {
-        if (defaultPrevented || composing || repeat) return undefined
-        if (key === "Escape") return SnakeMessage.PressedEscape()
-        if (editable) return undefined
-        const direction = directions[key]
-        // Reversing into itself isn't a turn.
-        return direction === undefined || direction === opposite[model.heading]
-          ? undefined
-          : SnakeMessage.PressedArrow({ direction })
-      },
-      { preventDefault: true }
-    )
+    model.running && HtmlSubscription.shortcuts([
+      { key: "Escape", message: SnakeMessage.PressedEscape(), whileTyping: true },
+      // Reversing into itself isn't a turn.
+      ...arrows.flatMap(([key, direction]) =>
+        direction === opposite[model.heading] ? [] : [{ key, message: SnakeMessage.PressedArrow({ direction }) }]
+      )
+    ])
   ]
 })
 

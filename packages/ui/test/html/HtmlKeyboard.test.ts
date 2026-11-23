@@ -29,7 +29,8 @@ describe("HtmlKeyboard.shortcuts", () => {
       { key: "Escape", message: "close", whileTyping: true },
       { key: "ArrowDown", message: "down", repeat: true },
       { key: "k", meta: true, shift: true, message: "cmd-shift-k" },
-      { key: "k", meta: true, message: "cmd-k" }
+      { key: "k", meta: true, message: "cmd-k" },
+      { key: "o", mod: true, message: "open" }
     ])
     assert.strictEqual(handle(key({ key: "?", shift: true })), "help")
     assert.strictEqual(handle(key({ key: "?", ctrl: true })), undefined)
@@ -41,6 +42,11 @@ describe("HtmlKeyboard.shortcuts", () => {
     assert.strictEqual(handle(key({ key: "ArrowDown", repeat: true })), "down")
     assert.strictEqual(handle(key({ key: "k", meta: true, shift: true })), "cmd-shift-k")
     assert.strictEqual(handle(key({ key: "k", meta: true })), "cmd-k")
+    assert.strictEqual(handle(key({ key: "o", ctrl: true })), "open")
+    assert.strictEqual(handle(key({ key: "o", meta: true })), "open")
+    assert.strictEqual(handle(key({ key: "o", ctrl: true, meta: true })), undefined)
+    assert.strictEqual(handle(key({ key: "o", ctrl: true, alt: true })), undefined)
+    assert.strictEqual(handle(key({ key: "o" })), undefined)
     assert.strictEqual(handle(key({ key: "x" })), undefined)
   })
 

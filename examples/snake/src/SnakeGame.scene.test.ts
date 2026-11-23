@@ -71,6 +71,7 @@ describe("SnakeGame", () => {
       const s = yield* HtmlScene.make(SnakeGame, {})
       s.given({ ...baseModel, gameState: "Playing", apple: { x: 10, y: 9 } })
         .fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
+        .fireDocument("keydown", { key: "ArrowUp", repeat: true }).expectDefaultPrevented()
         .subscription("gameClock:150", SnakeGameMessage.TickedClock())
         .expect(Locator.text("Score: 10")).toExist()
         .resolve(GenerateApplePosition, { x: 0, y: 0 })

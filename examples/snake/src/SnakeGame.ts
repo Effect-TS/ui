@@ -57,7 +57,11 @@ const MOVE_DIRECTIONS: ReadonlyMap<string, Direction.Direction> = new Map([
   ["d", "Right"]
 ])
 
-const HANDLED_KEYS: ReadonlySet<string> = new Set([...MOVE_DIRECTIONS.keys(), " ", "r"])
+const KEY_SHORTCUTS = [...MOVE_DIRECTIONS.keys(), " ", "r"].map((key) => ({
+  key,
+  message: SnakeGameMessage.PressedKey({ key }),
+  repeat: true
+}))
 
 const NEXT_ON_SPACE: Record<GameState, GameState> = {
   NotStarted: "Playing",
@@ -142,14 +146,7 @@ export const SnakeGame = Component.define({
           Stream.as(SnakeGameMessage.TickedClock())
         )
     ),
-    HtmlSubscription.onDocument(
-      "keydown",
-      ({ key, ctrl, alt, meta, defaultPrevented }) =>
-        defaultPrevented || ctrl || alt || meta || !HANDLED_KEYS.has(key)
-          ? undefined
-          : SnakeGameMessage.PressedKey({ key }),
-      { preventDefault: true }
-    )
+    HtmlSubscription.shortcuts(KEY_SHORTCUTS)
   ],
   head: ({ model }) => [Head.title(`Snake | ${model.points} pts`)],
   view: (h, model) =>

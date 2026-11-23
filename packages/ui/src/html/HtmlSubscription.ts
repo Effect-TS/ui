@@ -1,8 +1,9 @@
 /**
  * The Subscriptions to the page, as opposed to one element's events:
- * `onDocument` for a keyboard shortcut or a press outside a popup,
- * `onCustomEvent` for a `CustomEvent` dispatched on the document,
- * `onWindow` for the window's focus, and `onAnimationFrame` for animation.
+ * `onDocument` for a game's arrow keys or a press outside a popup,
+ * `shortcuts` for a table of keyboard shortcuts, `onCustomEvent` for a
+ * `CustomEvent` dispatched on the document, `onWindow` for the window's
+ * focus, and `onAnimationFrame` for animation.
  *
  * Their sources are the `GlobalEvents` and `AnimationFrames` services,
  * which `BrowserHost.layer` provides. Nothing listens on the server, and a
@@ -22,6 +23,7 @@ import * as services from "../internal/services.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
+import * as HtmlKeyboard from "./HtmlKeyboard.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
 
@@ -204,7 +206,8 @@ const listenFor = (
  *
  * Use when the input is one no element of the component hears: a keyboard shortcut, a
  * game's arrow keys, a press outside a popup. Gate the entry on the Model,
- * so the listener exists only while it's wanted.
+ * so the listener exists only while it's wanted. For a table of single-key
+ * shortcuts, use {@link shortcuts}.
  *
  * **Details**
  *
@@ -229,7 +232,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -265,11 +268,40 @@ const listenFor = (
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
- * **Example** (Shortcuts from a table, ignored while typing unless a row says otherwise)
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onDocument = <K extends keyof DocumentEvents, Msg>(
+  event: K,
+  handler: View.Handler<Msg, GlobalPayload<DocumentEvents[K]>>,
+  options?: GlobalEventOptions | undefined
+): Subscription.Subscription<Msg> => listenFor("document", event, handler, options)
+
+/**
+ * A Subscription that listens for a table of single-key shortcuts on the
+ * host's document: {@link onDocument} on `"keydown"` with the handler of
+ * `HtmlKeyboard.shortcuts`.
+ *
+ * **When to use**
+ *
+ * Use when an instance's document shortcuts fit in a table. An instance has
+ * one `keydown` listener per phase, so to combine a table with other keydown
+ * logic, or to listen on `"keyup"`, call `HtmlKeyboard.shortcuts` inside
+ * {@link onDocument} instead.
+ *
+ * **Details**
+ *
+ * `preventDefault` defaults to `true`, so the browser's default is cancelled
+ * for a key a row matches and kept for every other key. The rows match as
+ * `HtmlKeyboard.shortcuts` describes, and the key is that of
+ * {@link onDocument}: `@effect/ui/html/document:"keydown"`.
+ *
+ * **Example** (Document shortcuts from a table)
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -287,21 +319,17 @@ const listenFor = (
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
  *   view: (h, open) => h.p(open ? "help open" : "help closed"),
  *   subscriptions: () => [
- *     HtmlSubscription.onDocument(
- *       "keydown",
- *       HtmlKeyboard.shortcuts([
- *         { key: "?", message: Message.OpenedHelp() },
- *         { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
- *       ]),
- *       { preventDefault: true }
- *     )
+ *     HtmlSubscription.shortcuts([
+ *       { key: "?", message: Message.OpenedHelp() },
+ *       { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
+ *     ])
  *   ]
  * })
  *
  * Effect.gen(function*() {
  *   const s = yield* HtmlScene.make(Shortcuts, {})
  *   s.fireDocument("keydown", { key: "?", editable: true }).expectIgnored()
- *     .fireDocument("keydown", { key: "?" }).expect(Locator.text("help open")).toExist()
+ *     .fireDocument("keydown", { key: "?" }).expectDefaultPrevented().expect(Locator.text("help open")).toExist()
  *     .fireDocument("keydown", { key: "Escape", editable: true }).expect(Locator.text("help closed")).toExist()
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
@@ -310,11 +338,14 @@ const listenFor = (
  * @category subscriptions
  * @since 0.1.0
  */
-export const onDocument = <K extends keyof DocumentEvents, Msg>(
-  event: K,
-  handler: View.Handler<Msg, GlobalPayload<DocumentEvents[K]>>,
+export const shortcuts = <const Rows extends ReadonlyArray<HtmlKeyboard.Shortcut<unknown>>>(
+  table: Rows,
   options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("document", event, handler, options)
+): Subscription.Subscription<Rows[number]["message"]> =>
+  onDocument("keydown", HtmlKeyboard.shortcuts(table), {
+    ...options,
+    preventDefault: options?.preventDefault ?? true
+  })
 
 /**
  * A Subscription that listens for an event on the host's window.

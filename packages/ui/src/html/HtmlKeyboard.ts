@@ -15,11 +15,13 @@ import type * as HtmlSubscription from "./HtmlSubscription.ts"
  *
  * **Details**
  *
- * `ctrl`, `alt` and `meta` default to `false`. `shift` is ignored unless set,
- * so a character key such as `"?"` or `"G"` matches regardless of whether the
- * user's keyboard layout requires Shift to type it. `whileTyping` defaults to
- * `false` (ignored when `editable` is true), and `repeat` defaults to `false`
- * (ignored while the key auto-repeats).
+ * `ctrl`, `alt` and `meta` default to `false`. `mod: true` matches a
+ * cross-platform primary shortcut — either `ctrl` or `meta` pressed, but not
+ * both — and takes precedence over `ctrl` and `meta`. `shift` is ignored
+ * unless set, so a character key such as `"?"` or `"G"` matches regardless of
+ * whether the user's keyboard layout requires Shift to type it. `whileTyping`
+ * defaults to `false` (ignored when `editable` is true), and `repeat` defaults
+ * to `false` (ignored while the key auto-repeats).
  *
  * @stability experimental
  * @category events
@@ -28,6 +30,7 @@ import type * as HtmlSubscription from "./HtmlSubscription.ts"
 export interface Shortcut<Msg> {
   readonly key: string
   readonly message: Msg
+  readonly mod?: boolean | undefined
   readonly shift?: boolean | undefined
   readonly ctrl?: boolean | undefined
   readonly alt?: boolean | undefined
@@ -54,46 +57,44 @@ export interface Shortcut<Msg> {
  *
  * Because this returns a plain handler function with no state and no
  * listener registration, it can be combined with other keydown logic inside
- * an instance's single document listener.
+ * an instance's single document listener. For a table that is the whole
+ * document listener, use `HtmlSubscription.shortcuts`.
  *
- * **Example** (Document shortcuts with `HtmlSubscription.onDocument`)
+ * **Example** (Shortcuts on an element)
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
+ * import { Html, HtmlKeyboard } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
  *
- * const Message = UiSchema.TaggedEnum({ OpenedHelp: {}, ClosedHelp: {} })
+ * const Message = UiSchema.TaggedEnum({ PressedNext: {}, PressedPrevious: {} })
  *
- * const App = Component.define({
- *   name: "App",
+ * const Rows = Component.define({
+ *   name: "Rows",
  *   scoped: false,
- *   model: Schema.Boolean,
+ *   model: Schema.Number,
  *   message: Message,
  *   elements: Html
  * }).make({
- *   init: () => false,
- *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
- *   view: (h, open) => h.p(open ? "help open" : "help closed"),
- *   subscriptions: () => [
- *     HtmlSubscription.onDocument(
- *       "keydown",
+ *   init: () => 0,
+ *   update: { PressedNext: ($) => $.model + 1, PressedPrevious: ($) => $.model - 1 },
+ *   view: (h, row) =>
+ *     h.button.onKeyDown(
  *       HtmlKeyboard.shortcuts([
- *         { key: "?", message: Message.OpenedHelp() },
- *         { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
+ *         { key: "j", message: Message.PressedNext() },
+ *         { key: "k", message: Message.PressedPrevious() }
  *       ]),
  *       { preventDefault: true }
- *     )
- *   ]
+ *     ).children(`row ${row}`)
  * })
  *
  * Effect.gen(function*() {
- *   const s = yield* HtmlScene.make(App, {})
- *   s.fireDocument("keydown", { key: "?", editable: true }).expectIgnored()
- *     .fireDocument("keydown", { key: "?", shift: true }).expect(Locator.text("help open")).toExist()
- *     .fireDocument("keydown", { key: "Escape", editable: true }).expect(Locator.text("help closed")).toExist()
+ *   const s = yield* HtmlScene.make(Rows, {})
+ *   s.keydown(Locator.tag("button"), "x").expectIgnored()
+ *     .keydown(Locator.tag("button"), "j").expectDefaultPrevented()
+ *     .expect(Locator.text("row 1")).toExist()
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *
@@ -111,9 +112,10 @@ export const shortcuts = <const Rows extends ReadonlyArray<Shortcut<unknown>>>(
   for (const shortcut of table) {
     if (
       shortcut.key === payload.key &&
-      payload.ctrl === (shortcut.ctrl ?? false) &&
+      (shortcut.mod === true
+        ? payload.ctrl !== payload.meta
+        : payload.ctrl === (shortcut.ctrl ?? false) && payload.meta === (shortcut.meta ?? false)) &&
       payload.alt === (shortcut.alt ?? false) &&
-      payload.meta === (shortcut.meta ?? false) &&
       (shortcut.shift === undefined || payload.shift === shortcut.shift) &&
       (!payload.editable || shortcut.whileTyping === true) &&
       (!payload.repeat || shortcut.repeat === true)
