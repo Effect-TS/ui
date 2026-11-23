@@ -145,7 +145,7 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
   shouldYield(fiber: Fiber.Fiber<unknown, unknown>): boolean {
     const count = fiber.currentOpCount
     if (count >= fiber.cache.maxOpsBeforeYield) return this.yieldInLane(fiber)
-    if (fiber !== this.sampled || count < this.sampledAt) {
+    if (fiber !== this.sampled || count <= this.sampledAt) {
       this.sampled = fiber
       this.sampledAt = 0
     } else if (count < this.nextSample) {
@@ -160,7 +160,7 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
       this.stride = 1
     } else {
       const perOp = (time - this.sampledTime) / (count - this.sampledAt)
-      this.stride = Math.max(1, Math.min(this.stride * 2, 32, Math.floor((this.deadline - time) / perOp)))
+      this.stride = Math.max(1, Math.min(this.stride * 2, 32, Math.floor((this.deadline - time) / perOp / 2)))
     }
     this.nextSample = count + this.stride
     this.sampledAt = count

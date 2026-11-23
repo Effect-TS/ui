@@ -1,23 +1,36 @@
 import { HtmlScheduler } from "@effect/ui/html"
 import { afterEach, describe, expect, it, vi } from "@effect/vitest"
-import { Context, Deferred, Effect, Fiber, Scheduler } from "effect"
+import { Context, Deferred, Effect, Scheduler } from "effect"
 
 type Lane = "user-blocking" | "user-visible" | "background"
 
-const browser = () => {
+const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
   let time = 0
-  const posted: Array<{ readonly run: () => void; readonly priority: Lane }> = []
+  const posted: Array<{ readonly run: () => void; readonly priority: Lane | "message" }> = []
   vi.spyOn(performance, "now").mockImplementation(() => time)
-  vi.stubGlobal("scheduler", {
-    postTask: (run: () => void, options: { readonly priority: Lane }) => {
-      posted.push({ run, priority: options.priority })
-      return Promise.resolve()
-    }
-  })
+  if (transport === "postTask") {
+    vi.stubGlobal("scheduler", {
+      postTask: (run: () => void, options: { readonly priority: Lane }) => {
+        posted.push({ run, priority: options.priority })
+        return Promise.resolve()
+      }
+    })
+  } else {
+    vi.stubGlobal(
+      "MessageChannel",
+      class {
+        readonly port1 = { onmessage: () => {} }
+        readonly port2 = { postMessage: () => posted.push({ run: () => this.port1.onmessage(), priority: "message" }) }
+      }
+    )
+  }
   const scheduler = HtmlScheduler.make({ budget: 5 })
   return {
     posted,
     elapsed: () => time,
+    advance: (ms: number) => {
+      time += ms
+    },
     work: (ms: number) =>
       Effect.sync(() => {
         time += ms
@@ -88,20 +101,39 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     expect(posted.map((task) => task.priority)).toEqual(["user-visible"])
   })
 
-  it("gives the event loop a turn between slices without postTask", async () => {
-    const scheduler = HtmlScheduler.make({ budget: 5 })
-    const busy = Effect.sync(() => {
-      const end = performance.now() + 1
-      while (performance.now() < end) continue
-    })
-    let steps = 0
-    const timer = new Promise<number>((resolve) => setTimeout(() => resolve(steps), 0))
-    const fiber = Effect.runForkWith(Context.make(Scheduler.Scheduler, scheduler))(
-      Effect.forEach(Array.from({ length: 50 }), () => Effect.andThen(busy, Effect.sync(() => steps++)), {
-        discard: true
-      })
+  it("gives a fiber resumed outside its tasks a budget of its own", () => {
+    const { advance, fork, posted, work } = browser()
+    let resume: (effect: Effect.Effect<unknown>) => void = () => {}
+    const fiber = fork(Effect.callback<unknown>((f) => {
+      resume = f
+    }))
+    advance(10)
+    resume(Effect.forEach(Array.from({ length: 3 }), () => work(1)))
+    expect(fiber.pollUnsafe()?._tag).toBe("Success")
+    expect(posted).toEqual([])
+  })
+
+  it("flush runs everything queued, however long it takes", () => {
+    const { fork, work } = browser()
+    const fiber = fork(Effect.yieldNow.pipe(Effect.andThen(Effect.forEach(Array.from({ length: 20 }), () => work(1)))))
+    fiber.currentDispatcher.flush()
+    expect(fiber.pollUnsafe()?._tag).toBe("Success")
+  })
+
+  it("posts one message at a time without postTask", () => {
+    const { elapsed, fork, next, posted, work } = browser("MessageChannel")
+    const log: Array<string> = []
+    fork(
+      Effect.yieldNowWith(1).pipe(
+        Effect.andThen(Effect.forEach(Array.from({ length: 20 }), () => work(1))),
+        Effect.andThen(Effect.sync(() => log.push("background")))
+      )
     )
-    expect(await timer).toBeLessThan(50)
-    await Effect.runPromise(Fiber.join(fiber))
+    fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("normal")))))
+    expect(posted.length).toBe(1)
+    const slices = [elapsed()]
+    while (posted.length > 0) slices.push(next())
+    expect(log).toEqual(["normal", "background"])
+    expect(Math.max(...slices)).toBeLessThanOrEqual(6)
   })
 })
