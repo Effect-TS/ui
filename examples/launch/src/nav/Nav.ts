@@ -4,16 +4,58 @@ import { Array, Option, Schema, Stream } from "effect"
 
 export const sections = [
   { id: "terms", label: "Terms", isNested: false },
-  { id: "architecture", label: "The core change: Component-based architecture", isNested: false },
-  { id: "messages", label: "How Messages travel", isNested: true },
-  { id: "code", label: "The code you write", isNested: true },
-  { id: "split", label: "Organizing larger Components", isNested: true },
-  { id: "queries", label: "Addition: Built-in queries", isNested: false },
-  { id: "testing", label: "Change: Simpler Story and Scene tests, plus Play", isNested: false },
-  { id: "performance", label: "Change: Improved performance", isNested: false },
+  {
+    id: "architecture",
+    label: "The core change: Component-based architecture",
+    isNested: false
+  },
+  {
+    id: "messages",
+    label: "How Messages travel in Foldkit 0.x vs. Effect UI",
+    isNested: true
+  },
+  {
+    id: "code",
+    label: "Foldkit 0.x vs. Effect UI code comparison",
+    isNested: true
+  },
+  {
+    id: "self-contained",
+    label: "Components are self-contained",
+    isNested: true
+  },
+  {
+    id: "split",
+    label: "Organizing larger Components",
+    isNested: true
+  },
+  {
+    id: "queries",
+    label: "Addition: Built-in queries",
+    isNested: false
+  },
+  {
+    id: "testing",
+    label: "Change: Simpler Story and Scene tests",
+    isNested: false
+  },
+  { id: "play", label: "Addition: Play tests", isNested: false },
+  {
+    id: "performance",
+    label: "Change: Improved performance",
+    isNested: false
+  },
   { id: "more", label: "More changes", isNested: false },
-  { id: "carries-over", label: "Unchanged: Values, features and guarantees", isNested: false },
-  { id: "next", label: "You can keep building on Foldkit 0.x", isNested: false }
+  {
+    id: "carries-over",
+    label: "Unchanged: Values, features and guarantees",
+    isNested: false
+  },
+  {
+    id: "next",
+    label: "You can keep building on Foldkit 0.x",
+    isNested: false
+  }
 ] as const
 
 const ids = sections.map(({ id }) => id)
@@ -32,14 +74,19 @@ const Toggle = Html.ref("Nav.toggle", "button")
 const hasPassed = (id: string) => {
   const heading = document.getElementById(id)
   return heading !== null &&
-    heading.getBoundingClientRect().top <= Number.parseFloat(getComputedStyle(heading).scrollMarginTop) + 1
+    heading.getBoundingClientRect().top <=
+      Number.parseFloat(getComputedStyle(heading).scrollMarginTop) + 1
 }
 
 const isAtEnd = () =>
-  window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1
+  window.scrollY > 0 &&
+  window.scrollY + window.innerHeight >=
+    document.documentElement.scrollHeight - 1
 
 const currentSection = () =>
-  isAtEnd() ? sections[sections.length - 1].id : Option.getOrNull(Array.findLast(ids, hasPassed))
+  isAtEnd()
+    ? sections[sections.length - 1].id
+    : Option.getOrNull(Array.findLast(ids, hasPassed))
 
 const TrackSection = Subscription.make(
   "section",
@@ -59,7 +106,10 @@ const TrackSection = Subscription.make(
 export const Nav = Component.define({
   name: "Nav",
   scoped: false,
-  model: Schema.Struct({ current: Schema.NullOr(SectionId), isOpen: Schema.Boolean }),
+  model: Schema.Struct({
+    current: Schema.NullOr(SectionId),
+    isOpen: Schema.Boolean
+  }),
   message: NavMessage,
   elements: Html
 }).make({
@@ -67,38 +117,51 @@ export const Nav = Component.define({
   update: {
     ClickedToggle: ($) => $.evolve({ isOpen: (isOpen) => !isOpen }),
     ClickedSection: ($) => $.evolve({ isOpen: false }),
-    PressedEscape: ($) => $.evolve({ isOpen: false }).run(DomCommand.focus(Toggle, () => Component.noop)),
+    PressedEscape: ($) =>
+      $.evolve({ isOpen: false }).run(
+        DomCommand.focus(Toggle, () => Component.noop)
+      ),
     ChangedSection: ($, { current }) => $.evolve({ current })
   },
   subscriptions: ({ model }) => [
     TrackSection,
     model.isOpen &&
-    DomSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? NavMessage.PressedEscape() : undefined)
+    DomSubscription.onDocument(
+      "keydown",
+      ({ key }) =>
+        key === "Escape" ? NavMessage.PressedEscape() : undefined
+    )
   ],
   view: (h, model) => {
     const list = h.id("sections")
     const current = sections.find(({ id }) => id === model.current)
-    return h.nav.class("nav").attr("aria-label", "On this page").children(
-      h.p.class("nav-title").attr("aria-hidden", "true").children("On this page"),
-      h.button.ref(Toggle).class("nav-toggle").attrs({
-        type: "button",
-        "aria-expanded": String(model.isOpen),
-        "aria-controls": list
-      }).onClick(NavMessage.ClickedToggle()).children(
-        h.span.children("On this page"),
-        " ",
-        current && h.span.class("nav-current").children(current.label)
-      ),
-      h.ol.id(list).class("nav-list").children(
-        ...sections.map(({ id, label, isNested }) =>
-          h.li.key(id).children(
-            h.a.class("nav-link", isNested && "nav-nested").attrs({
-              href: `#${id}`,
-              "aria-current": id === model.current ? "location" : undefined
-            }).onClick(NavMessage.ClickedSection()).children(label)
+    return h.nav.class("nav").attr("aria-label", "On this page")
+      .children(
+        h.p.class("nav-title").attr("aria-hidden", "true").children(
+          "On this page"
+        ),
+        h.button.ref(Toggle).class("nav-toggle").attrs({
+          type: "button",
+          "aria-expanded": String(model.isOpen),
+          "aria-controls": list
+        }).onClick(NavMessage.ClickedToggle()).children(
+          h.span.children("On this page"),
+          " ",
+          current &&
+            h.span.class("nav-current").children(current.label)
+        ),
+        h.ol.id(list).class("nav-list").children(
+          ...sections.map(({ id, label, isNested }) =>
+            h.li.key(id).children(
+              h.a.class("nav-link", isNested && "nav-nested").attrs({
+                href: `#${id}`,
+                "aria-current": id === model.current
+                  ? "location"
+                  : undefined
+              }).onClick(NavMessage.ClickedSection()).children(label)
+            )
           )
         )
       )
-    )
   }
 })

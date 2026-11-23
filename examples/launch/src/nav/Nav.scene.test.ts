@@ -9,15 +9,21 @@ import { Nav, NavMessage, sections } from "./Nav.ts"
 const closed = Locator.attr("aria-expanded", "false")
 const opened = Locator.attr("aria-expanded", "true")
 const current = Locator.attr("aria-current", "location")
-const queries = HtmlLocator.role("link", { name: "Addition: Built-in queries" })
+const queries = HtmlLocator.role("link", {
+  name: "Addition: Built-in queries"
+})
 
 describe("Nav", () => {
   it.effect("lists every section in order", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Nav, {})
-      s.expect(HtmlLocator.role("navigation", { name: "On this page" })).toExist()
+      s.expect(
+        HtmlLocator.role("navigation", { name: "On this page" })
+      ).toExist()
         .expect(HtmlLocator.role("link")).toHaveCount(sections.length)
-        .expect(HtmlLocator.role("list")).toHaveText(sections.map(({ label }) => label).join(""))
+        .expect(HtmlLocator.role("list")).toHaveText(
+          sections.map(({ label }) => label).join("")
+        )
     }))
 
   it.effect("opens and closes from the bar", () =>
@@ -52,10 +58,18 @@ describe("Nav", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Nav, {})
       s.expect(current).toBeAbsent()
-        .subscription("section", NavMessage.ChangedSection({ current: "queries" }))
+        .subscription(
+          "section",
+          NavMessage.ChangedSection({ current: "queries" })
+        )
         .expect(current).toHaveText("Addition: Built-in queries")
-        .expect(closed).toHaveText("On this page Addition: Built-in queries")
-        .subscription("section", NavMessage.ChangedSection({ current: null }))
+        .expect(closed).toHaveText(
+          "On this page Addition: Built-in queries"
+        )
+        .subscription(
+          "section",
+          NavMessage.ChangedSection({ current: null })
+        )
         .expect(current).toBeAbsent()
         .expect(closed).toHaveText("On this page")
     }))

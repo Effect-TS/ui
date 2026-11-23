@@ -13,9 +13,13 @@ it.layer(TestHost.layer())("Effect UI counter page", (it) => {
       const play = yield* HtmlPlay.make(Page, {})
       yield* play.click(increment)
       yield* play.expect(count).toHaveText("1")
-      yield* play.click(HtmlLocator.role("button", { name: "Hide counter" }))
+      yield* play.click(
+        HtmlLocator.role("button", { name: "Hide counter" })
+      )
       yield* play.expect(count).toBeAbsent()
-      yield* play.click(HtmlLocator.role("button", { name: "Show counter" }))
+      yield* play.click(
+        HtmlLocator.role("button", { name: "Show counter" })
+      )
       yield* play.expect(count).toHaveText("0")
     }))
 })

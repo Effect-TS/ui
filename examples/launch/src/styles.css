@@ -266,8 +266,14 @@ a {
 }
 
 .compare-columns {
+  --line-width: 70;
+  --character: 7.5px;
+  --frame: 30px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(var(--line-width) * var(--character) + var(--frame))), 1fr)
+  );
   gap: 24px;
 }
 
@@ -580,8 +586,7 @@ a {
   color: var(--muted-foreground);
 }
 
-@media (max-width: 900px) {
-  .compare-columns,
+@media (max-width: 960px) {
   .beside-columns {
     grid-template-columns: minmax(0, 1fr);
   }

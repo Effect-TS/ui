@@ -25,9 +25,13 @@ const posts = postsQuery.lift<Model, Message>({
   toParentMessage: (message) => Message.GotPostsMessage({ message })
 })
 
-export const init = () => posts.revalidateOrLoad({ posts: postsQuery.init() })
+export const init = () =>
+  posts.revalidateOrLoad({ posts: postsQuery.init() })
 
-export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
+export const update = (
+  model: Model,
+  message: Message
+): Update.Return<Model, Message> =>
   Message.match(message, {
     GotPostsMessage: ({ message }) => posts.fold(model, message)
   })
@@ -35,5 +39,6 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
   Option.match(AsyncData.getData(postsQuery.read(model.posts)), {
     onNone: () => h.p([], ["Loading posts"]),
-    onSome: (posts) => h.ul([], posts.map((post) => h.li([], [post.title])))
+    onSome: (posts) =>
+      h.ul([], posts.map((post) => h.li([], [post.title])))
   })

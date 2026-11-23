@@ -7,7 +7,10 @@ import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { Posts } from "./Posts.ts"
 
-const titles = ["Foldkit Joins Effect", "How Foldkit 0.x evolves into Effect UI"]
+const titles = [
+  "Foldkit Joins Effect",
+  "Foldkit 0.x becomes Effect UI"
+]
 
 const TwoPosts = Component.define({
   name: "TwoPosts",
@@ -18,27 +21,34 @@ const TwoPosts = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.div.children(Posts(h, { key: "first" }), Posts(h, { key: "second" }))
+  view: (h) =>
+    h.div.children(
+      Posts(h, { key: "first" }),
+      Posts(h, { key: "second" })
+    )
 })
 
-it.layer(TestHost.layer(), { buildPerTest: true })("Effect UI posts", (it) => {
-  it.effect("shows Loading posts, then the titles", () =>
-    Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(Posts, {})
-      yield* play.expect(Locator.text("Loading posts")).toExist()
-      yield* TestClock.adjust("300 millis")
-      for (const title of titles) {
-        yield* play.expect(Locator.text(title)).toExist()
-      }
-    }))
+it.layer(TestHost.layer(), { buildPerTest: true })(
+  "Effect UI posts",
+  (it) => {
+    it.effect("shows Loading posts, then the titles", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(Posts, {})
+        yield* play.expect(Locator.text("Loading posts")).toExist()
+        yield* TestClock.adjust("300 millis")
+        for (const title of titles) {
+          yield* play.expect(Locator.text(title)).toExist()
+        }
+      }))
 
-  it.effect("two instances share one fetch", () =>
-    Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(TwoPosts, {})
-      yield* TestClock.adjust("300 millis")
-      for (const title of titles) {
-        yield* play.expect(Locator.text(title)).toHaveCount(2)
-      }
-      assert.strictEqual(play.root.fetches().length, 1)
-    }))
-})
+    it.effect("two instances share one fetch", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(TwoPosts, {})
+        yield* TestClock.adjust("300 millis")
+        for (const title of titles) {
+          yield* play.expect(Locator.text(title)).toHaveCount(2)
+        }
+        assert.strictEqual(play.root.fetches().length, 1)
+      }))
+  }
+)

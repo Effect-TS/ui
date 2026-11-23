@@ -8,11 +8,25 @@ describe("Foldkit 0.x counter page", () => {
     Story.story(
       update,
       Story.given(init().model),
-      Story.message(Message.GotCounterMessage({ message: Counter.Message.ClickedIncrement() })),
-      Story.model((model) => expect(model).toEqual({ isCounterShown: true, counter: { count: 1 } })),
+      Story.message(
+        Message.GotCounterMessage({
+          message: Counter.Message.ClickedIncrement()
+        })
+      ),
+      Story.model((model) =>
+        expect(model).toEqual({
+          isCounterShown: true,
+          counter: { count: 1 }
+        })
+      ),
       Story.message(Message.ClickedToggleCounter()),
       Story.message(Message.ClickedToggleCounter()),
-      Story.model((model) => expect(model).toEqual({ isCounterShown: true, counter: { count: 1 } })),
+      Story.model((model) =>
+        expect(model).toEqual({
+          isCounterShown: true,
+          counter: { count: 1 }
+        })
+      ),
       Story.Command.expectNone()
     )
   })

@@ -14,7 +14,10 @@ export type Message = typeof Message.Type
 
 export const init = (): Model => ({ count: 0 })
 
-export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
+export const update = (
+  model: Model,
+  message: Message
+): Update.Return<Model, Message> =>
   Message.match(message, {
     ClickedDecrement: () => ({ model: { count: model.count - 1 } }),
     ClickedIncrement: () => ({ model: { count: model.count + 1 } })
@@ -22,8 +25,14 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 
 export const view = defineView<Model, Message>((model, h) =>
   h.div([h.Class("counter")], [
-    h.button([h.AriaLabel("Decrement"), h.OnClick(Message.ClickedDecrement())], ["-"]),
+    h.button([
+      h.AriaLabel("Decrement"),
+      h.OnClick(Message.ClickedDecrement())
+    ], ["-"]),
     h.output([h.Class("count")], [String(model.count)]),
-    h.button([h.AriaLabel("Increment"), h.OnClick(Message.ClickedIncrement())], ["+"])
+    h.button([
+      h.AriaLabel("Increment"),
+      h.OnClick(Message.ClickedIncrement())
+    ], ["+"])
   ])
 )

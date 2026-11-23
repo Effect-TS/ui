@@ -6,7 +6,9 @@ import { Counter, CounterMessage, DelayReset } from "./Counter.ts"
 const delayedReset = Effect.gen(function*() {
   const s = yield* Story.make(Counter, {})
   s.send(CounterMessage.ClickedIncrement())
-  s.send(CounterMessage.ClickedResetAfterDelay()).expectExact(DelayReset)
+  s.send(CounterMessage.ClickedResetAfterDelay()).expectExact(
+    DelayReset
+  )
   s.resolve(DelayReset, CounterMessage.CompletedDelayReset())
   assert.strictEqual(s.model.count, 0)
 })
