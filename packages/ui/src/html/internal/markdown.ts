@@ -59,7 +59,7 @@ const reDirective = new RegExp(
   "u"
 )
 const reTextDirective = new RegExp("^:" + NAME + "(?:\\[[^\\]\\n]*\\]|\\{[^}\\n]*\\})", "u")
-const reLoneTextDirective = new RegExp("^[ \\t]*:" + NAME + "[ \\t]*$", "u")
+const reLoneTextDirective = new RegExp("^:" + NAME + "[ \\t]*(?:\\n|$)", "u")
 const reDelimiterRow = /^\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/
 const reEmailAutolink =
   /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/
@@ -806,7 +806,7 @@ export const parse = (
         : [{ ...node, content: withoutLiteralLinks(node.content) }]
     )
 
-  const parseInlines = (subject: string, startLine: number): Array<RawInline> => {
+  const parseInlines = (subject: string, startLine: number, paragraph = false): Array<RawInline> => {
     const nodes: Array<RawInline> = []
     let pos = 0
     let delimiters: Delimiter | null = null
@@ -1212,7 +1212,12 @@ export const parse = (
         }
         text(entity === null ? "&" : decodeEntity(entity[0]))
       } else if (char === ":" || char === "!") {
-        if (char === ":" && subject[pos - 1] !== ":" && reTextDirective.test(subject.slice(pos))) {
+        const after = subject.slice(pos)
+        const lineStart = pos === 0 || subject[pos - 1] === "\n"
+        if (
+          char === ":" && subject[pos - 1] !== ":" &&
+          (reTextDirective.test(after) || (paragraph && lineStart && reLoneTextDirective.test(after)))
+        ) {
           report("textDirective", lineAt(pos), pos)
         }
         pos++
@@ -1225,11 +1230,12 @@ export const parse = (
     return tidy(nodes).flatMap(emails)
   }
 
-  const content = (block: BlockNode) => {
+  const content = (block: BlockNode, paragraph = false) => {
     const leading = /^[ \t\n]*/.exec(block.text)?.[0] ?? ""
     return parseInlines(
       block.text.slice(leading.length).replace(/[ \t\n]+$/, ""),
-      block.line + leading.split("\n").length - 1
+      block.line + leading.split("\n").length - 1,
+      paragraph
     )
   }
   const row = (cells: ReadonlyArray<string>, line: number): Markdown.TableRow => ({
@@ -1299,12 +1305,7 @@ export const parse = (
         }
       }
       default:
-        block.text.split("\n").forEach((text, index) => {
-          if (reLoneTextDirective.test(text)) {
-            report("textDirective", block.line + index)
-          }
-        })
-        return { _tag: "Paragraph", content: content(block) }
+        return { _tag: "Paragraph", content: content(block, true) }
     }
   }
   const blocks = document.children.map(toBlock)

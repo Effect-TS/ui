@@ -209,6 +209,19 @@ describe("parseMarkdown", () => {
     )
   })
 
+  it("keeps a :name line inside a multiline code span", () => {
+    expect(parseMarkdown(lines("Try `SELECT", ":name", "FROM users`.")).blocks).toStrictEqual([
+      {
+        _tag: "Paragraph",
+        content: [
+          { _tag: "Text", value: "Try " },
+          { _tag: "InlineCode", value: "SELECT :name FROM users" },
+          { _tag: "Text", value: "." }
+        ]
+      }
+    ])
+  })
+
   it("keeps a literal :name heading or table cell as text", () => {
     const text = (value: string) => [{ _tag: "Text", value }]
 
