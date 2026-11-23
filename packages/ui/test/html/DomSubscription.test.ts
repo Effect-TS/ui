@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, DomSubscription, Html } from "@effect/ui/html"
-import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
+import { HtmlScene, TestAnimationFrames, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema } from "effect"
@@ -374,4 +374,79 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         `HtmlScene.fireDocument: nothing listens for "mouseup" on the document; active keys: ["@effect/ui/html/document:\\"keydown\\""]`
       )
     }))
+})
+
+const FrameMessage = UiSchema.TaggedEnum({ TickedFrame: { delta: Schema.Number }, Toggled: {} })
+
+const Frames = Component.define({
+  name: "Frames",
+  scoped: false,
+  model: Schema.Struct({ running: Schema.Boolean, deltas: Schema.Array(Schema.Number) }),
+  message: FrameMessage,
+  elements: Html
+}).make({
+  init: () => ({ running: true, deltas: [] }),
+  update: {
+    TickedFrame: (model, { delta }) => ({ ...model, deltas: [...model.deltas, delta] }),
+    Toggled: (model) => ({ ...model, running: !model.running })
+  },
+  view: (model, h) => h.p(model.deltas.join(",")),
+  subscriptions: (model) => [
+    model.running && DomSubscription.onAnimationFrame((delta) => FrameMessage.TickedFrame({ delta }))
+  ]
+})
+
+describe("onAnimationFrame", { concurrent: false }, () => {
+  it.effect("counts each delta from the last frame, and the first from when it starts, so a pause doesn't jump", () =>
+    Effect.gen(function*() {
+      const root = yield* TestHost.mount(Frames, {})
+      yield* TestHost.settle
+      yield* TestAnimationFrames.fire(16)
+      yield* TestAnimationFrames.fire(17)
+      root.send(FrameMessage.Toggled())
+      yield* TestHost.settle
+      yield* TestAnimationFrames.fire(1000)
+      root.send(FrameMessage.Toggled())
+      yield* TestHost.settle
+      yield* TestAnimationFrames.fire(5)
+      assert.deepStrictEqual(root.model()?.deltas, [16, 17, 5])
+    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestAnimationFrames.layer)), Effect.scoped))
+
+  it.effect("on BrowserHost, dispatches in the frame's callback and requests no frame once the tree unmounts", () =>
+    Effect.gen(function*() {
+      const pending = new Map<number, FrameRequestCallback>()
+      let next = 0
+      const { cancelAnimationFrame, requestAnimationFrame } = window
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          window.requestAnimationFrame = (callback) => {
+            pending.set(++next, callback)
+            return next
+          }
+          window.cancelAnimationFrame = (id) => void pending.delete(id)
+        }),
+        () =>
+          Effect.sync(() => {
+            window.requestAnimationFrame = requestAnimationFrame
+            window.cancelAnimationFrame = cancelAnimationFrame
+          })
+      )
+      const runFrame = () => {
+        const callbacks = Array.from(pending.values())
+        pending.clear()
+        for (const callback of callbacks) callback(performance.now())
+      }
+      const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+      const deltas = yield* Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        const root = yield* BrowserHost.mountEffect(Frames, {}, app)
+        yield* tick
+        runFrame()
+        runFrame()
+        return root.model()?.deltas.length
+      }).pipe(Effect.scoped)
+      assert.strictEqual(deltas, 2)
+      assert.strictEqual(pending.size, 0)
+    }).pipe(Effect.scoped))
 })

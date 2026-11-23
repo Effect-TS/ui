@@ -1,12 +1,14 @@
 /**
  * Subscriptions to the host's document and window: `onDocument` for a
  * keyboard shortcut or a press outside a popup, `onCustomEvent` for a
- * `CustomEvent` dispatched on the document, and `onWindow` for the window's
- * focus.
+ * `CustomEvent` dispatched on the document, `onWindow` for the window's
+ * focus, and `onAnimationFrame` for animation.
  *
- * Their source is the `GlobalEvents` service, which `BrowserHost.layer`
- * provides. Nothing listens on the server, and a test fires events with
- * `HtmlScene` or `TestGlobalEvents` from `@effect/ui/html/testing`.
+ * Their sources are the `GlobalEvents` and `AnimationFrames` services,
+ * which `BrowserHost.layer` provides. Nothing listens on the server, and a
+ * test fires events and frames with `HtmlScene`, or with
+ * `TestGlobalEvents` and `TestAnimationFrames` from
+ * `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @since 0.1.0
@@ -15,10 +17,12 @@ import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
+import { handle } from "../internal/handler.ts"
 import * as services from "../internal/services.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
+import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
 
 /**
@@ -401,3 +405,133 @@ export const onCustomEvent = <Msg>(
   handler: View.Handler<Msg, GlobalPayload<CustomEventPayload>>,
   options?: GlobalEventOptions | undefined
 ): Subscription.Subscription<Msg> => listenFor("document", event, handler, options, true)
+
+/**
+ * The source of animation frames, which `onAnimationFrame` listens to.
+ *
+ * **Details**
+ *
+ * `listen` calls the listener once per frame with the frame's time in ms,
+ * until the function it returns is called. `now` is the current time on
+ * the same clock.
+ *
+ * `BrowserHost.layer` provides the one over its document's window, with
+ * `requestAnimationFrame` and `performance.now`. The default never fires,
+ * so a host without a window, and a test that doesn't fire frames, need
+ * nothing. A test fires them with `HtmlScene`'s `frame`, or with
+ * `TestAnimationFrames` from `@effect/ui/html/testing`.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export interface AnimationFrames {
+  readonly now: () => number
+  readonly listen: (listener: (time: number) => void) => () => void
+}
+
+/**
+ * The source of animation frames. It defaults to one that never fires.
+ *
+ * @stability experimental
+ * @category references
+ * @since 0.1.0
+ */
+export const AnimationFrames: Context.Reference<AnimationFrames> = Context.Reference<AnimationFrames>(
+  "@effect/ui/html/DomSubscription/AnimationFrames",
+  { defaultValue: () => still }
+)
+
+const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
+
+/**
+ * A Subscription that sends a message on every animation frame, with the
+ * time since the last one in ms.
+ *
+ * **When to use**
+ *
+ * Use to move a scene along with the screen's refresh, such as a game or a
+ * simulation drawn with `Canvas`. Gate the entry on the Model, so frames
+ * come only while it runs.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of the delta. The source is
+ * `AnimationFrames`, and the runtime dispatches each frame's message as it
+ * fires, so the update, the render and a `Canvas` repaint all land in the
+ * frame that ticked.
+ *
+ * The first delta counts from when the Subscription starts, so a pause and
+ * resume doesn't jump. A browser stops sending frames to a hidden tab,
+ * though, and the first one after it returns covers the whole time away.
+ * Cap the delta in `update` when it drives motion.
+ *
+ * The key is `@effect/ui/html/animationFrame`, and an instance has one.
+ *
+ * **Example** (A clock that runs while the Model says so)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ TickedFrame: { delta: Schema.Number } })
+ *
+ * const Stopwatch = Component.define({
+ *   name: "Stopwatch",
+ *   scoped: false,
+ *   model: Schema.Struct({ running: Schema.Boolean, elapsed: Schema.Number }),
+ *   message: Message,
+ *   elements: Html
+ * }).make({
+ *   init: () => ({ running: true, elapsed: 0 }),
+ *   update: {
+ *     // A tab that comes back from the background sends one long frame.
+ *     TickedFrame: (model, { delta }, $) => $.evolve({ elapsed: model.elapsed + Math.min(delta, 100) })
+ *   },
+ *   view: (model, h) => h.p(`${Math.round(model.elapsed)} ms`),
+ *   subscriptions: (model) => [
+ *     model.running && DomSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Stopwatch, {})
+ *   s.frame(16).frame(5000)
+ *     .expect(Locator.text("116 ms")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onAnimationFrame = <Msg>(handler: View.Handler<Msg, number>): Subscription.Subscription<Msg> =>
+  Object.assign(
+    Subscription.make("@effect/ui/html/animationFrame", Stream.never),
+    { [frames.frame]: handler, [services.direct]: attachFrames }
+  )
+
+const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => {
+  const source = Context.get(context, AnimationFrames)
+  let last = source.now()
+  return {
+    initial: Effect.void,
+    close: source.listen((time) => {
+      const delta = Math.max(0, time - last)
+      last = time
+      enter((latest) => {
+        try {
+          const message = handle(frames.handlerOf(latest), delta)
+          if (message !== undefined) emit(message, noop)
+        } catch (error) {
+          fail(Cause.die(error))
+        }
+      })
+    })
+  }
+}
+
+const noop = () => {}
