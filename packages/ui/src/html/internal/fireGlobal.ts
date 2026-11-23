@@ -49,12 +49,6 @@ export const fire = (
   return cancelled
 }
 
-/**
- * The payload a custom event's listeners get for `given`: a missing or
- * `undefined` `detail` is `null`, as the DOM makes it.
- *
- * @internal
- */
 export const custom = (given: { readonly detail?: unknown } | undefined): object => ({
   ...given,
   detail: given?.detail ?? null
