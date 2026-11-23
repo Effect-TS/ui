@@ -335,7 +335,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           beforeInput(field, true)
           field.value = "123x456"
           field.setSelectionRange(4, 4)
-          field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }))
+          field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }))
           yield* tick
           expect(selection(field)).toEqual(["123456", 3, 3])
         }).pipe(Effect.scoped))
