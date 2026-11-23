@@ -130,4 +130,49 @@ describe("DomFile", { concurrent: false }, () => {
       expect(root.model()).toEqual(["found true, opened true", "chose notes.txt", "found true, opened false"])
       expect(input.files!.length).toBe(0)
     }).pipe(Effect.scoped))
+
+  it.effect("without showPicker, DomCommand.showPicker falls back to click only on a file input and never submits a form", () =>
+    Effect.gen(function*() {
+      const Submit = Html.ref("Submit", "input")
+      const Attachment = Html.ref("Attachment", "input")
+      const Message = UiSchema.TaggedEnum({
+        OpenSubmit: {},
+        OpenFile: {},
+        ShowedPicker: { found: Schema.Boolean, opened: Schema.Boolean },
+        Submitted: {}
+      })
+      const Form = Component.define({
+        name: "Form",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Message,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, message, $) =>
+          Message.match(message, {
+            OpenSubmit: () => $.run(DomCommand.showPicker(Submit, Message.ShowedPicker)),
+            OpenFile: () => $.run(DomCommand.showPicker(Attachment, Message.ShowedPicker)),
+            ShowedPicker: ({ found, opened }) => [...log, `found ${found}, opened ${opened}`],
+            Submitted: () => [...log, "submitted"]
+          }),
+        view: (_, h) =>
+          h.form.onSubmit(Message.Submitted()).children(
+            h.input.attr("type", "submit").ref(Submit),
+            h.input.attr("type", "file").ref(Attachment)
+          )
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      const root = yield* BrowserHost.mountEffect(Form, {}, app)
+      let fileClicks = 0
+      app.querySelector<HTMLInputElement>("input[type='file']")!.addEventListener("click", () => {
+        fileClicks++
+      })
+      root.send(Message.OpenSubmit())
+      root.send(Message.OpenFile())
+      yield* tick
+      expect(root.model()).toEqual(["found true, opened false", "found true, opened true"])
+      expect(fileClicks).toBe(1)
+    }).pipe(Effect.scoped))
 })
