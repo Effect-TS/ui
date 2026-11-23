@@ -73,6 +73,12 @@ export * as HtmlKeyboard from "./HtmlKeyboard.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as HtmlScheduler from "./HtmlScheduler.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as HtmlServer from "./HtmlServer.ts"
 
 /**

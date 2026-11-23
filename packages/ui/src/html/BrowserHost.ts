@@ -122,6 +122,7 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Scheduler from "effect/Scheduler"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
@@ -131,6 +132,7 @@ import * as View from "../View.ts"
 import * as Html from "./Html.ts"
 import * as HtmlFiles from "./HtmlFiles.ts"
 import * as HtmlImages from "./HtmlImages.ts"
+import * as HtmlScheduler from "./HtmlScheduler.ts"
 import * as HtmlSubscription from "./HtmlSubscription.ts"
 import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
@@ -1688,9 +1690,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * app needs only this Layer and its Router's. A root's props therefore can't
  * themselves be an Effect.
  *
- * Commands and Subscriptions run on the default scheduler, the render flush
- * on a microtask. A navigation Command runs in the flush its `update` caused,
- * which renders the new route.
+ * Commands and Subscriptions run on `HtmlScheduler`, unless the caller
+ * provides a `Scheduler`, and the render flush on a microtask. A navigation
+ * Command runs in the flush its `update` caused, which renders the new route.
  *
  * **Hydration.** Pass the `state` from `HtmlServer.renderToHtml`, with the
  * server's HTML already in `container` and the same props, to adopt the
@@ -1801,5 +1803,8 @@ export const mountEffect = <
 ): Effect.Effect<Renderer.Root<Model, Msg>, never, Exclude<R | RF | RP, Html.Host> | Scope.Scope> =>
   Effect.gen(function*() {
     const context = yield* Layer.build(layer({ document: container.ownerDocument }))
-    return yield* Effect.provideContext(Renderer.mount(component, props, container, options), context)
+    const scheduled = Context.getOrUndefined(yield* Effect.context<never>(), Scheduler.Scheduler) === undefined
+      ? Context.add(context, Scheduler.Scheduler, HtmlScheduler.make())
+      : context
+    return yield* Effect.provideContext(Renderer.mount(component, props, container, options), scheduled)
   }) as any

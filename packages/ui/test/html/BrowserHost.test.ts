@@ -17,7 +17,7 @@ import { BrowserHost, Html, HtmlCommand, HtmlServer, HtmlSubscription } from "@e
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
-import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Scheduler, Schema, Scope, Stream } from "effect"
 import { describe, vi } from "vitest"
 import { collectGarbage } from "../utils/gc.ts"
 import { Confirm, ConfirmMessage, Nested } from "./fixtures/confirm.ts"
@@ -84,6 +84,39 @@ describe("BrowserHost", { concurrent: false }, () => {
       assert.deepStrictEqual([visibility.get(), connectivity.get()], [true, true])
       delete (document as { visibilityState?: unknown }).visibilityState
     }))
+
+  it.live("runs Commands on HtmlScheduler unless the caller provides a Scheduler", () =>
+    Effect.gen(function*() {
+      const posted: Array<string> = []
+      vi.stubGlobal("scheduler", {
+        postTask: (run: () => void, options: { readonly priority: string }) => {
+          posted.push(options.priority)
+          return new Promise((resolve) => setTimeout(() => resolve(run()), 0))
+        }
+      })
+      const Ping = Command.make("Ping", { args: {} }, () => Effect.as(Effect.yieldNowWith(1), "pong"))
+      const App = Component.define({ name: "App", scoped: false, model: Schema.String, message: Schema.String })
+        .make({
+          init: () => "",
+          update: ($, message) => message === "ping" ? $.run(Ping.make()) : message,
+          view: (h, model) => h.text(model)
+        })
+      const mounted = Effect.fnUntraced(function*(app: Element) {
+        const root = yield* BrowserHost.mountEffect(App, {}, app)
+        root.send("ping")
+        yield* tick
+        return app.textContent
+      })
+      expect(yield* mounted(yield* container)).toBe("pong")
+      expect(posted).toContain("background")
+      posted.length = 0
+      expect(
+        yield* mounted(yield* container).pipe(
+          Effect.provideService(Scheduler.Scheduler, new Scheduler.MixedScheduler())
+        )
+      ).toBe("pong")
+      expect(posted).toEqual([])
+    }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => vi.unstubAllGlobals()))))
 
   describe("a todo app", () => {
     it.effect("adds, toggles, deletes and clears todos", () =>
