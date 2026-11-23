@@ -492,6 +492,22 @@ describe("Menu", () => {
       assert.isFalse(accents.contains("Crème", "creme"))
     }))
 
+  it.effect("trigger reads its options from the object it's given, getters included", () =>
+    Effect.gen(function*() {
+      class Off {
+        constructor(readonly element: View.PartTarget<"button">) {}
+        get disabled() {
+          return true
+        }
+      }
+      const s = yield* HtmlScene.make(Menu, { open: false, items }, {
+        elements: Html,
+        view: (menu, h) => menu.trigger(new Off(h.button.class("trigger"))).children("Edit")
+      })
+      assert.strictEqual(s.get(trigger).attrs?.disabled, "")
+      assert.strictEqual(s.get(trigger).attrs?.["data-disabled"], "")
+    }))
+
   it.effect("clears consumer aria-disabled and group hidden, and validates hidden part tags", () =>
     Effect.gen(function*() {
       const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)

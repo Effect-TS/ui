@@ -2267,11 +2267,11 @@ export const Menu = Component.define({
     const trigger = View.wrapPart(
       triggerPart,
       <B extends View.PartTarget<"button">>(
-        { element, ...options }: MenuTriggerOptions & { readonly element: B }
+        options: MenuTriggerOptions & { readonly element: B }
       ): ReturnType<B["attr"]> => {
-        const id = idOf(element)
+        const id = idOf(options.element)
         triggers++
-        return triggerPart(element, id ?? p.id("trigger", triggers - 1), id, options)
+        return triggerPart(options.element, id ?? p.id("trigger", triggers - 1), id, options)
       }
     )
 
