@@ -246,6 +246,7 @@ import { grouped, valued } from "./internal/list.ts"
 import { holdLayer, nextLayerOrder } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
+import { mergeNow } from "./internal/stream.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
@@ -1341,15 +1342,15 @@ const TrackSelect = Mount.makeStream(
   "TrackSelect",
   { args: TrackSelectArgs },
   (node: HTMLElement, args, changes) =>
-    Stream.merge(
-      watch(node, args, changes),
+    mergeNow(
       Positioning.trackPosition(
         node,
         args.position,
         Stream.map(changes, (next) => next.position)
       ).pipe(
         Stream.map((placement) => SelectMessage.ChangedPlacement({ placement }))
-      )
+      ),
+      watch(node, args, changes)
     )
 )
 
