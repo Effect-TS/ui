@@ -59,7 +59,7 @@ const reDirective = new RegExp(
   "u"
 )
 const reTextDirective = new RegExp("^:" + NAME + "(?:\\[[^\\]\\n]*\\]|\\{[^}\\n]*\\})", "u")
-const reLoneTextDirective = new RegExp("^:" + NAME + "[ \\t]*(?:\\n|$)", "u")
+const reLoneTextDirective = new RegExp("^[ \\t]*:" + NAME + "[ \\t]*$", "u")
 const reDelimiterRow = /^\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/
 const reEmailAutolink =
   /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/
@@ -1212,12 +1212,7 @@ export const parse = (
         }
         text(entity === null ? "&" : decodeEntity(entity[0]))
       } else if (char === ":" || char === "!") {
-        const after = subject.slice(pos)
-        const lineStart = pos === 0 || subject[pos - 1] === "\n"
-        if (
-          char === ":" && subject[pos - 1] !== ":" &&
-          (reTextDirective.test(after) || (lineStart && reLoneTextDirective.test(after)))
-        ) {
+        if (char === ":" && subject[pos - 1] !== ":" && reTextDirective.test(subject.slice(pos))) {
           report("textDirective", lineAt(pos), pos)
         }
         pos++
@@ -1304,6 +1299,11 @@ export const parse = (
         }
       }
       default:
+        block.text.split("\n").forEach((text, index) => {
+          if (reLoneTextDirective.test(text)) {
+            report("textDirective", block.line + index)
+          }
+        })
         return { _tag: "Paragraph", content: content(block) }
     }
   }

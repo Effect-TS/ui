@@ -209,6 +209,27 @@ describe("parseMarkdown", () => {
     )
   })
 
+  it("keeps a literal :name heading or table cell as text", () => {
+    const text = (value: string) => [{ _tag: "Text", value }]
+
+    expect(parseMarkdown(lines("# :name", "", "| Param | Type |", "| - | - |", "| :name | string |")).blocks)
+      .toStrictEqual([
+        { _tag: "Heading", level: 1, content: text(":name") },
+        {
+          _tag: "Table",
+          alignments: ["None", "None"],
+          headerRow: {
+            _tag: "TableRow",
+            cells: [{ _tag: "TableCell", content: text("Param") }, { _tag: "TableCell", content: text("Type") }]
+          },
+          bodyRows: [{
+            _tag: "TableRow",
+            cells: [{ _tag: "TableCell", content: text(":name") }, { _tag: "TableCell", content: text("string") }]
+          }]
+        }
+      ])
+  })
+
   it("rejects leaf directive labels", () => {
     expect(() => parseMarkdown("::Counter[Clicks while reading]")).toThrowError(
       /Leaf directive labels \(`::Name\[label\]`\) are not supported/
