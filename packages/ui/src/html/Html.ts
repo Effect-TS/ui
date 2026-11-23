@@ -27,7 +27,9 @@
  * Model's value back after every patch and after every event that could have
  * changed it, so the element always shows what the Model says. While an input
  * method composes text in a field, its `value` is left alone until
- * `compositionend`.
+ * `compositionend`. When the host writes a focused field's `value`, the
+ * selection stays where the user left it: a rejected edit puts it back, and a
+ * normalized value keeps it with the text around it.
  *
  * A `dialog` is closed, open, or open as a modal: `.open(b)` and `.modal(b)`
  * set the same state, and the last call wins. A modal's close requests, such

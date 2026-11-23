@@ -264,6 +264,144 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(field.value).toBe("abXcdef")
         expect(field.selectionStart).toBe(3)
       }).pipe(Effect.scoped))
+
+    describe("the selection of a focused field the host writes", () => {
+      const Edited = UiSchema.TaggedEnum({
+        Upper: { value: Schema.String },
+        Card: { value: Schema.String },
+        Push: {},
+        ResetUpper: {}
+      })
+      const Fields = Component.define({
+        name: "Fields",
+        scoped: false,
+        model: Schema.Struct({ upper: Schema.String, card: Schema.String, pushed: Schema.String }),
+        message: Edited,
+        elements: Html
+      }).make({
+        init: () => ({ upper: "ABCDEF", card: "1234", pushed: "hello world" }),
+        update: (model, message) =>
+          Edited.match(message, {
+            Upper: ({ value }) => ({ ...model, upper: value.toUpperCase() }),
+            Card: ({ value }) => ({ ...model, card: value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ") }),
+            Push: () => ({ ...model, pushed: model.pushed === "hello world" ? "hello" : "hello world" }),
+            ResetUpper: () => ({ ...model, upper: "ABCDEF" })
+          }),
+        view: (model, h) =>
+          h.div(
+            h.input.attr("aria-label", "Fixed").value("123456").onInput(() => undefined),
+            h.textarea.attr("aria-label", "Upper").value(model.upper).onInput(({ value }) => Edited.Upper({ value })),
+            h.input.attr("aria-label", "Card").value(model.card).onInput(({ value }) => Edited.Card({ value })),
+            h.input.attr("aria-label", "Pushed").value(model.pushed),
+            h.input.attr("aria-label", "Other").value(model.pushed),
+            h.input.attrs({ type: "email", "aria-label": "Email" }).value(model.pushed),
+            h.button.onClick(Edited.Push()).children("Push"),
+            h.button.onClick(Edited.ResetUpper()).children("Reset")
+          )
+      })
+      const mountFields = Effect.gen(function*() {
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Fields, {}, app)
+        return {
+          field: (name: string) => HtmlLocator.getByRole(app, "textbox", { name }) as HTMLInputElement,
+          press: (name: string) => HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name }))
+        }
+      })
+      const beforeInput = (field: HTMLInputElement, cancel = false) => {
+        if (cancel) field.addEventListener("beforeinput", (event) => event.preventDefault(), { once: true })
+        field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText" }))
+      }
+      const edit = (field: HTMLInputElement, value: string, caret: number) => {
+        beforeInput(field)
+        field.value = value
+        field.setSelectionRange(caret, caret)
+        field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }))
+      }
+      const selection = (field: HTMLInputElement) => [field.value, field.selectionStart, field.selectionEnd]
+
+      it.effect("a rejected edit puts back the selection it started from", () =>
+        Effect.gen(function*() {
+          const field = (yield* mountFields).field("Fixed")
+          field.focus()
+          field.setSelectionRange(3, 3)
+          edit(field, "123a456", 4)
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 3])
+          field.setSelectionRange(3, 6)
+          edit(field, "123a", 4)
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 6])
+          field.setSelectionRange(1, 1)
+          beforeInput(field, true)
+          field.value = "123x456"
+          field.setSelectionRange(4, 4)
+          field.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }))
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 3, 3])
+        }).pipe(Effect.scoped))
+
+      it.effect("a normalized value keeps the caret with the text around it, and at the end", () =>
+        Effect.gen(function*() {
+          const { field, press } = yield* mountFields
+          const upper = field("Upper")
+          upper.focus()
+          upper.setSelectionRange(1, 1)
+          edit(upper, "AXBCDEF", 2)
+          yield* Effect.promise(() => Promise.resolve())
+          upper.setSelectionRange(5, 5)
+          press("Reset")
+          yield* tick
+          expect(selection(upper)).toEqual(["ABCDEF", 4, 4])
+          upper.setSelectionRange(3, 3)
+          edit(upper, "ABCxDEF", 4)
+          yield* tick
+          expect(selection(upper)).toEqual(["ABCXDEF", 4, 4])
+
+          const card = field("Card")
+          card.focus()
+          edit(card, "12345", 5)
+          yield* tick
+          expect(selection(card)).toEqual(["1234 5", 6, 6])
+          card.setSelectionRange(2, 2)
+          edit(card, "12934 5", 3)
+          yield* tick
+          expect(selection(card)).toEqual(["1293 45", 3, 3])
+        }).pipe(Effect.scoped))
+
+      it.effect("a value the Model pushes keeps a focused field's selection, clamped", () =>
+        Effect.gen(function*() {
+          const { field, press } = yield* mountFields
+          const [pushed, other] = [field("Pushed"), field("Other")]
+          pushed.setSelectionRange(2, 8)
+          other.setSelectionRange(2, 8)
+          pushed.focus()
+          press("Push")
+          yield* tick
+          expect(selection(pushed)).toEqual(["hello", 2, 5])
+          expect(selection(other)).toEqual(["hello", 5, 5])
+          field("Email").focus()
+          press("Push")
+          yield* tick
+          expect(field("Email").value).toBe("hello world")
+        }).pipe(Effect.scoped))
+
+      it.effect("a rejected composition puts back the selection it started from after compositionend", () =>
+        Effect.gen(function*() {
+          const field = (yield* mountFields).field("Fixed")
+          field.focus()
+          field.setSelectionRange(1, 4)
+          field.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }))
+          field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, isComposing: true }))
+          field.value = "1か56"
+          field.setSelectionRange(2, 2)
+          field.dispatchEvent(new InputEvent("input", { bubbles: true, isComposing: true }))
+          yield* tick
+          expect(selection(field)).toEqual(["1か56", 2, 2])
+          field.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }))
+          yield* tick
+          expect(selection(field)).toEqual(["123456", 1, 4])
+        }).pipe(Effect.scoped))
+    })
   })
 
   describe("a field bound to the URL", () => {

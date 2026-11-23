@@ -68,6 +68,13 @@
  * after the element's children exist, skips a no-op so the caret doesn't jump,
  * and puts the Model's value back after the user changes it and the Model
  * didn't follow, whether `update` rejected the change or nothing handled it.
+ * A focused `input` or `textarea` keeps its selection when the host writes
+ * its `value`. A rejected edit, typed or composed, puts back the selection
+ * from before it. A value `update` changed, such as uppercased text or
+ * grouped digits, or one the Model set, keeps each end of the selection with
+ * the unchanged text before it, else after it, and a caret at the end stays at
+ * the end. When the text changed on both sides of the caret, as when a
+ * character typed next to a separator moves it, the caret keeps its offset.
  * A field's `value` isn't written while an input method composes text in it,
  * from `compositionstart`, or an `input` that says it's composing, to
  * `compositionend`, so a patch or a rejected `input` can't replace the text
@@ -146,7 +153,7 @@ const dropTargetEvents: ReadonlySet<string> = new Set(["dragenter", "dragleave",
 const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 
 /** Events the host listens to whether or not a handler wants them. */
-const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart"]
+const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart", "beforeinput"]
 
 /** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
 const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
@@ -333,6 +340,34 @@ const selectionOf = (target: EventTarget | null) => {
   }
 }
 
+interface FieldState {
+  readonly value: string
+  readonly start: number
+  readonly end: number
+  readonly direction: "forward" | "backward" | "none"
+}
+
+const fieldStateOf = (target: EventTarget | null): FieldState | undefined => {
+  const { selectionEnd, selectionStart } = selectionOf(target)
+  if (selectionStart === null || selectionEnd === null) return undefined
+  const field = target as HTMLInputElement
+  return { value: field.value, start: selectionStart, end: selectionEnd, direction: field.selectionDirection ?? "none" }
+}
+
+const offsetIn = (current: string, next: string, offset: number): number => {
+  const max = Math.min(current.length, next.length)
+  let prefix = 0
+  while (prefix < max && current.charCodeAt(prefix) === next.charCodeAt(prefix)) prefix++
+  if (offset <= prefix) return offset
+  let suffix = 0
+  while (
+    suffix < max - prefix &&
+    current.charCodeAt(current.length - 1 - suffix) === next.charCodeAt(next.length - 1 - suffix)
+  ) suffix++
+  const fromEnd = current.length - offset
+  return fromEnd <= suffix ? next.length - fromEnd : Math.min(offset, next.length - suffix)
+}
+
 /** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
 const pastedText = (event: Event): string => {
   try {
@@ -506,6 +541,57 @@ export const makeHost = (
   /** The events of `node` itself. */
   const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
+  const beforeEdits = new WeakMap<globalThis.Node, Map<string, FieldState>>()
+  let pendingEdit:
+    | { readonly node: globalThis.Node; readonly state: FieldState; readonly event: Partial<InputEvent> }
+    | undefined
+  const expectEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
+    const state = fieldStateOf(node)
+    const edit = pendingEdit = state === undefined ? undefined : { node, state, event }
+    // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
+    if (edit !== undefined) {
+      setTimeout(() => {
+        if (pendingEdit === edit) pendingEdit = undefined
+      }, 0)
+    }
+  }
+  const recordEdit = (node: globalThis.Node, state: FieldState | undefined) => {
+    if (state === undefined) return
+    let edits = beforeEdits.get(node)
+    if (edits === undefined) beforeEdits.set(node, edits = new Map())
+    edits.set(state.value, state)
+  }
+  const settleEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
+    const edit = pendingEdit
+    pendingEdit = undefined
+    if (edit?.node === node && edit.event.defaultPrevented !== true && edit.event.inputType === event.inputType) {
+      recordEdit(node, edit.state)
+    }
+  }
+  const retireEdits = (node: globalThis.Node) => {
+    if (!composing.has(node)) beforeEdits.delete(node)
+  }
+  const writeControlled = (element: any, name: string, value: unknown) => {
+    const state = name === "value" && element.getRootNode().activeElement === element
+      ? fieldStateOf(element)
+      : undefined
+    if (state === undefined) {
+      element[name] = value
+      return
+    }
+    const { scrollLeft, scrollTop } = element
+    element.value = value
+    const shown: string = element.value
+    const before = beforeEdits.get(element)?.get(shown)
+    if (before !== undefined) element.setSelectionRange(before.start, before.end, before.direction)
+    else if (state.start !== state.end || state.end !== state.value.length) {
+      const start = offsetIn(state.value, shown, state.start)
+      const end = state.end === state.start ? start : offsetIn(state.value, shown, state.end)
+      element.setSelectionRange(start, end, state.direction)
+    } else return
+    element.scrollLeft = scrollLeft
+    element.scrollTop = scrollTop
+  }
   const listening = new Map<string, (event: Event) => void>()
   // The pointer of the last `pointerdown`, which the click-like events that follow it report.
   let lastPointer: Html.PointerType | undefined
@@ -711,7 +797,7 @@ export const makeHost = (
         if ((node as globalThis.Element).getAttribute("popover") === "manual") {
           applyPopover(node as HTMLElement, value === true, true)
         }
-      } else if (element[name] !== value) element[name] = value
+      } else if (element[name] !== value) writeControlled(element, name, value)
     }
   }
   /** Restores `node` and what changing it also changes. */
@@ -748,7 +834,10 @@ export const makeHost = (
       later(() => {
         const nodes = restoring!
         restoring = undefined
-        for (const node of nodes) restoreAffected(node)
+        for (const node of nodes) {
+          restoreAffected(node)
+          retireEdits(node)
+        }
       })
     }
     restoring.add(target as globalThis.Node)
@@ -1006,11 +1095,18 @@ export const makeHost = (
     }
     const path = event.composedPath() as Array<globalThis.Node>
     const target = path[0] ?? event.target
-    if (name === "compositionstart" || name === "compositionend" || name === "input") {
+    if (name === "compositionstart" || name === "compositionend" || name === "input" || name === "beforeinput") {
       if (target !== null && target !== undefined && "nodeType" in target) {
-        if (name === "compositionstart" || (event as Partial<InputEvent>).isComposing === true) {
-          composing.add(target as globalThis.Node)
-        } else composing.delete(target as globalThis.Node)
+        const node = target as globalThis.Node
+        const e = event as Partial<InputEvent>
+        if (name === "beforeinput") {
+          if (e.isComposing !== true && !composing.has(node)) expectEdit(node, e)
+        } else {
+          if (name === "compositionstart") recordEdit(node, fieldStateOf(node))
+          else if (name === "input") settleEdit(node, e)
+          if (name === "compositionstart" || e.isComposing === true) composing.add(node)
+          else composing.delete(node)
+        }
       }
     }
     const entries = eventsAlong(path)
@@ -1197,7 +1293,8 @@ export const makeHost = (
         if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
         if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
-        if (element[name] !== value) element[name] = value
+        if (element[name] !== value) writeControlled(element, name, value)
+        if (name === "value") retireEdits(node)
         return
       }
       if (value === undefined) {
