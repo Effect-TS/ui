@@ -9,6 +9,8 @@ import { Counter as FragmentCounter } from "./autocounter/fragment/Counter.ts"
 import { Scoreboard } from "./autocounter/headless/Scoreboard.ts"
 import { Page } from "./counter/effect/Page.ts"
 import { EmbedFoldkitPage } from "./counter/FoldkitEmbed.ts"
+import { AllResults, PerformanceChart } from "./performance/Chart.ts"
+import { links } from "./performance/Results.ts"
 
 const Example = <M>(h: View.H<M>, options: {
   readonly title: string
@@ -343,6 +345,24 @@ export const LaunchPage = Component.define({
           h,
           "`Play` also mounts real child components end to end, so you no longer have to test a Command's Effect separately with a mock Layer like Foldkit 0.x recommended."
         )
+      ),
+      h.section.attr("aria-labelledby", "performance").children(
+        h.h2.id("performance").children("Performance on js-framework-benchmark"),
+        h.p.children(
+          "We ran Effect UI and Foldkit 0.x through ",
+          h.a.attr("href", links.harness).children("js-framework-benchmark"),
+          ", the keyed table benchmark most UI frameworks publish numbers for, alongside React, Vue, Svelte, Solid, and vanilla JS. Every entry renders the same table, and the harness times each operation from the click to the next paint."
+        ),
+        PerformanceChart(h),
+        P(
+          h,
+          "The first group shows script time: the JavaScript that runs between the click and the paint. Painting 1,000 rows took about 100 ms on the test machine whatever the framework, so script time separates the frameworks better than total time. Effect UI runs less JavaScript than Foldkit 0.x on seven of the nine operations, and less than half as much to create 10,000 rows. Foldkit 0.x is faster at swapping two rows, and the two are level on removing one."
+        ),
+        P(
+          h,
+          "Effect UI also ships a smaller bundle, paints first sooner, and uses less memory. Vue, Svelte, and Solid are still ahead of both on most operations, most of all on small updates. Effect UI runs `update` and the whole `view` for each Message and compares every row's arguments to find the few that changed, while Svelte and Solid write only the DOM nodes that depend on the changed state."
+        ),
+        AllResults(h)
       ),
       h.section.attr("aria-labelledby", "carries-over").children(
         h.h2.id("carries-over").children("What stays the same"),

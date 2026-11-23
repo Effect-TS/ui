@@ -470,6 +470,162 @@ a {
   transform: translateY(2px);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.perf {
+  margin-top: 1.6em;
+}
+
+.article .perf + p {
+  margin-top: 1.6em;
+}
+
+.perf table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.perf caption,
+.perf-all caption {
+  padding-bottom: 12px;
+  text-align: start;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.perf th,
+.perf td,
+.perf-table th,
+.perf-table td {
+  padding: 6px 0;
+  text-align: start;
+  vertical-align: middle;
+  font-weight: 400;
+}
+
+.perf thead th {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.perf thead th:first-child {
+  width: 38%;
+}
+
+.perf td {
+  padding-inline-start: 12px;
+}
+
+.perf tbody th[scope="row"] {
+  padding-inline-end: 8px;
+  line-height: 1.35;
+}
+
+.perf .perf-group th {
+  padding-top: 18px;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.perf-note {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.perf-bar {
+  display: block;
+  height: 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  background: var(--foreground);
+}
+
+.perf .foldkit .perf-bar {
+  background: var(--border-strong);
+}
+
+.perf-value {
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.perf-value.lower {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.unit {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+
+.perf-all {
+  margin-top: 1.6em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.perf-all summary {
+  padding: 12px 16px;
+  font-weight: 560;
+  cursor: pointer;
+}
+
+.perf-all[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.table-scroll {
+  position: relative;
+  overflow-x: auto;
+  padding: 16px;
+}
+
+.table-scroll + .table-scroll {
+  border-top: 1px solid var(--border);
+}
+
+.perf-table {
+  min-width: 640px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.perf-table thead th {
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--muted-foreground);
+}
+
+.perf-table th:not(:first-child),
+.perf-table td {
+  padding-inline-start: 12px;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.perf-table tbody tr + tr > * {
+  border-top: 1px solid var(--border);
+}
+
+.perf-table .effect-ui {
+  font-weight: 600;
+}
+
 .footer {
   margin-top: 96px;
   padding-top: 24px;
