@@ -172,14 +172,14 @@ export const LaunchPage = Component.define({
       Section(h, "Dependencies").children(
         h.h2.children("A component provides its own services"),
         h.p.class("prose").children(
-          "Say an editor saves drafts through a Drafts service. In Foldkit 0.x the editor's Command can ask for Drafts, but only the root can provide it, through makeApplication's resources. That Layer is built the first time a Command needs it and kept until the app shuts down, and every Command in the app can reach it. Leave it out and the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves. A Command can also provide the service inside its own Effect, which builds it again on every run."
+          "Say an editor saves drafts through a Drafts service. In Foldkit 0.x the editor's Command can ask for Drafts. To share one Drafts service across Commands, this app puts Drafts.layer in makeApplication's resources. The runtime builds that Layer the first time any Command or Subscription runs, whether or not it uses Drafts, and keeps it until the app shuts down. Every Command in the app can reach it. Leave it out and the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves. A Command can instead provide the service inside its own Effect, which builds it again on every run."
         ),
         h.div.class("compare").children(
           Listing(
             h,
             "Foldkit 0.x",
             h.props.provider.foldkit,
-            "The editor's Command asks for Drafts. The root provides it for the whole app."
+            "The editor's Command asks for Drafts. This app provides it at the root, to every Command."
           ),
           Listing(
             h,
@@ -189,7 +189,7 @@ export const LaunchPage = Component.define({
           )
         ),
         h.p.class("prose").children(
-          "Component.provide is Effect.provide for a component and everything below it. The editor's file exports Editor with its Layers already provided, so a page renders Editor and passes nothing down. The Layer is built when the first Editor mounts, shared by the Editors on screen, and released when the last one unmounts. Services now last as long as the components that use them, the same as state. Mount a component without its services and it doesn't compile. A test mounts EditorNoDeps and provides fakes."
+          "Component.provide is Effect.provide for a component and everything below it. The editor's file exports Editor with its Layers already provided, so a page renders Editor and passes nothing down. With two Editors on screen, each has its own text, and both use one Drafts service. It's built when the first Editor mounts and released when the last one unmounts, so removing one Editor drops that Editor's text and keeps Drafts for the other. Mounting EditorNoDeps, which has no Layers, still compiles, but the mounted app then needs SaveDraft, and TypeScript won't let you run it until something provides one. A test can mount EditorNoDeps with a fake."
         )
       ),
       Section(h, "What's next").children(
