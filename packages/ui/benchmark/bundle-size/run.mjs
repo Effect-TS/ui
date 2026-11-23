@@ -2,11 +2,12 @@
 //
 // Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary] [--spike] [--features]
+//   pnpm bundle-size [--json <file>] [--base <file>] [--vocabulary] [--spike] [--features] [--development]
 //
 // Added gzip bytes are the counter total minus a separately bundled effect-only client.
 // Pass --vocabulary to measure the opt-in counter with the same click assertion.
 // Pass --spike to measure counter-spike.ts, the counter on the EFF-4218 kernel spike.
+// Pass --development to bundle with NODE_ENV=development, which keeps the checks a production build drops.
 // Pass --features to measure features.ts instead of the counter: an app with a Layer, a slot, a failure
 // fallback and the message log. With --spike it is features-spike.ts.
 //
@@ -22,8 +23,9 @@ import { gzipSync } from "node:zlib"
 import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
-const { values: { base, features, json, spike, vocabulary } } = parseArgs({
+const { values: { base, development, features, json, spike, vocabulary } } = parseArgs({
   options: {
+    development: { type: "boolean", default: false },
     features: { type: "boolean", default: false },
     vocabulary: { type: "boolean", default: false },
     spike: { type: "boolean", default: false },
@@ -31,6 +33,8 @@ const { values: { base, features, json, spike, vocabulary } } = parseArgs({
     json: { type: "string" }
   }
 })
+// Vite replaces `process.env.NODE_ENV` with this, whatever the mode.
+process.env.NODE_ENV = development ? "development" : "production"
 const ui = path.resolve(import.meta.dirname, "../..")
 const effectDir = path.join(ui, "node_modules/effect")
 const effect = JSON.parse(fs.readFileSync(path.join(effectDir, "package.json"), "utf8")).version
@@ -115,7 +119,7 @@ async function measure() {
 }
 
 const elements = (vocabulary ? "Html.vocabulary" : "Html") + (features ? ", features app" : "") +
-  (spike ? " (kernel spike)" : "")
+  (spike ? " (kernel spike)" : "") + (development ? ", development" : "")
 const result = { ...await measure(), elements }
 const headers = ["Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
 const row = [elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]
@@ -132,7 +136,7 @@ if (base) {
 const report = [
   "### Counter bundle size",
   "",
-  `Vite/Rolldown, production, default Oxc minification, ${target}, single ES module, gzip level 9.`,
+  `Vite/Rolldown, production${development ? " with NODE_ENV=development" : ""}, default Oxc minification, ${target}, single ES module, gzip level 9.`,
   "",
   ...[headers, headers.map(() => "---"), row].map((cells) => "| " + cells.join(" | ") + " |"),
   ""
