@@ -235,6 +235,10 @@ h2 + .split {
   color: var(--muted-foreground);
 }
 
+.compare + .prose {
+  margin-top: 32px;
+}
+
 .compare {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -301,6 +305,12 @@ h2 + .split {
   font-size: 1.125rem;
   font-weight: 620;
   letter-spacing: -0.015em;
+}
+
+.listing-caption {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
 }
 
 .flow-meta {

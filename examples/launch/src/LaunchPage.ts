@@ -1,3 +1,4 @@
+import { Code } from "#components/Code"
 import { Flow } from "#components/Flow"
 import { Snippet } from "#domain/Snippet"
 import { Component, Head, type View } from "@effect/ui"
@@ -16,6 +17,15 @@ const Terms = <M>(h: View.H<M>, name: string, items: ReadonlyArray<readonly [ter
     ...items.map(([term, description]) =>
       h.div.key(term).class("term").children(h.dt.children(term), h.dd.children(description))
     )
+  )
+
+const Listing = <M>(h: View.H<M>, title: string, files: ReadonlyArray<Snippet>, caption: string) =>
+  h.figure.class("flow").attr("aria-label", title).children(
+    h.header.class("flow-head").children(h.h3.class("flow-title").children(title)),
+    h.div.class("files").children(
+      ...files.map((snippet) => h.div.key(snippet.name).children(Code(h, { snippet, lit: -1 })))
+    ),
+    h.figcaption.class("listing-caption").children(caption)
   )
 
 const names = [
@@ -45,7 +55,11 @@ const totals = [
 export const LaunchPage = Component.define({
   name: "LaunchPage",
   scoped: false,
-  props: Schema.Struct({ effect: Snippet, foldkit: Schema.Array(Snippet) }),
+  props: Schema.Struct({
+    effect: Snippet,
+    foldkit: Schema.Array(Snippet),
+    provider: Schema.Struct({ foldkit: Schema.Array(Snippet), effect: Schema.Array(Snippet) })
+  }),
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -59,7 +73,7 @@ export const LaunchPage = Component.define({
         Label(h, "Effect UI"),
         h.h1.class("title").children("Foldkit's frontend continues as Effect UI"),
         h.p.class("lede").children(
-          "Foldkit 0.x was a frontend framework. Its frontend work continues as Effect UI, and Foldkit becomes the full-stack framework built on it. If you've built with Foldkit 0.x, most of what you know carries over. This page shows the one thing that changed the most, and why."
+          "Foldkit 0.x was a frontend framework. Its frontend work continues as Effect UI, and Foldkit becomes the full-stack framework built on it. If you've built with Foldkit 0.x, most of what you know carries over. This page shows the two things that changed the most, and why."
         ),
         Terms(h, "names", names)
       ),
@@ -153,6 +167,29 @@ export const LaunchPage = Component.define({
         h.h2.children("By default, state lasts as long as the component is rendered"),
         h.p.class("prose").children(
           "Stop rendering a component and its Model goes with it. That's the trade for not storing every child's state yourself, and we think it's the right one. When state has to survive being off screen, like a draft on a tab the reader switched away from, the parent renders that child with h.scoped, and its Model is kept while it's hidden."
+        )
+      ),
+      Section(h, "Dependencies").children(
+        h.h2.children("A component provides its own services"),
+        h.p.class("prose").children(
+          "Say an editor saves drafts through a Drafts service. In Foldkit 0.x the editor's Command can ask for Drafts, but only the root can provide it, through makeApplication's resources. That Layer is built the first time a Command needs it and kept until the app shuts down, and every Command in the app can reach it. Leave it out and the app still compiles. It crashes with \"Service not found: Drafts\" the first time the editor saves. A Command can also provide the service inside its own Effect, which builds it again on every run."
+        ),
+        h.div.class("compare").children(
+          Listing(
+            h,
+            "Foldkit 0.x",
+            h.props.provider.foldkit,
+            "The editor's Command asks for Drafts. The root provides it for the whole app."
+          ),
+          Listing(
+            h,
+            "Effect UI",
+            h.props.provider.effect,
+            "The editor provides Drafts in its own file. The entry module never mentions it."
+          )
+        ),
+        h.p.class("prose").children(
+          "Component.provide is Effect.provide for a component and everything below it. The editor's file exports Editor with its Layers already provided, so a page renders Editor and passes nothing down. The Layer is built when the first Editor mounts, shared by the Editors on screen, and released when the last one unmounts. Services now last as long as the components that use them, the same as state. Mount a component without its services and it doesn't compile. A test mounts EditorNoDeps and provides fakes."
         )
       ),
       Section(h, "What's next").children(
