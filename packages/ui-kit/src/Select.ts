@@ -91,7 +91,8 @@
  *
  * On the trigger, Enter, Space, ArrowDown and ArrowUp open the popup and
  * move focus to the selected item, or to the first or, for ArrowUp, the
- * last item. Typing a letter selects the next matching item without
+ * last item. Inside a vertical `Toolbar`, ArrowDown and ArrowUp move focus
+ * instead. Typing a letter selects the next matching item without
  * opening. In the popup, ArrowDown, ArrowUp, Home and End move between
  * items, disabled ones included, and typing moves to the next item whose
  * label starts with what's typed, skipping disabled ones. Enter and Space
@@ -222,6 +223,7 @@ import { raiseAbove } from "./internal/topLayer.ts"
 import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
+import { Toolbar } from "./Toolbar.ts"
 
 /**
  * One option of a `Select`: the value it submits, the text the trigger shows
@@ -1137,6 +1139,9 @@ export const Select = Component.define({
   message: SelectMessage,
   events: SelectEvents,
   restore: false,
+  shared: {
+    toolbar: { owner: Toolbar, optional: true }
+  },
   elements: Html
 }).make({
   init: () => ({
@@ -1273,6 +1278,7 @@ export const Select = Component.define({
     const readOnly = props.readOnly === true
     const required = props.required === true
     const multiple = props.multiple === true
+    const arrowsOpen = p.shared.toolbar?.orientation !== "vertical"
     const values = valuesOf(props)
     const chosen = new Set(values)
     const filled = filledOf(props)
@@ -1363,7 +1369,7 @@ export const Select = Component.define({
           ({ alt, composing, ctrl, key, meta }) =>
             composing
               ? undefined
-              : key === "ArrowDown" || key === "ArrowUp" ||
+              : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
                   (printable(key, alt, ctrl, meta) && (key !== " " || typing(model)))
               ? SelectMessage.PressedTriggerKey({ key })
               : undefined,
