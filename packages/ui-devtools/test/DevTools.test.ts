@@ -305,8 +305,12 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.notInclude(step(root, "Update").meta, "stopped ")
       assert.match(step(root, "command 0").meta, /^stopped #\d+$/)
       assert.match(step(root, "command 1").meta, /^stopped #\d+$/)
+      assert.notStrictEqual(step(root, "command 0").meta, step(root, "command 1").meta)
       yield* follow(root, "command 0")
       assert.include(step(root, "issued command 1").body, "{\"id\":\"b\"}")
+      yield* click(oldest(root, /Update Escaped$/))
+      yield* follow(root, "command 1")
+      assert.include(step(root, "issued command 0").body, "{\"id\":\"a\"}")
     }))
 
   it.live("keeps a key pressed in the overlay from the app's document listeners", () =>
@@ -331,7 +335,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
 
   it.live("handles evicted entries in the causal chain and Model diff", () =>
     Effect.gen(function*() {
-      const { root } = yield* mount("interrupted", 6)
+      const { root } = yield* mount("interrupted", 7)
       yield* open(root)
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Commands" }))
       yield* click(entry(root, /CommandInterrupted notes\/SaveNote · interrupt$/)[0]!)
@@ -340,6 +344,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNull(issuedBy.step.querySelector("button.ref"))
       yield* follow(root, "causedBy")
       assert.include(heading(root), "PressedEscape")
+      const saved = oldest(root, /Update SucceededSaveNote$/)
+      assert.strictEqual(text(saved.closest(".row")!.querySelector(".glyph")), "~")
+      yield* click(saved)
       assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "diff unavailable")
       assert.match(
         text(root.querySelector(".pane.model h4")),
