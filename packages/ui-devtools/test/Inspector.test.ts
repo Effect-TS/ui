@@ -265,6 +265,25 @@ describe("Inspector", () => {
     assert.deepStrictEqual(session.records().map((record) => [record.kind, record.start]), [["subscription", 5]])
   })
 
+  it("compares a Model only with a state entry the buffer holds", () => {
+    const full = load("interrupted")
+    const [last] = full.updates("Editor[n1]", "PressedEscape")
+    const later = (seq: number): Entry => ({ ...last, seq })
+
+    const small = load("interrupted", 3)
+    assert.deepStrictEqual(small.session.resolve(last.seq), { _tag: "Outside", seq: last.seq })
+    small.inspector.ingest([later(30), later(31)])
+    assert.deepStrictEqual(small.session.previous(30), { seq: last.seq })
+    assert.deepStrictEqual(small.session.previous(31), { seq: 30, changed: false })
+    small.inspector.ingest([later(32), later(33)])
+    assert.deepStrictEqual(small.session.resolve(30), { _tag: "Outside", seq: 30 })
+    assert.deepStrictEqual(small.session.previous(31), { seq: 30, changed: false })
+
+    full.session.clear()
+    full.inspector.ingest([later(30)])
+    assert.deepStrictEqual(full.session.previous(30), { seq: last.seq })
+  })
+
   it("diffs nested values by key and by index", () => {
     assert.deepStrictEqual(
       Inspector.diff(
