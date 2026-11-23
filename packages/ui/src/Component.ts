@@ -231,6 +231,8 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
   readonly lists?: ReadonlyArray<ListIssue> | undefined
   /** The messages `update` sent to owners above it, in order. */
   readonly sends?: ReadonlyArray<Send> | undefined
+  /** The types of the view transition `update` asked for, when it asked for one. */
+  readonly viewTransition?: ReadonlyArray<string> | undefined
 }
 
 /**
@@ -538,6 +540,11 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
   readonly lists: ReadonlyArray<ListIssue>
   /** The messages sent to owners above, in order. */
   readonly sends: ReadonlyArray<Send>
+  /**
+   * The types of the view transition `viewTransition` asked for, `[]` for
+   * one without types, and `undefined` when the step asked for none.
+   */
+  readonly viewTransitionTypes: ReadonlyArray<string> | undefined
   /** Replaces the Model. */
   set(model: Model): Step<Model, Msg, Events, R, L>
   /**
@@ -589,6 +596,75 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
   ): Step<Model, Msg, Events, R | (Shared.Of<O> & SendTarget<O>), L>
+  /**
+   * Animates the DOM update this step causes with the browser's View
+   * Transitions API. `types` tag the transition for CSS
+   * `:active-view-transition-type(...)` selectors.
+   *
+   * **Details**
+   *
+   * A step asks for the transition and the host decides. `BrowserHost`
+   * runs the flush that renders this update inside
+   * `document.startViewTransition`. Where the browser lacks the API, or the
+   * user prefers reduced motion, the flush commits once without animation. A
+   * host with no document, such as `TestHost` or the server, ignores the
+   * request. The step's `viewTransitionTypes` and the log's `Update` entry
+   * hold it.
+   *
+   * The rest of the flush runs inside the transition, and every update it
+   * renders is animated. Until the browser calls back, about a frame later,
+   * the flush waits: its DOM patch, the head, a navigation's scroll and
+   * focus, and `afterCommit` work land together inside the callback.
+   * Messages and query results that arrive meanwhile render in that callback
+   * too, and one for a component below a waiting update is delivered there,
+   * with the props the new view gives it. Commands start as soon as
+   * `update` returns, so a navigation's history entry is already pushed.
+   *
+   * The transition's types are merged from the steps that asked before the
+   * flush was handed to the browser. A step that asks while the callback is
+   * pending renders in that callback, and its types are dropped: the browser
+   * already has the transition's types, and it starts no second one.
+   *
+   * The first mount and hydration never animate. A component can animate
+   * its own updates and, from its handler for a child's event, the child's
+   * changes that came with the event. The transition is the document's, so a
+   * second root asking for one in the same frame skips the first's
+   * animation, and both updates still commit. Give each animated element a
+   * `viewTransitionName` that is unique among the elements on screen.
+   *
+   * **Example** (Animating a layout switch)
+   *
+   * ```ts
+   * import { Component, UiSchema } from "@effect/ui"
+   * import { Html } from "@effect/ui/html"
+   * import { Schema } from "effect"
+   *
+   * const Layout = Schema.Literals(["grid", "list"])
+   * const Message = UiSchema.TaggedEnum({
+   *   ClickedLayout: { layout: Layout },
+   *   TypedFilter: { value: Schema.String }
+   * })
+   *
+   * export const Gallery = Component.define({
+   *   name: "Gallery",
+   *   scoped: false,
+   *   model: Schema.Struct({ layout: Layout, filter: Schema.String }),
+   *   message: Message,
+   *   elements: Html
+   * }).make({
+   *   init: () => ({ layout: "grid" as const, filter: "" }),
+   *   update: {
+   *     ClickedLayout: (_model, { layout }, $) => $.evolve({ layout }).viewTransition(["layout-change"]),
+   *     TypedFilter: (_model, { value }, $) => $.evolve({ filter: value })
+   *   },
+   *   view: (model, h) =>
+   *     h.ul.class(model.layout).children(
+   *       ...["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
+   *     )
+   * })
+   * ```
+   */
+  viewTransition(types?: ReadonlyArray<string>): Step<Model, Msg, Events, R, L>
 }
 
 /**
@@ -715,41 +791,54 @@ const StepProto = {
     return Pipeable.pipeArguments(this, arguments)
   },
   set(this: Step<any, any, any, any>, model: unknown) {
-    return makeStep(model, this.commands, this.emitted, this.lists, this.sends)
+    return stepWith(this, { model })
   },
   evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
-    return makeStep(
-      UiStruct.evolve<any>(this.model, fields as never),
-      this.commands,
-      this.emitted,
-      this.lists,
-      this.sends
-    )
+    return stepWith(this, { model: UiStruct.evolve<any>(this.model, fields as never) })
   },
   run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
-    return makeStep(this.model, [...this.commands, ...commands], this.emitted, this.lists, this.sends)
+    return stepWith(this, { commands: [...this.commands, ...commands] })
   },
   emit(this: Step<any, any, any, any>, ...emitted: ReadonlyArray<unknown>) {
-    return makeStep(this.model, this.commands, [...this.emitted, ...emitted], this.lists, this.sends)
+    return stepWith(this, { emitted: [...this.emitted, ...emitted] })
   },
   loadMore(this: Step<any, any, any, any>, name: string) {
-    return makeStep(this.model, this.commands, this.emitted, [...this.lists, { name, op: "loadMore" }], this.sends)
+    return stepWith(this, { lists: [...this.lists, { name, op: "loadMore" }] })
   },
   reset(this: Step<any, any, any, any>, name: string) {
-    return makeStep(this.model, this.commands, this.emitted, [...this.lists, { name, op: "reset" }], this.sends)
+    return stepWith(this, { lists: [...this.lists, { name, op: "reset" }] })
   },
   send(this: Step<any, any, any, any>, owner: Headless.Any, message: unknown) {
-    return makeStep(this.model, this.commands, this.emitted, this.lists, [...this.sends, { owner, message }])
+    return stepWith(this, { sends: [...this.sends, { owner, message }] })
+  },
+  viewTransition(this: Step<any, any, any, any>, types: ReadonlyArray<string> = []) {
+    return stepWith(this, { viewTransitionTypes: mergeTypes(this.viewTransitionTypes, types) })
   }
 }
+
+const mergeTypes = (
+  a: ReadonlyArray<string> | undefined,
+  b: ReadonlyArray<string> | undefined
+): ReadonlyArray<string> | undefined => a === undefined ? b : b === undefined ? a : [...new Set([...a, ...b])]
 
 const makeStep = (
   model: unknown,
   commands: ReadonlyArray<Command.Command<any, any>>,
   emitted: ReadonlyArray<unknown>,
   lists: ReadonlyArray<ListIssue>,
-  sends: ReadonlyArray<Send>
-): Step<any, any, any, any> => Object.assign(Object.create(StepProto), { model, commands, emitted, lists, sends })
+  sends: ReadonlyArray<Send>,
+  viewTransitionTypes: ReadonlyArray<string> | undefined
+): Step<any, any, any, any> =>
+  Object.assign(Object.create(StepProto), { model, commands, emitted, lists, sends, viewTransitionTypes })
+
+const stepWith = (
+  step: Step<any, any, any, any>,
+  change: Partial<Step<any, any, any, any>>
+): Step<any, any, any, any> =>
+  Object.assign(
+    makeStep(step.model, step.commands, step.emitted, step.lists, step.sends, step.viewTransitionTypes),
+    change
+  )
 
 type AnyUpdate = (model: unknown, msg: unknown, $: Update<any, any, any, any>) => unknown
 
@@ -767,6 +856,7 @@ const UpdateProto = {
     const emitted = [...this.emitted]
     const lists = [...this.lists]
     const sends = [...this.sends]
+    let viewTransitionTypes = this.viewTransitionTypes
     for (const update of updates) {
       const next = toNext(
         update(model, msg, makeUpdate(model, this.props, this.queries, this.shared, msg, this["~self"]))
@@ -776,8 +866,9 @@ const UpdateProto = {
       emitted.push(...next.events)
       if (next.lists !== undefined) lists.push(...next.lists)
       if (next.sends !== undefined) sends.push(...next.sends)
+      viewTransitionTypes = mergeTypes(viewTransitionTypes, next.viewTransition)
     }
-    return makeStep(model, commands, emitted, lists, sends)
+    return makeStep(model, commands, emitted, lists, sends, viewTransitionTypes)
   }
 }
 
@@ -796,6 +887,7 @@ const makeUpdate = (
     emitted: [],
     lists: [],
     sends: [],
+    viewTransitionTypes: undefined,
     props,
     queries,
     shared,
@@ -803,7 +895,7 @@ const makeUpdate = (
     "~self": self
   })
 
-const initSet = (model: unknown) => makeStep(model, [], [], [], []) as Step<any, any, any, never>
+const initSet = (model: unknown) => makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
 const makeInit = (props: unknown): Init<any, any, any, any> => ({ props, set: initSet })
 
 // The effects of an `init` or `update` that returned a bare Model: shared, and frozen, since `init` hands
@@ -827,7 +919,8 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
       commands: result.commands,
       events: result.emitted,
       lists: (result as Step<any, any, any>).lists,
-      sends: (result as Step<any, any, any>).sends
+      sends: (result as Step<any, any, any>).sends,
+      viewTransition: (result as Step<any, any, any>).viewTransitionTypes
     }
     : { model: result, commands: noEffects, events: noEffects }
 

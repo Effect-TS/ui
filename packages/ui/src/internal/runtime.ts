@@ -1769,7 +1769,7 @@ const setup = (
   const wake = () => {
     if (!scheduled) {
       scheduled = true
-      executor.schedule(flush)
+      executor.schedule(runScheduled)
     }
   }
   /**
@@ -1822,6 +1822,15 @@ const setup = (
   let busy = 0
   // The instance `renderAbove` is rendering the ancestors of.
   let receiving: Instance | undefined
+  const dirtyAbove = (inst: Instance): Instance | undefined => {
+    if (dirty.size === 0 || busy > 0) return undefined
+    let top: Instance | undefined
+    for (let at = inst.parent; at !== undefined; at = at.parent) if (dirty.has(at)) top = at
+    return top
+  }
+  const waitsForTransition = (inst: Instance) =>
+    (resume !== undefined || (transitionTypes !== undefined && (mayTransition || !draining))) &&
+    dirtyAbove(inst) !== undefined
   /**
    * Renders the dirty instances above `inst`, outermost first, before it is given a message or a
    * query result. Its `update` then reads the props its ancestors' Models give it now, and it is gone
@@ -1832,9 +1841,7 @@ const setup = (
    * render, and rendering it now would write the older value over what the user typed.
    */
   const renderAbove = (inst: Instance) => {
-    if (dirty.size === 0 || busy > 0) return
-    let top: Instance | undefined
-    for (let at = inst.parent; at !== undefined; at = at.parent) if (dirty.has(at)) top = at
+    const top = dirtyAbove(inst)
     if (top === undefined) return
     const above: Array<Instance> = []
     for (let at = inst.parent; at !== top.parent; at = at!.parent) above.push(at!)
@@ -1872,18 +1879,48 @@ const setup = (
     deferred.push(from === undefined ? f : () => under(from, f))
     wake()
   }
+  const receive = (inst: Instance, f: () => void): void =>
+    step(() => {
+      if (waitsForTransition(inst)) return defer(() => receive(inst, f))
+      renderAbove(inst)
+      f()
+    })
   /** Runs `f` once the current render is committed. */
   const afterCommit = (f: () => void) => {
     if (rendering || scheduled || dirty.size > 0) committed.push(f)
     else f()
   }
-  function flush() {
+  let transitionTypes: Set<string> | undefined
+  let mayTransition = false
+  let resume: (() => void) | undefined
+  function runScheduled() {
+    if (scheduled && resume === undefined && !rootClosed) flush(true)
+  }
+  function flush(animate: boolean) {
     scheduled = false
     rendering = true
     flushes++
     sendPasses.clear()
     sharedPasses.clear()
-    drain()
+    mayTransition = animate
+    finishFlush()
+  }
+  function finishFlush() {
+    const done = drain()
+    mayTransition = false
+    const types = transitionTypes
+    transitionTypes = undefined
+    if (!done) {
+      scheduled = true
+      const update = () => {
+        if (resume !== update) return
+        resume = undefined
+        scheduled = false
+        finishFlush()
+      }
+      resume = update
+      return host.viewTransition!(update, [...types!])
+    }
     if (reportPending) reportAdoption()
     host.commit?.()
     afterCommitHooks()
@@ -1891,21 +1928,22 @@ const setup = (
     runCommitted()
     checkIdle()
   }
-  function drain() {
+  function drain(): boolean {
     draining = true
     try {
-      drainLoop()
+      return drainLoop()
     } finally {
       draining = false
       // What the mount, or a child that adopted once its Layer was ready, published outside a render.
       if (patching === 0) forgetPublished()
     }
   }
-  function drainLoop() {
+  function drainLoop(): boolean {
     do {
       // A mount or a closure that rendered alone leaves its author's placed slots to check.
       checkPendingAuthors()
       while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0) {
+        if (mayTransition && transitionTypes !== undefined && dirty.size > 0) return false
         if (deferred.length > 0) {
           deferred.shift()!()
           checkPendingAuthors()
@@ -1928,6 +1966,7 @@ const setup = (
       }
       foldHead()
     } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
+    return true
   }
   /**
    * Decides whether the server is idle once the current callback has finished:
@@ -2751,8 +2790,7 @@ const setup = (
   // -- instances ------------------------------------------------------------
   /** Runs `update` for a message to `inst`, in a step of its own. */
   const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
-    step(() => {
-      renderAbove(inst)
+    receive(inst, () => {
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
       let next: ReturnType<typeof component.update>
@@ -2779,6 +2817,7 @@ const setup = (
         events: next.events,
         lists: next.lists ?? [],
         sends: next.sends ?? [],
+        ...(next.viewTransition === undefined ? undefined : { viewTransition: next.viewTransition }),
         // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
         ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty }),
         ...(shared === undefined ? undefined : { shared })
@@ -3636,7 +3675,13 @@ const setup = (
     for (let index = 0; index < commands.length; index++) {
       issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
     }
-    if (!initial) markDirty(inst)
+    if (!initial) {
+      markDirty(inst)
+      if (next.viewTransition !== undefined && attached && host.viewTransition !== undefined) {
+        transitionTypes ??= new Set()
+        for (const type of next.viewTransition) transitionTypes.add(type)
+      }
+    }
     syncSubscriptions(inst)
     // After the watches follow the Model, so a load more reaches the args the query returns for it.
     if (!initial && next.lists !== undefined) {
@@ -4532,8 +4577,7 @@ const setup = (
         )
         // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
         const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
-          step(() => {
-            renderAbove(inst)
+          receive(inst, () => {
             if (current()) f(running.latest)
           })
         const deliver = (message: unknown, accepted?: () => void) =>
@@ -4645,8 +4689,7 @@ const setup = (
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
-        step(() => {
-          renderAbove(inst)
+        receive(inst, () => {
           if (running.released || inst.closed) return
           writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
         })
@@ -7338,7 +7381,13 @@ const setup = (
   rootRendered = () => listOf(root.rendered)
   rootInstance = root
   // Added after the root forked its Scope, so it runs before that Scope closes.
-  addFinalizer(rootScope, Effect.sync(() => leave(root)))
+  addFinalizer(
+    rootScope,
+    Effect.sync(() => {
+      resume = undefined
+      leave(root)
+    })
+  )
   if (root.failure === undefined) placeEach(container, root.rendered, rootRef)
   started = true
   if (waiting === 0 && !adoptedDone) {
@@ -7543,7 +7592,8 @@ const setup = (
       checkIdle()
     },
     freeze: () => {
-      if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
+      if (resume !== undefined) resume()
+      else if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush(false)
       frozen = true
       return cache
     }

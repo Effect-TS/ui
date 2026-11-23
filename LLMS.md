@@ -973,6 +973,11 @@ client, not the services.
   mount folds them into one document head. This entry
   module mounts it with `BrowserRouter`. The routes are in
   `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
+- **[View transitions](./ai-docs/src/10_ui/32_view-transitions.ts)**:
+  Animate an update with the browser's View Transitions API: a board that
+  morphs its cards between a grid and a list, and a root that slides pages in
+  the direction of the navigation. `$.viewTransition` asks for the animation
+  in `update`, and `BrowserHost` runs it.
 - **[Search, filters and pagination in the URL](./ai-docs/src/10_ui/35_url-state.ts)**:
   Keep a search page's text, order and page number in the search, so a link
   or a reload shows the same results. The page reads them from its route,
