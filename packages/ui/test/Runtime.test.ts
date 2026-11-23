@@ -2622,7 +2622,7 @@ describe("Runtime", () => {
         assert.strictEqual(batches.length, 1)
       }))
 
-    it.effect("makeEncoded redacts a key two record signatures match, and sends a sibling its Schema rejects as a placeholder", () =>
+    it.effect("makeEncoded masks overlapping keys, and sends any part its Schema rejects as a placeholder, checked containers included", () =>
       provideHost(Effect.gen(function*() {
         const EncodedSecret = Schema.Redacted(Schema.String).pipe(
           Schema.decodeTo(
@@ -2632,26 +2632,36 @@ describe("Runtime", () => {
         )
         const Secret = Schema.Record(Schema.TemplateLiteral(["secret-", Schema.String]), EncodedSecret)
         const Loose = Schema.Record(Schema.String, Schema.Unknown)
+        const Checked = Schema.Array(Schema.Number).check(Schema.isMinLength(2))
         for (const order of [[Secret, Loose], [Loose, Secret]] as const) {
-          const Entries = Schema.StructWithRest(
-            Schema.Struct({ n: Schema.Number }),
-            order as unknown as readonly [typeof Secret, typeof Loose]
-          )
-          const entries = { n: "rejected-sibling", "secret-a": "must-not-log" } as unknown as typeof Entries.Type
-          const Message = UiSchema.TaggedEnum({ Set: { entries: Entries } })
+          const signatures = order as unknown as readonly [typeof Secret, typeof Loose]
+          const Page = Schema.StructWithRest(Schema.Struct({}), signatures)
+          const Entries = Schema.StructWithRest(Schema.Struct({ n: Schema.Number, list: Checked }), signatures)
+          const State = Schema.Struct({ entries: Entries, pages: Schema.Array(Page).check(Schema.isMinLength(2)) })
+          const page = (note: string) => ({ "secret-a": "must-not-log", note })
+          const state = {
+            entries: { n: "rejected-sibling", list: [987654321], "secret-a": "must-not-log" },
+            pages: [page("unchecked-page")]
+          } as unknown as typeof State.Type
+          const Message = UiSchema.TaggedEnum({ Set: { state: State } })
           const Vault = Component.define({
             name: "Vault",
             scoped: false,
-            props: Schema.Struct({ entries: Entries }),
-            model: Entries,
+            props: State,
+            model: State,
             message: Message
           }).make({
-            init: () => entries,
-            update: (_, message) => message.entries,
+            init: () => state,
+            update: (_, message) => message.state,
             view: (_, h) => h.text("vault")
           })
-          const root = yield* TestHost.mount(Vault, { entries })
-          root.send(Message.Set({ entries: { ...entries, other: 1 } }))
+          const root = yield* TestHost.mount(Vault, state)
+          root.send(Message.Set({
+            state: {
+              entries: { ...state.entries, other: 1 },
+              pages: [page("checked-page"), page("checked-page")]
+            } as unknown as typeof State.Type
+          }))
           yield* TestHost.settle
           const frames: Array<MessageLog.WireEntry> = []
           const warnings: Array<string> = []
@@ -2663,23 +2673,35 @@ describe("Runtime", () => {
             for (const entry of root.log()) log.record(entry)
             yield* Effect.yieldNow
           })).pipe(Effect.provide(Logger.layer([logger])))
-          const mounted = frames.find((frame) => frame._tag === "Mounted")!
-          const update = frames.find((frame) => frame._tag === "Update")!
-          const masked = { n: { "~unserialisable": "encode" }, "secret-a": { "~redacted": true } }
-          assert.deepStrictEqual([mounted.props, mounted.model], [{ entries: masked }, masked])
-          assert.deepStrictEqual([update.message, update.model], [{ "~unserialisable": "encode" }, {
-            ...masked,
-            other: 1
-          }])
           const json = JSON.stringify(frames)
-          assert.notInclude(json, "must-not-log")
-          assert.notInclude(json, "rejected-sibling")
+          const copied = (JSON.parse(json) as Array<MessageLog.WireEntry>).map((frame) =>
+            Schema.decodeUnknownSync(MessageLog.Wire)(frame)
+          )
+          const failed = { "~unserialisable": "encode" }
+          const redacted = { "~redacted": true }
+          const masked = { n: failed, list: failed, "secret-a": redacted }
+          const checkedPage = { "secret-a": redacted, note: "checked-page" }
+          const before = { entries: masked, pages: failed }
+          for (const received of [frames, copied]) {
+            const mounted = received.find((frame) => frame._tag === "Mounted")!
+            const update = received.find((frame) => frame._tag === "Update")!
+            assert.deepStrictEqual([mounted.props, mounted.model], [before, before])
+            assert.deepStrictEqual([update.message, update.model], [failed, {
+              entries: { ...masked, other: 1 },
+              pages: [checkedPage, checkedPage]
+            }])
+          }
+          for (const value of ["must-not-log", "rejected-sibling", "987654321", "unchecked-page"]) {
+            assert.notInclude(json, value)
+          }
           assert.deepStrictEqual(warnings.map((message) => message.split(" failed")[0]).sort(), [
             "MessageLog: Vault.message",
             "MessageLog: Vault.model",
             "MessageLog: Vault.props"
           ])
         }
+        const Keep = Command.make("Keep", { args: { list: Checked } }, () => Effect.void)
+        assert.deepStrictEqual(MessageLog.encodeCommand(Keep.make({ list: [987654321] })).args, { list: [987654321] })
       })))
 
     it.effect("a run that interrupts itself while its instance's close is held open logs self", () =>

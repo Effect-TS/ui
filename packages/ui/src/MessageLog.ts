@@ -1312,6 +1312,7 @@ export const makeEncoder = (options?: {
       const out = guarded(() =>
         encodeAt(schema.ast, value, {
           path: new Set(),
+          strict: true,
           leaf: () => {
             rejected = true
             return failed
@@ -1716,6 +1717,7 @@ const guarded = (f: () => Schema.Json): Schema.Json => {
 
 interface Walk {
   readonly path: Set<object>
+  readonly strict: boolean
   readonly leaf: (ast: SchemaAST.AST, value: unknown) => Schema.Json
 }
 /**
@@ -1731,7 +1733,8 @@ interface Walk {
  */
 const encodeAt = (ast: SchemaAST.AST, value: unknown, walk: Walk): Schema.Json => {
   if (typeof value === "object" && value !== null && walk.path.has(value)) return { "~unserialisable": "cycle" }
-  const encode = holdsRedactedOverlap(ast) ? null : encoderOf(ast)
+  const overlap = holdsRedactedOverlap(ast)
+  const encode = overlap ? null : encoderOf(ast)
   if (encode !== null) {
     try {
       // A Schema such as `Schema.Any` passes a value through, so the result goes through `structural` too.
@@ -1740,6 +1743,7 @@ const encodeAt = (ast: SchemaAST.AST, value: unknown, walk: Walk): Schema.Json =
       // Encoded part by part below.
     }
   }
+  if (walk.strict && (!overlap || (ast.checks !== undefined && !guardOf(ast)(value)))) return walk.leaf(ast, value)
   if (ast.encoding === undefined) {
     switch (ast._tag) {
       case "Suspend":
@@ -1828,7 +1832,7 @@ const fallback = (ast: SchemaAST.AST, value: unknown): Schema.Json =>
  * @internal
  */
 export const encodeArgs = (schema: Schema.Top, value: unknown): Schema.Json => {
-  const walk: Walk = { path: new Set(), leaf: fallback }
+  const walk: Walk = { path: new Set(), strict: false, leaf: fallback }
   // A struct or a class is encoded field by field.
   const fields = (schema as { readonly fields?: Schema.Struct.Fields }).fields
   if (fields !== undefined && isPlainRecord(value)) {
