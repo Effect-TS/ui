@@ -1,6 +1,6 @@
 import { HtmlScheduler } from "@effect/ui/html"
 import { afterEach, describe, expect, it, vi } from "@effect/vitest"
-import { Context, Effect, Fiber, Scheduler } from "effect"
+import { Context, Deferred, Effect, Fiber, Scheduler } from "effect"
 
 type Lane = "user-blocking" | "user-visible" | "background"
 
@@ -66,6 +66,26 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("later")))))
     while (posted.length > 0) next()
     expect(log).toEqual(["urgent", "normal", "later", "background"])
+  })
+
+  it("runs work forked by background work before more background work", () => {
+    const { fork, next, posted } = browser()
+    const log: Array<string> = []
+    const background = (name: string, effect: Effect.Effect<unknown> = Effect.void) =>
+      fork(Effect.yieldNowWith(1).pipe(Effect.andThen(effect), Effect.andThen(Effect.sync(() => log.push(name)))))
+    background("first", Effect.forkDetach(Effect.sync(() => log.push("forked"))))
+    background("second")
+    while (posted.length > 0) next()
+    expect(log).toEqual(["first", "forked", "second"])
+  })
+
+  it("puts a fiber woken by background work back at priority 0 when it spends the budget", () => {
+    const { fork, next, posted, work } = browser()
+    const woken = Deferred.makeUnsafe<void>()
+    fork(Deferred.await(woken).pipe(Effect.andThen(Effect.forEach(Array.from({ length: 10 }), () => work(1)))))
+    fork(Effect.yieldNowWith(1).pipe(Effect.andThen(Deferred.succeed(woken, undefined))))
+    next()
+    expect(posted.map((task) => task.priority)).toEqual(["user-visible"])
   })
 
   it("gives the event loop a turn between slices without postTask", async () => {

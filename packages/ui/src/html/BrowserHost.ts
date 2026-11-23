@@ -1767,6 +1767,8 @@ export const mount = <
 ): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(mountEffect(component, props, container, options)) as any
 
+let defaultScheduler: Scheduler.Scheduler | undefined
+
 /**
  * Mounts a component tree into `container` for the life of the current
  * Scope, and returns its root.
@@ -1804,7 +1806,7 @@ export const mountEffect = <
   Effect.gen(function*() {
     const context = yield* Layer.build(layer({ document: container.ownerDocument }))
     const scheduled = Context.getOrUndefined(yield* Effect.context<never>(), Scheduler.Scheduler) === undefined
-      ? Context.add(context, Scheduler.Scheduler, HtmlScheduler.make())
+      ? Context.add(context, Scheduler.Scheduler, defaultScheduler ??= HtmlScheduler.make())
       : context
     return yield* Effect.provideContext(Renderer.mount(component, props, container, options), scheduled)
   }) as any
