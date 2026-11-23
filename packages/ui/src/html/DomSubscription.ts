@@ -225,7 +225,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -258,6 +258,47 @@ const listenFor = (
  *   s.fireDocument("keydown", { key: "ArrowUp" })
  *     .expectDefaultPrevented()
  *     .expect(Locator.text("ArrowUp")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * **Example** (Shortcuts from a table, ignored while typing unless a row says otherwise)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ OpenedHelp: {}, ClosedHelp: {} })
+ *
+ * const Shortcuts = Component.define({
+ *   name: "Shortcuts",
+ *   scoped: false,
+ *   model: Schema.Boolean,
+ *   message: Message,
+ *   elements: Html
+ * }).make({
+ *   init: () => false,
+ *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
+ *   view: (open, h) => h.p(open ? "help open" : "help closed"),
+ *   subscriptions: () => [
+ *     DomSubscription.onDocument(
+ *       "keydown",
+ *       HtmlKeyboard.shortcuts([
+ *         { key: "?", message: Message.OpenedHelp() },
+ *         { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
+ *       ]),
+ *       { preventDefault: true }
+ *     )
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Shortcuts, {})
+ *   s.fireDocument("keydown", { key: "?", editable: true }).expectIgnored()
+ *     .fireDocument("keydown", { key: "?" }).expect(Locator.text("help open")).toExist()
+ *     .fireDocument("keydown", { key: "Escape", editable: true }).expect(Locator.text("help closed")).toExist()
  * }).pipe(Effect.scoped, Effect.runSync)
  * ```
  *

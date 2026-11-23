@@ -35,7 +35,9 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // or `undefined`; with `preventDefault: true` the page doesn't scroll for
 // an arrow the game took, and keeps every other key. The handler may read
 // the Model: the listener runs the one from the latest `subscriptions`.
-// `defaultPrevented` skips a key an element's handler already took.
+// `defaultPrevented` skips a key an element's handler already took,
+// `repeat` skips a held key's auto-repeats, and `editable` skips keys typed
+// into a field, while `Escape` still gets through.
 export const Snake = Component.define({
   name: "Snake",
   scoped: false,
@@ -56,9 +58,10 @@ export const Snake = Component.define({
   subscriptions: (model) => [
     model.running && DomSubscription.onDocument(
       "keydown",
-      ({ defaultPrevented, key }) => {
-        if (defaultPrevented) return undefined
+      ({ composing, defaultPrevented, editable, key, repeat }) => {
+        if (defaultPrevented || composing || repeat) return undefined
         if (key === "Escape") return SnakeMessage.PressedEscape()
+        if (editable) return undefined
         const direction = directions[key]
         // Reversing into itself isn't a turn.
         return direction === undefined || direction === opposite[model.heading]
@@ -84,6 +87,8 @@ const opposite = { up: "down", down: "up", left: "right", right: "left" } as con
 export const steered = Effect.gen(function*() {
   const s = yield* HtmlScene.make(Snake, {})
   s.click(Locator.text("Start"))
+    .fireDocument("keydown", { key: "ArrowUp", editable: true }).expectIgnored()
+    .fireDocument("keydown", { key: "ArrowUp", repeat: true }).expectIgnored()
     .fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
     .fireDocument("keydown", { key: "ArrowDown" }).expectIgnored()
     .fireDocument("keydown", { key: "Escape" })

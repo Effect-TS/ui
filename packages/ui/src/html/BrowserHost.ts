@@ -131,6 +131,7 @@ import * as View from "../View.ts"
 import * as DomImages from "./DomImages.ts"
 import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
+import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
@@ -138,6 +139,7 @@ import { ownEvents } from "./internal/ownEvents.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
+const HTML = "http://www.w3.org/1999/xhtml"
 const SVG = "http://www.w3.org/2000/svg"
 
 /** Events after which a controlled property may differ from what the Model says. */
@@ -324,6 +326,16 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
 
 const noSelection = { selectionStart: null, selectionEnd: null }
 
+const isEditable = (target: EventTarget | null): boolean => {
+  const element = target as HTMLElement | null
+  if (element?.namespaceURI === HTML) {
+    const tag = element.localName
+    if (tag === "textarea" || tag === "select") return true
+    if (tag === "input") return !nonTextInputTypes.has((element as HTMLInputElement).type)
+  }
+  return element?.isContentEditable === true
+}
+
 const selectionOf = (target: EventTarget | null) => {
   const field = target as HTMLInputElement | null
   const tag = (field as globalThis.Element | null)?.localName
@@ -448,7 +460,14 @@ const payloadOf = (
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
       const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
-      return { key: e.key ?? "", ...modifiers(event), composing, ...selectionOf(target) }
+      return {
+        key: e.key ?? "",
+        ...modifiers(event),
+        composing,
+        repeat: e.repeat === true,
+        editable: isEditable(event.composedPath()[0] ?? target),
+        ...selectionOf(target)
+      }
     }
     case "input":
     case "change":

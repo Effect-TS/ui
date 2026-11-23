@@ -13,7 +13,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, DomCommand, DomSubscription, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -1379,6 +1379,93 @@ describe("BrowserHost", { concurrent: false }, () => {
           const selections = selectionOf(root.model()!)
           expect(selections).toEqual([[1, 4], [null, null], [null, null]])
           expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
+        }).pipe(Effect.scoped))
+
+      it.effect("keydown and keyup report editable targets and auto-repeat on elements and the document", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const shadowHost = yield* container
+          const shadow = shadowHost.attachShadow({ mode: "open" })
+          const shadowInput = document.createElement("input")
+          shadow.appendChild(shadowInput)
+          const editableIds = ["kt-readonly", "kt-unknown", "kt-area", "kt-select", "kt-ce", "kt-ce-child"]
+          const nonEditableTypes = [
+            "button",
+            "checkbox",
+            "color",
+            "file",
+            "image",
+            "radio",
+            "range",
+            "reset",
+            "submit"
+          ] as const
+          const KeyTargets = Component.define({
+            name: "KeyTargets",
+            scoped: false,
+            model: Schema.Array(Schema.String),
+            message: Schema.String,
+            elements: Html
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: (log, entry) => [...log, entry],
+            view: (_, h) =>
+              h.div
+                .onKeyDown(({ editable, key, repeat }) => `el:down:${key}:${editable}:${repeat}`)
+                .onKeyUp(({ editable, key, repeat }) => `el:up:${key}:${editable}:${repeat}`)
+                .children(
+                  h.input.attr("id", "kt-text"),
+                  h.input.attr("id", "kt-readonly").attr("readonly", ""),
+                  h.input.attr("id", "kt-unknown").attr("type", "futuretype"),
+                  h.textarea.attr("id", "kt-area"),
+                  h.select.attr("id", "kt-select").children(h.option.attr("value", "a").children("A")),
+                  ...nonEditableTypes.map((type) => h.input.attr("id", `kt-${type}`).attr("type", type)),
+                  h.div.attr("id", "kt-ce").attr("contenteditable", "true").children(
+                    h.span.attr("id", "kt-ce-child").children("hi"),
+                    h.div.attr("id", "kt-ce-island").attr("contenteditable", "false").children(
+                      h.button.attr("id", "kt-ce-btn").children("x")
+                    )
+                  )
+                ),
+            subscriptions: () => [
+              DomSubscription.onDocument(
+                "keydown",
+                ({ editable, key, repeat }) => `doc:down:${key}:${editable}:${repeat}`
+              ),
+              DomSubscription.onDocument("keyup", ({ editable, key, repeat }) => `doc:up:${key}:${editable}:${repeat}`)
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(KeyTargets, {}, app)
+          yield* tick
+          const fire = (target: EventTarget, type: "keydown" | "keyup", key: string, repeat = false) =>
+            target.dispatchEvent(new KeyboardEvent(type, { key, repeat, bubbles: true, composed: true }))
+          const byId = (id: string) => app.querySelector(`#${id}`)!
+          fire(byId("kt-text"), "keydown", "g", true)
+          fire(byId("kt-text"), "keyup", "g")
+          for (const id of editableIds) fire(byId(id), "keydown", id)
+          fire(byId("kt-ce-btn"), "keydown", "island")
+          for (const type of nonEditableTypes) fire(byId(`kt-${type}`), "keydown", type)
+          const shadowEvent = new KeyboardEvent("keydown", { key: "s", bubbles: true, composed: true })
+          Object.defineProperty(shadowEvent, "composedPath", {
+            value: () => [shadowInput, shadow, shadowHost, document.body, document, window]
+          })
+          shadowHost.dispatchEvent(shadowEvent)
+          const svgInput = document.createElementNS("http://www.w3.org/2000/svg", "input")
+          app.appendChild(svgInput)
+          fire(svgInput, "keydown", "svg")
+          yield* tick
+          expect(root.model()).toEqual([
+            "el:down:g:true:true",
+            "doc:down:g:true:true",
+            "el:up:g:true:false",
+            "doc:up:g:true:false",
+            ...editableIds.flatMap((id) => [`el:down:${id}:true:false`, `doc:down:${id}:true:false`]),
+            "el:down:island:false:false",
+            "doc:down:island:false:false",
+            ...nonEditableTypes.flatMap((type) => [`el:down:${type}:false:false`, `doc:down:${type}:false:false`]),
+            "doc:down:s:true:false",
+            "doc:down:svg:false:false"
+          ])
         }).pipe(Effect.scoped))
 
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
