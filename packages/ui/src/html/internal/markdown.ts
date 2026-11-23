@@ -53,12 +53,13 @@ const reHtmlTag = new RegExp(
 const reHtmlBlock =
   /^<(?:(?:script|pre|textarea|style)(?:\s|>|$)|!--|[?]|![A-Za-z]|!\[CDATA\[|\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:\s|\/?>|$))/i
 const reThematicBreak = /^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$|^(?:-[ \t]*){3,}$/
-const NAME = "[^\\s\\p{P}\\p{S}](?:[^\\s\\p{P}\\p{S}]|[-_](?![-_]*(?:[\\s\\p{P}\\p{S}]|$)))*"
+const NAME = "[^\\s\\p{P}\\p{S}](?:[^\\s\\p{P}\\p{S}]|[-_](?=[-_]*[^\\s\\p{P}\\p{S}]))*"
 const reDirective = new RegExp(
-  "^(:{2,})(" + NAME + ")(?:\\[([^\\]]*)\\])?(\\{(?:\"[^\"]*\"|'[^']*'|[^}\"'])*\\})?[ \\t]*$",
+  "^(:{2,})(" + NAME + ")(?:\\[((?:[^[\\]]|\\[[^[\\]]*\\])*)\\])?(\\{(?:\"[^\"]*\"|'[^']*'|[^}\"'])*\\})?[ \\t]*$",
   "u"
 )
 const reTextDirective = new RegExp("^:" + NAME + "(?:\\[[^\\]\\n]*\\]|\\{[^}\\n]*\\})", "u")
+const reLoneTextDirective = new RegExp("^:" + NAME + "[ \\t]*(?:\\n|$)", "u")
 const reDelimiterRow = /^\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/
 const reEmailAutolink =
   /^<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/
@@ -71,21 +72,25 @@ const replacementCharacter = String.fromCharCode(0xfffd)
 const isSpaceOrTab = (char: string | undefined): boolean => char === " " || char === "\t"
 
 const splitRow = (row: string): Array<string> => {
-  const trimmed = row.trim().replace(/^\|/, "").replace(/(^|[^\\])\|$/, "$1")
+  const trimmed = row.trim().replace(/^\|/, "")
   const cells: Array<string> = []
   let current = ""
+  let closed = false
   for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === "\\" && trimmed[i + 1] === "|") {
-      current += "|"
+    closed = trimmed[i] === "|"
+    if (trimmed[i] === "\\" && i + 1 < trimmed.length) {
+      current += trimmed[i + 1] === "|" ? "|" : trimmed[i] + trimmed[i + 1]
       i++
-    } else if (trimmed[i] === "|") {
+    } else if (closed) {
       cells.push(current)
       current = ""
     } else {
       current += trimmed[i]
     }
   }
-  cells.push(current)
+  if (!closed) {
+    cells.push(current)
+  }
   return cells.map((cell) => cell.trim())
 }
 
@@ -104,24 +109,28 @@ const decodeEntity = (entity: string): string => {
 const unescape = (text: string): string =>
   text.replace(reEscapedOrEntity, (match, escaped: string | undefined) => escaped ?? decodeEntity(match))
 
-const parseAttributes = (text: string | undefined): Record<string, string> => {
+const reEntity = new RegExp(ENTITY, "g")
+const reAttribute =
+  /^(?:([#.])([^\s"#'.<=>`}]+)|([A-Za-z:_][\w.:-]*)(?:[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s"'<=>`}]+)))?)/
+
+const parseAttributes = (text: string | undefined): Record<string, string> | undefined => {
   const attributes: Record<string, string> = {}
-  const classes: Array<string> = []
-  if (text === undefined) {
-    return attributes
-  }
-  const pattern = /#([^\s#.}]+)|\.([^\s#.}]+)|([^\s=}#."']+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s}]*)))?/g
-  for (const match of text.slice(1, -1).matchAll(pattern)) {
-    if (match[1] !== undefined) {
-      attributes.id = match[1]
-    } else if (match[2] !== undefined) {
-      classes.push(match[2])
-    } else {
-      attributes[match[3]] = unescape(match[4] ?? match[5] ?? match[6] ?? "")
+  let rest = text?.slice(1, -1).trimStart() ?? ""
+  while (rest !== "") {
+    const match = reAttribute.exec(rest)
+    if (match === null) {
+      return undefined
     }
-  }
-  if (classes.length > 0) {
-    attributes.class = classes.join(" ")
+    const [whole, shortcut, shortcutValue, name, double, single, bare] = match
+    const key = shortcut === "#" ? "id" : shortcut === "." ? "class" : name
+    const value = (shortcutValue ?? double ?? single ?? bare ?? "").replace(reEntity, decodeEntity)
+    attributes[key] = key === "class" && Object.hasOwn(attributes, "class") ? `${attributes.class} ${value}` : value
+    rest = rest.slice(whole.length)
+    const gap = /^[ \t]*/.exec(rest)?.[0] ?? ""
+    if (gap === "" && rest !== "" && (shortcut === undefined || !/^[#.]/.test(rest))) {
+      return undefined
+    }
+    rest = rest.slice(gap.length)
   }
   return attributes
 }
@@ -515,7 +524,7 @@ export const parse = (
         }
         return MATCHED
       case "table":
-        return blank || startsBlock() ? NO_MATCH : MATCHED
+        return blank || indented || startsBlock() ? NO_MATCH : MATCHED
       case "directive": {
         if (block.leaf) {
           return NO_MATCH
@@ -662,12 +671,22 @@ export const parse = (
       }
       closeUnmatched()
       const leaf = match[1].length === 2
+      const attributes = parseAttributes(match[4])
+      if (attributes === undefined) {
+        problems.push({
+          line: lineNumber,
+          column: 0,
+          message: `Malformed attributes ${match[4]} on island "${
+            match[2]
+          }" (line ${lineNumber}). Write each attribute as name="value", separated by spaces.`
+        })
+      }
       addChild("directive", {
         leaf,
         fenceLength: match[1].length,
         name: match[2],
-        label: match[3],
-        attributes: parseAttributes(match[4])
+        label: leaf && match[3] === "" ? undefined : match[3],
+        attributes: attributes ?? {}
       })
       advanceToEnd()
       return leaf ? LEAF : CONTAINER
@@ -1100,25 +1119,27 @@ export const parse = (
       }
       const www = found[1].length === 4
       const before = subject[pos - 1]
-      let body = found[2]
-      const trail = /[!"&'),.:;<>?\]*_~]+$/.exec(body)
-      if (trail !== null) {
-        body = body.slice(0, trail.index)
-        let trailing = trail[0]
-        for (
-          let close = trailing.indexOf(")");
-          close !== -1 && body.split("(").length > body.split(")").length;
-          close = trailing.indexOf(")")
-        ) {
-          body += trailing.slice(0, close + 1)
-          trailing = trailing.slice(close + 1)
+      let opens = found[2].split("(").length - 1
+      let closes = found[2].split(")").length - 1
+      let end = found[2].length
+      while (end > 0) {
+        const char = found[2][end - 1]
+        if (char === ")" && closes > opens) {
+          closes--
+          end--
+        } else if (char === ";") {
+          end = /&[A-Za-z0-9]+;$/.exec(found[2].slice(0, end))?.index ?? end - 1
+        } else if (char !== ")" && `!"&',.:<>?]*_~`.includes(char)) {
+          end--
+        } else {
+          break
         }
       }
+      const body = found[2].slice(0, end)
       const domain = (/^(?:[^\s\p{P}\p{S}]|[-._])*/u.exec(body)?.[0] ?? "").split(".")
-      const validDomain = www
-        ? domain.length >= 2 && domain.slice(-2).every((part) => !part.includes("_")) &&
-          (before === undefined || reSpaceOrPunctuation.test(before))
-        : domain[0] !== "" && (before === undefined || !/[A-Za-z]/.test(before))
+      const validDomain = domain[0] !== "" &&
+        (www ? ["www", ...domain] : domain).slice(-2).every((part) => !part.includes("_")) &&
+        (before === undefined || (www ? reSpaceOrPunctuation.test(before) : !/[A-Za-z]/.test(before)))
       if (!validDomain || body === "") {
         pos += found[1].length
         text(found[1])
@@ -1191,7 +1212,12 @@ export const parse = (
         }
         text(entity === null ? "&" : decodeEntity(entity[0]))
       } else if (char === ":" || char === "!") {
-        if (char === ":" && subject[pos - 1] !== ":" && reTextDirective.test(subject.slice(pos))) {
+        const after = subject.slice(pos)
+        const lineStart = pos === 0 || subject[pos - 1] === "\n"
+        if (
+          char === ":" && subject[pos - 1] !== ":" &&
+          (reTextDirective.test(after) || (lineStart && reLoneTextDirective.test(after)))
+        ) {
           report("textDirective", lineAt(pos), pos)
         }
         pos++

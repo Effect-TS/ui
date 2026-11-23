@@ -212,8 +212,9 @@ const parseFrontmatter = (
  * @category parsing
  * @since 0.1.0
  */
-export const parseMarkdownWithFrontmatter = (source: string, options: Options = {}): Parsed => {
+export const parseMarkdownWithFrontmatter = (input: string, options: Options = {}): Parsed => {
   const { frontmatter, islands } = checkOptions(options)
+  const source = input.replace(/^\uFEFF/, "")
   const split = splitFrontmatter(source)
   if (split !== undefined && frontmatter === undefined) {
     throw new ParseError({ line: 1, message: unsupported("yaml", 1) })

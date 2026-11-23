@@ -61,6 +61,81 @@ describe("parseMarkdown", () => {
     ])
   })
 
+  it("reads island attributes with spaces around =, merged classes, and literal backslashes", () => {
+    const Counter = Schema.Struct({
+      label: Schema.optionalKey(Schema.String),
+      step: Schema.optionalKey(Schema.String),
+      class: Schema.optionalKey(Schema.String)
+    })
+
+    expect(
+      parseMarkdown("::Counter{label = \"C:\\dir &amp; more\" step= '2' .wide class=tall}", { islands: { Counter } })
+        .blocks
+    ).toStrictEqual([
+      {
+        _tag: "Island",
+        name: "Counter",
+        attributes: { label: "C:\\dir & more", step: "2", class: "wide tall" },
+        blocks: []
+      }
+    ])
+  })
+
+  it("rejects malformed island attribute blocks", () => {
+    expect(() => parseMarkdown("::Counter{label=}")).toThrowError(
+      "Malformed attributes {label=} on island \"Counter\" (line 1). Write each attribute as name=\"value\", separated by spaces."
+    )
+    expect(() => parseMarkdown("::Counter{a=\"x\"b=\"y\"}")).toThrowError(/Malformed attributes/)
+  })
+
+  it("accepts island names with repeated - or _ and an empty leaf label", () => {
+    expect(parseMarkdown(lines("::film--strip[]", "", "::film__strip")).blocks).toStrictEqual([
+      { _tag: "Island", name: "film--strip", attributes: {}, blocks: [] },
+      { _tag: "Island", name: "film__strip", attributes: {}, blocks: [] }
+    ])
+  })
+
+  it("ends a bare URL before a trailing entity-like reference", () => {
+    expect(parseMarkdown("www.google.com/search?q=commonmark&hl;").blocks).toStrictEqual([
+      {
+        _tag: "Paragraph",
+        content: [
+          {
+            _tag: "Link",
+            url: "http://www.google.com/search?q=commonmark",
+            title: Option.none(),
+            content: [{ _tag: "Text", value: "www.google.com/search?q=commonmark" }]
+          },
+          { _tag: "Text", value: "&hl;" }
+        ]
+      }
+    ])
+  })
+
+  it("splits a table cell after an escaped backslash and ends the table at an indented line", () => {
+    expect(parseMarkdown(lines("| a | b |", "| - | - |", "| x\\\\| y |", "    code")).blocks).toStrictEqual([
+      {
+        _tag: "Table",
+        alignments: ["None", "None"],
+        headerRow: {
+          _tag: "TableRow",
+          cells: [{ _tag: "TableCell", content: [{ _tag: "Text", value: "a" }] }, {
+            _tag: "TableCell",
+            content: [{ _tag: "Text", value: "b" }]
+          }]
+        },
+        bodyRows: [{
+          _tag: "TableRow",
+          cells: [{ _tag: "TableCell", content: [{ _tag: "Text", value: "x\\" }] }, {
+            _tag: "TableCell",
+            content: [{ _tag: "Text", value: "y" }]
+          }]
+        }]
+      },
+      { _tag: "CodeBlock", language: Option.none(), meta: Option.none(), value: "code" }
+    ])
+  })
+
   it("round-trips through the JSON wire form", () => {
     const document = parseMarkdown(
       lines(
@@ -128,6 +203,12 @@ describe("parseMarkdown", () => {
     ])
   })
 
+  it("rejects a line holding only :Name as a mistyped island", () => {
+    expect(() => parseMarkdown(lines("Prose.", ":Counter"))).toThrowError(
+      /Unsupported markdown node "textDirective" \(line 2\)/
+    )
+  })
+
   it("rejects leaf directive labels", () => {
     expect(() => parseMarkdown("::Counter[Clicks while reading]")).toThrowError(
       /Leaf directive labels \(`::Name\[label\]`\) are not supported/
@@ -193,6 +274,19 @@ describe("parseMarkdownWithFrontmatter", () => {
     expect(frontmatter).toStrictEqual(Option.some({ title: "Colons: allowed", date: "2026-08-01" }))
     expect(document.blocks.map((block) => block._tag)).toStrictEqual(["Paragraph"])
     expect(parseMarkdownWithFrontmatter("# Title", options).frontmatter).toStrictEqual(Option.none())
+  })
+
+  it("strips a leading byte order mark before reading frontmatter and the first block", () => {
+    const { document, frontmatter } = parseMarkdownWithFrontmatter(
+      lines("\uFEFF---", "title: Notes", "---", "# Heading"),
+      options
+    )
+
+    expect(frontmatter).toStrictEqual(Option.some({ title: "Notes" }))
+    expect(document.blocks.map((block) => block._tag)).toStrictEqual(["Heading"])
+    expect(parseMarkdown("\uFEFF::Counter").blocks).toStrictEqual([
+      { _tag: "Island", name: "Counter", attributes: {}, blocks: [] }
+    ])
   })
 
   it("rejects entries that are not flat key: value pairs", () => {
