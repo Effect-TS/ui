@@ -14,15 +14,12 @@
   },
   "dependencies": {
     "@effect/ui": "workspace:*",
-    "@effect/ui-kit": "workspace:*",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "effect": "^4.1.4"
   },
   "devDependencies": {
-    "@effect/platform-browser": "4.1.4",
     "@effect/vitest": "^4.1.4",
-    "@foldkit/ui": "0.171.0",
     "foldkit": "0.171.0",
     "shiki": "^4.6.0",
     "vite": "^8.3.6"

@@ -12,10 +12,8 @@ export const Snippet = Schema.Struct({
 })
 export type Snippet = typeof Snippet.Type
 
-const lineText = (line: ReadonlyArray<Token>): string => line.map((token) => token.text).join("")
-
-export const countLines = (snippets: ReadonlyArray<Snippet>): number =>
-  snippets.reduce((total, snippet) => total + snippet.lines.filter((line) => lineText(line).trim() !== "").length, 0)
-
-export const lineOf = (snippet: Snippet, marker: string | undefined): number =>
-  marker === undefined ? -1 : snippet.lines.findIndex((line) => lineText(line).includes(marker))
+export const Pair = Schema.Struct({
+  foldkit: Schema.Array(Snippet),
+  effect: Schema.Array(Snippet)
+})
+export type Pair = typeof Pair.Type
