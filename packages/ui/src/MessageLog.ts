@@ -34,6 +34,7 @@ import * as Redacted from "effect/Redacted"
 import * as Schedule from "effect/Schedule"
 import * as Schema from "effect/Schema"
 import type * as SchemaAST from "effect/SchemaAST"
+import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
 import type * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
@@ -416,6 +417,11 @@ export interface Waiting extends InstanceBase {
  * parent's. Its Scope closes after, and its Commands log their ends as they
  * exit, which can be later than this entry.
  *
+ * It also ends the instance's Subscriptions and any Layer still pending:
+ * neither logs an end entry when its instance goes, so a reader closes them
+ * at this entry. Mounts log their own `MountEnded`, and Command runs their
+ * own `CommandEnded` or `CommandInterrupted`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -590,6 +596,30 @@ export interface MountEnded extends InstanceBase {
 }
 
 /**
+ * A Command run's fiber started its work, in the run's span.
+ *
+ * **Details**
+ *
+ * From here until its end entry the run is running: `CommandEnded`,
+ * `CommandInterrupted`, or a `Failed` with its `issued`. A run with an end
+ * entry and no `CommandStarted` never began: it was stopped while queued in
+ * its group or while it waited for its instance's Layer. `causedBy` names the fact of the step that started it:
+ * the one that issued it, the one that freed its group for a queued run, or
+ * the Layer build that ended for a run that waited for it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CommandStarted extends InstanceBase {
+  readonly _tag: "CommandStarted"
+  readonly name: string
+  readonly issued: Issued
+  readonly spanId: string
+  readonly traceId: string
+}
+
+/**
  * A Command run ended with a result.
  *
  * **Details**
@@ -632,8 +662,8 @@ export interface CommandEnded extends InstanceBase {
 }
 
 /**
- * A Command run was interrupted (by unmount, `switch`, the interrupt Command
- * or a handled Layer failure) and dispatched nothing.
+ * A Command run was interrupted and dispatched nothing. `reason` says what
+ * stopped it (see `InterruptReason`).
  *
  * **Details**
  *
@@ -654,7 +684,31 @@ export interface CommandInterrupted extends InstanceBase {
   readonly spanId: string | undefined
   /** The run's trace id, or `undefined` when its span never began. */
   readonly traceId: string | undefined
+  readonly reason: InterruptReason
 }
+
+/**
+ * What stopped a Command run, as `CommandInterrupted` reports it.
+ *
+ * **Details**
+ *
+ * - `"interrupt"`: an `update` issued `Command.interrupt` for its group.
+ * - `"switch"`: an `update` issued a later run of its `switch` group.
+ * - `"unmount"`: its instance was removed, or the app was disposed.
+ * - `"layer"`: its instance's provided Layer failed before the run could
+ *   start, or a keyed provide selected again and dropped the runs issued
+ *   before it.
+ * - `"self"`: its own work was interrupted, and nothing in the tree asked it
+ *   to stop.
+ *
+ * `causedBy` names the fact whose handling stopped it, for every reason but
+ * `"self"`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type InterruptReason = "interrupt" | "switch" | "unmount" | "layer" | "self"
 
 /**
  * How a `Command.afterRefetch` wait ended.
@@ -756,6 +810,11 @@ export interface Failed extends InstanceBase {
    * only record.
    */
   readonly update?: { readonly message: unknown; readonly source: Source } | undefined
+  /**
+   * The run that failed the instance, when `in` is `"command"`. This entry
+   * is that run's end: it has no `CommandEnded` or `CommandInterrupted`.
+   */
+  readonly issued?: Issued | undefined
 }
 
 /**
@@ -826,6 +885,7 @@ export type InstanceEntry =
   | Drawn
   | MountStarted
   | MountEnded
+  | CommandStarted
   | CommandAwaiting
   | CommandEnded
   | CommandInterrupted
@@ -940,7 +1000,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 7
+export const wireVersion = 1
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -1027,6 +1087,17 @@ const RunWire = {
  * `-Infinity` are sent as `{ "~unserialisable": "number" }` and `-0` as
  * `0`. The `key` beside them still tells those deps apart.
  *
+ * Every `Schema.Redacted` in props, Models, messages, events, Command and
+ * mount args, sends and shared values is sent as the placeholder. Two values
+ * have no Schema to mark them, and are sent in clear: a Subscription's
+ * `key` and `deps`, and the message text of an error in a Cause. Build a
+ * Subscription's key from an id that isn't secret, and keep secrets out of
+ * error messages.
+ *
+ * A reader treats each placeholder (see `isPlaceholder`) as a leaf whose
+ * value is unknown: two placeholders aren't known to be equal, and a value
+ * that is one isn't known to have changed.
+ *
  * @stability experimental
  * @category Wire
  * @since 0.1.0
@@ -1105,7 +1176,8 @@ export const Wire = Schema.Union([
     in: Schema.String,
     name: Schema.NullOr(Schema.String),
     cause: CauseWire,
-    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire }))
+    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire })),
+    issued: Schema.optionalKey(IssuedWire)
   }),
   Schema.TaggedStruct("Unmounted", InstanceWire),
   Schema.TaggedStruct("Kept", InstanceWire),
@@ -1117,6 +1189,13 @@ export const Wire = Schema.Union([
     started: Schema.Number,
     reason: Schema.Literals(["completed", "closed", "failed"]),
     silent: Schema.Boolean
+  }),
+  Schema.TaggedStruct("CommandStarted", {
+    ...InstanceWire,
+    name: Schema.String,
+    issued: IssuedWire,
+    spanId: Schema.String,
+    traceId: Schema.String
   }),
   Schema.TaggedStruct("CommandAwaiting", {
     ...InstanceWire,
@@ -1130,7 +1209,10 @@ export const Wire = Schema.Union([
     waitEnded: Schema.optionalKey(Schema.Literals(["settled", "nothing", "budget", "switch", "interrupt", "closed"])),
     outstanding: Schema.optionalKey(Schema.Array(AwaitedEntryWire))
   }),
-  Schema.TaggedStruct("CommandInterrupted", RunWire),
+  Schema.TaggedStruct("CommandInterrupted", {
+    ...RunWire,
+    reason: Schema.Literals(["interrupt", "switch", "unmount", "layer", "self"])
+  }),
   Schema.TaggedStruct("CommandDropped", {
     ...InstanceWire,
     name: Schema.String,
@@ -1165,6 +1247,40 @@ export type Wire = typeof Wire.Type
 export type WireEntry = Exclude<Wire, { readonly _tag: "Hello" }>
 
 /**
+ * A value the encoder sent in place of one it couldn't or mustn't send.
+ *
+ * @stability experimental
+ * @category Wire
+ * @since 0.1.0
+ */
+export type Placeholder =
+  | { readonly "~unserialisable": string }
+  | { readonly "~redacted": true }
+  | { readonly "~truncated": number }
+
+const placeholderChecks: Record<string, (value: unknown) => boolean> = {
+  "~unserialisable": (value) => typeof value === "string",
+  "~redacted": (value) => value === true,
+  "~truncated": (value) => typeof value === "number"
+}
+
+/**
+ * Whether a JSON value from a Wire frame is a `Placeholder`: an object with
+ * one key, `"~unserialisable"` with a string, `"~redacted"` with `true`,
+ * or `"~truncated"` with a number.
+ *
+ * @stability experimental
+ * @category Wire
+ * @since 0.1.0
+ */
+export const isPlaceholder = (value: unknown): value is Placeholder => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const keys = Object.keys(value)
+  return keys.length === 1 && Object.hasOwn(placeholderChecks, keys[0]) &&
+    placeholderChecks[keys[0]]((value as Record<string, unknown>)[keys[0]])
+}
+
+/**
  * Turns entries into Wire frames.
  *
  * @stability experimental
@@ -1194,6 +1310,21 @@ export const makeEncoder = (options?: {
   const through = (component: Component.Any, field: "props" | "model" | "message" | "events", value: unknown) =>
     encodeWith(component[field] as Schema.Top, `${component.definition.name}.${field}`, value)
   const encodeWith = (schema: Schema.Top, id: string, value: unknown) => {
+    if (holdsRedactedOverlap(schema.ast)) {
+      let rejected = false
+      const out = guarded(() =>
+        encodeAt(schema.ast, value, {
+          path: new Set(),
+          strict: true,
+          leaf: () => {
+            rejected = true
+            return failed
+          }
+        })
+      )
+      if (rejected) warn(id, "a part of it didn't match its Schema")
+      return out
+    }
     let encode = encoders.get(schema)
     if (encode === undefined) {
       encode = Schema.encodeUnknownSync(
@@ -1204,12 +1335,14 @@ export const makeEncoder = (options?: {
     try {
       return encode(value) as Schema.Json
     } catch (error) {
-      if (!warned.has(id)) {
-        warned.add(id)
-        options?.onWarning?.(`MessageLog: ${id} failed to encode, so it's sent as a placeholder: ${String(error)}`)
-      }
-      return { "~unserialisable": "encode" }
+      warn(id, String(error))
+      return failed
     }
+  }
+  const warn = (id: string, error: string) => {
+    if (warned.has(id)) return
+    warned.add(id)
+    options?.onWarning?.(`MessageLog: ${id} failed to encode, so it's sent as a placeholder: ${error}`)
   }
   const encodeQueries = (
     component: Component.Any,
@@ -1364,7 +1497,8 @@ export const makeEncoder = (options?: {
                 message: capped(entry.component, "message", entry.update.message),
                 source: encodeSource(entry.update.source)
               }
-            })
+            }),
+            ...(entry.issued === undefined ? undefined : { issued: entry.issued })
           }
         case "MountStarted":
           return {
@@ -1381,6 +1515,15 @@ export const makeEncoder = (options?: {
             started: entry.started,
             reason: entry.reason,
             silent: entry.silent
+          }
+        case "CommandStarted":
+          return {
+            _tag: "CommandStarted",
+            ...instanceBase(entry),
+            name: entry.name,
+            issued: entry.issued,
+            spanId: entry.spanId,
+            traceId: entry.traceId
           }
         case "CommandAwaiting":
           return {
@@ -1399,7 +1542,7 @@ export const makeEncoder = (options?: {
             ...(entry.outstanding === undefined ? undefined : { outstanding: entry.outstanding })
           }
         case "CommandInterrupted":
-          return { _tag: "CommandInterrupted", ...run(entry) }
+          return { _tag: "CommandInterrupted", ...run(entry), reason: entry.reason }
         case "CommandDropped":
           return {
             _tag: "CommandDropped",
@@ -1576,6 +1719,11 @@ const guarded = (f: () => Schema.Json): Schema.Json => {
   }
 }
 
+interface Walk {
+  readonly path: Set<object>
+  readonly strict: boolean
+  readonly leaf: (ast: SchemaAST.AST, value: unknown) => Schema.Json
+}
 /**
  * Encodes `value` through `ast`. When the whole fails, a struct, record,
  * tuple or array is encoded part by part, and a union through the member the
@@ -1587,9 +1735,10 @@ const guarded = (f: () => Schema.Json): Schema.Json => {
  * cyclic value makes the codec overflow the stack, which is a failure like
  * any other: the walk goes on part by part, and the repeat is a placeholder.
  */
-const encodeAt = (ast: SchemaAST.AST, value: unknown, path: Set<object>): Schema.Json => {
-  if (typeof value === "object" && value !== null && path.has(value)) return { "~unserialisable": "cycle" }
-  const encode = holdsRedactedOverlap(ast) ? null : encoderOf(ast)
+const encodeAt = (ast: SchemaAST.AST, value: unknown, walk: Walk): Schema.Json => {
+  if (typeof value === "object" && value !== null && walk.path.has(value)) return { "~unserialisable": "cycle" }
+  const overlap = holdsRedactedOverlap(ast)
+  const encode = overlap ? null : encoderOf(ast)
   if (encode !== null) {
     try {
       // A Schema such as `Schema.Any` passes a value through, so the result goes through `structural` too.
@@ -1598,24 +1747,25 @@ const encodeAt = (ast: SchemaAST.AST, value: unknown, path: Set<object>): Schema
       // Encoded part by part below.
     }
   }
+  if (walk.strict && (!overlap || (ast.checks !== undefined && !guardOf(ast)(value)))) return walk.leaf(ast, value)
   if (ast.encoding === undefined) {
     switch (ast._tag) {
       case "Suspend":
-        return encodeAt(ast.thunk(), value, path)
+        return encodeAt(ast.thunk(), value, walk)
       case "Objects":
-        if (isPlainRecord(value)) return within(path, value, () => encodeObject(ast, value, path))
+        if (isPlainRecord(value)) return within(walk.path, value, () => encodeObject(ast, value, walk))
         break
       case "Arrays":
-        if (Array.isArray(value)) return within(path, value, () => encodeArray(ast, value, path))
+        if (Array.isArray(value)) return within(walk.path, value, () => encodeArray(ast, value, walk))
         break
       case "Union": {
         const member = ast.types.find((type) => guardOf(type)(value))
-        if (member !== undefined) return encodeAt(member, value, path)
+        if (member !== undefined) return encodeAt(member, value, walk)
         break
       }
     }
   }
-  return fallback(ast, value)
+  return walk.leaf(ast, value)
 }
 const within = <A>(path: Set<object>, value: object, f: () => A): A => {
   path.add(value)
@@ -1632,7 +1782,7 @@ const within = <A>(path: Set<object>, value: object, f: () => A): A => {
  * redaction counts. A key that matches nothing is left out. Only keys are read
  * here, never values.
  */
-const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown>, path: Set<object>): Schema.Json => {
+const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown>, walk: Walk): Schema.Json => {
   const applies = new Map<string, Array<SchemaAST.AST>>()
   for (const property of ast.propertySignatures) {
     if (typeof property.name === "string" && Object.hasOwn(value, property.name)) {
@@ -1655,12 +1805,12 @@ const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown
     const type = properties.has(key) ? types[0]! : types[types.length - 1]!
     out[key] = types.length > 1 && types.some(holdsRedacted)
       ? redacted
-      : guarded(() => encodeAt(type, value[key], path))
+      : guarded(() => encodeAt(type, value[key], walk))
   }
   return out
 }
 /** Elements, then the rest, then the trailing elements, which take the last positions. */
-const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, path: Set<object>): Schema.Json => {
+const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, walk: Walk): Schema.Json => {
   const [rest, ...tail] = ast.rest
   const tailStart = Math.max(ast.elements.length, value.length - tail.length)
   return value.map((item, i) => {
@@ -1671,7 +1821,7 @@ const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, path:
       : i >= tailStart
       ? tail[i - tailStart]
       : rest
-    return element === undefined ? fallback(ast, item) : encodeAt(element, item, path)
+    return element === undefined ? walk.leaf(ast, item) : encodeAt(element, item, walk)
   })
 }
 const fallback = (ast: SchemaAST.AST, value: unknown): Schema.Json =>
@@ -1686,20 +1836,20 @@ const fallback = (ast: SchemaAST.AST, value: unknown): Schema.Json =>
  * @internal
  */
 export const encodeArgs = (schema: Schema.Top, value: unknown): Schema.Json => {
-  const path = new Set<object>()
+  const walk: Walk = { path: new Set(), strict: false, leaf: fallback }
   // A struct or a class is encoded field by field.
   const fields = (schema as { readonly fields?: Schema.Struct.Fields }).fields
   if (fields !== undefined && isPlainRecord(value)) {
-    return within(path, value, () => {
+    return within(walk.path, value, () => {
       const out: Record<string, Schema.Json> = {}
       for (const key of Object.keys(fields)) {
         if (!Object.hasOwn(value, key)) continue
-        out[key] = guarded(() => encodeAt((fields[key] as Schema.Top).ast, value[key], path))
+        out[key] = guarded(() => encodeAt((fields[key] as Schema.Top).ast, value[key], walk))
       }
       return out
     })
   }
-  return guarded(() => encodeAt(schema.ast, value, path))
+  return guarded(() => encodeAt(schema.ast, value, walk))
 }
 
 const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({
@@ -1773,16 +1923,85 @@ const utf8Length = (text: string): number => {
 }
 
 /**
+ * Makes a log that encodes entries off the runtime's path. `record` only
+ * queues an entry. A fiber in the current Scope takes everything queued,
+ * encodes it as Wire frames, and passes the batch to `onBatch`.
+ *
+ * **Details**
+ *
+ * The runtime calls `record` on every `update`, so a sink that sends frames
+ * somewhere builds on this rather than encode inside `record`. A value whose
+ * Schema fails to encode is sent as a placeholder, and a warning is logged
+ * the first time per component and field. `maxEntryBytes` caps Models,
+ * messages, query results and shared values, as in `makeEncoder`. A batch
+ * whose `onBatch` dies is dropped, and an error is logged. Entries
+ * recorded once the Scope has closed are dropped.
+ *
+ * **Example** (Keeping encoded frames in an array)
+ *
+ * ```ts
+ * import { MessageLog } from "@effect/ui"
+ * import { Effect, Layer } from "effect"
+ *
+ * const frames: Array<MessageLog.WireEntry> = []
+ *
+ * const FramesLog = Layer.effect(
+ *   MessageLog.MessageLog,
+ *   MessageLog.makeEncoded((batch) => Effect.sync(() => frames.push(...batch)))
+ * )
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const makeEncoded = (
+  onBatch: (batch: ReadonlyArray<WireEntry>) => Effect.Effect<void>,
+  options?: { readonly maxEntryBytes?: number | undefined }
+): Effect.Effect<MessageLog, never, Scope.Scope> =>
+  Effect.gen(function*() {
+    const entries = yield* Queue.unbounded<Entry>()
+    const warnings: Array<string> = []
+    const encoder = makeEncoder({
+      maxEntryBytes: options?.maxEntryBytes,
+      onWarning: (message) => warnings.push(message)
+    })
+    yield* Queue.takeAll(entries).pipe(
+      Effect.flatMap((batch) =>
+        Effect.suspend(() => {
+          const frames = batch.map((entry) => encoder.encode(entry))
+          const logged = warnings.splice(0)
+          return Effect.andThen(
+            Effect.catchCause(
+              Effect.suspend(() => onBatch(frames)),
+              (cause) => Effect.logError("MessageLog: onBatch failed, and its batch was dropped", cause)
+            ),
+            logged.length === 0 ? Effect.void : Effect.forEach(logged, (message) => Effect.logWarning(message))
+          )
+        })
+      ),
+      Effect.forever,
+      Effect.ensuring(Queue.shutdown(entries)),
+      Effect.forkScoped
+    )
+    return {
+      enabled: true,
+      record: (entry: Entry) => {
+        Queue.offerUnsafe(entries, entry)
+      }
+    }
+  })
+
+/**
  * Streams entries to a devtools process over a WebSocket, as newline-free
  * JSON Wire frames, one per message.
  *
  * **Details**
  *
- * `record` only pushes to a Queue. The Layer's fiber encodes whatever it
- * takes and keeps the last `buffer` frames (1,000 by default), which every new
- * connection receives after its `Hello`, so devtools that connect late see
- * the recent past. A lost connection is retried with backoff, and one warning
- * is logged.
+ * Entries are encoded by `makeEncoded`. The Layer keeps the last `buffer`
+ * frames (1,000 by default), which every new connection receives after its
+ * `Hello`, so devtools that connect late see the recent past. A lost
+ * connection is retried with backoff, and one warning is logged.
  *
  * @stability experimental
  * @category layers
@@ -1797,31 +2016,21 @@ export const socket = (url: string, options?: {
     MessageLog,
     Effect.gen(function*() {
       const size = Math.max(1, options?.buffer ?? 1_000)
-      const entries = yield* Queue.unbounded<Entry>()
       const outbox = yield* Queue.unbounded<string>()
       const replay: Array<string> = []
-      const warnings: Array<string> = []
-      const encoder = makeEncoder({
-        maxEntryBytes: options?.maxEntryBytes,
-        onWarning: (message) => warnings.push(message)
-      })
       const hello = JSON.stringify({ _tag: "Hello", version: wireVersion, host: options?.host ?? "browser" })
 
-      yield* Queue.takeAll(entries).pipe(
-        Effect.flatMap((batch) =>
-          Effect.suspend(() => {
-            for (const entry of batch) {
-              const frame = JSON.stringify(encoder.encode(entry))
+      const log = yield* makeEncoded(
+        (batch) =>
+          Effect.sync(() => {
+            for (const encoded of batch) {
+              const frame = JSON.stringify(encoded)
               replay.push(frame)
               if (replay.length > size) replay.shift()
               Queue.offerUnsafe(outbox, frame)
             }
-            const logged = warnings.splice(0)
-            return logged.length === 0 ? Effect.void : Effect.forEach(logged, (message) => Effect.logWarning(message))
-          })
-        ),
-        Effect.forever,
-        Effect.forkScoped
+          }),
+        { maxEntryBytes: options?.maxEntryBytes }
       )
 
       const connection = Effect.gen(function*() {
@@ -1850,11 +2059,6 @@ export const socket = (url: string, options?: {
         Effect.forkScoped
       )
 
-      return {
-        enabled: true,
-        record: (entry: Entry) => {
-          Queue.offerUnsafe(entries, entry)
-        }
-      }
+      return log
     })
   )

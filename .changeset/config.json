@@ -12,7 +12,8 @@
   "fixed": [
     [
       "@effect/ui",
-      "@effect/ui-kit"
+      "@effect/ui-kit",
+      "@effect/ui-devtools"
     ]
   ],
   "snapshot": {

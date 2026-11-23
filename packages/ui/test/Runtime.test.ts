@@ -23,6 +23,7 @@ import {
   Fiber,
   Layer,
   LayerMap,
+  Logger,
   Metric,
   Option,
   Queue,
@@ -881,10 +882,12 @@ describe("Runtime", () => {
           "Update",
           "Update",
           "CommandInterrupted",
+          "CommandStarted",
           "Update",
           "CommandEnded"
         ])
-        const result = root.log()[5] as MessageLog.Update
+        assert.strictEqual((root.log()[4] as MessageLog.CommandInterrupted).reason, "switch")
+        const result = root.log()[6] as MessageLog.Update
         assert.strictEqual(result.source._tag, "Command")
         if (result.source._tag === "Command") assert.deepStrictEqual(result.source.issued, { seq: 4, index: 0 })
       })))
@@ -1094,8 +1097,14 @@ describe("Runtime", () => {
         assert.deepStrictEqual([server.interrupted, server.count], [1, 0])
         const editor = root.log().filter((entry) => "path" in entry && entry.path === "/Page/Editor[editor]")
         assert.deepStrictEqual(
-          editor.filter((entry) => entry._tag.startsWith("Command")).map((entry) => entry._tag),
-          ["CommandInterrupted", "CommandInterrupted"]
+          editor.flatMap((entry) =>
+            entry._tag === "CommandInterrupted"
+              ? [`${entry._tag} ${entry.reason}`]
+              : entry._tag.startsWith("Command")
+              ? [entry._tag]
+              : []
+          ),
+          ["CommandStarted", "CommandInterrupted unmount", "CommandInterrupted unmount"]
         )
         // A started run invalidates however it exits.
         assert.strictEqual(server.requests, 2)
@@ -2055,11 +2064,12 @@ describe("Runtime", () => {
         yield* TestClock.adjust("1 second")
         yield* TestHost.settle
         assert.strictEqual(root.text(), "hello world")
-        assert.deepStrictEqual(tags(root).slice(0, 5), [
+        assert.deepStrictEqual(tags(root).slice(0, 6), [
           "SessionStarted",
           "Mounted",
           "LayerPending",
           "LayerReady",
+          "CommandStarted",
           "Update"
         ])
       })))
@@ -2516,16 +2526,293 @@ describe("Runtime", () => {
           root.log().filter((entry) => entry._tag === "Unmounted").map((entry) => entry.path),
           ["/Top/Middle[m]/Holder[h]", "/Top/Middle[m]"]
         )
-        assert.deepStrictEqual(tags(root, "/Top/Middle[m]/Holder[h]"), ["Mounted", "Unmounted"])
+        assert.deepStrictEqual(tags(root, "/Top/Middle[m]/Holder[h]"), ["Mounted", "CommandStarted", "Unmounted"])
 
         // The parent's Scope waits for the child's close. Its Command ends meanwhile, and its message is dropped.
         Deferred.doneUnsafe(slow, Exit.void)
         yield* TestHost.settle
-        assert.deepStrictEqual(tags(root, "/Top/Middle[m]"), ["Mounted", "Unmounted", "CommandEnded"])
+        assert.deepStrictEqual(tags(root, "/Top/Middle[m]"), ["Mounted", "CommandStarted", "Unmounted", "CommandEnded"])
 
         Deferred.doneUnsafe(hold, Exit.void)
         yield* TestHost.settle
-        assert.deepStrictEqual(tags(root, "/Top/Middle[m]/Holder[h]"), ["Mounted", "Unmounted", "CommandInterrupted"])
+        assert.deepStrictEqual(tags(root, "/Top/Middle[m]/Holder[h]"), [
+          "Mounted",
+          "CommandStarted",
+          "Unmounted",
+          "CommandInterrupted"
+        ])
+      })))
+
+    it.effect("a run logs CommandStarted with its span, and its CommandInterrupted names what stopped it", () =>
+      provideHost(Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Save: {}, Stop: {}, Saved: {} })
+        const Save = Command.make("test/Save", { args: {} }, () => Effect.never)
+        const Quit = Command.make("test/Quit", { args: {} }, () => Effect.interrupt)
+        const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Number, message: Message }).make(
+          {
+            init: ($) => $.set(0).run(Quit.make().pipe(Command.map(() => Message.Saved()))),
+            update: ($, message) =>
+              message._tag === "Save"
+                ? $.set($.model + 1).run(Save.make().pipe(Command.map(() => Message.Saved())))
+                : message._tag === "Stop"
+                ? $.set($.model).run(Command.interrupt(Save))
+                : $.model,
+            view: (h, n) => h.text(String(n))
+          }
+        )
+        const root = yield* TestHost.mount(Editor, {})
+        root.send(Message.Save())
+        yield* TestHost.settle
+        root.send(Message.Stop())
+        yield* TestHost.settle
+
+        assert.strictEqual(MessageLog.wireVersion, 1)
+        const encoder = MessageLog.makeEncoder()
+        const wire = root.log().map((entry) =>
+          Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(encoder.encode(entry))))
+        )
+        const updates = wire.filter((frame) => frame._tag === "Update")
+        const frameOf = <Tag extends "CommandStarted" | "CommandInterrupted">(tag: Tag, name: string) =>
+          wire.find((frame): frame is Extract<MessageLog.Wire, { _tag: Tag }> =>
+            frame._tag === tag && "name" in frame && frame.name === name
+          )!
+        const started = frameOf("CommandStarted", "test/Save")
+        const interrupted = frameOf("CommandInterrupted", "test/Save")
+        const quit = frameOf("CommandInterrupted", "test/Quit")
+        assert.deepStrictEqual([quit.reason, quit.causedBy], ["self", undefined])
+        assert.deepStrictEqual(
+          [started.issued, started.causedBy, typeof started.spanId, typeof started.traceId],
+          [{ seq: updates[0]!.seq, index: 0 }, updates[0]!.seq, "string", "string"]
+        )
+        assert.deepStrictEqual(
+          [interrupted.issued, interrupted.spanId, interrupted.causedBy, interrupted.reason],
+          [started.issued, started.spanId, updates[1]!.seq, "interrupt"]
+        )
+        const replay = Story.fromLog(Editor, wire)
+        assert.deepStrictEqual([replay.model, replay.replayed, replay.divergence], [1, 2, undefined])
+      })))
+
+    it.effect("makeEncoded queues on record, batches as Wire frames, recovers when onBatch dies, and drops after its Scope", () =>
+      Effect.gen(function*() {
+        const batches: Array<ReadonlyArray<MessageLog.WireEntry>> = []
+        const scope = yield* Scope.make()
+        const log = yield* MessageLog.makeEncoded((batch) =>
+          batch[0]!.seq === 3 ? Effect.die("inspector broke") : Effect.sync(() => batches.push(batch))
+        ).pipe(Scope.provide(scope))
+        log.record({ _tag: "SessionStarted", seq: 1, at: 0, session: "s", app: "A" })
+        log.record({ _tag: "SessionStarted", seq: 2, at: 0, session: "s", app: "B" })
+        assert.deepStrictEqual(batches, [])
+        yield* Effect.yieldNow
+        assert.deepStrictEqual(batches, [[
+          { _tag: "SessionStarted", seq: 1, at: 0, session: "s", app: "A" },
+          { _tag: "SessionStarted", seq: 2, at: 0, session: "s", app: "B" }
+        ]])
+        log.record({ _tag: "SessionStarted", seq: 3, at: 0, session: "s", app: "C" })
+        yield* Effect.yieldNow
+        log.record({ _tag: "SessionStarted", seq: 4, at: 0, session: "s", app: "D" })
+        yield* Effect.yieldNow
+        assert.deepStrictEqual(batches.map((batch) => batch.map((frame) => frame.seq)), [[1, 2], [4]])
+        yield* Scope.close(scope, Exit.void)
+        log.record({ _tag: "SessionStarted", seq: 5, at: 0, session: "s", app: "E" })
+        yield* Effect.yieldNow
+        assert.strictEqual(batches.length, 2)
+      }))
+
+    it.effect("makeEncoded masks overlapping keys, and sends any part its Schema rejects as a placeholder, checked containers included", () =>
+      provideHost(Effect.gen(function*() {
+        const EncodedSecret = Schema.Redacted(Schema.String).pipe(
+          Schema.decodeTo(
+            Schema.String,
+            SchemaTransformation.transform({ decode: Redacted.value, encode: Redacted.make })
+          )
+        )
+        const Secret = Schema.Record(Schema.TemplateLiteral(["secret-", Schema.String]), EncodedSecret)
+        const Loose = Schema.Record(Schema.String, Schema.Unknown)
+        const Checked = Schema.Array(Schema.Number).check(Schema.isMinLength(2))
+        for (const order of [[Secret, Loose], [Loose, Secret]] as const) {
+          const signatures = order as unknown as readonly [typeof Secret, typeof Loose]
+          const Page = Schema.StructWithRest(Schema.Struct({}), signatures)
+          const Entries = Schema.StructWithRest(Schema.Struct({ n: Schema.Number, list: Checked }), signatures)
+          const State = Schema.Struct({ entries: Entries, pages: Schema.Array(Page).check(Schema.isMinLength(2)) })
+          const page = (note: string) => ({ "secret-a": "must-not-log", note })
+          const state = {
+            entries: { n: "rejected-sibling", list: [987654321], "secret-a": "must-not-log" },
+            pages: [page("unchecked-page")]
+          } as unknown as typeof State.Type
+          const Message = UiSchema.TaggedEnum({ Set: { state: State } })
+          const Vault = Component.define({
+            name: "Vault",
+            scoped: false,
+            props: State,
+            model: State,
+            message: Message
+          }).make({
+            init: () => state,
+            update: (_, message) => message.state,
+            view: (h) => h.text("vault")
+          })
+          const root = yield* TestHost.mount(Vault, state)
+          root.send(Message.Set({
+            state: {
+              entries: { ...state.entries, other: 1 },
+              pages: [page("checked-page"), page("checked-page")]
+            } as unknown as typeof State.Type
+          }))
+          yield* TestHost.settle
+          const frames: Array<MessageLog.WireEntry> = []
+          const warnings: Array<string> = []
+          const logger = Logger.make<unknown, void>((options) => {
+            if (options.logLevel === "Warn") warnings.push(String(options.message))
+          })
+          yield* Effect.scoped(Effect.gen(function*() {
+            const log = yield* MessageLog.makeEncoded((batch) => Effect.sync(() => frames.push(...batch)))
+            for (const entry of root.log()) log.record(entry)
+            yield* Effect.yieldNow
+          })).pipe(Effect.provide(Logger.layer([logger])))
+          const json = JSON.stringify(frames)
+          const copied = (JSON.parse(json) as Array<MessageLog.WireEntry>).map((frame) =>
+            Schema.decodeUnknownSync(MessageLog.Wire)(frame)
+          )
+          const failed = { "~unserialisable": "encode" }
+          const redacted = { "~redacted": true }
+          const masked = { n: failed, list: failed, "secret-a": redacted }
+          const checkedPage = { "secret-a": redacted, note: "checked-page" }
+          const before = { entries: masked, pages: failed }
+          for (const received of [frames, copied]) {
+            const mounted = received.find((frame) => frame._tag === "Mounted")!
+            const update = received.find((frame) => frame._tag === "Update")!
+            assert.deepStrictEqual([mounted.props, mounted.model], [before, before])
+            assert.deepStrictEqual([update.message, update.model], [failed, {
+              entries: { ...masked, other: 1 },
+              pages: [checkedPage, checkedPage]
+            }])
+          }
+          for (const value of ["must-not-log", "rejected-sibling", "987654321", "unchecked-page"]) {
+            assert.notInclude(json, value)
+          }
+          assert.deepStrictEqual(warnings.map((message) => message.split(" failed")[0]).sort(), [
+            "MessageLog: Vault.message",
+            "MessageLog: Vault.model",
+            "MessageLog: Vault.props"
+          ])
+        }
+        const Keep = Command.make("Keep", { args: { list: Checked } }, () => Effect.void)
+        assert.deepStrictEqual(MessageLog.encodeCommand(Keep.make({ list: [987654321] })).args, { list: [987654321] })
+      })))
+
+    it.effect("a run that interrupts itself while its instance's close is held open logs self", () =>
+      provideHost(Effect.gen(function*() {
+        const hold = Deferred.makeUnsafe<void>()
+        const quit = Deferred.makeUnsafe<void>()
+        const Message = UiSchema.TaggedEnum({ Close: {}, Done: {} })
+        const done = Command.map(() => Message.Done())
+        const Holder = Component.define({ name: "Holder", scoped: false, model: Schema.Null, message: Message }).make({
+          init: ($) =>
+            $.set(null).run(
+              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold))).make().pipe(
+                done
+              )
+            ),
+          update: ($) => $.model,
+          view: (h) => h.text("holder")
+        })
+        const Middle = Component.define({ name: "Middle", scoped: false, model: Schema.Null, message: Message }).make({
+          init: ($) =>
+            $.set(null).run(
+              Command.make("test/Quit", { args: {} }, () => Effect.andThen(Deferred.await(quit), Effect.interrupt))
+                .make().pipe(done)
+            ),
+          update: ($) => $.model,
+          view: (h) => h.el("div", Holder(h, { key: "h", props: {} }))
+        })
+        const Top = Component.define({ name: "Top", scoped: false, model: Schema.Boolean, message: Message }).make({
+          init: () => true,
+          update: ($, message) => message._tag === "Close" ? false : $.model,
+          view: (h, open) => h.el("div", open ? Middle(h, { key: "m", props: {} }) : null)
+        })
+        const root = yield* TestHost.mount(Top, {})
+        yield* TestHost.settle
+        root.send(Message.Close())
+        yield* TestHost.settle
+        Deferred.doneUnsafe(quit, Exit.void)
+        yield* TestHost.settle
+        const quitEnd = root.log().find((entry) =>
+          entry._tag === "CommandInterrupted" && entry.name === "test/Quit"
+        ) as MessageLog.CommandInterrupted
+        assert.deepStrictEqual([quitEnd.reason, quitEnd.causedBy], ["self", undefined])
+        Deferred.doneUnsafe(hold, Exit.void)
+        yield* TestHost.settle
+      })))
+
+    it.effect("a queued run's CommandStarted names the step that freed its group", () =>
+      provideHost(Effect.gen(function*() {
+        const gates = [Deferred.makeUnsafe<void>(), Deferred.makeUnsafe<void>()]
+        const Message = UiSchema.TaggedEnum({ Save: {}, Saved: {} })
+        const Save = Command.make(
+          "test/Save",
+          { args: { n: Schema.Number }, mode: "queue" },
+          ({ n }) => Deferred.await(gates[n]!)
+        )
+        const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Number, message: Message }).make(
+          {
+            init: () => 0,
+            update: ($, message) =>
+              message._tag === "Save"
+                ? $.set($.model + 1).run(Save.make({ n: $.model }).pipe(Command.map(() => Message.Saved())))
+                : $.model,
+            view: (h, n) => h.text(String(n))
+          }
+        )
+        const root = yield* TestHost.mount(Editor, {})
+        root.send(Message.Save())
+        root.send(Message.Save())
+        yield* TestHost.settle
+        Deferred.doneUnsafe(gates[0]!, Exit.void)
+        yield* TestHost.settle
+        const saved = root.log().find((entry) => entry._tag === "Update" && entry.source._tag === "Command")!
+        const starts = root.log().filter((entry) => entry._tag === "CommandStarted")
+        assert.deepStrictEqual(starts.map((entry) => entry.causedBy), [starts[0]!.issued.seq, saved.seq])
+        Deferred.doneUnsafe(gates[1]!, Exit.void)
+        yield* TestHost.settle
+      })))
+
+    it.effect("a run whose result fails its instance names itself in Failed, which is its end", () =>
+      provideHost(Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Saved: {} })
+        for (
+          const [name, command] of [
+            [
+              "test/Die",
+              Command.make("test/Die", { args: {} }, () => Effect.die("boom")).make().pipe(
+                Command.map(() => Message.Saved())
+              )
+            ],
+            [
+              "test/Throw",
+              Command.make("test/Throw", { args: {} }, () => Effect.void).make().pipe(Command.map(() => {
+                throw new Error("boom")
+              }))
+            ]
+          ] as const
+        ) {
+          const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Message }).make(
+            {
+              init: ($) => $.set(null).run(command),
+              update: ($) => $.model,
+              view: (h) => h.text("editor")
+            }
+          )
+          const root = yield* TestHost.mount(Editor, {})
+          yield* Effect.exit(TestHost.settle)
+          const started = root.log().find((entry) => entry._tag === "CommandStarted")!
+          const failed = root.log().find((entry) => entry._tag === "Failed")!
+          assert.deepStrictEqual([failed.in, failed.name, failed.issued], ["command", name, started.issued])
+          assert.notInclude(tags(root), "CommandInterrupted")
+          assert.notInclude(tags(root), "CommandEnded")
+          const wire = MessageLog.makeEncoder().encode(failed)
+          assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire))), wire)
+          assert.deepStrictEqual((wire as MessageLog.WireEntry & { issued?: unknown }).issued, started.issued)
+        }
       })))
 
     it("the Wire encodes args through their Schema, redacted, with a structural fallback per field", () => {
@@ -4317,6 +4604,12 @@ describe("Runtime", () => {
         yield* Fiber.join(closed)
         // The close waits for the instance's runs before any of its Layers is released.
         assert.deepStrictEqual(events, ["clean", "release a", "release b"])
+        assert.deepStrictEqual(
+          root.log().flatMap((entry) => entry._tag === "CommandInterrupted" ? [entry.reason] : []),
+          [
+            "layer"
+          ]
+        )
       })))
 
     it.effect("cleanup still running from an earlier flush is waited for before a key change releases the services it may use", () =>

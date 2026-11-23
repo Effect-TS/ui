@@ -459,6 +459,7 @@ interface Run {
   cancelWait: (() => void) | undefined
   /** The entry that started the step that stopped the run, for the `CommandInterrupted` its fiber's exit logs. */
   cutBy: number | undefined
+  cutFor: MessageLog.InterruptReason | undefined
 }
 
 interface SubscriptionRun {
@@ -558,6 +559,7 @@ export interface Instance {
   // empty Map or Set costs about 150 bytes.
   /** `Unmounted` is logged: the instance left the tree, though its Scope may still be closing. */
   left: boolean
+  leftBy: number | undefined
   /** How many instances whose component has a `head` are in the tree at or below it. */
   heads: number
   /** The containers of the detached children its view declares, unregistered when it leaves. */
@@ -1496,7 +1498,7 @@ const setup = (
   let origin: number | undefined
   // How many `under` calls are running, and whether the outermost is a step with no entry yet.
   let depth = 0
-  let starting = false
+  let starting: { seq: number | undefined } | undefined
   /**
    * Numbers the next entry, and names the entry it follows from: `causedBy` when its caller knows it,
    * and otherwise the entry that started what is running. A step's first entry has none, and starts it.
@@ -1504,9 +1506,10 @@ const setup = (
   const number = (causedBy: number | undefined): Pick<MessageLog.Base, "seq" | "causedBy"> => {
     const next = ++seq
     const cause = causedBy ?? origin
-    if (starting) {
-      starting = false
+    if (starting !== undefined) {
       origin = cause ?? next
+      starting.seq = origin
+      starting = undefined
     }
     return cause === undefined ? { seq: next } : { seq: next, causedBy: cause }
   }
@@ -1515,7 +1518,7 @@ const setup = (
     const outer = origin
     const outerStarting = starting
     origin = cause
-    starting = start && cause === undefined
+    starting = start && cause === undefined && log.enabled ? { seq: undefined } : undefined
     depth++
     try {
       return f()
@@ -2260,6 +2263,7 @@ const setup = (
     if (keptLive > 0) leaveKept(inst)
     // An outlet is a place in its receiver's view, not an instance the log knows.
     if (inst.component !== outletComponent) record(inst, { _tag: "Unmounted" })
+    inst.leftBy = origin
   }
 
   /**
@@ -2298,7 +2302,8 @@ const setup = (
     cause: Cause.Cause<unknown>,
     where: MessageLog.FailedIn,
     name?: string,
-    update?: MessageLog.Failed["update"]
+    update?: MessageLog.Failed["update"],
+    issued?: MessageLog.Issued
   ) => {
     if (inst.closed) return
     const failedSeq = record(inst, {
@@ -2307,7 +2312,8 @@ const setup = (
       in: where,
       name,
       cause,
-      ...(update === undefined ? undefined : { update })
+      ...(update === undefined ? undefined : { update }),
+      ...(issued === undefined ? undefined : { issued })
     })
     forkNow(
       ctx,
@@ -2755,7 +2761,7 @@ const setup = (
 
   /** Stops a run whose selection went: an awaiting run's message is dropped rather than delivered. */
   const dropRun = (inst: Instance, run: Run) => {
-    if (run.held === undefined) return stopRun(inst, run)
+    if (run.held === undefined) return stopRun(inst, run, "layer")
     endWait(run, "interrupt")
     run.held = undefined
     removeRun(inst, run)
@@ -2963,6 +2969,7 @@ const setup = (
     adoptsChildren = false
     runs: Array<Run> = emptyList
     left = false
+    leftBy: number | undefined = undefined
     cause: number | undefined = undefined
     /** The instance's event dispatch and finalizer: see `fireOn`. */
     private fired: OmitThisParameter<typeof fireOn> | undefined = undefined
@@ -4044,7 +4051,7 @@ const setup = (
     }
     const decision = schedule.schedule(entriesOf(inst), command)
     if (command._tag === "Interrupt") {
-      for (const entry of decision.interrupt) stopRun(inst, entry.value)
+      for (const entry of decision.interrupt) stopRun(inst, entry.value, "interrupt")
       return
     }
     switch (decision.action) {
@@ -4080,7 +4087,8 @@ const setup = (
           waiting: false,
           waited: undefined,
           cancelWait: undefined,
-          cutBy: undefined
+          cutBy: undefined,
+          cutFor: undefined
         }
         if (inst.runs === emptyList) inst.runs = []
         inst.runs.push(run)
@@ -4113,7 +4121,7 @@ const setup = (
       const next = schedule.next(entriesOf(inst), entryOf(run))
       if (next === undefined) return
       if (inst.closed) {
-        stopRun(inst, next.value)
+        stopRun(inst, next.value, "unmount")
         continue
       }
       next.value.status = "running"
@@ -4131,11 +4139,11 @@ const setup = (
    * A wait only delays a message: an awaiting run delivers it at once, whatever stops it, unless its
    * instance is gone. `by` is what the log says cut its wait.
    */
-  const stopRun = (inst: Instance, run: Run, by: "switch" | "interrupt" = "interrupt") => {
+  const stopRun = (inst: Instance, run: Run, by: MessageLog.InterruptReason) => {
     if (run.done) return
     if (run.held !== undefined) {
       const closed = inst.closed || rootClosed
-      endWait(run, closed ? "closed" : by)
+      endWait(run, closed ? "closed" : by === "switch" ? "switch" : "interrupt")
       if (closed) {
         run.held = undefined
         removeRun(inst, run)
@@ -4151,12 +4159,13 @@ const setup = (
       run.done = true
       run.status = "stopping"
       run.cutBy = origin
+      run.cutFor = by
       fiber.interruptUnsafe()
       return
     }
     removeRun(inst, run)
     if (fiber === undefined) run.handle?.finish({ _tag: "Stopped" })
-    recordInterrupted(inst, run)
+    recordInterrupted(inst, run, by)
     if (!inst.closed) markDirty(inst)
     promote(inst, run)
   }
@@ -4167,7 +4176,7 @@ const setup = (
    */
   const stopAndAwait = (inst: Instance, run: Run): Effect.Effect<void> => {
     const fiber = run.fiber
-    stopRun(inst, run)
+    stopRun(inst, run, "unmount")
     return fiber === undefined ? Effect.void : Effect.asVoid(Fiber.await(fiber))
   }
   const awaitRuns = (waits: ReadonlyArray<Effect.Effect<void>>): Effect.Effect<void> =>
@@ -4190,6 +4199,8 @@ const setup = (
       : (envCtx: Context.Context<any>) => goNow(envCtx, forkLater)
     const goNow = (envCtx: Context.Context<any>, fork: typeof forkNow) => {
       if (run.done || frozen) return
+      const startedBy = origin
+      const opening = starting
       const command = run.command
       // Every run gets a Scope of its own, closed with the run's exit before its fiber exits, so what
       // the body acquires is released when the run ends, not when its instance does.
@@ -4222,6 +4233,13 @@ const setup = (
           // Kept on the run as well, for the end entries of a run that sends no message.
           run.spanId = span.spanId
           run.traceId = span.traceId
+          record(inst, {
+            _tag: "CommandStarted",
+            name: command.name,
+            issued: run.issued,
+            spanId: span.spanId,
+            traceId: span.traceId
+          }, startedBy ?? opening?.seq)
           source = {
             _tag: "Command",
             name: command.name,
@@ -4268,7 +4286,7 @@ const setup = (
     }
     // After a handled Layer failure, work runs against the parent's services. A run issued before a
     // keyed provide's due read starts against the selection the read leaves.
-    onceSelected(inst, go, () => stopRun(inst, run))
+    onceSelected(inst, go, () => stopRun(inst, run, "layer"))
   }
 
   const beginRun = (made: queryCore.Cache, command: Run["command"]): Query.RunHandle =>
@@ -4296,7 +4314,7 @@ const setup = (
       // A stopped run sends nothing. It leaves now, so its group is free, `h.isRunning` ends and the
       // log says so. A defect in its cleanup can't fail the run that replaced it: it is reported.
       removeRun(inst, run)
-      recordInterrupted(inst, run)
+      recordInterrupted(inst, run, run.cutFor!)
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) {
         report(
           new Command.CleanupFailed({
@@ -4319,8 +4337,10 @@ const setup = (
       // It ended while its instance closes, before the close stopped it. Its message is dropped, and a
       // failure tells only the log.
       removeRun(inst, run)
-      if (interrupted) recordInterrupted(inst, run)
-      else {
+      if (interrupted) {
+        if (run.spanId === undefined) run.cutBy = inst.leftBy
+        recordInterrupted(inst, run, run.spanId === undefined ? "unmount" : "self")
+      } else {
         if (Exit.isFailure(exit)) {
           forkNow(ctx, Effect.logError(`${inst.path} is gone, and its Command ${command.name} failed`, exit.cause))
         }
@@ -4332,7 +4352,7 @@ const setup = (
     }
     if (interrupted) {
       removeRun(inst, run)
-      recordInterrupted(inst, run)
+      recordInterrupted(inst, run, "self")
       markDirty(inst)
       promote(inst, run)
       return
@@ -4341,7 +4361,7 @@ const setup = (
     if (Exit.isFailure(exit) && (Cause.hasDies(exit.cause) || reject === undefined)) {
       // A typed failure nothing maps is a defect too: an unmatched Command got past the types.
       removeRun(inst, run)
-      failInstance(inst, exit.cause, "command", command.name)
+      failInstance(inst, exit.cause, "command", command.name, undefined, run.issued)
       return
     }
     if (Exit.isSuccess(exit) && command._tag === "Stream") {
@@ -4351,23 +4371,24 @@ const setup = (
       promote(inst, run)
       return
     }
-    const message = guard(
-      inst,
-      "command",
-      () =>
-        Exit.isFailure(exit)
-          ? { value: reject!(Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as never) }
-          : { value: command.resolve(exit.value as never) },
-      command.name
-    )
-    if (message === undefined || run.done) return
+    let message: unknown
+    try {
+      message = Exit.isFailure(exit)
+        ? reject!(Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as never)
+        : command.resolve(exit.value as never)
+    } catch (error) {
+      removeRun(inst, run)
+      failInstance(inst, Cause.die(error), "command", command.name, undefined, run.issued)
+      return
+    }
+    if (run.done) return
     // Known now, though applied at delivery: a silent result is held like a message.
-    run.silent = isNoop(message.value) && run.silent !== false
+    run.silent = isNoop(message) && run.silent !== false
     // From here until delivery the run is awaiting: on its own wait, or under `queue` behind an earlier
     // message of its group. Either way the next queued run starts now, before any `update` this
     // delivers can issue another run of the group, which would otherwise start ahead of it.
     run.status = "awaiting"
-    run.held = { message: message.value, source }
+    run.held = { message, source }
     promote(inst, run)
     if (waits) beginWait(inst, run)
     release(inst, run)
@@ -4424,7 +4445,7 @@ const setup = (
       if (run.command.mode !== "queue" && run.done) return
       const next = schedule.deliverable(entriesOf(inst), entryOf(run), (other) => !other.waiting)
       if (next === undefined) return
-      if (inst.closed || rootClosed) return stopRun(inst, next.value)
+      if (inst.closed || rootClosed) return stopRun(inst, next.value, "unmount")
       deliver(inst, next.value)
     }
   }
@@ -4452,13 +4473,14 @@ const setup = (
       silent: run.silent === true,
       ...run.waited
     })
-  const recordInterrupted = (inst: Instance, run: Run) =>
+  const recordInterrupted = (inst: Instance, run: Run, reason: MessageLog.InterruptReason) =>
     record(inst, {
       _tag: "CommandInterrupted",
       name: run.command.name,
       issued: run.issued,
       spanId: run.spanId,
-      traceId: run.traceId
+      traceId: run.traceId,
+      reason
     }, run.cutBy)
 
   /** `h.isRunning` for one instance: a run of the Command in the schedule, of the group if given. */

@@ -52,8 +52,9 @@ describe("Router", { concurrent: false }, () => {
               return entry._tag
           }
         })
-        assert.deepStrictEqual(entries.slice(0, 6), [
+        assert.deepStrictEqual(entries.slice(0, 7), [
           "Update /App Go(DomEvent)",
+          "CommandStarted",
           "Update /App ChangedRoute(Subscription)",
           "Update /App Navigated(Command)",
           "CommandEnded @effect/ui/Router/Push",
