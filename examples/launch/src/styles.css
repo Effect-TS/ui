@@ -172,12 +172,26 @@ a {
   gap: 24px;
 }
 
-.example {
+.example,
+.arch-column {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  row-gap: 12px;
+  min-width: 0;
+  margin: 0;
+}
+
+.example-body,
+.arch-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  margin: 0;
+}
+
+.arch-body {
+  gap: 10px;
 }
 
 .article .example {
@@ -188,6 +202,8 @@ a {
 .arch-title {
   font-size: 0.9375rem;
   font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
 }
 
 .demo {
@@ -268,10 +284,6 @@ a {
 }
 
 .arch-column {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
