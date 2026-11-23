@@ -36,6 +36,7 @@ import * as childOf from "./child.ts"
 import { propsEqual, sharedEqual } from "./equal.ts"
 import * as Executor from "./executor.ts"
 import * as headFold from "./headFold.ts"
+import * as lazyOf from "./lazy.ts"
 import * as match from "./match.ts"
 import { isKeyed, keyOf } from "./match.ts"
 import * as messageLog from "./messageLog.ts"
@@ -353,11 +354,18 @@ interface RFallback {
   /** A failed child, not its feature's Layer, put it here: it stays until the key changes. */
   readonly failedChild: boolean
   readonly scoped?: undefined
+  readonly lazy?: LazySlot | undefined
+}
+
+interface LazySlot extends Load {
+  readonly lazy: Component.Lazy.Any
+  readonly release: () => void
 }
 
 interface RScoped {
   readonly _tag: "Fallback"
   readonly scoped: true
+  readonly lazy?: undefined
   v: View.Child<any, any>
   inner: RChild | RFallback | RText
   gone?: boolean
@@ -664,6 +672,12 @@ export interface Pending {
 }
 
 /** @internal */
+export interface Load {
+  readonly path: string
+  readonly name: string
+}
+
+/** @internal */
 export interface Root {
   readonly path: string
   readonly session: string
@@ -673,6 +687,7 @@ export interface Root {
   readonly send: (message: unknown) => void
   /** The Commands still running, queued, awaiting or stopping anywhere in the tree. */
   readonly pending: () => ReadonlyArray<Pending>
+  readonly loads: () => ReadonlyArray<Load>
   /** The query cache the runtime owns, read where the `Query` module is loaded. */
   readonly cache: ReturnType<typeof Query.internals>
   /** Why the root failed, once it has. */
@@ -1764,6 +1779,14 @@ const setup = (
   // Each provided Layer build still pending, stamped with the flush it began in.
   let flushes = 0
   const building = new Set<{ readonly flush: number }>()
+  const lazySlots = new Set<LazySlot>()
+  const loads = (): Array<Load> => {
+    const out: Array<Load> = []
+    for (const slot of lazySlots) {
+      if (lazyOf.stateOf(slot.lazy)._tag === "Loading") out.push({ path: slot.path, name: slot.name })
+    }
+    return out
+  }
   // True while the first render or a flush is building nodes the host hasn't committed yet.
   let rendering = true
   const wake = () => {
@@ -1979,7 +2002,7 @@ const setup = (
     idleCheck = true
     executor.schedule(() => {
       idleCheck = false
-      if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0) return
+      if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0 || loads().length > 0) return
       // Any fetch in flight holds the response: a watch's, a `get`'s, a prefetch nobody renders.
       if (cache !== undefined && cache.pending().length > 0) return
       for (const f of idleWaiters.splice(0)) f()
@@ -5834,6 +5857,10 @@ const setup = (
       component = found.value.component
       // The Context that closed the implementation's requirements wins over the mount position's.
       childEnv = readyEnv(Context.merge(env.ctx!, found.value.context), env)
+    } else if (lazyOf.TypeId in target) {
+      const state = lazyOf.stateOf(target)
+      if (state._tag !== "Loaded") return loadingSlot(inst, view, env, range)
+      component = state.component
     } else {
       component = target
     }
@@ -5848,8 +5875,8 @@ const setup = (
     const child = makeInstance(
       component,
       view.props,
-      // A feature's segment names the feature, not the component that implements it.
-      component === target ? named : `${inst.path}/${segment(view)}`,
+      // A feature's or a lazy component's segment names it, not the component that implements it.
+      component === target ? named : named ?? `${inst.path}/${segment(view)}`,
       view.key,
       inst,
       childEnv,
@@ -5906,23 +5933,54 @@ const setup = (
   }
 
   /**
-   * What a slot shows for a status other than `Ready`: its `fallback` of that status. Only a failed
-   * child's slot may have none, and shows nothing. A fallback that throws fails its author, who wrote
+   * What a slot shows for a status other than `Ready`: its `fallback` of that status, or nothing
+   * without one. A feature's slot always has one. A fallback that throws fails its author, who wrote
    * the tree it sits in, with source `fallback`.
    */
-  const fallbackOf = (
-    inst: Instance,
-    view: View.Child<any, any>,
-    status: Status,
-    failedChild: boolean
-  ): View.Node<any, any> =>
+  const fallbackOf = (inst: Instance, view: View.Child<any, any>, status: Status): View.Node<any, any> =>
     shownIn(
       inst,
       view,
       guard(inst.author, "fallback", () =>
-        failedChild && view.fallback === undefined ? emptyText : View.toNode(view.fallback!(resultOf(status)))) ??
+        view.fallback === undefined ? emptyText : View.toNode(view.fallback(resultOf(status)))) ??
         emptyText
     )
+
+  const loadingSlot = (inst: Instance, view: View.Child<any, any>, env: Env, range: Range | undefined): RFallback => {
+    const lazy = view.component as Component.Lazy.Any
+    const unwatch = lazyOf.watch(lazy, () => {
+      if (!inst.closed) markDirty(inst)
+      checkIdle()
+    })
+    const scope = inst.scope
+    const slot: LazySlot = {
+      path: `${inst.path}/${segment(view)}`,
+      name: lazy[lazyOf.TypeId].name,
+      lazy,
+      release: () => {
+        unwatch()
+        scopeRemoveFinalizerUnsafe(scope, slot)
+        if (lazySlots.delete(slot)) checkIdle()
+      }
+    }
+    if (scope.state._tag === "Closed") {
+      unwatch()
+    } else {
+      lazySlots.add(slot)
+      scopeAddFinalizerUnsafe(scope, slot, () => Effect.sync(slot.release))
+    }
+    lazy.preload()
+    return { ...fallbackSlot(inst, view, pendingStatus, false, env, range), lazy: slot }
+  }
+
+  const lazyStatus = (lazy: Component.Lazy.Any): Status => {
+    const state = lazyOf.stateOf(lazy)
+    return state._tag === "Loaded"
+      ? readyStatus
+      : state._tag === "Failed"
+      ? { _tag: "Failed", cause: Cause.die(state.error) }
+      : pendingStatus
+  }
 
   const failedChild = (
     inst: Instance,
@@ -5944,7 +6002,7 @@ const setup = (
     env: Env,
     range: Range | undefined
   ): RFallback => {
-    const shown = fallbackOf(inst, view, status, failedChild)
+    const shown = fallbackOf(inst, view, status)
     let inner: Rendered | undefined
     if (range !== undefined) {
       if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
@@ -6608,19 +6666,26 @@ const setup = (
   ): RChild | RFallback => {
     switch (rendered._tag) {
       case "Fallback": {
-        const status = rendered.failedChild ? rendered.status : env.status
+        const lazy = lazyOf.TypeId in child.component
+        const status = rendered.failedChild ? rendered.status : lazy ? lazyStatus(child.component) : env.status
         if (status._tag === "Ready") {
-          // Ready now: the fallback goes, and the feature mounts in its place.
+          // Ready now: the fallback goes, and the feature or the lazy component mounts in its place.
+          rendered.lazy?.release()
           destroy(inst, rendered.inner)
-          return makeChild(inst, child, env)
+          // A lazy scoped component makes a scoped slot, not a fallback: its parent's next patch sees
+          // `scoped` and goes to `patchScoped`.
+          return lazy
+            ? createChild(inst, lazyOf.scopedOnceLoaded(child), env) as RFallback
+            : makeChild(inst, child, env)
         }
-        const shown = fallbackOf(inst, child, status, rendered.failedChild)
+        const shown = fallbackOf(inst, child, status)
         return {
           _tag: "Fallback",
           v: child,
           inner: patchOrReplace(inst, rendered.inner, shown, settled(env)),
           status,
-          failedChild: rendered.failedChild
+          failedChild: rendered.failedChild,
+          lazy: rendered.lazy
         }
       }
       case "Child": {
@@ -7276,6 +7341,7 @@ const setup = (
       }
       case "Fallback": {
         const inner = rendered.inner
+        rendered.lazy?.release()
         if (rendered.scoped) {
           rendered.gone = true
           const entry = entryAt(inst.author, rendered.v)
@@ -7562,6 +7628,7 @@ const setup = (
     model: () => root.failure === undefined ? root.model : undefined,
     send: (message) => root.dispatch(message, { _tag: "Dispatch" }),
     pending: () => pendingOf(root),
+    loads,
     get cache() {
       return queryCache()
     },

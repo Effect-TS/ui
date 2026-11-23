@@ -153,8 +153,8 @@ export const isService = (u: unknown): u is Any => Predicate.hasProperty(u, Type
  * **When to use**
  *
  * Use when a piece of UI should be swappable: the app provides the live
- * implementation, a test provides a fake, and code splitting provides it from
- * an async Layer.
+ * implementation and a test provides a fake. To load a component from a
+ * chunk of its own, use `Component.lazy`.
  *
  * **Details**
  *

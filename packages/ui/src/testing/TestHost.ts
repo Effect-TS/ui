@@ -348,13 +348,13 @@ export interface Tree {
 }
 
 /**
- * Work still in flight: a Command run or a fetch.
+ * Work still in flight: a Command run, a fetch or a lazy component's load.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type Pending = PendingCommand | PendingFetch
+export type Pending = PendingCommand | PendingFetch | PendingLoad
 
 /**
  * A Command run still in flight: the instance that issued it, its name, and
@@ -390,6 +390,20 @@ export interface PendingFetch {
   readonly logKey: string
   readonly status: "running" | "held"
   readonly trigger: Query.Trigger
+}
+
+/**
+ * A `Component.lazy` module a slot waits for: the slot's path and the name
+ * given to `lazy`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface PendingLoad {
+  readonly _tag: "Load"
+  readonly path: string
+  readonly name: string
 }
 
 /**
@@ -593,7 +607,7 @@ export interface Root<out Model, in Msg, out Events> {
   readonly emitted: ReadonlyArray<Events>
   /** This mount's log entries, oldest first. */
   readonly log: () => ReadonlyArray<MessageLog.Entry>
-  /** The Command runs and fetches still in flight in this tree. */
+  /** The Command runs, fetches and lazy loads still in flight in this tree. */
   readonly pending: () => ReadonlyArray<Pending>
   /** Every fetch the tree's cache started, oldest first: the log's `FetchStarted` entries. */
   readonly fetches: () => ReadonlyArray<MessageLog.FetchStarted>
@@ -729,7 +743,8 @@ export const register = (
   Effect.gen(function*() {
     const pending = (): ReadonlyArray<Pending> => [
       ...root.pending().map((run): Pending => ({ _tag: "Command", ...run })),
-      ...root.cache.pending().map((fetch): Pending => ({ _tag: "Fetch", path: root.path, ...fetch }))
+      ...root.cache.pending().map((fetch): Pending => ({ _tag: "Fetch", path: root.path, ...fetch })),
+      ...root.loads().map((load): Pending => ({ _tag: "Load", ...load }))
     ]
     const unregister = testHost.register({ path: root.path, pending, crashed: root.crashed })
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
@@ -793,7 +808,8 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * Subscription waiting for its next value, or a Command or fetch sleeping on
  * the clock, doesn't keep `settle` from returning; adjust `TestClock`, which
  * runs what it wakes. Work that resolves a Promise gets a few macrotasks to
- * come back. A run or fetch that never returns is left in `pending()`.
+ * come back. A run or fetch that never returns is left in `pending()`. A
+ * `Component.lazy` load is waited for until it settles.
  *
  * **Gotchas**
  *
@@ -844,9 +860,10 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
     }
     // A run or fetch sleeping on the clock looks the same as one waiting on a Promise, so anything
     // in flight gets the grace.
-    if (testHost.pending().length === 0) return
+    const pending = testHost.pending()
+    if (pending.length === 0) return
     // Something may come back from outside the scheduler, such as a resolved Promise.
-    quiet++
+    if (!pending.some((pending) => pending._tag === "Load")) quiet++
     yield* nextMacrotask
   }
 })
@@ -854,6 +871,8 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
 const describePending = (pending: Pending): string =>
   pending._tag === "Command"
     ? `  ${pending.path} ${pending.name} (${pending.status})`
+    : pending._tag === "Load"
+    ? `  ${pending.path} load ${pending.name}`
     : `  ${pending.path} fetch ${pending.query} ${pending.logKey} (${pending.status}, ${pending.trigger})`
 
 /**

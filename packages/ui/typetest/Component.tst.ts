@@ -313,6 +313,56 @@ describe("Component", () => {
     })
   })
 
+  describe("lazy", () => {
+    const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
+    type ParentMessage = typeof ParentMessage.Type
+    const ParentDef = Component.define({ name: "Parent", scoped: false, model: Schema.Null, message: ParentMessage })
+    const todo = { id: "", title: "", done: false }
+    const LazyTodo = Component.lazy("LazyTodo", () => Promise.resolve(TodoItem))
+
+    it("reads props, events, requirements and fallback result from the loaded component", () => {
+      expect(LazyTodo).type.toBe<
+        Component.Lazy<{ readonly todo: typeof Todo.Type }, typeof TodoItemEvents.Type, SaveTodo>
+      >()
+      ParentDef.view((_, h) => {
+        expect(
+          LazyTodo(h, {
+            props: { todo },
+            onEmit: (events) => ParentMessage.make(events),
+            fallback: (result) => {
+              expect(result).type.toBe<AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>>()
+              return h.el("p")
+            }
+          })
+        ).type.toBe<View.Child<ParentMessage, SaveTodo>>()
+        expect(LazyTodo).type.not.toBeCallableWith(h, { props: { todo }, onEmit: () => Message.X() })
+        expect(LazyTodo).type.not.toBeCallableWith(h, {})
+        return h.el("p")
+      })
+    })
+
+    it("keeps a scoped component's call: it takes the s of h.scoped, and not h", () => {
+      const Scoped = Component.define({ name: "Scoped", scoped: true, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, view: (_, h) => h.el("p") })
+      const LazyScoped = Component.lazy("LazyScoped", () => Promise.resolve(Scoped))
+      expect(LazyScoped).type.toBe<Component.Lazy.Scoped<{}, never>>()
+      expect(LazyScoped).type.toBeAssignableTo<Component.Lazy.Any>()
+      ParentDef.view((_, h) => {
+        expect(LazyScoped).type.not.toBeCallableWith(h, { key: "s" })
+        return h.scoped((s) => {
+          expect(LazyScoped(s, { key: "s", fallback: () => h.el("p") })).type.toBe<View.Child<ParentMessage, never>>()
+          return LazyScoped(s, { key: "s" })
+        })
+      })
+    })
+
+    it("takes no headless component", () => {
+      const Headless = Component.define({ name: "Headless", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      expect(Component.lazy).type.not.toBeCallableWith("Headless", () => Promise.resolve(Headless))
+    })
+  })
+
   describe("calling a component", () => {
     const ParentMessage = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
     type ParentMessage = typeof ParentMessage.Type

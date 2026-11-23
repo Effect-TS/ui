@@ -12,6 +12,7 @@ import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as Router from "../Router.ts"
 import * as View from "../View.ts"
+import * as lazy from "./lazy.ts"
 import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
@@ -233,6 +234,10 @@ const walkPage = (
           if (Feature.isService(node.component)) return
           // A headless child's view is a closure over its parts, which this walk doesn't run.
           if (node.view !== undefined) return
+          if (lazy.isLazy(node.component)) {
+            const state = lazy.stateOf(node.component)
+            return state._tag === "Loaded" ? visit(state.component, node.props, behind) : undefined
+          }
           return visit(node.component, node.props, behind)
       }
     }

@@ -70,6 +70,7 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
+import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as sharedReads from "./internal/shared.ts"
@@ -1028,12 +1029,19 @@ export declare namespace Mountable {
   }
 
   /**
-   * The call signature of a component that isn't scoped.
+   * The call signature of a component that isn't scoped. `Result` is what
+   * `fallback` is passed: a lazy component's is also passed `Initial`.
    *
    * @category models
    * @since 0.1.0
    */
-  export interface Call<in out Props, out Events, out R = never, in Sl extends string = never> {
+  export interface Call<
+    in out Props,
+    out Events,
+    out R = never,
+    in Sl extends string = never,
+    out Result = AsyncResult.Failure<never, unknown>
+  > {
     /**
      * Declares a child of this component in a parent's view, from the parent's
      * `h`, which types `onEmit`, `onFailure` and `fallback` against the
@@ -1052,10 +1060,11 @@ export declare namespace Mountable {
       options:
         & View.Child.Options<Props, Events, NoInfer<Msg>>
         & {
-          /** Shown if the child fails, until its key changes. Without it, the child is blank. */
-          readonly fallback?:
-            | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
-            | undefined
+          /**
+           * Shown if the child fails, until its key changes, and while a lazy
+           * component's module loads. Without it, the child is blank.
+           */
+          readonly fallback?: ((result: Result) => View.Content<NoInfer<Msg>, RF>) | undefined
         }
         & SlotOptions<Sl, SC, NoInfer<Msg>>
         // Erased props are required, so every component is a `Component.Any`:
@@ -1697,12 +1706,19 @@ export declare namespace Scoped {
   /**
    * The call signature of a scoped component. It takes the `s` of
    * `h.scoped`, which says whether the scope has a predicate. Without one,
-   * the child's key must be a literal, or left out.
+   * the child's key must be a literal, or left out. `Result` is what
+   * `fallback` is passed: a lazy component's is also passed `Initial`.
    *
    * @category models
    * @since 0.1.0
    */
-  export interface Call<in out Props, out Events, out R = never, in Sl extends string = never> {
+  export interface Call<
+    in out Props,
+    out Events,
+    out R = never,
+    in Sl extends string = never,
+    out Result = AsyncResult.Failure<never, unknown>
+  > {
     /**
      * Declares a scoped child in a parent's view, from the `s` of the
      * parent's `h.scoped`. It lives until the scope's predicate is false
@@ -1713,10 +1729,11 @@ export declare namespace Scoped {
       options:
         & View.Child.ScopedOptions<Props, Events, NoInfer<Msg>, K, Ends>
         & {
-          /** Shown if the child fails, until its key changes. Without it, the child is blank. */
-          readonly fallback?:
-            | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
-            | undefined
+          /**
+           * Shown if the child fails, until its key changes, and while a lazy
+           * component's module loads. Without it, the child is blank.
+           */
+          readonly fallback?: ((result: Result) => View.Content<NoInfer<Msg>, RF>) | undefined
         }
         & SlotOptions<Sl, SC, NoInfer<Msg>>
         & (0 extends 1 & Props ? { readonly props: Props } : {})
@@ -3744,3 +3761,192 @@ export const provide: {
   const curried = !isComponent(args[0])
   return curried ? (component: Any) => go(component, args[0], args[1]) : go(args[0], args[1], args[2])
 }) as any
+
+/**
+ * Identifies a lazy component.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export const LazyTypeId = "~@effect/ui/Component/Lazy" as const
+
+/**
+ * Identifies a lazy component.
+ *
+ * @stability experimental
+ * @category type ids
+ * @since 0.1.0
+ */
+export type LazyTypeId = typeof LazyTypeId
+
+/**
+ * A component whose module is loaded with a dynamic `import()`, as returned
+ * by `lazy`. A parent declares it as it would the component: its props,
+ * events, slots and requirements are the loaded component's. The first child
+ * rendered starts loading the module. Its `fallback` is passed `Initial`
+ * while the module loads, and `Failure` if the load or the child fails.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Lazy<in out Props, out Events, out R = never, in Sl extends string = never>
+  extends Lazy.Members<Props, Events, R, Sl>, Mountable.Call<Props, Events, R, Sl, Lazy.Result>
+{}
+
+/**
+ * Helper types for `Lazy`.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace Lazy {
+  /**
+   * What every lazy component has, scoped or not.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Members<in out Props, out Events, out R = never, in Sl extends string = never> {
+    readonly [LazyTypeId]: Info<Props, Events, R, Sl>
+    /**
+     * Starts loading the module without rendering anything, such as when the
+     * pointer enters a link. Settles once the module has loaded or failed to,
+     * and never rejects.
+     */
+    readonly preload: () => Promise<void>
+  }
+
+  /**
+   * What a lazy component's `fallback` is passed: `Initial` while the
+   * module loads, and `Failure` if the load or the child fails.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type Result = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+
+  /**
+   * A lazy scoped component: it's written inside `h.scoped`, with the `s`
+   * it gives, as the scoped component is. Once its module has loaded, the
+   * child lives until the scope's predicate is false for its key, or the
+   * parent ends.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Scoped<in out Props, out Events, out R = never, in Sl extends string = never>
+    extends Members<Props, Events, R, Sl>, Scoped.Call<Props, Events, R, Sl, Result>
+  {}
+
+  /**
+   * The name a lazy component's children take in their paths, and phantom
+   * variance for its props, events, requirements and slots.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Info<in out Props, out Events, out R, in Sl extends string = never>
+    extends Mountable.Variance<Props, Events, R, Sl>
+  {
+    readonly name: string
+  }
+
+  /**
+   * Any lazy component, scoped or not.
+   *
+   * @category models
+   * @since 0.1.0
+   */
+  export type Any = Members<any, any, any>
+}
+
+/**
+ * Returns `true` if `u` is a lazy component.
+ *
+ * @stability experimental
+ * @category guards
+ * @since 0.1.0
+ */
+export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy
+
+/**
+ * Declares a component whose module is loaded the first time one of its
+ * children is rendered, so a bundler such as Vite puts it in a chunk of its
+ * own.
+ *
+ * **When to use**
+ *
+ * Use when most visits never show a page or a panel, so its code, and the
+ * code only it imports, stays out of the initial load.
+ *
+ * **Details**
+ *
+ * `load` returns the component, usually from `import()`. The props,
+ * events, slots and requirements are read from its type, which TypeScript
+ * erases, so the module is imported only when `load` runs. Nothing else in
+ * the app may import the module statically, or the bundler keeps it in the
+ * importing chunk.
+ *
+ * `name` stands in for the component's name in its children's paths, since
+ * the paths are needed before the module arrives. It's the name a `Scene`
+ * error or a log entry shows for the child.
+ *
+ * The first child rendered starts the load, which happens once per app. Until
+ * it ends, the child shows its `fallback`, passed `Initial`, and the
+ * parent's other content renders as usual. A child rendered after the module
+ * loaded mounts at once, with no fallback. A load that fails shows the
+ * fallback's `Failure` branch, and the next child that mounts loads again.
+ * `onFailure` hears a failure of the child, not of the load. `preload`
+ * starts the load without rendering, and `TestHost.settle` waits for a load
+ * in flight.
+ *
+ * A scoped component loaded lazily is still scoped: write its children
+ * inside `h.scoped`, with the `s` it gives.
+ *
+ * Provide the services that only the loaded component uses with
+ * `Component.provide` inside its module, so their Layers go into its chunk.
+ * Its requirements that the module doesn't provide surface in the parent's.
+ *
+ * **Gotchas**
+ *
+ * - `load` must resolve to a component that isn't headless. Any other
+ *   value fails the load, as does a `load` that throws.
+ * - A lazy scoped child is kept only once its module has loaded. Until then,
+ *   a parent that stops writing it drops its fallback, as it would any
+ *   child's.
+ * - The server waits for the load and renders the component. The client
+ *   doesn't load the module before it hydrates, so it replaces the server's
+ *   nodes with the fallback, then with the component once it has loaded.
+ * - A browser may keep a failed chunk request in its module map and fail
+ *   every later load of it without a request. Reloading the page recovers:
+ *   Vite reports such a failure with the `vite:preloadError` event.
+ *
+ * **Example** (A page loaded on its first visit)
+ *
+ * ```ts
+ * import { Component } from "@effect/ui"
+ *
+ * const SettingsPage = Component.lazy(
+ *   "SettingsPage",
+ *   () => import("./pages/SettingsPage.ts").then((module) => module.SettingsPage)
+ * )
+ *
+ * // In the parent's view, called as the component would be:
+ * // SettingsPage(h, {
+ * //   props: { user },
+ * //   onEmit: { Saved: () => AppMessage.SavedSettings() },
+ * //   fallback: (result) => h.p.children(result._tag === "Failure" ? "Couldn't load settings." : "Loading…")
+ * // })
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const lazy: <C extends AnyRoot>(
+  name: string,
+  load: () => Promise<C>
+) => C extends Mountable.Call<any, any, any, never> ? Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>>
+  : Lazy.Scoped<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy.make as any
