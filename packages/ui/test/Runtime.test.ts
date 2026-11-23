@@ -2603,6 +2603,188 @@ describe("Runtime", () => {
         ]])
       }).pipe(Effect.scoped))
 
+    it.effect("makeEncoded drops the batch onBatch dies on, sends later ones, and drops what's recorded after its Scope", () =>
+      Effect.gen(function*() {
+        const batches: Array<ReadonlyArray<MessageLog.WireEntry>> = []
+        const scope = yield* Scope.make()
+        const log = yield* MessageLog.makeEncoded((batch) =>
+          batch[0]!.seq === 1 ? Effect.die("inspector broke") : Effect.sync(() => batches.push(batch))
+        ).pipe(Scope.provide(scope))
+        log.record({ _tag: "SessionStarted", seq: 1, at: 0, session: "s", app: "A" })
+        yield* Effect.yieldNow
+        log.record({ _tag: "SessionStarted", seq: 2, at: 0, session: "s", app: "B" })
+        yield* Effect.yieldNow
+        assert.deepStrictEqual(batches.map((batch) => batch.map((frame) => frame.seq)), [[2]])
+        yield* Scope.close(scope, Exit.void)
+        log.record({ _tag: "SessionStarted", seq: 3, at: 0, session: "s", app: "C" })
+        yield* Effect.yieldNow
+        assert.strictEqual(batches.length, 1)
+      }))
+
+    it.effect("makeEncoded redacts a Model, props or message key that two record signatures match", () =>
+      provideHost(Effect.gen(function*() {
+        const EncodedSecret = Schema.Redacted(Schema.String).pipe(
+          Schema.decodeTo(
+            Schema.String,
+            SchemaTransformation.transform({ decode: Redacted.value, encode: Redacted.make })
+          )
+        )
+        const Secret = Schema.Record(Schema.TemplateLiteral(["secret-", Schema.String]), EncodedSecret)
+        const Loose = Schema.Record(Schema.String, Schema.Unknown)
+        for (const order of [[Secret, Loose], [Loose, Secret]] as const) {
+          const Entries = Schema.StructWithRest(
+            Schema.Struct({}),
+            order as unknown as readonly [typeof Secret, typeof Loose]
+          )
+          const entries = { "secret-a": "must-not-log" } as typeof Entries.Type
+          const Message = UiSchema.TaggedEnum({ Set: { entries: Entries } })
+          const Vault = Component.define({
+            name: "Vault",
+            scoped: false,
+            props: Schema.Struct({ entries: Entries }),
+            model: Entries,
+            message: Message
+          }).make({
+            init: () => entries,
+            update: (_, message) => message.entries,
+            view: (_, h) => h.text("vault")
+          })
+          const root = yield* TestHost.mount(Vault, { entries })
+          root.send(Message.Set({ entries: { ...entries, other: 1 } }))
+          yield* TestHost.settle
+          const frames: Array<MessageLog.WireEntry> = []
+          yield* Effect.scoped(Effect.gen(function*() {
+            const log = yield* MessageLog.makeEncoded((batch) => Effect.sync(() => frames.push(...batch)))
+            for (const entry of root.log()) log.record(entry)
+            yield* Effect.yieldNow
+          }))
+          const mounted = frames.find((frame) => frame._tag === "Mounted")!
+          const update = frames.find((frame) => frame._tag === "Update")!
+          assert.deepStrictEqual([mounted.props, mounted.model], [
+            { entries: { "secret-a": { "~redacted": true } } },
+            { "secret-a": { "~redacted": true } }
+          ])
+          assert.deepStrictEqual(update.message, {
+            _tag: "Set",
+            entries: { "secret-a": { "~redacted": true }, other: 1 }
+          })
+          assert.notInclude(JSON.stringify(frames), "must-not-log")
+        }
+      })))
+
+    it.effect("a run that interrupts itself while its instance's close is held open logs self", () =>
+      provideHost(Effect.gen(function*() {
+        const hold = Deferred.makeUnsafe<void>()
+        const quit = Deferred.makeUnsafe<void>()
+        const Message = UiSchema.TaggedEnum({ Close: {}, Done: {} })
+        const done = Command.map(() => Message.Done())
+        const Holder = Component.define({ name: "Holder", scoped: false, model: Schema.Null, message: Message }).make({
+          init: ($) =>
+            $.set(null).run(
+              Command.make("test/Hold", { args: {} }, () => Effect.uninterruptible(Deferred.await(hold))).make().pipe(
+                done
+              )
+            ),
+          update: (model) => model,
+          view: (_, h) => h.text("holder")
+        })
+        const Middle = Component.define({ name: "Middle", scoped: false, model: Schema.Null, message: Message }).make({
+          init: ($) =>
+            $.set(null).run(
+              Command.make("test/Quit", { args: {} }, () => Effect.andThen(Deferred.await(quit), Effect.interrupt))
+                .make().pipe(done)
+            ),
+          update: (model) => model,
+          view: (_, h) => h.el("div", Holder(h, { key: "h", props: {} }))
+        })
+        const Top = Component.define({ name: "Top", scoped: false, model: Schema.Boolean, message: Message }).make({
+          init: () => true,
+          update: (open, message) => message._tag === "Close" ? false : open,
+          view: (open, h) => h.el("div", open ? Middle(h, { key: "m", props: {} }) : null)
+        })
+        const root = yield* TestHost.mount(Top, {})
+        yield* TestHost.settle
+        root.send(Message.Close())
+        yield* TestHost.settle
+        Deferred.doneUnsafe(quit, Exit.void)
+        yield* TestHost.settle
+        const quitEnd = root.log().find((entry) =>
+          entry._tag === "CommandInterrupted" && entry.name === "test/Quit"
+        ) as MessageLog.CommandInterrupted
+        assert.deepStrictEqual([quitEnd.reason, quitEnd.causedBy], ["self", undefined])
+        Deferred.doneUnsafe(hold, Exit.void)
+        yield* TestHost.settle
+      })))
+
+    it.effect("a queued run's CommandStarted names the step that freed its group", () =>
+      provideHost(Effect.gen(function*() {
+        const gates = [Deferred.makeUnsafe<void>(), Deferred.makeUnsafe<void>()]
+        const Message = UiSchema.TaggedEnum({ Save: {}, Saved: {} })
+        const Save = Command.make(
+          "test/Save",
+          { args: { n: Schema.Number }, mode: "queue" },
+          ({ n }) => Deferred.await(gates[n]!)
+        )
+        const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Number, message: Message }).make(
+          {
+            init: () => 0,
+            update: (n, message, $) =>
+              message._tag === "Save" ? $.set(n + 1).run(Save.make({ n }).pipe(Command.map(() => Message.Saved()))) : n,
+            view: (n, h) => h.text(String(n))
+          }
+        )
+        const root = yield* TestHost.mount(Editor, {})
+        root.send(Message.Save())
+        root.send(Message.Save())
+        yield* TestHost.settle
+        Deferred.doneUnsafe(gates[0]!, Exit.void)
+        yield* TestHost.settle
+        const saved = root.log().find((entry) => entry._tag === "Update" && entry.source._tag === "Command")!
+        const starts = root.log().filter((entry) => entry._tag === "CommandStarted")
+        assert.deepStrictEqual(starts.map((entry) => entry.causedBy), [starts[0]!.issued.seq, saved.seq])
+        Deferred.doneUnsafe(gates[1]!, Exit.void)
+        yield* TestHost.settle
+      })))
+
+    it.effect("a run whose result fails its instance names itself in Failed, which is its end", () =>
+      provideHost(Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Saved: {} })
+        for (
+          const [name, command] of [
+            [
+              "test/Die",
+              Command.make("test/Die", { args: {} }, () => Effect.die("boom")).make().pipe(
+                Command.map(() => Message.Saved())
+              )
+            ],
+            [
+              "test/Throw",
+              Command.make("test/Throw", { args: {} }, () => Effect.void).make().pipe(Command.map(() => {
+                throw new Error("boom")
+              }))
+            ]
+          ] as const
+        ) {
+          const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Message }).make(
+            {
+              init: ($) => $.set(null).run(command),
+              update: (model) => model,
+              view: (_, h) => h.text("editor")
+            }
+          )
+          const root = yield* TestHost.mount(Editor, {})
+          yield* Effect.exit(TestHost.settle)
+          const started = root.log().find((entry) => entry._tag === "CommandStarted")!
+          const failed = root.log().find((entry) => entry._tag === "Failed")!
+          assert.deepStrictEqual([failed.in, failed.name, failed.issued], ["command", name, started.issued])
+          assert.notInclude(tags(root), "CommandInterrupted")
+          assert.notInclude(tags(root), "CommandEnded")
+          const wire = MessageLog.makeEncoder().encode(failed)
+          assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire))), wire)
+          assert.deepStrictEqual((wire as MessageLog.WireEntry & { issued?: unknown }).issued, started.issued)
+        }
+      })))
+
     it("the Wire encodes args through their Schema, redacted, with a structural fallback per field", () => {
       const Send = Command.make(
         "Send",
