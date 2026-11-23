@@ -16,51 +16,13 @@ const whole: Select = (source) => source.replace(/^(?:\/\/ @vitest[^\n]*\n|impor
 const names = (...wanted: ReadonlyArray<string>): Select => (source) =>
   source.split("\n\n").filter((block) => wanted.includes(declared(block) ?? "")).join("\n\n").trimEnd()
 
-const line = (text: string): Select => (source) => source.split("\n").find((line) => line.includes(text))?.trim() ?? ""
-
-const indent = (line: string): number => line.length - line.trimStart().length
-
-const member = (key: string): Select => (source) => {
-  const lines = source.split("\n")
-  const start = lines.findIndex((line) => line.trimStart().startsWith(`${key}:`))
-  const depth = indent(lines[start] ?? "")
-  const rest = lines.slice(start + 1)
-  const end = rest.findIndex((line) => line.trim() !== "" && indent(line) <= depth)
-  const closes = end !== -1 && indent(rest[end]!) === depth && /^[)\]}]/.test(rest[end]!.trimStart())
-  const body = [lines[start]!, ...rest.slice(0, end === -1 ? rest.length : end + (closes ? 1 : 0))]
-  return body.map((line) => line.slice(depth)).join("\n").replace(/,$/, "").trimEnd()
-}
-
-const both = (...selects: ReadonlyArray<Select>): Select => (source) =>
-  selects.map((select) => select(source)).join("\n\n")
-
 const sources: { readonly [K in keyof Snippets]: ReadonlyArray<readonly [string, Select]> } = {
   intro: [["src/autocounter/Counter.ts", whole]],
   split: [["src/autocounter/split/Counter.ts", whole]],
   counterFoldkit: [["src/counter/foldkit/Counter.ts", whole], ["src/counter/foldkit/Page.ts", whole]],
   counterEffect: [["src/counter/effect/Counter.ts", whole], ["src/counter/effect/Page.ts", whole]],
-  kept: [["src/counter/kept/Counter.ts", line("scoped: true")], ["src/counter/kept/Page.ts", line("h.scoped(")]],
-  providerFoldkit: [["src/provider/foldkit/editor.ts", names("SaveDraft")], [
-    "src/provider/foldkit/main.ts",
-    names("app")
-  ]],
-  providerEffect: [
-    ["src/provider/effect/Editor.ts", names("SaveDraft", "Editor")],
-    ["src/provider/effect/main.ts", names("root")]
-  ],
-  noopFoldkit: [["src/provider/foldkit/editor.ts", names("Message", "update")]],
-  noopEffect: [["src/provider/effect/Editor.ts", both(names("EditorMessage"), member("update"))]],
-  lazy: [
-    ["src/lazy/Panel.ts", whole],
-    ["src/lazy/PanelLoader.ts", both(names("PanelLazy"), member("view"), names("PanelLoader"))],
-    ["src/lazy/PanelPage.ts", member("view")]
-  ],
-  failure: [["src/failure/Widget.ts", member("update")], ["src/failure/WidgetPage.ts", member("view")]],
-  headless: [["src/autocounter/headless/Counter.ts", member("parts")], [
-    "src/autocounter/headless/Scoreboard.ts",
-    member("view")
-  ]],
-  fragment: [["src/autocounter/fragment/Counter.ts", names("resetButton", "view")]],
+  queryFoldkit: [["src/queries/foldkit/posts.ts", whole]],
+  queryEffect: [["src/queries/effect/Posts.ts", whole]],
   storyFoldkit: [["src/autocounter/foldkit/counter.story.test.ts", names("delayedReset")]],
   storyEffect: [["src/autocounter/Counter.story.test.ts", names("delayedReset")]],
   sceneFoldkit: [["src/autocounter/foldkit/counter.scene.test.ts", names("delayedReset")]],
