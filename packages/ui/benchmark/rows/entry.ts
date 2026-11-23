@@ -1,5 +1,6 @@
 import { Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import * as SpikeDom from "@effect/ui/html/SpikeDom"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
 import type { Message as TableMessage, Model as TableModel } from "./harness.ts"
@@ -176,8 +177,23 @@ const mount = (component: Table) => async (container: HTMLElement) => {
   }
 }
 
+// SPIKE (EFF-4218): the same tables on the kernel and its DOM host.
+const spike = (component: Table) => async (container: HTMLElement) => {
+  const scope = Effect.runSync(Scope.make())
+  const root = Effect.runSync(
+    Scope.provide(SpikeDom.mountEffect(component, {}, container), scope)
+  )
+  return {
+    send: (message: typeof Message.Type) => root.send(message),
+    close: () => Effect.runPromise(Scope.close(scope, Exit.void))
+  }
+}
+
 const empty = tables(init)
 install({
+  "spike-plain": spike(empty.plain),
+  "spike-lazy": spike(empty.lazy),
+  "spike-component": spike(empty.component),
   plain: mount(empty.plain),
   lazy: mount(empty.lazy),
   component: mount(empty.component),
