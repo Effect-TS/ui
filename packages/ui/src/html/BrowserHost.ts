@@ -1451,16 +1451,18 @@ const signals = (document: Document) => {
   }
 }
 
-// `DomSubscription.onDocument` and `DomSubscription.onWindow` listen here. Each Subscription
+// `DomSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
 const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
-  listen: (target, name, { capture }, listener) => {
+  listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
     const f = (event: Event) =>
       listener(
         {
-          ...(payloadOf(name, event, event.target, document.documentElement, undefined) as object),
+          ...(custom === true
+            ? { detail: (event as CustomEvent).detail ?? null }
+            : payloadOf(name, event, event.target, document.documentElement, undefined) as object),
           defaultPrevented: event.defaultPrevented
         },
         () => event.preventDefault()

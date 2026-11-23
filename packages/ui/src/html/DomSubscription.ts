@@ -1,7 +1,8 @@
 /**
  * Subscriptions to the host's document and window: `onDocument` for a
- * keyboard shortcut or a press outside a popup, and `onWindow` for the
- * window's focus.
+ * keyboard shortcut or a press outside a popup, `onCustomEvent` for a
+ * `CustomEvent` dispatched on the document, and `onWindow` for the window's
+ * focus.
  *
  * Their source is the `GlobalEvents` service, which `BrowserHost.layer`
  * provides. Nothing listens on the server, and a test fires events with
@@ -80,9 +81,22 @@ export interface WindowEvents {
 export type GlobalPayload<P> = P & { readonly defaultPrevented: boolean }
 
 /**
- * The options of `onDocument` and `onWindow`: `preventDefault`, as on an
- * element's handler, and `capture`, to listen in the capture phase, before
- * any element sees the event, so a handler that stops it can't hide it.
+ * The payload of `onCustomEvent`: the event's `detail`, which is `null`
+ * when the event has none.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface CustomEventPayload {
+  readonly detail: unknown
+}
+
+/**
+ * The options of `onDocument`, `onCustomEvent` and `onWindow`:
+ * `preventDefault`, as on an element's handler, and `capture`, to listen in
+ * the capture phase, before any element sees the event, so a handler that
+ * stops it can't hide it.
  *
  * @stability experimental
  * @category events
@@ -93,22 +107,23 @@ export interface GlobalEventOptions extends View.EventOptions {
 }
 
 /**
- * The source of document and window events, which `onDocument` and
- * `onWindow` listen to.
+ * The source of document and window events, which `onDocument`,
+ * `onCustomEvent` and `onWindow` listen to.
  *
  * **Details**
  *
  * `listen` adds a listener to the host's `document` or its window and
  * returns the function that removes it. The listener gets the plain payload,
  * `defaultPrevented` included, and a function that cancels the event's
- * default.
+ * default. With `custom: true` the payload is a `CustomEventPayload`,
+ * whatever the event's type.
  *
  * `BrowserHost.layer` provides the one over its `document` and that
  * document's `defaultView`, so an app in an iframe hears its own document.
  * The default never fires, so a host without a document, and a test that
  * doesn't fire events, need nothing. A test fires them with `HtmlScene`'s
- * `fireDocument` and `fireWindow`, or with `TestGlobalEvents` from
- * `@effect/ui/html/testing`.
+ * `fireDocument`, `fireCustomEvent` and `fireWindow`, or with
+ * `TestGlobalEvents` from `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @category services
@@ -118,7 +133,7 @@ export interface GlobalEvents {
   readonly listen: (
     target: "document" | "window",
     event: string,
-    options: { readonly capture: boolean },
+    options: { readonly capture: boolean; readonly custom?: boolean | undefined },
     listener: (payload: unknown, preventDefault: () => void) => void
   ) => () => void
 }
@@ -142,7 +157,8 @@ const listenFor = (
   target: "document" | "window",
   event: string,
   handler: View.Handler<unknown, any>,
-  options: GlobalEventOptions | undefined
+  options: GlobalEventOptions | undefined,
+  custom = false
 ): Subscription.Subscription<any> => {
   const capture = options?.capture === true
   const declared: globalEvents.Listener = {
@@ -160,7 +176,7 @@ const listenFor = (
     close: Context.get(context, GlobalEvents).listen(
       target,
       event,
-      { capture },
+      { capture, custom },
       (payload, preventDefault) =>
         enter((latest) => {
           try {
@@ -289,3 +305,58 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
   handler: View.Handler<Msg, GlobalPayload<WindowEvents[K]>>,
   options?: GlobalEventOptions | undefined
 ): Subscription.Subscription<Msg> => listenFor("window", event, handler, options)
+
+/**
+ * A Subscription that listens for a `CustomEvent` on the host's document.
+ *
+ * **Details**
+ *
+ * It works as `onDocument` does, with the key `@effect/ui/html/document`, for
+ * an event type outside `DocumentEvents`. The payload carries the event's
+ * `detail` (as `unknown`) and `defaultPrevented`. A test fires it with
+ * `HtmlScene`'s `fireCustomEvent` or `TestGlobalEvents.fireCustomEvent`.
+ *
+ * **Example** (Listening for a custom document event)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ Received: { text: Schema.String } })
+ *
+ * const Banner = Component.define({
+ *   name: "Banner",
+ *   scoped: false,
+ *   model: Schema.String,
+ *   message: Message,
+ *   elements: Html
+ * }).make({
+ *   init: () => "",
+ *   update: { Received: (_model, { text }) => text },
+ *   view: (text, h) => h.p(text),
+ *   subscriptions: () => [
+ *     DomSubscription.onCustomEvent("app:notice", ({ detail }) =>
+ *       typeof detail === "string" ? Message.Received({ text: detail }) : undefined
+ *     )
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Banner, {})
+ *   s.fireCustomEvent("app:notice", { detail: "saved" })
+ *     .expect(Locator.text("saved")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onCustomEvent = <Msg>(
+  event: string,
+  handler: View.Handler<Msg, GlobalPayload<CustomEventPayload>>,
+  options?: GlobalEventOptions | undefined
+): Subscription.Subscription<Msg> => listenFor("document", event, handler, options, true)

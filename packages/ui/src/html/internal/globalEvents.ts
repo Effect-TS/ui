@@ -1,5 +1,5 @@
 /**
- * What `DomSubscription.onDocument` and `DomSubscription.onWindow` put on
+ * What `DomSubscription.onDocument`, `onCustomEvent` and `onWindow` put on
  * their Subscription, read back by the runtime's attached listener and by the
  * test tools.
  *

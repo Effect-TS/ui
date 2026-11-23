@@ -3,10 +3,10 @@
  * document and window events without a document, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`, and fire an event with
- * `fire`. Every listener the mounted components'
- * `DomSubscription.onDocument` and `DomSubscription.onWindow` added runs,
- * as the browser would run them. `fire` returns whether one cancelled the
- * default. Run `TestHost.settle` after it to see the update.
+ * `fire`, or a custom one with `fireCustomEvent`. Every listener the mounted
+ * components' `DomSubscription.onDocument`, `onCustomEvent` and `onWindow`
+ * added runs, as the browser would run them. Both return whether one
+ * cancelled the default. Run `TestHost.settle` after it to see the update.
  *
  * **Example** (Pressing Escape in a whole-app test)
  *
@@ -87,6 +87,15 @@ export interface TestGlobalEvents {
     event: K,
     payload?: Partial<DomSubscription.GlobalPayload<Targets[T][K]>>
   ) => boolean
+  /**
+   * Fires a custom `event` on the document, as `fire` does for built-in
+   * document events. `detail` defaults to `null` and `defaultPrevented` to
+   * `false`.
+   */
+  readonly fireCustomEvent: (
+    event: string,
+    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.CustomEventPayload>>
+  ) => boolean
 }
 
 /**
@@ -117,6 +126,15 @@ interface Entry {
  */
 export const make = (): DomSubscription.GlobalEvents & TestGlobalEvents => {
   const entries = new Set<Entry>()
+  const fire = (target: string, event: string, payload: object | undefined) =>
+    fireGlobal.fire(event, payload, function*(capture) {
+      // Copied as the phase starts. A listener an earlier one's message removed is skipped.
+      for (const entry of Array.from(entries)) {
+        if (entry.target === target && entry.event === event && entry.capture === capture && entries.has(entry)) {
+          yield entry.listener
+        }
+      }
+    })
   return {
     listen: (target, event, { capture }, listener) => {
       const entry: Entry = { target, event, capture, listener }
@@ -125,15 +143,8 @@ export const make = (): DomSubscription.GlobalEvents & TestGlobalEvents => {
         entries.delete(entry)
       }
     },
-    fire: (target, event, payload) =>
-      fireGlobal.fire(event as string, payload, function*(capture) {
-        // Copied as the phase starts. A listener an earlier one's message removed is skipped.
-        for (const entry of Array.from(entries)) {
-          if (entry.target === target && entry.event === event && entry.capture === capture && entries.has(entry)) {
-            yield entry.listener
-          }
-        }
-      })
+    fire: (target, event, payload) => fire(target, event as string, payload),
+    fireCustomEvent: (event, payload) => fire("document", event, fireGlobal.custom(payload))
   }
 }
 
@@ -166,3 +177,17 @@ export const fire = <T extends keyof Targets, K extends keyof Targets[T]>(
   payload?: Partial<DomSubscription.GlobalPayload<Targets[T][K]>>
 ): Effect.Effect<boolean, never, TestGlobalEvents> =>
   TestGlobalEvents.useSync((events) => events.fire(target, event, payload))
+
+/**
+ * Fires a custom `event` on the document through the fake, and returns
+ * whether a listener cancelled the default.
+ *
+ * @stability experimental
+ * @category testing
+ * @since 0.1.0
+ */
+export const fireCustomEvent = (
+  event: string,
+  payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.CustomEventPayload>>
+): Effect.Effect<boolean, never, TestGlobalEvents> =>
+  TestGlobalEvents.useSync((events) => events.fireCustomEvent(event, payload))

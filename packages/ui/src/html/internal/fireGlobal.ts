@@ -1,6 +1,7 @@
 /**
  * How the test tools deliver a document or window event: `HtmlScene`'s
- * `fireDocument` and `fireWindow`, and `TestGlobalEvents.fire`.
+ * `fireDocument`, `fireCustomEvent` and `fireWindow`, and
+ * `TestGlobalEvents`' `fire` and `fireCustomEvent`.
  *
  * @internal
  */
@@ -47,3 +48,8 @@ export const fire = (
   }
   return cancelled
 }
+
+export const custom = (given: { readonly detail?: unknown } | undefined): object => ({
+  ...given,
+  detail: given?.detail ?? null
+})
