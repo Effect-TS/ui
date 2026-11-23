@@ -99,13 +99,13 @@ describe("Component", () => {
           ? $.set({ count: $.props.initial }).run(CA.make())
           : $.set({ count: 0 }).run(CB.make())
       })
-      const C = Def.make({ init, update: (model) => model, view: (_, h) => h.el("div") })
+      const C = Def.make({ init, update: ($) => $.model, view: (h) => h.el("div") })
       expect<Component.Requirements<typeof C>>().type.toBe<CA | CB>()
       expect(Def.init).type.not.toBeCallableWith(() => ({ count: "wrong" }))
     })
 
     it("infers subscriptions' inputs and preserves stream requirements and falsy entries", () => {
-      const subscriptions = Def.subscriptions((model, props, queries) => {
+      const subscriptions = Def.subscriptions(({ model, props, queries }) => {
         expect(model).type.toBe<{ readonly count: number }>()
         expect(props).type.toBe<{ readonly initial: number }>()
         expect(queries).type.toBe<{}>()
@@ -119,9 +119,9 @@ describe("Component", () => {
       })
       const C = Def.make({
         init: () => ({ count: 0 }),
-        update: (model) => model,
+        update: ($) => $.model,
         subscriptions,
-        view: (_, h) => h.el("div")
+        view: (h) => h.el("div")
       })
       expect<Component.Requirements<typeof C>>().type.toBe<A | B>()
       expect(Def.subscriptions).type.not.toBeCallableWith(

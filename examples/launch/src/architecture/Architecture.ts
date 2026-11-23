@@ -152,17 +152,17 @@ export const Architecture = Component.define({
 }).make({
   init: () => ({ leaf: null, elapsed: 0 }),
   update: {
-    ClickedLeaf: (model, { leaf }, $) => isPlaying(model) ? model : $.evolve({ leaf, elapsed: 0 }),
-    Ticked: (_model, _message, $) => $.evolve({ elapsed: (elapsed) => elapsed + 1 })
+    ClickedLeaf: ($, { leaf }) => isPlaying($.model) ? $.model : $.evolve({ leaf, elapsed: 0 }),
+    Ticked: ($) => $.evolve({ elapsed: (elapsed) => elapsed + 1 })
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     isPlaying(model) &&
     Subscription.make(
       "tick",
       Stream.tick("900 millis").pipe(Stream.drop(1), Stream.map(() => ArchitectureMessage.Ticked()))
     )
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.figure.class("arch2 wide").children(
       h.div.class("arch2-controls").attrs({ role: "group", "aria-label": "Send a Message from" }).children(
         h.span.class("arch2-prompt").attr("aria-hidden", "true").children("Send a Message from"),

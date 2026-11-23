@@ -22,8 +22,8 @@ export const Posts = Component.define({
   }
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_model, h) => {
+  update: ($) => $.model,
+  view: (h) => {
     const posts = h.queries.posts
     return AsyncResult.isSuccess(posts)
       ? h.ul.children(posts.value.map((post) => h.li.key(post.id).children(post.title)))

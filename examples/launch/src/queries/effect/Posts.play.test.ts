@@ -17,8 +17,8 @@ const TwoPosts = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_model, h) => h.div.children(Posts(h, { key: "first" }), Posts(h, { key: "second" }))
+  update: ($) => $.model,
+  view: (h) => h.div.children(Posts(h, { key: "first" }), Posts(h, { key: "second" }))
 })
 
 it.layer(TestHost.layer(), { buildPerTest: true })("Effect UI posts", (it) => {

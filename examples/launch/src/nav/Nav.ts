@@ -66,18 +66,17 @@ export const Nav = Component.define({
 }).make({
   init: () => ({ current: null, isOpen: false }),
   update: {
-    ClickedToggle: (_model, _message, $) => $.evolve({ isOpen: (isOpen) => !isOpen }),
-    ClickedSection: (_model, _message, $) => $.evolve({ isOpen: false }),
-    PressedEscape: (_model, _message, $) =>
-      $.evolve({ isOpen: false }).run(DomCommand.focus(Toggle, () => Component.noop)),
-    ChangedSection: (_model, { current }, $) => $.evolve({ current })
+    ClickedToggle: ($) => $.evolve({ isOpen: (isOpen) => !isOpen }),
+    ClickedSection: ($) => $.evolve({ isOpen: false }),
+    PressedEscape: ($) => $.evolve({ isOpen: false }).run(DomCommand.focus(Toggle, () => Component.noop)),
+    ChangedSection: ($, { current }) => $.evolve({ current })
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     TrackSection,
     model.isOpen &&
     DomSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? NavMessage.PressedEscape() : undefined)
   ],
-  view: (model, h) => {
+  view: (h, model) => {
     const list = h.id("sections")
     const current = sections.find(({ id }) => id === model.current)
     return h.nav.class("nav").attr("aria-label", "On this page").children(
