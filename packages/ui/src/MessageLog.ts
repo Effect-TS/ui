@@ -1307,7 +1307,20 @@ export const makeEncoder = (options?: {
   const through = (component: Component.Any, field: "props" | "model" | "message" | "events", value: unknown) =>
     encodeWith(component[field] as Schema.Top, `${component.definition.name}.${field}`, value)
   const encodeWith = (schema: Schema.Top, id: string, value: unknown) => {
-    if (holdsRedactedOverlap(schema.ast)) return encodeArgs(schema, value)
+    if (holdsRedactedOverlap(schema.ast)) {
+      let rejected = false
+      const out = guarded(() =>
+        encodeAt(schema.ast, value, {
+          path: new Set(),
+          leaf: () => {
+            rejected = true
+            return failed
+          }
+        })
+      )
+      if (rejected) warn(id, "a part of it didn't match its Schema")
+      return out
+    }
     let encode = encoders.get(schema)
     if (encode === undefined) {
       encode = Schema.encodeUnknownSync(
@@ -1318,12 +1331,14 @@ export const makeEncoder = (options?: {
     try {
       return encode(value) as Schema.Json
     } catch (error) {
-      if (!warned.has(id)) {
-        warned.add(id)
-        options?.onWarning?.(`MessageLog: ${id} failed to encode, so it's sent as a placeholder: ${String(error)}`)
-      }
-      return { "~unserialisable": "encode" }
+      warn(id, String(error))
+      return failed
     }
+  }
+  const warn = (id: string, error: string) => {
+    if (warned.has(id)) return
+    warned.add(id)
+    options?.onWarning?.(`MessageLog: ${id} failed to encode, so it's sent as a placeholder: ${error}`)
   }
   const encodeQueries = (
     component: Component.Any,
@@ -1699,6 +1714,10 @@ const guarded = (f: () => Schema.Json): Schema.Json => {
   }
 }
 
+interface Walk {
+  readonly path: Set<object>
+  readonly leaf: (ast: SchemaAST.AST, value: unknown) => Schema.Json
+}
 /**
  * Encodes `value` through `ast`. When the whole fails, a struct, record,
  * tuple or array is encoded part by part, and a union through the member the
@@ -1710,8 +1729,8 @@ const guarded = (f: () => Schema.Json): Schema.Json => {
  * cyclic value makes the codec overflow the stack, which is a failure like
  * any other: the walk goes on part by part, and the repeat is a placeholder.
  */
-const encodeAt = (ast: SchemaAST.AST, value: unknown, path: Set<object>): Schema.Json => {
-  if (typeof value === "object" && value !== null && path.has(value)) return { "~unserialisable": "cycle" }
+const encodeAt = (ast: SchemaAST.AST, value: unknown, walk: Walk): Schema.Json => {
+  if (typeof value === "object" && value !== null && walk.path.has(value)) return { "~unserialisable": "cycle" }
   const encode = holdsRedactedOverlap(ast) ? null : encoderOf(ast)
   if (encode !== null) {
     try {
@@ -1724,21 +1743,21 @@ const encodeAt = (ast: SchemaAST.AST, value: unknown, path: Set<object>): Schema
   if (ast.encoding === undefined) {
     switch (ast._tag) {
       case "Suspend":
-        return encodeAt(ast.thunk(), value, path)
+        return encodeAt(ast.thunk(), value, walk)
       case "Objects":
-        if (isPlainRecord(value)) return within(path, value, () => encodeObject(ast, value, path))
+        if (isPlainRecord(value)) return within(walk.path, value, () => encodeObject(ast, value, walk))
         break
       case "Arrays":
-        if (Array.isArray(value)) return within(path, value, () => encodeArray(ast, value, path))
+        if (Array.isArray(value)) return within(walk.path, value, () => encodeArray(ast, value, walk))
         break
       case "Union": {
         const member = ast.types.find((type) => guardOf(type)(value))
-        if (member !== undefined) return encodeAt(member, value, path)
+        if (member !== undefined) return encodeAt(member, value, walk)
         break
       }
     }
   }
-  return fallback(ast, value)
+  return walk.leaf(ast, value)
 }
 const within = <A>(path: Set<object>, value: object, f: () => A): A => {
   path.add(value)
@@ -1755,7 +1774,7 @@ const within = <A>(path: Set<object>, value: object, f: () => A): A => {
  * redaction counts. A key that matches nothing is left out. Only keys are read
  * here, never values.
  */
-const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown>, path: Set<object>): Schema.Json => {
+const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown>, walk: Walk): Schema.Json => {
   const applies = new Map<string, Array<SchemaAST.AST>>()
   for (const property of ast.propertySignatures) {
     if (typeof property.name === "string" && Object.hasOwn(value, property.name)) {
@@ -1778,12 +1797,12 @@ const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown
     const type = properties.has(key) ? types[0]! : types[types.length - 1]!
     out[key] = types.length > 1 && types.some(holdsRedacted)
       ? redacted
-      : guarded(() => encodeAt(type, value[key], path))
+      : guarded(() => encodeAt(type, value[key], walk))
   }
   return out
 }
 /** Elements, then the rest, then the trailing elements, which take the last positions. */
-const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, path: Set<object>): Schema.Json => {
+const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, walk: Walk): Schema.Json => {
   const [rest, ...tail] = ast.rest
   const tailStart = Math.max(ast.elements.length, value.length - tail.length)
   return value.map((item, i) => {
@@ -1794,7 +1813,7 @@ const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, path:
       : i >= tailStart
       ? tail[i - tailStart]
       : rest
-    return element === undefined ? fallback(ast, item) : encodeAt(element, item, path)
+    return element === undefined ? walk.leaf(ast, item) : encodeAt(element, item, walk)
   })
 }
 const fallback = (ast: SchemaAST.AST, value: unknown): Schema.Json =>
@@ -1809,20 +1828,20 @@ const fallback = (ast: SchemaAST.AST, value: unknown): Schema.Json =>
  * @internal
  */
 export const encodeArgs = (schema: Schema.Top, value: unknown): Schema.Json => {
-  const path = new Set<object>()
+  const walk: Walk = { path: new Set(), leaf: fallback }
   // A struct or a class is encoded field by field.
   const fields = (schema as { readonly fields?: Schema.Struct.Fields }).fields
   if (fields !== undefined && isPlainRecord(value)) {
-    return within(path, value, () => {
+    return within(walk.path, value, () => {
       const out: Record<string, Schema.Json> = {}
       for (const key of Object.keys(fields)) {
         if (!Object.hasOwn(value, key)) continue
-        out[key] = guarded(() => encodeAt((fields[key] as Schema.Top).ast, value[key], path))
+        out[key] = guarded(() => encodeAt((fields[key] as Schema.Top).ast, value[key], walk))
       }
       return out
     })
   }
-  return guarded(() => encodeAt(schema.ast, value, path))
+  return guarded(() => encodeAt(schema.ast, value, walk))
 }
 
 const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({

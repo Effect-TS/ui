@@ -23,6 +23,7 @@ import {
   Fiber,
   Layer,
   LayerMap,
+  Logger,
   Metric,
   Option,
   Queue,
@@ -2621,7 +2622,7 @@ describe("Runtime", () => {
         assert.strictEqual(batches.length, 1)
       }))
 
-    it.effect("makeEncoded redacts a Model, props or message key that two record signatures match", () =>
+    it.effect("makeEncoded redacts a key two record signatures match, and sends a sibling its Schema rejects as a placeholder", () =>
       provideHost(Effect.gen(function*() {
         const EncodedSecret = Schema.Redacted(Schema.String).pipe(
           Schema.decodeTo(
@@ -2633,10 +2634,10 @@ describe("Runtime", () => {
         const Loose = Schema.Record(Schema.String, Schema.Unknown)
         for (const order of [[Secret, Loose], [Loose, Secret]] as const) {
           const Entries = Schema.StructWithRest(
-            Schema.Struct({}),
+            Schema.Struct({ n: Schema.Number }),
             order as unknown as readonly [typeof Secret, typeof Loose]
           )
-          const entries = { "secret-a": "must-not-log" } as typeof Entries.Type
+          const entries = { n: "rejected-sibling", "secret-a": "must-not-log" } as unknown as typeof Entries.Type
           const Message = UiSchema.TaggedEnum({ Set: { entries: Entries } })
           const Vault = Component.define({
             name: "Vault",
@@ -2653,22 +2654,31 @@ describe("Runtime", () => {
           root.send(Message.Set({ entries: { ...entries, other: 1 } }))
           yield* TestHost.settle
           const frames: Array<MessageLog.WireEntry> = []
+          const warnings: Array<string> = []
+          const logger = Logger.make<unknown, void>((options) => {
+            if (options.logLevel === "Warn") warnings.push(String(options.message))
+          })
           yield* Effect.scoped(Effect.gen(function*() {
             const log = yield* MessageLog.makeEncoded((batch) => Effect.sync(() => frames.push(...batch)))
             for (const entry of root.log()) log.record(entry)
             yield* Effect.yieldNow
-          }))
+          })).pipe(Effect.provide(Logger.layer([logger])))
           const mounted = frames.find((frame) => frame._tag === "Mounted")!
           const update = frames.find((frame) => frame._tag === "Update")!
-          assert.deepStrictEqual([mounted.props, mounted.model], [
-            { entries: { "secret-a": { "~redacted": true } } },
-            { "secret-a": { "~redacted": true } }
+          const masked = { n: { "~unserialisable": "encode" }, "secret-a": { "~redacted": true } }
+          assert.deepStrictEqual([mounted.props, mounted.model], [{ entries: masked }, masked])
+          assert.deepStrictEqual([update.message, update.model], [{ "~unserialisable": "encode" }, {
+            ...masked,
+            other: 1
+          }])
+          const json = JSON.stringify(frames)
+          assert.notInclude(json, "must-not-log")
+          assert.notInclude(json, "rejected-sibling")
+          assert.deepStrictEqual(warnings.map((message) => message.split(" failed")[0]).sort(), [
+            "MessageLog: Vault.message",
+            "MessageLog: Vault.model",
+            "MessageLog: Vault.props"
           ])
-          assert.deepStrictEqual(update.message, {
-            _tag: "Set",
-            entries: { "secret-a": { "~redacted": true }, other: 1 }
-          })
-          assert.notInclude(JSON.stringify(frames), "must-not-log")
         }
       })))
 
