@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
-import * as Kernel from "../spike/Kernel.ts"
+import * as Kernel from "../internal/kernel.ts"
 import * as View from "../View.ts"
 import { attributeName, svgTags } from "./internal/elements.ts"
 
@@ -122,6 +122,7 @@ const report: Kernel.Tree["report"] = (path, where, cause) =>
  * @stability experimental
  */
 export interface Options {
+  // oxlint-disable-next-line effect/no-unused-internal
   readonly log?: Kernel.Recorder | undefined
   readonly fallback?:
     | ((

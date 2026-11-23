@@ -12,7 +12,7 @@ import * as Layer from "effect/Layer"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scope from "effect/Scope"
 import * as Component from "../Component.ts"
-import * as Kernel from "./Kernel.ts"
+import * as Kernel from "../internal/kernel.ts"
 
 /** Runs `ready` with what the Layers above built, or `failed` with why they didn't. */
 const whenSettled = (

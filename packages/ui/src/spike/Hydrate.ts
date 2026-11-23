@@ -18,10 +18,10 @@ import type * as Fiber from "effect/Fiber"
 import * as Result from "effect/Result"
 import * as Schema from "effect/Schema"
 import * as SchemaParser from "effect/SchemaParser"
+import * as Kernel from "../internal/kernel.ts"
 import { segment } from "../internal/paths.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
-import * as Kernel from "./Kernel.ts"
 
 const decoders = new WeakMap<
   object,

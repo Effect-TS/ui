@@ -9,3 +9,9 @@ export const dev: boolean = false
 
 /** Does nothing. */
 export const checkKeys: typeof On.checkKeys = () => {}
+
+/** Does nothing. */
+export const checkPaths: typeof On.checkPaths = () => {}
+
+/** Does nothing. */
+export const checkContent: typeof On.checkContent = () => {}

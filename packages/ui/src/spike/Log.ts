@@ -4,7 +4,7 @@
  *
  * Left out: what caused an entry, the session, and the wire format the devtools read.
  */
-import type * as Kernel from "./Kernel.ts"
+import * as Kernel from "../internal/kernel.ts"
 
 /**
  * One thing the tree did.
@@ -16,6 +16,7 @@ export interface Entry {
   readonly seq: number
   readonly at: number
   readonly path: string
+  // oxlint-disable-next-line effect/no-unused-internal
   readonly component: Kernel.Runnable
   readonly [field: string]: unknown
 }
@@ -26,9 +27,17 @@ export interface Entry {
  * @stability experimental
  */
 export interface Log {
+  // oxlint-disable-next-line effect/no-unused-internal
   readonly record: Kernel.Recorder
   readonly entries: () => ReadonlyArray<Entry>
 }
+
+const sourceOf = (source: unknown): unknown =>
+  typeof source === "string"
+    ? { _tag: "DomEvent", name: source }
+    : source instanceof Kernel.Instance
+    ? { _tag: source.closed ? "Failure" : "Emit", path: source.path }
+    : { _tag: "Send" }
 
 /**
  * A log that keeps its last `capacity` entries.
@@ -40,13 +49,17 @@ export const make = (capacity = 1000): Log => {
   let entries: Array<Entry> = []
   return {
     record(inst, draft) {
-      entries.push({
+      const entry: Entry = {
         ...draft,
         seq: ++seq,
         at: Date.now(),
         path: inst.path,
         component: inst.component
-      })
+      }
+      if (draft._tag === "Update") {
+        ;(entry as any).source = sourceOf(draft.source)
+      }
+      entries.push(entry)
       if (entries.length > capacity * 2) entries = entries.slice(-capacity)
     },
     entries: () => entries.slice(-capacity)
