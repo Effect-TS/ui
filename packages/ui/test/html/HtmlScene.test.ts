@@ -164,12 +164,12 @@ describe("HtmlScene", () => {
       .keydown(Locator.attr("id", "ce-child"), "g")
       .keydown(Locator.attr("id", "ce-island-btn"), "g")
     assert.deepStrictEqual(s.get(log).children?.map((child) => child.text).join("").split("\n"), [
-      `input {"value":"A","checked":false,"composing":false,"inputType":"insertText"}`,
-      `input {"value":"Ad","checked":false,"composing":true,"inputType":"insertCompositionText"}`,
+      `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText"}`,
+      `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
       `compositionend {"value":"Adam"}`,
       `compositionend {"value":"Ada"}`,
-      `change {"value":"Ada","checked":false,"composing":false,"inputType":""}`,
-      `change {"value":"Ada","checked":false,"composing":false,"inputType":"insertReplacementText"}`,
+      `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":""}`,
+      `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText"}`,
       `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
       `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
       `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
@@ -177,6 +177,32 @@ describe("HtmlScene", () => {
       `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
     ])
   })
+
+  it.effect("change with files sends them to a file input's change, and other inputs get none", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Changed: { names: Schema.Array(Schema.String) } })
+      const Upload = Component.define({
+        name: "Upload",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Message,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: (log, { names }) => [...log, names.join(",")],
+        view: (log, h) =>
+          h.div(
+            h.input.attrs({ type: "file", "aria-label": "File" }).value("")
+              .onChange(({ files }) => Message.Changed({ names: files.map((file) => file.name) })),
+            h.input.attr("aria-label", "Name").onChange(({ files }) => Message.Changed({ names: [`${files.length}`] })),
+            h.output(log.join(" | "))
+          )
+      })
+      const s = yield* HtmlScene.make(Upload, {})
+      s.change(HtmlLocator.label("File"), { files: [new File(["a"], "a.txt"), new File(["b"], "b.txt")] })
+        .change(HtmlLocator.label("Name"), { value: "Ada" })
+        .expect(Locator.text("a.txt,b.txt | 0")).toExist()
+    }))
 
   it.effect("a submit button submits its form with the fields read from the view", () =>
     Effect.gen(function*() {

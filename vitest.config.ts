@@ -84,6 +84,7 @@ export default defineConfig({
       ...example("auth"),
       ...example("counter"),
       ...example("counters"),
+      ...example("file-preview"),
       ...example("interrupting-commands"),
       ...example("routing"),
       ...example("snake")

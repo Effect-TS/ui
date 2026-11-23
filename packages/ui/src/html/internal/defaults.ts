@@ -213,6 +213,7 @@ export const planClick = (
     const payload: Html.InputPayload = {
       value: HtmlLocator.value(node) ?? "on",
       checked: type === "radio" ? true : HtmlLocator.checked(node) !== true,
+      files: [],
       composing: false,
       inputType: ""
     }
@@ -267,7 +268,9 @@ export const inputPayload = (
   details?: Partial<Pick<Html.InputPayload, "composing" | "inputType">>
 ): Html.ValuePayload | Html.InputPayload => {
   const edit = { composing: details?.composing ?? false, inputType: details?.inputType ?? "insertText" }
-  return node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true, ...edit } : { value, ...edit }
+  return node.tag === "input"
+    ? { value, checked: HtmlLocator.checked(node) === true, files: [], ...edit }
+    : { value, ...edit }
 }
 
 /** @internal */
@@ -279,7 +282,7 @@ export const changePayload = (
   const edit = { composing: input.composing ?? false, inputType: input.inputType ?? "" }
   const value = input.value ?? HtmlLocator.value(node) ?? ""
   return node.tag === "input"
-    ? { value, checked: input.checked ?? HtmlLocator.checked(node) === true, ...edit }
+    ? { value, checked: input.checked ?? HtmlLocator.checked(node) === true, files: input.files ?? [], ...edit }
     : { value, ...edit }
 }
 
