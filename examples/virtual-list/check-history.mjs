@@ -83,7 +83,9 @@ try {
       for (const item of document.querySelectorAll("[data-virtual-list-item]")) {
         const rect = item.getBoundingClientRect()
         tops[item.dataset.key] = rect.top
-        if (rect.bottom > y && (under === null || rect.top < under.top)) under = { key: item.dataset.key, top: rect.top }
+        if (rect.bottom > y && (under === null || rect.top < under.top)) {
+          under = { key: item.dataset.key, top: rect.top }
+        }
       }
       window.samples.push({ start: Number(status.dataset.start), scrollTop: scroller.scrollTop, under, tops })
       requestAnimationFrame(next)

@@ -84,24 +84,30 @@ const row = (cells) => "| " + cells.join(" | ") + " |"
 const header = (title) => [row([title, ...frameworks]), row(["---", ...frameworks.map(() => "---:")])]
 
 for (const key of ["total", "script"]) {
-  console.log([
-    ...header(`CPU, ${key} (ms)`),
-    ...Object.entries(cpuLabels).map(([b, label]) =>
-      row([label, ...frameworks.map((f) => format(cell(pooled, key, b, f)))])
-    ),
-    ...(key === "total" ? [row(["**vs vanilla**", ...vsVanilla(pooled, key).map((x) => x && `**${x}**`)])] : [])
-  ].join("\n") + "\n")
-}
-console.log([
-  ...header("Memory and size"),
-  ...Object.entries(otherLabels).map(([b, label]) =>
-    row([label, ...frameworks.map((f) => format(cell(pooled, "DEFAULT", b, f)))])
+  console.log(
+    [
+      ...header(`CPU, ${key} (ms)`),
+      ...Object.entries(cpuLabels).map(([b, label]) =>
+        row([label, ...frameworks.map((f) => format(cell(pooled, key, b, f)))])
+      ),
+      ...(key === "total" ? [row(["**vs vanilla**", ...vsVanilla(pooled, key).map((x) => x && `**${x}**`)])] : [])
+    ].join("\n") + "\n"
   )
-].join("\n") + "\n")
+}
+console.log(
+  [
+    ...header("Memory and size"),
+    ...Object.entries(otherLabels).map(([b, label]) =>
+      row([label, ...frameworks.map((f) => format(cell(pooled, "DEFAULT", b, f)))])
+    )
+  ].join("\n") + "\n"
+)
 if (dirs.length > 1) {
-  console.log([
-    ...header("vs vanilla (total), per run"),
-    ...runs.map((run, i) => row([dirs[i], ...vsVanilla(run, "total")]))
-  ].join("\n") + "\n")
+  console.log(
+    [
+      ...header("vs vanilla (total), per run"),
+      ...runs.map((run, i) => row([dirs[i], ...vsVanilla(run, "total")]))
+    ].join("\n") + "\n"
+  )
 }
 console.log("Versions: " + frameworks.map((f) => versions.get(f)).join(", "))

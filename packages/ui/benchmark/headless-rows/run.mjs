@@ -57,11 +57,10 @@
 //
 // Treat results as exploratory: compare variants within one run on one machine, and paired runs of
 // the same command across revisions; absolute figures depend on the machine and browser.
+import { build } from "esbuild"
 import { execSync } from "node:child_process"
 import * as path from "node:path"
-import { build } from "esbuild"
 import { chromium } from "playwright"
-
 
 const dir = import.meta.dirname
 const out = path.join(process.cwd(), "scratchpad/headless-rows.bundle.js")
@@ -79,7 +78,16 @@ await build({
 
 const count = Number(process.argv[2] ?? 1000)
 const rounds = Number(process.argv[3] ?? 7)
-const all = ["plain", "normal", "headless", "wrapped", "owner-headless", "owner-wrapped", "owner-boundary", "owner-readers"]
+const all = [
+  "plain",
+  "normal",
+  "headless",
+  "wrapped",
+  "owner-headless",
+  "owner-wrapped",
+  "owner-boundary",
+  "owner-readers"
+]
 // $VARIANTS picks a comma-separated subset.
 const names = process.env.VARIANTS ? process.env.VARIANTS.split(",") : all
 const which = () => {
@@ -110,7 +118,8 @@ await browser.close()
 
 const stat = (values) => {
   const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)].toFixed(1) + " (" + sorted[0].toFixed(1) + "-" + sorted[sorted.length - 1].toFixed(1) + ")"
+  return sorted[Math.floor(sorted.length / 2)].toFixed(1) + " (" + sorted[0].toFixed(1) + "-" +
+    sorted[sorted.length - 1].toFixed(1) + ")"
 }
 console.log(count + " rows, " + rounds + " rounds, median (min-max) ms")
 for (const name of names) {
@@ -120,6 +129,8 @@ for (const name of names) {
     ["mount", "hydrate", "toggle", "reverse", "click", "touch", "open"]
       .filter((key) => row[0][key] !== undefined && row[0][key] !== null)
       .map((key) => key + " " + stat(row.map((r) => r[key]))).join(" | "),
-    "| hops", Math.max(...row.map((r) => r.mountHops)), Math.max(...row.map((r) => r.updateHops))
+    "| hops",
+    Math.max(...row.map((r) => r.mountHops)),
+    Math.max(...row.map((r) => r.updateHops))
   )
 }

@@ -9,6 +9,7 @@
 //
 // --json writes the result and --base adds deltas against an earlier --json file. The table is also
 // appended to $GITHUB_STEP_SUMMARY when that is set.
+import { Window } from "happy-dom"
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
 import * as fs from "node:fs"
@@ -16,7 +17,6 @@ import { tmpdir } from "node:os"
 import * as path from "node:path"
 import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
-import { Window } from "happy-dom"
 import { build, version as vite } from "vite"
 
 const { values: { base, json, vocabulary } } = parseArgs({
@@ -33,7 +33,7 @@ async function checkClient(code, baseline) {
   })
   try {
     const document = window.document
-    document.body.innerHTML = '<div id="app"></div>'
+    document.body.innerHTML = "<div id=\"app\"></div>"
     const app = document.getElementById("app")
     app.dataset.model = "7"
     app.dataset.message = JSON.stringify({ _tag: "Decrement" })
@@ -91,7 +91,14 @@ async function measure() {
     fs.copyFileSync(path.join(import.meta.dirname, "effect-only.ts"), baselineInput)
     const counter = await bundle(root, input, false)
     const baseline = await bundle(root, baselineInput, true)
-    return { ...counter, baselineGzip: baseline.gzip, addedGzip: counter.gzip - baseline.gzip, vite, effect, node: process.version }
+    return {
+      ...counter,
+      baselineGzip: baseline.gzip,
+      addedGzip: counter.gzip - baseline.gzip,
+      vite,
+      effect,
+      node: process.version
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
@@ -100,7 +107,16 @@ async function measure() {
 const elements = vocabulary ? "Html.vocabulary" : "Html"
 const result = { ...await measure(), elements }
 const headers = ["Elements", "Vite", "effect", "Node", "Raw bytes", "Gzip bytes", "Effect-only gzip B", "Added gzip B"]
-const row = [elements, result.vite, result.effect, result.node, result.raw, result.gzip, result.baselineGzip, result.addedGzip]
+const row = [
+  elements,
+  result.vite,
+  result.effect,
+  result.node,
+  result.raw,
+  result.gzip,
+  result.baselineGzip,
+  result.addedGzip
+]
 if (base) {
   const previous = JSON.parse(fs.readFileSync(base, "utf8"))
   assert.equal(previous.elements ?? "Html", elements, "baseline uses a different vocabulary")
