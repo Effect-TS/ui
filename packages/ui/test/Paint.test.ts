@@ -7,7 +7,7 @@ import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
 const makeApp = () => {
-  const ran = { commands: 0, subscriptions: 0, fetches: 0 }
+  const ran = { inits: 0, commands: 0, subscriptions: 0, fetches: 0 }
 
   class GetName extends Query.Service<GetName>()(
     "GetName",
@@ -35,7 +35,10 @@ const makeApp = () => {
     message: RowMessage,
     queries: { name: { query: GetName, args: ({ props }) => ({ id: props.id }) } }
   }).make({
-    init: ($) => $.set(0).run(Ping.make({})),
+    init: ($) => {
+      ran.inits++
+      return $.set(0).run(Ping.make({}))
+    },
     update: ($, message) => RowMessage.match(message, { Clicked: () => $.model + 1, Ticked: () => $.model }),
     view: (h, count) =>
       h.el("button").on("click", RowMessage.Clicked()).children(
@@ -59,7 +62,10 @@ const makeApp = () => {
     model: Schema.Array(Schema.String),
     message: ListMessage
   }).make({
-    init: () => ["a"],
+    init: () => {
+      ran.inits++
+      return ["a"]
+    },
     update: ($, message) => [...$.model, message.id],
     view: (h, ids) => h.el("div", ids.map((id) => Row(h, { key: id, props: { id } })))
   })
@@ -67,7 +73,6 @@ const makeApp = () => {
   return { ran, List, ListMessage, layer: GetName.layer }
 }
 
-/** Each instance's state as of the last entry in `entries`, by path. */
 const fold = (entries: ReadonlyArray<MessageLog.Entry>) => {
   const state = new Map<string, { model: unknown; results: Record<string, unknown> | undefined }>()
   for (const entry of entries) {
@@ -140,8 +145,49 @@ describe("paint", () => {
         yield* load
         assert.deepStrictEqual(painted.fellBack, ["/List/Row[a]", "/List/Row[b]"])
         assert.strictEqual(Locator.textOf(container), "a:?=0;b:?=0;")
-        assert.deepStrictEqual(ran, { commands: 0, subscriptions: 0, fetches: 0 })
+        assert.deepStrictEqual(ran, { inits: 2, commands: 0, subscriptions: 0, fetches: 0 })
       })
     )
   })
+
+  it.effect("an instance with recorded props takes them over the ones its parent's view passes", () => {
+    const { List, layer } = makeApp()
+    return run(
+      layer,
+      Effect.gen(function*() {
+        const testHost = yield* TestHost.TestHost
+        const container = testHost.host.createElement("div")
+        const recorded: Record<string, runtime.PaintState> = {
+          "/List": { model: ["a", "b"], results: undefined },
+          "/List/Row[a]": { model: 1, results: undefined, props: { id: "before" } },
+          "/List/Row[b]": { model: 2, results: undefined }
+        }
+        yield* runtime.paint(List, {}, container, (path) => recorded[path])
+        assert.strictEqual(Locator.textOf(container), "before:?=1;b:?=2;")
+      })
+    )
+  })
+
+  it.effect("a lazy component that hasn't loaded shows its fallback, without loading it", () =>
+    Effect.gen(function*() {
+      let loads = 0
+      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({ init: () => null, update: ($) => $.model, view: (h) => h.text("page") })
+      const LazyPage = Component.lazy("LazyPage", () => {
+        loads++
+        return Promise.resolve(Page)
+      })
+      const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never })
+        .make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.el("p", LazyPage(h, { props: {}, fallback: () => h.text("loading") }))
+        })
+      const testHost = yield* TestHost.TestHost
+      const container = testHost.host.createElement("div")
+      yield* runtime.paint(App, {}, container, () => ({ model: null, results: undefined }))
+      yield* TestHost.settle
+      assert.strictEqual(Locator.textOf(container), "loading")
+      assert.strictEqual(loads, 0)
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

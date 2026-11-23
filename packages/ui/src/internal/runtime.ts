@@ -738,8 +738,13 @@ interface Options {
   readonly inert?: Inert | undefined
 }
 
+/** @internal */
+export interface PaintState extends Decoded {
+  readonly props?: unknown
+}
+
 interface Inert {
-  readonly state: (path: string) => Decoded | undefined
+  readonly state: (path: string) => PaintState | undefined
   readonly fellBack: (path: string) => void
   readonly fallback: (path: string) => void
 }
@@ -794,7 +799,8 @@ interface StateCodec {
   ) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly decode: (encoded: unknown) => Effect.Effect<Decoded, SchemaIssue.Issue>
 }
-interface Decoded {
+/** @internal */
+export interface Decoded {
   readonly model: unknown
   readonly results: componentQueries.Results | undefined
 }
@@ -969,9 +975,7 @@ export const paint = (
   component: Component.Any,
   rootProps: unknown,
   container: unknown,
-  state: (
-    path: string
-  ) => { readonly model: unknown; readonly results: componentQueries.Results | undefined } | undefined
+  state: (path: string) => PaintState | undefined
 ): Effect.Effect<
   { readonly fellBack: ReadonlyArray<string>; readonly fallbacks: ReadonlyArray<string> },
   never,
@@ -3257,8 +3261,12 @@ const setup = (
 
     if (inert !== undefined) {
       const recorded = inert.state(inst.path)
-      if (recorded === undefined) inert.fellBack(inst.path)
-      else restoredState.set(inst, recorded)
+      if (recorded === undefined) {
+        inert.fellBack(inst.path)
+      } else {
+        if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
+        restoredState.set(inst, recorded)
+      }
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
       return inst
     }
@@ -3523,7 +3531,7 @@ const setup = (
     readonly adopted: Adopted
   }
   /** Runs `init`, once the host is known to show the component's elements. */
-  const initOf = (inst: Instance): Component.Next<any, any, any, any> => {
+  const initOf = (inst: Instance, recorded?: Decoded): Component.Next<any, any, any, any> => {
     const component = inst.component
     const elements = component.elements()
     if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
@@ -3534,16 +3542,18 @@ const setup = (
       )
     }
     findOwners(inst)
-    return component.init(inst.props)
+    return recorded === undefined ? component.init(inst.props) : { model: recorded.model, commands: none, events: none }
   }
   /**
    * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
    * history restore instead of `init`'s.
    */
   const startFrom = (inst: Instance, serverModel: Adopted): Start => {
-    const first = guard(inst, "init", initOf)
-    let adopted = serverModel
     const restored = restoredState.get(inst)
+    const first = inert === undefined || restored === undefined
+      ? guard(inst, "init", initOf)
+      : guard(inst, "init", (inst) => initOf(inst, restored))
+    let adopted = serverModel
     if (restored !== undefined) {
       restoredState.delete(inst)
       if (first !== undefined) {
@@ -5933,7 +5943,11 @@ const setup = (
       childEnv = readyEnv(Context.merge(env.ctx!, found.value.context), env)
     } else if (lazyOf.TypeId in target) {
       const state = lazyOf.stateOf(target)
-      if (state._tag !== "Loaded") return loadingSlot(inst, view, env, range)
+      if (state._tag !== "Loaded") {
+        return inert === undefined
+          ? loadingSlot(inst, view, env, range)
+          : fallbackSlot(inst, view, lazyStatus(target), false, env, range)
+      }
       component = state.component
     } else {
       component = target

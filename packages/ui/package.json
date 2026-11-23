@@ -79,7 +79,8 @@
     "codegen": "effect-utils codegen",
     "build": "tsc -b tsconfig.json && pnpm babel",
     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
-    "check": "tsc -b tsconfig.json"
+    "check": "tsc -b tsconfig.json",
+    "check-pause": "node test/browser/check-pause.mjs"
   },
   "peerDependencies": {
     "effect": "^4.1.4"

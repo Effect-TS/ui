@@ -746,6 +746,26 @@ export const makeHost = (
     shown.add(dialog)
   }
 
+  let modalsHeld = false
+  const showModals = () => {
+    const dialogs: Array<HTMLDialogElement> = []
+    for (const dialog of modalWanted) {
+      // A dialog that left the tree for good is forgotten. One that's back is shown again.
+      if (!dialog.isConnected) modalWanted.delete(dialog)
+      else dialogs.push(dialog)
+    }
+    // Document order: a dialog opens before one nested in it or after it, which then stacks on top.
+    dialogs.sort((a, b) => (a.compareDocumentPosition(b) & 4) !== 0 ? -1 : 1)
+    for (const dialog of dialogs) showDialog(dialog, "modal")
+  }
+  const holdModals = (hold: boolean) => {
+    modalsHeld = hold
+    if (!hold) return showModals()
+    for (const dialog of Array.from(shown).reverse()) {
+      if (modals.has(dialog)) closeDialog(dialog, true)
+    }
+  }
+
   // -- popovers ----------------------------------------------------------------
   // A popover's `popoverOpen` is separate from `open`. A manual popover is applied at every commit and put
   // back after any other change; an auto popover is applied only when the Model's value or the mode
@@ -1388,16 +1408,7 @@ export const makeHost = (
       for (const dialog of shown) {
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
-      if (modalWanted.size === 0) return showPopovers()
-      const dialogs: Array<HTMLDialogElement> = []
-      for (const dialog of modalWanted) {
-        // A dialog that left the tree for good is forgotten. One that's back is shown again.
-        if (!dialog.isConnected) modalWanted.delete(dialog)
-        else dialogs.push(dialog)
-      }
-      // Document order: a dialog opens before one nested in it or after it, which then stacks on top.
-      dialogs.sort((a, b) => (a.compareDocumentPosition(b) & 4) !== 0 ? -1 : 1)
-      for (const dialog of dialogs) showDialog(dialog, "modal")
+      if (modalWanted.size > 0 && !modalsHeld) showModals()
       showPopovers()
     },
     viewTransition(update, types) {
@@ -1435,8 +1446,11 @@ export const makeHost = (
       active = undefined
     }
   }
+  heldModals.set(host, holdModals)
   return host
 }
+
+const heldModals = new WeakMap<Renderer.Host<globalThis.Node>, (hold: boolean) => void>()
 
 /**
  * The element operations behind `HtmlCommand.focus`, `blur`,
@@ -1518,12 +1532,13 @@ const signals = (document: Document) => {
 
 // `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
+const globalEventsOf = (document: Document, muted?: () => boolean): HtmlSubscription.GlobalEvents => ({
   listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
+    const view = document.defaultView
     const f = (event: Event) =>
-      listener(
+      view !== null && muted?.() === true && isInput(event, view) ? undefined : listener(
         {
           ...(custom === true
             ? { detail: (event as CustomEvent).detail ?? null }
@@ -1536,6 +1551,11 @@ const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
     return () => on.removeEventListener(name, f, { capture })
   }
 })
+
+const isInput = (event: Event, view: Window & typeof globalThis): boolean =>
+  event.isTrusted &&
+  (event instanceof view.MouseEvent || event instanceof view.KeyboardEvent ||
+    (typeof view.TouchEvent === "function" && event instanceof view.TouchEvent))
 
 const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   const view = document.defaultView
@@ -1806,7 +1826,13 @@ export const mountEffect = <
   options?: MountOptions<V, RF>
 ): Effect.Effect<Renderer.Root<Model, Msg>, never, Exclude<R | RF | RP, Html.Host> | Scope.Scope> =>
   Effect.gen(function*() {
-    const context = yield* Layer.build(layer({ document: container.ownerDocument }))
+    const document = container.ownerDocument
+    const muted = { input: false }
+    const context = Context.add(
+      yield* Layer.build(layer({ document })),
+      HtmlSubscription.GlobalEvents,
+      globalEventsOf(document, () => muted.input)
+    )
     const outer = yield* Effect.context<Scope.Scope>()
     const scheduled = Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
       ? Context.add(context, Scheduler.Scheduler, defaultScheduler ??= HtmlScheduler.make())
@@ -1815,7 +1841,7 @@ export const mountEffect = <
       Renderer.mount(component, props, container, options),
       scheduled
     )) as unknown as runtime.Root
-    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled))
+    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled), muted)
     const unregister = Context.get(outer, Pausables).register(paused)
     yield* Effect.addFinalizer(() => Effect.andThen(Effect.sync(unregister), paused.resume))
     return root
@@ -1823,8 +1849,17 @@ export const mountEffect = <
 
 /**
  * An instance's state as a tool recorded it from the `MessageLog`: the
- * Model of a `Mounted` or `Update` entry and, for a component with
- * queries, its query results.
+ * Model of a `Mounted` or `Update` entry, for a component with queries
+ * its query results, and the props of its `Mounted` or latest
+ * `PropsChanged` entry.
+ *
+ * **Details**
+ *
+ * Without `props`, the instance takes the props its parent's view passes it,
+ * and the root the props it was mounted with. With them, it takes those, so
+ * a child shows the props it had at that entry, even when its parent's
+ * Model at that entry would pass it newer ones or its parent wasn't
+ * recorded.
  *
  * @stability experimental
  * @category models
@@ -1833,6 +1868,7 @@ export const mountEffect = <
 export interface Recorded {
   readonly model: unknown
   readonly queries?: Component.Results | undefined
+  readonly props?: unknown
 }
 
 /**
@@ -1848,19 +1884,26 @@ export interface Recorded {
  * `init`. See `Painted` for what it returns.
  *
  * The frozen copy runs nothing: no Command, `init`'s included, no
- * Subscription, query watch or fetch, element mount or provided Layer, so a
- * feature slot whose service comes from a provided Layer shows its
- * `fallback`. It logs no entries, leaves the
- * document head alone, isn't seen by the Router and takes no events.
- * A modal dialog in the copy is shown as a manual popover, and an auto
- * popover as a manual one, so the copy never makes the rest of the page
- * inert, a tool's own UI included, and never closes the live tree's
- * popovers.
+ * Subscription, query watch or fetch, element mount or provided Layer, and
+ * loads no lazy component, so a feature slot whose service comes from a
+ * provided Layer, and a lazy component that hasn't loaded, show their
+ * `fallback`. It logs no entries, leaves the document head alone, isn't seen
+ * by the Router and takes no events. A modal dialog in the copy is shown as
+ * a manual popover, and an auto popover as a manual one, so the copy never
+ * makes the rest of the page inert, a tool's own UI included, and never
+ * closes the live tree's popovers.
  *
  * The live root keeps running while it's hidden: its Commands,
  * Subscriptions and updates go on, and it renders into its hidden
- * container. Pausing again replaces the painted copy. `resume` removes the
- * copy and shows the container again, with whatever happened meanwhile.
+ * container. While it's paused, its modal dialogs are closed and its
+ * document and window listeners don't hear the user's mouse, pointer, touch
+ * and key input, so a click on the copy, which `inert` passes to the
+ * element under it, doesn't reach the live tree, and nothing it shows blocks
+ * the rest of the page. Events that aren't the user's input, and ones code
+ * dispatches, still reach it. Pausing again replaces the painted copy.
+ * `resume` removes the copy, shows the container again, with whatever
+ * happened meanwhile, and shows the modal dialogs its Model has open. When
+ * a paint fails, `pause` removes its copy and leaves the page as it was.
  *
  * **Gotchas**
  *
@@ -1951,11 +1994,13 @@ const pausable = (
   component: Component.Any,
   root: runtime.Root,
   container: globalThis.Element,
-  context: Context.Context<Scope.Scope | Renderer.Renderer>
+  context: Context.Context<Scope.Scope | Renderer.Renderer>,
+  muted: { input: boolean }
 ): Pausable => {
   const owner = Context.get(context, Scope.Scope)
   const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<globalThis.Node>
   const painting = Context.add(context, Renderer.Renderer, { host: paintHost(host) })
+  const holdModals = heldModals.get(host)
   const style = (container as HTMLElement).style
   let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
   let shown: readonly [value: string, priority: string] | undefined
@@ -1967,16 +2012,25 @@ const pausable = (
     if (value === "") target.removeProperty("display")
     else target.setProperty("display", value, priority)
   }
+  const hide = (): readonly [string, string] => {
+    if (shown !== undefined) return shown
+    shown = [style.getPropertyValue("display"), style.getPropertyPriority("display")]
+    muted.input = true
+    holdModals?.(true)
+    style.setProperty("display", "none", "important")
+    return shown
+  }
+  const reveal = Effect.sync(() => {
+    if (shown === undefined) return
+    show(style, shown)
+    shown = undefined
+    muted.input = false
+    holdModals?.(false)
+  })
   const resume = Effect.suspend(() => {
     const was = painted
     painted = undefined
-    return Effect.andThen(
-      unpaint(was),
-      Effect.sync(() => {
-        if (shown !== undefined) show(style, shown)
-        shown = undefined
-      })
-    )
+    return Effect.andThen(unpaint(was), reveal)
   })
   return {
     session: root.session,
@@ -1984,16 +2038,19 @@ const pausable = (
     pause: (state) =>
       Effect.uninterruptible(Effect.gen(function*() {
         const scope = yield* Scope.fork(owner, "sequential")
-        shown ??= [style.getPropertyValue("display"), style.getPropertyPriority("display")]
         const copy = container.cloneNode(false) as HTMLElement
-        show(copy.style, shown)
+        show(copy.style, hide())
         copy.setAttribute("inert", "")
         ;(painted?.copy ?? container).after(copy)
-        style.setProperty("display", "none", "important")
         const result = yield* runtime.paint(component, root.instance.props, copy, (path) => {
           const recorded = state(path)
-          return recorded === undefined ? undefined : { model: recorded.model, results: recorded.queries }
-        }).pipe(Effect.provideContext(Context.add(painting, Scope.Scope, scope)))
+          if (recorded === undefined) return undefined
+          const adopted = { model: recorded.model, results: recorded.queries }
+          return Object.hasOwn(recorded, "props") ? { ...adopted, props: recorded.props } : adopted
+        }).pipe(
+          Effect.provideContext(Context.add(painting, Scope.Scope, scope)),
+          Effect.onError(() => Effect.andThen(unpaint({ scope, copy }), painted === undefined ? reveal : Effect.void))
+        )
         const was = painted
         painted = { scope, copy }
         yield* unpaint(was)
