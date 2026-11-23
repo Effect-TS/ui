@@ -98,11 +98,11 @@ const Page = Component.define({
                 items: [{ value: "copy", label: "Copy" }, { value: "paste", label: "Paste" }]
               },
               onEmit: {
-                Opened: () => Message.OpenedMenu(),
-                Dismissed: () => Message.DismissedMenu(),
+                RequestedOpen: () => Message.OpenedMenu(),
+                RequestedClose: () => Message.DismissedMenu(),
                 Picked: () => undefined,
                 Highlighted: () => undefined,
-                ChangedQuery: () => undefined,
+                RequestedQuery: () => undefined,
                 Settled: () => undefined
               },
               view: (menu) =>
@@ -128,8 +128,8 @@ const Page = Component.define({
                 items: [{ value: "100", label: "100%" }, { value: "200", label: "200%" }]
               },
               onEmit: {
-                Opened: () => Message.OpenedSelect(),
-                Dismissed: () => Message.DismissedSelect(),
+                RequestedOpen: () => Message.OpenedSelect(),
+                RequestedClose: () => Message.DismissedSelect(),
                 Picked: ({ value }) => typeof value === "string" ? Message.Picked({ value }) : undefined,
                 Settled: () => undefined
               },
