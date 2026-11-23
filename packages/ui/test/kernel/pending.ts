@@ -43,18 +43,7 @@ export const pending: {
     "Story and sends > fromLog reports a divergence when a send changes, from entries and from the Wire":
       "headless components and shared state (step 8)"
   },
-  "DuplicatePaths.test.ts": {
-    "duplicate child paths > in a child's fallback > fail the parent with source view when a fallback renders two children at one path":
-      "2b: checking the child paths of fallbacks",
-    "duplicate child paths > in a child's fallback > fail the parent with source view when a fallback renders a child at a sibling child's path":
-      "2b: checking the child paths of fallbacks",
-    "duplicate child paths > in a child's fallback > fail the parent with source view when a fallback renders a child at the path of another fallback's child":
-      "2b: checking the child paths of fallbacks",
-    "duplicate child paths > in a child's fallback > fail the parent when a child that fails after it rendered shows a fallback at a sibling's path":
-      "2b: checking the child paths of fallbacks",
-    "duplicate child paths > in a nested fallback > fail the parent when a nested fallback renders two children with one key":
-      "2b: checking the child paths of fallbacks"
-  },
+  "DuplicatePaths.test.ts": {},
   "Keyed.test.ts": {
     "Keyed query fields > N cold keys start N fetches in one batch, and its results are one message with N changes":
       "queries (step 5)",
@@ -119,18 +108,8 @@ export const pending: {
       "queries (step 5)",
     "render timing > a query fetches the args of every Model before the flush":
       "Commands (step 3), queries (step 5)",
-    "render timing > the instance a message is on its way to renders once, in the flush":
-      "2b: rendering dirty ancestors before a message is delivered",
-    "causedBy > the entries of the first mount name the session's start":
-      "2b: the full message log (causedBy)",
-    "causedBy > two messages rendered by one flush: each instance's entries name the last to change it":
-      "2b: the full message log (causedBy)",
     "causedBy > a message a Command resolves with names nothing, and an interrupted run names what cut it":
       "2b: the full message log (causedBy), Commands (step 3)",
-    "TestHost.formatTimeline > lists each fact with what followed from it under it, whichever flush logged it":
-      "2b: the full message log (causedBy)",
-    "TestHost.formatTimeline > an entry whose fact isn't among the entries is listed as one, naming it":
-      "2b: the full message log (causedBy)",
     "TestHost.layer flush > first renders before the scheduler's other tasks, and last after them":
       "Commands (step 3)",
     "TestHost.layer flush > a seed gives the same order every time":
@@ -141,18 +120,12 @@ export const pending: {
   "Runtime.test.ts": {
     "Runtime > rejects a different shared owner with the same name at mount":
       "headless components and shared state (step 8)",
-    "Runtime > an event reaches a handler below thousands of elements":
-      "2b: create recurses once per element, and 3000 levels overflow the stack",
     "Runtime > keyed list > adds, removes and reorders children, closing the Scopes of the removed ones":
       "Commands (step 3)",
     "Runtime > keyed list > closing the mount's Scope unmounts every instance":
       "Commands (step 3)",
     "Runtime > keyed list > a child made again at its path before the old one closes is still its parent's child":
       "Commands (step 3)",
-    "Runtime > keyed list > rows added or removed at the end touch no other node":
-      "differs: the kernel keeps the unkeyed row after the list, which today makes again, so one insert fewer",
-    "Runtime > keyed list > a row inserted or removed in the middle leaves the rows around it alone":
-      "differs: the kernel keeps the unkeyed row after the list, which today makes again, so one insert fewer",
     "Runtime > failures > a defect in a Command fails its instance":
       "Commands (step 3)",
     "Runtime > a provided Layer factory and a fallback's child > a throwing factory fails only that child":
@@ -227,8 +200,6 @@ export const pending: {
       "Layers (step 4)",
     "Runtime > features > stub records props and emits what the test sends":
       "Subscriptions (step 3)",
-    "Runtime > MessageLog > a message whose update throws is on its Failed entry, and crosses the Wire":
-      "2b: the full message log (Failed.update)",
     "Runtime > MessageLog > an instance logs Unmounted as it leaves the tree, and a Command's end once its fiber has exited":
       "Commands (step 3)",
     "Runtime > vocabularies > controlled properties are re-applied after every patch":
@@ -320,12 +291,6 @@ export const pending: {
     "placing a slot twice fails the receiver > once in a headless child's closure":
       "headless components and shared state (step 8)",
     "placing a slot twice fails the receiver > but not when it forwards the slot through a headless closure in a child's content":
-      "headless components and shared state (step 8)",
-    "a mistake in content fails the parent that wrote it > two elements with one key":
-      "2b: a mistake in slot content fails the parent that wrote it",
-    "a mistake in content fails the parent that wrote it > a fallback at a sibling's path":
-      "2b: a mistake in slot content fails the parent that wrote it",
-    "a mistake in content fails the parent that wrote it > text forwarded to a slot placed where the vocabulary allows none":
-      "2b: a mistake in slot content fails the parent that wrote it"
+      "headless components and shared state (step 8)"
   }
 }

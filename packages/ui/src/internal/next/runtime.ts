@@ -10,12 +10,12 @@ import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
-import type * as MessageLog from "../../MessageLog.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as View from "../../View.ts"
 import * as Executor from "../executor.ts"
 import * as Kernel from "../kernel.ts"
 import * as messageLog from "../messageLog.ts"
+import * as Recorder from "../recorder.ts"
 import type * as runtime from "../runtime.ts"
 import * as services from "../services.ts"
 
@@ -44,22 +44,29 @@ const dispatched = { _tag: "Dispatch" } as const
 
 let sessions = 0
 
-const bridge = (host: Renderer.Host<any>): Kernel.Host => ({
+const bridge = (
+  host: Renderer.Host<any>,
+  step: Recorder.Recording["step"]
+): Kernel.Host => ({
   createElement: (tag) => host.createElement(tag),
   createText: (text) => host.createText(text),
   setText: (node, text) => host.setText(node, text),
   setAttr: (node, name, value) => host.setAttr(node, name, value),
+  normalizeAttrs: host.normalizeAttrs === undefined
+    ? undefined
+    : (node, attrs) => host.normalizeAttrs!(node, attrs),
   setProp: (node, name, value) => host.setProp(node, name, value),
   setEvents: (node, rec) => {
     const view = rec.v as View.Element<any, any>
     host.setEvents(
       node,
       view.handlers,
-      (event, handler, payload, onMessage) => {
-        const sent = rec.inst.fire(handler, payload, event)
-        if (sent) onMessage?.()
-        return sent
-      },
+      (event, handler, payload, onMessage) =>
+        step(() => {
+          const sent = rec.inst.fire(handler, payload, event)
+          if (sent) onMessage?.()
+          return sent
+        }),
       view.eventOptions
     )
     host.events?.listen(view.handlers, view.eventOptions)
@@ -145,104 +152,70 @@ const start = (
     (sessions++).toString(36)
   }`
   const emitted: Array<unknown> = []
-  const numbers = new WeakMap<Kernel.Instance, number>()
-  const lastSeqs = new WeakMap<Kernel.Instance, number>()
-  let seq = 0
-  let born = 0
   let flushes = 0
-  const stamp = () => ({
-    seq: ++seq,
-    at: clock.currentTimeMillisUnsafe(),
-    session
-  })
-  if (log.enabled) {
-    log.record(
-      {
-        _tag: "SessionStarted",
-        app: component.definition.name,
-        ...stamp()
-      } as MessageLog.Entry
-    )
-  }
-  const sourceOf = (source: unknown): MessageLog.Source =>
-    typeof source === "string"
-      ? { _tag: "DomEvent", name: source }
-      : source instanceof Kernel.Instance
-      ? {
-        _tag: source.closed ? "Failure" : "Emit",
-        path: source.path,
-        seq: lastSeqs.get(source) ?? -1
-      }
-      : dispatched
+  const recording = Recorder.make(
+    log,
+    clock,
+    session,
+    component.definition.name
+  )
   const record: Kernel.Recorder = (inst, draft) => {
-    let number = numbers.get(inst)
-    if (number === undefined) numbers.set(inst, number = born++)
     if (
       inst.parent === undefined &&
       (draft._tag === "Update" || draft._tag === "Mounted")
     ) {
       emitted.push(...(draft.events as ReadonlyArray<unknown>))
     }
-    if (!log.enabled) return
-    const entry: Record<string, unknown> = {
-      ...draft,
-      ...stamp(),
-      path: inst.path,
-      instance: number,
-      component: inst.component
-    }
-    if (draft._tag === "Update") {
-      entry.source = sourceOf(draft.source)
-      entry.lists = []
-      entry.sends = []
-    } else if (draft._tag === "Failed") entry.name = undefined
-    lastSeqs.set(inst, seq)
-    log.record(entry as unknown as MessageLog.Entry)
+    recording.record(inst, draft)
   }
   const fallback = options?.fallback
-  const kernelRoot = Kernel.mount(
-    component as unknown as Kernel.Runnable,
-    props,
-    container,
-    bridge(host),
-    {
-      context: ctx,
-      init: (inst) => {
-        const made = inst.component as unknown as Component.Any
-        const elements = made.elements()
-        if (
-          elements !== undefined && host.elements !== "any" &&
-          !host.elements.includes(elements.name)
-        ) {
-          throw new Error(
-            `${made.definition.name} renders ${elements.name} elements, and this host shows ${
-              host.elements.join(", ")
-            }`
-          )
-        }
-        return inst.component.init(inst.props)
-      },
-      log: record,
-      schedule: (task) =>
-        executor.schedule(() => {
-          flushes++
-          task()
-        }),
-      report: (path, where, cause) => {
-        Effect.runForkWith(forkContext)(
-          Effect.logError(`${path} failed in ${where}`, cause)
-        )
-      },
-      fallback: fallback === undefined ?
-        undefined :
-        (cause) =>
-          View.toNode(
-            fallback(
-              AsyncResult.failure(cause),
-              View.makeHelper({}, component.elements())
+  const kernelRoot = recording.session(() =>
+    Kernel.mount(
+      component as unknown as Kernel.Runnable,
+      props,
+      container,
+      bridge(host, recording.step),
+      {
+        context: ctx,
+        init: (inst) => {
+          const made = inst.component as unknown as Component.Any
+          const elements = made.elements()
+          if (
+            elements !== undefined && host.elements !== "any" &&
+            !host.elements.includes(elements.name)
+          ) {
+            throw new Error(
+              `${made.definition.name} renders ${elements.name} elements, and this host shows ${
+                host.elements.join(", ")
+              }`
             )
+          }
+          return inst.component.init(inst.props)
+        },
+        log: record,
+        schedule: (task) => {
+          const run = recording.later(task)
+          executor.schedule(() => {
+            flushes++
+            run()
+          })
+        },
+        report: (path, where, cause) => {
+          Effect.runForkWith(forkContext)(
+            Effect.logError(`${path} failed in ${where}`, cause)
           )
-    }
+        },
+        fallback: fallback === undefined ?
+          undefined :
+          (cause) =>
+            View.toNode(
+              fallback(
+                AsyncResult.failure(cause),
+                View.makeHelper({}, component.elements())
+              )
+            )
+      }
+    )
   )
   const instance = kernelRoot.instance
   const root = {
@@ -251,7 +224,8 @@ const start = (
     instance: instance as unknown as Instance,
     emitted,
     model: () => instance.failure === undefined ? instance.model : undefined,
-    send: (message: unknown) => kernelRoot.send(message, dispatched),
+    send: (message: unknown) =>
+      recording.step(() => kernelRoot.send(message, dispatched)),
     pending: () => [],
     loads: () => [],
     cache: {
