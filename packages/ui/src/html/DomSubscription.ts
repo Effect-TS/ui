@@ -17,6 +17,7 @@ import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
+import { handle } from "../internal/handler.ts"
 import * as services from "../internal/services.ts"
 import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
@@ -507,31 +508,30 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  * @category subscriptions
  * @since 0.1.0
  */
-export const onAnimationFrame = <Msg>(handler: View.Handler<Msg, number>): Subscription.Subscription<Msg> => {
-  const declared: frames.Declared = { handler }
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => {
-    const source = Context.get(context, AnimationFrames)
-    let last = source.now()
-    return {
-      initial: Effect.void,
-      close: source.listen((time) => {
-        const delta = Math.max(0, time - last)
-        last = time
-        enter((latest) => {
-          try {
-            const message = frames.run(frames.declaredOf(latest) ?? declared, delta)
-            if (message !== undefined) emit(message, noop)
-          } catch (error) {
-            fail(Cause.die(error))
-          }
-        })
-      })
-    }
-  }
-  return Object.assign(
+export const onAnimationFrame = <Msg>(handler: View.Handler<Msg, number>): Subscription.Subscription<Msg> =>
+  Object.assign(
     Subscription.make("@effect/ui/html/animationFrame", Stream.never),
-    { [frames.frame]: declared, [services.direct]: direct }
+    { [frames.frame]: handler, [services.direct]: attachFrames }
   )
+
+const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => {
+  const source = Context.get(context, AnimationFrames)
+  let last = source.now()
+  return {
+    initial: Effect.void,
+    close: source.listen((time) => {
+      const delta = Math.max(0, time - last)
+      last = time
+      enter((latest) => {
+        try {
+          const message = handle(frames.handlerOf(latest), delta)
+          if (message !== undefined) emit(message, noop)
+        } catch (error) {
+          fail(Cause.die(error))
+        }
+      })
+    })
+  }
 }
 
 const noop = () => {}

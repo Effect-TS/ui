@@ -73,6 +73,7 @@
 import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
+import { handle } from "../../internal/handler.ts"
 import * as internal from "../../internal/scene.ts"
 import * as cursor from "../../internal/steps.ts"
 import * as engine from "../../internal/story.ts"
@@ -434,15 +435,15 @@ class StepsImpl extends internal.SceneCursor {
   frame(delta = 16): this {
     let handled = false
     return this.act("frame", "message", (state) => {
-      const declared = state.declared().map(frames.declaredOf).find((declared) => declared !== undefined)
-      if (declared === undefined) {
+      const handler = state.declared().map(frames.handlerOf).find((handler) => handler !== undefined)
+      if (handler === undefined) {
         throw new Error(
           `${this.name("frame")}: nothing listens for animation frames; active keys: ${
             JSON.stringify(state.subscriptions())
           }`
         )
       }
-      const message = frames.run(declared, delta)
+      const message = handle(handler, delta)
       if (message === undefined) return state
       handled = true
       return engine.dispatch(state, message)

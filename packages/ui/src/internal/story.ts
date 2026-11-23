@@ -23,6 +23,7 @@ import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target 
 import * as View from "../View.ts"
 import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
+import { handle } from "./handler.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
@@ -1377,9 +1378,6 @@ export const findRunning = (story: State<any, any, any, any>, target: Target, st
   }
   return entry
 }
-
-const handle = <Msg, Payload>(handler: View.Handler<Msg, Payload>, payload: Payload): Msg | undefined =>
-  typeof handler === "function" ? (handler as (payload: Payload) => Msg | undefined)(payload) : handler
 
 /** @internal */
 export const dispatch = <Props, Model, Msg, Events>(

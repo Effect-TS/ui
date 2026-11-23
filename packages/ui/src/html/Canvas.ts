@@ -57,19 +57,32 @@
  */
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
+import * as Record from "effect/Record"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Component from "../Component.ts"
+import { handle } from "../internal/handler.ts"
 import * as Mount from "../Mount.ts"
 import * as UiSchema from "../UiSchema.ts"
 import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
+import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
 
 const callable = <S extends Schema.Top, F extends Function>(schema: S, construct: F): S & F =>
   Object.setPrototypeOf(construct, schema)
 
 const tagged = <A extends { readonly _tag: string }>(tag: A["_tag"]) => (fields: Omit<A, "_tag">): A =>
   ({ ...fields, _tag: tag }) as A
+
+// The equivalence derived for a union validates both values against a member before it compares them,
+// which costs many times the comparison. The `_tag` already says which member's equivalence applies.
+const sameByTag = <S extends Schema.Top & { readonly Type: { readonly _tag: string } }>(
+  cases: Record<string, Schema.Top>
+) =>
+  Schema.overrideToEquivalence<S>(() => {
+    const same = Record.map(cases, (schema) => Schema.toEquivalence(schema))
+    return (a, b) => a._tag === b._tag && same[a._tag]?.(a, b) === true
+  })
 
 /**
  * A point in scene coordinates.
@@ -222,7 +235,7 @@ export const PathCommand = UiSchema.TaggedEnum({
 export type PathCommand = typeof PathCommand.Type
 
 const PathSchema = Schema.TaggedStruct("Path", {
-  commands: Schema.Array(PathCommand),
+  commands: Schema.Array(PathCommand.pipe(sameByTag(PathCommand.cases))),
   fill: Schema.optional(Schema.String),
   stroke: Schema.optional(Schema.String),
   lineWidth: Schema.optional(Schema.Number),
@@ -339,7 +352,9 @@ export type Shape = Rect | Circle | Path | Text | Group
  * @category shapes
  * @since 0.1.0
  */
-export const Shape: Schema.Codec<Shape> = Schema.Union([Rect, Circle, Path, Text, Group])
+export const Shape: Schema.Codec<Shape> = Schema.Union([Rect, Circle, Path, Text, Group]).pipe(
+  sameByTag({ Rect, Circle, Path, Text, Group })
+)
 
 /**
  * A 2D context `paint` draws on: a `<canvas>`'s or an `OffscreenCanvas`'s.
@@ -525,11 +540,6 @@ export const PixelRatio = Schema.Union([Schema.Number, Schema.Literal("auto")])
  */
 export type PixelRatio = typeof PixelRatio.Type
 
-const pointerTypeOf = (event: globalThis.PointerEvent): Html.PointerType => {
-  const type = event.pointerType
-  return type === "touch" || type === "pen" || type === "" ? type : "mouse"
-}
-
 /**
  * The mount `view` puts on its canvas. It paints the scene when the canvas
  * is added and whenever its args change, and reports the pointer events
@@ -571,10 +581,10 @@ export const Paint = Mount.makeStream(
     Stream.callback<Pointer>((queue) =>
       Effect.gen(function*() {
         let args = initial
-        let listening: AbortController | undefined
-        let listened: string | undefined
-        yield* Effect.addFinalizer(() => Effect.sync(() => listening?.abort()))
-        const report = (event: PointerEvent, from: globalThis.PointerEvent) => {
+        const listening = new AbortController()
+        const { signal } = listening
+        yield* Effect.addFinalizer(() => Effect.sync(() => listening.abort()))
+        const report = (event: PointerEvent) => (from: globalThis.PointerEvent) => {
           if (!args.listen.includes(event)) return
           const box = canvas.getBoundingClientRect()
           Queue.offerUnsafe(queue, {
@@ -582,44 +592,25 @@ export const Paint = Mount.makeStream(
             button: from.button,
             x: (from.clientX - box.left) * (box.width === 0 ? 1 : args.width / box.width),
             y: (from.clientY - box.top) * (box.height === 0 ? 1 : args.height / box.height),
-            shift: from.shiftKey,
-            ctrl: from.ctrlKey,
-            alt: from.altKey,
-            meta: from.metaKey,
-            pointerType: pointerTypeOf(from)
+            ...modifiers(from),
+            pointerType: pointerTypeOf(from) ?? "mouse"
           })
         }
-        const listen = () => {
-          const key = args.listen.join()
-          if (key === listened) return
-          listened = key
-          listening?.abort()
-          listening = new AbortController()
-          if (args.listen.length === 0) return
-          const signal = listening.signal
-          const drags = args.listen.includes("pointermove") || args.listen.includes("pointerup")
-          canvas.addEventListener("pointerdown", (event) => {
-            if (drags) {
-              // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
-              try {
-                canvas.setPointerCapture(event.pointerId)
-              } catch {}
-            }
-            report("pointerdown", event)
-          }, { signal })
-          if (args.listen.includes("pointermove")) {
-            canvas.addEventListener("pointermove", (event) => report("pointermove", event), { signal })
-          }
-          if (args.listen.includes("pointerup")) {
-            canvas.addEventListener("pointerup", (event) => report("pointerup", event), { signal })
-            canvas.addEventListener("pointercancel", (event) => report("pointerup", event), { signal })
-          }
-        }
+        canvas.addEventListener("pointerdown", (event) => {
+          if (!args.listen.includes("pointermove") && !args.listen.includes("pointerup")) return
+          // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
+          try {
+            canvas.setPointerCapture(event.pointerId)
+          } catch {}
+        }, { signal })
+        canvas.addEventListener("pointerdown", report("pointerdown"), { signal })
+        canvas.addEventListener("pointermove", report("pointermove"), { signal })
+        canvas.addEventListener("pointerup", report("pointerup"), { signal })
+        canvas.addEventListener("pointercancel", report("pointerup"), { signal })
         const context = canvas.getContext("2d")
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             args = next
-            listen()
             if (context === null) return
             const ratio = next.pixelRatio === "auto"
               ? canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1
@@ -733,13 +724,7 @@ export const view = <Msg>(
   const canvas = h.canvas.attrs({ width: String(width), height: String(height) })
   return (pixelRatio === 1 ? canvas : canvas.style({ width: width + "px", height: height + "px" })).onMount(
     Paint({ width, height, shapes, pixelRatio, listen }).pipe(
-      Mount.map(({ event, ...payload }) => {
-        const handler = handlers[event]
-        const message = typeof handler === "function"
-          ? (handler as (payload: Html.PointerPayload) => Msg | undefined)(payload)
-          : handler
-        return message ?? Component.noop
-      })
+      Mount.map(({ event, ...payload }) => handle(handlers[event], payload) ?? Component.noop)
     )
   )
 }

@@ -106,6 +106,19 @@ describe("Canvas", { concurrent: false }, () => {
       assert.deepStrictEqual(root.model()?.dots, [{ x: 150, y: 100 }, { x: 0, y: 0 }])
     }).pipe(Effect.scoped))
 
+  it("scenes are equal only when every nested shape and path command is", () => {
+    const same = Schema.toEquivalence(Schema.Array(Canvas.Shape))
+    const line = (x: number) =>
+      Canvas.Group({
+        shapes: [
+          Canvas.Path({ commands: [Canvas.PathCommand.MoveTo({ x: 0, y: 0 }), Canvas.PathCommand.LineTo({ x, y: 1 })] })
+        ]
+      })
+    assert.isTrue(same([line(1)], [line(1)]))
+    assert.isFalse(same([line(1)], [line(2)]))
+    assert.isFalse(same([Canvas.Circle({ x: 0, y: 0, radius: 1 })], [Canvas.Rect({ x: 0, y: 0, width: 1, height: 1 })]))
+  })
+
   it("paint draws paths, text and nested groups in order, each between save and restore", () => {
     const { calls, context } = recorder()
     Canvas.paint(context, {

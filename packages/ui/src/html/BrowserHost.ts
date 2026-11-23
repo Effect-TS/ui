@@ -137,6 +137,7 @@ import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import { ownEvents } from "./internal/ownEvents.ts"
+import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
@@ -269,16 +270,6 @@ const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Recor
 }
 
 /**
- * What a pointer event's `pointerType` names, or `undefined` for an event
- * with none, such as a `mousedown` in a browser that sends it as a plain
- * `MouseEvent`, or a type no browser sends today.
- */
-const pointerTypeOf = (event: Event): Html.PointerType | undefined => {
-  const type = (event as { readonly pointerType?: unknown }).pointerType
-  return type === "mouse" || type === "touch" || type === "pen" || type === "" ? type : undefined
-}
-
-/**
  * The `pointerType` of a click-like event's payload. A click with `detail`
  * 0, or a pointer event with an empty `pointerType`, came from no pointer:
  * the keyboard, or a script. Otherwise the last `pointerdown` says which
@@ -289,11 +280,6 @@ const pressedWith = (name: string, event: Event, last: Html.PointerType | undefi
   const own = pointerTypeOf(event)
   if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) return ""
   return last ?? own ?? "mouse"
-}
-
-const modifiers = (event: Event) => {
-  const e = event as KeyboardEvent
-  return { shift: e.shiftKey === true, ctrl: e.ctrlKey === true, alt: e.altKey === true, meta: e.metaKey === true }
 }
 
 const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
