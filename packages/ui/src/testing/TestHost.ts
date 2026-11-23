@@ -1032,8 +1032,10 @@ const formatEntry = (entry: MessageLog.Entry): string => {
     case "MountEnded":
       return `${head} ${entry.name} (${entry.reason})${entry.silent ? " (silent)" : ""}`
     case "MountStarted":
-    case "CommandInterrupted":
+    case "CommandStarted":
       return `${head} ${entry.name}`
+    case "CommandInterrupted":
+      return `${head} ${entry.name} (${entry.reason})`
     case "CommandAwaiting":
       return `${head} ${entry.name} on ${
         entry.entries.map((awaited) => `${awaited.query} ${awaited.logKey}`).join(", ")

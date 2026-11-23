@@ -34,6 +34,7 @@ import * as Redacted from "effect/Redacted"
 import * as Schedule from "effect/Schedule"
 import * as Schema from "effect/Schema"
 import type * as SchemaAST from "effect/SchemaAST"
+import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
 import type * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
@@ -414,6 +415,11 @@ export interface Waiting extends InstanceBase {
  * parent's. Its Scope closes after, and its Commands log their ends as they
  * exit, which can be later than this entry.
  *
+ * It also ends the instance's Subscriptions and any Layer still pending:
+ * neither logs an end entry when its instance goes, so a reader closes them
+ * at this entry. Mounts log their own `MountEnded`, and Command runs their
+ * own `CommandEnded` or `CommandInterrupted`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -588,6 +594,30 @@ export interface MountEnded extends InstanceBase {
 }
 
 /**
+ * A Command run's fiber started its work, in the run's span.
+ *
+ * **Details**
+ *
+ * From here until its `CommandEnded` or `CommandInterrupted` the run is
+ * running. A run with an end entry and no `CommandStarted` never began: it
+ * was stopped while queued in its group or while it waited for its
+ * instance's Layer. `causedBy` names the fact of the step that started it:
+ * the one that issued it, the one that freed its group for a queued run, or
+ * the Layer build that ended for a run that waited for it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CommandStarted extends InstanceBase {
+  readonly _tag: "CommandStarted"
+  readonly name: string
+  readonly issued: Issued
+  readonly spanId: string
+  readonly traceId: string
+}
+
+/**
  * A Command run ended with a result.
  *
  * **Details**
@@ -630,8 +660,8 @@ export interface CommandEnded extends InstanceBase {
 }
 
 /**
- * A Command run was interrupted (by unmount, `switch`, the interrupt Command
- * or a handled Layer failure) and dispatched nothing.
+ * A Command run was interrupted and dispatched nothing. `reason` says what
+ * stopped it (see `InterruptReason`).
  *
  * **Details**
  *
@@ -652,7 +682,31 @@ export interface CommandInterrupted extends InstanceBase {
   readonly spanId: string | undefined
   /** The run's trace id, or `undefined` when its span never began. */
   readonly traceId: string | undefined
+  readonly reason: InterruptReason
 }
+
+/**
+ * What stopped a Command run, as `CommandInterrupted` reports it.
+ *
+ * **Details**
+ *
+ * - `"interrupt"`: an `update` issued `Command.interrupt` for its group.
+ * - `"switch"`: an `update` issued a later run of its `switch` group.
+ * - `"unmount"`: its instance was removed, or the app was disposed.
+ * - `"layer"`: its instance's provided Layer failed before the run could
+ *   start, or a keyed provide selected again and dropped the runs issued
+ *   before it.
+ * - `"self"`: its own work was interrupted, and nothing in the tree asked it
+ *   to stop.
+ *
+ * `causedBy` names the fact whose handling stopped it, for every reason but
+ * `"self"`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type InterruptReason = "interrupt" | "switch" | "unmount" | "layer" | "self"
 
 /**
  * How a `Command.afterRefetch` wait ended.
@@ -824,6 +878,7 @@ export type InstanceEntry =
   | Drawn
   | MountStarted
   | MountEnded
+  | CommandStarted
   | CommandAwaiting
   | CommandEnded
   | CommandInterrupted
@@ -938,7 +993,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
  * @category Wire
  * @since 0.1.0
  */
-export const wireVersion = 7
+export const wireVersion = 8
 
 /**
  * Where a log comes from, as `Hello` reports it.
@@ -1024,6 +1079,17 @@ const RunWire = {
  * a Subscription with none. They're there to be read: `NaN`, `Infinity` and
  * `-Infinity` are sent as `{ "~unserialisable": "number" }` and `-0` as
  * `0`. The `key` beside them still tells those deps apart.
+ *
+ * Every `Schema.Redacted` in props, Models, messages, events, Command and
+ * mount args, sends and shared values is sent as the placeholder. Two values
+ * have no Schema to mark them, and are sent in clear: a Subscription's
+ * `key` and `deps`, and the message text of an error in a Cause. Build a
+ * Subscription's key from an id that isn't secret, and keep secrets out of
+ * error messages.
+ *
+ * A reader treats each placeholder (see `isPlaceholder`) as a leaf whose
+ * value is unknown: two placeholders aren't known to be equal, and a value
+ * that is one isn't known to have changed.
  *
  * @stability experimental
  * @category Wire
@@ -1115,6 +1181,13 @@ export const Wire = Schema.Union([
     reason: Schema.Literals(["completed", "closed", "failed"]),
     silent: Schema.Boolean
   }),
+  Schema.TaggedStruct("CommandStarted", {
+    ...InstanceWire,
+    name: Schema.String,
+    issued: IssuedWire,
+    spanId: Schema.String,
+    traceId: Schema.String
+  }),
   Schema.TaggedStruct("CommandAwaiting", {
     ...InstanceWire,
     name: Schema.String,
@@ -1127,7 +1200,10 @@ export const Wire = Schema.Union([
     waitEnded: Schema.optionalKey(Schema.Literals(["settled", "nothing", "budget", "switch", "interrupt", "closed"])),
     outstanding: Schema.optionalKey(Schema.Array(AwaitedEntryWire))
   }),
-  Schema.TaggedStruct("CommandInterrupted", RunWire),
+  Schema.TaggedStruct("CommandInterrupted", {
+    ...RunWire,
+    reason: Schema.Literals(["interrupt", "switch", "unmount", "layer", "self"])
+  }),
   Schema.TaggedStruct("CommandDropped", {
     ...InstanceWire,
     name: Schema.String,
@@ -1160,6 +1236,40 @@ export type Wire = typeof Wire.Type
  * @since 0.1.0
  */
 export type WireEntry = Exclude<Wire, { readonly _tag: "Hello" }>
+
+/**
+ * A value the encoder sent in place of one it couldn't or mustn't send.
+ *
+ * @stability experimental
+ * @category Wire
+ * @since 0.1.0
+ */
+export type Placeholder =
+  | { readonly "~unserialisable": string }
+  | { readonly "~redacted": true }
+  | { readonly "~truncated": number }
+
+const placeholderChecks: Record<string, (value: unknown) => boolean> = {
+  "~unserialisable": (value) => typeof value === "string",
+  "~redacted": (value) => value === true,
+  "~truncated": (value) => typeof value === "number"
+}
+
+/**
+ * Whether a JSON value from a Wire frame is a `Placeholder`: an object with
+ * one key, `"~unserialisable"` with a string, `"~redacted"` with `true`,
+ * or `"~truncated"` with a number.
+ *
+ * @stability experimental
+ * @category Wire
+ * @since 0.1.0
+ */
+export const isPlaceholder = (value: unknown): value is Placeholder => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const keys = Object.keys(value)
+  return keys.length === 1 && Object.hasOwn(placeholderChecks, keys[0]) &&
+    placeholderChecks[keys[0]]((value as Record<string, unknown>)[keys[0]])
+}
 
 /**
  * Turns entries into Wire frames.
@@ -1378,6 +1488,15 @@ export const makeEncoder = (options?: {
             reason: entry.reason,
             silent: entry.silent
           }
+        case "CommandStarted":
+          return {
+            _tag: "CommandStarted",
+            ...instanceBase(entry),
+            name: entry.name,
+            issued: entry.issued,
+            spanId: entry.spanId,
+            traceId: entry.traceId
+          }
         case "CommandAwaiting":
           return {
             _tag: "CommandAwaiting",
@@ -1395,7 +1514,7 @@ export const makeEncoder = (options?: {
             ...(entry.outstanding === undefined ? undefined : { outstanding: entry.outstanding })
           }
         case "CommandInterrupted":
-          return { _tag: "CommandInterrupted", ...run(entry) }
+          return { _tag: "CommandInterrupted", ...run(entry), reason: entry.reason }
         case "CommandDropped":
           return {
             _tag: "CommandDropped",
@@ -1769,16 +1888,79 @@ const utf8Length = (text: string): number => {
 }
 
 /**
+ * Makes a log that encodes entries off the runtime's path. `record` only
+ * queues an entry. A fiber in the current Scope takes everything queued,
+ * encodes it as Wire frames, and passes the batch to `onBatch`.
+ *
+ * **Details**
+ *
+ * The runtime calls `record` on every `update`, so a sink that sends frames
+ * somewhere builds on this rather than encode inside `record`. A value whose
+ * Schema fails to encode is sent as a placeholder, and a warning is logged
+ * the first time per component and field. `maxEntryBytes` caps Models,
+ * messages, query results and shared values, as in `makeEncoder`.
+ *
+ * **Example** (Keeping encoded frames in an array)
+ *
+ * ```ts
+ * import { MessageLog } from "@effect/ui"
+ * import { Effect, Layer } from "effect"
+ *
+ * const frames: Array<MessageLog.WireEntry> = []
+ *
+ * const FramesLog = Layer.effect(
+ *   MessageLog.MessageLog,
+ *   MessageLog.makeEncoded((batch) => Effect.sync(() => frames.push(...batch)))
+ * )
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const makeEncoded = (
+  onBatch: (batch: ReadonlyArray<WireEntry>) => Effect.Effect<void>,
+  options?: { readonly maxEntryBytes?: number | undefined }
+): Effect.Effect<MessageLog, never, Scope.Scope> =>
+  Effect.gen(function*() {
+    const entries = yield* Queue.unbounded<Entry>()
+    const warnings: Array<string> = []
+    const encoder = makeEncoder({
+      maxEntryBytes: options?.maxEntryBytes,
+      onWarning: (message) => warnings.push(message)
+    })
+    yield* Queue.takeAll(entries).pipe(
+      Effect.flatMap((batch) =>
+        Effect.suspend(() => {
+          const frames = batch.map((entry) => encoder.encode(entry))
+          const logged = warnings.splice(0)
+          return Effect.andThen(
+            onBatch(frames),
+            logged.length === 0 ? Effect.void : Effect.forEach(logged, (message) => Effect.logWarning(message))
+          )
+        })
+      ),
+      Effect.forever,
+      Effect.forkScoped
+    )
+    return {
+      enabled: true,
+      record: (entry: Entry) => {
+        Queue.offerUnsafe(entries, entry)
+      }
+    }
+  })
+
+/**
  * Streams entries to a devtools process over a WebSocket, as newline-free
  * JSON Wire frames, one per message.
  *
  * **Details**
  *
- * `record` only pushes to a Queue. The Layer's fiber encodes whatever it
- * takes and keeps the last `buffer` frames (1,000 by default), which every new
- * connection receives after its `Hello`, so devtools that connect late see
- * the recent past. A lost connection is retried with backoff, and one warning
- * is logged.
+ * Entries are encoded by `makeEncoded`. The Layer keeps the last `buffer`
+ * frames (1,000 by default), which every new connection receives after its
+ * `Hello`, so devtools that connect late see the recent past. A lost
+ * connection is retried with backoff, and one warning is logged.
  *
  * @stability experimental
  * @category layers
@@ -1793,31 +1975,21 @@ export const socket = (url: string, options?: {
     MessageLog,
     Effect.gen(function*() {
       const size = Math.max(1, options?.buffer ?? 1_000)
-      const entries = yield* Queue.unbounded<Entry>()
       const outbox = yield* Queue.unbounded<string>()
       const replay: Array<string> = []
-      const warnings: Array<string> = []
-      const encoder = makeEncoder({
-        maxEntryBytes: options?.maxEntryBytes,
-        onWarning: (message) => warnings.push(message)
-      })
       const hello = JSON.stringify({ _tag: "Hello", version: wireVersion, host: options?.host ?? "browser" })
 
-      yield* Queue.takeAll(entries).pipe(
-        Effect.flatMap((batch) =>
-          Effect.suspend(() => {
-            for (const entry of batch) {
-              const frame = JSON.stringify(encoder.encode(entry))
+      const log = yield* makeEncoded(
+        (batch) =>
+          Effect.sync(() => {
+            for (const encoded of batch) {
+              const frame = JSON.stringify(encoded)
               replay.push(frame)
               if (replay.length > size) replay.shift()
               Queue.offerUnsafe(outbox, frame)
             }
-            const logged = warnings.splice(0)
-            return logged.length === 0 ? Effect.void : Effect.forEach(logged, (message) => Effect.logWarning(message))
-          })
-        ),
-        Effect.forever,
-        Effect.forkScoped
+          }),
+        { maxEntryBytes: options?.maxEntryBytes }
       )
 
       const connection = Effect.gen(function*() {
@@ -1846,11 +2018,6 @@ export const socket = (url: string, options?: {
         Effect.forkScoped
       )
 
-      return {
-        enabled: true,
-        record: (entry: Entry) => {
-          Queue.offerUnsafe(entries, entry)
-        }
-      }
+      return log
     })
   )
