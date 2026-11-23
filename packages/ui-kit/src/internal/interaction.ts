@@ -14,11 +14,7 @@ export const methodOf = (pointerType: string): "mouse" | "touch" | "pen" | "keyb
   pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
 
 export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
-  HtmlSubscription.onDocument(
-    "keydown",
-    ({ composing, defaultPrevented, key }) => key === "Escape" && !composing && !defaultPrevented ? message : undefined,
-    { preventDefault: true }
-  )
+  HtmlSubscription.shortcuts([{ key: "Escape", message, whileTyping: true, repeat: true }])
 
 export const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
   if (!(target instanceof HTMLElement)) return false

@@ -677,7 +677,8 @@ and the end of the test.
 Keys and presses that no element hears, such as a game's arrow keys or an
 Escape that closes a popup opened by hovering, are entries in
 `subscriptions`: `HtmlSubscription.onDocument("keydown", handler, options)`,
-and `HtmlSubscription.onWindow("focus" | "blur", handler)` for the window's
+`HtmlSubscription.shortcuts(table)` for a table of single-key shortcuts, and
+`HtmlSubscription.onWindow("focus" | "blur", handler)` for the window's
 focus. The handler and `preventDefault` mean what they mean on an element,
 and the payload adds `defaultPrevented`, so a listener can skip a key an
 element already took. `capture: true` hears a press before any element can stop it.

@@ -292,11 +292,14 @@ describe("Tooltip", () => {
       ])
     }))
 
-  it.effect("document Escape skips another key, a composition and an Escape already handled", () =>
+  it.effect("document Escape skips another key, a composition, modified Escape and an Escape already handled", () =>
     Effect.gen(function*() {
       const s = yield* opened({ open: true })
       s.fireDocument("keydown", { key: "a" }).expectIgnored().expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "Escape", composing: true }).expectIgnored()
+        .fireDocument("keydown", { key: "Escape", ctrl: true }).expectIgnored().expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", alt: true }).expectIgnored().expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", meta: true }).expectIgnored().expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "Escape", defaultPrevented: true }).expectIgnored()
       assert.deepStrictEqual(s.current.emitted, [])
     }))

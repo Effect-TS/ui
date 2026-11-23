@@ -1,4 +1,4 @@
-import { Component, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
+import { Component, Mount, Renderer, Route, Router, type Subscription, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlKeyboard, HtmlServer, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { type Locator, Scene } from "@effect/ui/testing"
@@ -224,6 +224,13 @@ describe("Html", () => {
         >()
         expect(h.div.onKeyDown).type.toBeCallableWith(shortcutHandler)
         HtmlSubscription.onDocument("keydown", shortcutHandler, { preventDefault: true })
+        const shortcutSub = HtmlSubscription.shortcuts([
+          { key: "?", message: Msg.Typed({ value: "help" }) },
+          { key: "Escape", message: Msg.Mounted(), whileTyping: true }
+        ])
+        expect(shortcutSub).type.toBe<
+          Subscription.Subscription<ReturnType<typeof Msg.Typed> | ReturnType<typeof Msg.Mounted>>
+        >()
         expect(h.input.onPaste).type.toBeCallableWith(
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
           { preventDefault: true }

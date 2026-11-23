@@ -113,12 +113,9 @@ export const CsvImport = Component.define({
       })
     ),
   subscriptions: () => [
-    HtmlSubscription.onDocument(
-      "keydown",
-      ({ ctrl, key, meta, repeat }) =>
-        (ctrl || meta) && key === "o" && !repeat ? ImportMessage.PressedOpen() : undefined,
-      { preventDefault: true }
-    )
+    HtmlSubscription.shortcuts([
+      { key: "o", mod: true, message: ImportMessage.PressedOpen(), whileTyping: true }
+    ])
   ]
 })
 
