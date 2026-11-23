@@ -17,7 +17,7 @@ const form = (name: string, restore?: false | ((model: string) => string)) =>
     {
       init: () => inits++ === 0 ? "server" : "client",
       update: (_, text) => text,
-      view: (text, h) => h.input.value(text).onInput(({ value }) => value)
+      view: (h, text) => h.input.value(text).onInput(({ value }) => value)
     }
   )
 const Form = form("Form")
@@ -31,22 +31,22 @@ const SlowSide = Component.define({
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
-}).make({ init: () => null, update: (model) => model, view: (_, h) => h.i("side") }).pipe(Component.provide(slow))
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.i("side") }).pipe(Component.provide(slow))
 
 let serving = false
 const secret = <Scoped extends boolean>(name: string, scoped: Scoped, restore: false | ((model: string) => string)) =>
   Component.define({ name, scoped, model: Schema.String, message: Schema.Never, elements: Html, restore }).make({
     init: () => serving ? "secret-token" : "client",
-    update: (model) => model,
-    view: (text, h) => h.input.value(text)
+    update: ($) => $.model,
+    view: (h, text) => h.input.value(text)
   })
 const vault = (name: string, restore: false | ((model: string) => string)) => {
   const Plain = secret(`${name}Plain`, false, restore)
   const Kept = secret(`${name}Kept`, true, restore)
   return Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Html }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.div(Plain(h, { key: "p" }), h.scoped((s) => Kept(s, { key: "k" })))
+    update: ($) => $.model,
+    view: (h) => h.div(Plain(h, { key: "p" }), h.scoped((s) => Kept(s, { key: "k" })))
   }).pipe(Component.provide(slow))
 }
 const ExcludedVault = vault("ExcludedVault", false)
@@ -65,7 +65,7 @@ const LateForm = Component.define({
 }).make({
   init: () => "client",
   update: (_, text) => text,
-  view: (text, h) => h.input.value(text).onInput(({ value }) => value)
+  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
 })
 const scopedForm = (name: string, restore?: false | ((model: string) => string)) =>
   Component.define({
@@ -78,7 +78,7 @@ const scopedForm = (name: string, restore?: false | ((model: string) => string))
   }).make({
     init: () => inits++ === 0 ? "server" : "client",
     update: (_, text) => text,
-    view: (text, h) => h.input.value(text)
+    view: (h, text) => h.input.value(text)
   }).pipe(Component.provide(slow))
 const ScopedForm = scopedForm("ScopedForm")
 const ExcludedScopedForm = scopedForm("ExcludedScopedForm", false)
@@ -92,8 +92,8 @@ const holder = (child: typeof ScopedForm) =>
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.scoped((s) => h.div(child(s, { key: "d" })))
+    update: ($) => $.model,
+    view: (h) => h.scoped((s) => h.div(child(s, { key: "d" })))
   })
 const Holder = holder(ScopedForm)
 const ExcludedHolder = holder(ExcludedScopedForm)
@@ -116,8 +116,8 @@ const draft = (restore?: false) =>
   })
     .make({
       init: () => inits++ === 0 ? "server" : "client",
-      update: (model) => model,
-      view: (text, h) => h.input.value(text)
+      update: ($) => $.model,
+      view: (h, text) => h.input.value(text)
     })
 const Draft = draft()
 const lateSettings = (child: typeof Draft) =>
@@ -131,7 +131,7 @@ const lateSettings = (child: typeof Draft) =>
   }).make({
     init: () => "",
     update: (_, shown) => shown,
-    view: (shown, h) =>
+    view: (h, shown) =>
       h.div(
         h.button.onClick("shown").children("show"),
         shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
@@ -151,8 +151,8 @@ const lateScoped = (name: string, restore?: (model: string) => string) =>
     restore
   }).make({
     init: () => inits++ === 0 ? "server" : "client",
-    update: (model) => model,
-    view: (text, h) => h.input.value(text)
+    update: ($) => $.model,
+    view: (h, text) => h.input.value(text)
   })
 const LateScoped = lateScoped("LateScoped")
 const FilteredLateScoped = lateScoped("FilteredLateScoped", () => "filtered")
@@ -165,8 +165,8 @@ const lateHolder = (child: typeof LateScoped) =>
     elements: Html
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.scoped((s) => h.div(child(s, { key: "d" })))
+    update: ($) => $.model,
+    view: (h) => h.scoped((s) => h.div(child(s, { key: "d" })))
   })
 const LateHolder = lateHolder(LateScoped)
 const FilteredLateHolder = lateHolder(FilteredLateScoped)
@@ -179,7 +179,7 @@ const Field = Component.define({
 }).make({
   init: () => "client",
   update: (_, text) => text,
-  view: (text, h) => h.input.value(text).onInput(({ value }) => value)
+  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
 })
 const Group = Component.define({
   name: "Group",
@@ -189,8 +189,8 @@ const Group = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.div(Form(h, { key: "c" }), h.scoped((s) => Field(s, { key: "e" })))
+  update: ($) => $.model,
+  view: (h) => h.div(Form(h, { key: "c" }), h.scoped((s) => Field(s, { key: "e" })))
 })
 const LateCard = Component.define({
   name: "LateCard",
@@ -200,8 +200,8 @@ const LateCard = Component.define({
   elements: Html
 }).make({
   init: () => "client",
-  update: (model) => model,
-  view: (_, h) => h.div(h.scoped((s) => Field(s, { key: "p" })), Group(h, { key: "g" }))
+  update: ($) => $.model,
+  view: (h) => h.div(h.scoped((s) => Field(s, { key: "p" })), Group(h, { key: "g" }))
 })
 const Card = Component.define({
   name: "Card",
@@ -209,7 +209,7 @@ const Card = Component.define({
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
-}).make({ init: () => null, update: (model) => model, view: (_, h) => h.div(LateCard(h, { key: "l" })) })
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.div(LateCard(h, { key: "l" })) })
 const CardHolder = Component.define({
   name: "CardHolder",
   scoped: false,
@@ -218,8 +218,8 @@ const CardHolder = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.scoped((s) => h.div(Card(s, { key: "d" })))
+  update: ($) => $.model,
+  view: (h) => h.scoped((s) => h.div(Card(s, { key: "d" })))
 })
 const Outer = Component.define({
   name: "Outer",
@@ -230,8 +230,8 @@ const Outer = Component.define({
 })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.scoped((s) => h.div(Draft(s, { key: "d" })))
+    update: ($) => $.model,
+    view: (h) => h.scoped((s) => h.div(Draft(s, { key: "d" })))
   })
 const Nesting = Component.define({
   name: "Nesting",
@@ -241,8 +241,8 @@ const Nesting = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.scoped((s) => h.div(Outer(s, { key: "o" })))
+  update: ($) => $.model,
+  view: (h) => h.scoped((s) => h.div(Outer(s, { key: "o" })))
 })
 
 type Page =
@@ -278,15 +278,16 @@ const appOf = (page: Page) =>
     elements: Html
   }).make({
     init: ($) => $.props.route,
-    update: (route, message, $) =>
+    update: ($, message) =>
       Msg.match(message, {
         Changed: (changed) => changed.route,
         Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => Msg.Went()))),
         Next: () => $.run(Router.push(Routes, Routes.Next()).pipe(Command.map(() => Msg.Went()))),
-        Went: () => route
+        Went: () => $.model
       }),
-    subscriptions: (route) => [Router.subscription(Routes, route, (changed) => Msg.Changed({ route: changed }))],
-    view: (route, h) =>
+    subscriptions: ({ model: route }) => [Router.subscription(Routes, route, (changed) =>
+      Msg.Changed({ route: changed }))],
+    view: (h, route) =>
       h.main(
         page.endsWith("slow side") || (page.startsWith("open") && route._tag === "Home")
           ? SlowSide(h, { key: "s" })
@@ -342,7 +343,7 @@ const editor = (name: string) =>
   }).make({
     init: () => "subject",
     update: (_, subject) => subject,
-    view: (subject, h) =>
+    view: (h, subject) =>
       h.section(
         h.input.value(subject ?? "").onInput(({ value }) => value === "" ? null : value),
         h.props.open ? h.scoped((s) => Draft(s, { key: "d" })) : null
@@ -359,8 +360,8 @@ const SlowNesting = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.section(h.scoped(({ props }) => props.open, (s) => Outer(s, { key: "o" })))
+  update: ($) => $.model,
+  view: (h) => h.section(h.scoped(({ props }) => props.open, (s) => Outer(s, { key: "o" })))
 }).pipe(Component.provide(slow))
 const Shown = Schema.Literals(["none", "closed", "open"])
 const DeskMsg = UiSchema.TaggedEnum({ Changed: { route: Routes }, Go: {}, Went: {}, Show: { editor: Shown } })
@@ -374,15 +375,17 @@ const deskOf = (waits: boolean, nested: boolean) =>
     elements: Html
   }).make({
     init: ($) => ({ route: $.props.route, editor: "open" as const }),
-    update: (desk, message, $) =>
+    update: ($, message) =>
       DeskMsg.match(message, {
-        Changed: ({ route }) => ({ ...desk, route }),
+        Changed: ({ route }) => ({ ...$.model, route }),
         Go: () => $.run(Router.push(Routes, Routes.Away()).pipe(Command.map(() => DeskMsg.Went()))),
-        Went: () => desk,
-        Show: ({ editor }) => ({ ...desk, editor })
+        Went: () => $.model,
+        Show: ({ editor }) => ({ ...$.model, editor })
       }),
-    subscriptions: (desk) => [Router.subscription(Routes, desk.route, (route) => DeskMsg.Changed({ route }))],
-    view: (desk, h) => {
+    subscriptions: (
+      { model: desk }
+    ) => [Router.subscription(Routes, desk.route, (route) => DeskMsg.Changed({ route }))],
+    view: (h, desk) => {
       if (desk.route._tag === "Away") return h.main("away")
       const props = { open: desk.editor === "open" }
       return h.main(
@@ -441,7 +444,7 @@ const Panel = Component.define({
 }).make({
   init: () => true,
   update: (_, shown) => shown,
-  view: (shown, h) => h.main(SlowSide(h, { key: "s" }), shown ? Editor(h, { key: "e", props: { open: true } }) : null)
+  view: (h, shown) => h.main(SlowSide(h, { key: "s" }), shown ? Editor(h, { key: "e", props: { open: true } }) : null)
 })
 const aside = Effect.fnUntraced(function*(first: Page) {
   const { app, state } = yield* serve(HtmlServer.renderToHtml(Panel, {}), false)

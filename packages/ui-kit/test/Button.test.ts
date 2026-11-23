@@ -29,7 +29,7 @@ const Card = Component.define({
     PressedSave: () => ({ clicked: "save" }),
     ClickedCard: () => ({ clicked: "card" })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.onClick(CardMessage.ClickedCard()).children(
       Button(h, {
         props: h.props.button,

@@ -81,9 +81,9 @@
  * }).make({
  *   init: () => ({ details: true }),
  *   update: {
- *     ToggledDetails: (_model, { open }, $) => $.evolve({ details: open })
+ *     ToggledDetails: ($, { open }) => $.evolve({ details: open })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Collapsible(h, {
  *       props: { open: model.details },
  *       onEmit: {
@@ -424,36 +424,36 @@ export const Collapsible = Component.define({
     openOnLoad: $.props.open
   }),
   update: {
-    ClickedTrigger: (model, _message, $) =>
+    ClickedTrigger: ($) =>
       $.props.disabled === true
-        ? model
+        ? $.model
         : $.emit(CollapsibleEvents.Toggled({ open: !$.props.open, reason: "trigger-press" })),
-    MeasuredPanel: (_model, { size }, $) =>
+    MeasuredPanel: ($, { size }) =>
       $.evolve(
         $.props.open
           ? { size, mounted: true, ending: false }
           : { size, mounted: true, ending: false, instant: false, openOnLoad: false }
       ),
-    RenderedFirstFrame: (model, _message, $) => $.props.open ? $.evolve({ started: true }) : model,
-    RenderedSize: (model, _message, $) => !$.props.open && model.mounted ? $.evolve({ ending: true }) : model,
-    FinishedTransition: (model, { open }, $) => {
-      if (open !== $.props.open) return model
+    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    RenderedSize: ($) => !$.props.open && $.model.mounted ? $.evolve({ ending: true }) : $.model,
+    FinishedTransition: ($, { open }) => {
+      if (open !== $.props.open) return $.model
       if (open) return $.evolve({ size: null, instant: false }).emit(CollapsibleEvents.Settled({ open }))
-      return model.ending && $.props.holdExit !== true
+      return $.model.ending && $.props.holdExit !== true
         ? $.evolve({ mounted: false, started: false, ending: false, size: null }).emit(
           CollapsibleEvents.Settled({ open })
         )
-        : model
+        : $.model
     },
-    MatchedFind: (model, _message, $) =>
+    MatchedFind: ($) =>
       $.props.open || $.props.disabled === true
-        ? model
+        ? $.model
         : $.evolve({ started: true, instant: true }).emit(
           CollapsibleEvents.Toggled({ open: true, reason: "find-in-page" })
         ),
-    StayedHidden: (model, _message, $) => $.props.open ? model : $.evolve({ started: false, instant: false })
+    StayedHidden: ($) => $.props.open ? $.model : $.evolve({ started: false, instant: false })
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const props = p.props
     const open = props.open
     const disabled = props.disabled === true

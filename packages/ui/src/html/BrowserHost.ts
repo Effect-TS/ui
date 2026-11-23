@@ -1,5 +1,5 @@
 /**
- * The DOM host for `@effect/ui`: mounts a component tree into an element of a
+ * The browser host for `@effect/ui`: mounts a component tree into an element of a
  * real document.
  *
  * Events are delegated: the host keeps one listener per event name on the
@@ -107,8 +107,8 @@
  *   elements: Html
  * }).make({
  *   init: () => 0,
- *   update: (count) => count + 1,
- *   view: (count, h) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
+ *   update: ($) => $.model + 1,
+ *   view: (h, count) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
  * })
  *
  * // The tree is mounted for as long as the Layer is built.
@@ -128,16 +128,20 @@ import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
-import * as DomImages from "./DomImages.ts"
-import * as DomSubscription from "./DomSubscription.ts"
 import * as Html from "./Html.ts"
+import * as HtmlFiles from "./HtmlFiles.ts"
+import * as HtmlImages from "./HtmlImages.ts"
+import * as HtmlSubscription from "./HtmlSubscription.ts"
+import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import { ownEvents } from "./internal/ownEvents.ts"
+import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
+const HTML = "http://www.w3.org/1999/xhtml"
 const SVG = "http://www.w3.org/2000/svg"
 
 /** Events after which a controlled property may differ from what the Model says. */
@@ -266,16 +270,6 @@ const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Recor
 }
 
 /**
- * What a pointer event's `pointerType` names, or `undefined` for an event
- * with none, such as a `mousedown` in a browser that sends it as a plain
- * `MouseEvent`, or a type no browser sends today.
- */
-const pointerTypeOf = (event: Event): Html.PointerType | undefined => {
-  const type = (event as { readonly pointerType?: unknown }).pointerType
-  return type === "mouse" || type === "touch" || type === "pen" || type === "" ? type : undefined
-}
-
-/**
  * The `pointerType` of a click-like event's payload. A click with `detail`
  * 0, or a pointer event with an empty `pointerType`, came from no pointer:
  * the keyboard, or a script. Otherwise the last `pointerdown` says which
@@ -286,11 +280,6 @@ const pressedWith = (name: string, event: Event, last: Html.PointerType | undefi
   const own = pointerTypeOf(event)
   if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) return ""
   return last ?? own ?? "mouse"
-}
-
-const modifiers = (event: Event) => {
-  const e = event as KeyboardEvent
-  return { shift: e.shiftKey === true, ctrl: e.ctrlKey === true, alt: e.altKey === true, meta: e.metaKey === true }
 }
 
 const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
@@ -318,11 +307,32 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
   const composing = e?.isComposing === true
   const inputType = typeof e?.inputType === "string" ? e.inputType : ""
   return control.localName === "input"
-    ? { value: control.value, checked: control.checked === true, composing, inputType }
+    ? {
+      value: control.value,
+      checked: control.checked === true,
+      files: control.files ? Array.from(control.files) : noFiles,
+      composing,
+      inputType
+    }
     : { value: String(control.value ?? ""), composing, inputType }
 }
 
+const noFiles: ReadonlyArray<File> = []
+
+const isFileInput = (node: globalThis.Node): boolean =>
+  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "file"
+
 const noSelection = { selectionStart: null, selectionEnd: null }
+
+const isEditable = (target: EventTarget | null): boolean => {
+  const element = target as HTMLElement | null
+  if (element?.namespaceURI === HTML) {
+    const tag = element.localName
+    if (tag === "textarea" || tag === "select") return true
+    if (tag === "input") return !nonTextInputTypes.has((element as HTMLInputElement).type)
+  }
+  return element?.isContentEditable === true
+}
 
 const selectionOf = (target: EventTarget | null) => {
   const field = target as HTMLInputElement | null
@@ -448,7 +458,14 @@ const payloadOf = (
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
       const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
-      return { key: e.key ?? "", ...modifiers(event), composing, ...selectionOf(target) }
+      return {
+        key: e.key ?? "",
+        ...modifiers(event),
+        composing,
+        repeat: e.repeat === true,
+        editable: isEditable(event.composedPath()[0] ?? target),
+        ...selectionOf(target)
+      }
     }
     case "input":
     case "change":
@@ -499,8 +516,10 @@ const payloadOf = (
   }
 }
 
+const ignore = () => {}
+
 /**
- * Makes a DOM host for `document`, plus `dispose`, which removes its
+ * Makes a browser host for `document`, plus `dispose`, which removes its
  * listeners.
  *
  * **Details**
@@ -572,6 +591,7 @@ export const makeHost = (
     if (!composing.has(node)) beforeEdits.delete(node)
   }
   const writeControlled = (element: any, name: string, value: unknown) => {
+    if (name === "value" && value !== "" && isFileInput(element)) return
     const state = name === "value" && element.getRootNode().activeElement === element
       ? fieldStateOf(element)
       : undefined
@@ -1206,6 +1226,10 @@ export const makeHost = (
     return kept
   }
 
+  let transition: ViewTransition | undefined
+  const typedTransitions = view !== null && typeof view.ViewTransition === "function" &&
+    "types" in view.ViewTransition.prototype
+
   const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
     createElement: (tag) =>
       elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
@@ -1372,7 +1396,32 @@ export const makeHost = (
       for (const dialog of dialogs) showDialog(dialog, "modal")
       showPopovers()
     },
+    viewTransition(update, types) {
+      if (
+        typeof document.startViewTransition !== "function" ||
+        view?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+      ) return update()
+      let ran = false
+      const run = () => {
+        ran = true
+        update()
+      }
+      try {
+        transition = document.startViewTransition(
+          typedTransitions && types.length > 0 ? { update: run, types: [...types] } : run
+        )
+      } catch (error) {
+        if (ran) throw error
+        return update()
+      }
+      // `ready` rejects when the transition is skipped. `finished` and `updateCallbackDone` reject only when
+      // `update` throws, and `updateCallbackDone` is left unhandled so that error is reported once, as a flush's is.
+      transition.ready.catch(ignore)
+      transition.finished.catch(ignore)
+    },
     dispose: () => {
+      transition?.skipTransition()
+      transition = undefined
       syncHead.release()
       for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
       listening.clear()
@@ -1386,8 +1435,9 @@ export const makeHost = (
 }
 
 /**
- * The element operations behind `DomCommand.focus`, `blur`,
- * `scrollIntoView`, `measure`, `select` and `requestSubmit`, on DOM elements.
+ * The element operations behind `HtmlCommand.focus`, `blur`,
+ * `scrollIntoView`, `measure`, `select`, `requestSubmit` and `showPicker`,
+ * on DOM elements.
  *
  * @stability experimental
  * @category constructors
@@ -1425,6 +1475,17 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
     if (form === null || typeof form.requestSubmit !== "function") return false
     form.requestSubmit()
     return true
+  },
+  showPicker: (element) => {
+    const field = element as HTMLInputElement
+    try {
+      if (typeof field.showPicker === "function") field.showPicker()
+      else if (field.type === "file" && !field.matches(":disabled")) field.click()
+      else return false
+      return true
+    } catch {
+      return false
+    }
   }
 }
 
@@ -1451,9 +1512,9 @@ const signals = (document: Document) => {
   }
 }
 
-// `DomSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
+// `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
+const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
   listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
@@ -1472,8 +1533,24 @@ const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   }
 })
 
+const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
+  const view = document.defaultView
+  return {
+    now: () => view?.performance.now() ?? 0,
+    listen: (listener) => {
+      if (view === null || typeof view.requestAnimationFrame !== "function") return () => {}
+      const frame = (time: number) => {
+        id = view.requestAnimationFrame(frame)
+        listener(time)
+      }
+      let id = view.requestAnimationFrame(frame)
+      return () => view.cancelAnimationFrame(id)
+    }
+  }
+}
+
 // Loads in a detached <img>. A cached image may already be complete.
-const imagesOf = (document: Document): DomImages.Images => ({
+const imagesOf = (document: Document): HtmlImages.Images => ({
   load: (source) =>
     Effect.callback((resume) => {
       const image = document.createElement("img")
@@ -1493,17 +1570,38 @@ const imagesOf = (document: Document): DomImages.Images => ({
     })
 })
 
+const filesOf = (document: Document): HtmlFiles.Files => ({
+  pick: (options) =>
+    Effect.callback((resume) => {
+      const input = document.createElement("input")
+      input.type = "file"
+      input.multiple = options.multiple === true
+      if (options.accept !== undefined) input.accept = options.accept.join(",")
+      if (options.capture !== undefined) input.setAttribute("capture", options.capture)
+      const settle = (files: ReadonlyArray<File>) => resume(Effect.succeed({ opened: true, files }))
+      input.onchange = () => settle(Array.from(input.files ?? []))
+      input.oncancel = () => settle([])
+      if (!htmlHost.showPicker(input)) return resume(Effect.succeed({ opened: false, files: [] }))
+      return Effect.sync(() => {
+        input.onchange = null
+        input.oncancel = null
+      })
+    })
+})
+
 /**
- * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
+ * Provides the browser host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `DomSubscription.GlobalEvents`, and a `DomImages.Images` over it, for the
- * life of the Layer.
+ * `HtmlSubscription.GlobalEvents`, its window's frames as
+ * `HtmlSubscription.AnimationFrames`, and an `HtmlImages.Images` and
+ * `HtmlFiles.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `DomSubscription.GlobalEvents` and
- * `DomImages.Images` use the document and its `defaultView`, never globals.
+ * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
+ * `HtmlSubscription.AnimationFrames`, `HtmlImages.Images` and `HtmlFiles.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1522,8 +1620,10 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
-      Context.add(DomImages.Images, imagesOf(document))
+      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
+      Context.add(HtmlImages.Images, imagesOf(document)),
+      Context.add(HtmlFiles.Files, filesOf(document))
     )
   }))
 
@@ -1635,8 +1735,8 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *   elements: Html
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_, h) => h.h1("Hello")
+ *   update: ($) => $.model,
+ *   view: (h) => h.h1("Hello")
  * })
  *
  * // In the browser entry module.

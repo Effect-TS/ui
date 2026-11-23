@@ -61,9 +61,9 @@ const Plain = ({ bind }) => {
 const withRow = (component) => ({ bind }) => {
   const [model, dispatch] = useReducer(update, undefined, init)
   bind(dispatch)
-  return table(model.rows.map((row) =>
-    e(component, { key: row.id, row, selected: row.id === model.selected, dispatch })
-  ))
+  return table(
+    model.rows.map((row) => e(component, { key: row.id, row, selected: row.id === model.selected, dispatch }))
+  )
 }
 
 const mount = (App) => async (container) => {

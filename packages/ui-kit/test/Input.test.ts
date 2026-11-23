@@ -18,9 +18,9 @@ const Profile = Component.define({
 }).make({
   init: () => ({ name: "Ada" }),
   update: {
-    UpdatedName: (model, { value }) => ({ ...model, name: value })
+    UpdatedName: ($, { value }) => ({ ...$.model, name: value })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     Input(h, {
       props: { value: model.name, ...h.props },
       onUpdate: ({ value }) => ProfileMessage.UpdatedName({ value })

@@ -66,8 +66,8 @@ const render = (document: Markdown.Document, config?: Markdown.ViewConfig<never>
     Component.define({ name: "Doc", scoped: false, model: Schema.Struct({}), message: Schema.Never, elements: Html })
       .make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) => Markdown.view(h, document, config)
+        update: ($) => $.model,
+        view: (h) => Markdown.view(h, document, config)
       }),
     {},
     { budget: 0 }
@@ -211,8 +211,8 @@ it.layer(TestHost.layer())("view", (it) => {
           elements: Html
         }).make({
           init: () => ({}),
-          update: (model) => model,
-          view: (_model, h) => h.article.children(Markdown.viewBlocks(h, document))
+          update: ($) => $.model,
+          view: (h) => h.article.children(Markdown.viewBlocks(h, document))
         }),
         {},
         { budget: 0 }
@@ -233,8 +233,8 @@ const Counter = Component.define({
   elements: Html
 }).make({
   init: () => ({ count: 0 }),
-  update: { Incremented: (model, _message, $) => ({ count: model.count + $.props.step }) },
-  view: (model, h) =>
+  update: { Incremented: ($) => ({ count: $.model.count + $.props.step }) },
+  view: (h, model) =>
     h.div.children(
       h.span.attr("role", "status").children(String(model.count)),
       h.button.onClick(CounterMessage.Incremented()).children("Increment")
@@ -275,8 +275,8 @@ const Post = Component.define({
   elements: Html
 }).make({
   init: () => ({ renders: 0 }),
-  update: { ClickedRefresh: (model) => ({ renders: model.renders + 1 }) },
-  view: (model, h) =>
+  update: { ClickedRefresh: ($) => ({ renders: $.model.renders + 1 }) },
+  view: (h, model) =>
     h.article.children(
       h.button.onClick(PostMessage.ClickedRefresh()).children(`Refresh ${model.renders}`),
       Markdown.view(h, post, {
@@ -318,8 +318,8 @@ const Greeting = Component.define({
   elements: Html
 }).make({
   init: ($) => $.set("...").run(Greet.make({ name: $.props.name })),
-  update: (_model, message) => message,
-  view: (text, h) => h.p.attr("role", "status").children(text)
+  update: (_$, message) => message,
+  view: (h, text) => h.p.attr("role", "status").children(text)
 })
 
 const greetingAttributes = { Greeting: Schema.Struct({ name: Schema.String }) }
@@ -334,8 +334,8 @@ const GreetingPost = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_model, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     Markdown.view(h, greetingPost, {
       islands: Markdown.islandsFor(greetingAttributes, {
         Greeting: (h, { name }) => Greeting(h, { key: "greeting", props: { name } })

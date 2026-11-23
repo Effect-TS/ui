@@ -26,8 +26,8 @@ const Sender = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: { Clicked: (_model, _message, $) => $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" }) },
-  view: (_model, h) => h.button.class("sender").attr("type", "button").onClick(SenderMessage.Clicked())
+  update: { Clicked: ($) => $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" }) },
+  view: (h) => h.button.class("sender").attr("type", "button").onClick(SenderMessage.Clicked())
 })
 
 const Basket = Component.define({
@@ -44,12 +44,12 @@ const Basket = Component.define({
 }).make({
   init: () => ({ fruits: ["apple", "fig"], pearToggled: null, locked: false, frozen: false }),
   update: {
-    ChangedFruits: (model, { value }) => ({ ...model, fruits: value }),
-    ToggledPear: (model, { checked }) => ({ ...model, pearToggled: checked }),
-    ToggledLock: (model) => ({ ...model, locked: !model.locked }),
-    ToggledFreeze: (model) => ({ ...model, frozen: !model.frozen })
+    ChangedFruits: ($, { value }) => ({ ...$.model, fruits: value }),
+    ToggledPear: ($, { checked }) => ({ ...$.model, pearToggled: checked }),
+    ToggledLock: ($) => ({ ...$.model, locked: !$.model.locked }),
+    ToggledFreeze: ($) => ({ ...$.model, frozen: !$.model.frozen })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.form.attr("data-pear-toggled", model.pearToggled === null ? undefined : String(model.pearToggled)).children(
       Field(h, {
         props: { disabled: model.locked },

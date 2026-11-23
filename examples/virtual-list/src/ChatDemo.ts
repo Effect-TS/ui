@@ -33,15 +33,15 @@ const ChatDemoNoDeps = Component.define({
 }).make({
   init: () => ({ start: total - page, sent: 0, loading: false }),
   update: {
-    ApproachedStart: (model, _message, $) =>
-      model.loading || model.start === 0
-        ? model
-        : $.set({ ...model, loading: true }).run(LoadOlder.make({ before: model.start })),
-    LoadedOlder: (model, { before }) =>
-      before === model.start ? { ...model, start: Math.max(0, before - page), loading: false } : model,
-    ClickedSend: (model) => ({ ...model, sent: model.sent + 1 })
+    ApproachedStart: ($) =>
+      $.model.loading || $.model.start === 0
+        ? $.model
+        : $.evolve({ loading: true }).run(LoadOlder.make({ before: $.model.start })),
+    LoadedOlder: ($, { before }) =>
+      before === $.model.start ? $.evolve({ start: Math.max(0, before - page), loading: false }) : $.model,
+    ClickedSend: ($) => $.evolve({ sent: (sent) => sent + 1 })
   },
-  view: (model, h) => {
+  view: (h, model) => {
     const ids = Array.from({ length: total - model.start + model.sent }, (_, i) => "m" + (model.start + i))
     return h.div.class("page").children(
       h.div.class("toolbar").children(

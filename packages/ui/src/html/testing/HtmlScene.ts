@@ -38,13 +38,13 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ zip: "", forecast: "" }),
- *   update: (_model, message, $) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
  *       UpdatedZip: ({ zip }) => $.evolve({ zip }),
  *       SubmittedForm: ({ zip }) => $.run(FetchWeather.make({ zip })),
  *       CompletedFetchWeather: ({ forecast }) => $.evolve({ forecast })
  *     }),
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     h.div(
  *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),
@@ -73,16 +73,18 @@
 import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
+import { handle } from "../../internal/handler.ts"
 import * as internal from "../../internal/scene.ts"
 import * as cursor from "../../internal/steps.ts"
 import * as engine from "../../internal/story.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Scene from "../../testing/Scene.ts"
 import type * as View from "../../View.ts"
-import type * as DomSubscription from "../DomSubscription.ts"
 import type * as Html from "../Html.ts"
+import type * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
+import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
@@ -159,8 +161,10 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   type(locator: Locator.Locator, value: string, details?: EditDetails): this
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
-   * the new value; an object also sets `checked` on an `input`, and
+   * the new value; an object also sets `checked` on an `input`, its current
+   * `checked` otherwise, `files` on a file input, none otherwise, and
    * `composing` and `inputType`, `false` and `""` otherwise.
+   * `change(locator, { files })` chooses files in a file input.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this
   /**
@@ -169,8 +173,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    */
   compositionEnd(locator: Locator.Locator, value?: string): this
   /**
-   * Presses `key`: sends `keydown` with the modifier keys, `composing` and
-   * selection given, each `false` or `null` otherwise.
+   * Presses `key`: sends `keydown` with the modifier keys, `composing`,
+   * `repeat` and selection given, each `false` or `null` otherwise. `editable`
+   * defaults from the matched element unless given.
    */
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this
   /**
@@ -199,7 +204,7 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this
   /**
    * Fires `event` on the document, as the browser host delivers it to the
-   * component's `DomSubscription.onDocument` listeners. Missing payload
+   * component's `HtmlSubscription.onDocument` listeners. Missing payload
    * fields default as `keydown` and `click` default them, and
    * `defaultPrevented` to `false`.
    *
@@ -215,27 +220,37 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * It throws when nothing listens for `event` on the document, listing
    * the active keys, and is ignored when no listener produced a message.
    */
-  fireDocument<K extends keyof DomSubscription.DocumentEvents>(
+  fireDocument<K extends keyof HtmlSubscription.DocumentEvents>(
     event: K,
-    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.DocumentEvents[K]>>
+    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.DocumentEvents[K]>>
   ): this
   /**
    * Fires `event` on the window, as `fireDocument` does for
-   * `DomSubscription.onWindow`'s listeners.
+   * `HtmlSubscription.onWindow`'s listeners.
    */
-  fireWindow<K extends keyof DomSubscription.WindowEvents>(
+  fireWindow<K extends keyof HtmlSubscription.WindowEvents>(
     event: K,
-    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.WindowEvents[K]>>
+    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.WindowEvents[K]>>
   ): this
   /**
    * Fires a custom `event` on the document, as `fireDocument` does for
-   * `DomSubscription.onCustomEvent`'s listeners. `detail` defaults to `null`
+   * `HtmlSubscription.onCustomEvent`'s listeners. `detail` defaults to `null`
    * and `defaultPrevented` to `false`.
    */
   fireCustomEvent(
     event: string,
-    payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.CustomEventPayload>>
+    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>>
   ): this
+  /**
+   * Fires an animation frame `delta` ms after the last, `16` by default,
+   * as the browser host delivers it to the component's
+   * `HtmlSubscription.onAnimationFrame`, and dispatches what its handler
+   * returns.
+   *
+   * It throws when nothing listens for frames, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  frame(delta?: number): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -321,7 +336,12 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
-    return this.one("keydown", locator, "keydown", () => defaults.keyPayload(key, details))
+    return this.one(
+      "keydown",
+      locator,
+      "keydown",
+      (node, state) => defaults.keyPayload(key, details, engine.ancestry(state, node) as ReadonlyArray<Locator.Node>)
+    )
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {
@@ -411,6 +431,23 @@ class StepsImpl extends internal.SceneCursor {
       }
       return out
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))
+  }
+  frame(delta = 16): this {
+    let handled = false
+    return this.act("frame", "message", (state) => {
+      const handler = state.declared().map(frames.handlerOf).find((handler) => handler !== undefined)
+      if (handler === undefined) {
+        throw new Error(
+          `${this.name("frame")}: nothing listens for animation frames; active keys: ${
+            JSON.stringify(state.subscriptions())
+          }`
+        )
+      }
+      const message = handle(handler, delta)
+      if (message === undefined) return state
+      handled = true
+      return engine.dispatch(state, message)
+    }, () => ({ interaction: handled ? "handled" : "ignored" }))
   }
   override expect(locator: Locator.Locator): object {
     return this.expectation(locator, defaults.matchers)

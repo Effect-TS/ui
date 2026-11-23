@@ -49,9 +49,9 @@
  * }).make({
  *   init: () => ({ bold: false }),
  *   update: {
- *     ToggledBold: (_model, { pressed }, $) => $.evolve({ bold: pressed })
+ *     ToggledBold: ($, { pressed }) => $.evolve({ bold: pressed })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Toggle(h, {
  *       props: { pressed: model.bold },
  *       onToggle: ({ pressed }) => EditorMessage.ToggledBold({ pressed })

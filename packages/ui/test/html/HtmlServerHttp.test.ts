@@ -52,8 +52,8 @@ describe("HtmlServerHttp.layerHttp", () => {
         rendered++
         return {}
       },
-      update: (model) => model,
-      view: (_, h) => h.h1("Home")
+      update: ($) => $.model,
+      view: (h) => h.h1("Home")
     })
     const response = await request(layerHttp(Root, { routes: HomeRoute, document }), "/missing")
     assert.strictEqual(response.status, 404)
@@ -80,8 +80,8 @@ describe("HtmlServerHttp.layerHttp", () => {
       elements: Html
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_, h) => h.p(`Page ${h.props.route.search.page}`)
+      update: ($) => $.model,
+      view: (h) => h.p(`Page ${h.props.route.search.page}`)
     })
     const lists = layerHttp(List, { routes: ListRoute, document })
     const response = await request(lists, "/list?page=x&utm_source=mail")

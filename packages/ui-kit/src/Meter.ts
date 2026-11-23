@@ -59,8 +59,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ used: 12, quota: 16 }),
- *   update: (model) => model,
- *   view: (model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h, model) =>
  *     Meter(h, {
  *       props: { value: model.used, max: model.quota, valueText: `${model.used} of ${model.quota} GB` },
  *       view: (meter) =>
@@ -163,8 +163,8 @@ export const Meter = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  parts: (_model, p) => {
+  update: ($) => $.model,
+  parts: (p) => {
     const min = p.props.min ?? 0
     const max = p.props.max ?? 100
     const { percentage, value } = placeInRange(p.props.value, min, max)

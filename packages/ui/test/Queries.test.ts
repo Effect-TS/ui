@@ -50,15 +50,15 @@ const makeApp = () => {
     elements: Html,
     queries: {
       // An empty id disables the query.
-      note: { query: GetNote, args: (_model, props) => props.id === "" ? undefined : { id: props.id } }
+      note: { query: GetNote, args: ({ props }) => props.id === "" ? undefined : { id: props.id } }
     }
   }).make({
     init: () => ({ clicks: 0, last: "none" }),
     // What the query holds when the click is handled, so a replay only reproduces it with the results.
-    update: (model, message, $) =>
+    update: ($, message) =>
       NoteMessage.match(message, {
         Click: () => ({
-          clicks: model.clicks + 1,
+          clicks: $.model.clicks + 1,
           last: AsyncResult.isSuccess($.queries.note)
             ? $.queries.note.value + ($.queries.note.waiting ? " (waiting)" : "")
             : "none"
@@ -67,10 +67,10 @@ const makeApp = () => {
           $.run(
             Touch.make({ id: $.props.id }).pipe(Command.as(touched))
           ),
-        Touched: () => model
+        Touched: () => $.model
       }),
-    head: (_model, _props, queries) => [Head.title(AsyncResult.isSuccess(queries.note) ? queries.note.value : "Note")],
-    view: (model, h) =>
+    head: ({ queries }) => [Head.title(AsyncResult.isSuccess(queries.note) ? queries.note.value : "Note")],
+    view: (h, model) =>
       h.div(
         h.p(AsyncResult.match(h.queries.note, {
           onInitial: () => "loading",
@@ -95,11 +95,11 @@ const makeApp = () => {
     elements: Html
   }).make({
     init: ($) => $.props.route,
-    update: (_route, message) => message.route,
-    subscriptions: (route) => [
+    update: (_, message) => message.route,
+    subscriptions: ({ model: route }) => [
       Router.subscription(AppRoute, route, (next) => AppMessage.RouteChanged({ route: next }))
     ],
-    view: (route, h) =>
+    view: (h, route) =>
       h.main(AppRoute.match(route, {
         Home: () => h.h1("Home"),
         Note: (note) => Note(h, { key: AppRoute.print(note), props: { id: note.params.id } })
@@ -116,8 +116,8 @@ const makeApp = () => {
     elements: Html
   }).make({
     init: () => "1",
-    update: (_id, message) => message.id,
-    view: (id, h) => h.div(Note(h, { key: "note", props: { id } }))
+    update: (_, message) => message.id,
+    view: (h, id) => h.div(Note(h, { key: "note", props: { id } }))
   })
   const setId = (id: string) => ShellMessage.SetId({ id })
 

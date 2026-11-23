@@ -26,22 +26,22 @@ export const NotePageNoDeps = Component.define({
   // disable it. The runtime watches the query at those args and keeps its
   // latest result, which re-renders the page. No message or
   // `update` case is involved.
-  queries: { note: { query: GetNote, args: (_model, props) => ({ id: props.id }) } }
+  queries: { note: { query: GetNote, args: ({ props }) => ({ id: props.id }) } }
 }).make({
   init: () => ({ notice: "" }),
   // `update` can read the results too, as `$.queries`.
-  update: (_model, message, $) =>
+  update: ($, message) =>
     NotePageMessage.match(message, {
       SavedNote: () => $.evolve({ notice: "Saved" }),
       FailedEditor: () => $.evolve({ notice: "The editor crashed" })
     }),
-  // `head` gets the Model, the props and the queries' results, as a view
-  // does. The title comes from the loaded note, and the note's id from the
+  // `head` gets one object holding the Model, the props and the queries'
+  // results, and picks out what it reads. The title comes from the loaded note, and the note's id from the
   // route stands in while it loads, with no copy of the prop in the Model.
-  head: (_model, props, queries) => [
+  head: ({ props, queries }) => [
     Head.title(AsyncResult.isSuccess(queries.note) ? queries.note.value.title : `Note ${props.id}`)
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     // `h.queries.note` is the query's result as an `AsyncResult`.
     AsyncResult.match(h.queries.note, {
       onInitial: () => h.p("Loading note…"),

@@ -14,8 +14,8 @@ const Row = Component.define({
   message: Schema.Never
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => h.el("li", h.props.label)
+  update: ($) => $.model,
+  view: (h) => h.el("li", h.props.label)
 })
 
 const ListMessage = UiSchema.TaggedEnum({ Set: { keys: Schema.Array(Schema.String) } })
@@ -31,7 +31,7 @@ const makeList = (layout: "siblings" | "nested") =>
   }).make({
     init: ($) => $.props.keys,
     update: (_, message) => message.keys,
-    view: (keys, h) =>
+    view: (h, keys) =>
       layout === "siblings"
         ? h.el("ul", keys.map((key) => Row(h, { key, props: { label: key } })))
         : h.el("div", keys.map((key) => h.el("ul", Row(h, { key, props: { label: key } }))))
@@ -48,8 +48,8 @@ const makePage = (layout: "siblings" | "nested") => {
     message: Schema.Never
   }).make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) =>
+    update: ($) => $.model,
+    view: (h) =>
       h.el(
         "main",
         List(
@@ -122,7 +122,7 @@ describe("duplicate child paths", () => {
         }).make({
           init: () => [],
           update: (_, message) => message.keys,
-          view: (keys, h) => h.el("ul", h.lazy(row), keys.map((key) => Row(h, { key, props: { label: key } })))
+          view: (h, keys) => h.el("ul", h.lazy(row), keys.map((key) => Row(h, { key, props: { label: key } })))
         })
         const root = yield* TestHost.mount(List, {}, { fallback: (_, h) => h.text("crashed") })
         yield* TestHost.settle
@@ -138,8 +138,8 @@ describe("duplicate child paths", () => {
       const Group = makeList("siblings")
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           h.el(
             "main",
             Group(h, { key: "a", props: { keys: ["b"] } }),
@@ -173,8 +173,8 @@ describe("duplicate child paths", () => {
       init: () => {
         throw new Error("broken")
       },
-      update: (model) => model,
-      view: (_, h) => h.text("")
+      update: ($) => $.model,
+      view: (h) => h.text("")
     })
 
     const Props = Schema.Struct({
@@ -199,8 +199,8 @@ describe("duplicate child paths", () => {
     })
       .make({
         init: () => 0,
-        update: (count) => count + 1,
-        view: (_, h) => {
+        update: ($) => $.model + 1,
+        view: (h) => {
           const rows = (keys: ReadonlyArray<string>) =>
             h.el("div", keys.map((key) => h.el("p", Row(h, { key, props: { label: key } }))))
           return h.el(
@@ -220,8 +220,8 @@ describe("duplicate child paths", () => {
       message: Schema.Never
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
+      update: ($) => $.model,
+      view: (h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
     })
 
     const cases: ReadonlyArray<Props & { readonly name: string; readonly error: string }> = [
@@ -281,12 +281,12 @@ describe("duplicate child paths", () => {
             update: () => {
               throw new Error("faulty")
             },
-            view: (_, h) => h.el("button").on("click", null).children("faulty")
+            view: (h) => h.el("button").on("click", null).children("faulty")
           })
         const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.el(
               "div",
               Row(h, { key: "a", props: { label: "a" } }),
@@ -327,8 +327,8 @@ describe("duplicate child paths", () => {
       init: () => {
         throw new Error("broken")
       },
-      update: (model) => model,
-      view: (_, h) => h.text("")
+      update: ($) => $.model,
+      view: (h) => h.text("")
     })
 
     const Go = UiSchema.TaggedEnum({ Go: {} })
@@ -338,7 +338,7 @@ describe("duplicate child paths", () => {
       update: () => {
         throw new Error("faulty")
       },
-      view: (_, h) => h.el("button").on("click", Go.Go()).children("faulty")
+      view: (h) => h.el("button").on("click", Go.Go()).children("faulty")
     })
     const Props = Schema.Struct({ nested: Schema.Array(Schema.String) })
     const ParentMessage = UiSchema.TaggedEnum({ Bump: {} })
@@ -356,8 +356,8 @@ describe("duplicate child paths", () => {
     })
       .make({
         init: () => 0,
-        update: (count) => count + 1,
-        view: (_, h) =>
+        update: ($) => $.model + 1,
+        view: (h) =>
           Broken(h, {
             key: "b",
             fallback: () => {
@@ -375,8 +375,8 @@ describe("duplicate child paths", () => {
       message: Schema.Never
     }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
+      update: ($) => $.model,
+      view: (h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
     })
 
     const parentFailures = (root: TestHost.TestRoot<null, never, never>) =>
@@ -421,13 +421,13 @@ describe("a child without a key", () => {
     provideHost(Effect.gen(function*() {
       const Label = Component.define({ name: "Label", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.el("span", "label")
+        update: ($) => $.model,
+        view: (h) => h.el("span", "label")
       })
       const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) => h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
+        update: ($) => $.model,
+        view: (h) => h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -449,7 +449,7 @@ describe("a child without a key", () => {
       }).make({
         init: ($) => $.props.keys,
         update: (_, message) => message.keys,
-        view: (keys, h) => h.el("ul", keys.map((key) => Row(h, { props: { label: key } })))
+        view: (h, keys) => h.el("ul", keys.map((key) => Row(h, { props: { label: key } })))
       })
       const root = yield* TestHost.mount(List, { keys: ["a"] }, { fallback: (_, h) => h.text("crashed") })
       yield* TestHost.settle

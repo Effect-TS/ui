@@ -39,15 +39,15 @@ const Picker = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (log, message) => [
-    ...log,
+  update: ($, message) => [
+    ...$.model,
     PickerMessage.match(message, {
       Picked: ({ id }) => "picked " + id,
       Closed: () => "closed",
       Clicked: ({ id }) => "clicked " + id
     })
   ],
-  view: (log, h) =>
+  view: (h, log) =>
     Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
@@ -89,14 +89,14 @@ const Bell = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (count, message, $) =>
+  update: ($, message) =>
     BellMessage.match(message, {
-      Ring: () => $.set(count + 1).emit("rang"),
+      Ring: () => $.set($.model + 1).emit("rang"),
       Break: () => {
         throw new Error("the bell broke")
       }
     }),
-  view: (count, h) =>
+  view: (h, count) =>
     h.span(
       h.button.onClick(BellMessage.Ring()).children("ring " + count),
       h.button.onClick(BellMessage.Break()).children("break")
@@ -114,8 +114,8 @@ const Board = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (log, message) => [...log, message._tag],
-  view: (log, h) =>
+  update: ($, message) => [...$.model, message._tag],
+  view: (h, log) =>
     Menu(h, {
       key: "actions",
       props: { items },
@@ -143,12 +143,12 @@ class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({})
 const BadgeImpl = Component.define({ name: "BadgeImpl", scoped: false, model: Schema.Null, message: Schema.Never })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.el("span", "badge")
+    update: ($) => $.model,
+    view: (h) => h.el("span", "badge")
   })
 const Bare = Component.define({ name: "Bare", scoped: false, model: Schema.Null, message: Schema.Never }).make({
   init: () => null,
-  update: (model) => model,
+  update: ($) => $.model,
   parts: () => ({})
 })
 const ConsumerMessage = UiSchema.TaggedEnum({ Break: {} })
@@ -161,7 +161,7 @@ const Consumer = Component.define({
 }).make({
   init: ($) => $.props.throwsAt === "mount",
   update: () => true,
-  view: (broken, h) =>
+  view: (h, broken) =>
     h.el(
       "div",
       h.el("button").on("click", ConsumerMessage.Break()).children("break"),
@@ -191,8 +191,8 @@ const Waiting = Component.define({
   message: Schema.Never
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     Provided(h, {
       key: "c",
       props: { throwsAt: h.props.throwsAt },
@@ -212,8 +212,8 @@ const Field = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  parts: (_, p) => ({
+  update: ($) => $.model,
+  parts: (p) => ({
     input: p.part(
       "input",
       (b) => b.class(undefined).class("field").attr("aria-describedby", undefined).attr("aria-describedby", "hint")
@@ -229,9 +229,9 @@ const Form = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
+  update: ($) => $.model,
   // One list set before the part is applied, and one after.
-  view: (_, h) =>
+  view: (h) =>
     Field(
       h,
       { key: "f", view: (field) => field.input(h.input.class("wide field")).attr("aria-describedby", "note") }
@@ -247,8 +247,8 @@ const Shell = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => Board(h, { key: "board", props: h.props, fallback: () => h.p("board down") })
+  update: ($) => $.model,
+  view: (h) => Board(h, { key: "board", props: h.props, fallback: () => h.p("board down") })
 })
 
 describe("headless components", () => {
@@ -313,8 +313,8 @@ describe("headless components", () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        parts: (_, p) => ({
+        update: ($) => $.model,
+        parts: (p) => ({
           root: p.part("button", (b) =>
             b.disabled(p.props.active)
               .attr("aria-readonly", p.props.active ? "true" : undefined)
@@ -332,8 +332,8 @@ describe("headless components", () => {
         elements: Html
       }).make({
         init: () => false,
-        update: (active) => !active,
-        view: (active, h) =>
+        update: ($) => !$.model,
+        view: (h, active) =>
           h.div(
             h.button.onClick("toggle").children("toggle"),
             Control(h, {
@@ -373,8 +373,8 @@ describe("headless components", () => {
         message: Schema.Literal("hit")
       }).make({
         init: () => 0,
-        update: (count) => count + 1,
-        view: (count): View.Element<"hit"> => ({
+        update: ($) => $.model + 1,
+        view: (_, count): View.Element<"hit"> => ({
           _tag: "Element",
           tag: "button",
           elementKey: undefined,

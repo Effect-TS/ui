@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema } from "@effect/ui"
-import { BrowserHost, DomCommand, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlCommand, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -40,15 +40,15 @@ const Picker = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (log, message) => [
-    ...log,
+  update: ($, message) => [
+    ...$.model,
     PickerMessage.match(message, {
       Picked: ({ id }) => "picked " + id,
       Closed: () => "closed",
       Clicked: ({ id }) => "clicked " + id
     })
   ],
-  view: (log, h) =>
+  view: (h, log) =>
     Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
@@ -95,13 +95,13 @@ const Toolbar = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (log, message, $) =>
+  update: ($, message) =>
     ToolbarMessage.match(message, {
-      Picked: ({ id }) => [...log, "picked " + id],
-      Focus: () => $.run(DomCommand.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
-      Focused: ({ found }) => [...log, "focused " + String(found)]
+      Picked: ({ id }) => [...$.model, "picked " + id],
+      Focus: () => $.run(HtmlCommand.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
+      Focused: ({ found }) => [...$.model, "focused " + String(found)]
     }),
-  view: (log, h) =>
+  view: (h, log) =>
     Menu(h, {
       key: "actions",
       props: { items },
@@ -143,8 +143,8 @@ const Anchor = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (count) => count + 1,
-  parts: (count, p) => ({
+  update: ($) => $.model + 1,
+  parts: (p, count) => ({
     count,
     anchor: p.part("button", (b) => b.attr("data-anchored", "").onMount(PlaceAnchor()))
   })
@@ -158,8 +158,8 @@ const Tip = Component.define({
   elements: Html
 }).make({
   init: () => true,
-  update: (on) => !on,
-  view: (on, h) =>
+  update: ($) => !$.model,
+  view: (h, on) =>
     Anchor(h, {
       key: "anchor",
       view: (anchor) => {
@@ -183,8 +183,8 @@ const Page = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.main(
       Menu(h, {
         key: "ok",
@@ -221,8 +221,8 @@ const Keys = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (seen, message) => [...seen, message],
-  parts: (seen, p) => ({
+  update: ($, message) => [...$.model, message],
+  parts: (p, seen) => ({
     seen,
     container: p.part("div", (b) => b.onKeyDown(({ key }) => "container " + key)),
     focused: p.part("input", (b) => b.onKeyDown(({ key }) => "focused " + key))
@@ -237,8 +237,8 @@ const KeysApp = Component.define({
   elements: Html
 }).make({
   init: () => [],
-  update: (seen, message) => [...seen, message],
-  view: (seen, h) =>
+  update: ($, message) => [...$.model, message],
+  view: (h, seen) =>
     Keys(h, {
       key: "keys",
       view: (keys) =>
@@ -264,8 +264,8 @@ const Confirm = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: (closed) => closed + 1,
-  view: (closed, h) =>
+  update: ($) => $.model + 1,
+  view: (h, closed) =>
     Dialog(h, {
       key: "confirm",
       props: { label: "Confirm" },
@@ -332,8 +332,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             h.main(
               Menu(h, {
                 key: "ok",
@@ -492,8 +492,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       })
         .make({
           init: () => 0,
-          update: (count) => count + 1,
-          parts: (_, p) => ({ button: p.part("button", (b) => b.onClick("hit", { preventDefault: true })) })
+          update: ($) => $.model + 1,
+          parts: (p) => ({ button: p.part("button", (b) => b.onClick("hit", { preventDefault: true })) })
         })
       const App = Component.define({
         name: "App",
@@ -503,8 +503,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Hit(h, {
             key: "h",
             view: (hit) => hit.button(h.button).onClick(() => undefined, { preventDefault: false }).children("hit")
@@ -527,8 +527,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        parts: (_, p) => ({ button: p.part("button", (b) => b.onClick("hit")) })
+        update: ($) => $.model,
+        parts: (p) => ({ button: p.part("button", (b) => b.onClick("hit")) })
       })
       const App = Component.define({
         name: "App",
@@ -539,8 +539,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             Plain(h, {
               key: "p",
               view: (plain) => plain.button(h.button).onClick("own", { preventDefault: true }).children("hit")
@@ -564,8 +564,8 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => null,
-        update: (model) => model,
-        parts: (_, p) => ({
+        update: ($) => $.model,
+        parts: (p) => ({
           root: p.part("div", (b) =>
             b.on("focusout", () => {
               calls++
@@ -582,7 +582,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       }).make({
         init: () => true,
         update: () => false,
-        view: (shown, h) =>
+        view: (h, shown) =>
           h.main(shown ? Frame(h, { view: (frame) => frame.root(h.div).children(h.button) }) : h.p("gone"))
       })
       const app = yield* container

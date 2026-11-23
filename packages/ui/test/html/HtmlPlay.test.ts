@@ -16,8 +16,8 @@ const Checkout = Component.define({
   elements: Html
 }).make({
   init: () => ({ log: [], zip: "old" }),
-  update: (model, message) => ({ log: [...model.log, message], zip: message === "fill" ? "new" : model.zip }),
-  view: (model, h) =>
+  update: ($, message) => ({ log: [...$.model.log, message], zip: message === "fill" ? "new" : $.model.zip }),
+  view: (h, model) =>
     h.div(
       h.form.onFocus("form focus").onSubmit(({ entries }) =>
         `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
@@ -125,8 +125,8 @@ describe("HtmlPlay", () => {
       })
         .make({
           init: () => null,
-          update: (model) => model,
-          view: (_, h) =>
+          update: ($) => $.model,
+          view: (h) =>
             Menu(h, {
               props: { items: [] },
               view: (menu) => h.div(menu.trigger(h.button).children("Actions"), h.p(menu.open ? "open" : "closed"))
@@ -139,5 +139,30 @@ describe("HtmlPlay", () => {
       yield* toolbar.expect(Locator.tag("p")).toHaveText("open")
       const exit = yield* Effect.exit(toolbar.expectIgnored())
       assert.match(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", /produced a message/)
+    }).pipe(play))
+
+  it.effect("keydown resolves inherited editability and accepts full key details", () =>
+    Effect.gen(function*() {
+      const Keys = Component.define({
+        name: "Keys",
+        scoped: false,
+        model: Schema.Array(Schema.String),
+        message: Schema.String,
+        elements: Html
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: ($, entry) => [...$.model, entry],
+        view: (h, entries) =>
+          h.div.onKeyDown(({ editable, key, repeat }) => `${key}:${editable}:${repeat}`).children(
+            h.div.prop("contentEditable", "true").children(
+              h.span.attr("id", "play-ce-child").children("Edit")
+            ),
+            h.output(entries.join(","))
+          )
+      })
+      const p = yield* HtmlPlay.make(Keys, {})
+      yield* p.keydown(Locator.attr("id", "play-ce-child"), "g")
+      yield* p.keydown(Locator.attr("id", "play-ce-child"), "g", { repeat: true, editable: false })
+      yield* p.expect(log).toHaveText("g:true:false,g:false:true")
     }).pipe(play))
 })

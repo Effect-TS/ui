@@ -124,9 +124,9 @@
  * }).make({
  *   init: () => ({ volume: 40 }),
  *   update: {
- *     MovedVolume: (_model, { value }, $) => $.evolve({ volume: value })
+ *     MovedVolume: ($, { value }) => $.evolve({ volume: value })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Field(h, {
  *       view: (field) =>
  *         field.root(h.div).children(
@@ -457,10 +457,10 @@ const changed = (s: Settings, values: ReadonlyArray<number>): Value | undefined 
 // -- update ------------------------------------------------------------------
 
 // A key or the input set a thumb: report the new value and commit it at once.
-const setThumb = (model: SliderModel, $: SliderUpdate, s: Settings, index: number, next: number) => {
-  if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return model
+const setThumb = ($: SliderUpdate, s: Settings, index: number, next: number) => {
+  if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return $.model
   const value = changed(s, withThumb(s, index, next))
-  return value === undefined ? model : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
+  return value === undefined ? $.model : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
 }
 
 const sliderKeys = new Set([
@@ -727,37 +727,37 @@ export const Slider = Component.define({
 }).make({
   init: () => released,
   update: {
-    PressedPointer: (model, { fraction, index, onThumb }, $) => {
+    PressedPointer: ($, { fraction, index, onThumb }) => {
       const s = settingsOf($.props)
-      if (s.disabled || index < 0 || index >= s.values.length) return model
+      if (s.disabled || index < 0 || index >= s.values.length) return $.model
       // Thumbs stacked at the end are dragged from the first of them, so
       // they can be pulled apart.
       let thumb = index
       if (onThumb) { while (thumb > 0 && s.values[thumb]! >= s.top && s.values[thumb - 1]! >= s.top) thumb-- }
-      const next = UiStruct.evolve(model, { pressed: thumb, pressedValues: s.values, moved: null })
+      const next = UiStruct.evolve($.model, { pressed: thumb, pressedValues: s.values, moved: null })
       // A thumb grabbed where it is doesn't move until the pointer does.
       return onThumb ? next : drag(next, $, s, fraction)
     },
-    MovedPointer: (model, { fraction }, $) =>
-      model.pressed < 0 || $.props.disabled === true ? model : drag(model, $, settingsOf($.props), fraction),
-    ReleasedPointer: (model, _message, $) => {
-      if (model.pressed < 0) return model
-      const next = UiStruct.evolve(released, { active: model.active })
-      return model.moved === null || $.props.disabled === true
+    MovedPointer: ($, { fraction }) =>
+      $.model.pressed < 0 || $.props.disabled === true ? $.model : drag($.model, $, settingsOf($.props), fraction),
+    ReleasedPointer: ($) => {
+      if ($.model.pressed < 0) return $.model
+      const next = UiStruct.evolve(released, { active: $.model.active })
+      return $.model.moved === null || $.props.disabled === true
         ? next
-        : $.set(next).emit(SliderEvents.Committed({ value: model.moved }))
+        : $.set(next).emit(SliderEvents.Committed({ value: $.model.moved }))
     },
-    PressedKey: (model, { index, key, shift }, $) => {
+    PressedKey: ($, { index, key, shift }) => {
       const s = settingsOf($.props)
       const next = keyed(s, index, key, shift)
-      return next === undefined ? model : setThumb(model, $, s, index, next)
+      return next === undefined ? $.model : setThumb($, s, index, next)
     },
-    UpdatedThumb: (model, { index, value }, $) =>
-      value.trim() === "" ? model : setThumb(model, $, settingsOf($.props), index, Number(value)),
-    FocusedThumb: (_model, { index }, $) => $.evolve({ active: index }),
-    BlurredThumb: (model, { index }, $) => model.active === index ? $.evolve({ active: -1 }) : model
+    UpdatedThumb: ($, { index, value }) =>
+      value.trim() === "" ? $.model : setThumb($, settingsOf($.props), index, Number(value)),
+    FocusedThumb: ($, { index }) => $.evolve({ active: index }),
+    BlurredThumb: ($, { index }) => $.model.active === index ? $.evolve({ active: -1 }) : $.model
   },
-  parts: (model, p) => {
+  parts: (p, model) => {
     const s = settingsOf(p.props)
     const dragging = model.pressed >= 0 && !s.disabled
     const orientation = p.props.orientation ?? "horizontal"

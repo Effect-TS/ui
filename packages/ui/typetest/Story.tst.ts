@@ -45,8 +45,8 @@ describe("Story", () => {
     const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Reset: {} })
     const Setter = Component.define({ name: "Setter", scoped: false, model: Schema.Number, message: Message }).make({
       init: () => 0,
-      update: (_model, message) => message._tag === "Set" ? message.value : 0,
-      view: (model, h) => h.text(String(model))
+      update: (_, message) => message._tag === "Set" ? message.value : 0,
+      view: (h, model) => h.text(String(model))
     })
     const steps: Steps.Steps<typeof Setter> = Story.start(Setter, {})
     expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
@@ -123,8 +123,8 @@ describe("Story", () => {
       message: Schema.Never
     }).make({
       init: () => 0,
-      update: (model) => model,
-      view: (model, h) => h.el("p", String(model))
+      update: ($) => $.model,
+      view: (h, model) => h.el("p", String(model))
     })
     const steps = Story.start(Static, {})
     expect(steps).type.toBe<Story.Steps<typeof Static>>()

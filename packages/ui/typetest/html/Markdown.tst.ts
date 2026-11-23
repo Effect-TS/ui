@@ -59,8 +59,8 @@ describe("Markdown.islandsFor", () => {
       elements: Html
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Markdown.view(h, document, {
           islands: Markdown.islandsFor(definitions, { Clock: () => clockChild, Note: (h) => h.hr })
         })

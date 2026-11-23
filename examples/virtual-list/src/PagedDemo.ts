@@ -15,8 +15,8 @@ export const PagedDemo = Component.define({
   elements: Html
 }).make({
   init: () => ({ total: "known" as const }),
-  update: { PickedTotal: (model, { total }) => ({ ...model, total }) },
-  view: (model, h) =>
+  update: { PickedTotal: ($, { total }) => $.evolve({ total }) },
+  view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
         h.button.attr("id", "known").onClick(PagedMessage.PickedTotal({ total: "known" })).children("10,000 results"),

@@ -1,0 +1,9 @@
+{
+  "framework": "svelte-v5.42.1-keyed",
+  "keyed": true,
+  "benchmark": "43_first-paint",
+  "type": "size",
+  "values": {
+    "DEFAULT": { "min": 210.4, "max": 210.4, "median": 210.4, "mean": 210.4, "stddev": null, "values": [210.4] }
+  }
+}

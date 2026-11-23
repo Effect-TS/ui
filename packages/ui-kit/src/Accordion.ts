@@ -85,9 +85,9 @@
  * }).make({
  *   init: () => ({ open: ["shipping"] }),
  *   update: {
- *     ToggledQuestions: (model, { open }) => ({ ...model, open })
+ *     ToggledQuestions: ($, { open }) => ({ ...$.model, open })
  *   },
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     Accordion(h, {
  *       props: { value: model.open },
  *       onEmit: { Toggled: ({ value }) => FaqMessage.ToggledQuestions({ open: value }) },
@@ -295,12 +295,12 @@ export const Accordion = Component.define({
 }).make({
   init: () => ({}),
   update: {
-    ToggledItem: (model, { item, open, reason }, $) =>
+    ToggledItem: ($, { item, open, reason }) =>
       $.props.disabled === true
-        ? model
+        ? $.model
         : $.emit(AccordionEvents.Toggled({ value: toggled($.props, item, open), reason }))
   },
-  parts: (_model, p) => {
+  parts: (p) => {
     const { disabled, orientation, value } = resolved(p.props)
     return {
       value,
@@ -441,15 +441,15 @@ export const AccordionItem = Component.define({
 }).make({
   init: () => ({}),
   update: {
-    ToggledCollapsible: (model, { open, reason }, $) =>
+    ToggledCollapsible: ($, { open, reason }) =>
       $.props.disabled === true || $.shared.accordion.disabled
-        ? model
+        ? $.model
         : $.send(Accordion, { _tag: "ToggledItem", item: $.props.value, open, reason }).emit(
           AccordionItemEvents.Toggled({ open, reason })
         ),
-    SettledCollapsible: (_model, { open }, $) => $.emit(AccordionItemEvents.Settled({ open }))
+    SettledCollapsible: ($, { open }) => $.emit(AccordionItemEvents.Settled({ open }))
   },
-  parts: (_model, p) => {
+  parts: (p) => {
     const props = p.props
     const accordion = p.shared.accordion
     const open = accordion.value.includes(props.value)

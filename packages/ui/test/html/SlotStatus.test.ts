@@ -19,8 +19,8 @@ const EditorView = Component.define({
 })
   .make({
     init: () => null,
-    update: (model) => model,
-    view: (_, h) => h.p("editor")
+    update: ($) => $.model,
+    view: (h) => h.p("editor")
   })
 // The failure branch shows its cause, stack included, so the server and the client must pass the same one.
 const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
@@ -31,7 +31,7 @@ const Page = Component.define({ name: "Page", scoped: false, model: Schema.Strin
   .make({
     init: () => "fine",
     update: () => "failed",
-    view: (_, h) => h.div(Editor.render(h, { key: "e", props: {}, fallback: (result) => h.p(shown(result)) }))
+    view: (h) => h.div(Editor.render(h, { key: "e", props: {}, fallback: (result) => h.p(shown(result)) }))
   })
 const slot = "/Page/SlotStatus/HtmlEditor[e]"
 

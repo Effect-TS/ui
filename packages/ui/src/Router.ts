@@ -64,14 +64,14 @@
  *   message: Message
  * }).make({
  *   init: ($) => ({ route: $.props.route }),
- *   update: (_model, message, $) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
  *       ChangedRoute: ({ route }) => ({ route }),
  *       // The new route comes back through the subscription: the push itself sends nothing.
  *       ClickedLink: ({ route }) => $.run(Router.push(AppRoute, route).pipe(Command.asNoop))
  *     }),
- *   subscriptions: (model) => [Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route }))],
- *   view: (model, h) => h.el("p", model.route._tag)
+ *   subscriptions: ({ model }) => [Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route }))],
+ *   view: (h, model) => h.el("p", model.route._tag)
  * })
  *
  * // The initial route comes from the Router, here at "/about".
@@ -485,7 +485,8 @@ export class Load extends Command.Service<Load>()("@effect/ui/Router/Load", {
  * ```ts
  * import { Router } from "@effect/ui"
  *
- * const subscriptions = (model: { readonly dirty: boolean }) => model.dirty ? [Router.blocked("form")] : []
+ * const subscriptions = ({ model }: { readonly model: { readonly dirty: boolean } }) =>
+ *   model.dirty ? [Router.blocked("form")] : []
  * ```
  *
  * @stability experimental
@@ -577,8 +578,8 @@ export const currentRoute = <U extends Routes>(routes: U): Effect.Effect<U["Type
  *   message: Schema.Never
  * }).make({
  *   init: ($) => $.props.route,
- *   update: (route) => route,
- *   view: (route, h) => h.el("p", route._tag)
+ *   update: ($) => $.model,
+ *   view: (h, route) => h.el("p", route._tag)
  * })
  *
  * // Requires the Router: the initial route comes from its URL.
@@ -884,11 +885,11 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
- *   queries: { person: { query: GetPerson, args: (_model, props) => ({ id: props.id }) } }
+ *   queries: { person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) } }
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_model, h) => h.el("p", "Person")
+ *   update: ($) => $.model,
+ *   view: (h) => h.el("p", "Person")
  * })
  *
  * const subscriptions = () => [

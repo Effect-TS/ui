@@ -41,12 +41,12 @@
  *   elements: Html
  * }).make({
  *   init: () => ({ email: "", signedIn: false }),
- *   update: (model, message) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
- *       ChangedEmail: ({ value }) => ({ ...model, email: value }),
- *       SubmittedForm: () => ({ ...model, signedIn: true })
+ *       ChangedEmail: ({ value }) => $.evolve({ email: value }),
+ *       SubmittedForm: () => $.evolve({ signedIn: true })
  *     }),
- *   view: (model, h) =>
+ *   view: (h, model) =>
  *     model.signedIn
  *       ? h.p(`Welcome, ${model.email}`)
  *       : h.form.onSubmit(Message.SubmittedForm()).children(
@@ -90,7 +90,7 @@ import type * as HtmlScene from "./HtmlScene.ts"
  */
 export type Expect = HtmlScene.Expect<Effect.Effect<void, Play.StepError>>
 
-type Modifiers = Partial<Pick<Html.KeyPayload, "shift" | "ctrl" | "alt" | "meta">>
+type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
 
 /**
  * A cursor over an HTML tree on `TestHost`: the Play's steps, plus a step
@@ -117,11 +117,17 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
   type(locator: Locator.Locator, value: string): Effect.Effect<void, Play.StepError>
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
-   * the new value; an object also sets `checked` on an `input`.
+   * the new value; an object also sets `checked` on an `input`, and `files`
+   * on a file input. `change(locator, { files })` chooses files in a file
+   * input.
    */
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError>
-  /** Presses `key`: sends `keydown` with the modifier keys given, each `false` otherwise. */
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): Effect.Effect<void, Play.StepError>
+  /**
+   * Presses `key`: sends `keydown` with the modifier keys, `composing`,
+   * `repeat` and selection given, each `false` or `null` otherwise. `editable`
+   * defaults from the matched element unless given.
+   */
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError>
   /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
@@ -183,11 +189,17 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError> {
     return this.one("change", locator, "change", (node) => defaults.changePayload(node, value), (node, payload) => {
-      Object.assign(node.props, payload)
+      node.props.value = payload.value
+      if ("checked" in payload) node.props.checked = payload.checked
     })
   }
-  keydown(locator: Locator.Locator, key: string, modifiers?: Modifiers): Effect.Effect<void, Play.StepError> {
-    return this.one("keydown", locator, "keydown", () => defaults.keyPayload(key, modifiers))
+  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError> {
+    return this.one(
+      "keydown",
+      locator,
+      "keydown",
+      (node) => defaults.keyPayload(key, details, internal.ancestors(node))
+    )
   }
   submit(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.interact("submit", () => {

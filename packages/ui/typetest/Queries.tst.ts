@@ -36,7 +36,7 @@ const Card = Component.define({
   queries: {
     user: {
       query: GetUser,
-      args: (_model, props) => ({ id: props.id }),
+      args: ({ props }) => ({ id: props.id }),
       onChange: (result) => {
         expect(result).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
         return Message.UserChanged({ state: result._tag, failed: AsyncResult.isFailure(result) })
@@ -44,7 +44,7 @@ const Card = Component.define({
     },
     team: {
       query: GetTeam,
-      args: (_model, _props, queries) => {
+      args: ({ queries }) => {
         expect(queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
         expect(queries).type.not.toHaveProperty("team")
         return AsyncResult.isSuccess(queries.user) ? { id: queries.user.value.teamId } : undefined
@@ -57,24 +57,24 @@ const Card = Component.define({
   }
 }).make({
   init: () => ({ n: 0 }),
-  update: (model, message, $) => {
+  update: ($, message) => {
     expect($.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
     expect($.queries.team).type.toBe<AsyncResult.AsyncResult<typeof Team.Type, never>>()
     return Message.match(message, {
-      UserChanged: () => model,
-      TeamChanged: () => model,
-      Bump: () => ({ ...model, n: model.n + 1 })
+      UserChanged: () => $.model,
+      TeamChanged: () => $.model,
+      Bump: () => ({ ...$.model, n: $.model.n + 1 })
     })
   },
-  subscriptions: (_model, _props, queries) => {
+  subscriptions: ({ queries }) => {
     expect(queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
     return []
   },
-  head: (_model, _props, queries) => {
+  head: ({ queries }) => {
     expect(queries.team).type.toBe<AsyncResult.AsyncResult<typeof Team.Type, never>>()
     return [Head.title("Card")]
   },
-  view: (_model, h) => {
+  view: (h) => {
     expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
     expect(h.previous.user).type.toBe<Option.Option<typeof User.Type>>()
     expect(h.patched.team).type.toBe<boolean>()
@@ -132,8 +132,8 @@ describe("Component queries", () => {
       queries: { name: { query: GetName, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({}),
-      update: (model, _msg, $: Component.Update<{}, never, never, {}>) => $.set(model),
-      view: (_model, h) => h.text("")
+      update: ($: Component.Update<{}, never, never, {}>) => $.set($.model),
+      view: (h) => h.text("")
     })
     expect<Component.Queries<typeof Annotated>>().type.toBe<{ readonly name: Component.QueryOne<typeof GetName> }>()
     expect<Component.Requirements<typeof Annotated>>().type.toBe<GetName>()
@@ -148,8 +148,8 @@ describe("Component queries", () => {
       queries: { name: { query: GetName, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) => h.text(AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : "")
+      update: ($) => $.model,
+      view: (h) => h.text(AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : "")
     })
     expect<Component.Requirements<typeof Named>>().type.toBe<GetName>()
     // Provided, the query's layer brings what its fetcher uses.
@@ -167,16 +167,16 @@ describe("Component queries", () => {
         user: {
           query: GetUser,
           // @ts-expect-error Property 'user' does not exist
-          args: (_model, _props, queries) => AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
+          args: ({ queries }) => AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
         },
         team: {
           query: GetTeam,
-          args: (_model, _props, queries) => AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
+          args: ({ queries }) => AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
         }
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
   })
@@ -193,14 +193,14 @@ describe("Component queries", () => {
         user: { query: GetUser, args: () => ({ id: 1 }) },
         team: {
           query: GetTeam,
-          args: (_model, props) => ({ id: props.id }),
+          args: ({ props }) => ({ id: props.id }),
           // @ts-expect-error not assignable
           onChange: (_result: AsyncResult.AsyncResult<string, never>) => Message.Bump()
         }
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
     Component.define({
@@ -214,7 +214,7 @@ describe("Component queries", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
   })
@@ -232,7 +232,7 @@ describe("debounce", () => {
         user: {
           query: GetUser,
           debounce: "300 millis",
-          args: (_model, props, queries) => {
+          args: ({ props, queries }) => {
             expect(props).type.toBe<{ readonly id: string }>()
             expect(queries).type.not.toHaveProperty("user")
             return props.id === "" ? undefined : { id: props.id }
@@ -243,7 +243,7 @@ describe("debounce", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
   })
@@ -260,7 +260,7 @@ describe("debounce", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
   })
@@ -336,7 +336,7 @@ const List = Component.define({
   queries: {
     users: {
       queryMany: GetUser,
-      args: (model) => model.ids.map((id) => ({ id })),
+      args: ({ model }) => model.ids.map((id) => ({ id })),
       onChange: (results, changes) => {
         expect(results).type.toBe<Component.KeyedResults<typeof GetUser>>()
         expect(changes).type.toBe<ReadonlyArray<Component.KeyedChange<typeof GetUser>>>()
@@ -346,14 +346,14 @@ const List = Component.define({
   }
 }).make({
   init: () => ({ ids: [], changed: 0 }),
-  update: (model, message, $) => {
+  update: ($, message) => {
     expect($.queries.users).type.toBe<Component.KeyedResults<typeof GetUser>>()
     return ListMessage.match(message, {
-      UsersChanged: ({ changed }) => ({ ...model, changed }),
-      Show: ({ ids }) => ({ ...model, ids })
+      UsersChanged: ({ changed }) => ({ ...$.model, changed }),
+      Show: ({ ids }) => ({ ...$.model, ids })
     })
   },
-  view: (_model, h) =>
+  view: (h) =>
     h.ul(
       h.queries.users.map(({ args, result, patched }) =>
         h.li.key(args.id).children(AsyncResult.isSuccess(result) ? result.value.name + (patched ? "*" : "") : "…")
@@ -396,11 +396,11 @@ describe("Keyed queries", () => {
         users: {
           queryMany: GetUser,
           // @ts-expect-error Property 'users' does not exist
-          args: (_model, _props, queries) => queries.users === undefined ? [] : [{ id: "1" }]
+          args: ({ queries }) => queries.users === undefined ? [] : [{ id: "1" }]
         },
         team: {
           query: GetTeam,
-          args: (_model, _props, queries) => {
+          args: ({ queries }) => {
             expect(queries.users).type.toBe<Component.KeyedResults<typeof GetUser>>()
             return queries.users.length > 0 ? { id: "1" } : undefined
           }
@@ -408,7 +408,7 @@ describe("Keyed queries", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
   })
@@ -419,14 +419,14 @@ describe("Keyed queries", () => {
     Component.define({
       ...base,
       // @ts-expect-error is missing the following properties from type 'readonly { readonly id: string; }[]'
-      queries: { users: { queryMany: GetUser, args: (m) => ({ id: m.ids[0] }) } }
+      queries: { users: { queryMany: GetUser, args: ({ model }) => ({ id: model.ids[0] }) } }
     })
     Component.define({
       ...base,
       queries: {
         users: {
           queryMany: GetUser,
-          args: (m) => m.ids.map((id) => ({ id })),
+          args: ({ model }) => model.ids.map((id) => ({ id })),
           // @ts-expect-error not assignable
           onChange: (_loaded: AsyncResult.AsyncResult<unknown, unknown>) => ListMessage.Show({ ids: [] })
         }
@@ -446,7 +446,7 @@ describe("Keyed queries", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
     const Keyed = Component.define({
@@ -457,7 +457,7 @@ describe("Keyed queries", () => {
       queries: { counts: { queryMany: GetCount, args: () => ["a", "b"] } }
     }).make({
       init: () => ({}),
-      update: (model) => model,
+      update: ($) => $.model,
       view: () => null as never
     })
     expect<Component.QueryResultOf<Component.Queries<typeof Keyed>["counts"]>>().type.toBe<
@@ -509,7 +509,7 @@ const Chat = Component.define({
   queries: {
     messages: {
       query: ListMessages,
-      args: (_model, props) => ({ room: props.room }),
+      args: ({ props }) => ({ room: props.room }),
       onChange: (result) => {
         expect(result).type.toBe<
           AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>
@@ -523,17 +523,17 @@ const Chat = Component.define({
   }
 }).make({
   init: () => ({}),
-  update: (model, message, $) => {
+  update: ($, message) => {
     expect($.queries.messages).type.toBe<
       AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>
     >()
     return ChatMessage.match(message, {
-      Changed: () => model,
+      Changed: () => $.model,
       More: () => $.loadMore("messages"),
       Refresh: () => $.reset("messages")
     })
   },
-  view: (_model, h) => {
+  view: (h) => {
     expect(h.queries.messages).type.toBe<AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>>()
     expect(h.previous.messages).type.toBe<Option.Option<Omit<Component.InfiniteData<typeof ListMessages>, "more">>>()
     expect(h.patched.messages).type.toBe<boolean>()
@@ -564,22 +564,22 @@ describe("List queries", () => {
       message: ChatMessage,
       elements: Html,
       queries: {
-        messages: { query: ListMessages, args: (_model, props) => ({ room: props.room }) },
+        messages: { query: ListMessages, args: ({ props }) => ({ room: props.room }) },
         user: { query: GetUser, args: () => ({ id: "1" }) }
       }
     }).make({
       // @ts-expect-error Property 'loadMore' does not exist
       init: ($) => $.set({}).loadMore("messages"),
-      update: (model, message, $) =>
+      update: ($, message) =>
         ChatMessage.match(message, {
           // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
-          Changed: () => $.set(model).loadMore("user"),
+          Changed: () => $.loadMore("user"),
           // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type '"messages"'
-          More: () => $.set(model).loadMore("missing"),
+          More: () => $.loadMore("missing"),
           // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
-          Refresh: () => $.set(model).reset("user")
+          Refresh: () => $.reset("user")
         }),
-      view: (_model, h) => h.p("")
+      view: (h) => h.p("")
     })
     Component.define({
       name: "Reset",
@@ -590,8 +590,8 @@ describe("List queries", () => {
     }).make({
       init: () => ({}),
       // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type '"messages"'
-      update: (_model, _message, $) => $.reset("missing"),
-      view: (_model, h) => h.text("")
+      update: ($) => $.reset("missing"),
+      view: (h) => h.text("")
     })
   })
 
@@ -607,8 +607,8 @@ describe("List queries", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) => h.text("")
+      update: ($) => $.model,
+      view: (h) => h.text("")
     })
     Component.define({
       name: "Both",
@@ -621,8 +621,8 @@ describe("List queries", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) => h.text("")
+      update: ($) => $.model,
+      view: (h) => h.text("")
     })
   })
 

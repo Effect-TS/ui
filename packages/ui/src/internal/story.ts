@@ -23,6 +23,7 @@ import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target 
 import * as View from "../View.ts"
 import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
+import { handle } from "./handler.ts"
 import { isNoop } from "./noop.ts"
 import {
   checkAuthorPlacements,
@@ -1378,9 +1379,6 @@ export const findRunning = (story: State<any, any, any, any>, target: Target, st
   return entry
 }
 
-const handle = <Msg, Payload>(handler: View.Handler<Msg, Payload>, payload: Payload): Msg | undefined =>
-  typeof handler === "function" ? (handler as (payload: Payload) => Msg | undefined)(payload) : handler
-
 /** @internal */
 export const dispatch = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
@@ -1950,8 +1948,8 @@ const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any
 }
 
 /**
- * Whether `child` was declared from `component`: the component itself, a provided copy of it, or the
- * feature service.
+ * Whether `child` was declared from `component`: the component itself, a provided copy of it, the lazy
+ * component or the feature service.
  */
 const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
   if (child.component === component) return true
@@ -1967,7 +1965,7 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
  */
 export const findChild = (
   view: View.Node<any, any>,
-  component: Component.AnyRoot | Component.Headless.Any | Feature.Any,
+  component: Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
   key: string | undefined,
   step: string
 ): Occurrence => {

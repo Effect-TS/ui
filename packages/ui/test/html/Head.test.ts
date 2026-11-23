@@ -19,9 +19,9 @@ const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
       })
         .make({
           init: () => null,
-          update: (model) => model,
+          update: ($) => $.model,
           head: () => entries,
-          view: (_, h) => h.div
+          view: (h) => h.div
         }),
       {}
     )
@@ -296,8 +296,8 @@ const Titled = Component.define({
 }).make({
   init: ($) => $.props.title,
   update: (_, message) => message.title,
-  head: (title) => [Head.title(title), HtmlHead.meta({ name: "description", content: title })],
-  view: (title, h) => h.p(title)
+  head: ({ model: title }) => [Head.title(title), HtmlHead.meta({ name: "description", content: title })],
+  view: (h, title) => h.p(title)
 })
 
 const mountIn = Effect.fnUntraced(function*(title: string, options?: { readonly head?: boolean }) {

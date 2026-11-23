@@ -103,27 +103,27 @@ const makeApp = (options?: {
     queries: {
       user: {
         query: GetUser,
-        args: (_model, props) => ({ id: props.id }),
+        args: ({ props }) => ({ id: props.id }),
         onChange: () => CardMessage.UserChanged()
       }
     }
   }).make({
     init: () => ({ done: [] }),
-    update: (model, message, $) => {
+    update: ($, message) => {
       order.push(`update ${$.props.tag} ${message._tag}${"name" in message ? " " + message.name : ""}`)
       return CardMessage.match(message, {
-        UserChanged: () => model,
-        Rename: ({ name }) => $.set(model).run(rename($.props.id, name)),
+        UserChanged: () => $.model,
+        Rename: ({ name }) => $.run(rename($.props.id, name)),
         Renamed: ({ name }) => {
-          const next = { ...model, done: [...model.done, name] }
+          const next = { ...$.model, done: [...$.model.done, name] }
           const chain = options?.chain
-          return chain !== undefined && model.done.length === 0 ? $.set(next).run(rename($.props.id, chain)) : next
+          return chain !== undefined && $.model.done.length === 0 ? $.set(next).run(rename($.props.id, chain)) : next
         },
-        Failed: ({ name }) => ({ ...model, done: [...model.done, "failed " + name] }),
-        Stop: () => $.set(model).run(Command.interrupt(RenameUser))
+        Failed: ({ name }) => ({ ...$.model, done: [...$.model.done, "failed " + name] }),
+        Stop: () => $.run(Command.interrupt(RenameUser))
       })
     },
-    view: (model, h) => {
+    view: (h, model) => {
       const text = AsyncResult.match(h.queries.user, {
         onInitial: () => "loading",
         onSuccess: (success) => success.value.name + (h.patched.user ? "~" : "") + (success.waiting ? "…" : ""),
@@ -147,8 +147,8 @@ const makeApp = (options?: {
     message: ListMessage
   }).make({
     init: ($) => $.props.cards,
-    update: (_model, message) => message.cards,
-    view: (cards, h) =>
+    update: (_, message) => message.cards,
+    view: (h, cards) =>
       h.el(
         "div",
         cards.map((card) => {
@@ -396,12 +396,12 @@ describe("Command.afterRefetch", () => {
       }
     }).make({
       init: () => ({ renamed: false }),
-      update: (model, message, $) => {
+      update: ($, message) => {
         order.push(`update ${message._tag}`)
         return BoardMessage.match(message, {
-          Changed: () => model,
+          Changed: () => $.model,
           Rename: () =>
-            $.set(model).run(
+            $.run(
               app.RenameUser.make({ id: "1", name: "Bob" }).pipe(
                 Command.match({
                   onSuccess: () => BoardMessage.Renamed(),
@@ -410,10 +410,10 @@ describe("Command.afterRefetch", () => {
                 Command.afterRefetch("Infinity")
               )
             ),
-          Renamed: () => ({ ...model, renamed: true })
+          Renamed: () => ({ ...$.model, renamed: true })
         })
       },
-      view: (model, h) => {
+      view: (h, model) => {
         const text = h.queries.users.map(({ result }) =>
           AsyncResult.match(result, {
             onInitial: () => "…",
@@ -758,19 +758,19 @@ describe("Command.afterRefetch", () => {
       queries: { items: { query: ListItems, args: () => ({}) } }
     }).make({
       init: () => ({ touched: false }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         ItemsMessage.match(message, {
           More: () => $.loadMore("items"),
           Touch: () =>
-            $.set({ ...model, touched: false }).run(
+            $.set({ ...$.model, touched: false }).run(
               Touch.make().pipe(
                 Command.map(() => ItemsMessage.Touched()),
                 Command.afterRefetch("Infinity")
               )
             ),
-          Touched: () => ({ ...model, touched: true })
+          Touched: () => ({ ...$.model, touched: true })
         }),
-      view: (model, h) =>
+      view: (h, model) =>
         h.el(
           "p",
           AsyncResult.match(h.queries.items, {

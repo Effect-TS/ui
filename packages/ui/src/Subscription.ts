@@ -1,7 +1,7 @@
 /**
  * Subscriptions are keyed Streams an instance runs while it asks for them.
  *
- * A component's `subscriptions: (model, props) => [...]` is re-run on mount,
+ * A component's `subscriptions: ({ model, props }) => [...]` is re-run on mount,
  * after each `update` and on a props change. The result is diffed by key: a
  * key that disappears has its Scope closed first, then a new key starts in a
  * child Scope of the instance. Each element the Stream emits is dispatched to
@@ -23,7 +23,10 @@
  *
  * const roomMessages = (roomId: string) => Stream.make(`hello from ${roomId}`)
  *
- * const subscriptions = (model: { readonly running: boolean }, props: { readonly roomId: string }) => [
+ * const subscriptions = ({ model, props }: {
+ *   readonly model: { readonly running: boolean }
+ *   readonly props: { readonly roomId: string }
+ * }) => [
  *   model.running && Subscription.make("tick", Stream.tick("1 second").pipe(Stream.as(Message.Ticked()))),
  *   Subscription.make("room", props.roomId, (roomId) =>
  *     roomMessages(roomId).pipe(Stream.map((text) => Message.Received({ text }))))

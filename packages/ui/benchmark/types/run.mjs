@@ -41,8 +41,8 @@ export const C${i} = Component.define({
   elements: Html
 }).make({
   init: () => ({ draft: "" }),
-  update: (_model, message, $) => $.set({ draft: message.value }).emit(E${i}.Saved({ id: message.value })),
-  view: (model, h) => h.p(model.draft)
+  update: ($, message) => $.set({ draft: message.value }).emit(E${i}.Saved({ id: message.value })),
+  view: (h, model) => h.p(model.draft)
 })
 `)
   }
@@ -85,8 +85,8 @@ export const Owner = Component.define({
   elements: Html
 }).make({
   init: () => ({ selected: null, order: [] }),
-  update: (model, message, $) => $.set({ ...model, selected: message.id }),
-  view: (model, h) =>
+  update: ($, message) => $.set({ ...$.model, selected: message.id }),
+  view: (h, model) =>
     ${view}
 })
 `
@@ -96,8 +96,8 @@ const deep = (scoped, depth) => {
   const out = [imports, ""]
   for (let i = depth - 1; i >= 0; i--) {
     const last = i === depth - 1
-    const child = (at) =>
-      `L${i + 1}(${at}, { key: "below", props: { id: model.draft }, onEmit: { Saved: (e) => LM${i}.Below({ id: e.id }) } })`
+    const onEmit = `{ Saved: (e) => LM${i}.Below({ id: e.id }) }`
+    const child = (at) => `L${i + 1}(${at}, { key: "below", props: { id: model.draft }, onEmit: ${onEmit} })`
     const below = scoped ? `h.scoped((s) => ${child("s")})` : child("h")
     out.push(`const LM${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Below: { id: Schema.String } })
 const LE${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
@@ -110,11 +110,11 @@ export const L${i} = Component.define({
   elements: Html
 }).make({
   init: () => ({ draft: "" }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     message._tag === "Typed"
       ? $.set({ draft: message.value })
-      : $.set(model).emit(LE${i}.Saved({ id: message.id })),
-  view: (model, h) => h.div(h.p(model.draft)${last ? "" : `, ${below}`})
+      : $.set($.model).emit(LE${i}.Saved({ id: message.id })),
+  view: (h, model) => h.div(h.p(model.draft)${last ? "" : `, ${below}`})
 })
 `)
   }
@@ -328,8 +328,9 @@ const rows = Object.entries(measures).map(([name, { inline, scoped, ofMain }]) =
 console.log("| Measure | main | Inline | Scoped | Scoped / main | Ceiling | |")
 console.log("| --- | ---: | ---: | ---: | ---: | ---: | --- |")
 for (const row of rows) {
+  const status = row.pass ? "pass" : "OVER"
   console.log(
-    `| ${row.name} | ${row.main} | ${row.inline} | ${row.scoped} | ${row.ofMain} | ${row.ceiling} | ${row.pass ? "pass" : "OVER"} |`
+    `| ${row.name} | ${row.main} | ${row.inline} | ${row.scoped} | ${row.ofMain} | ${row.ceiling} | ${status} |`
   )
 }
 if (editor !== undefined) {

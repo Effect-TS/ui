@@ -3,14 +3,29 @@ import * as scene from "../../internal/scene.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Html from "../Html.ts"
 import * as HtmlLocator from "../testing/HtmlLocator.ts"
+import { nonTextInputTypes } from "./editable.ts"
 
 const lower = (value: string | undefined) => value?.toLowerCase()
 
-const inputType = (node: Locator.Node): string => lower(node.attrs?.type) ?? "text"
+const inputType = (node: Locator.Node): string =>
+  lower(typeof node.props?.type === "string" ? node.props.type : node.attrs?.type) ?? "text"
 
 /** An attribute set, or a property set to `true`. */
 const flag = (node: Locator.Node, name: string): boolean =>
   node.props?.[name] === true || (node.props?.[name] === undefined && node.attrs?.[name] !== undefined)
+
+const isEditable = (path: ReadonlyArray<Locator.Node>): boolean => {
+  const tag = path[0]?.tag
+  if (tag === "textarea" || tag === "select") return true
+  if (tag === "input") return !nonTextInputTypes.has(inputType(path[0]!))
+  for (const at of path) {
+    const set = at.props?.contentEditable
+    const value = lower(typeof set === "string" ? set : at.attrs?.contenteditable)
+    if (value === "" || value === "true" || value === "plaintext-only") return true
+    if (value === "false") return false
+  }
+  return false
+}
 
 const controls: ReadonlySet<string> = new Set([
   "button",
@@ -198,6 +213,7 @@ export const planClick = (
     const payload: Html.InputPayload = {
       value: HtmlLocator.value(node) ?? "on",
       checked: type === "radio" ? true : HtmlLocator.checked(node) !== true,
+      files: [],
       composing: false,
       inputType: ""
     }
@@ -252,7 +268,9 @@ export const inputPayload = (
   details?: Partial<Pick<Html.InputPayload, "composing" | "inputType">>
 ): Html.ValuePayload | Html.InputPayload => {
   const edit = { composing: details?.composing ?? false, inputType: details?.inputType ?? "insertText" }
-  return node.tag === "input" ? { value, checked: HtmlLocator.checked(node) === true, ...edit } : { value, ...edit }
+  return node.tag === "input"
+    ? { value, checked: HtmlLocator.checked(node) === true, files: [], ...edit }
+    : { value, ...edit }
 }
 
 /** @internal */
@@ -264,14 +282,20 @@ export const changePayload = (
   const edit = { composing: input.composing ?? false, inputType: input.inputType ?? "" }
   const value = input.value ?? HtmlLocator.value(node) ?? ""
   return node.tag === "input"
-    ? { value, checked: input.checked ?? HtmlLocator.checked(node) === true, ...edit }
+    ? {
+      value,
+      checked: input.checked ?? HtmlLocator.checked(node) === true,
+      files: inputType(node) === "file" ? input.files ?? [] : [],
+      ...edit
+    }
     : { value, ...edit }
 }
 
 /** @internal */
 export const keyPayload = (
   key: string,
-  details: Partial<Omit<Html.KeyPayload, "key">> | undefined
+  details: Partial<Omit<Html.KeyPayload, "key">> | undefined,
+  path: ReadonlyArray<Locator.Node> = []
 ): Html.KeyPayload => ({
   key,
   shift: details?.shift === true,
@@ -279,6 +303,8 @@ export const keyPayload = (
   alt: details?.alt === true,
   meta: details?.meta === true,
   composing: details?.composing === true,
+  repeat: details?.repeat === true,
+  editable: details?.editable ?? isEditable(path),
   selectionStart: details?.selectionStart ?? null,
   selectionEnd: details?.selectionEnd ?? null
 })

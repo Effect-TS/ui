@@ -33,7 +33,7 @@ declare const withSpecialFields: {
 
 describe("$.evolve", () => {
   it("takes a value or a function of the old value for each field, and nothing else", () => {
-    Def.update((_model, _message, $) => {
+    Def.update(($) => {
       expect($.evolve({ attempts: 1, coupon: UiStruct.evolve({ status: "Idle" }) })).type.toBe<Step>()
       expect($.evolve({ attempts: (n) => n + 1 }).evolve({ attempts: 2 })).type.toBe<Step>()
       expect($.evolve).type.not.toBeCallableWith({ atempts: 1 })
@@ -51,14 +51,14 @@ describe("$.evolve", () => {
   })
 
   it("rejects non-struct Models", () => {
-    AuthDef.update((model, _message, $) => {
+    AuthDef.update(($) => {
       expect($.evolve).type.not.toBeCallableWith({ email: "a@b.c" })
-      return model
+      return $.model
     })
-    CountDef.update((model, _message, $) => {
+    CountDef.update(($) => {
       expect($.evolve).type.not.toBeCallableWith(1)
       expect($.evolve).type.not.toBeCallableWith({})
-      return model
+      return $.model
     })
   })
 })

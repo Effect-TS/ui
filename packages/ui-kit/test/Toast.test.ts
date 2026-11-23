@@ -22,21 +22,20 @@ const Poster = Component.define({
   .make({
     init: () => 0,
     update: {
-      ClickedPost: (model, _message, $) =>
-        $.set(model + 1).send(ToastProvider, {
+      ClickedPost: ($) =>
+        $.set($.model + 1).send(ToastProvider, {
           _tag: "RequestedAdd",
           toast: {
-            id: "t" + (model + 1),
+            id: "t" + ($.model + 1),
             title: "Toast",
-            priority: model === 0 ? "high" : "low",
-            type: model === 0 ? "loading" : "success"
+            priority: $.model === 0 ? "high" : "low",
+            type: $.model === 0 ? "loading" : "success"
           }
         }),
-      CompletedUpload: (model, _message, $) =>
-        $.set(model).send(ToastProvider, { _tag: "RequestedUpdate", id: "t1", type: "success" }),
-      ClickedDrop: (model, _message, $) => $.set(model).send(ToastProvider, { _tag: "RequestedClose", id: "t" + model })
+      CompletedUpload: ($) => $.send(ToastProvider, { _tag: "RequestedUpdate", id: "t1", type: "success" }),
+      ClickedDrop: ($) => $.send(ToastProvider, { _tag: "RequestedClose", id: "t" + $.model })
     },
-    view: (_, h) =>
+    view: (h) =>
       h.div(
         h.button.attr("id", "post").onClick(PosterMessage.ClickedPost()).children("Post"),
         h.button.attr("id", "complete").onClick(PosterMessage.CompletedUpload()).children("Complete"),
@@ -58,7 +57,7 @@ const Page = Component.define({
   update: {
     Dismissed: (_, { id }) => id
   },
-  view: (dismissed, h) =>
+  view: (h, dismissed) =>
     ToastProvider(h, {
       props: { timeout: h.props.timeout, limit: 2 },
       onEmit: { Dismissed: ({ id }) => PageMessage.Dismissed({ id }) },
@@ -256,7 +255,7 @@ const Above = Component.define({
 }).make({
   init: () => false,
   update: { Opened: () => true },
-  view: (open, h) =>
+  view: (h, open) =>
     ToastProvider(h, {
       view: (toastProvider) =>
         h.div(

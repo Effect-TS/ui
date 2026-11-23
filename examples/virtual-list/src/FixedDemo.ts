@@ -13,8 +13,8 @@ export const FixedDemo = Component.define({
   elements: Html
 }).make({
   init: () => ({ jump: 0 }),
-  update: { ClickedLast: (model) => ({ jump: model.jump + 1 }) },
-  view: (model, h) =>
+  update: { ClickedLast: ($) => ({ jump: $.model.jump + 1 }) },
+  view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
         h.button.attr("id", "last").onClick(FixedMessage.ClickedLast()).children("Jump to the last row")

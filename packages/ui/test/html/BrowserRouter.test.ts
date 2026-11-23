@@ -24,8 +24,8 @@ const SearchApp = Component.define({
 }).make({
   init: ($) => $.props.route,
   update: (_, route) => route,
-  subscriptions: (route) => [Router.subscription(SearchRoute, route, (next) => next)],
-  view: (route, h) => h.h1(SearchRoute.print(route))
+  subscriptions: ({ model: route }) => [Router.subscription(SearchRoute, route, (next) => next)],
+  view: (h, route) => h.h1(SearchRoute.print(route))
 })
 
 const ListRoute = Route.union({
@@ -52,7 +52,7 @@ const ListPage = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model, message, $) =>
+  update: ($, message) =>
     ListMessage.match(message, {
       Typed: ({ value }) =>
         $.run(Router.patchSearch(ListRoute, $.props.route, { q: value || undefined }).pipe(patched)),
@@ -63,9 +63,9 @@ const ListPage = Component.define({
             scroll: true
           }).pipe(patched)
         ),
-      Patched: () => model
+      Patched: () => $.model
     }),
-  view: (_, h) =>
+  view: (h) =>
     h.div(
       h.h1(`List page ${h.props.route.search.page}`),
       h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
@@ -88,8 +88,8 @@ const ListApp = Component.define({
 }).make({
   init: ($) => $.props.route,
   update: (_, route) => route,
-  subscriptions: (route) => [Router.subscription(ListRoute, route, (next) => next)],
-  view: (route, h) =>
+  subscriptions: ({ model: route }) => [Router.subscription(ListRoute, route, (next) => next)],
+  view: (h, route) =>
     ListRoute.match(route, {
       List: (route) => ListPage(h, { key: ListRoute.printPath(route), props: { route } }),
       Other: () => h.h1("Other")
@@ -433,8 +433,8 @@ describe("BrowserRouter", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: (peeks) => peeks + 1,
-        view: (_, h) => h.a.attr("href", "/people/1").onClick("Peek", { preventDefault: true }).children("Person 1")
+        update: ($) => $.model + 1,
+        view: (h) => h.a.attr("href", "/people/1").onClick("Peek", { preventDefault: true }).children("Person 1")
       })
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Peek, {}, app)

@@ -158,6 +158,16 @@ export interface HostEvents<Node> {
  * removes every node of a list, so a host can clear a parent that holds
  * nothing else in one step. A host without it gets `remove` for each node.
  *
+ * `viewTransition`, if given, is called for a flush that renders an update
+ * whose step called `$.viewTransition`, before it renders, with the rest of
+ * the flush as `update` and the types the steps asked for. The host calls
+ * `update` once, now or later, such as inside `document.startViewTransition`.
+ * Until it does, the flush waits, and what arrives meanwhile renders in it,
+ * without adding its types.
+ * Once the root has closed, `update` does nothing. A host without it ignores
+ * the request, and the flush runs as any other. The first mount never calls
+ * it.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -202,6 +212,7 @@ export interface Host<Node> {
   readonly createContainer?: (() => Node) | undefined
   readonly removeChildren?: ((parent: Node, nodes: ReadonlyArray<Node>) => void) | undefined
   readonly events?: HostEvents<Node> | undefined
+  readonly viewTransition?: ((update: () => void, types: ReadonlyArray<string>) => void) | undefined
 }
 
 /**

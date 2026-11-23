@@ -29,15 +29,15 @@ export const ConfirmDialog = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model, message, $) =>
+  update: ($, message) =>
     ConfirmDialogMessage.match(message, {
       CancelledDialog: () => $.emit(ConfirmDialogEvents.RequestedClose()),
       // A close while `open` is still true is the browser's. One after the
       // caller set `open` to false only confirms the caller's decision.
-      ClosedDialog: () => $.props.open ? $.emit(ConfirmDialogEvents.RequestedClose()) : model,
+      ClosedDialog: () => $.props.open ? $.emit(ConfirmDialogEvents.RequestedClose()) : $.model,
       ClickedConfirm: () => $.emit(ConfirmDialogEvents.Confirmed())
     }),
-  view: (_, h) =>
+  view: (h) =>
     h.dialog.attr("aria-label", "Confirm").modal(h.props.open)
       .onCancel(ConfirmDialogMessage.CancelledDialog())
       .onClose(ConfirmDialogMessage.ClosedDialog())
@@ -57,14 +57,14 @@ export const Page = Component.define({
   elements: Html
 }).make({
   init: () => ({ confirming: false, deleted: false }),
-  update: (_model, message, $) =>
+  update: ($, message) =>
     PageMessage.match(message, {
       ClickedDelete: () => $.evolve({ confirming: true }),
       // The page decides: returning `model` here refuses the dismissal.
       RequestedCloseConfirm: () => $.evolve({ confirming: false }),
       ConfirmedDelete: () => ({ confirming: false, deleted: true })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.onClick(PageMessage.ClickedDelete()).children("Delete"),
       model.deleted && h.p.children("Deleted"),
@@ -101,19 +101,19 @@ export const Wizard = Component.define({
   // Guaranteed: a child that unmounts loses its Model, so each mount starts
   // the workflow over.
   init: () => ({ step: 0 }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     WizardMessage.match(message, {
       // Guaranteed: `$.props` is the props as of this message, not as of
       // mount. A prop change by itself dispatches nothing.
       ClickedNext: () =>
-        model.step + 1 < $.props.steps
-          ? { step: model.step + 1 }
+        $.model.step + 1 < $.props.steps
+          ? { step: $.model.step + 1 }
           : $.emit(WizardEvents.Finished()),
       ClickedCancel: () => $.emit(WizardEvents.Cancelled()),
       // The wizard is always open while mounted, so a forced close cancels it.
       ClosedDialog: () => $.emit(WizardEvents.Cancelled())
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.dialog.attr("aria-label", "Import").modal(true)
       .onCancel(WizardMessage.ClickedCancel())
       .onClose(WizardMessage.ClosedDialog())
@@ -133,14 +133,14 @@ export const Host = Component.define({
   elements: Html
 }).make({
   init: () => ({ importing: false, imported: 0 }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     HostMessage.match(message, {
       // The host decides whether the wizard is mounted, not which step it's on.
       ClickedImport: () => $.evolve({ importing: true }),
-      FinishedImport: () => ({ importing: false, imported: model.imported + 1 }),
+      FinishedImport: () => ({ importing: false, imported: $.model.imported + 1 }),
       CancelledImport: () => $.evolve({ importing: false })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.onClick(HostMessage.ClickedImport()).children("Import"),
       h.p.children(`Imported ${model.imported}`),
@@ -173,14 +173,14 @@ export const ModalProvider = Component.define({
   elements: Html
 }).make({
   init: () => ({ open: false }),
-  update: (_model, message) =>
+  update: (_, message) =>
     ModalProviderMessage.match(message, {
       RequestedOpen: () => ({ open: true }),
       RequestedClose: () => ({ open: false })
     }),
   // Only `Around`, at the end of this file, reads these parts. Without it
   // this is `parts: () => ({})`.
-  parts: (model) => ({ open: model.open })
+  parts: (_, model) => ({ open: model.open })
 })
 
 const OpenButtonMessage = UiSchema.TaggedEnum({ ClickedOpen: {} })
@@ -196,11 +196,11 @@ export const OpenButton = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (_model, message, $) =>
+  update: ($, message) =>
     OpenButtonMessage.match(message, {
       ClickedOpen: () => $.send(ModalProvider, ModalProviderMessage.RequestedOpen())
     }),
-  view: (_, h) => h.button.onClick(OpenButtonMessage.ClickedOpen()).children("Open")
+  view: (h) => h.button.onClick(OpenButtonMessage.ClickedOpen()).children("Open")
 })
 
 // Two events, two messages; they share the handler in `update`.
@@ -217,14 +217,14 @@ export const ModalHost = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (_model, message, $) => {
+  update: ($, message) => {
     const close = () => $.send(ModalProvider, ModalProviderMessage.RequestedClose())
     return ModalHostMessage.match(message, {
       RequestedCloseDialog: close,
       ConfirmedDialog: close
     })
   },
-  view: (_, h) =>
+  view: (h) =>
     ConfirmDialog(h, {
       props: { open: h.shared.provider.open },
       onEmit: {
@@ -242,8 +242,8 @@ export const Shell = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) => ModalProvider(h, { view: () => h.div(OpenButton(h, {}), ModalHost(h, {})) })
+  update: ($) => $.model,
+  view: (h) => ModalProvider(h, { view: () => h.div(OpenButton(h, {}), ModalHost(h, {})) })
 })
 
 // ---------------------------------------------------------------------------
@@ -262,11 +262,11 @@ export const Counter = Component.define({
   elements: Html
 }).make({
   init: ($) => ({ count: $.props.initialCount }),
-  update: (model, message) =>
+  update: ($, message) =>
     CounterMessage.match(message, {
-      ClickedIncrement: () => ({ count: model.count + 1 })
+      ClickedIncrement: () => ({ count: $.model.count + 1 })
     }),
-  view: (model, h) => h.button.onClick(CounterMessage.ClickedIncrement()).children(String(model.count))
+  view: (h, model) => h.button.onClick(CounterMessage.ClickedIncrement()).children(String(model.count))
 })
 
 // ---------------------------------------------------------------------------
@@ -286,14 +286,14 @@ export const Dual = Component.define({
   elements: Html
 }).make({
   init: ($) => ({ open: $.props.open }),
-  update: (_model, message) =>
+  update: (_, message) =>
     DualMessage.match(message, {
       ClickedOpen: () => ({ open: true }),
       ClickedClose: () => ({ open: false })
     }),
   // The prop is read again after `init`. That makes this a mirror, where
   // Counter above is a seed.
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.onClick(DualMessage.ClickedOpen()).children("Open"),
       h.dialog.modal(model.open || h.props.open).children(
@@ -315,8 +315,8 @@ export const Around = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  view: (_, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     ModalProvider(h, {
       view: (modalProvider) =>
         h.div(

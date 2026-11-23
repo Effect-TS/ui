@@ -36,7 +36,7 @@ export const Form = Component.define({
 }).make({
   init: () => "",
   update: (_, value) => value,
-  view: (value, h) =>
+  view: (h, value) =>
     Card(h).children(
       Field(h, {
         label: "Name",

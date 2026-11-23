@@ -25,7 +25,7 @@ const Timed = Component.define({
 }).make({
   init: () => 0,
   update: (_, now) => now,
-  parts: (now, p) => ({
+  parts: (p, now) => ({
     now,
     clock: p.part("time", (b) => b.onMount(Tick()))
   })
@@ -40,16 +40,16 @@ const Heading = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: (model) => model,
-  parts: (_, p) => ({ heading: p.part(["h2", "h3"], (b) => b.attr("role", "heading")) })
+  update: ($) => $.model,
+  parts: (p) => ({ heading: p.part(["h2", "h3"], (b) => b.attr("role", "heading")) })
 })
 
 describe("headless components", () => {
   it("the consumer calls parts with no annotations", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Menu(h, {
           key: "actions",
           props: { items },
@@ -83,8 +83,8 @@ describe("headless components", () => {
   it("a part returns the chain type, so the callable shorthand is gone", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Menu(h, {
           key: "actions",
           props: { items },
@@ -126,8 +126,8 @@ describe("headless components", () => {
     })
       .make({
         init: () => null,
-        update: (model) => model,
-        parts: (_, p) => ({
+        update: ($) => $.model,
+        parts: (p) => ({
           inside: p.part("button", (b) => b.children(seen())),
           around: p.part("button", (b) => b.forward((node) => new Html.Element<never>("div").children(node, seen())))
         })
@@ -136,8 +136,8 @@ describe("headless components", () => {
     const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
       {
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Timed(h, {
             key: "t",
             view: (timed) =>
@@ -158,8 +158,8 @@ describe("headless components", () => {
       elements: Html
     }).make({
       init: () => null,
-      update: (model) => model,
-      parts: (_, p) => {
+      update: ($) => $.model,
+      parts: (p) => {
         const clock = p.part("time", (b) => b.onMount(Tick()))
         const seen = p.part(
           "div",
@@ -180,8 +180,8 @@ describe("headless components", () => {
     const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
       {
         init: () => null,
-        update: (model) => model,
-        view: (_, h) =>
+        update: ($) => $.model,
+        view: (h) =>
           Wrapped(h, {
             key: "wrapped",
             view: (wrapped) => {
@@ -205,8 +205,8 @@ describe("headless components", () => {
   it("a part for one heading rejects another, and a part may list several tags", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Dialog(h, {
           key: "confirm",
           props: { label: "Confirm" },
@@ -238,8 +238,8 @@ describe("headless components", () => {
   it("view is required for a headless child, and a normal child takes none", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         expect(Menu).type.not.toBeCallableWith(h, { key: "actions", props: { items } })
         return h.div()
       }

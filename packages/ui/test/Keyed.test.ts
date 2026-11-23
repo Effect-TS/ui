@@ -96,7 +96,7 @@ const makeApp = (options?: {
     queries: {
       users: {
         queryMany: GetUser,
-        args: (model) => {
+        args: ({ model }) => {
           queryRuns++
           return model.ids.map((id) => ({ id }))
         },
@@ -111,25 +111,25 @@ const makeApp = (options?: {
     }
   }).make({
     init: ($) => ({ ids: $.props.ids }),
-    update: (model, message, $) =>
+    update: ($, message) =>
       BoardMessage.match(message, {
-        Show: ({ ids }) => ({ ...model, ids }),
+        Show: ({ ids }) => ({ ...$.model, ids }),
         UsersChanged: ({ changed }) => {
           order.push(`update ${$.props.tag} [${changed.join(",")}]`)
-          if (changed.length > 0) return model
-          if (options?.pruneTrims === true) return { ids: model.ids.slice(0, 1) }
-          if (options?.pruneDrops === true && model.ids.length > 1) return { ids: model.ids.slice(0, -1) }
-          return model
+          if (changed.length > 0) return $.model
+          if (options?.pruneTrims === true) return { ids: $.model.ids.slice(0, 1) }
+          if (options?.pruneDrops === true && $.model.ids.length > 1) return { ids: $.model.ids.slice(0, -1) }
+          return $.model
         },
         Rename: ({ id, name }) => {
           order.push(`update ${$.props.tag} Rename`)
-          return $.set(model).run(
+          return $.run(
             RenameUser.make({ id, name }).pipe(Command.map(() => BoardMessage.Renamed()))
           )
         },
-        Renamed: () => model
+        Renamed: () => $.model
       }),
-    view: (_model, h) => {
+    view: (h) => {
       const text = h.queries.users.map(({ args, result, patched }) => `${args.id}=${show(result)}${patched ? "~" : ""}`)
         .join(" ")
       order.push(`view ${h.props.tag} ${text}`)
@@ -150,8 +150,8 @@ const makeApp = (options?: {
     message: ListMessage
   }).make({
     init: ($) => $.props.boards,
-    update: (_model, message) => message.boards,
-    view: (boards, h) =>
+    update: (_, message) => message.boards,
+    view: (h, boards) =>
       h.el(
         "div",
         boards.map((board) => {
@@ -304,17 +304,17 @@ describe("Keyed query fields", () => {
       queries: {
         users: {
           queryMany: app.GetUser,
-          args: (_model, props) => props.ids.map((id) => ({ id })),
+          args: ({ props }) => props.ids.map((id) => ({ id })),
           onChange: (_loaded, changes) => Message.UsersChanged({ changed: changes.map((change) => change.args.id) })
         }
       }
     }).make({
       init: () => ({}),
-      update: (model, { changed }) => {
+      update: ($, { changed }) => {
         order.push(`update [${changed.join(",")}]`)
-        return model
+        return $.model
       },
-      view: (_model, h) => {
+      view: (h) => {
         const text = h.queries.users.map(({ result }) => AsyncResult.isSuccess(result) ? result.value.name : "…")
           .join(" ")
         order.push(`view ${text}`)
@@ -329,8 +329,8 @@ describe("Keyed query fields", () => {
       message: PageMessage
     }).make({
       init: () => ["1"],
-      update: (_model, { ids }) => ids,
-      view: (ids, h) =>
+      update: (_, { ids }) => ids,
+      view: (h, ids) =>
         h.el(
           "div",
           Row(h, { key: "row", props: { ids } }),
@@ -676,11 +676,11 @@ describe("Keyed query fields", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model, { changed: keys }) => {
+      update: ($, { changed: keys }) => {
         changed.push(keys)
-        return model
+        return $.model
       },
-      view: (_model, h) =>
+      view: (h) =>
         h.el(
           "p",
           h.queries.users.map(({ result }) => AsyncResult.isSuccess(result) ? "y" : "n").join("") +
@@ -742,8 +742,8 @@ describe("Keyed query fields", () => {
       queries: { users: { queryMany: app.GetUser, args: () => [{ id: "2" }, { id: "1" }] } }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         const one = h.queries.users.get({ id: "1" })
         const name = Option.match(one, {
           onNone: () => "none",
@@ -803,7 +803,7 @@ describe("Keyed results", () => {
         queries: { users }
       } as any).make({
         init: () => ({}),
-        update: (model: unknown) => model,
+        update: ($: { readonly model: unknown }) => $.model,
         view: () => null as never
       } as any)
     assert.throws(
@@ -838,8 +838,8 @@ describe("Keyed results", () => {
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) => h.el("p", "x")
+      update: ($) => $.model,
+      view: (h) => h.el("p", "x")
     })
     const Host = Component.define({
       name: "Host",
@@ -848,8 +848,8 @@ describe("Keyed results", () => {
       message: Schema.Never
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) => h.el("div", Bad(h, { key: "bad", props: {} }), h.el("p", "host"))
+      update: ($) => $.model,
+      view: (h) => h.el("div", Bad(h, { key: "bad", props: {} }), h.el("p", "host"))
     })
     return run(
       app.layer,
@@ -885,12 +885,12 @@ describe("Keyed redaction", () => {
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: {
-        accounts: { queryMany: GetAccount, args: (_model, props) => props.tokens.map((token) => ({ token })) }
+        accounts: { queryMany: GetAccount, args: ({ props }) => props.tokens.map((token) => ({ token })) }
       }
     }).make({
       init: () => ({}),
-      update: (model) => model,
-      view: (_model, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         h.el(
           "p",
           h.queries.accounts.map(({ result }) =>
@@ -1001,19 +1001,21 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
     queries: {
       users: {
         queryMany: app.GetUser,
-        args: (model) => model.ids.map((id) => ({ id })),
+        args: ({ model }) => model.ids.map((id) => ({ id })),
         onChange: () => Message.UsersChanged()
       }
     }
   }).make({
     init: () => ({ ids: ["1", "2"], selected: "2" }),
-    update: (model, message, $) =>
+    update: ($, message) =>
       Message.match(message, {
-        Show: ({ ids }) => ({ ...model, ids }),
+        Show: ({ ids }) => ({ ...$.model, ids }),
         UsersChanged: () =>
-          Option.isSome($.queries.users.get({ id: model.selected })) ? model : { ...model, selected: model.ids[0] }
+          Option.isSome($.queries.users.get({ id: $.model.selected }))
+            ? $.model
+            : { ...$.model, selected: $.model.ids[0] }
       }),
-    view: (model, h) => {
+    view: (h, model) => {
       const row = h.queries.users.get({ id: model.selected })
       if (Option.isNone(row)) throw new Error(`no row for the selection ${model.selected}`)
       const result = row.value.result
@@ -1110,20 +1112,20 @@ describe("Keyed history restore", () => {
       scoped: false,
       model: Schema.Struct({ ids: Schema.Array(Schema.String) }),
       message: Message,
-      queries: { users: { queryMany: app.GetUser, args: (model) => model.ids.map((id) => ({ id })) } }
+      queries: { users: { queryMany: app.GetUser, args: ({ model }) => model.ids.map((id) => ({ id })) } }
     }).make({
       init: () => ({ ids: ["1", "2"] }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
           ShowAndGo: ({ ids }) =>
-            $.set({ ...model, ids }).run(
+            $.set({ ...$.model, ids }).run(
               Router.push(PageRoute, PageRoute.Next()).pipe(
                 Command.map(() => Message.Navigated())
               )
             ),
-          Navigated: () => model
+          Navigated: () => $.model
         }),
-      view: (_model, h) => h.el("p", h.queries.users.map(({ args }) => args.id).join(","))
+      view: (h) => h.el("p", h.queries.users.map(({ args }) => args.id).join(","))
     })
     const base = Router.memoryHistory("/")
     const written: Array<{ readonly url: string; readonly state: unknown }> = []
@@ -1178,19 +1180,19 @@ describe("Keyed history restore", () => {
       message: ShellMessage
     }).make({
       init: ($) => $.props.route,
-      update: (model, message, $) =>
+      update: ($, message) =>
         ShellMessage.match(message, {
           ChangedRoute: ({ route }) => route,
           Go: ({ route }) =>
-            $.set(model).run(
+            $.run(
               Router.push(ShellRoute, route).pipe(Command.map(() => ShellMessage.Navigated()))
             ),
-          Navigated: () => model
+          Navigated: () => $.model
         }),
-      subscriptions: (model) => [
+      subscriptions: ({ model }) => [
         Router.subscription(ShellRoute, model, (route) => ShellMessage.ChangedRoute({ route }))
       ],
-      view: (model, h) =>
+      view: (h, model) =>
         h.el(
           "div",
           h.el("button").on(

@@ -136,8 +136,8 @@ describe("Field", () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: (model) => model,
-        view: (_model, h) => {
+        update: ($) => $.model,
+        view: (h) => {
           const formField = (key: string, draw: (field: Parts) => View.Content<never>) =>
             Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
           const props = { checked: true, name: "terms" }

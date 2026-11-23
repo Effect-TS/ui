@@ -1,10 +1,11 @@
 /**
- * What `DomSubscription.onDocument`, `onCustomEvent` and `onWindow` put on
+ * What `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` put on
  * their Subscription, read back by the runtime's attached listener and by the
  * test tools.
  *
  * @internal
  */
+import { handle } from "../../internal/handler.ts"
 import type * as View from "../../View.ts"
 
 /**
@@ -12,7 +13,7 @@ import type * as View from "../../View.ts"
  *
  * @internal
  */
-export const listener: unique symbol = Symbol.for("@effect/ui/html/DomSubscription/listener") as any
+export const listener: unique symbol = Symbol.for("@effect/ui/html/HtmlSubscription/listener") as any
 
 /** @internal */
 export interface Listener {
@@ -46,8 +47,7 @@ export const run = (
   onMessage: (message: unknown, cancel: () => void) => void
 ): void => {
   if (declared.preventDefault === "always") preventDefault()
-  const { handler } = declared
-  const message = typeof handler === "function" ? (handler as (payload: unknown) => unknown)(payload) : handler
+  const message = handle(declared.handler, payload)
   if (message !== undefined) onMessage(message, declared.preventDefault === true ? preventDefault : noop)
 }
 

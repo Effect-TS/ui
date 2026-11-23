@@ -34,9 +34,9 @@ describe("Story", () => {
       message: Message
     }).make({
       init: () => 1,
-      update: (_model, message) => message._tag === "Set" ? message.value : 0,
-      subscriptions: (model) => model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
-      view: (model, h) => h.text(String(model))
+      update: (_, message) => message._tag === "Set" ? message.value : 0,
+      subscriptions: ({ model }) => model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
+      view: (h, model) => h.text(String(model))
     })
     const s = Story.start(Ticker, {})
     s.send((model) => ({ _tag: "Set", value: model + 1 }))
@@ -63,7 +63,7 @@ describe("Story", () => {
         Subscription.make("room", "42", () => Stream.empty),
         Subscription.make("room", ["42"], () => Stream.empty)
       ],
-      view: (_, h) => h.text("twice")
+      view: (h) => h.text("twice")
     })
     const s = Story.start(Twice, {})
     assert.throws(() => s.subscriptions, "/Twice: two Subscriptions share the key room:\"42\"")
@@ -134,12 +134,12 @@ describe("Story", () => {
       message: Message
     }).make({
       init: () => ({ value: "", presses: 0 }),
-      update: (model, message) =>
+      update: ($, message) =>
         Message.match(message, {
-          Typed: ({ value }) => ({ ...model, value }),
-          Pressed: () => ({ ...model, presses: model.presses + 1 })
+          Typed: ({ value }) => ({ ...$.model, value }),
+          Pressed: () => ({ ...$.model, presses: $.model.presses + 1 })
         }),
-      view: (model, h) =>
+      view: (h, model) =>
         h.el(
           "div",
           h.el("input").attr("data-testid", "name").on(
@@ -196,8 +196,8 @@ describe("Story", () => {
           message: Sent
         }).make({
           init: () => 0,
-          update: (sent) => sent + 1,
-          view: (sent, h) =>
+          update: ($) => $.model + 1,
+          view: (h, sent) =>
             h.el(
               "div",
               h.el("textarea").on(
@@ -306,7 +306,7 @@ describe("Story", () => {
       message: Msg
     }).make({
       init: () => "idle",
-      update: (_, message, $) =>
+      update: ($, message) =>
         Msg.match(message, {
           Save: () =>
             $.run(
@@ -319,7 +319,7 @@ describe("Story", () => {
           Failed: ({ reason }) => `failed: ${reason}`,
           Stop: () => $.run(Command.interrupt(Save))
         }),
-      view: (model, h) =>
+      view: (h, model) =>
         h.el("div", [
           h.el("button").on("click", Msg.Save()).children("save"),
           h.el("button").on("click", Msg.Stop()).children("stop"),
@@ -449,13 +449,13 @@ describe("Story", () => {
       message: Message
     }).make({
       init: () => ({ url: "" }),
-      update: (_model, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
           Upload: () =>
             $.run(UploadFile.make({ name: "me.png" }).pipe(Command.map((url) => Message.Uploaded({ url })))),
           Uploaded: ({ url }) => ({ url })
         }),
-      view: (model, h) => h.el("img").attr("src", model.url)
+      view: (h, model) => h.el("img").attr("src", model.url)
     })
 
     it.effect("resolves with the Command's own message type and replays the mapping", () =>
@@ -492,7 +492,7 @@ describe("Story", () => {
       message: Message
     }).make({
       init: () => ({ outcome: "" }),
-      update: (_model, message, $) =>
+      update: ($, message) =>
         Message.match(message, {
           Go: () =>
             $.run(
@@ -502,7 +502,7 @@ describe("Story", () => {
             ),
           Navigated: ({ outcome }) => ({ outcome })
         }),
-      view: (model, h) => h.el("p", model.outcome)
+      view: (h, model) => h.el("p", model.outcome)
     })
 
     it.effect("a navigation Command stays pending until resolved, like any other", () =>
@@ -529,7 +529,7 @@ describe("Story", () => {
           message: BoxMessage
         }).make({
           init: () => ({ outcome: "" }),
-          update: (_model, message, $) =>
+          update: ($, message) =>
             BoxMessage.match(message, {
               Typed: ({ value }) =>
                 $.run(
@@ -539,7 +539,7 @@ describe("Story", () => {
                 ),
               Patched: ({ outcome }) => ({ outcome })
             }),
-          view: (model, h) => h.el("p", model.outcome)
+          view: (h, model) => h.el("p", model.outcome)
         })
         const route = Routes.Search()
         const s = yield* Story.make(Box, { route })
@@ -559,8 +559,8 @@ describe("Story", () => {
       message: Message
     }).make({
       init: () => ({ n: 0 }),
-      update: (model) => ({ n: model.n + 1 }),
-      view: (model, h) => {
+      update: ($) => ({ n: $.model.n + 1 }),
+      view: (h, model) => {
         if (model.n > 0) throw new Error(`view broke at ${model.n}`)
         return h.el("button").on("click", Message.Bump()).children("bump")
       }
@@ -584,7 +584,7 @@ describe("Story", () => {
           message: Message
         }).make({
           init: () => ({}),
-          update: (model) => model,
+          update: ($) => $.model,
           view: () => {
             throw new Error("no view")
           }
@@ -693,12 +693,12 @@ describe("Story", () => {
         // Declared before the query it depends on, so the order of the record doesn't matter.
         friend: {
           query: users.GetUser,
-          args: (_model, _props, loaded) =>
+          args: ({ queries: loaded }) =>
             AsyncResult.isSuccess(loaded.user) ? { id: loaded.user.value.email } : undefined
         },
         user: {
           query: users.GetUser,
-          args: (_model, props) => ({ id: props.id }),
+          args: ({ props }) => ({ id: props.id }),
           onChange: () => TeamMessage.UserChanged()
         },
         others: { queryMany: users.GetUser, args: () => [{ id: "8" }, { id: "9" }] },
@@ -706,8 +706,8 @@ describe("Story", () => {
       }
     }).make({
       init: () => ({ changes: 0 }),
-      update: (model) => ({ changes: model.changes + 1 }),
-      view: (model, h) => {
+      update: ($) => ({ changes: $.model.changes + 1 }),
+      view: (h, model) => {
         const name = (result: AsyncResult.AsyncResult<users.User, unknown>) =>
           AsyncResult.isSuccess(result) ? result.value.name : "?"
         const out = [
@@ -787,18 +787,18 @@ describe("Story", () => {
           message: Message,
           elements: Html,
           queries: {
-            user: { query: users.GetUser, args: (_model, props) => ({ id: props.id }) },
+            user: { query: users.GetUser, args: ({ props }) => ({ id: props.id }) },
             friends: {
               queryMany: users.GetUser,
-              args: (_model, _props, loaded) =>
+              args: ({ queries: loaded }) =>
                 AsyncResult.isSuccess(loaded.user) ? [{ id: loaded.user.value.email }] : [],
               onChange: () => Message.FriendsChanged()
             }
           }
         }).make({
           init: () => ({ changes: 0 }),
-          update: (model) => ({ changes: model.changes + 1 }),
-          view: (model, h) =>
+          update: ($) => ({ changes: $.model.changes + 1 }),
+          view: (h, model) =>
             h.p(`${h.queries.friends.filter((entry) => AsyncResult.isSuccess(entry.result)).length} ${model.changes}`)
         })
         const s = yield* Scene.make(Pals, { id: "1" })
@@ -832,16 +832,16 @@ describe("Story", () => {
             // Declared before the query it reads, so a first pass sees the old user at the new Model's args.
             friends: {
               queryMany: users.GetUser,
-              args: (_model, _props, loaded) =>
+              args: ({ queries: loaded }) =>
                 AsyncResult.isSuccess(loaded.user) ? [{ id: loaded.user.value.email }] : [],
               onChange: () => Message.FriendsChanged()
             },
-            user: { query: users.GetUser, args: (model) => ({ id: model.id }) }
+            user: { query: users.GetUser, args: ({ model }) => ({ id: model.id }) }
           }
         }).make({
           init: () => ({ id: "1", changes: 0 }),
-          update: (model) => ({ ...model, changes: model.changes + 1 }),
-          view: (model, h) =>
+          update: ($) => ({ ...$.model, changes: $.model.changes + 1 }),
+          view: (h, model) =>
             h.p(
               `${
                 h.queries.friends.map((entry) => AsyncResult.isSuccess(entry.result) ? entry.result.value.name : "?")
@@ -884,7 +884,7 @@ describe("Story", () => {
         model: Schema.Null,
         message: UiSchema.TaggedEnum({ Take: { token: Secret, at: Schema.Finite } }),
         shares: { value: () => null, receives: ["Take"] }
-      }).make({ init: () => null, update: (model) => model, parts: () => ({}) })
+      }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
       const App = Component.define({
         name: "SecretOutputs",
         scoped: false,
@@ -895,11 +895,11 @@ describe("Story", () => {
         shared: { receiver: Receiver }
       }).make({
         init: () => null,
-        update: (_, { at, kind }, $) =>
+        update: ($, { at, kind }) =>
           kind === "emit"
             ? $.emit({ token: Redacted.make("synthetic-event-secret"), at })
             : $.send(Receiver, { _tag: "Take", token: Redacted.make("synthetic-send-secret"), at }),
-        view: (_, h) => h.div
+        view: (h) => h.div
       })
       const errorOf = (f: () => unknown): string => {
         try {

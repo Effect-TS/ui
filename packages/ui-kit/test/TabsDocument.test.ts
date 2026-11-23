@@ -17,8 +17,8 @@ const Page = Component.define({
   elements: Html
 }).make({
   init: () => ({ tab: "a" }),
-  update: { Selected: (model, { value }) => ({ ...model, tab: value }) },
-  view: (model, h) =>
+  update: { Selected: ($, { value }) => ({ ...$.model, tab: value }) },
+  view: (h, model) =>
     Tabs(h, {
       props: {
         value: model.tab,

@@ -38,15 +38,15 @@ const Page = Component.define({
 }).make({
   init: () => ({ clicks: 0, align: [], menu: false, select: false, zoom: "100" }),
   update: {
-    ClickedBold: (model) => ({ ...model, clicks: model.clicks + 1 }),
-    Toggled: (model, { value }) => ({ ...model, align: value }),
-    OpenedMenu: (model) => ({ ...model, menu: true }),
-    DismissedMenu: (model) => ({ ...model, menu: false }),
-    OpenedSelect: (model) => ({ ...model, select: true }),
-    DismissedSelect: (model) => ({ ...model, select: false }),
-    Picked: (model, { value }) => ({ ...model, zoom: value, select: false })
+    ClickedBold: ($) => ({ ...$.model, clicks: $.model.clicks + 1 }),
+    Toggled: ($, { value }) => ({ ...$.model, align: value }),
+    OpenedMenu: ($) => ({ ...$.model, menu: true }),
+    DismissedMenu: ($) => ({ ...$.model, menu: false }),
+    OpenedSelect: ($) => ({ ...$.model, select: true }),
+    DismissedSelect: ($) => ({ ...$.model, select: false }),
+    Picked: ($, { value }) => ({ ...$.model, zoom: value, select: false })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div(
       h.button.attrs({ id: "before", type: "button" }).children("Before"),
       Toolbar(h, {

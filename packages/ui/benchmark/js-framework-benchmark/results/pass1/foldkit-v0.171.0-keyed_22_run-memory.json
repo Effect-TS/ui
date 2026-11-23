@@ -1,0 +1,16 @@
+{
+  "framework": "foldkit-v0.171.0-keyed",
+  "keyed": true,
+  "benchmark": "22_run-memory",
+  "type": "memory",
+  "values": {
+    "DEFAULT": {
+      "min": 6.142372131347656,
+      "max": 6.142372131347656,
+      "median": 6.142372131347656,
+      "mean": 6.142372131347656,
+      "stddev": null,
+      "values": [6.142372131347656]
+    }
+  }
+}

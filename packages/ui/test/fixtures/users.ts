@@ -148,11 +148,11 @@ export const UserCard = Component.define({
   message: UserCardMessage,
   elements: Html,
   queries: {
-    user: { query: GetUser, args: (_model, props) => ({ id: props.id }) }
+    user: { query: GetUser, args: ({ props }) => ({ id: props.id }) }
   }
 }).make({
   init: () => ({}),
-  update: (model, message, $) =>
+  update: ($, message) =>
     UserCardMessage.match(message, {
       Like: () =>
         $.run(
@@ -161,9 +161,9 @@ export const UserCard = Component.define({
             onFailure: () => UserCardMessage.Liked()
           }))
         ),
-      Liked: () => model
+      Liked: () => $.model
     }),
-  view: (_model, h) =>
+  view: (h) =>
     AsyncResult.match(h.queries.user, {
       onInitial: () => h.p("Loading user…"),
       onFailure: () => h.p("This user doesn't exist."),
@@ -201,35 +201,35 @@ export const RenameForm = Component.define({
   message: RenameFormMessage,
   elements: Html,
   queries: {
-    user: { query: GetUser, args: (_model, props) => ({ id: props.id }) }
+    user: { query: GetUser, args: ({ props }) => ({ id: props.id }) }
   }
 }).make({
   init: () => ({ draft: Option.none(), error: Option.none() }),
-  update: (model, message, $) =>
+  update: ($, message) =>
     RenameFormMessage.match(message, {
-      Edit: ({ name }) => ({ ...model, draft: Option.some(name), error: Option.none() }),
-      Cancel: () => ({ ...model, draft: Option.none(), error: Option.none() }),
+      Edit: ({ name }) => ({ ...$.model, draft: Option.some(name), error: Option.none() }),
+      Cancel: () => ({ ...$.model, draft: Option.none(), error: Option.none() }),
       Save: () =>
-        Option.match(model.draft, {
-          onNone: () => model,
+        Option.match($.model.draft, {
+          onNone: () => $.model,
           onSome: (name) =>
             // No saving flag in the Model. The run ends with the form, so if it unmounts neither
             // message below arrives, and a flag set here would come back stuck from history.state.
-            $.set({ ...model, draft: Option.none(), error: Option.none() }).run(
+            $.set({ ...$.model, draft: Option.none(), error: Option.none() }).run(
               RenameUser.make({ id: $.props.id, name }).pipe(Command.match({
                 onSuccess: () => RenameFormMessage.Saved(),
                 onFailure: (error) => RenameFormMessage.SaveFailed({ name, reason: error.reason })
               }))
             )
         }),
-      Saved: () => model,
+      Saved: () => $.model,
       SaveFailed: ({ name, reason }) => ({
-        ...model,
-        draft: Option.orElse(model.draft, () => Option.some(name)),
+        ...$.model,
+        draft: Option.orElse($.model.draft, () => Option.some(name)),
         error: Option.some(reason)
       })
     }),
-  view: (model, h) =>
+  view: (h, model) =>
     AsyncResult.match(h.queries.user, {
       onInitial: () => h.p("Loading…"),
       onFailure: () => h.p("There is nothing to rename."),
@@ -263,8 +263,8 @@ export const DetailPage = Component.define({
   elements: Html
 }).make({
   init: () => ({ renaming: false }),
-  update: (model) => ({ renaming: !model.renaming }),
-  view: (model, h) =>
+  update: ($) => ({ renaming: !$.model.renaming }),
+  view: (h, model) =>
     h.section(
       UserCard(h, { key: "card", props: { id: h.props.id } }),
       h.button.onClick(DetailPageMessage.ToggleRename()).children(model.renaming ? "Close" : "Rename"),
@@ -285,15 +285,15 @@ export const ListPage = Component.define({
   message: ListPageMessage,
   elements: Html,
   queries: {
-    users: { query: ListUsers, args: (model) => ({ page: model.page }) }
+    users: { query: ListUsers, args: ({ model }) => ({ page: model.page }) }
   }
 }).make({
   init: () => ({ page: 0 }),
-  update: (model, message) =>
+  update: ($, message) =>
     ListPageMessage.match(message, {
-      GoTo: ({ page }) => ({ ...model, page })
+      GoTo: ({ page }) => ({ ...$.model, page })
     }),
-  view: (model, h) => {
+  view: (h, model) => {
     const current = h.queries.users
     if (AsyncResult.isFailure(current)) return h.p("The users couldn't be loaded.")
     // The requested page once it is here. Until then the page the query still holds, if any.
@@ -331,11 +331,9 @@ export const App = Component.define({
   elements: Html
 }).make({
   init: ($) => $.props.route,
-  update: (_route, message) => message.route,
-  subscriptions: (
-    model
-  ) => [Router.subscription(AppRoute, model, (route) => AppMessage.RouteChanged({ route }))],
-  view: (route, h) =>
+  update: (_, message) => message.route,
+  subscriptions: ({ model }) => [Router.subscription(AppRoute, model, (route) => AppMessage.RouteChanged({ route }))],
+  view: (h, route) =>
     h.div(
       h.header(h.a.attr("href", AppRoute.print(AppRoute.List())).children("Users")),
       h.main(

@@ -146,8 +146,8 @@
  *   elements: Html
  * }).make({
  *   init: () => ({}),
- *   update: (model) => model,
- *   view: (_model, h) =>
+ *   update: ($) => $.model,
+ *   view: (h) =>
  *     VirtualList(h, {
  *       props: { count: rows.length, itemSize: 32, initialCount: 20 },
  *       view: (virtualList) =>
@@ -1283,8 +1283,8 @@ export const VirtualList = Component.define({
     lead: 0
   }),
   update: {
-    MovedViewport: (stored, { anchor, atEnd, atStart, height, length, scrolled, start }, $) => {
-      const model = current(stored, $.props)
+    MovedViewport: ($, { anchor, atEnd, atStart, height, length, scrolled, start }) => {
+      const model = current($.model, $.props)
       const layout = layoutOf(model, $.props)
       const row = rowAt(layout, start)
       const position = anchor ?? {
@@ -1310,23 +1310,23 @@ export const VirtualList = Component.define({
         layout
       )
     },
-    RequestedScroll: (model, { scrollTo }, $) =>
-      sameRequest(scrollTo, latestOf(model)) ? model : $.evolve({ scroll: { scrollTo, done: false } }),
-    ScrolledByUser: (model, _message, $) =>
-      model.scroll === null || model.scroll.done
-        ? model
-        : $.evolve({ scroll: UiStruct.evolve(model.scroll, { done: true }) }),
-    MeasuredItems: (stored, message, $) => {
-      const model = current(stored, $.props)
+    RequestedScroll: ($, { scrollTo }) =>
+      sameRequest(scrollTo, latestOf($.model)) ? $.model : $.evolve({ scroll: { scrollTo, done: false } }),
+    ScrolledByUser: ($) =>
+      $.model.scroll === null || $.model.scroll.done
+        ? $.model
+        : $.evolve({ scroll: UiStruct.evolve($.model.scroll, { done: true }) }),
+    MeasuredItems: ($, message) => {
+      const model = current($.model, $.props)
       const next = measured(model, $.props, message)
-      return next === model ? stored : announce($, next)
+      return next === model ? $.model : announce($, next)
     },
-    FocusedItem: (stored, { index, key }, $) => UiStruct.evolve(current(stored, $.props), { focused: { index, key } }),
-    BlurredItems: (stored, _message, $) => UiStruct.evolve(current(stored, $.props), { focused: null }),
-    ScrolledViewport: (stored, { height, length, offset, scrolling }, $) =>
-      announce($, UiStruct.evolve(current(stored, $.props), { offset, height, length, scrolling }))
+    FocusedItem: ($, { index, key }) => UiStruct.evolve(current($.model, $.props), { focused: { index, key } }),
+    BlurredItems: ($) => UiStruct.evolve(current($.model, $.props), { focused: null }),
+    ScrolledViewport: ($, { height, length, offset, scrolling }) =>
+      announce($, UiStruct.evolve(current($.model, $.props), { offset, height, length, scrolling }))
   },
-  parts: (stored, p) => {
+  parts: (p, stored) => {
     const props = p.props
     const model = current(stored, props)
     const id = p.id("virtual-list")

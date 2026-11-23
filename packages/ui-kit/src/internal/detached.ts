@@ -1,4 +1,4 @@
-import * as DomSubscription from "@effect/ui/html/DomSubscription"
+import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import type * as Subscription from "@effect/ui/Subscription"
 import * as Predicate from "effect/Predicate"
 
@@ -15,7 +15,7 @@ export const detachedChannel = <M>(name: string): DetachedChannel<M> => {
       document.dispatchEvent(new CustomEvent(typeOf(popupId), { detail: { [tag]: message } }))
     },
     subscription: (popupId) =>
-      DomSubscription.onCustomEvent(
+      HtmlSubscription.onCustomEvent(
         typeOf(popupId),
         ({ detail }) => Predicate.hasProperty(detail, tag) ? detail[tag] as M : undefined
       )

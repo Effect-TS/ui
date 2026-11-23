@@ -26,8 +26,8 @@ describe("Select", () => {
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Select(h, {
           key: "s",
           props: { open: false, items },
@@ -55,8 +55,8 @@ describe("Select", () => {
   it("the trigger takes only a button, and an item needs its value", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Select(h, {
           key: "s",
           props: { open: false, items },
@@ -75,8 +75,8 @@ describe("Select", () => {
   it("draws its trigger with a field's member, inside the field's focusWithin", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) =>
+      update: ($) => $.model,
+      view: (h) =>
         Field(h, {
           props: {},
           view: (field) =>
@@ -96,8 +96,8 @@ describe("Select", () => {
   it("requires open and items", () => {
     Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
       init: () => null,
-      update: (model) => model,
-      view: (_, h) => {
+      update: ($) => $.model,
+      view: (h) => {
         // @ts-expect-error Property 'items' is missing
         Select(h, { key: "s", props: { open: false }, view: (select) => select.trigger(h.button) })
         return h.div

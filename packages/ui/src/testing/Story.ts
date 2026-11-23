@@ -39,12 +39,12 @@
  *   message: Message
  * }).make({
  *   init: () => ({ saved: false }),
- *   update: (model, message, $) =>
+ *   update: ($, message) =>
  *     Message.match(message, {
  *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
  *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
- *   view: (_, h) => h.el("button").on("click", Message.ClickedSave()).children("save")
+ *   view: (h) => h.el("button").on("click", Message.ClickedSave()).children("save")
  * })
  *
  * Effect.gen(function*() {
@@ -173,8 +173,8 @@ type AnyComponent =
  *   message: Message
  * }).make({
  *   init: () => ({ count: 0 }),
- *   update: (model) => ({ count: model.count + 1 }),
- *   view: (model, h) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
+ *   update: ($) => ({ count: $.model.count + 1 }),
+ *   view: (h, model) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
  * })
  *
  * const twice = (s: Story.Steps<typeof Counter>) =>
@@ -352,9 +352,9 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  *   message: Schema.Never
  * }).make({
  *   init: () => ({ name: "Ada" }),
- *   update: (model) => model,
- *   head: (model) => [Head.title(model.name)],
- *   view: (model, h) => h.el("h1", model.name)
+ *   update: ($) => $.model,
+ *   head: ({ model }) => [Head.title(model.name)],
+ *   view: (h, model) => h.el("h1", model.name)
  * })
  *
  * Story.head(Person, { name: "Grace" }) // => [Head.title("Grace")]

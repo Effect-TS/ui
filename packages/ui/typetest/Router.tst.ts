@@ -51,15 +51,15 @@ describe("Router.patchSearch", () => {
       message: Message
     }).make({
       init: () => ({ typed: 0 }),
-      update: (model, message, $) =>
+      update: ($, message) =>
         message._tag === "Typed"
           ? $.run(
             Router.patchSearch(AppRoute, $.props.route, { q: message.value || undefined }).pipe(
               Command.map(() => Message.Patched())
             )
           )
-          : model,
-      view: (_, h) => h.text("")
+          : $.model,
+      view: (h) => h.text("")
     })
     expect<Component.Requirements<typeof Box>>().type.toBe<Router.PatchSearch>()
   })

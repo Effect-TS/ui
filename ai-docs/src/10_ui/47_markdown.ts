@@ -69,8 +69,8 @@ export const GuidePageNoDeps = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
-  view: (_model, h) =>
+  update: ($) => $.model,
+  view: (h) =>
     h.article(
       h.h1(frontmatter?.title ?? "Guide"),
       Markdown.view(h, Markdown.decodeDocument(guide), {

@@ -68,7 +68,7 @@ a render fails the author. So do an ordinary child and a scoped child of
 the same name and key that resolve to one path.
 
 ```ts
-const view = (model: SettingsModel, h: H) =>
+const view = (h: H, model: SettingsModel) =>
   model.tab === "profile"
     ? h.scoped((s) => Profile(s, { key: "profile" }))
     : h.scoped((s) => Billing(s, { key: "billing" }))
@@ -301,20 +301,20 @@ function from its old value to the new one. It returns a step, so `.run`,
 `.emit` and another `.evolve` chain after it:
 
 ```ts
-const submittedOrder = CheckoutDef.update("SubmittedOrder", (model, _message, $) =>
-  model.submitting
-    ? model
+const submittedOrder = CheckoutDef.update("SubmittedOrder", ($) =>
+  $.model.submitting
+    ? $.model
     : $.evolve({ form: submit, submitting: true, attempts: (n) => n + 1, notice: null })
-      .run(placeOrder(model.form.values)))
+      .run(placeOrder($.model.form.values)))
 ```
 
 `UiStruct.evolve` takes the same fields for a struct inside the Model:
 data-first for a row of a list, and data-last for a struct field, where it
 takes the struct's type from the field. It also changes the Model in a
-handler that returns a bare Model, with no `$`:
+handler that returns a bare Model rather than a step:
 
 ```ts
-const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id }, $) =>
+const clickedIncrement = CheckoutDef.update("ClickedIncrement", ($, { id }) =>
   $.evolve({
     lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
     coupon: UiStruct.evolve({ status: "Idle" })
@@ -322,7 +322,7 @@ const clickedIncrement = CheckoutDef.update("ClickedIncrement", (_model, { id },
 
 const failedSaveNote = NoteEditorDef.update(
   "FailedSaveNote",
-  (model, { reason }) => UiStruct.evolve(model, { error: reason })
+  ($, { reason }) => UiStruct.evolve($.model, { error: reason })
 )
 ```
 
@@ -345,7 +345,7 @@ updater, so a field whose type is a function can't be set through
 encoded for hydration or history.
 
 A function sees only its own field. One that depends on another field
-reads the handler's `model`, which is the Model before this step.
+reads `$.model`, which is the Model before this step.
 
 `evolve` doesn't take a union, and a nullable struct counts as one. Match
 the union first and evolve the member:
@@ -353,7 +353,7 @@ the union first and evolve the member:
 ```ts
 const updatedName = AuthDef.update(
   "UpdatedName",
-  (model, { value }) => Auth.match(model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
+  ($, { value }) => Auth.match($.model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
 )
 
 // A union field in a struct Model, with `match` data-last.
@@ -419,16 +419,16 @@ Framed(h).class("wide").children(h.input)
 ### Loading data
 
 A component declares the queries it shows in `queries`, by name. Each entry
-names a `Query` and returns its args from the Model, the props and the other
-queries' results, or `undefined` to disable it:
+names a `Query` and returns its args from `$`, holding the Model, the props
+and the other queries' results, or `undefined` to disable it:
 
 ```ts
 queries: {
-  note: { query: GetNote, args: (_model, props) => ({ id: props.id }) },
+  note: { query: GetNote, args: ({ props }) => ({ id: props.id }) },
   // Waits for the args to hold still before it fetches.
-  results: { query: SearchNotes, debounce: "300 millis", args: (model) => ({ q: model.q }) },
+  results: { query: SearchNotes, debounce: "300 millis", args: ({ model }) => ({ q: model.q }) },
   // One query at many args, one entry per args.
-  authors: { queryMany: GetUser, args: (_model, props) => props.authorIds.map((id) => ({ id })) }
+  authors: { queryMany: GetUser, args: ({ props }) => props.authorIds.map((id) => ({ id })) }
 }
 ```
 
@@ -440,8 +440,8 @@ keeps it as `{ model, queries }`, so a hydrated or restored instance starts
 with the results it had.
 
 Every function of the component can read the results, by query name:
-`h.queries` in `view`, `$.queries` in `update`, and the `queries` argument of
-`head(model, props, queries)` and `subscriptions(model, props, queries)`. Give an entry
+`h.queries` in `view`, and `$.queries` in `update`, `head` and
+`subscriptions`, whose `$` holds `model`, `props` and `queries`. Give an entry
 an `onChange` only when `update` has to react to a new result, such as
 moving focus once a query fails. It returns a message, which `update` gets
 after the result is written.
@@ -689,8 +689,8 @@ and the end of the test.
 
 Keys and presses that no element hears, such as a game's arrow keys or an
 Escape that closes a popup opened by hovering, are entries in
-`subscriptions`: `DomSubscription.onDocument("keydown", handler, options)`,
-and `DomSubscription.onWindow("focus" | "blur", handler)` for the window's
+`subscriptions`: `HtmlSubscription.onDocument("keydown", handler, options)`,
+and `HtmlSubscription.onWindow("focus" | "blur", handler)` for the window's
 focus. The handler and `preventDefault` mean what they mean on an element,
 and the payload adds `defaultPrevented`, so a listener can skip a key an
 element already took. `capture: true` hears a press before any element can stop it.
@@ -703,6 +703,25 @@ fires one with `s.fireDocument("keydown", { key: "Escape" })`, and a
 `Play` adds `TestGlobalEvents.layer` and calls
 `TestGlobalEvents.fire("document", "keydown", { key: "Escape" })`, which
 its next step settles.
+
+### Drawing on a canvas
+
+`Canvas.view(h, { width, height, shapes, pixelRatio, onPointerDown, onPointerMove, onPointerUp })`,
+from `@effect/ui/html`, draws a scene of plain shapes: `Canvas.Rect`,
+`Circle`, `Path`, `Text` and a nestable `Group`. Build the scene from the
+Model in `view`. The canvas repaints only when the scene differs. It
+returns the `h.canvas` builder, so classes, attributes and fallback
+children chain on it, and it takes the element's mount. Pointer handlers
+get `x` and `y` in scene units. `pixelRatio: "auto"` draws sharply on a
+HiDPI screen; chain `.style({ width: "100%" })` for a canvas that fills
+its container. For motion, add
+`model.running && HtmlSubscription.onAnimationFrame((delta) => ...)` to
+`subscriptions`, and cap the delta, which is long after a hidden tab
+returns. A `Scene` asserts on the shapes with
+`expectMount(Canvas.Paint({ ... }))`, and an `HtmlScene` fires a frame
+with `s.frame(16)`; a `Play` adds `TestAnimationFrames.layer` and calls
+`TestAnimationFrames.fire(16)`. `Canvas.paint(context, { width, height, shapes })`
+draws a scene on any 2D context, such as an `OffscreenCanvas`'s.
 
 ### Forms
 
@@ -916,6 +935,71 @@ platform Layers such as the Router, the HTTP client and logging. Domain Layers
 are never provided there. The server and a test of the whole app swap the HTTP
 client, not the services.
 
+### Code splitting
+
+Load a page that most visits never show from a chunk of its own with
+`Component.lazy`. Give it a name and a function that imports the component,
+and call it in the view as the component would be called:
+
+```ts
+// The `import()` is the only reference to the page's module.
+const SearchPage = Component.lazy(
+  "SearchPage",
+  () => import("./pages/search/SearchPage.ts").then((module) => module.SearchPage)
+)
+
+// In the root's view. `fallback` shows while the module loads, and if the
+// load fails.
+SearchPage(h, {
+  key: AppRoute.printPath(route),
+  props: { route },
+  fallback: (result) => h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
+})
+```
+
+Vite, like any bundler that splits on `import()`, puts the page and the code
+only it imports into a chunk of its own. The props, events, slots and
+requirements come from the component's type, so the call is checked as a
+direct one is. A static import of the page's module anywhere in the app pulls
+it back into the entry chunk. A type-only import doesn't.
+
+The first child rendered starts the load. The module stays loaded for the life
+of the document, so a later visit mounts at once, without the fallback.
+`SearchPage.preload()` starts the load early, such as when the pointer enters
+a link. A failed load shows the `Failure` branch of `fallback`, and the next
+mount loads again. The browser may keep the failed chunk and fail every later
+load of it, so listen for Vite's `vite:preloadError` event and reload the
+page.
+
+The page provides its own Layers with `Component.provide`, as every page
+does, and they go into its chunk with it. The name is the child's path
+segment, since the path is needed before the module arrives. A `Scene` names
+the child by the lazy value, as in `s.childEmit(SearchPage, event)`, and
+`TestHost.settle` waits for a load in flight.
+
+Don't put `@effect/ui` in one vendor chunk with Vite's `manualChunks` or
+`advancedChunks`. Framework modules that only a lazy page uses, such as
+`Query`, move back into the initial load, which can end up larger than with
+no splitting at all.
+
+A `Feature.Service` whose Layer is built from an `import()` splits too, but
+it needs a contract module for the Schemas, a host component and a Layer for
+each page. Use a feature to swap an implementation, and `Component.lazy` to
+split one off.
+
+Known limits:
+
+- A headless component or a view function can't be loaded lazily. Make a
+  page written as a view function a component first.
+- A lazy scoped component is written with the `s` of `h.scoped`, as the
+  component is, but it's kept only once its module has loaded. A parent that
+  stops writing it while it loads drops its fallback.
+- The server waits for the module and renders the page. The client doesn't
+  load the module before it hydrates, so it replaces the server's nodes with
+  the fallback, then with the page once the module has loaded.
+- Nothing preloads the chunk of a lazy page that a link opens directly: the
+  entry chunk loads, then the page's.
+
 - **[Building a component with @effect/ui](./ai-docs/src/10_ui/10_basics.ts)**:
   Build a note editor from Schemas and pure functions, with its update split
   into slices on a `Component.define` definition. It saves through a
@@ -958,6 +1042,9 @@ client, not the services.
 - **[Document and window events](./ai-docs/src/10_ui/25_document-events.ts)**:
   Listen for keys on the document while a game runs, test it in a scene,
   and press a key in a whole-app test.
+- **[Drawing on a canvas](./ai-docs/src/10_ui/25_drawing-on-canvas.ts)**:
+  Draw a scene from the Model, move it every animation frame, turn presses
+  into scene points, and test it in a scene and a whole-app test.
 - **[Validating forms](./ai-docs/src/10_ui/26_forms.ts)**:
   Validate a sign-up form with `Validation`: rules on each field, a rule
   that reads another field, a username check run by a debounced query, and
@@ -966,6 +1053,12 @@ client, not the services.
   Compare a controlled modal, a workflow started by mounting it, and a provider
   that owns visibility. Contrast an initial prop with a live prop and see
   how competing routes for the same value or request can still compile.
+- **[Files](./ai-docs/src/10_ui/28_files.ts)**:
+  Let the user choose a file and read it: a file input reports the `File`s
+  the user chose, `HtmlFiles.pick` opens a picker from a keyboard shortcut,
+  and a Command reads the file with `HtmlFiles.readAsText`. Cancelling the
+  Command stops the browser reading the file. A story resolves the picker
+  and the read, and a scene chooses a file in the input.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta
@@ -973,6 +1066,11 @@ client, not the services.
   mount folds them into one document head. This entry
   module mounts it with `BrowserRouter`. The routes are in
   `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
+- **[View transitions](./ai-docs/src/10_ui/32_view-transitions.ts)**:
+  Animate an update with the browser's View Transitions API: a board that
+  morphs its cards between a grid and a list, and a root that slides pages in
+  the direction of the navigation. `$.viewTransition` asks for the animation
+  in `update`, and `BrowserHost` runs it.
 - **[Search, filters and pagination in the URL](./ai-docs/src/10_ui/35_url-state.ts)**:
   Keep a search page's text, order and page number in the search, so a link
   or a reload shows the same results. The page reads them from its route,
