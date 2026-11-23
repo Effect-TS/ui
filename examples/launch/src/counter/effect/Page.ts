@@ -16,9 +16,9 @@ export const Page = Component.define({
 }).make({
   init: () => ({ isCounterShown: true }),
   update: {
-    ClickedToggleCounter: (model) => ({ isCounterShown: !model.isCounterShown })
+    ClickedToggleCounter: ($) => ({ isCounterShown: !$.model.isCounterShown })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("counter-page").children(
       h.button.onClick(PageMessage.ClickedToggleCounter()).children(
         model.isCounterShown ? "Hide counter" : "Show counter"

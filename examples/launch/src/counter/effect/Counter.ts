@@ -16,10 +16,10 @@ export const Counter = Component.define({
 }).make({
   init: () => ({ count: 0 }),
   update: {
-    ClickedDecrement: (model) => ({ count: model.count - 1 }),
-    ClickedIncrement: (model) => ({ count: model.count + 1 })
+    ClickedDecrement: ($) => ({ count: $.model.count - 1 }),
+    ClickedIncrement: ($) => ({ count: $.model.count + 1 })
   },
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("counter").children(
       h.button.attr("aria-label", "Decrement").onClick(CounterMessage.ClickedDecrement()).children("-"),
       h.output.class("count").children(String(model.count)),

@@ -27,17 +27,17 @@ export const Counter = Component.define({
 }).make({
   init: () => ({ count: 0, isAutoCounting: false }),
   update: {
-    ClickedIncrement: (_model, _message, $) => $.evolve({ count: (count) => count + 1 }),
-    ClickedResetAfterDelay: (_model, _message, $) => $.run(DelayReset.make({})),
-    CompletedDelayReset: (_model, _message, $) => $.evolve({ count: 0 }),
-    ClickedToggleAutoCount: (_model, _message, $) => $.evolve({ isAutoCounting: (isAutoCounting) => !isAutoCounting }),
-    Ticked: (_model, _message, $) => $.evolve({ count: (count) => count + 1 })
+    ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 }),
+    ClickedResetAfterDelay: ($) => $.run(DelayReset.make({})),
+    CompletedDelayReset: ($) => $.evolve({ count: 0 }),
+    ClickedToggleAutoCount: ($) => $.evolve({ isAutoCounting: (isAutoCounting) => !isAutoCounting }),
+    Ticked: ($) => $.evolve({ count: (count) => count + 1 })
   },
-  subscriptions: (model) => [
+  subscriptions: ({ model }) => [
     model.isAutoCounting &&
     Subscription.make("tick", Stream.tick("1 second").pipe(Stream.drop(1), Stream.map(() => CounterMessage.Ticked())))
   ],
-  view: (model, h) =>
+  view: (h, model) =>
     h.div.class("counter").children(
       h.output.class("count").children(String(model.count)),
       h.button.onClick(CounterMessage.ClickedIncrement()).children("Increment"),

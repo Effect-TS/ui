@@ -13,7 +13,7 @@ const CounterDef = Component.define({
 
 const init = CounterDef.init(() => ({ count: 0, isAutoCounting: false }))
 
-const update = CounterDef.update((_model, message, $) =>
+const update = CounterDef.update(($, message) =>
   CounterMessage.match(message, {
     ClickedIncrement: () => $.evolve({ count: (count) => count + 1 }),
     ClickedResetAfterDelay: () => $.run(DelayReset.make({})),
@@ -23,12 +23,12 @@ const update = CounterDef.update((_model, message, $) =>
   })
 )
 
-const subscriptions = CounterDef.subscriptions((model) => [
+const subscriptions = CounterDef.subscriptions(({ model }) => [
   model.isAutoCounting &&
   Subscription.make("tick", Stream.tick("1 second").pipe(Stream.drop(1), Stream.map(() => CounterMessage.Ticked())))
 ])
 
-const view = CounterDef.view((model, h) =>
+const view = CounterDef.view((h, model) =>
   h.div.class("counter").children(
     h.output.class("count").children(String(model.count)),
     h.button.onClick(CounterMessage.ClickedIncrement()).children("Increment"),

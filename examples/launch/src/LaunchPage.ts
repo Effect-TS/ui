@@ -70,9 +70,9 @@ export const LaunchPage = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: (model) => model,
+  update: ($) => $.model,
   head: () => [Head.title("How Foldkit 0.x evolves into Effect UI")],
-  view: (_model, h) =>
+  view: (h) =>
     h.div.class("nav-layout").children(
       Nav(h, {}),
       h.main.class("article").children(
