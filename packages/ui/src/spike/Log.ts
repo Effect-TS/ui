@@ -49,6 +49,7 @@ export const make = (capacity = 1000): Log => {
   let entries: Array<Entry> = []
   return {
     record(inst, draft) {
+      if (draft === Kernel.rendering || draft === Kernel.rendered) return
       const entry: Entry = {
         ...draft,
         seq: ++seq,

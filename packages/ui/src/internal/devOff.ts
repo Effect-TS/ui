@@ -15,3 +15,6 @@ export const checkPaths: typeof On.checkPaths = () => {}
 
 /** Does nothing. */
 export const checkContent: typeof On.checkContent = () => {}
+
+/** Does nothing. */
+export const checkShown: typeof On.checkShown = () => {}

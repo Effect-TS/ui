@@ -1,7 +1,7 @@
 /**
  * @internal
  */
-import { checkContent, checkKeys, checkPaths, dev } from "#dev"
+import { checkContent, checkKeys, checkPaths, checkShown, dev } from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
@@ -16,6 +16,12 @@ export interface Host<N = any> {
   readonly createText: (text: string) => N
   readonly setText: (node: N, text: string) => void
   readonly setAttr: (node: N, name: string, value: string | undefined) => void
+  readonly normalizeAttrs?:
+    | ((
+      node: N,
+      attrs: Readonly<Record<string, string>>
+    ) => Readonly<Record<string, string>>)
+    | undefined
   readonly setProp: (node: N, name: string, value: unknown) => void
   readonly setEvents: (node: N, record: Rec, first: boolean) => void
   readonly insert: (parent: N, node: N, before: N | null) => void
@@ -64,7 +70,12 @@ export interface Env {
   readonly waiting: Array<() => void>
 }
 
-/** @internal */
+/**
+ * What a mount records into, if it was given one: a draft per entry, and `rendering` and `rendered`
+ * around each dirty instance's render, which are not entries.
+ *
+ * @internal
+ */
 export type Recorder = (
   inst: Instance,
   draft: { readonly _tag: string; readonly [field: string]: unknown }
@@ -183,6 +194,16 @@ interface Placed {
 }
 
 let slot: string | undefined
+let busy = 0
+let receiving: Instance | undefined
+let shown = 0
+const born: Array<Instance | Rec> = []
+
+/** Recorded before a dirty instance renders, so a log can name what made it dirty. @internal */
+export const rendering = { _tag: "Render" } as const
+
+/** Recorded after it rendered. @internal */
+export const rendered = { _tag: "Rendered" } as const
 
 /** @internal */
 export const notPorted = (feature: string): never => {
@@ -197,6 +218,7 @@ const fallbackOf = (
   cause: Cause.Cause<unknown> | undefined
 ): View.Node<any, any> => {
   const fallback = view.fallback
+  if (dev) shown++
   if (fallback === undefined) return emptyText
   try {
     return View.children([
@@ -235,6 +257,7 @@ const rootFallback = (
 const stand = (inst: Instance, cause: Cause.Cause<unknown>): Rec => {
   const parent = inst.parent
   const outer = slot
+  const from = born.length
   slot = inst.under
   try {
     return parent === undefined
@@ -244,6 +267,7 @@ const stand = (inst: Instance, cause: Cause.Cause<unknown>): Rec => {
         fallbackOf(parent, inst.at!.v as View.Child<any, any>, cause)
       )
   } catch (error) {
+    orphans(from)
     inst.tree.report(inst.path, "fallback", Cause.die(error))
     return create(inst, emptyText)
   } finally {
@@ -255,30 +279,34 @@ const stand = (inst: Instance, cause: Cause.Cause<unknown>): Rec => {
 export const fail = (
   inst: Instance,
   where: FailedIn,
-  cause: Cause.Cause<unknown>
+  cause: Cause.Cause<unknown>,
+  update?: { readonly message: unknown; readonly source: unknown },
+  from?: number
 ): void => {
   if (inst.closed) return
   const tree = inst.tree
   const log = tree.log
   if (log !== undefined) {
-    log(inst, { _tag: "Failed", props: inst.props, in: where, cause })
+    log(inst, { _tag: "Failed", props: inst.props, in: where, cause, update })
   }
   inst.failure = cause
   const old = inst.rendered
   const path = inst.path
   close(inst)
+  if (from !== undefined) orphans(from)
   const at = inst.at
   if (old !== undefined) {
     const host = tree.host
     const first = nodeOf(old)
     const parentNode = host.parentOf(first)
-    const shown = stand(inst, cause)
-    place(host, parentNode, shown, first)
+    const fallback = stand(inst, cause)
+    place(host, parentNode, fallback, first)
     unplace(host, parentNode, old)
-    if (at === undefined) inst.rendered = shown
+    if (at === undefined) inst.rendered = fallback
     else {
       inst.rendered = undefined
-      at.kids = [shown]
+      at.kids = [fallback]
+      if (dev) tree.schedule(() => recheck(inst.parent!))
     }
   }
   const onFailure = at === undefined
@@ -293,18 +321,35 @@ export const fail = (
   tree.report(path, where, cause)
 }
 
+const recheck = (inst: Instance): void => {
+  if (inst.closed || inst.rendered === undefined) return
+  try {
+    checkShown(inst.path, [inst.rendered])
+  } catch (error) {
+    fail(inst, "view", Cause.die(error))
+  }
+}
+
+const orphans = (from: number): void => {
+  for (let index = from; index < born.length; index += 2) {
+    release(born[index] as Instance, born[index + 1] as Rec)
+  }
+  born.length = from
+}
+
 /** @internal */
 export const send = (
   inst: Instance,
   message: unknown,
   source?: unknown
 ): void => {
+  renderAbove(inst)
   if (inst.closed) return
   let next: Next | undefined
   try {
     next = inst.component.update(inst.model, message as never, inst.props)
   } catch (error) {
-    return fail(inst, "update", Cause.die(error))
+    return fail(inst, "update", Cause.die(error), { message, source })
   }
   if (next === undefined) return
   const log = inst.tree.log
@@ -365,6 +410,35 @@ const markDirty = (inst: Instance): void => {
 
 const byDepth = (a: Instance, b: Instance): number => a.depth - b.depth
 
+const renderAbove = (inst: Instance): void => {
+  if (busy > 0 || inst.tree.dirty.length === 0) return
+  const above: Array<Instance> = []
+  let top = -1
+  for (let at = inst.parent; at !== undefined; at = at.parent) {
+    if (at.dirty) top = above.length
+    above.push(at)
+  }
+  if (top < 0) return
+  const outer = receiving
+  receiving = inst
+  try {
+    for (let index = top; index >= 0; index--) {
+      const next = above[index]!
+      if (next.closed) return
+      if (next.dirty) renderDirty(next)
+    }
+  } finally {
+    receiving = outer
+  }
+}
+
+const renderDirty = (inst: Instance): void => {
+  const log = inst.tree.log
+  if (log !== undefined) log(inst, rendering)
+  render(inst)
+  if (log !== undefined) log(inst, rendered)
+}
+
 /** @internal */
 export const flush = (tree: Tree): void => {
   tree.scheduled = false
@@ -374,7 +448,7 @@ export const flush = (tree: Tree): void => {
     if (batch.length > 1) batch.sort(byDepth)
     for (let index = 0; index < batch.length; index++) {
       const inst = batch[index]!
-      if (inst.dirty && !inst.closed) render(inst)
+      if (inst.dirty && !inst.closed) renderDirty(inst)
     }
   }
   if (!tree.closed) tree.host.commit?.()
@@ -420,7 +494,10 @@ const start = (inst: Instance): Rec | undefined => {
   let first: Next
   const component = inst.component
   const outer = slot
+  const from = born.length
+  const fallbacks = shown
   slot = undefined
+  busy++
   try {
     try {
       check(component)
@@ -450,8 +527,9 @@ const start = (inst: Instance): Rec | undefined => {
     let rendered: Rec
     try {
       rendered = create(inst, tree)
+      if (dev && shown !== fallbacks) checkShown(inst.path, [rendered])
     } catch (error) {
-      fail(inst, "view", Cause.die(error))
+      fail(inst, "view", Cause.die(error), undefined, from)
       return undefined
     }
     if (inst.closed) {
@@ -462,6 +540,8 @@ const start = (inst: Instance): Rec | undefined => {
     apply(inst, first)
     return rendered
   } finally {
+    busy--
+    born.length = from
     slot = outer
   }
 }
@@ -469,14 +549,20 @@ const start = (inst: Instance): Rec | undefined => {
 const render = (inst: Instance): void => {
   inst.dirty = false
   const outer = slot
+  const from = born.length
+  const fallbacks = shown
   slot = undefined
+  busy++
   try {
     const tree = viewOf(inst)
     if (tree === undefined) return
     inst.rendered = patch(inst, inst.rendered!, tree)
+    if (dev && shown !== fallbacks) checkShown(inst.path, [inst.rendered])
   } catch (error) {
-    fail(inst, "view", Cause.die(error))
+    fail(inst, "view", Cause.die(error), undefined, from)
   } finally {
+    busy--
+    born.length = from
     slot = outer
   }
 }
@@ -510,6 +596,8 @@ const release = (owner: Instance, rec: Rec): void => {
       rec.inst = released
     }
   } else if (view._tag === "Outlet") {
+    if (rec.inst !== owner) return
+    rec.inst = released
     owner.live--
     if (owner.placed!.get(view.name)?.rec === rec) {
       owner.placed!.delete(view.name)
@@ -581,6 +669,7 @@ const mountChild = (owner: Instance, rec: Rec): void => {
       rec.kids = [create(owner, fallbackOf(owner, view, env.cause))]
       rec.inst = owner
       owner.live++
+      born.push(owner, rec)
       if (env.cause === undefined) {
         const at = slot
         env.waiting.push(() => settle(owner, rec, at))
@@ -607,6 +696,7 @@ const mountChild = (owner: Instance, rec: Rec): void => {
     env
   )
   owner.live++
+  born.push(owner, rec)
   if (start(child) === undefined) rec.kids = [stand(child, child.failure!)]
   else if (owner.closed) close(child)
 }
@@ -649,11 +739,28 @@ const settle = (owner: Instance, rec: Rec, at: string | undefined): void => {
 
 const noContent: ReadonlyArray<View.Node<any, any>> = [emptyText]
 
-const contentOf = (content: unknown): ReadonlyArray<View.Node<any, any>> => {
+const contentOf = (
+  view: View.Outlet,
+  content: unknown
+): ReadonlyArray<View.Node<any, any>> => {
   if (content === undefined) return noContent
-  const views = View.children([content as View.Input<any, any>])
-  return views.length === 0 ? noContent : views
+  let views = View.children([content as View.Input<any, any>])
+  if (views.length === 0) return noContent
+  const noText = view.noText
+  if (noText !== undefined) {
+    views = views.map((node) => {
+      if (node._tag === "Text") throw new Error(slot + ": " + noText)
+      return node._tag === "Outlet" && node.noText !== noText
+        ? { _tag: "Outlet", name: node.name, noText }
+        : node
+    })
+  }
+  if (dev) checkContent(slot!, views)
+  return views
 }
+
+const failLater = (inst: Instance, error: unknown): void =>
+  inst.tree.schedule(() => fail(inst, "view", Cause.die(error)))
 
 const slotOf = (receiver: Instance, name: string): unknown =>
   receiver.at === undefined
@@ -662,28 +769,60 @@ const slotOf = (receiver: Instance, name: string): unknown =>
 
 const refresh = (receiver: Instance, placed: Placed): void => {
   const rec = placed.rec
-  const name = (rec.v as View.Outlet).name
-  const content = slotOf(receiver, name)
+  const view = rec.v as View.Outlet
+  const content = slotOf(receiver, view.name)
   if (content === placed.content) return
   placed.content = content
+  const declarer = receiver.parent!
   const host = receiver.tree.host
   const olds = rec.kids!
   const after = host.nextOf(lastNodeOf(olds[olds.length - 1]!))
   const outer = slot
-  slot = receiver.path + "/" + slotSegment(name)
+  const fallbacks = shown
+  slot = receiver.path + "/" + slotSegment(view.name)
   try {
-    const views = contentOf(content)
-    if (dev) checkContent(slot, views)
-    rec.kids = patchList(
-      receiver.parent!,
+    let views = noContent
+    try {
+      views = contentOf(view, content)
+    } catch (error) {
+      failLater(declarer, error)
+    }
+    const kids = rec.kids = patchList(
+      declarer,
       host.parentOf(nodeOf(olds[0]!)),
       olds,
       views,
       after
     )
+    if (dev && shown !== fallbacks) {
+      try {
+        checkShown(slot, kids)
+      } catch (error) {
+        failLater(declarer, error)
+      }
+    }
   } finally {
     slot = outer
   }
+}
+
+const setAttrs = (
+  host: Host,
+  node: unknown,
+  attrs: Readonly<Record<string, string>>
+): void => {
+  if (host.normalizeAttrs !== undefined) {
+    attrs = host.normalizeAttrs(node, attrs)
+  }
+  for (const name in attrs) host.setAttr(node, name, attrs[name])
+}
+
+const setProps = (
+  host: Host,
+  node: unknown,
+  props: Readonly<Record<string, unknown>>
+): void => {
+  for (const name in props) host.setProp(node, name, props[name])
 }
 
 const create = (inst: Instance, view: View.Node<any, any>): Rec => {
@@ -693,10 +832,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
       return new Rec(view, host.createText(view.text), undefined, inst)
     case "Element": {
       const node = host.createElement(view.tag)
-      const attrs = view.attrs
-      if (attrs !== View.noFields) {
-        for (const name in attrs) host.setAttr(node, name, attrs[name])
-      }
+      if (view.attrs !== View.noFields) setAttrs(host, node, view.attrs)
       const views = view.children
       let kids: Array<Rec> | undefined
       if (dev && views.length > 1) checkKeys(inst.path, views)
@@ -706,10 +842,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
           place(host, node, kids[index] = create(inst, views[index]!), null)
         }
       }
-      const props = view.props
-      if (props !== View.noFields) {
-        for (const name in props) host.setProp(node, name, props[name])
-      }
+      if (view.props !== View.noFields) setProps(host, node, view.props)
       if (view.mount !== undefined) notPorted("mounts")
       if (view.refKey !== undefined) notPorted("refs")
       if (view.owned !== undefined && view.owned.length > 0) {
@@ -724,32 +857,41 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
       mountChild(inst, rec)
       return rec
     }
-    case "Outlet": {
-      const declarer = inst.parent
-      if (declarer === undefined) {
-        throw new Error(
-          inst.path + " places the slot " + view.name + ", and is a root"
-        )
-      }
-      const content = slotOf(inst, view.name)
-      const views = contentOf(content)
-      const kids: Array<Rec> = new Array(views.length)
-      const rec = new Rec(view, undefined, kids, inst)
-      inst.live++
-      ;(inst.placed ??= new Map()).set(view.name, { rec, content })
-      const outer = slot
-      slot = inst.path + "/" + slotSegment(view.name)
-      if (dev) checkContent(slot, views)
-      try {
-        for (let index = 0; index < views.length; index++) {
-          kids[index] = create(declarer, views[index]!)
-        }
-      } finally {
-        slot = outer
-      }
-      return rec
-    }
+    case "Outlet":
+      return createOutlet(inst, view)
   }
+}
+
+const createOutlet = (inst: Instance, view: View.Outlet): Rec => {
+  const declarer = inst.parent
+  if (declarer === undefined) {
+    throw new Error(
+      inst.path + " places the slot " + view.name + ", and is a root"
+    )
+  }
+  const content = slotOf(inst, view.name)
+  const rec = new Rec(view, undefined, undefined, inst)
+  inst.live++
+  ;(inst.placed ??= new Map()).set(view.name, { rec, content })
+  const outer = slot
+  const from = born.length
+  const fallbacks = shown
+  slot = inst.path + "/" + slotSegment(view.name)
+  try {
+    const views = contentOf(view, content)
+    const kids: Array<Rec> = rec.kids = new Array(views.length)
+    for (let index = 0; index < views.length; index++) {
+      kids[index] = create(declarer, views[index]!)
+    }
+    if (dev && shown !== fallbacks) checkShown(slot, kids)
+  } catch (error) {
+    orphans(from)
+    rec.kids = [create(declarer, emptyText)]
+    failLater(declarer, error)
+  } finally {
+    slot = outer
+  }
+  return rec
 }
 
 const pairs = (
@@ -817,8 +959,9 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
         if (log !== undefined) {
           log(child, { _tag: "PropsChanged", props: view.props })
         }
-        render(child)
-      } else if (child.dirty) render(child)
+        if (child === receiving) markDirty(child)
+        else render(child)
+      }
       const placed = child.placed
       if (placed !== undefined && !child.closed) {
         for (const entry of placed.values()) {
@@ -828,9 +971,50 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
       return old
     }
     case "Outlet": {
-      refresh(inst, inst.placed!.get(view.name)!)
+      const placed = inst.placed!.get(view.name)
+      if (placed?.rec !== old) return old
+      if ((prev as View.Outlet).noText !== view.noText) {
+        placed.content = refreshed
+      }
+      old.v = view
+      refresh(inst, placed)
       return old
     }
+  }
+}
+
+const refreshed = {}
+
+const patchAttrs = (
+  host: Host,
+  node: unknown,
+  before: Readonly<Record<string, string>>,
+  attrs: Readonly<Record<string, string>>
+): void => {
+  if (host.normalizeAttrs !== undefined) {
+    before = host.normalizeAttrs(node, before)
+    attrs = host.normalizeAttrs(node, attrs)
+  }
+  for (const name in before) {
+    if (typeof attrs[name] !== "string") host.setAttr(node, name, undefined)
+  }
+  for (const name in attrs) {
+    const value = attrs[name]
+    if (before[name] !== value) host.setAttr(node, name, value)
+  }
+}
+
+const patchProps = (
+  host: Host,
+  node: unknown,
+  was: Readonly<Record<string, unknown>>,
+  props: Readonly<Record<string, unknown>>
+): void => {
+  for (const name in was) {
+    if (!(name in props)) host.setProp(node, name, undefined)
+  }
+  for (const name in props) {
+    if (was[name] !== props[name]) host.setProp(node, name, props[name])
   }
 }
 
@@ -843,27 +1027,8 @@ const patchElement = (
   const host = inst.tree.host
   const node = rec.node
   rec.v = view
-  const before = prev.attrs
-  const attrs = view.attrs
-  if (before !== attrs) {
-    for (const name in before) {
-      if (typeof attrs[name] !== "string") host.setAttr(node, name, undefined)
-    }
-    for (const name in attrs) {
-      const value = attrs[name]
-      if (before[name] !== value) host.setAttr(node, name, value)
-    }
-  }
-  const was = prev.props
-  const props = view.props
-  if (was !== props) {
-    for (const name in was) {
-      if (!(name in props)) host.setProp(node, name, undefined)
-    }
-    for (const name in props) {
-      if (was[name] !== props[name]) host.setProp(node, name, props[name])
-    }
-  }
+  if (prev.attrs !== view.attrs) patchAttrs(host, node, prev.attrs, view.attrs)
+  if (prev.props !== view.props) patchProps(host, node, prev.props, view.props)
   if (view.handlers !== prev.handlers) {
     host.setEvents(node, rec, prev.handlers === View.noFields)
   }
@@ -887,7 +1052,11 @@ const patchElement = (
       }}
     rec.kids = undefined
   } else if (views.length === 1 && olds.length === 1) {
-    olds[0] = patch(inst, olds[0]!, views[0]!)
+    const old = olds[0]!
+    const next = views[0]!
+    if (next._tag === "Element" && old.v !== next && pairs(old.v, next)) {
+      patchElement(inst, old, old.v as View.Element<any, any>, next)
+    } else olds[0] = patch(inst, old, next)
   } else rec.kids = patchList(inst, node, olds, views, null)
 }
 
@@ -916,8 +1085,12 @@ const patchList = (
     out[start] = patch(inst, olds[start]!, views[start]!)
     start++
   }
+  // An unkeyed node matches by its position from the start, so the end pairs by position only when the
+  // count stays.
   while (
-    start <= oldEnd && start <= end && pairs(olds[oldEnd]!.v, views[end]!)
+    start <= oldEnd && start <= end &&
+    (olds.length === views.length || keyOf(views[end]!) !== undefined) &&
+    pairs(olds[oldEnd]!.v, views[end]!)
   ) {
     out[end] = patch(inst, olds[oldEnd]!, views[end]!)
     oldEnd--
@@ -941,24 +1114,39 @@ const patchList = (
   }
   const count = end - start + 1
   const sources = new Int32Array(count)
+  // Each key's first view, and after each view the next with its key: an element's key can be a child's,
+  // or another tag's.
   let byKey: Map<unknown, number> | undefined
-  for (let index = start; index <= end; index++) {
+  let same: Int32Array | undefined
+  for (let index = end; index >= start; index--) {
     const key = keyOf(views[index]!)
-    if (key !== undefined) (byKey ??= new Map()).set(key, index)
+    if (key === undefined) continue
+    const next = (byKey ??= new Map()).get(key)
+    if (next !== undefined) {
+      ;(same ??= new Int32Array(count))[index - start] = next + 1
+    }
+    byKey.set(key, index)
   }
   let moved = false
   let last = 0
   for (let index = start; index <= oldEnd; index++) {
     const old = olds[index]!
     const key = keyOf(old.v)
-    const to = key !== undefined
+    let to = key !== undefined
       ? byKey?.get(key)
       : index <= end
       ? index
       : undefined
-    if (
-      to !== undefined && sources[to - start] === 0 && pairs(old.v, views[to]!)
+    while (
+      to !== undefined &&
+      (sources[to - start] !== 0 || !pairs(old.v, views[to]!))
     ) {
+      const next = key === undefined || same === undefined
+        ? 0
+        : same[to - start]!
+      to = next === 0 ? undefined : next - 1
+    }
+    if (to !== undefined) {
       sources[to - start] = index + 1
       if (to < last) moved = true
       else last = to
@@ -1040,7 +1228,8 @@ export const mount = (
     init: options.init ?? initOf,
     log: options.log,
     fallback: options.fallback,
-    schedule: options.schedule ?? queueMicrotask,
+    // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
+    schedule: options.schedule ?? ((task) => queueMicrotask(task)),
     dirty: [],
     scheduled: false,
     closed: false
