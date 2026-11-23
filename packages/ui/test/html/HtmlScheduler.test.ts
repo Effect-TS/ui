@@ -51,15 +51,24 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     vi.unstubAllGlobals()
   })
 
-  it("runs fiber work in slices", () => {
-    const { elapsed, fork, next, posted, work } = browser()
-    const fiber = fork(Effect.all([
-      Effect.forEach(Array.from({ length: 100 }), () => work(1), { discard: true }),
-      Effect.forEach(Array.from({ length: 100 }), () => work(1), { concurrency: "unbounded", discard: true })
-    ], { concurrency: 2 }))
+  it("slices sequential and concurrent work, and falls back to MessageChannel", () => {
+    const { elapsed, fork, next, posted, work } = browser("MessageChannel")
+    const log: Array<string> = []
+    fork(
+      Effect.yieldNowWith(1).pipe(
+        Effect.andThen(Effect.forEach(Array.from({ length: 100 }), () => work(1), { discard: true })),
+        Effect.andThen(Effect.sync(() => log.push("background")))
+      )
+    )
+    fork(
+      Effect.forEach(Array.from({ length: 100 }), () => work(1), { concurrency: "unbounded", discard: true }).pipe(
+        Effect.andThen(Effect.sync(() => log.push("normal")))
+      )
+    )
+    expect(posted.length).toBe(1)
     const slices = [elapsed()]
     while (posted.length > 0) slices.push(next())
-    expect(fiber.pollUnsafe()?._tag).toBe("Success")
+    expect(log).toEqual(["normal", "background"])
     expect(Math.max(...slices)).toBeLessThanOrEqual(6)
   })
 
@@ -68,7 +77,7 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     const log: Array<string> = []
     fork(Effect.gen(function*() {
       yield* Effect.yieldNowWith(1)
-      for (let i = 0; i < 20; i++) yield* work(1)
+      for (let i = 0; i < 8; i++) yield* work(1)
       log.push("background")
     }))
     fork(Effect.yieldNowWith(-1).pipe(Effect.andThen(Effect.sync(() => log.push("urgent")))))
@@ -76,65 +85,73 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     expect(posted.map((task) => task.priority)).toEqual(["background", "user-blocking", "user-visible"])
     next()
     expect(log).toEqual(["urgent", "normal"])
-    expect(posted.map((task) => task.priority)).toEqual(["user-blocking", "user-visible", "background"])
     fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("later")))))
+    expect(posted.map((task) => task.priority)).toEqual(["user-blocking", "user-visible", "background"])
     while (posted.length > 0) next()
     expect(log).toEqual(["urgent", "normal", "later", "background"])
   })
 
-  it("runs work forked by background work before more background work", () => {
-    const { fork, next, posted } = browser()
+  it("runs work forked or woken by background work at priority 0", () => {
+    const { fork, next, posted, work } = browser()
     const log: Array<string> = []
+    const woken = Deferred.makeUnsafe<void>()
+    fork(
+      Deferred.await(woken).pipe(
+        Effect.andThen(Effect.forEach(Array.from({ length: 10 }), () => work(1))),
+        Effect.andThen(Effect.sync(() => log.push("woken")))
+      )
+    )
     const background = (name: string, effect: Effect.Effect<unknown> = Effect.void) =>
       fork(Effect.yieldNowWith(1).pipe(Effect.andThen(effect), Effect.andThen(Effect.sync(() => log.push(name)))))
     background("first", Effect.forkDetach(Effect.sync(() => log.push("forked"))))
-    background("second")
+    background("second", Deferred.succeed(woken, undefined))
+    background("third")
     while (posted.length > 0) next()
-    expect(log).toEqual(["first", "forked", "second"])
+    expect(log).toEqual(["first", "forked", "woken", "third", "second"])
   })
 
-  it("puts a fiber woken by background work back at priority 0 when it spends the budget", () => {
-    const { fork, next, posted, work } = browser()
-    const woken = Deferred.makeUnsafe<void>()
-    fork(Deferred.await(woken).pipe(Effect.andThen(Effect.forEach(Array.from({ length: 10 }), () => work(1)))))
-    fork(Effect.yieldNowWith(1).pipe(Effect.andThen(Deferred.succeed(woken, undefined))))
-    next()
-    expect(posted.map((task) => task.priority)).toEqual(["user-visible"])
-  })
-
-  it("gives a fiber resumed outside its tasks a budget of its own", () => {
+  it("gives a fiber resumed outside its tasks a budget of its own unless work is already queued", () => {
     const { advance, fork, posted, work } = browser()
-    let resume: (effect: Effect.Effect<unknown>) => void = () => {}
-    const fiber = fork(Effect.callback<unknown>((f) => {
-      resume = f
-    }))
+    const callback = () => {
+      let resume: (effect: Effect.Effect<unknown>) => void = () => {}
+      const fiber = fork(Effect.callback<unknown>((f) => {
+        resume = f
+      }))
+      return { fiber, resume }
+    }
+    const idle = callback()
     advance(10)
-    resume(Effect.forEach(Array.from({ length: 3 }), () => work(1)))
-    expect(fiber.pollUnsafe()?._tag).toBe("Success")
+    idle.resume(Effect.forEach(Array.from({ length: 3 }), () => work(1)))
+    expect(idle.fiber.pollUnsafe()?._tag).toBe("Success")
     expect(posted).toEqual([])
+
+    const busy = callback()
+    fork(Effect.yieldNow)
+    advance(10)
+    busy.resume(Effect.forEach(Array.from({ length: 3 }), () => work(1)))
+    expect(busy.fiber.pollUnsafe()).toBeUndefined()
   })
 
-  it("flush runs everything queued, however long it takes", () => {
-    const { fork, work } = browser()
-    const fiber = fork(Effect.yieldNow.pipe(Effect.andThen(Effect.forEach(Array.from({ length: 20 }), () => work(1)))))
-    fiber.currentDispatcher.flush()
-    expect(fiber.pollUnsafe()?._tag).toBe("Success")
-  })
-
-  it("posts one message at a time without postTask", () => {
-    const { elapsed, fork, next, posted, work } = browser("MessageChannel")
+  it("flush drains queued work without yielding on time, and leaves an outer task's budget and lane intact", () => {
+    const { fork, next, posted, work } = browser()
     const log: Array<string> = []
-    fork(
-      Effect.yieldNowWith(1).pipe(
-        Effect.andThen(Effect.forEach(Array.from({ length: 20 }), () => work(1))),
-        Effect.andThen(Effect.sync(() => log.push("background")))
+    const bg = fork(Effect.gen(function*() {
+      yield* Effect.yieldNowWith(1)
+      fork(
+        Effect.yieldNow.pipe(
+          Effect.andThen(Effect.forEach(Array.from({ length: 10 }), () => work(1))),
+          Effect.andThen(Effect.sync(() => log.push("flushed-1")))
+        )
       )
-    )
+      fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("flushed-2")))))
+      bg.currentDispatcher.flush()
+      for (let i = 0; i < 3; i++) yield* work(1)
+      log.push("background")
+    }))
+    next()
+    expect(log).toEqual(["flushed-1", "flushed-2"])
     fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("normal")))))
-    expect(posted.length).toBe(1)
-    const slices = [elapsed()]
-    while (posted.length > 0) slices.push(next())
-    expect(log).toEqual(["normal", "background"])
-    expect(Math.max(...slices)).toBeLessThanOrEqual(6)
+    while (posted.length > 0) next()
+    expect(log).toEqual(["flushed-1", "flushed-2", "normal", "background"])
   })
 })
