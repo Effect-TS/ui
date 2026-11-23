@@ -1,0 +1,134 @@
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  line-height: 1.4;
+}
+
+.nav-title,
+.nav-toggle span,
+.nav-link {
+  font-size: 0.875rem;
+}
+
+.nav-link {
+  display: block;
+  border-inline-start: 2px solid var(--border);
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  color: var(--foreground);
+}
+
+.nav-link[aria-current] {
+  border-color: var(--foreground);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+@media (width < 1200px) {
+  .nav-title {
+    display: none;
+  }
+
+  .nav-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: var(--nav-bar);
+    padding: 0 var(--nav-inset);
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--background);
+    color: var(--muted-foreground);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .nav-toggle:focus-visible {
+    outline-offset: -2px;
+  }
+
+  .nav-toggle::after {
+    content: "";
+    flex: none;
+    width: 7px;
+    height: 7px;
+    margin-inline-start: auto;
+    border: solid currentColor;
+    border-width: 0 1.5px 1.5px 0;
+    transform: translateY(-2px) rotate(45deg);
+  }
+
+  .nav-toggle[aria-expanded="true"]::after {
+    transform: translateY(2px) rotate(-135deg);
+  }
+
+  .nav-current {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--foreground);
+    font-weight: 560;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-list {
+    display: none;
+    position: absolute;
+    inset: 100% 0 auto;
+    max-height: calc(100dvh - var(--nav-bar));
+    overflow-y: auto;
+    padding: 12px var(--nav-inset) 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--background);
+    box-shadow: 0 16px 24px -16px var(--ring);
+  }
+
+  .nav-toggle[aria-expanded="true"] + .nav-list {
+    display: block;
+  }
+
+  .nav-link {
+    padding: 10px 14px;
+  }
+}
+
+@media (width >= 1200px) {
+  .nav {
+    align-self: start;
+    justify-self: end;
+    width: var(--nav-rail);
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: clamp(56px, 12vh, 128px) 0 24px 20px;
+  }
+
+  .nav-title,
+  .nav-link {
+    font-size: 0.8125rem;
+  }
+
+  .nav-title {
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .nav-toggle {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 5px 0 5px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-toggle::after {
+    transition: transform 0.15s var(--ease);
+  }
+}

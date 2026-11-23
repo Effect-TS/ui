@@ -29,4 +29,4 @@ export const Posts = Component.define({
       ? h.ul.children(posts.value.map((post) => h.li.key(post.id).children(post.title)))
       : h.p.children("Loading posts")
   }
-})
+}).pipe(Component.provide(GetPosts.layer))
