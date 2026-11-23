@@ -5,6 +5,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
+    "types": ["vite/client"],
     "declaration": false,
     "declarationMap": false,
     "composite": false,
