@@ -209,7 +209,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -249,7 +249,7 @@ const listenFor = (
  *
  * ```ts import.meta.vitest
  * import { Component, UiSchema } from "@effect/ui"
- * import { DomSubscription, Html } from "@effect/ui/html"
+ * import { DomSubscription, Html, HtmlKeyboard } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
  * import { Effect, Schema } from "effect"
@@ -269,7 +269,7 @@ const listenFor = (
  *   subscriptions: () => [
  *     DomSubscription.onDocument(
  *       "keydown",
- *       Html.shortcuts([
+ *       HtmlKeyboard.shortcuts([
  *         { key: "?", message: Message.OpenedHelp() },
  *         { key: "Escape", message: Message.ClosedHelp(), whileTyping: true }
  *       ]),

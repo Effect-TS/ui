@@ -55,4 +55,10 @@ export * as HtmlHead from "./HtmlHead.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as HtmlKeyboard from "./HtmlKeyboard.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as HtmlServer from "./HtmlServer.ts"
