@@ -24,6 +24,8 @@ export const Snippets = Schema.Struct({
   providerEffect: Files,
   noopFoldkit: Files,
   noopEffect: Files,
+  lazy: Files,
+  failure: Files,
   headless: Files,
   fragment: Files,
   storyFoldkit: Files,

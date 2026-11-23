@@ -50,6 +50,12 @@ const sources: { readonly [K in keyof Snippets]: ReadonlyArray<readonly [string,
   ],
   noopFoldkit: [["src/provider/foldkit/editor.ts", names("Message", "update")]],
   noopEffect: [["src/provider/effect/Editor.ts", both(names("EditorMessage"), member("update"))]],
+  lazy: [
+    ["src/lazy/Panel.ts", whole],
+    ["src/lazy/PanelLoader.ts", both(names("PanelLazy"), member("view"), names("PanelLoader"))],
+    ["src/lazy/PanelPage.ts", member("view")]
+  ],
+  failure: [["src/failure/Widget.ts", member("update")], ["src/failure/WidgetPage.ts", member("view")]],
   headless: [["src/autocounter/headless/Counter.ts", member("parts")], [
     "src/autocounter/headless/Scoreboard.ts",
     member("view")

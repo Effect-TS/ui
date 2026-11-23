@@ -9,6 +9,8 @@ import { Counter as FragmentCounter } from "./autocounter/fragment/Counter.ts"
 import { Scoreboard } from "./autocounter/headless/Scoreboard.ts"
 import { Page } from "./counter/effect/Page.ts"
 import { EmbedFoldkitPage } from "./counter/FoldkitEmbed.ts"
+import { WidgetPage } from "./failure/WidgetPage.ts"
+import { PanelPage } from "./lazy/PanelPage.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
 import { links } from "./performance/Results.ts"
 
@@ -243,6 +245,53 @@ export const LaunchPage = Component.define({
         P(
           h,
           "Exporting `EditorNoDeps` alongside `Editor` keeps dependencies testable. Mounting `EditorNoDeps` carries the `SaveDraft` requirement in the type system, so TypeScript won't let you run the app until something provides it — and a test can swap in a fake `SaveDraft` Layer."
+        )
+      ),
+      h.section.attr("aria-labelledby", "lazy").children(
+        h.h2.id("lazy").children("Components can load their code on demand"),
+        P(
+          h,
+          "A Foldkit 0.x app is one Model, one `update`, and one `view`, all composed up front, so the code for every page ships in the first bundle. You can put a heavy dependency behind `import()` or embed a second app with its own bundle, but you can't split the pages of one app."
+        ),
+        P(
+          h,
+          "In Effect UI, a parent can render a component it never imports. `Panel` below is only a contract: a name and a props Schema. `PanelLoader` renders whatever implements `Panel`, and gets that implementation from a Layer that awaits `import()`."
+        ),
+        Beside(h, {
+          label: "A panel loaded on demand",
+          files: h.props.snippets.lazy,
+          demo: PanelPage(h, {}),
+          caption:
+            "Open your browser's Network tab, then click Show panel. The request for `CounterPanel` goes out on that click."
+        }),
+        P(
+          h,
+          "What arrives is a whole component: `CounterPanel`'s Model, Messages, `update`, and `view`. The runtime shows `fallback` while the Layer is being built, then mounts the component in its place. `import()` is what tells the bundler to split the file, and `Component.provide` is the same call `Editor` used for `Drafts`."
+        ),
+        P(
+          h,
+          "The runtime builds a Layer when the component that provides it mounts. That is why the Layer sits on `PanelLoader`, which the page renders only once you ask for the panel. Provided on the page itself, it would load with the page. If the import fails, `PanelLoader` fails, and the page shows the `fallback` it passed."
+        )
+      ),
+      h.section.attr("aria-labelledby", "failure").children(
+        h.h2.id("failure").children("A component that fails doesn't take the page down with it"),
+        P(
+          h,
+          "In Foldkit 0.x, an error that escapes `update`, `view`, or a Command stops the application. The runtime renders the crash view, and no later Message runs."
+        ),
+        P(
+          h,
+          "In Effect UI, the failure stops at the component it happened in. Below, `Widget`'s `update` throws when you click the button. The page passes `Widget` a `fallback`, and the runtime renders it in place of the failed `Widget`."
+        ),
+        Beside(h, {
+          label: "A widget that fails beside a counter that keeps working",
+          files: h.props.snippets.failure,
+          demo: WidgetPage(h, {}),
+          caption: "Click Break the widget, then keep counting."
+        }),
+        P(
+          h,
+          "The counter is a sibling with its own Model, so it keeps its count and keeps handling clicks. A failed component stays down until its `key` changes. Restart the widget sends the page a Message that changes the key, and the runtime mounts a fresh `Widget`."
         )
       ),
       h.section.attr("aria-labelledby", "noop").children(
