@@ -78,7 +78,7 @@ const advance = (seconds: number) => (ball: Ball): Ball => {
 
 const background = Canvas.Rect({ x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT, fill: "#0a0a0f" })
 
-export const sceneOf = (model: CanvasArtModel): ReadonlyArray<Canvas.Shape> => [
+const sceneOf = (model: CanvasArtModel): ReadonlyArray<Canvas.Shape> => [
   background,
   ...model.balls.map(({ color, radius, x, y }) => Canvas.Circle({ x, y, radius, fill: color }))
 ]

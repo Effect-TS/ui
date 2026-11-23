@@ -21,7 +21,7 @@ describe("CanvasArt", () => {
       assert.strictEqual(s.model.nextId, 2)
     }))
 
-  it.effect("a frame moves each ball by its velocity, and bounces it off an edge", () =>
+  it.effect("a frame moves each ball, bounces it off an edge, and clamps long deltas", () =>
     Effect.gen(function*() {
       const s = yield* Story.make(CanvasArt, {})
       s.given({
@@ -32,14 +32,8 @@ describe("CanvasArt", () => {
         ]
       }).subscription(frames, CanvasArtMessage.TickedFrame({ delta: 20 }))
       assert.deepStrictEqual(s.model.balls.map(({ vx, x, y }) => [x, y, vx]), [[101, 101, 50], [590, 200, -100]])
-    }))
-
-  it.effect("a long frame moves the balls no further than a short one", () =>
-    Effect.gen(function*() {
-      const s = yield* Story.make(CanvasArt, {})
-      s.given({ ...empty, balls: [{ id: 0, x: 100, y: 100, vx: 100, vy: 0, radius: 10, color: "#fff" }] })
-        .subscription(frames, CanvasArtMessage.TickedFrame({ delta: 5000 }))
-      assert.strictEqual(s.model.balls[0]?.x, 105)
+      s.subscription(frames, CanvasArtMessage.TickedFrame({ delta: 5000 }))
+      assert.deepStrictEqual(s.model.balls.map(({ x }) => x), [103.5, 585])
     }))
 
   it.effect("frames come only while it runs", () =>
