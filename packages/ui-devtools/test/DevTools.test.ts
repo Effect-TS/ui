@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
+import * as DevToolsLayer from "@effect/ui-devtools/internal/layer"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -19,7 +20,7 @@ const overlay = () =>
 const mount = Effect.fnUntraced(function*(capture: Capture, buffer?: number) {
   const memory = MessageLog.makeMemory({ size: 500 })
   const services = yield* Layer.build(
-    MessageLog.fanout([DevTools.layer({ buffer }), Layer.succeed(MessageLog.MessageLog, memory)])
+    MessageLog.fanout([DevToolsLayer.make({ buffer }), Layer.succeed(MessageLog.MessageLog, memory)])
   )
   const app = yield* play(capture).pipe(Effect.provide(services))
   yield* settle
@@ -330,7 +331,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-      yield* Layer.build(DevTools.layer({ buffer: 4 })).pipe(
+      yield* Layer.build(DevToolsLayer.make({ buffer: 4 })).pipe(
         Effect.flatMap((services) => BrowserHost.mountEffect(Page, {}, app).pipe(Effect.provide(services)))
       )
       yield* settle

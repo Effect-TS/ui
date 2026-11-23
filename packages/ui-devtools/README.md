@@ -27,7 +27,7 @@ The overlay starts as a button. Opened, it shows:
 - the entry's Model with what changed since that instance's previous entry, marked with `~`, a struck-out old value and a CHANGED badge, so it reads without colour; its message, Commands, events and raw frame
 - the lifecycle of the instance: its Layer build, Subscriptions, mounts and Command runs, open or with how they ended
 
-It follows the latest entry until one is selected. It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`. It keeps the last 1,000 entries of each session, or `buffer` of them.
+It follows the latest entry until one is selected. It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`. It keeps the last 1,000 entries of each session.
 
 ## The core
 
