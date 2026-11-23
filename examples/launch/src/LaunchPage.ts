@@ -85,7 +85,7 @@ export const LaunchPage = Component.define({
         ),
         P(
           h,
-          "We kept the core that made Foldkit 0.x predictable: Schema Models, fact-based Messages, pure `update` functions, and declarative Commands and Subscriptions. What changed is how apps scale past a single root Model. In Foldkit 0.x, growing a codebase meant threading child state, wrapped Messages, and global Layers through the top of the app. In Effect UI, each component instance owns its state, lifecycle, and Effect Layers, while keeping the one-way data flow and observability you already rely on."
+          "We kept the core that made Foldkit 0.x predictable: Schema Models, fact-based Messages, pure `update` functions, and declarative Commands and Subscriptions. What changed is how apps scale past a single root Model. In Foldkit 0.x, growing a codebase meant threading child state, wrapped Messages, and shared resource Layers through the top of the app. In Effect UI, each component instance owns its state and lifecycle, and components can scope Effect Layers to their subtrees, while keeping the one-way data flow and observability you already rely on."
         )
       ),
       h.section.attr("aria-labelledby", "define").children(
@@ -110,14 +110,14 @@ export const LaunchPage = Component.define({
         ),
         P(
           h,
-          "`subscriptions` returns the list of active Streams derived directly from the Model. When `isAutoCounting` is `true`, `tick` enters the list and emits `Ticked` every second; when it flips to `false`, `tick` drops out and the runtime tears down the Stream. A plain `&&` replaces Foldkit 0.x's `modelToDependencies` and `dependenciesToStream` wiring."
+          "`subscriptions` returns keyed Subscription declarations derived from the Model, and the runtime starts and stops each Stream for you. When `isAutoCounting` is `true`, `tick` enters the list and emits `Ticked` every second; when it flips to `false`, `tick` drops out and the runtime tears down the Stream. A plain `&&` replaces Foldkit 0.x's `modelToDependencies` and `dependenciesToStream` wiring."
         )
       ),
       h.section.attr("aria-labelledby", "split").children(
         h.h2.id("split").children("Split large components without manual type annotations"),
         P(
           h,
-          "Once a component outgrows a single chained call, assign `Component.define(...)` to a variable and write each piece separately before calling `.make`. Because the definition carries the types for `$`, `h`, and every Message, extracted handlers and views stay typed on their own."
+          "Once a component outgrows a single chained call, assign `Component.define(...)` to a variable and write each piece separately before calling `.make`. Because the definition carries the types for `$`, `h`, and every Message, extracted handlers, views, and fragments stay typed on their own (while `init` and `subscriptions` take an explicit `Model` annotation)."
         ),
         Listing(h, h.props.snippets.split),
         P(
@@ -176,7 +176,7 @@ export const LaunchPage = Component.define({
         ),
         P(
           h,
-          "Both `Counter` files share the same Model, Messages, and update logic. Every line of difference lives in `Page`. In Effect UI, the `counter` field on the parent Model, the `GotCounterMessage` wrapper, and `foldCounter` are gone, and `h.submodel` becomes a direct `Counter(h, {})` call. The page's `update` only handles `ClickedToggleCounter`."
+          "Both `Counter` files implement the same Model, Messages, and increment/decrement logic (with Effect UI's tagged handlers and chained HTML syntax). The structural change is in `Page`: the `counter` field on the parent Model, the `GotCounterMessage` wrapper, and `foldCounter` are gone, and `h.submodel` becomes a direct `Counter(h, {})` call. The page's `update` only handles `ClickedToggleCounter`."
         ),
         P(
           h,
@@ -413,7 +413,7 @@ export const LaunchPage = Component.define({
         ),
         P(
           h,
-          "The Effect UI entry also produced a smaller bundle, an earlier first paint, and a smaller JavaScript heap after load and with 1,000 rows. Each of those four metrics was measured once per run, so treat them as rough. Svelte spent less script time than both Effect entries on all nine operations, and Solid on all except clearing rows. Vue beat Effect UI on five, by the widest margins on updating, selecting, and swapping rows. In Effect UI, each Message runs `update` and the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and update only those."
+          "The Effect UI entry also produced a smaller bundle, an earlier first paint, and a smaller JavaScript heap after load and with 1,000 rows. Each of those four metrics was measured once per run, so treat them as rough. Svelte spent less script time than both Effect entries on all nine operations, and Solid on all except clearing rows. Vue spent less script time than Effect UI on five operations, by the widest margins on updating, selecting, and swapping rows. In Effect UI, each Message runs `update` and the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and update only those."
         ),
         AllResults(h)
       ),
