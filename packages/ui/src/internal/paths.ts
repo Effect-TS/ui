@@ -10,12 +10,12 @@ import type * as View from "../View.ts"
 import * as lazy from "./lazy.ts"
 
 /** @internal */
-export const childName = (component: Component.Any | Component.Lazy.Any | Feature.Any): string =>
-  Feature.isService(component)
-    ? component[Feature.TypeId].name
-    : lazy.isLazy(component)
-    ? lazy.nameOf(component)
-    : component.definition.name
+export const childName = (component: Component.Any | Component.Lazy.Any | Feature.Any): string => {
+  // A component first: every child's segment comes through here, and only a component has a definition.
+  const definition = (component as Component.Any).definition
+  if (definition !== undefined) return definition.name
+  return (Feature.TypeId in component ? component[Feature.TypeId] : (component as Component.Lazy.Any)[lazy.TypeId]).name
+}
 
 /**
  * The segment a child adds to its parent's path: `Name[key]`.

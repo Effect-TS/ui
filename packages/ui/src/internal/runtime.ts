@@ -5892,9 +5892,9 @@ const setup = (
 
   const loadingSlot = (inst: Instance, view: View.Child<any, any>, env: Env, range: Range | undefined): RFallback => {
     const lazy = view.component as Component.Lazy.Any
-    const load: Load = { path: `${inst.path}/${segment(view)}`, name: lazyOf.nameOf(lazy) }
+    const load: Load = { path: `${inst.path}/${segment(view)}`, name: lazy[lazyOf.TypeId].name }
     loads.add(load)
-    lazyOf.start(lazy).then(() => {
+    lazy.preload().then(() => {
       loads.delete(load)
       if (!inst.closed) markDirty(inst)
       checkIdle()
@@ -6595,17 +6595,16 @@ const setup = (
   ): RChild | RFallback => {
     switch (rendered._tag) {
       case "Fallback": {
-        const status = rendered.failedChild
-          ? rendered.status
-          : lazyOf.TypeId in child.component
-          ? lazyStatus(child.component)
-          : env.status
+        const lazy = lazyOf.TypeId in child.component
+        const status = rendered.failedChild ? rendered.status : lazy ? lazyStatus(child.component) : env.status
         if (status._tag === "Ready") {
           // Ready now: the fallback goes, and the feature or the lazy component mounts in its place.
           destroy(inst, rendered.inner)
-          const scoped = lazyOf.TypeId in child.component ? lazyOf.scopedOnceLoaded(child) : undefined
-          // A scoped slot, not a fallback: its parent's next patch sees `scoped` and goes to `patchScoped`.
-          return scoped === undefined ? makeChild(inst, child, env) : createChild(inst, scoped, env) as RFallback
+          // A lazy scoped component makes a scoped slot, not a fallback: its parent's next patch sees
+          // `scoped` and goes to `patchScoped`.
+          return lazy
+            ? createChild(inst, lazyOf.scopedOnceLoaded(child), env) as RFallback
+            : makeChild(inst, child, env)
         }
         const shown = fallbackOf(inst, child, status)
         return {

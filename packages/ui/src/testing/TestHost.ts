@@ -863,12 +863,10 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
     const pending = testHost.pending()
     if (pending.length === 0) return
     // Something may come back from outside the scheduler, such as a resolved Promise.
-    if (!pending.some(isLoad)) quiet++
+    if (!pending.some((pending) => pending._tag === "Load")) quiet++
     yield* nextMacrotask
   }
 })
-
-const isLoad = (pending: Pending): boolean => pending._tag === "Load"
 
 const describePending = (pending: Pending): string =>
   pending._tag === "Command"

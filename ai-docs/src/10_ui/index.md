@@ -918,13 +918,11 @@ const SearchPage = Component.lazy(
 
 // In the root's view. `fallback` shows while the module loads, and if the
 // load fails.
-Search: ;
-;((route) =>
-  SearchPage(h, {
-    key: AppRoute.printPath(route),
-    props: { route },
-    fallback: (result) => h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
-  }))
+SearchPage(h, {
+  key: AppRoute.printPath(route),
+  props: { route },
+  fallback: (result) => h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
+})
 ```
 
 Vite, like any bundler that splits on `import()`, puts the page and the code
