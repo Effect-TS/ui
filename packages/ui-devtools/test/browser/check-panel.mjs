@@ -90,6 +90,12 @@ const desktop = async () => {
   expect(atTop(state) && state.newest > opened.newest, "a timeline at the top stays pinned to new events", state)
 
   await frame.locator(".row-button").nth(3).click()
+  const heading = await readable(frame, ".ehead .headline")
+  expect(
+    heading.ok && heading.text === "UpdatedDraft",
+    "selecting an entry shows its heading alongside the timeline",
+    heading
+  )
   await type(page, "klm")
   state = await timeline(page)
   expect(atTop(state), "selecting an entry keeps the timeline pinned", state)
