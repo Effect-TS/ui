@@ -73,6 +73,7 @@
 import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
+import { handle } from "../../internal/handler.ts"
 import * as internal from "../../internal/scene.ts"
 import * as cursor from "../../internal/steps.ts"
 import * as engine from "../../internal/story.ts"
@@ -83,6 +84,7 @@ import type * as DomSubscription from "../DomSubscription.ts"
 import type * as Html from "../Html.ts"
 import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
+import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
@@ -239,6 +241,16 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
     event: string,
     payload?: Partial<DomSubscription.GlobalPayload<DomSubscription.CustomEventPayload>>
   ): this
+  /**
+   * Fires an animation frame `delta` ms after the last, `16` by default,
+   * as the browser host delivers it to the component's
+   * `DomSubscription.onAnimationFrame`, and dispatches what its handler
+   * returns.
+   *
+   * It throws when nothing listens for frames, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  frame(delta?: number): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -419,6 +431,23 @@ class StepsImpl extends internal.SceneCursor {
       }
       return out
     }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))
+  }
+  frame(delta = 16): this {
+    let handled = false
+    return this.act("frame", "message", (state) => {
+      const handler = state.declared().map(frames.handlerOf).find((handler) => handler !== undefined)
+      if (handler === undefined) {
+        throw new Error(
+          `${this.name("frame")}: nothing listens for animation frames; active keys: ${
+            JSON.stringify(state.subscriptions())
+          }`
+        )
+      }
+      const message = handle(handler, delta)
+      if (message === undefined) return state
+      handled = true
+      return engine.dispatch(state, message)
+    }, () => ({ interaction: handled ? "handled" : "ignored" }))
   }
   override expect(locator: Locator.Locator): object {
     return this.expectation(locator, defaults.matchers)

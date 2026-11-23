@@ -137,6 +137,7 @@ import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import { ownEvents } from "./internal/ownEvents.ts"
+import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
@@ -269,16 +270,6 @@ const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Recor
 }
 
 /**
- * What a pointer event's `pointerType` names, or `undefined` for an event
- * with none, such as a `mousedown` in a browser that sends it as a plain
- * `MouseEvent`, or a type no browser sends today.
- */
-const pointerTypeOf = (event: Event): Html.PointerType | undefined => {
-  const type = (event as { readonly pointerType?: unknown }).pointerType
-  return type === "mouse" || type === "touch" || type === "pen" || type === "" ? type : undefined
-}
-
-/**
  * The `pointerType` of a click-like event's payload. A click with `detail`
  * 0, or a pointer event with an empty `pointerType`, came from no pointer:
  * the keyboard, or a script. Otherwise the last `pointerdown` says which
@@ -289,11 +280,6 @@ const pressedWith = (name: string, event: Event, last: Html.PointerType | undefi
   const own = pointerTypeOf(event)
   if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) return ""
   return last ?? own ?? "mouse"
-}
-
-const modifiers = (event: Event) => {
-  const e = event as KeyboardEvent
-  return { shift: e.shiftKey === true, ctrl: e.ctrlKey === true, alt: e.altKey === true, meta: e.metaKey === true }
 }
 
 const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
@@ -1547,6 +1533,22 @@ const globalEventsOf = (document: Document): DomSubscription.GlobalEvents => ({
   }
 })
 
+const framesOf = (document: Document): DomSubscription.AnimationFrames => {
+  const view = document.defaultView
+  return {
+    now: () => view?.performance.now() ?? 0,
+    listen: (listener) => {
+      if (view === null || typeof view.requestAnimationFrame !== "function") return () => {}
+      const frame = (time: number) => {
+        id = view.requestAnimationFrame(frame)
+        listener(time)
+      }
+      let id = view.requestAnimationFrame(frame)
+      return () => view.cancelAnimationFrame(id)
+    }
+  }
+}
+
 // Loads in a detached <img>. A cached image may already be complete.
 const imagesOf = (document: Document): DomImages.Images => ({
   load: (source) =>
@@ -1590,15 +1592,16 @@ const filesOf = (document: Document): DomFile.Files => ({
 /**
  * Provides the DOM host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
- * `DomSubscription.GlobalEvents`, and a `DomImages.Images` and
+ * `DomSubscription.GlobalEvents`, its window's frames as
+ * `DomSubscription.AnimationFrames`, and a `DomImages.Images` and
  * `DomFile.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
  * host's listeners. The signals, `DomSubscription.GlobalEvents`,
- * `DomImages.Images` and `DomFile.Files` use the document and its
- * `defaultView`, never globals.
+ * `DomSubscription.AnimationFrames`, `DomImages.Images` and `DomFile.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -1618,6 +1621,7 @@ export const layer = (options?: {
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
       Context.add(DomSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(DomSubscription.AnimationFrames, framesOf(document)),
       Context.add(DomImages.Images, imagesOf(document)),
       Context.add(DomFile.Files, filesOf(document))
     )

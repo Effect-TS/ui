@@ -5,6 +5,7 @@
  *
  * @internal
  */
+import { handle } from "../../internal/handler.ts"
 import type * as View from "../../View.ts"
 
 /**
@@ -46,8 +47,7 @@ export const run = (
   onMessage: (message: unknown, cancel: () => void) => void
 ): void => {
   if (declared.preventDefault === "always") preventDefault()
-  const { handler } = declared
-  const message = typeof handler === "function" ? (handler as (payload: unknown) => unknown)(payload) : handler
+  const message = handle(declared.handler, payload)
   if (message !== undefined) onMessage(message, declared.preventDefault === true ? preventDefault : noop)
 }
 
