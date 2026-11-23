@@ -611,13 +611,19 @@ export interface Step<in out Model, in out Msg, in out Events, out R = never, L 
    * request. The step's `viewTransitionTypes` and the log's `Update` entry
    * hold it.
    *
-   * The rest of the flush runs inside the transition: every update it
-   * renders is animated, and the types of every step that asked are merged.
-   * Until the browser calls back, about a frame later, the flush waits: its
-   * DOM patch, the head, a navigation's scroll and focus, and `afterCommit`
-   * work land together inside the callback. Messages that arrive meanwhile
-   * render in that callback too. Commands start as soon as `update` returns,
-   * so a navigation's history entry is already pushed.
+   * The rest of the flush runs inside the transition, and every update it
+   * renders is animated. Until the browser calls back, about a frame later,
+   * the flush waits: its DOM patch, the head, a navigation's scroll and
+   * focus, and `afterCommit` work land together inside the callback.
+   * Messages and query results that arrive meanwhile render in that callback
+   * too, and one for a component below a waiting update is delivered there,
+   * with the props the new view gives it. Commands start as soon as
+   * `update` returns, so a navigation's history entry is already pushed.
+   *
+   * The transition's types are merged from the steps that asked before the
+   * flush was handed to the browser. A step that asks while the callback is
+   * pending renders in that callback, and its types are dropped: the browser
+   * already has the transition's types, and it starts no second one.
    *
    * The first mount and hydration never animate. A component can animate
    * its own updates and, from its handler for a child's event, the child's

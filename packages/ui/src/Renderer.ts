@@ -162,7 +162,8 @@ export interface HostEvents<Node> {
  * whose step called `$.viewTransition`, before it renders, with the rest of
  * the flush as `update` and the types the steps asked for. The host calls
  * `update` once, now or later, such as inside `document.startViewTransition`.
- * Until it does, the flush waits, and what arrives meanwhile renders in it.
+ * Until it does, the flush waits, and what arrives meanwhile renders in it,
+ * without adding its types.
  * Once the root has closed, `update` does nothing. A host without it ignores
  * the request, and the flush runs as any other. The first mount never calls
  * it.

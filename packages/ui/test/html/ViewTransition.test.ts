@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, Route, Router, UiSchema } from "@effect/ui"
+import { Command, Component, MessageLog, Renderer, Route, Router, UiSchema } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html } from "@effect/ui/html"
+import * as Executor from "@effect/ui/internal/executor"
+import type * as runtime from "@effect/ui/internal/runtime"
 import { expect, it } from "@effect/vitest"
-import { Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { describe } from "vitest"
 
 const GalleryRoute = Route.union({ Grid: Route.make("/"), Detail: Route.make("/detail") })
@@ -12,6 +14,21 @@ const Message = UiSchema.TaggedEnum({
   TypedFilter: { value: Schema.String },
   ClickedOpen: {},
   ChangedRoute: { route: GalleryRoute }
+})
+
+const CardMessage = UiSchema.TaggedEnum({ ClickedLike: {} })
+
+const Card = Component.define({
+  name: "Card",
+  scoped: false,
+  props: Schema.Struct({ layout: Layout }),
+  model: Schema.Struct({ likes: Schema.Number }),
+  message: CardMessage,
+  elements: Html
+}).make({
+  init: () => ({ likes: 0 }),
+  update: { ClickedLike: (model, _, $) => $.evolve({ likes: model.likes + 1 }) },
+  view: (model, h) => h.button.onClick(CardMessage.ClickedLike()).children(`Like ${model.likes}`)
 })
 
 const Gallery = Component.define({
@@ -35,9 +52,11 @@ const Gallery = Component.define({
   view: (model, h) =>
     h.main(
       h.p(`${model.route._tag} ${model.layout} ${model.filter}`),
+      h.button.onClick(Message.ClickedLayout({ layout: "grid" })).children("Grid"),
       h.button.onClick(Message.ClickedLayout({ layout: "list" })).children("List"),
       h.button.onClick(Message.ClickedOpen()).children("Open"),
-      h.input.attr("aria-label", "Filter").onInput(({ value }) => Message.TypedFilter({ value }))
+      h.input.attr("aria-label", "Filter").onInput(({ value }) => Message.TypedFilter({ value })),
+      Card(h, { props: { layout: model.layout } })
     )
 })
 
@@ -78,16 +97,32 @@ const fakeTransitions = (options?: { readonly reducedMotion?: boolean }) =>
       })
   )
 
-const start = Effect.gen(function*() {
+const mount = Effect.fnUntraced(function*(executor: Executor.Executor) {
   window.history.replaceState(null, "", "/")
   const log = MessageLog.makeMemory()
   const app = yield* Effect.acquireRelease(
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (element) => Effect.sync(() => element.remove())
   )
-  const context = yield* Layer.build(BrowserRouter.layer({ routes: GalleryRoute }))
-  yield* Effect.flatMap(Router.currentRoute(GalleryRoute), (route) => BrowserHost.mountEffect(Gallery, { route }, app))
-    .pipe(Effect.provideService(MessageLog.MessageLog, log), Effect.provideContext(context))
+  const browser = yield* Layer.build(BrowserHost.layer())
+  const host = Context.get(browser, Renderer.Renderer).host
+  let commits = 0
+  const counted: Renderer.Host<unknown> = {
+    ...host,
+    commit: () => {
+      commits++
+      host.commit?.()
+    }
+  }
+  const context = Context.merge(browser, yield* Layer.build(BrowserRouter.layer({ routes: GalleryRoute }))).pipe(
+    Context.add(Renderer.Renderer, { host: counted }),
+    Context.add(MessageLog.MessageLog, log),
+    Context.add(Executor.CurrentExecutor, executor)
+  )
+  const root = yield* Effect.flatMap(
+    Router.currentRoute(GalleryRoute),
+    (route) => Renderer.mount(Gallery, { route }, app)
+  ).pipe(Effect.provideContext(context))
   const click = (label: string) =>
     [...app.querySelectorAll("button")].find((button) => button.textContent === label)!.click()
   const type = (value: string) => {
@@ -95,7 +130,26 @@ const start = Effect.gen(function*() {
     input.value = value
     input.dispatchEvent(new Event("input", { bubbles: true }))
   }
-  return { log, click, type, shown: () => app.querySelector("p")!.textContent }
+  return {
+    log,
+    click,
+    type,
+    commits: () => commits,
+    freeze: () => (root as unknown as runtime.Root).freeze(),
+    shown: () => app.querySelector("p")!.textContent,
+    card: () => app.querySelector("main > button:last-child")!.textContent
+  }
+})
+
+const start = mount(Executor.microtask)
+
+const held = Effect.gen(function*() {
+  const tasks: Array<() => void> = []
+  const app = yield* mount({ scheduler: undefined, schedule: (task) => tasks.push(task) })
+  const runTasks = () => {
+    while (tasks.length > 0) tasks.shift()!()
+  }
+  return { ...app, tasks, runTasks }
 })
 
 describe("view transitions", { concurrent: false }, () => {
@@ -157,5 +211,66 @@ describe("view transitions", { concurrent: false }, () => {
       const logged = log.entries().length
       transitions.started[0]!.update()
       expect(log.entries()).toHaveLength(logged)
+    }).pipe(Effect.scoped))
+
+  it.effect("a flush queued before the hand-off commits nothing once the held flush has", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      for (const consume of ["callback", "freeze", "close"] as const) {
+        yield* Effect.gen(function*() {
+          const scope = yield* Scope.make()
+          const app = yield* Scope.provide(held, scope)
+          const before = transitions.started.length
+          app.click("Open")
+          while (transitions.started.length === before) {
+            if (app.tasks.length > 0) app.tasks.shift()!()
+            else yield* tick
+          }
+          const queued = app.tasks.length
+          const commits = app.commits()
+          if (consume === "callback") transitions.started.at(-1)!.update()
+          else if (consume === "freeze") app.freeze()
+          else yield* Scope.close(scope, Exit.void)
+          app.runTasks()
+          expect({ consume, queued: queued > 0, commits: app.commits() }).toEqual({
+            consume,
+            queued: true,
+            commits: commits + 1
+          })
+          yield* Scope.close(scope, Exit.void)
+        })
+      }
+    }).pipe(Effect.scoped))
+
+  it.effect("a child's message waits for its parent's transition, and reads the props it gives", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      const { card, click, log, runTasks, shown } = yield* held
+      for (const flushFirst of [true, false]) {
+        click(flushFirst ? "List" : "Grid")
+        if (flushFirst) runTasks()
+        click(card())
+        runTasks()
+        expect(shown()).toBe(flushFirst ? "Grid grid " : "Grid list ")
+        expect(transitions.started).toHaveLength(flushFirst ? 1 : 2)
+        transitions.started.at(-1)!.update()
+        runTasks()
+        expect(shown()).toBe(flushFirst ? "Grid list " : "Grid grid ")
+        const liked = log.entries().filter((entry) => entry._tag === "Update" && entry.path !== "Gallery[]")
+        expect((liked.at(-1) as MessageLog.Update).props).toEqual({ layout: flushFirst ? "list" : "grid" })
+      }
+      expect(card()).toBe("Like 2")
+    }).pipe(Effect.scoped))
+
+  it.effect("freezing settles a requested transition's update at once, without starting one", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      const { click, commits, freeze, shown } = yield* held
+      const before = commits()
+      click("List")
+      freeze()
+      expect(shown()).toBe("Grid list ")
+      expect(transitions.started).toHaveLength(0)
+      expect(commits()).toBe(before + 1)
     }).pipe(Effect.scoped))
 })

@@ -1769,7 +1769,7 @@ const setup = (
   const wake = () => {
     if (!scheduled) {
       scheduled = true
-      executor.schedule(flush)
+      executor.schedule(runScheduled)
     }
   }
   /**
@@ -1831,10 +1831,17 @@ const setup = (
    * without a dirty ancestor. A message from a field's event is ahead of the Model that view would
    * render, and rendering it now would write the older value over what the user typed.
    */
-  const renderAbove = (inst: Instance) => {
-    if (dirty.size === 0 || busy > 0) return
+  const dirtyAbove = (inst: Instance): Instance | undefined => {
+    if (dirty.size === 0 || busy > 0) return undefined
     let top: Instance | undefined
     for (let at = inst.parent; at !== undefined; at = at.parent) if (dirty.has(at)) top = at
+    return top
+  }
+  const waitsForTransition = (inst: Instance) =>
+    (resume !== undefined || (transitionTypes !== undefined && (mayTransition || !draining))) &&
+    dirtyAbove(inst) !== undefined
+  const renderAbove = (inst: Instance) => {
+    const top = dirtyAbove(inst)
     if (top === undefined) return
     const above: Array<Instance> = []
     for (let at = inst.parent; at !== top.parent; at = at!.parent) above.push(at!)
@@ -1880,15 +1887,16 @@ const setup = (
   let transitionTypes: Set<string> | undefined
   let mayTransition = false
   let resume: (() => void) | undefined
-  function flush() {
-    // A flush queued before the host was handed this one: the host's call to `resume` renders its work.
-    if (resume !== undefined) return
+  function runScheduled() {
+    if (scheduled && resume === undefined && !rootClosed) flush(true)
+  }
+  function flush(animate: boolean) {
     scheduled = false
     rendering = true
     flushes++
     sendPasses.clear()
     sharedPasses.clear()
-    mayTransition = true
+    mayTransition = animate
     finishFlush()
   }
   function finishFlush() {
@@ -1930,6 +1938,7 @@ const setup = (
       // A mount or a closure that rendered alone leaves its author's placed slots to check.
       checkPendingAuthors()
       while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0) {
+        if (mayTransition && transitionTypes !== undefined && dirty.size > 0) return false
         if (deferred.length > 0) {
           deferred.shift()!()
           checkPendingAuthors()
@@ -1942,7 +1951,6 @@ const setup = (
           else deliverReports(reportsDue.keys().next().value!)
           continue
         }
-        if (mayTransition && transitionTypes !== undefined) return false
         let next: Instance | undefined
         for (const inst of dirty) {
           if (next === undefined || inst.depth < next.depth) next = inst
@@ -2776,8 +2784,9 @@ const setup = (
 
   // -- instances ------------------------------------------------------------
   /** Runs `update` for a message to `inst`, in a step of its own. */
-  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
+  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source): void =>
     step(() => {
+      if (waitsForTransition(inst)) return defer(() => dispatchTo(inst, message, source))
       renderAbove(inst)
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
@@ -4562,8 +4571,9 @@ const setup = (
           Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
         )
         // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
-        const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
+        const enter = (f: (latest: Subscription.Subscription<any, any>) => void): void =>
           step(() => {
+            if (waitsForTransition(inst)) return defer(() => enter(f))
             renderAbove(inst)
             if (current()) f(running.latest)
           })
@@ -4676,11 +4686,14 @@ const setup = (
         const query = bound.byName.get(marker.name)!
         // It may run inside another instance's `update`: a patch registered at issue reaches every
         // watcher before that `update` returns.
-        step(() => {
-          renderAbove(inst)
-          if (running.released || inst.closed) return
-          writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
-        })
+        const write = (): void =>
+          step(() => {
+            if (waitsForTransition(inst)) return defer(write)
+            renderAbove(inst)
+            if (running.released || inst.closed) return
+            writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
+          })
+        write()
       }
       const go = (envCtx: Context.Context<any>) => {
         if (inst.closed || running.released) return
@@ -7369,12 +7382,11 @@ const setup = (
   rootRendered = () => listOf(root.rendered)
   rootInstance = root
   // Added after the root forked its Scope, so it runs before that Scope closes.
-  addFinalizer(rootScope, Effect.sync(() => leave(root)))
-  // Registered last so it runs first: the flush the host holds must not render into a closing tree.
   addFinalizer(
     rootScope,
     Effect.sync(() => {
       resume = undefined
+      leave(root)
     })
   )
   if (root.failure === undefined) placeEach(container, root.rendered, rootRef)
@@ -7582,7 +7594,7 @@ const setup = (
     },
     freeze: () => {
       if (resume !== undefined) resume()
-      else if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush()
+      else if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush(false)
       frozen = true
       return cache
     }
