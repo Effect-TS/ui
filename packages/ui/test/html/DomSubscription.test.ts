@@ -447,7 +447,6 @@ describe("onAnimationFrame", { concurrent: false }, () => {
         return root.model()?.deltas.length
       }).pipe(Effect.scoped)
       assert.strictEqual(deltas, 2)
-      runFrame()
       assert.strictEqual(pending.size, 0)
     }).pipe(Effect.scoped))
 })

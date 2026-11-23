@@ -73,7 +73,8 @@ describe("Canvas", { concurrent: false }, () => {
       yield* tick
       const canvas = app.querySelector("canvas")!
       assert.deepStrictEqual([canvas.width, canvas.height], [600, 400])
-      assert.strictEqual(canvas.getAttribute("style"), "width:300px;height:200px")
+      assert.strictEqual(canvas.style.width, "300px")
+      assert.strictEqual(canvas.style.height, "200px")
       assert.deepStrictEqual(calls.splice(0), ["setTransform(2,0,0,2,0,0)", "clearRect(0,0,300,200)"])
 
       const captured: Array<number> = []
