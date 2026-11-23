@@ -93,7 +93,7 @@ export interface Options {
  * @since 0.1.0
  */
 export const make = (options?: Options): Scheduler.Scheduler =>
-  new HtmlScheduler(Duration.toMillis(Duration.fromInputUnsafe(options?.budget ?? 5)))
+  new HtmlScheduler(Duration.toMillis(options?.budget ?? 5))
 
 /**
  * Provides a Scheduler made by `make`.
@@ -104,10 +104,15 @@ export const make = (options?: Options): Scheduler.Scheduler =>
  */
 export const layer = (options?: Options): Layer.Layer<never> => Layer.succeed(Scheduler.Scheduler, make(options))
 
+interface Task {
+  readonly run: () => void
+  readonly priority: number
+  readonly fiber: number | undefined
+}
+
 interface Bucket {
   readonly priority: number
-  tasks: Array<() => void>
-  fibers: Array<Fiber.Fiber<unknown, unknown> | undefined>
+  tasks: Array<Task>
 }
 
 type Lane = "user-blocking" | "user-visible" | "background"
@@ -126,14 +131,11 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
   readonly budget: number
   private queue: Array<Bucket> = []
   private deadline = -Infinity
-  private draining = false
-  private running: number | undefined = undefined
-  private owner: Fiber.Fiber<unknown, unknown> | undefined = undefined
+  private active: Task | undefined = undefined
   private keep: number | undefined = undefined
-  private sampled: Fiber.Fiber<unknown, unknown> | undefined = undefined
+  private sampled = -1
   private sampledAt = 0
   private sampledTime = 0
-  private nextSample = 0
   private stride = 1
   private readonly pending = new Set<Lane>()
   private channel: MessageChannel | undefined = undefined
@@ -145,31 +147,27 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
   shouldYield(fiber: Fiber.Fiber<unknown, unknown>): boolean {
     const count = fiber.currentOpCount
     if (count >= fiber.cache.maxOpsBeforeYield) return this.yieldInLane(fiber)
-    if (fiber !== this.sampled || count <= this.sampledAt) {
-      this.sampled = fiber
-      this.sampledAt = 0
-    } else if (count < this.nextSample) {
-      return false
-    }
+    const fresh = fiber.id !== this.sampled || count <= this.sampledAt
+    if (!fresh && count < this.sampledAt + this.stride) return false
     const time = now()
     if (time >= this.deadline) {
-      if (count !== 1 || this.draining || this.pending.size > 0) return this.yieldInLane(fiber)
+      if (count !== 1 || this.active !== undefined || this.pending.size > 0) return this.yieldInLane(fiber)
       this.deadline = time + this.budget
     }
-    if (this.sampledAt === 0) {
+    if (fresh) {
       this.stride = 1
     } else {
       const perOp = (time - this.sampledTime) / (count - this.sampledAt)
       this.stride = Math.max(1, Math.min(this.stride * 2, 32, Math.floor((this.deadline - time) / perOp / 2)))
     }
-    this.nextSample = count + this.stride
+    this.sampled = fiber.id
     this.sampledAt = count
     this.sampledTime = time
     return false
   }
 
   private yieldInLane(fiber: Fiber.Fiber<unknown, unknown>): boolean {
-    this.keep = fiber === this.owner ? this.running : undefined
+    this.keep = this.active?.fiber === fiber.id ? this.active.priority : undefined
     return true
   }
 
@@ -177,15 +175,13 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
     return this
   }
 
-  scheduleTask(task: () => void, priority: number): void {
+  scheduleTask(run: () => void, priority: number): void {
     if (this.keep !== undefined) {
       priority = this.keep
       this.keep = undefined
     }
-    const bucket = bucketAt(this.queue, priority)
-    bucket.tasks.push(task)
-    bucket.fibers.push(Fiber.getCurrent())
-    if (!this.draining) this.post(laneOf(priority))
+    bucketAt(this.queue, priority).tasks.push({ run, priority, fiber: Fiber.getCurrent()?.id })
+    if (this.active === undefined) this.post(laneOf(priority))
   }
 
   private post(lane: Lane): void {
@@ -215,33 +211,31 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
   }
 
   private drain(deadline: number): void {
+    const outer = this.active
     const batch = this.queue
     this.queue = []
-    this.draining = true
     this.deadline = deadline
     let b = 0
     let i = 0
     try {
       for (; b < batch.length; b++, i = 0) {
-        const bucket = batch[b]!
-        while (i < bucket.tasks.length) {
-          if ((b > 0 || i > 0) && now() >= deadline) return
-          if (bucket.priority > 0 && this.queue.length > 0 && this.queue[0]!.priority <= 0) return
-          this.running = bucket.priority
-          this.owner = bucket.fibers[i]
-          bucket.tasks[i++]!()
+        const tasks = batch[b]!.tasks
+        while (i < tasks.length) {
+          const task = tasks[i]!
+          if (task.priority > 0 && this.queue.length > 0 && this.queue[0]!.priority <= 0) return
+          this.active = task
+          i++
+          task.run()
+          if (now() >= deadline) return
         }
       }
     } finally {
-      this.running = undefined
-      this.owner = undefined
-      this.draining = false
+      this.active = outer
       for (; b < batch.length; b++, i = 0) {
         const bucket = batch[b]!
         if (i < bucket.tasks.length) {
           const queued = bucketAt(this.queue, bucket.priority)
           queued.tasks = bucket.tasks.slice(i).concat(queued.tasks)
-          queued.fibers = bucket.fibers.slice(i).concat(queued.fibers)
         }
       }
       for (const bucket of this.queue) this.post(laneOf(bucket.priority))
@@ -249,14 +243,11 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
   }
 
   flush(): void {
-    const { deadline, draining, owner, running } = this
+    const deadline = this.deadline
     try {
       while (this.queue.length > 0) this.drain(Infinity)
     } finally {
       this.deadline = deadline
-      this.draining = draining
-      this.owner = owner
-      this.running = running
     }
   }
 }
@@ -266,7 +257,7 @@ const bucketAt = (queue: Array<Bucket>, priority: number): Bucket => {
   while (index > 0 && queue[index - 1]!.priority > priority) index--
   const found = queue[index - 1]
   if (found !== undefined && found.priority === priority) return found
-  const bucket: Bucket = { priority, tasks: [], fibers: [] }
+  const bucket: Bucket = { priority, tasks: [] }
   queue.splice(index, 0, bucket)
   return bucket
 }

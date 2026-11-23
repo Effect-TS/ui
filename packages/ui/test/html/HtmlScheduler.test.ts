@@ -1,6 +1,6 @@
 import { HtmlScheduler } from "@effect/ui/html"
 import { afterEach, describe, expect, it, vi } from "@effect/vitest"
-import { Context, Deferred, Effect, Scheduler } from "effect"
+import { Deferred, Effect } from "effect"
 
 type Lane = "user-blocking" | "user-visible" | "background"
 
@@ -16,6 +16,7 @@ const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
       }
     })
   } else {
+    vi.stubGlobal("scheduler", undefined)
     vi.stubGlobal(
       "MessageChannel",
       class {
@@ -35,7 +36,7 @@ const browser = (transport: "postTask" | "MessageChannel" = "postTask") => {
       Effect.sync(() => {
         time += ms
       }),
-    fork: <A>(effect: Effect.Effect<A>) => Effect.runForkWith(Context.make(Scheduler.Scheduler, scheduler))(effect),
+    fork: <A>(effect: Effect.Effect<A>) => Effect.runFork(effect, { scheduler }),
     next: () => {
       const start = time
       posted.shift()!.run()
