@@ -4,10 +4,12 @@ import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as MessageLog from "@effect/ui/MessageLog"
+import * as Renderer from "@effect/ui/Renderer"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import type * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
@@ -24,13 +26,9 @@ const FeedSchema = Schema.declare(
   (u: unknown): u is Feed => Predicate.hasProperty(u, "inspector") && Predicate.hasProperty(u, "changes")
 )
 
-export const Position = Schema.Literals(["TopLeft", "TopRight", "BottomLeft", "BottomRight"])
-
-export type Position = typeof Position.Type
-
 const Filter = Schema.Literals(["all", "updates", "commands", "lifecycle"])
 
-const OverlayProps = Schema.Struct({ feed: FeedSchema, position: Position })
+const OverlayProps = Schema.Struct({ feed: FeedSchema })
 
 type OverlayProps = typeof OverlayProps.Type
 
@@ -63,11 +61,19 @@ const OverlayMessage = UiSchema.TaggedEnum({
 
 type OverlayMessage = typeof OverlayMessage.Type
 
+const CopyButton = Html.ref("DevToolsCopyFrame", "button")
+
 const CopyFrame = Command.make(
   "devtools/CopyFrame",
   { args: { seq: Schema.Number, text: Schema.String } },
   ({ seq, text }) =>
-    Effect.tryPromise(() => globalThis.navigator.clipboard.writeText(text)).pipe(
+    Renderer.Refs.use((refs) => refs.lookup(CopyButton)).pipe(
+      Effect.flatMap((button) =>
+        Effect.tryPromise(() => {
+          const clipboard = Option.getOrUndefined(button)?.ownerDocument.defaultView?.navigator.clipboard
+          return clipboard === undefined ? Promise.reject() : clipboard.writeText(text)
+        })
+      ),
       Effect.match({
         onSuccess: () => OverlayMessage.SucceededCopyFrame({ seq }),
         onFailure: () => OverlayMessage.FailedCopyFrame()
@@ -185,7 +191,7 @@ const Header = (
   )
 }
 
-const Instances = (h: H, session: Session, model: OverlayModel) => {
+const Instances = (h: H, session: Session, model: OverlayModel, owner: number | undefined) => {
   const instances = session.instances()
   const open = instances.filter((instance) => instance.unmounted === undefined).length
   return h.section.class("instances").attr("aria-label", "Instances").children(
@@ -196,8 +202,9 @@ const Instances = (h: H, session: Session, model: OverlayModel) => {
     h.ul.class("instance-list").children(
       instances.map((instance) =>
         h.li.key(String(instance.instance)).children(
-          h.button.class("irow", model.instance === instance.instance && "on")
+          h.button.class("irow", model.instance === instance.instance && "on", owner === instance.instance && "owner")
             .attr("aria-pressed", String(model.instance === instance.instance))
+            .attr("aria-current", owner === instance.instance ? "true" : undefined)
             .attr("data-instance", Read.nameOf(instance.path))
             .attr("style", "padding-left:" + (12 + Read.depthOf(instance.path) * 14) + "px")
             .onClick(OverlayMessage.ClickedInstance({ instance: instance.instance }))
@@ -396,7 +403,14 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
               ),
               {
                 tone: step.selected ? "this" : undefined,
-                meta: [SeqLink(h, step.ref), " · ", placeMeta(feed, step.ref.entry)]
+                meta: [
+                  ...(step.stopped === undefined || step.stopped.length === 0
+                    ? []
+                    : ["stopped ", ...step.stopped.flatMap((ref) => [SeqLink(h, ref), " "]), "· "]),
+                  SeqLink(h, step.ref),
+                  " · ",
+                  placeMeta(feed, step.ref.entry)
+                ]
               }
             )
           case "Command":
@@ -491,43 +505,55 @@ const Chain = (h: H, feed: Feed, steps: ReadonlyArray<Read.Step>) =>
     )
   )
 
-const ModelTree = (h: H, value: Schema.Json, changes: ReadonlyArray<Inspector.Change>) =>
-  h.div.class("tree").children(
-    Read.treeOf(value, changes).map((row, index) => {
-      const change = row.change
-      const kind = change?.kind === "unknown" ? undefined : change?.kind
-      const gutter = kind === "changed" ? "~" : kind === "added" ? "+" : kind === "removed" ? "-" : ""
-      return h.div.key(String(index)).class("tl", kind !== undefined && "chg").attr(
-        "style",
-        "padding-left:" + (row.depth * 14 + 4) + "px"
-      ).attr("data-change", kind).children(
-        h.span.class("g").attr("aria-hidden", "true").children(gutter),
-        h.span.class("v").children(
-          row.key === undefined ? null : h.span.class("t-key").children(String(row.key) + ": "),
-          row.open ?? row.close ?? null,
-          ...(kind === "changed"
-            ? [
-              h.del.class("old").children(...Json(h, change!.before)),
-              h.span.class("arrow").attr("aria-hidden", "true").children(" → "),
-              h.ins.class("new").children(...Json(h, change!.after))
-            ]
-            : row.open === undefined && row.close === undefined
-            ? Json(h, row.value)
-            : [])
-        ),
-        kind === undefined ? h.span : h.span.class("badge").children(kind)
-      )
-    })
+const treeRow = (h: H, row: Read.Row) => {
+  const change = row.change
+  const kind = change?.kind === "unknown" ? undefined : change?.kind
+  const gutter = kind === "changed" ? "~" : kind === "added" ? "+" : kind === "removed" ? "-" : ""
+  return h.div.key(row.id).class("tl", kind !== undefined && "chg").attr(
+    "style",
+    "padding-left:" + (row.depth * 14 + 4) + "px"
+  ).attr("data-change", kind).children(
+    h.span.class("g").attr("aria-hidden", "true").children(gutter),
+    h.span.class("v").children(
+      row.key === undefined ? null : h.span.class("t-key").children(String(row.key) + ": "),
+      row.open ?? row.close ?? null,
+      ...(kind === "changed"
+        ? [
+          h.del.class("old").children(...Json(h, change!.before)),
+          h.span.class("arrow").attr("aria-hidden", "true").children(" → "),
+          h.ins.class("new").children(...Json(h, change!.after))
+        ]
+        : row.open === undefined && row.close === undefined
+        ? Json(h, row.value)
+        : [])
+    ),
+    kind === undefined ? h.span : h.span.class("badge").children(kind)
   )
+}
+
+const ModelTree = (h: H, value: Schema.Json, changes: ReadonlyArray<Inspector.Change>) =>
+  h.div.class("tree").children(Read.treeOf(value, changes).map((row) => treeRow(h, row)))
+
+const VirtualTree = (h: H, label: string, dataset: string, rows: ReadonlyArray<Read.Row>) =>
+  VirtualList(h, {
+    props: { keys: rows.map((row) => row.id), itemSize: 20, initialCount: 60, dataset },
+    view: (list) =>
+      list.viewport(h.div.class("tree", "scroll").attr("aria-label", label)).children(
+        list.list(h.div.class("tree-rows")).children(
+          list.items.map((index) => list.item({ element: treeRow(h, rows[index]!), index }))
+        )
+      )
+  })
 
 const Details = (h: H, session: Session, entry: Entry, model: OverlayModel) => {
   const state = entry._tag === "Update" || entry._tag === "Mounted" || entry._tag === "Waiting" ? entry : undefined
   const previous = state === undefined ? undefined : session.previous(entry.seq)
-  const before = previous === undefined ? undefined : session.resolve(previous.seq)
-  const changes = state === undefined || before === undefined || before._tag === "Outside" || !("model" in before)
-    ? []
-    : Inspector.diff(before.model, state.model)
+  const resolved = previous === undefined ? undefined : session.resolve(previous.seq)
+  const before = resolved !== undefined && resolved._tag !== "Outside" && "model" in resolved ? resolved : undefined
+  const unavailable = previous !== undefined && before === undefined
+  const changes = state === undefined || before === undefined ? [] : Inspector.diff(before.model, state.model)
   const changed = changes.filter((change) => change.kind !== "unknown").length
+  const props = state === undefined || before === undefined ? undefined : Read.compare(before.props, state.props)
   const commands = Read.isIssuing(entry) ? entry.commands : []
   const events = Read.isIssuing(entry) ? entry.events : []
   const tabs = state === undefined
@@ -543,35 +569,53 @@ const Details = (h: H, session: Session, entry: Entry, model: OverlayModel) => {
     view: (t) =>
       t.root(h.div.class("details")).children(
         t.list(h.div.class("tabs").attr("aria-label", "Entry details")).children(
-          state === undefined ? null : t.tab({ element: tab("Model", changed + " changed"), value: "model" }),
+          state === undefined ? null : t.tab({
+            element: tab(
+              "Model",
+              unavailable ? "diff unavailable" : previous === undefined ? "first" : changed + " changed"
+            ),
+            value: "model"
+          }),
           state === undefined ? null : t.tab({ element: tab("Message"), value: "message" }),
           state === undefined ? null : t.tab({ element: tab("Commands", String(commands.length)), value: "commands" }),
           state === undefined ? null : t.tab({ element: tab("Events", String(events.length)), value: "events" }),
           t.tab({ element: tab("Raw frame"), value: "raw" })
         ),
         state === undefined ? null : t.panel({ element: h.div.class("panes"), value: "model" })?.children(
-          h.div.class("pane").children(
+          h.div.class("pane", "model").children(
             h.h4.children(
               h.span.children("Model after #" + entry.seq),
               previous === undefined
                 ? h.span.children("first state of this instance")
+                : unavailable
+                ? h.span.class("unavailable").children(
+                  "diff unavailable: this instance's previous entry ",
+                  SeqLink(h, Read.refOf(session, previous.seq)),
+                  " is outside the buffer"
+                )
                 : h.span.children(
                   "compared with ",
                   SeqLink(h, Read.refOf(session, previous.seq)),
                   ", this instance's previous entry"
                 )
             ),
-            ModelTree(h, state.model, changes)
+            VirtualTree(h, "Model after #" + entry.seq, String(entry.seq), Read.treeOf(state.model, changes))
           ),
           h.div.class("pane").children(
             h.h4.children(
               h.span.children("Props seen"),
-              before !== undefined && before._tag !== "Outside" && "props" in before &&
-                Read.sameJson(before.props, state.props)
+              before === undefined || props === undefined
+                ? h.span
+                : props === "same"
                 ? h.span.children("same as ", SeqLink(h, Read.refOf(session, before.seq)))
-                : h.span
+                : props === "changed"
+                ? h.span.children("changed since ", SeqLink(h, Read.refOf(session, before.seq)))
+                : h.span.children(
+                  "redacted parts can't be compared with ",
+                  SeqLink(h, Read.refOf(session, before.seq))
+                )
             ),
-            ModelTree(h, state.props, []),
+            ModelTree(h, state.props, before === undefined ? [] : Inspector.diff(before.props, state.props)),
             entry._tag === "Update"
               ? h.h4.children(h.span.children("Message"), h.span.children("as encoded on the wire"))
               : null,
@@ -776,7 +820,7 @@ const Panel = (h: H, model: OverlayModel) => {
     Header(h, feed, session, selected, model),
     h.div.class("body").children(
       h.div.class("left").children(
-        Instances(h, session, model),
+        Instances(h, session, model, entry === undefined ? undefined : Read.instanceOf(entry)),
         Filters(h, model),
         Timeline(h, feed, session, model, timeline, selected?.seq, chain)
       ),
@@ -793,7 +837,7 @@ const Panel = (h: H, model: OverlayModel) => {
             "instance" in entry ? h.span.class("chip").children("instance " + entry.instance) : null,
             h.span.class("chip").children(clock(feed, entry)),
             h.span.class("spacer"),
-            h.button.class("chip", "button").onClick(
+            h.button.class("chip", "button").ref(CopyButton).onClick(
               OverlayMessage.ClickedCopyFrame({ seq: entry.seq, text: JSON.stringify(entry, null, 2) })
             ).children(model.copied === entry.seq ? "Copied" : "Copy frame")
           ),
@@ -833,7 +877,7 @@ export const Overlay = Component.define({
     Subscription.make("devtools/frames", props.feed.changes.pipe(Stream.map(() => OverlayMessage.ReceivedFrames())))
   ],
   view: (model, h) =>
-    h.div.class("overlay", "at-" + h.props.position).children(
+    h.div.class("overlay").children(
       model.open
         ? Panel(h, model)
         : h.button.class("launcher").attr("aria-label", "Open the Effect UI inspector").onClick(

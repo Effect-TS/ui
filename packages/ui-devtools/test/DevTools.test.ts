@@ -13,18 +13,20 @@ const token = "tok_live_9f2c"
 
 const text = (node: Element | null | undefined) => (node?.textContent ?? "").replace(/\s+/g, " ").trim()
 
-const mount = Effect.fnUntraced(function*(capture: Capture) {
+const overlay = () =>
+  document.querySelector<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")!.contentDocument!.body
+
+const mount = Effect.fnUntraced(function*(capture: Capture, buffer?: number) {
   const memory = MessageLog.makeMemory({ size: 500 })
   const services = yield* Layer.build(
-    MessageLog.fanout([DevTools.layer(), Layer.succeed(MessageLog.MessageLog, memory)])
+    MessageLog.fanout([DevTools.layer({ buffer }), Layer.succeed(MessageLog.MessageLog, memory)])
   )
   const app = yield* play(capture).pipe(Effect.provide(services))
   yield* settle
-  const root = document.querySelector("[data-effect-ui-devtools]")!.shadowRoot!
-  return { app, memory, root }
+  return { app, memory, root: overlay() }
 })
 
-const open = Effect.fnUntraced(function*(root: ShadowRoot) {
+const open = Effect.fnUntraced(function*(root: HTMLElement) {
   HtmlLocator.click(HtmlLocator.getByRole(root, "button", { name: "Open the Effect UI inspector" }))
   yield* settle
 })
@@ -34,9 +36,9 @@ const click = Effect.fnUntraced(function*(element: Element) {
   yield* settle
 })
 
-const instance = (root: ShadowRoot, name: string) => root.querySelector(`[data-instance="${name}"]`)!
+const instance = (root: HTMLElement, name: string) => root.querySelector(`[data-instance="${name}"]`)!
 
-const entry = (root: ShadowRoot, name: RegExp) => {
+const entry = (root: HTMLElement, name: RegExp) => {
   const found = HtmlLocator.queryAllByRole(root, "button", { name }).filter((node) =>
     node.classList.contains("row-button")
   )
@@ -44,9 +46,9 @@ const entry = (root: ShadowRoot, name: RegExp) => {
   return found
 }
 
-const oldest = (root: ShadowRoot, name: RegExp) => entry(root, name).at(-1)!
+const oldest = (root: HTMLElement, name: RegExp) => entry(root, name).at(-1)!
 
-const steps = (root: ShadowRoot) =>
+const steps = (root: HTMLElement) =>
   Array.from(root.querySelectorAll(".chain .step")).map((step) => ({
     step,
     what: text(step.querySelector(".what")),
@@ -54,23 +56,23 @@ const steps = (root: ShadowRoot) =>
     meta: text(step.querySelector(".meta"))
   }))
 
-const step = (root: ShadowRoot, what: string) => {
+const step = (root: HTMLElement, what: string) => {
   const found = steps(root).find((step) => step.what === what)
   assert.isDefined(found, "no chain step " + what + " in " + JSON.stringify(steps(root).map((step) => step.what)))
   return found!
 }
 
-const heading = (root: ShadowRoot) =>
+const heading = (root: HTMLElement) =>
   Array.from(root.querySelectorAll(".ehead > span")).map((node) => text(node)).filter((part) => part !== "").join(" ")
 
-const follow = (root: ShadowRoot, what: string) => click(step(root, what).step.querySelector("button.ref")!)
+const follow = (root: HTMLElement, what: string) => click(step(root, what).step.querySelector("button.ref")!)
 
-const selectClickedSave = Effect.fnUntraced(function*(root: ShadowRoot, pick = oldest) {
+const selectClickedSave = Effect.fnUntraced(function*(root: HTMLElement, pick = oldest) {
   yield* click(instance(root, "Editor[n2]"))
   yield* click(pick(root, /Update ClickedSave$/))
 })
 
-const commonChecks = Effect.fnUntraced(function*(root: ShadowRoot) {
+const commonChecks = Effect.fnUntraced(function*(root: HTMLElement) {
   const changed = root.querySelector(".tree .tl[data-change=changed]")
   assert.strictEqual(changed?.querySelector(".g")?.textContent, "~")
   assert.strictEqual(changed?.querySelector(".t-key")?.textContent, "status: ")
@@ -81,7 +83,7 @@ const commonChecks = Effect.fnUntraced(function*(root: ShadowRoot) {
   HtmlLocator.click(HtmlLocator.getByRole(root, "tab", { name: /Raw frame/ }))
   yield* settle
   const copied: Array<string> = []
-  Object.defineProperty(globalThis.navigator, "clipboard", {
+  Object.defineProperty(root.ownerDocument.defaultView!.navigator, "clipboard", {
     configurable: true,
     value: { writeText: (value: string) => Promise.resolve(void copied.push(value)) }
   })
@@ -105,6 +107,12 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.notInclude(text(instance(root, "Editor[n2]")), "ended")
 
       yield* selectClickedSave(root)
+      yield* click(instance(root, "Editor[n2]"))
+      assert.isFalse(instance(root, "Editor[n2]").classList.contains("on"))
+      assert.strictEqual(instance(root, "Editor[n2]").getAttribute("aria-current"), "true")
+      assert.isNull(instance(root, "Editor[n1]").getAttribute("aria-current"))
+      yield* click(instance(root, "Editor[n2]"))
+      assert.isTrue(instance(root, "Editor[n2]").classList.contains("on"))
       const chain = steps(root)
       assert.deepStrictEqual(chain.map((step) => step.what), [
         "source",
@@ -237,7 +245,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* settle
       HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Upload" }))
       yield* wait(30)
-      const root = document.querySelector("[data-effect-ui-devtools]")!.shadowRoot!
+      const root = overlay()
       yield* open(root)
 
       const uploader = text(instance(root, "Uploader[uploader]"))
@@ -258,6 +266,94 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.include(heading(root), "Failed")
       assert.strictEqual(step(root, "end").step.classList.contains("this"), false)
       assert.include(step(root, "Update").body, "Update ClickedUpload")
+    }).pipe(Effect.scoped))
+
+  it.live("keeps a key pressed in the overlay from the app's document listeners", () =>
+    Effect.gen(function*() {
+      const { memory, root } = yield* mount("open")
+      yield* open(root)
+      yield* selectClickedSave(root)
+      yield* click(HtmlLocator.getByRole(root, "tab", { name: /Raw frame/ }))
+      const copy = HtmlLocator.getByRole(root, "button", { name: "Copy frame" })
+      copy.focus()
+      const view = root.ownerDocument.defaultView!
+      copy.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }))
+      yield* wait(30)
+      const interrupted = () => memory.entries().filter((entry) => entry._tag === "CommandInterrupted").length
+      assert.strictEqual(interrupted(), 0)
+      assert.include(text(instance(root, "Editor[n2]")), "◌ 1 running")
+
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+      yield* wait(30)
+      assert.strictEqual(interrupted(), 1)
+    }).pipe(Effect.scoped))
+
+  it.live("follows an interruption's cause when its issuing Update left the buffer", () =>
+    Effect.gen(function*() {
+      const { root } = yield* mount("interrupted", 6)
+      yield* open(root)
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Commands" }))
+      yield* click(entry(root, /CommandInterrupted notes\/SaveNote · interrupt$/)[0]!)
+      const issuedBy = step(root, "issued by")
+      assert.isNotNull(issuedBy.step.querySelector(".ref.outside"))
+      assert.isNull(issuedBy.step.querySelector("button.ref"))
+      yield* follow(root, "causedBy")
+      assert.include(heading(root), "PressedEscape")
+    }).pipe(Effect.scoped))
+
+  it.live("says the diff is unavailable when the previous state entry left the buffer", () =>
+    Effect.gen(function*() {
+      const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
+      const Counter = Component.define({
+        name: "Counter",
+        scoped: false,
+        props: Schema.Struct({ label: Schema.String }),
+        model: Schema.Number,
+        message: CounterMessage,
+        elements: Html
+      }).make({
+        init: () => 0,
+        update: { Clicked: (count, _message, $) => $.set(count + 1) },
+        view: (count, h) => h.button.onClick(CounterMessage.Clicked()).children(h.props.label + " " + count)
+      })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => ({}),
+        update: (model) => model,
+        view: (_model, h) =>
+          h.main(Counter(h, { key: "a", props: { label: "a" } }), Counter(h, { key: "b", props: { label: "b" } }))
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer({ buffer: 4 })).pipe(
+        Effect.flatMap((services) => BrowserHost.mountEffect(Page, {}, app).pipe(Effect.provide(services)))
+      )
+      yield* settle
+      const press = (name: RegExp) => click(HtmlLocator.getByRole(app, "button", { name }))
+      yield* press(/^a /)
+      yield* press(/^a /)
+      const root = overlay()
+      yield* open(root)
+      yield* click(instance(root, "Counter[a]"))
+      const latest = entry(root, /Update Clicked$/)[0]!
+      yield* click(latest)
+      const glyph = () => text(latest.closest(".row")!.querySelector(".glyph"))
+      assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "1 changed")
+      assert.strictEqual(glyph(), "~")
+
+      for (let i = 0; i < 3; i++) yield* press(/^b /)
+      assert.strictEqual(glyph(), "~")
+      assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "diff unavailable")
+      assert.match(
+        text(root.querySelector(".pane.model h4")),
+        /diff unavailable: this instance's previous entry #\d+ is outside the buffer/
+      )
+      assert.isNull(root.querySelector(".tree .tl[data-change]"))
     }).pipe(Effect.scoped))
 
   it.live("leaves the app's Model and DOM as they are", () =>

@@ -2,14 +2,16 @@
  * A read-only inspector overlay for an `@effect/ui` app in the browser.
  *
  * `layer` takes the app's `MessageLog` slot. It feeds the app's log entries,
- * as Wire frames, to an `Inspector`, and mounts the overlay in a shadow root
- * at a corner of the page. The overlay shows the timeline, the instances with
+ * as Wire frames, to an `Inspector`, and mounts the overlay in an iframe at
+ * a corner of the page. The overlay shows the timeline, the instances with
  * the state of their Command runs, the causal chain of the selected entry,
  * its Model with what changed, its message, Commands and raw frame, and the
  * Layer builds, Subscriptions, mounts and Command runs of its instance.
  *
- * The overlay is an Effect UI component tree mounted with `MessageLog.noop`,
- * so it never records its own updates. It reads Wire frames only, so a
+ * The overlay is an Effect UI component tree in its own document, mounted
+ * with `MessageLog.noop`: it never records its own updates, the page's
+ * styles don't reach it, and its input never reaches the app's
+ * `DomSubscription.onDocument` or `onWindow` listeners. It reads Wire frames only, so a
  * `Schema.Redacted` value reaches it, and a copied frame, as the encoder's
  * placeholder. It keeps frames in memory only.
  *
@@ -62,6 +64,13 @@ import { styles } from "./internal/styles.ts"
  */
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
 
+const corners: { readonly [P in Position]: string } = {
+  TopLeft: "top:0;left:0",
+  TopRight: "top:0;right:0",
+  BottomLeft: "bottom:0;left:0",
+  BottomRight: "bottom:0;right:0"
+}
+
 /**
  * Provides the `MessageLog` with a log that feeds the inspector overlay, and
  * mounts the overlay for as long as the Layer is built.
@@ -69,15 +78,15 @@ export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
  * **Details**
  *
  * The overlay starts closed, as a button at `position` (`"BottomRight"` by
- * default) that opens it. It's mounted in a shadow root on a `<div>` added
- * to the end of `document.body` and removed when the Layer closes, so the
- * page's styles don't reach it and the app's DOM is left as it is. Its theme
- * follows `prefers-color-scheme`.
+ * default) that opens it. It's mounted in an iframe added to the end of
+ * `document.body` and removed when the Layer closes, so the app's DOM is
+ * left as it is. The iframe is sized to the overlay, and its theme follows
+ * `prefers-color-scheme`.
  *
  * Entries are queued by `record` and encoded off the app's update path by
- * `MessageLog.makeEncoded`. The inspector keeps the last 1,000 entries of
- * each session. To send entries to another sink as well, combine both with
- * `MessageLog.fanout`.
+ * `MessageLog.makeEncoded`. The inspector keeps the last `buffer` entries
+ * of each session, 1,000 by default. To send entries to another sink as
+ * well, combine both with `MessageLog.fanout`.
  *
  * Browser only: building the Layer needs `document`.
  *
@@ -85,11 +94,14 @@ export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
  * @category layers
  * @since 0.1.0
  */
-export const layer = (options?: { readonly position?: Position | undefined }): Layer.Layer<never> =>
+export const layer = (options?: {
+  readonly position?: Position | undefined
+  readonly buffer?: number | undefined
+}): Layer.Layer<never> =>
   Layer.effect(
     MessageLog.MessageLog,
     Effect.gen(function*() {
-      const inspector = Inspector.make()
+      const inspector = Inspector.make({ size: options?.buffer })
       const origins = new Map<string, number>()
       const changes = yield* PubSub.sliding<void>(1)
       const feed: Feed = {
@@ -98,19 +110,47 @@ export const layer = (options?: { readonly position?: Position | undefined }): L
         changes: Stream.fromPubSub(changes)
       }
 
-      const host = document.createElement("div")
-      host.setAttribute("data-effect-ui-devtools", "")
-      const shadow = host.attachShadow({ mode: "open" })
-      const style = document.createElement("style")
-      style.textContent = styles
-      const container = document.createElement("div")
-      shadow.append(style, container)
-      document.body.appendChild(host)
-      yield* Effect.addFinalizer(() => Effect.sync(() => host.remove()))
+      const frame = document.createElement("iframe")
+      frame.setAttribute("data-effect-ui-devtools", "")
+      frame.title = "Effect UI inspector"
+      frame.setAttribute(
+        "style",
+        "position:fixed;" + corners[options?.position ?? "BottomRight"] +
+          ";z-index:2147483000;border:0;margin:0;padding:0;width:160px;height:64px;" +
+          "background:transparent;color-scheme:light dark;max-width:none;max-height:none"
+      )
+      frame.srcdoc = "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
+        "</style></head><body><div id=\"root\"></div></body></html>"
+      yield* Effect.callback<void>((resume) => {
+        frame.addEventListener("load", () => resume(Effect.void), { once: true })
+        document.body.appendChild(frame)
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
+      const inner = frame.contentDocument!
+      const container = inner.getElementById("root")!
 
-      yield* BrowserHost.mountEffect(Overlay, { feed, position: options?.position ?? "BottomRight" }, container, {
-        head: false
-      }).pipe(Effect.provideService(MessageLog.MessageLog, MessageLog.noop))
+      const view = document.defaultView
+      const viewport = () => {
+        if (view === null) return
+        inner.documentElement.style.setProperty("--vw", view.innerWidth + "px")
+        inner.documentElement.style.setProperty("--vh", view.innerHeight + "px")
+      }
+      viewport()
+      view?.addEventListener("resize", viewport)
+      yield* Effect.addFinalizer(() => Effect.sync(() => view?.removeEventListener("resize", viewport)))
+      const Observer = (frame.contentWindow as (Window & typeof globalThis) | null)?.ResizeObserver
+      if (Observer !== undefined) {
+        const observer = new Observer(() => {
+          frame.style.width = container.offsetWidth + "px"
+          frame.style.height = container.offsetHeight + "px"
+        })
+        observer.observe(container)
+        yield* Effect.addFinalizer(() => Effect.sync(() => observer.disconnect()))
+      }
+
+      yield* BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
+        Effect.provideService(MessageLog.MessageLog, MessageLog.noop)
+      )
 
       return yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {
