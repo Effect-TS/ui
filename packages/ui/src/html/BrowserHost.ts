@@ -746,7 +746,7 @@ export const makeHost = (
     shown.add(dialog)
   }
 
-  let modalsHeld = false
+  let held = false
   const showModals = () => {
     const dialogs: Array<HTMLDialogElement> = []
     for (const dialog of modalWanted) {
@@ -757,13 +757,6 @@ export const makeHost = (
     // Document order: a dialog opens before one nested in it or after it, which then stacks on top.
     dialogs.sort((a, b) => (a.compareDocumentPosition(b) & 4) !== 0 ? -1 : 1)
     for (const dialog of dialogs) showDialog(dialog, "modal")
-  }
-  const holdModals = (hold: boolean) => {
-    modalsHeld = hold
-    if (!hold) return showModals()
-    for (const dialog of Array.from(shown).reverse()) {
-      if (modals.has(dialog)) closeDialog(dialog, true)
-    }
   }
 
   // -- popovers ----------------------------------------------------------------
@@ -821,9 +814,47 @@ export const makeHost = (
     for (const element of popovers) {
       // One that left the document is forgotten; a render that brings it back queues it again.
       if (!element.isConnected || !element.hasAttribute("popover")) continue
+      if (held && isAuto(element)) {
+        popoversToShow.add(element)
+        continue
+      }
       if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
       keepingScroll(() => element.showPopover())
     }
+  }
+
+  const heldPopovers = new Set<HTMLElement>()
+  const hostToggles = new WeakSet<globalThis.Node>()
+  const togglePopover = (element: HTMLElement, show: boolean) => {
+    if (show) keepingScroll(() => element.showPopover())
+    else element.hidePopover()
+    if (popoverShowing(element) === show && listening.has("toggle")) hostToggles.add(element)
+  }
+  const isAuto = (element: globalThis.Element) =>
+    element.hasAttribute("popover") && element.getAttribute("popover") !== "manual"
+  const hold = (container: globalThis.Element | undefined) => {
+    held = container !== undefined
+    if (container !== undefined) {
+      for (const dialog of Array.from(shown).reverse()) {
+        if (modals.has(dialog)) closeDialog(dialog, true)
+      }
+      for (const element of container.querySelectorAll<HTMLElement>("[popover]")) {
+        if (wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)) {
+          togglePopover(element, false)
+          heldPopovers.add(element)
+        }
+      }
+      return
+    }
+    showModals()
+    for (const element of heldPopovers) {
+      if (
+        element.isConnected && isAuto(element) && wanted.get(element)?.get("popoverOpen") === true &&
+        !popoverShowing(element)
+      ) togglePopover(element, true)
+    }
+    heldPopovers.clear()
+    showPopovers()
   }
 
   const restoreNode = (node: globalThis.Node) => {
@@ -834,7 +865,7 @@ export const makeHost = (
       if (name === "value" && composing.has(node)) continue
       if (name === "open" && isDialog(node)) {
         // A dialog that left the document can't be shown; a later commit shows it if it comes back.
-        if (node.isConnected) showDialog(node, value as boolean | "modal")
+        if (node.isConnected && !(held && value === "modal")) showDialog(node, value as boolean | "modal")
       } else if (name === "popoverOpen") {
         // Only a manual popover is put back. An auto popover's changes are the browser's, for the Model
         // to follow.
@@ -1121,6 +1152,7 @@ export const makeHost = (
   }
 
   const listener = (name: string) => (event: Event) => {
+    if (name === "toggle" && event.target !== null && hostToggles.delete(event.target as globalThis.Node)) return
     if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
     if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
       const dialog = event.target as HTMLDialogElement
@@ -1408,7 +1440,7 @@ export const makeHost = (
       for (const dialog of shown) {
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
-      if (modalWanted.size > 0 && !modalsHeld) showModals()
+      if (modalWanted.size > 0 && !held) showModals()
       showPopovers()
     },
     viewTransition(update, types) {
@@ -1446,11 +1478,11 @@ export const makeHost = (
       active = undefined
     }
   }
-  heldModals.set(host, holdModals)
+  holds.set(host, hold)
   return host
 }
 
-const heldModals = new WeakMap<Renderer.Host<globalThis.Node>, (hold: boolean) => void>()
+const holds = new WeakMap<Renderer.Host<globalThis.Node>, (container: globalThis.Element | undefined) => void>()
 
 /**
  * The element operations behind `HtmlCommand.focus`, `blur`,
@@ -1895,14 +1927,16 @@ export interface Recorded {
  *
  * The live root keeps running while it's hidden: its Commands,
  * Subscriptions and updates go on, and it renders into its hidden
- * container. While it's paused, its modal dialogs are closed and its
- * document and window listeners don't hear the user's mouse, pointer, touch
- * and key input, so a click on the copy, which `inert` passes to the
- * element under it, doesn't reach the live tree, and nothing it shows blocks
- * the rest of the page. Events that aren't the user's input, and ones code
- * dispatches, still reach it. Pausing again replaces the painted copy.
- * `resume` removes the copy, shows the container again, with whatever
- * happened meanwhile, and shows the modal dialogs its Model has open. When
+ * container. While it's paused, its modal dialogs and auto popovers are
+ * closed, without a `toggle` or `close` reaching the Model, and its document
+ * and window listeners don't hear the user's mouse, pointer, touch and key
+ * input. So a click on the copy, which `inert` passes to the element under
+ * it, doesn't reach the live tree or light-dismiss its popovers, and nothing
+ * it shows blocks the rest of the page. Events that aren't the user's input,
+ * and ones code dispatches, still reach it. Pausing again replaces the
+ * painted copy. `resume` removes the copy, shows the container again, with
+ * whatever happened meanwhile, and shows the modal dialogs and popovers its
+ * Model has open. When
  * a paint fails, `pause` removes its copy and leaves the page as it was.
  *
  * **Gotchas**
@@ -2000,7 +2034,7 @@ const pausable = (
   const owner = Context.get(context, Scope.Scope)
   const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<globalThis.Node>
   const painting = Context.add(context, Renderer.Renderer, { host: paintHost(host) })
-  const holdModals = heldModals.get(host)
+  const hold = holds.get(host)
   const style = (container as HTMLElement).style
   let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
   let shown: readonly [value: string, priority: string] | undefined
@@ -2016,7 +2050,7 @@ const pausable = (
     if (shown !== undefined) return shown
     shown = [style.getPropertyValue("display"), style.getPropertyPriority("display")]
     muted.input = true
-    holdModals?.(true)
+    hold?.(container)
     style.setProperty("display", "none", "important")
     return shown
   }
@@ -2025,7 +2059,7 @@ const pausable = (
     show(style, shown)
     shown = undefined
     muted.input = false
-    holdModals?.(false)
+    hold?.(undefined)
   })
   const resume = Effect.suspend(() => {
     const was = painted

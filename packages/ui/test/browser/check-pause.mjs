@@ -39,6 +39,7 @@ const scene = (page) =>
       liveDialogOpen: live.querySelector("dialog").open,
       liveModal: live.querySelector("dialog").matches(":modal"),
       copy: copy?.querySelector(".count").textContent ?? null,
+      liveMenuOpen: live.querySelector(".menu").matches(":popover-open"),
       blocked: document.querySelector(":modal") !== null
     }
   })
@@ -60,7 +61,7 @@ try {
   const live = await scene(page)
   expect(live.model.count === 1 && live.model.heard === 1, "a click on the live page reaches both handlers", live)
 
-  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false }))
+  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false, menu: false, toggles: 0 }))
   await clickAt(page, page.locator("[inert] .count"))
   const clicked = await scene(page)
   expect(clicked.copy === "Count 5" && !clicked.liveShown, "pause shows the copy and hides the live page", clicked)
@@ -87,7 +88,7 @@ try {
     resumed
   )
 
-  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false }))
+  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false, menu: false, toggles: 0 }))
   const again = await scene(page)
   expect(!again.blocked && !again.liveDialogOpen, "pausing closes the open live modal", again)
   await clickAt(page, page.locator("#resume"))
@@ -97,6 +98,56 @@ try {
   await clickAt(page, page.locator("#root:not([inert]) .close"))
   const closed = await scene(page)
   expect(!closed.model.dialog && !closed.blocked, "the live page takes clicks after Resume", closed)
+
+  await clickAt(page, page.locator("#root:not([inert]) .open-menu"))
+  const menu = await scene(page)
+  expect(menu.model.menu && menu.liveMenuOpen, "the live menu opens", menu)
+  const toggles = menu.model.toggles
+
+  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false, menu: false, toggles: 0 }))
+  await clickAt(page, page.locator("[inert] .count"))
+  await page.mouse.click(400, 500)
+  await page.waitForTimeout(100)
+  const clickedMenu = await scene(page)
+  expect(
+    clickedMenu.model.toggles === toggles && clickedMenu.model.menu,
+    "pausing and clicking the copy dispatch no onToggle to the live Model",
+    clickedMenu.model
+  )
+
+  await clickAt(page, page.locator("#resume"))
+  const resumedMenu = await scene(page)
+  expect(
+    resumedMenu.copy === null && resumedMenu.model.menu && resumedMenu.liveMenuOpen &&
+      resumedMenu.model.toggles === toggles,
+    "Resume shows the live menu open again, with no onToggle",
+    resumedMenu
+  )
+
+  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false, menu: false, toggles: 0 }))
+  await page.evaluate(() => globalThis.check.menu(false))
+  await page.waitForTimeout(100)
+  await clickAt(page, page.locator("#resume"))
+  const closedMenu = await scene(page)
+  expect(
+    !closedMenu.model.menu && !closedMenu.liveMenuOpen,
+    "a menu the live Model closed while paused stays closed on Resume",
+    closedMenu
+  )
+
+  await page.evaluate(() => globalThis.check.pause({ count: 5, heard: 0, dialog: false, menu: false, toggles: 0 }))
+  await page.evaluate(() => globalThis.check.menu(true))
+  await page.waitForTimeout(100)
+  const waiting = await scene(page)
+  expect(!waiting.liveMenuOpen, "a menu the live Model opens while paused waits", waiting)
+  await clickAt(page, page.locator("[inert] .count"))
+  await clickAt(page, page.locator("#resume"))
+  const openedMenu = await scene(page)
+  expect(
+    openedMenu.model.menu && openedMenu.liveMenuOpen && openedMenu.model.toggles === toggles + 1,
+    "a menu the live Model opened while paused shows on Resume, reporting its own toggle",
+    openedMenu
+  )
 } catch (error) {
   failures.push(String(error).split("\n")[0])
 } finally {
