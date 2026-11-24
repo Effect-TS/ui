@@ -212,24 +212,24 @@ export interface Events {
  * @since 0.1.0
  */
 export type EventsOf<K extends string> = K extends "input" ?
-  & Events
-  & {
-    readonly input: ValuePayload
-    readonly change: ValuePayload
-    readonly enter: ValuePayload
-  }
-  : K extends "textarea" ?
     & Events
     & {
       readonly input: ValuePayload
-      readonly submit: ValuePayload
+      readonly change: ValuePayload
+      readonly enter: ValuePayload
     }
+  : K extends "textarea" ?
+      & Events
+      & {
+        readonly input: ValuePayload
+        readonly submit: ValuePayload
+      }
   : K extends "select" ?
-    & Events
-    & {
-      readonly selectionChanged: SelectPayload
-      readonly itemSelected: SelectPayload
-    }
+      & Events
+      & {
+        readonly selectionChanged: SelectPayload
+        readonly itemSelected: SelectPayload
+      }
   : K extends TextModifierTag | "br" ? {}
   : Events
 
@@ -362,13 +362,13 @@ const mergeProps = <B extends View.ElementBuilder<any, any, any, any>>(
   for (const key in options) {
     if (!Object.hasOwn(options, key)) continue
     const value = options[key]
-    if (next === undefined) {
-      next = builder.props === View.noFields ? {} : { ...builder.props }
-    }
+    next ??= { ...builder.props }
     if (value === undefined) delete next[key]
     else next[key] = value
   }
-  return next === undefined ? builder : View.withFields(builder, { props: next })
+  return next === undefined
+    ? builder
+    : View.withFields(builder, { props: next })
 }
 
 /**
@@ -417,7 +417,7 @@ export class VoidElement<
       node: VoidElement<Msg, R, E, Node, Tag, Options>
     ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
   ): VoidElement<Msg, R | R2, E, Node, Tag, Options> {
-    return View.withForward(this, place) as any
+    return super.forward(place as any) as any
   }
 
   /**
@@ -707,7 +707,9 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onSelectionChanged<E2 extends E & { readonly selectionChanged: SelectPayload }>(
+  onSelectionChanged<
+    E2 extends E & { readonly selectionChanged: SelectPayload }
+  >(
     this: VoidElement<Msg, R, E2, Node, Tag, Options>,
     handler: View.Handler<Msg, SelectPayload>
   ): this {
@@ -771,13 +773,18 @@ export class LayoutElement<
    */
   children<const C extends ReadonlyArray<NoTextInput<Msg, any>>>(
     ...inputs: C
-  ): LayoutElement<Msg, R | View.Requirements<C[number]>, E, Node, Tag, Options> {
+  ): LayoutElement<
+    Msg,
+    R | View.Requirements<C[number]>,
+    E,
+    Node,
+    Tag,
+    Options
+  > {
     return View.withNoTextContent(
       this,
       inputs as ReadonlyArray<View.Input<Msg, any>>,
-      `<${this.tag}> can't hold text in the ${name} vocabulary; text goes inside ${
-        textParents.join(", ")
-      }`
+      vocabulary
     ) as any
   }
 
@@ -791,7 +798,7 @@ export class LayoutElement<
       node: LayoutElement<Msg, R, E, Node, Tag, Options>
     ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
   ): LayoutElement<Msg, R | R2, E, Node, Tag, Options> {
-    return View.withForward(this, place) as any
+    return super.forward(place as any) as any
   }
 }
 
@@ -852,7 +859,7 @@ export class TextElement<
       node: TextElement<Msg, R, E, Node, Tag, Options>
     ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
   ): TextElement<Msg, R | R2, E, Node, Tag, Options> {
-    return View.withForward(this, place) as any
+    return super.forward(place as any) as any
   }
 }
 

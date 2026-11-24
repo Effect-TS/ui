@@ -1,7 +1,7 @@
 import { Component, View } from "@effect/ui"
-import { TestHost } from "@effect/ui/testing"
 import { OpenTui } from "@effect/ui-opentui"
 import { TestOpenTuiEvents } from "@effect/ui-opentui/testing"
+import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 

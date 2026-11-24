@@ -95,22 +95,18 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
   GameOver: "Game Over - Press R to restart"
 }
 
-const cellGlyph = (
-  x: number,
-  y: number,
-  model: SnakeGameModel
-): { readonly char: string; readonly fg: string } => {
-  const cell = { x, y }
-  if (Position.equivalence(cell, model.snake[0])) {
-    return { char: "@@", fg: "#22c55e" }
-  }
-  if (Snake.contains(model.snake, cell)) {
-    return { char: "[]", fg: "#4ade80" }
-  }
-  if (Position.equivalence(cell, model.apple)) {
-    return { char: "()", fg: "#ef4444" }
-  }
-  return { char: " .", fg: "#374151" }
+const GLYPH = {
+  head: { char: "@@", fg: "#22c55e" },
+  body: { char: "[]", fg: "#4ade80" },
+  apple: { char: "()", fg: "#ef4444" },
+  empty: { char: " .", fg: "#374151" }
+}
+
+const cellGlyph = (cell: Position.Position, model: SnakeGameModel) => {
+  if (Position.equivalence(cell, model.snake[0])) return GLYPH.head
+  if (Snake.contains(model.snake, cell)) return GLYPH.body
+  if (Position.equivalence(cell, model.apple)) return GLYPH.apple
+  return GLYPH.empty
 }
 
 export const SnakeGame = Component.define({
@@ -202,7 +198,9 @@ export const SnakeGame = Component.define({
         h.b("Snake"),
         `  Score: ${model.points}  High: ${model.highScore}`
       ),
-      h.text.style({ fg: "#9ca3af" }).children(GAME_STATE_TEXT[model.gameState]),
+      h.text.style({ fg: "#9ca3af" }).children(
+        GAME_STATE_TEXT[model.gameState]
+      ),
       h.box.style({
         border: true,
         flexDirection: "column",
@@ -210,12 +208,10 @@ export const SnakeGame = Component.define({
         height: Position.GRID_SIZE + 2
       }).children(
         Array.makeBy(Position.GRID_SIZE, (y) =>
-          h.text.key(`row-${y}`).children(
+          h.text(
             Array.makeBy(Position.GRID_SIZE, (x) => {
-              const cell = cellGlyph(x, y, model)
-              return h.span.key(`c-${x}`).style({ fg: cell.fg }).children(
-                cell.char
-              )
+              const glyph = cellGlyph({ x, y }, model)
+              return h.span.style({ fg: glyph.fg }).children(glyph.char)
             })
           ))
       ),

@@ -49,7 +49,10 @@ const found = <N>(
   ref: Renderer.Ref<N>,
   f: (host: Context.Service.Shape<typeof OpenTui.Host>, node: N) => void
 ): Effect.Effect<Found, never, Renderer.Refs | OpenTui.Host> =>
-  Effect.map(withNode(ref, f), (done): Found => ({ found: Option.isSome(done) }))
+  Effect.map(
+    withNode(ref, f),
+    (done): Found => ({ found: Option.isSome(done) })
+  )
 
 /**
  * The Command definition behind {@link focus}.
@@ -58,12 +61,14 @@ const found = <N>(
  * @category commands
  * @since 0.1.0
  */
-export const Focus: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> =
-  Command.make(
-    "OpenTuiCommand.focus",
-    { args: { ref: Renderer.Ref } },
-    ({ ref }) => found(ref, (host, node) => host.focus(node as OT.Renderable))
-  )
+export const Focus: Command.Factory<
+  { readonly ref: Renderer.Ref<any> },
+  Found
+> = Command.make(
+  "OpenTuiCommand.focus",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) => found(ref, (host, node) => host.focus(node as OT.Renderable))
+)
 
 /**
  * The Command definition behind {@link blur}.
@@ -96,8 +101,10 @@ export const ScrollTo: Command.Factory<
   "OpenTuiCommand.scrollTo",
   { args: { ref: Renderer.Ref, position: ScrollPositionSchema } },
   ({ position, ref }) =>
-    found(ref, (host, node) =>
-      host.scrollTo(node as OT.ScrollBoxRenderable, position))
+    found(
+      ref,
+      (host, node) => host.scrollTo(node as OT.ScrollBoxRenderable, position)
+    )
 )
 
 /**
@@ -117,8 +124,10 @@ export const ScrollBy: Command.Factory<
   "OpenTuiCommand.scrollBy",
   { args: { ref: Renderer.Ref, delta: ScrollPositionSchema } },
   ({ delta, ref }) =>
-    found(ref, (host, node) =>
-      host.scrollBy(node as OT.ScrollBoxRenderable, delta))
+    found(
+      ref,
+      (host, node) => host.scrollBy(node as OT.ScrollBoxRenderable, delta)
+    )
 )
 
 /**
@@ -134,7 +143,8 @@ export const Measure: Command.Factory<
 > = Command.make(
   "OpenTuiCommand.measure",
   { args: { ref: Renderer.Ref } },
-  ({ ref }) => withNode(ref, (host, node) => host.measure(node as OT.Renderable))
+  ({ ref }) =>
+    withNode(ref, (host, node) => host.measure(node as OT.Renderable))
 )
 
 /**

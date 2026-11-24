@@ -246,23 +246,6 @@ export interface DirectControls<State, Msg> {
 }
 
 /**
- * What a {@link direct} Subscription's attach callback returns: a cleanup
- * function, an object with cleanup and optional initial work, or `undefined`
- * to skip attaching.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export type DirectAttachment<R = never> =
-  | (() => void)
-  | {
-    readonly initial?: Effect.Effect<void, never, R> | undefined
-    readonly close: () => void
-  }
-  | undefined
-
-/**
  * Declares a keyed Subscription that attaches synchronously to a host event
  * source instead of running a Stream.
  *
@@ -274,9 +257,10 @@ export type DirectAttachment<R = never> =
  *
  * **Details**
  *
- * `state` is updated on every `subscriptions` run for the same key; read the
- * current value inside `controls.enter((latest) => ...)` so a listener never
- * closes over stale handlers or Model values.
+ * `attach` runs when the Subscription starts and returns the function that
+ * detaches it. `state` is updated on every `subscriptions` run for the same
+ * key; read the current value inside `controls.enter((latest) => ...)` so a
+ * listener never closes over stale handlers or Model values.
  *
  * @stability experimental
  * @category constructors
@@ -289,40 +273,34 @@ export const direct = <State, Msg, R = never>(
   attach: (
     context: Context.Context<R>,
     controls: DirectControls<State, Msg>
-  ) => DirectAttachment<R>
+  ) => () => void
 ): Subscription<Msg, R> => {
-  const base = deps === undefined
-    ? make<Msg, R>(name, Stream.never)
-    : make<Deps, Msg, R>(name, deps, () => Stream.never)
   const connect: NonNullable<services.Direct[typeof services.direct]> = (
     context,
     emit,
     fail,
     enter
-  ) => {
-    const attached = attach(context as Context.Context<R>, {
+  ) => ({
+    initial: Effect.void,
+    close: attach(context as Context.Context<R>, {
       emit: (message, accepted) => emit(message, accepted ?? noop),
       fail,
       enter: (f) =>
-        enter((latest) => {
-          const current = (latest as { readonly [directState]?: State })[
-            directState
-          ]
-          f(current !== undefined ? current : state)
-        })
+        enter((latest) =>
+          f(
+            (latest as unknown as { readonly [directState]: State })[
+              directState
+            ]
+          )
+        )
     })
-    if (attached === undefined) return undefined
-    return typeof attached === "function"
-      ? { initial: Effect.void, close: attached }
-      : {
-        initial: (attached.initial ?? Effect.void) as Effect.Effect<void>,
-        close: attached.close
-      }
-  }
-  return Object.assign(base, {
-    [directState]: state,
-    [services.direct]: connect
   })
+  return Object.assign(
+    deps === undefined
+      ? make<Msg, R>(name, Stream.never)
+      : make<Deps, Msg, R>(name, deps, () => Stream.never),
+    { [directState]: state, [services.direct]: connect }
+  )
 }
 
 const noop = () => {}

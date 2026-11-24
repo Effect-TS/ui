@@ -14,13 +14,11 @@ import {
   type TestRendererOptions,
   type TestRendererSetup
 } from "@opentui/core/testing"
-import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Scope from "effect/Scope"
-import * as OpenTui from "../OpenTui.ts"
+import type * as OpenTui from "../OpenTui.ts"
 import * as OpenTuiHost from "../OpenTuiHost.ts"
-import * as OpenTuiSubscription from "../OpenTuiSubscription.ts"
 
 /**
  * Options for {@link mount} and {@link layer}.
@@ -29,10 +27,14 @@ import * as OpenTuiSubscription from "../OpenTuiSubscription.ts"
  * @category models
  * @since 0.1.0
  */
-export interface TestOptions extends TestRendererOptions {
-  readonly renderables?:
-    | Readonly<Record<string, OpenTuiHost.RenderableConstructor>>
-    | undefined
+export interface TestOptions
+  extends TestRendererOptions, Pick<OpenTuiHost.MakeHostOptions, "renderables">
+{}
+
+interface Modifiers {
+  readonly shift?: boolean
+  readonly ctrl?: boolean
+  readonly meta?: boolean
 }
 
 /**
@@ -49,21 +51,10 @@ export interface MountedApp<out Model, in Msg> {
   readonly settle: Effect.Effect<void>
   readonly render: Effect.Effect<string>
   readonly captureFrame: () => string
-  readonly pressKey: (
-    key: string,
-    modifiers?: {
-      readonly shift?: boolean
-      readonly ctrl?: boolean
-      readonly meta?: boolean
-    }
-  ) => Effect.Effect<void>
+  readonly pressKey: (key: string, modifiers?: Modifiers) => Effect.Effect<void>
   readonly pressArrow: (
     direction: "up" | "down" | "left" | "right",
-    modifiers?: {
-      readonly shift?: boolean
-      readonly ctrl?: boolean
-      readonly meta?: boolean
-    }
+    modifiers?: Modifiers
   ) => Effect.Effect<void>
   readonly pressEnter: Effect.Effect<void>
   readonly pressEscape: Effect.Effect<void>
@@ -72,18 +63,26 @@ export interface MountedApp<out Model, in Msg> {
   readonly resize: (width: number, height: number) => Effect.Effect<void>
 }
 
-const drainTurn: Effect.Effect<void> = Effect.promise(async () => {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
-  for (let i = 0; i < 4; i++) {
-    await new Promise<void>((resolve) => queueMicrotask(resolve))
-  }
-})
-
 const drainMicrotasks: Effect.Effect<void> = Effect.promise(async () => {
   for (let i = 0; i < 4; i++) {
     await new Promise<void>((resolve) => queueMicrotask(resolve))
   }
 })
+
+const drainTurn: Effect.Effect<void> = Effect.andThen(
+  Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0))),
+  drainMicrotasks
+)
+
+const acquireSetup = (
+  options: TestRendererOptions
+): Effect.Effect<TestRendererSetup, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.promise(() =>
+      createTestRenderer({ width: 80, height: 24, ...options })
+    ),
+    (setup) => Effect.promise(() => setup.dispose())
+  )
 
 /**
  * Provides an OpenTUI test renderer as `Renderer.Renderer`, `OpenTui.Host`,
@@ -95,31 +94,15 @@ const drainMicrotasks: Effect.Effect<void> = Effect.promise(async () => {
  */
 export const layer = (
   options?: TestOptions | undefined
-): Layer.Layer<Renderer.Renderer | OpenTui.Host> =>
-  Layer.effectContext(
-    Effect.gen(function*() {
-      const { renderables, ...rendererOptions } = options ?? {}
-      const setup = yield* Effect.acquireRelease(
-        Effect.promise(() =>
-          createTestRenderer({
-            width: 80,
-            height: 24,
-            ...rendererOptions
-          })
-        ),
-        (s) => Effect.promise(() => s.dispose())
-      )
-      return Context.make(Renderer.Renderer, {
-        host: OpenTuiHost.makeHost(setup.renderer, { renderables })
-      }).pipe(
-        Context.add(OpenTui.Host, OpenTuiHost.makeHostService(setup.renderer)),
-        Context.add(
-          OpenTuiSubscription.GlobalEvents,
-          OpenTuiHost.makeGlobalEvents(setup.renderer)
-        )
-      )
-    })
+): Layer.Layer<Renderer.Renderer | OpenTui.Host> => {
+  const { renderables, ...rendererOptions } = options ?? {}
+  return Layer.unwrap(
+    Effect.map(
+      acquireSetup(rendererOptions),
+      (setup) => OpenTuiHost.layerFromRenderer(setup.renderer, { renderables })
+    )
   )
+}
 
 /**
  * Mounts `component` on OpenTUI's native test renderer for the life of the
@@ -153,45 +136,25 @@ export const mount = <
   Effect.gen(function*() {
     const { renderables, ...rendererOptions } = options ?? {}
     const titles: Array<string> = []
-    const setup = yield* Effect.acquireRelease(
-      Effect.promise(() =>
-        createTestRenderer({
-          width: 80,
-          height: 24,
-          ...rendererOptions
-        })
-      ),
-      (s) => Effect.promise(() => s.dispose())
-    )
-    const hostContext = Context.make(Renderer.Renderer, {
-      host: OpenTuiHost.makeHost(setup.renderer, {
+    const setup = yield* acquireSetup(rendererOptions)
+    const root = yield* Effect.provide(
+      Renderer.mount(component as any, props as any, setup.renderer.root),
+      OpenTuiHost.layerFromRenderer(setup.renderer, {
         renderables,
         onTitle: (title) => {
           titles.push(title)
         }
       })
-    }).pipe(
-      Context.add(OpenTui.Host, OpenTuiHost.makeHostService(setup.renderer)),
-      Context.add(
-        OpenTuiSubscription.GlobalEvents,
-        OpenTuiHost.makeGlobalEvents(setup.renderer)
-      )
     )
-    const outer = yield* Effect.context<Scope.Scope>()
-    const root = yield* Effect.provideContext(
-      Renderer.mount(component as any, props as any, setup.renderer.root),
-      Context.merge(outer, hostContext)
+    const pass = Effect.andThen(
+      drainTurn,
+      Effect.promise(async () => {
+        if (!setup.renderer.isDestroyed) await setup.renderOnce()
+      })
     )
-    const settle = Effect.gen(function*() {
-      yield* drainTurn
-      if (!setup.renderer.isDestroyed) {
-        yield* Effect.promise(() => setup.renderOnce())
-      }
-      yield* drainTurn
-      if (!setup.renderer.isDestroyed) {
-        yield* Effect.promise(() => setup.renderOnce())
-      }
-    })
+    const settle = Effect.andThen(pass, pass)
+    const act = (f: () => void): Effect.Effect<void> =>
+      Effect.andThen(Effect.sync(f), settle)
     yield* settle
     return {
       root,
@@ -204,19 +167,10 @@ export const mount = <
       ),
       captureFrame: () => setup.captureCharFrame(),
       pressKey: (key, modifiers) =>
-        Effect.andThen(
-          Effect.sync(() => setup.mockInput.pressKey(key, modifiers)),
-          settle
-        ),
+        act(() => setup.mockInput.pressKey(key, modifiers)),
       pressArrow: (direction, modifiers) =>
-        Effect.andThen(
-          Effect.sync(() => setup.mockInput.pressArrow(direction, modifiers)),
-          settle
-        ),
-      pressEnter: Effect.andThen(
-        Effect.sync(() => setup.mockInput.pressEnter()),
-        settle
-      ),
+        act(() => setup.mockInput.pressArrow(direction, modifiers)),
+      pressEnter: act(() => setup.mockInput.pressEnter()),
       pressEscape: Effect.gen(function*() {
         yield* Effect.promise(
           () =>
@@ -248,10 +202,6 @@ export const mount = <
           Effect.promise(() => setup.mockMouse.click(x, y)),
           settle
         ),
-      resize: (width, height) =>
-        Effect.andThen(
-          Effect.sync(() => setup.resize(width, height)),
-          settle
-        )
+      resize: (width, height) => act(() => setup.resize(width, height))
     } as MountedApp<Model, Msg>
   }) as any

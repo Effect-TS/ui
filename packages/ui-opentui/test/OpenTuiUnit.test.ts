@@ -1,11 +1,11 @@
 import { Component, UiSchema } from "@effect/ui"
-import { Locator, TestHost } from "@effect/ui/testing"
 import {
   OpenTui,
   OpenTuiCommand,
   OpenTuiSubscription
 } from "@effect/ui-opentui"
 import { TestOpenTuiEvents } from "@effect/ui-opentui/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Schema } from "effect"
 
@@ -71,7 +71,9 @@ describe("OpenTui FFI-free testing", () => {
         view: (h, model) =>
           h.box.ref(BoxRef).style({ border: true }).children(
             h.scrollbox.ref(ScrollRef).children(
-              h.text(`ups=${model.ups} pasted=${model.pasted} size=${model.size}`)
+              h.text(
+                `ups=${model.ups} pasted=${model.pasted} size=${model.size}`
+              )
             )
           )
       })

@@ -13,6 +13,7 @@ import * as OT from "@opentui/core"
 import * as Context from "effect/Context"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
+import * as Equal from "effect/Equal"
 import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
@@ -41,7 +42,9 @@ export type RenderableConstructor = new(
  * @since 0.1.0
  */
 export interface MakeHostOptions {
-  readonly renderables?: Readonly<Record<string, RenderableConstructor>> | undefined
+  readonly renderables?:
+    | Readonly<Record<string, RenderableConstructor>>
+    | undefined
   readonly onTitle?: ((title: string) => void) | undefined
 }
 
@@ -53,9 +56,9 @@ export interface MakeHostOptions {
  * @category models
  * @since 0.1.0
  */
-export interface LayerConfig extends OT.CliRendererConfig {
-  readonly renderables?: Readonly<Record<string, RenderableConstructor>> | undefined
-}
+export interface LayerConfig
+  extends OT.CliRendererConfig, Pick<MakeHostOptions, "renderables">
+{}
 
 /**
  * Passes when a root component renders OpenTUI elements or is host-neutral,
@@ -108,19 +111,31 @@ const textTagAttributes: Readonly<Record<string, number>> = {
   a: OT.TextAttributes.NONE
 }
 
-const mouseEventProps: Readonly<Record<string, string>> = {
-  mousedown: "onMouseDown",
-  mouseup: "onMouseUp",
-  mousemove: "onMouseMove",
-  mouseover: "onMouseOver",
-  mouseout: "onMouseOut",
-  mousescroll: "onMouseScroll"
-}
-
 const controlledProps: ReadonlySet<string> = new Set([
   "value",
   "selectedIndex",
   "focused"
+])
+
+const resettableProps: ReadonlySet<string> = new Set([
+  "border",
+  "borderStyle",
+  "shouldFill",
+  "visible",
+  "opacity",
+  "wrapMode",
+  "textAlign",
+  "truncate",
+  "showDescription",
+  "showSelectionIndicator",
+  "showScrollIndicator",
+  "wrapSelection",
+  "stickyScroll",
+  "scrollX",
+  "scrollY",
+  "titleAlignment",
+  "bottomTitleAlignment",
+  "attributes"
 ])
 
 const textDecoder = new TextDecoder()
@@ -140,17 +155,23 @@ class Container {
 
 type HostNode = OT.BaseRenderable | Slot | Container
 
+type Controlled = OT.TextareaRenderable | OT.SelectRenderable
+
+const isControlled = (
+  node: OT.BaseRenderable,
+  name: string
+): node is Controlled =>
+  name === "value"
+    ? node instanceof OT.TextareaRenderable
+    : name === "selectedIndex" && node instanceof OT.SelectRenderable
+
 const destroyRenderable = (node: OT.BaseRenderable | undefined): void => {
   if (node === undefined) return
   if (node instanceof OT.Renderable && node.isDestroyed) return
   node.destroyRecursively()
 }
 
-const destroyHostNode = (node: HostNode): void => {
-  if (node instanceof Container) {
-    for (const child of node.children.splice(0)) destroyHostNode(child)
-    return
-  }
+const destroyHostNode = (node: OT.BaseRenderable | Slot): void => {
   if (node instanceof Slot) {
     destroyRenderable(node.layout)
     destroyRenderable(node.text)
@@ -158,13 +179,6 @@ const destroyHostNode = (node: HostNode): void => {
   }
   destroyRenderable(node)
 }
-
-// Reclaims native handles for keepAlive subtrees discarded while parked in a Container.
-const containerRegistry = new FinalizationRegistry<Array<HostNode>>(
-  (children) => {
-    for (const child of children.splice(0)) destroyHostNode(child)
-  }
-)
 
 const isTextParent = (node: HostNode): boolean =>
   node instanceof OT.TextRenderable || OT.isTextNodeRenderable(node)
@@ -175,40 +189,23 @@ const realParent = (node: OT.BaseRenderable): OT.BaseRenderable | undefined => {
   return parent
 }
 
-const childrenOf = (node: OT.BaseRenderable): ReadonlyArray<OT.BaseRenderable> =>
-  node instanceof OT.TextRenderable ? node.getTextChildren() : node.getChildren()
+const childrenOf = (
+  node: OT.BaseRenderable
+): ReadonlyArray<OT.BaseRenderable> =>
+  node instanceof OT.TextRenderable
+    ? node.getTextChildren()
+    : node.getChildren()
 
-const deepEqual = (a: unknown, b: unknown): boolean => {
-  if (Object.is(a, b)) return true
-  if (
-    typeof a !== "object" || a === null ||
-    typeof b !== "object" || b === null
-  ) return false
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], b[i])) return false
-    }
-    return true
+const mapOf = (
+  maps: WeakMap<OT.BaseRenderable, Map<string, unknown>>,
+  node: OT.BaseRenderable
+): Map<string, unknown> => {
+  let map = maps.get(node)
+  if (map === undefined) {
+    map = new Map()
+    maps.set(node, map)
   }
-  if (Array.isArray(b)) return false
-  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false
-  const proto = Object.getPrototypeOf(a)
-  if (proto !== Object.prototype && proto !== null) return false
-  const keysA = Object.keys(a)
-  const keysB = Object.keys(b)
-  if (keysA.length !== keysB.length) return false
-  for (let i = 0; i < keysA.length; i++) {
-    const key = keysA[i]!
-    if (
-      !Object.hasOwn(b, key) ||
-      !deepEqual(
-        (a as Record<string, unknown>)[key],
-        (b as Record<string, unknown>)[key]
-      )
-    ) return false
-  }
-  return true
+  return map
 }
 
 const keyPayloadOf = (
@@ -247,52 +244,19 @@ const pastePayloadOf = (event: OT.PasteEvent): OpenTui.PastePayload => ({
   text: textDecoder.decode(event.bytes)
 })
 
-const resetDefault = (
-  node: OT.BaseRenderable,
-  name: string,
-  baseAttributes: WeakMap<OT.TextNodeRenderable, number>
-): unknown => {
-  switch (name) {
-    case "border":
-      return false
-    case "borderStyle":
-      return "single"
-    case "shouldFill":
-      return true
-    case "visible":
-      return true
-    case "opacity":
-      return 1
-    case "wrapMode":
-      return "none"
-    case "textAlign":
-      return "left"
-    case "truncate":
-      return false
-    case "showDescription":
-      return true
-    case "showSelectionIndicator":
-      return true
-    case "showScrollIndicator":
-      return false
-    case "wrapSelection":
-      return false
-    case "stickyScroll":
-      return false
-    case "scrollX":
-      return false
-    case "scrollY":
-      return true
-    case "titleAlignment":
-    case "bottomTitleAlignment":
-      return "left"
-    case "attributes":
-      return OT.isTextNodeRenderable(node)
-        ? (baseAttributes.get(node) ?? OT.TextAttributes.NONE)
-        : OT.TextAttributes.NONE
-    default:
-      return undefined
-  }
+type PayloadOf = (event: any, renderer: OT.CliRenderer) => object
+
+const cancellableEvents: Readonly<
+  Record<string, readonly [property: string, payloadOf: PayloadOf]>
+> = {
+  mousedown: ["onMouseDown", mousePayloadOf],
+  mouseup: ["onMouseUp", mousePayloadOf],
+  mousemove: ["onMouseMove", mousePayloadOf],
+  mouseover: ["onMouseOver", mousePayloadOf],
+  mouseout: ["onMouseOut", mousePayloadOf],
+  mousescroll: ["onMouseScroll", mousePayloadOf],
+  keydown: ["onKeyDown", keyPayloadOf],
+  paste: ["onPaste", pastePayloadOf]
 }
 
 interface EventEntry {
@@ -302,14 +266,7 @@ interface EventEntry {
   readonly wired: Set<string>
 }
 
-/**
- * Builds the `OpenTui.Host` service over a `CliRenderer`.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const makeHostService = (
+const makeHostService = (
   renderer: OT.CliRenderer
 ): Context.Service.Shape<typeof OpenTui.Host> => ({
   focus: (node) => {
@@ -335,53 +292,36 @@ export const makeHostService = (
   }
 })
 
-/**
- * Builds an `OpenTuiSubscription.GlobalEvents` source wired to `renderer`.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const makeGlobalEvents = (
+const makeGlobalEvents = (
   renderer: OT.CliRenderer
 ): OpenTuiSubscription.GlobalEvents => ({
   listen: (event, listener) => {
-    if (event === "keypress" || event === "keyrelease") {
-      const keyEvent: "keypress" | "keyrelease" = event
-      const handler = (key: OT.KeyEvent) => {
-        const payload = {
-          ...keyPayloadOf(key, renderer),
-          defaultPrevented: key.defaultPrevented
-        }
-        listener(payload as any, () => key.preventDefault())
+    if (event === "resize") {
+      const handler = (width: number, height: number) => {
+        listener(
+          { width, height, defaultPrevented: false } as any,
+          () => {}
+        )
       }
-      renderer.keyInput.on(keyEvent, handler)
+      renderer.on(OT.CliRenderEvents.RESIZE, handler)
       return () => {
-        renderer.keyInput.off(keyEvent, handler)
+        renderer.off(OT.CliRenderEvents.RESIZE, handler)
       }
     }
-    if (event === "paste") {
-      const handler = (paste: OT.PasteEvent) => {
-        const payload = {
-          ...pastePayloadOf(paste),
-          defaultPrevented: paste.defaultPrevented
-        }
-        listener(payload as any, () => paste.preventDefault())
+    const keyEvent: "keypress" | "keyrelease" | "paste" = event
+    const payloadOf: PayloadOf = keyEvent === "paste"
+      ? pastePayloadOf
+      : keyPayloadOf
+    const handler = (input: OT.KeyEvent | OT.PasteEvent) => {
+      const payload = {
+        ...payloadOf(input, renderer),
+        defaultPrevented: input.defaultPrevented
       }
-      renderer.keyInput.on("paste", handler)
-      return () => {
-        renderer.keyInput.off("paste", handler)
-      }
+      listener(payload as any, () => input.preventDefault())
     }
-    const handler = (width: number, height: number) => {
-      listener(
-        { width, height, defaultPrevented: false } as any,
-        () => {}
-      )
-    }
-    renderer.on(OT.CliRenderEvents.RESIZE, handler)
+    renderer.keyInput.on(keyEvent, handler)
     return () => {
-      renderer.off(OT.CliRenderEvents.RESIZE, handler)
+      renderer.keyInput.off(keyEvent, handler)
     }
   }
 })
@@ -408,16 +348,16 @@ export const makeHost = (
 
   const slots = new WeakMap<OT.BaseRenderable, Slot>()
   const containerParent = new WeakMap<HostNode, Container>()
-  const baseAttributes = new WeakMap<OT.TextNodeRenderable, number>()
   const events = new WeakMap<OT.BaseRenderable, EventEntry>()
-  const wanted = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
+  const wanted = new WeakMap<Controlled, string | number>()
+  const initialProps = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
   const lastProps = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
   const controlledWired = new WeakSet<OT.BaseRenderable>()
-  const suppressing = new WeakSet<OT.BaseRenderable>()
+  let suppressing = false
 
   const detached = new Set<HostNode>()
-  const pendingFocus = new Set<OT.Renderable>()
-  const pendingRevert = new Set<OT.BaseRenderable>()
+  const pendingFocus = new Map<OT.Renderable, boolean>()
+  const pendingRevert = new Set<Controlled>()
   let revertScheduled = false
 
   const real = (node: HostNode, parent?: HostNode): OT.BaseRenderable => {
@@ -451,78 +391,32 @@ export const makeHost = (
     return false
   }
 
-  const writeInputValue = (node: OT.InputRenderable, value: string): void => {
-    if (node.value === value) return
-    const prevValue = node.value
-    const prevCursor = node.cursorOffset
-    suppressing.add(node)
+  const write = (node: Controlled, value: string | number): boolean => {
+    const select = node instanceof OT.SelectRenderable
+    const current = select ? node.getSelectedIndex() : node.plainText
+    if (current === value) return false
+    suppressing = true
     try {
-      node.value = value
-      node.cursorOffset = prevCursor >= prevValue.length
-        ? value.length
-        : Math.min(prevCursor, value.length)
+      if (select) {
+        node.setSelectedIndex(value as number)
+      } else {
+        const text = value as string
+        const cursor = node.cursorOffset
+        if (node instanceof OT.InputRenderable) node.value = text
+        else node.setText(text)
+        node.cursorOffset = cursor >= (current as string).length
+          ? text.length
+          : Math.min(cursor, text.length)
+      }
     } finally {
-      suppressing.delete(node)
+      suppressing = false
     }
+    return true
   }
 
-  const writeTextareaValue = (
-    node: OT.TextareaRenderable,
-    value: string
-  ): void => {
-    if (node.plainText === value) return
-    const prevText = node.plainText
-    const prevCursor = node.cursorOffset
-    suppressing.add(node)
-    try {
-      node.setText(value)
-      node.cursorOffset = prevCursor >= prevText.length
-        ? value.length
-        : Math.min(prevCursor, value.length)
-    } finally {
-      suppressing.delete(node)
-    }
-  }
-
-  const writeSelectIndex = (
-    node: OT.SelectRenderable,
-    index: number
-  ): void => {
-    if (node.getSelectedIndex() === index) return
-    suppressing.add(node)
-    try {
-      node.setSelectedIndex(index)
-    } finally {
-      suppressing.delete(node)
-    }
-  }
-
-  const revertNode = (node: OT.BaseRenderable): boolean => {
-    if (node instanceof OT.Renderable && node.isDestroyed) return false
-    const map = wanted.get(node)
-    if (map === undefined) return false
-    if (node instanceof OT.InputRenderable && map.has("value")) {
-      const expected = String(map.get("value") ?? "")
-      if (node.value !== expected) {
-        writeInputValue(node, expected)
-        return true
-      }
-    } else if (node instanceof OT.TextareaRenderable && map.has("value")) {
-      const expected = String(map.get("value") ?? "")
-      if (node.plainText !== expected) {
-        writeTextareaValue(node, expected)
-        return true
-      }
-    } else if (
-      node instanceof OT.SelectRenderable && map.has("selectedIndex")
-    ) {
-      const expected = Number(map.get("selectedIndex") ?? 0)
-      if (node.getSelectedIndex() !== expected) {
-        writeSelectIndex(node, expected)
-        return true
-      }
-    }
-    return false
+  const revertNode = (node: Controlled): boolean => {
+    const value = wanted.get(node)
+    return value !== undefined && !node.isDestroyed && write(node, value)
   }
 
   const flushReverts = (): void => {
@@ -535,7 +429,7 @@ export const makeHost = (
     if (changed && !renderer.isDestroyed) renderer.requestRender()
   }
 
-  const scheduleRevert = (node: OT.BaseRenderable): void => {
+  const scheduleRevert = (node: Controlled): void => {
     pendingRevert.add(node)
     if (!revertScheduled) {
       revertScheduled = true
@@ -556,67 +450,57 @@ export const makeHost = (
     return entry.dispatch(name, handler, payload, onMessage)
   }
 
+  const afterEdit = (node: Controlled, handled: boolean): void => {
+    if (!wanted.has(node)) return
+    if (handled) scheduleRevert(node)
+    else if (revertNode(node) && !renderer.isDestroyed) renderer.requestRender()
+  }
+
   const ensureControlledListener = (node: OT.BaseRenderable): void => {
     if (controlledWired.has(node)) return
     controlledWired.add(node)
     if (node instanceof OT.InputRenderable) {
       node.on(OT.InputRenderableEvents.INPUT, (value: string) => {
-        if (suppressing.has(node)) return
-        const handled = fire(node, "input", { value: value ?? node.value })
-        if (wanted.get(node)?.has("value")) {
-          if (!handled) {
-            if (revertNode(node) && !renderer.isDestroyed) {
-              renderer.requestRender()
-            }
-          } else {
-            scheduleRevert(node)
-          }
-        }
+        if (suppressing) return
+        afterEdit(node, fire(node, "input", { value: value ?? node.value }))
       })
     } else if (node instanceof OT.TextareaRenderable) {
       node.onContentChange = () => {
-        if (suppressing.has(node)) return
-        const handled = fire(node, "input", { value: node.plainText })
-        if (wanted.get(node)?.has("value")) {
-          if (!handled) {
-            if (revertNode(node) && !renderer.isDestroyed) {
-              renderer.requestRender()
-            }
-          } else {
-            scheduleRevert(node)
-          }
-        }
+        if (suppressing) return
+        afterEdit(node, fire(node, "input", { value: node.plainText }))
       }
     } else if (node instanceof OT.SelectRenderable) {
       node.on(
         OT.SelectRenderableEvents.SELECTION_CHANGED,
         (index: number, option: OT.SelectOption | null) => {
-          if (suppressing.has(node)) return
-          const handled = fire(node, "selectionChanged", {
-            index,
-            option: option ?? null
-          })
-          if (wanted.get(node)?.has("selectedIndex")) {
-            if (!handled) {
-              if (revertNode(node) && !renderer.isDestroyed) {
-                renderer.requestRender()
-              }
-            } else {
-              scheduleRevert(node)
-            }
-          }
+          if (suppressing) return
+          afterEdit(
+            node,
+            fire(node, "selectionChanged", { index, option: option ?? null })
+          )
         }
       )
     }
   }
 
-  const wantedMapOf = (node: OT.BaseRenderable): Map<string, unknown> => {
-    let map = wanted.get(node)
-    if (map === undefined) {
-      map = new Map()
-      wanted.set(node, map)
-    }
-    return map
+  const cancellableListener = (
+    entry: EventEntry,
+    name: string,
+    payloadOf: PayloadOf
+  ) =>
+  (event: OT.MouseEvent | OT.KeyEvent | OT.PasteEvent): void => {
+    const handler = entry.handlers[name]
+    if (handler === undefined) return
+    // Renderer.Host contract: only the innermost element with a handler receives an event.
+    event.stopPropagation()
+    const prevent = entry.options[name]?.preventDefault
+    if (prevent === "always") event.preventDefault()
+    entry.dispatch(
+      name,
+      handler,
+      payloadOf(event, renderer),
+      prevent === true ? () => event.preventDefault() : undefined
+    )
   }
 
   const detachFromContainer = (node: HostNode): void => {
@@ -633,13 +517,10 @@ export const makeHost = (
         return OT.TextNodeRenderable.fromString("\n", { id: `br-${nextId++}` })
       }
       if (tag in textTagAttributes) {
-        const attr = textTagAttributes[tag]!
-        const node = new OT.TextNodeRenderable({
+        return new OT.TextNodeRenderable({
           id: `${tag}-${nextId++}`,
-          attributes: attr
+          attributes: textTagAttributes[tag]!
         })
-        baseAttributes.set(node, attr)
-        return node
       }
       const Ctor = catalogue[tag]
       if (Ctor === undefined) {
@@ -671,63 +552,42 @@ export const makeHost = (
     setProp(node, name, value) {
       if (node instanceof Slot || node instanceof Container) return
       if (name === "focused") {
-        if (!(node instanceof OT.Renderable)) return
-        wantedMapOf(node).set("focused", Boolean(value))
-        pendingFocus.add(node)
+        if (node instanceof OT.Renderable) {
+          pendingFocus.set(node, Boolean(value))
+        }
         return
       }
-      if (name === "value") {
-        if (node instanceof OT.InputRenderable) {
-          ensureControlledListener(node)
-          if (value === undefined) {
-            wanted.get(node)?.delete("value")
-            return
-          }
-          const str = String(value)
-          wantedMapOf(node).set("value", str)
-          writeInputValue(node, str)
-          return
-        }
-        if (node instanceof OT.TextareaRenderable) {
-          ensureControlledListener(node)
-          if (value === undefined) {
-            wanted.get(node)?.delete("value")
-            return
-          }
-          const str = String(value)
-          wantedMapOf(node).set("value", str)
-          writeTextareaValue(node, str)
-          return
-        }
-      }
-      if (name === "selectedIndex" && node instanceof OT.SelectRenderable) {
+      if (isControlled(node, name)) {
         ensureControlledListener(node)
         if (value === undefined) {
-          wanted.get(node)?.delete("selectedIndex")
-          return
+          wanted.delete(node)
+        } else {
+          const coerced = name === "value" ? String(value) : Number(value)
+          wanted.set(node, coerced)
+          write(node, coerced)
         }
-        const index = Number(value)
-        wantedMapOf(node).set("selectedIndex", index)
-        writeSelectIndex(node, index)
         return
       }
-      let prevMap = lastProps.get(node)
-      if (prevMap === undefined) {
-        prevMap = new Map()
-        lastProps.set(node, prevMap)
+      if (typeof value === "object" && value !== null) {
+        const last = mapOf(lastProps, node)
+        if (Equal.equals(last.get(name), value)) return
+        last.set(name, value)
+      } else {
+        lastProps.get(node)?.delete(name)
       }
-      const prev = prevMap.get(name)
-      if (prevMap.has(name) && deepEqual(prev, value)) return
-      prevMap.set(name, value)
-      if (name === "attributes" && OT.isTextNodeRenderable(node)) {
-        const base = baseAttributes.get(node) ?? OT.TextAttributes.NONE
-        node.attributes = base | (typeof value === "number" ? value : 0)
-        return
+      const target = node as unknown as Record<string, unknown>
+      let next = value
+      if (resettableProps.has(name)) {
+        const initial = mapOf(initialProps, node)
+        if (!initial.has(name)) initial.set(name, target[name])
+        if (value === undefined) {
+          next = initial.get(name)
+        } else if (name === "attributes" && OT.isTextNodeRenderable(node)) {
+          next = (initial.get(name) as number) |
+            (typeof value === "number" ? value : 0)
+        }
       }
-      const nextValue = value === undefined
-        ? resetDefault(node, name, baseAttributes)
-        : value
-      ;(node as unknown as Record<string, unknown>)[name] = nextValue
+      target[name] = next
     },
 
     insertBefore(parent, node, ref) {
@@ -753,12 +613,10 @@ export const makeHost = (
     remove(node) {
       if (containerParent.has(node)) {
         detachFromContainer(node)
-        if (node instanceof Slot) node.parent = undefined
-        detached.add(node)
-        return
+      } else {
+        const child = real(node)
+        realParent(child)?.remove(child)
       }
-      const child = real(node)
-      realParent(child)?.remove(child)
       if (node instanceof Slot) node.parent = undefined
       detached.add(node)
     },
@@ -804,64 +662,13 @@ export const makeHost = (
         entry.options = eventOptions
         entry.dispatch = dispatch
       }
-      for (const name of Object.keys(handlers)) {
+      for (const name in handlers) {
         if (entry.wired.has(name)) continue
         entry.wired.add(name)
-        if (name in mouseEventProps) {
-          const prop = mouseEventProps[name]!
-          ;(node as unknown as Record<string, unknown>)[prop] = (
-            event: OT.MouseEvent
-          ) => {
-            const current = events.get(node)
-            const handler = current?.handlers[name]
-            if (handler === undefined) return
-            // Renderer.Host contract: only the innermost element with a handler receives an event.
-            event.stopPropagation()
-            const opt = current!.options[name]
-            if (opt?.preventDefault === "always") event.preventDefault()
-            current!.dispatch(
-              name,
-              handler,
-              mousePayloadOf(event),
-              opt?.preventDefault === true
-                ? () => event.preventDefault()
-                : undefined
-            )
-          }
-        } else if (name === "keydown") {
-          ;(node as OT.Renderable).onKeyDown = (key: OT.KeyEvent) => {
-            const current = events.get(node)
-            const handler = current?.handlers[name]
-            if (handler === undefined) return
-            key.stopPropagation()
-            const opt = current!.options[name]
-            if (opt?.preventDefault === "always") key.preventDefault()
-            current!.dispatch(
-              name,
-              handler,
-              keyPayloadOf(key, renderer),
-              opt?.preventDefault === true
-                ? () => key.preventDefault()
-                : undefined
-            )
-          }
-        } else if (name === "paste") {
-          ;(node as OT.Renderable).onPaste = (paste: OT.PasteEvent) => {
-            const current = events.get(node)
-            const handler = current?.handlers[name]
-            if (handler === undefined) return
-            paste.stopPropagation()
-            const opt = current!.options[name]
-            if (opt?.preventDefault === "always") paste.preventDefault()
-            current!.dispatch(
-              name,
-              handler,
-              pastePayloadOf(paste),
-              opt?.preventDefault === true
-                ? () => paste.preventDefault()
-                : undefined
-            )
-          }
+        const cancellable = cancellableEvents[name]
+        if (cancellable !== undefined) {
+          ;(node as unknown as Record<string, unknown>)[cancellable[0]] =
+            cancellableListener(entry, name, cancellable[1])
         } else if (name === "focus") {
           node.on(OT.RenderableEvents.FOCUSED, () => {
             fire(node, "focus", {})
@@ -874,7 +681,7 @@ export const makeHost = (
           ensureControlledListener(node)
         } else if (name === "change" || name === "enter") {
           node.on(name, (value?: string) => {
-            if (suppressing.has(node)) return
+            if (suppressing) return
             fire(node, name, {
               value: value ??
                 (node instanceof OT.InputRenderable ? node.value : "")
@@ -900,28 +707,23 @@ export const makeHost = (
     runsMounts: true,
 
     createContainer() {
-      const container = new Container()
-      containerRegistry.register(container, container.children)
-      return container
+      return new Container()
     },
 
     commit() {
       for (const node of detached) {
-        if (containerParent.has(node)) continue
+        if (node instanceof Container || containerParent.has(node)) continue
         const child = real(node)
         if (realParent(child) === undefined) destroyHostNode(node)
       }
       detached.clear()
-      for (const node of pendingFocus) {
-        if (node.isDestroyed) continue
-        if (wanted.get(node)?.get("focused") === false && node.focused) {
-          node.blur()
-        }
+      for (const [node, focused] of pendingFocus) {
+        if (!focused && !node.isDestroyed && node.focused) node.blur()
       }
-      for (const node of pendingFocus) {
-        if (node.isDestroyed) continue
+      for (const [node, focused] of pendingFocus) {
         if (
-          wanted.get(node)?.get("focused") === true &&
+          focused &&
+          !node.isDestroyed &&
           !node.focused &&
           isAttachedToLiveTree(node)
         ) {
@@ -933,8 +735,9 @@ export const makeHost = (
     },
 
     head(head) {
-      const title = (head as { readonly title?: string | undefined } | undefined)
-        ?.title
+      const title =
+        (head as { readonly title?: string | undefined } | undefined)
+          ?.title
       if (title !== undefined && title !== lastTitle) {
         lastTitle = title
         if (options?.onTitle !== undefined) options.onTitle(title)
@@ -943,6 +746,27 @@ export const makeHost = (
     }
   }
 }
+
+const makeContext = (
+  renderer: OT.CliRenderer,
+  options?: MakeHostOptions | undefined
+): Context.Context<Renderer.Renderer | OpenTui.Host> =>
+  Context.make(Renderer.Renderer, { host: makeHost(renderer, options) }).pipe(
+    Context.add(OpenTui.Host, makeHostService(renderer)),
+    Context.add(OpenTuiSubscription.GlobalEvents, makeGlobalEvents(renderer))
+  )
+
+const acquireRenderer = (
+  config: OT.CliRendererConfig
+): Effect.Effect<OT.CliRenderer, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.promise(() => OT.createCliRenderer(config)),
+    (renderer) =>
+      Effect.promise(async () => {
+        if (!renderer.isDestroyed) renderer.destroy()
+        await renderer.closed
+      })
+  )
 
 /**
  * Provides `Renderer.Renderer`, `OpenTui.Host`, and
@@ -956,16 +780,7 @@ export const layerFromRenderer = (
   renderer: OT.CliRenderer,
   options?: MakeHostOptions | undefined
 ): Layer.Layer<Renderer.Renderer | OpenTui.Host> =>
-  Layer.succeedContext(
-    Context.make(Renderer.Renderer, { host: makeHost(renderer, options) })
-      .pipe(
-        Context.add(OpenTui.Host, makeHostService(renderer)),
-        Context.add(
-          OpenTuiSubscription.GlobalEvents,
-          makeGlobalEvents(renderer)
-        )
-      )
-  )
+  Layer.succeedContext(makeContext(renderer, options))
 
 /**
  * Creates and owns a `CliRenderer` for the life of the Layer, providing
@@ -977,29 +792,15 @@ export const layerFromRenderer = (
  */
 export const layer = (
   config?: LayerConfig | undefined
-): Layer.Layer<Renderer.Renderer | OpenTui.Host> =>
-  Layer.effectContext(
-    Effect.gen(function*() {
-      const { renderables, ...rendererConfig } = config ?? {}
-      const renderer = yield* Effect.acquireRelease(
-        Effect.promise(() => OT.createCliRenderer(rendererConfig)),
-        (r) =>
-          Effect.promise(async () => {
-            if (!r.isDestroyed) r.destroy()
-            await r.closed
-          })
-      )
-      return Context.make(Renderer.Renderer, {
-        host: makeHost(renderer, { renderables })
-      }).pipe(
-        Context.add(OpenTui.Host, makeHostService(renderer)),
-        Context.add(
-          OpenTuiSubscription.GlobalEvents,
-          makeGlobalEvents(renderer)
-        )
-      )
-    })
+): Layer.Layer<Renderer.Renderer | OpenTui.Host> => {
+  const { renderables, ...rendererConfig } = config ?? {}
+  return Layer.effectContext(
+    Effect.map(
+      acquireRenderer(rendererConfig),
+      (renderer) => makeContext(renderer, { renderables })
+    )
   )
+}
 
 /**
  * Mounts an OpenTUI component tree onto a `CliRenderer` owned for the life of
@@ -1032,24 +833,10 @@ export const mountEffect = <
 > =>
   Effect.gen(function*() {
     const { renderables, ...rendererConfig } = options?.renderer ?? {}
-    const renderer = yield* Effect.acquireRelease(
-      Effect.promise(() => OT.createCliRenderer(rendererConfig)),
-      (r) =>
-        Effect.promise(async () => {
-          if (!r.isDestroyed) r.destroy()
-          await r.closed
-        })
-    )
-    const hostContext = Context.make(Renderer.Renderer, {
-      host: makeHost(renderer, { renderables })
-    }).pipe(
-      Context.add(OpenTui.Host, makeHostService(renderer)),
-      Context.add(OpenTuiSubscription.GlobalEvents, makeGlobalEvents(renderer))
-    )
-    const outer = yield* Effect.context<Scope.Scope>()
+    const renderer = yield* acquireRenderer(rendererConfig)
     return yield* Effect.provideContext(
       Renderer.mount(component as any, props as any, renderer.root, options),
-      Context.merge(outer, hostContext)
+      makeContext(renderer, { renderables })
     )
   }) as any
 
@@ -1107,40 +894,17 @@ export const run = <
 ): Effect.Effect<void, never, Exclude<R | RF | RP, OpenTui.Host>> =>
   Effect.scoped(
     Effect.gen(function*() {
-      const { renderables, ...rendererConfig } = options?.renderer ?? {}
       const done = yield* Deferred.make<void>()
-      const renderer = yield* Effect.acquireRelease(
-        Effect.promise(() =>
-          OT.createCliRenderer({
-            ...rendererConfig,
-            onDestroy: () => {
-              rendererConfig.onDestroy?.()
-              Deferred.doneUnsafe(done, Exit.void)
-            }
-          })
-        ),
-        (r) =>
-          Effect.promise(async () => {
-            if (!r.isDestroyed) r.destroy()
-            await r.closed
-          })
-      )
-      const hostContext = Context.make(Renderer.Renderer, {
-        host: makeHost(renderer, { renderables })
-      }).pipe(
-        Context.add(OpenTui.Host, makeHostService(renderer)),
-        Context.add(
-          OpenTuiSubscription.GlobalEvents,
-          makeGlobalEvents(renderer)
-        )
-      )
-      const outer = yield* Effect.context<Scope.Scope>()
-      yield* Effect.provideContext(
-        Renderer.mount(component as any, props as any, renderer.root, options),
-        Context.merge(outer, hostContext)
-      )
-      if (!renderer.isDestroyed) {
-        yield* Deferred.await(done)
-      }
+      yield* mountEffect(component, props, {
+        ...options,
+        renderer: {
+          ...options?.renderer,
+          onDestroy: () => {
+            options?.renderer?.onDestroy?.()
+            Deferred.doneUnsafe(done, Exit.void)
+          }
+        }
+      })
+      yield* Deferred.await(done)
     })
   ) as any

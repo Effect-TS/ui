@@ -1,18 +1,12 @@
-import {
-  Component,
-  Head,
-  Subscription,
-  UiSchema,
-  View
-} from "@effect/ui"
+import { Component, Head, Subscription, UiSchema, View } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
   OpenTuiSubscription
 } from "@effect/ui-opentui"
 import { OpenTuiTest } from "@effect/ui-opentui/testing"
-import * as OT from "@opentui/core"
 import { describe, expect, it } from "@effect/vitest"
+import * as OT from "@opentui/core"
 import { Effect, Option, Schema } from "effect"
 
 describe("OpenTuiHost", () => {
@@ -32,8 +26,7 @@ describe("OpenTuiHost", () => {
         init: () => ({ count: 0, name: "" }),
         update: {
           ClickedIncrement: ($) => $.evolve({ count: (n) => n + 1 }),
-          UpdatedName: ($, { value }) =>
-            $.evolve({ name: value.toUpperCase() })
+          UpdatedName: ($, { value }) => $.evolve({ name: value.toUpperCase() })
         },
         head: ({ model }) => [Head.title(`Count ${model.count}`)],
         view: (h, model) =>
@@ -214,7 +207,8 @@ describe("OpenTuiHost", () => {
       expect(app.captureFrame()).toContain("123")
       expect(app.captureFrame()).not.toContain("12a")
 
-      const rootChildren = app.setup.renderer.root.getChildren()[0]!.getChildren()
+      const rootChildren = app.setup.renderer.root.getChildren()[0]!
+        .getChildren()
       const textarea = rootChildren[1] as OT.TextareaRenderable
       const select = rootChildren[2] as OT.SelectRenderable
 

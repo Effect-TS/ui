@@ -545,7 +545,7 @@ export type KeepAliveKeyHint =
  * @since 0.1.0
  */
 export interface KeepAlive<Msg, out Ends extends boolean = boolean>
-  extends Helper<Msg, unknown, any>
+  extends HelperBase<Msg, unknown>
 {
   /** Phantom: the brand only `h.keepAlive` gives. Its name is the error a keep-alive component called with `h` shows. */
   readonly "written inside h.keepAlive((s) => ...)": Ends
@@ -847,7 +847,9 @@ export const withForward = <B extends ElementBuilder<any, any, any, any>>(
  * normalised as `children` does. What a builder's `children` calls, with
  * its rest arguments: the array is reused for the first children.
  *
- * @internal
+ * @stability experimental
+ * @category vocabularies
+ * @since 0.1.0
  */
 export const withContent = <B extends ElementBuilder<any, any, any, any>>(
   builder: B,
@@ -867,8 +869,10 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
 
 /**
  * Like {@link withContent}, for a container element that cannot hold text
- * directly. Throws `message` if any child is text and marks slot `Outlet`
- * nodes so the runtime rejects text passed through them.
+ * directly. Throws if any child is text and marks slot `Outlet` nodes so
+ * the runtime rejects text passed through them. `vocabulary` is the
+ * vocabulary of `builder`: the error names it, and its `textParents` as
+ * where text goes.
  *
  * @stability experimental
  * @category vocabularies
@@ -877,28 +881,37 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
 export const withNoTextContent = <B extends ElementBuilder<any, any, any, any>>(
   builder: B,
   inputs: ReadonlyArray<Input<any, any>>,
-  message: string
+  vocabulary: Pick<Vocabulary, "name" | "textParents">
 ): B => {
   const out = withContent(builder, inputs) as Mutable<B>
+  let message: string | undefined
   let updated: Array<Node<any, any>> | undefined
   const content = out.content ?? noChildren
   for (let index = 0; index < content.length; index++) {
     const child = content[index]!
     if (child._tag === "Text") {
-      throw new Error(message)
+      throw new Error(noTextMessage(builder.tag, vocabulary))
     }
     if (child._tag === "Outlet") {
       updated ??= [...content]
       updated[index] = {
         _tag: "Outlet",
         name: child.name,
-        noText: message
+        noText: message ??= noTextMessage(builder.tag, vocabulary)
       }
     }
   }
   if (updated !== undefined) out.content = updated
   return out
 }
+
+const noTextMessage = (
+  tag: string,
+  vocabulary: Pick<Vocabulary, "name" | "textParents">
+): string =>
+  `<${tag}> can't hold text in the ${vocabulary.name} vocabulary; text goes inside ${
+    (vocabulary.textParents ?? []).join(", ")
+  }`
 
 /**
  * `children`, for an array the caller owns, such as a method's rest
@@ -2012,9 +2025,10 @@ export type Tags<V, Msg> = [V] extends [never] ? {}
  * @category utility types
  * @since 0.1.0
  */
-export type WithTags<Msg, Props, V> = "text" extends keyof Tags<V, Msg>
-  ? Omit<Helper<Msg, Props, any>, "text"> & Tags<V, Msg>
-  : Helper<Msg, Props> & Tags<V, Msg>
+export type WithTags<Msg, Props, V> =
+  & ("text" extends keyof Tags<V, Msg> ? HelperBase<Msg, Props>
+    : Helper<Msg, Props>)
+  & Tags<V, Msg>
 
 let registered: Vocabulary<any> | undefined
 
@@ -2057,7 +2071,21 @@ export const registeredElements = (): Vocabulary<any> | undefined => registered
  * @category models
  * @since 0.1.0
  */
-export interface Helper<Msg, Props, out TextResult = Text> {
+export interface Helper<Msg, Props> extends HelperBase<Msg, Props> {
+  /** A text node. The only way to put text in a native view. */
+  text(text: string): Text
+}
+
+/**
+ * The view helper without `text`: what every `h` has, including one whose
+ * vocabulary declares its own `text` tag. A function that takes any `h`
+ * types it with this.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface HelperBase<Msg, Props> {
   readonly props: Props
   /**
    * Any host element by name, with untyped event payloads. What host-neutral
@@ -2074,8 +2102,6 @@ export interface Helper<Msg, Props, out TextResult = Text> {
     tag: string,
     ...children: C
   ): ContainerBuilder<Msg, Requirements<C[number]>>
-  /** A text node. The only way to put text in a native view. */
-  text(text: string): TextResult
   /**
    * Whether this instance has a run of the Command in flight, of the group if
    * a pick of its `group` fields is given: queued, running, awaiting, or
@@ -2279,7 +2305,7 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     const textParents = this.elements?.textParents
     const builder = textParents === undefined || textParents.includes(tag)
       ? new ContainerBuilder<Msg>(tag)
-      : new NoTextBuilder<Msg>(tag, this.elements!.name, textParents)
+      : new NoTextBuilder<Msg>(tag, this.elements!)
     return inputs.length === 0 ? builder : builder.children(...inputs)
   }
   text(value: string): Text {
@@ -2289,26 +2315,15 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
 
 /** `h.el` of a tag that can't hold text in the helper's vocabulary. */
 class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
-  readonly vocabulary: string
-  readonly textParents: ReadonlyArray<string>
-  constructor(
-    tag: string,
-    vocabulary: string,
-    textParents: ReadonlyArray<string>
-  ) {
+  readonly vocabulary: Vocabulary<any>
+  constructor(tag: string, vocabulary: Vocabulary<any>) {
     super(tag)
     this.vocabulary = vocabulary
-    this.textParents = textParents
   }
   override children<const C extends ReadonlyArray<Input<Msg, any>>>(
     ...inputs: C
   ): ContainerBuilder<Msg, Requirements<C[number]>> {
-    return withNoTextContent(this, inputs, this.noTextMessage()) as any
-  }
-  private noTextMessage(): string {
-    return `<${this.tag}> can't hold text in the ${this.vocabulary} vocabulary; text goes inside ${
-      this.textParents.join(", ")
-    }`
+    return withNoTextContent(this, inputs, this.vocabulary) as any
   }
 }
 

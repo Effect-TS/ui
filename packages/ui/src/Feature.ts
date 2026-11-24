@@ -109,7 +109,7 @@ export interface Service<in out Self, in out Props, in out Events>
    */
   // A method, so `Feature.Any` takes every feature, as for `toLayer`.
   render<Msg, RF = never>(
-    h: View.Helper<Msg, unknown, any>,
+    h: View.HelperBase<Msg, unknown>,
     options: View.Child.Options<Props, Events, NoInfer<Msg>> & {
       readonly fallback: (
         result:

@@ -16,7 +16,6 @@
     "./packages/ui/test/html/register.test.ts",
     "./packages/ui/typetest/html/register.tst.ts",
     "./packages/ui-opentui/test/register.test.ts",
-    "./packages/ui-opentui/typetest/register.tst.ts",
     "./packages/ui/benchmark/types/tmp/**"
   ],
   "compilerOptions": {
@@ -37,7 +36,9 @@
       "@effect/ui-devtools": ["./packages/ui-devtools/src/index.ts"],
       "@effect/ui-devtools/*": ["./packages/ui-devtools/src/*.ts"],
       "@effect/ui-opentui": ["./packages/ui-opentui/src/index.ts"],
-      "@effect/ui-opentui/testing": ["./packages/ui-opentui/src/testing/index.ts"],
+      "@effect/ui-opentui/testing": [
+        "./packages/ui-opentui/src/testing/index.ts"
+      ],
       "@effect/ui-opentui/*": ["./packages/ui-opentui/src/*.ts"]
     },
     "plugins": [{

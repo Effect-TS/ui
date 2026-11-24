@@ -125,7 +125,10 @@ const buildPayload = <K extends keyof OpenTuiSubscription.TerminalEvents>(
  * @category constructors
  * @since 0.1.0
  */
-export const make = (): OpenTuiSubscription.GlobalEvents & TestOpenTuiEvents => {
+export const make = ():
+  & OpenTuiSubscription.GlobalEvents
+  & TestOpenTuiEvents =>
+{
   const entries = new Set<Entry>()
   const fire: TestOpenTuiEvents["fire"] = (event, partial) => {
     let prevented = partial.defaultPrevented ?? false

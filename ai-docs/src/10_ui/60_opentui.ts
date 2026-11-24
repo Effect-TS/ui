@@ -7,7 +7,6 @@
  */
 import { NodeRuntime } from "@effect/platform-node"
 import { Component, Head, UiSchema } from "@effect/ui"
-import { TestHost } from "@effect/ui/testing"
 import {
   OpenTui,
   OpenTuiCommand,
@@ -15,6 +14,7 @@ import {
   OpenTuiSubscription
 } from "@effect/ui-opentui"
 import { OpenTuiTest, TestOpenTuiEvents } from "@effect/ui-opentui/testing"
+import { TestHost } from "@effect/ui/testing"
 import { Effect, Layer, Schema } from "effect"
 
 // ---------------------------------------------------------------------------

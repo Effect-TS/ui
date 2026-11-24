@@ -53,9 +53,19 @@ describe("OpenTui vocabulary types", () => {
         return h.box.children(
           textNode,
           Child(h, {}),
-          h.keepAlive((s) => s.box.children(Kept(s, { key: "k" }), s.text("ok")))
+          h.keepAlive((s) => {
+            expect(s.text).type.toBe(h.text)
+            return s.box.children(Kept(s, { key: "k" }), s.text("ok"))
+          })
         )
       }
     })
+  })
+
+  it("replaces the core h.text wherever a helper takes the vocabulary", () => {
+    type H = View.WithTags<never, {}, OpenTui.Elements>
+    expect<H["text"]>().type.toBe<OpenTui.Tags<never>["text"]>()
+    expect<H>().type.toBeAssignableTo<View.HelperBase<never, {}>>()
+    expect<H>().type.not.toBeAssignableTo<View.Helper<never, {}>>()
   })
 })
