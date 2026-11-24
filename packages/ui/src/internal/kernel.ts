@@ -3,6 +3,8 @@
  */
 import {
   checkContent,
+  checkDeclarer,
+  checkFallback,
   checkKeys,
   checkPaths,
   checkPlaced,
@@ -1049,12 +1051,7 @@ const mountChild = (owner: Instance, rec: Rec, fresh?: boolean): void => {
   } else if (FeatureId in component) {
     const ctx = env.ctx
     if (ctx === undefined) {
-      if (view.fallback === undefined) {
-        throw new Error(
-          owner.path + ": " + component.key +
-            " isn't available, because a Layer above it is still building or failed. Pass `fallback`."
-        )
-      }
+      if (dev) checkFallback(owner.path, view)
       held = inFallback(
         owner,
         () => create(owner, fallbackOf(owner, view, env.cause))
@@ -1264,12 +1261,8 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
 }
 
 const createOutlet = (inst: Instance, view: View.Outlet): Rec => {
-  const declarer = inst.parent
-  if (declarer === undefined) {
-    throw new Error(
-      inst.path + " places the slot " + view.name + ", and is a root"
-    )
-  }
+  if (dev) checkDeclarer(inst, view)
+  const declarer = inst.parent!
   const content = slotOf(inst, view.name)
   const rec = new Rec(view, undefined, undefined, inst)
   inst.live++

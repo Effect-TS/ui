@@ -153,3 +153,25 @@ export const checkLayers = (
     }
   }
 }
+
+/** Throws for a feature child that has no `fallback` to show while the services it reads aren't there. */
+export const checkFallback = (
+  path: string,
+  view: View.Child<any, any>
+): void => {
+  if (view.fallback === undefined) {
+    throw new Error(
+      path + ": " + (view.component as { readonly key: string }).key +
+        " isn't available, because a Layer above it is still building or failed. Pass `fallback`."
+    )
+  }
+}
+
+/** Throws for a slot a root places: a root has no parent to fill it. */
+export const checkDeclarer = (inst: Instance, view: View.Outlet): void => {
+  if (inst.parent === undefined) {
+    throw new Error(
+      inst.path + " places the slot " + view.name + ", and is a root"
+    )
+  }
+}

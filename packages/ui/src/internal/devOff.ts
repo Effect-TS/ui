@@ -24,3 +24,9 @@ export const checkShown: typeof On.checkShown = () => {}
 
 /** Does nothing. */
 export const checkLayers: typeof On.checkLayers = () => {}
+
+/** Does nothing. */
+export const checkFallback: typeof On.checkFallback = () => {}
+
+/** Does nothing. */
+export const checkDeclarer: typeof On.checkDeclarer = () => {}
