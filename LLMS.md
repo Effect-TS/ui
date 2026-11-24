@@ -1155,3 +1155,7 @@ Known limits:
   Test a component's logic as a `Story`, its view as a `Scene`, a Command
   against a fake Layer, and components working together as a `Play`. The
   last test renders on the server and hydrates with `ssr`.
+- **[Terminal apps with OpenTUI](./ai-docs/src/10_ui/60_opentui.ts)**:
+  Build Effect UI terminal applications with `@effect/ui-opentui`, using the
+  OpenTUI vocabulary, global key shortcuts, controlled inputs, imperative
+  commands, and both FFI-free and frame-rendered tests.

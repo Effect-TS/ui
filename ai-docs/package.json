@@ -10,7 +10,9 @@
   "dependencies": {
     "@effect/platform-node": "^4.1.4",
     "@effect/ui": "workspace:*",
+    "@effect/ui-opentui": "workspace:*",
     "@effect/vitest": "^4.1.4",
+    "@opentui/core": "^0.9.9",
     "effect": "^4.1.4"
   }
 }

@@ -450,9 +450,11 @@ export const make: {
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly slots: (
-        h:
-          & View.Helper<never, unknown>
-          & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
+        h: View.WithTags<
+          never,
+          unknown,
+          [V] extends [never] ? VocabularyOf<C> : V
+        >
       ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
     }
   ): Effect.Effect<Steps<C>, never, Scope.Scope>
@@ -480,7 +482,7 @@ export const make: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly view: (
         parts: Parts,
-        h: View.Helper<never, Props> & View.Tags<V, never>
+        h: View.WithTags<never, Props, V>
       ) => View.Content<never, any>
     }
   ): Effect.Effect<
@@ -516,7 +518,7 @@ export const start: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly view: (
         parts: Parts,
-        h: View.Helper<never, Props> & View.Tags<V, never>
+        h: View.WithTags<never, Props, V>
       ) => View.Content<never, any>
     }
   ): Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>

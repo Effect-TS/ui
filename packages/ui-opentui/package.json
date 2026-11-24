@@ -1,0 +1,85 @@
+{
+  "name": "@effect/ui-opentui",
+  "type": "module",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "OpenTUI terminal vocabulary and host for @effect/ui",
+  "homepage": "https://effect.website",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Effect-TS/ui.git",
+    "directory": "packages/ui-opentui"
+  },
+  "bugs": {
+    "url": "https://github.com/Effect-TS/ui/issues"
+  },
+  "tags": [
+    "typescript",
+    "ui",
+    "opentui",
+    "tui",
+    "terminal",
+    "effect"
+  ],
+  "keywords": [
+    "typescript",
+    "ui",
+    "opentui",
+    "tui",
+    "terminal",
+    "effect"
+  ],
+  "sideEffects": [
+    "./src/register.ts",
+    "./dist/register.js"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./*": "./src/*.ts",
+    "./internal/*": null,
+    "./index": null,
+    "./*/index": null
+  },
+  "files": [
+    "src/**/*.ts",
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "ai-docs/**/*"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      "./package.json": "./package.json",
+      ".": "./dist/index.js",
+      "./testing": "./dist/testing/index.js",
+      "./*": "./dist/*.js",
+      "./internal/*": null,
+      "./index": null,
+      "./*/index": null
+    }
+  },
+  "scripts": {
+    "codegen": "effect-utils codegen",
+    "build": "tsc -b tsconfig.json && pnpm babel",
+    "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
+    "check": "tsc -b tsconfig.json"
+  },
+  "peerDependencies": {
+    "@effect/ui": "workspace:^",
+    "@opentui/core": "^0.9.9",
+    "effect": "^4.1.4"
+  },
+  "devDependencies": {
+    "@effect/ui": "workspace:^",
+    "@opentui/core": "^0.9.9",
+    "@types/node": "^26.6.6",
+    "effect": "^4.1.4"
+  }
+}

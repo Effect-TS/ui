@@ -6,6 +6,10 @@
   "imports": {
     "#domain/*": "./src/domain/*.ts"
   },
+  "exports": {
+    "./constants": "./src/constants.ts",
+    "./domain/*": "./src/domain/*.ts"
+  },
   "scripts": {
     "dev": "vite"
   },

@@ -8,6 +8,8 @@ const isNode = typeof process !== "undefined" &&
   !isDeno &&
   !isBun
 
+const ffi = isNode ? ["--experimental-ffi"] : []
+
 const project = (
   name: string,
   directory: string,
@@ -86,6 +88,9 @@ export default defineConfig({
       }),
       ...project("@effect/ui-kit", "packages/ui-kit"),
       ...project("@effect/ui-devtools", "packages/ui-devtools"),
+      ...project("@effect/ui-opentui", "packages/ui-opentui", true, {
+        test: { execArgv: ffi }
+      }),
       ...example("auth"),
       ...example("canvas-art"),
       ...example("counter"),
@@ -93,7 +98,13 @@ export default defineConfig({
       ...example("file-preview"),
       ...example("interrupting-commands"),
       ...example("routing"),
-      ...example("snake")
+      ...example("snake"),
+      ...project("snake-tui", path.join("examples", "snake-tui"), true, {
+        test: {
+          include: ["src/**/*.test.ts"],
+          execArgv: ffi
+        }
+      })
     ]
   }
 })

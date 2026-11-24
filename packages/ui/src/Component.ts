@@ -1192,7 +1192,7 @@ export declare namespace Mountable {
       Ends extends boolean = never,
       const K extends string = string
     >(
-      h: View.Helper<Msg, unknown> & { readonly "~keepAlive"?: Ends },
+      h: View.HelperBase<Msg, unknown> & { readonly "~keepAlive"?: Ends },
       options:
         & View.Child.KeepAliveOptions<Props, Events, NoInfer<Msg>, K, Ends>
         & {
@@ -1404,7 +1404,7 @@ export interface Headless<
    * removed: the readers and senders in it have this owner above them.
    */
   <Msg, RV = never, RF = never>(
-    h: View.Helper<Msg, unknown>,
+    h: View.HelperBase<Msg, unknown>,
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>>
       & {
@@ -2763,8 +2763,7 @@ export type ViewHelper<
   Props,
   Msg,
   L,
-  & View.Helper<Msg, Props>
-  & View.Tags<V, Msg>
+  & View.WithTags<Msg, Props, V>
   & QueryHelpers<L>
   & SlotHelpers<Sl>
   & SharedHelpers<SR>

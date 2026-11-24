@@ -1,6 +1,7 @@
-import { Subscription } from "@effect/ui"
+import { Component, Subscription, UiSchema } from "@effect/ui"
+import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 
 describe("Subscription", () => {
   it("a Subscription without deps is keyed by its name", () => {
@@ -92,4 +93,68 @@ describe("Subscription", () => {
       yield* Stream.runDrain(subscription.stream)
       assert.deepStrictEqual(seen, [["a", 1], ["a", 1]])
     }))
+
+  it.effect("direct delivers latest state, runs accepted synchronously, and detaches on stop", () =>
+    Effect.gen(function*() {
+      let fire: ((value: number) => void) | undefined
+      let detached = false
+      const accepted: Array<number> = []
+      const Message = UiSchema.TaggedEnum({
+        Got: { value: Schema.Number },
+        Stop: {}
+      })
+
+      const Direct = Component.define({
+        name: "DirectSub",
+        model: Schema.Struct({
+          count: Schema.Number,
+          active: Schema.Boolean
+        }),
+        message: Message
+      }).make({
+        init: () => ({ count: 1, active: true }),
+        update: {
+          Got: ($, { value }) => $.evolve({ count: (n) => n + value }),
+          Stop: ($) => $.evolve({ active: false })
+        },
+        subscriptions: ({ model }) => [
+          model.active && Subscription.direct<number, typeof Message.Type>(
+            "direct",
+            undefined,
+            model.count,
+            (_ctx, { emit, enter }) => {
+              fire = (value) =>
+                enter((latest) =>
+                  emit(Message.Got({ value: value * latest }), () => {
+                    accepted.push(latest)
+                  })
+                )
+              return () => {
+                detached = true
+                fire = undefined
+              }
+            }
+          )
+        ],
+        view: (h, model) => h.text(String(model.count))
+      })
+
+      const root = yield* TestHost.mount(Direct, {})
+      yield* TestHost.settle
+
+      fire!(2)
+      assert.deepStrictEqual(accepted, [1])
+      yield* TestHost.settle
+      assert.strictEqual(root.model()?.count, 3)
+
+      fire!(2)
+      assert.deepStrictEqual(accepted, [1, 3])
+      yield* TestHost.settle
+      assert.strictEqual(root.model()?.count, 9)
+
+      root.send(Message.Stop())
+      yield* TestHost.settle
+      assert.isTrue(detached)
+      assert.isUndefined(fire)
+    }).pipe(Effect.provide(TestHost.layer())))
 })

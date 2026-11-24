@@ -596,7 +596,7 @@ export const mount: <
     readonly fallback?:
       | ((
         failure: AsyncResult.Failure<never, unknown>,
-        h: View.Helper<never, {}> & View.Tags<V, never>
+        h: View.WithTags<never, {}, V>
       ) => View.Content<never, RF>)
       | undefined
     readonly query?: QueryOptions | undefined
