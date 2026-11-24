@@ -135,9 +135,11 @@ import * as Html from "./Html.ts"
 import * as HtmlFiles from "./HtmlFiles.ts"
 import * as HtmlImages from "./HtmlImages.ts"
 import * as HtmlScheduler from "./HtmlScheduler.ts"
-import * as HtmlSubscription from "./HtmlSubscription.ts"
+import type * as HtmlSubscription from "./HtmlSubscription.ts"
 import { nonTextInputTypes } from "./internal/editable.ts"
 import * as elements from "./internal/elements.ts"
+import * as frames from "./internal/frames.ts"
+import * as globalEvents from "./internal/globalEvents.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import { ownEvents } from "./internal/ownEvents.ts"
@@ -2003,10 +2005,10 @@ export const layer = (options?: {
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
       Context.add(
-        HtmlSubscription.GlobalEvents,
+        globalEvents.GlobalEvents,
         globalEventsOf(document, holds.get(host)!.held)
       ),
-      Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
+      Context.add(frames.AnimationFrames, framesOf(document)),
       Context.add(HtmlImages.Images, imagesOf(document)),
       Context.add(HtmlFiles.Files, filesOf(document))
     )

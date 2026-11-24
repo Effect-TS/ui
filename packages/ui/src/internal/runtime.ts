@@ -28,7 +28,7 @@ import * as Head from "../Head.ts"
 import type * as MessageLog from "../MessageLog.ts"
 import type * as Query from "../Query.ts"
 import type * as Renderer from "../Renderer.ts"
-import * as Subscription from "../Subscription.ts"
+import type * as Subscription from "../Subscription.ts"
 import * as View from "../View.ts"
 import * as childOf from "./child.ts"
 import { propsEqual, sharedEqual } from "./equal.ts"
@@ -5576,7 +5576,7 @@ const setup = (
         : def.logKey(marker.args, marker.argsKey)
       const logKey = fetchKey === undefined
         ? key
-        : Subscription.keyOf(`~query/${marker.name}`, fetchKey)
+        : subscriptionKeys.keyOf(`~query/${marker.name}`, fetchKey)
       const running: WatchRun = {
         marker,
         logKey,
@@ -5727,7 +5727,7 @@ const setup = (
     else {
       ;(inst.keyed ??= new Map()).set(group.name, {
         group,
-        logKey: Subscription.keyOf(`~query/${group.name}`),
+        logKey: subscriptionKeys.keyOf(`~query/${group.name}`),
         values: new Map(),
         changes: new Set()
       })

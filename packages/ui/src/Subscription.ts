@@ -37,6 +37,12 @@
  * @since 0.1.0
  */
 import * as Stream from "effect/Stream"
+import * as subscriptionRun from "./internal/subscriptionRun.ts"
+import * as subscriptions from "./internal/subscriptions.ts"
+
+// Every Subscription is made here, so a component's `subscriptions` reaches what runs them once one is.
+// Nothing an app imports anyway may import this module, or every app carries what runs them.
+subscriptions.load(subscriptionRun.sync)
 
 /**
  * Identifies a Subscription.
@@ -114,19 +120,6 @@ export type Deps = Dep | ReadonlyArray<Dep>
 export type Requirements<S> = S extends Subscription<infer _Msg, infer R> ? R
   : never
 
-// Strings are JSON, so they're quoted and self-delimiting. Everything else is
-// its literal: `NaN`, `Infinity` and `-Infinity` stay distinct from `null`, and
-// `-0` from `0`, since `1 / dep` tells them apart.
-const encodeDep = (dep: Dep): string =>
-  typeof dep === "string"
-    ? JSON.stringify(dep)
-    : Object.is(dep, -0)
-    ? "-0"
-    : String(dep)
-
-// A colon separates the name from the deps, so a colon in a name is doubled.
-const encodeName = (name: string): string => name.replaceAll(":", "::")
-
 /**
  * The key of a Subscription: the name, and with deps a colon followed by the
  * deps joined with commas.
@@ -155,12 +148,7 @@ const encodeName = (name: string): string => name.replaceAll(":", "::")
  * @category constructors
  * @since 0.1.0
  */
-export const keyOf = (name: string, deps?: Deps): string =>
-  deps === undefined
-    ? encodeName(name)
-    : `${encodeName(name)}:${
-      (Array.isArray(deps) ? deps : [deps as Dep]).map(encodeDep).join(",")
-    }`
+export const keyOf: (name: string, deps?: Deps) => string = subscriptions.keyOf
 
 /**
  * Declares a keyed Subscription.

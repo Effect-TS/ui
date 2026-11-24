@@ -6,6 +6,7 @@
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Fiber from "effect/Fiber"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
@@ -124,10 +125,7 @@ export const mount = (
           if (options?.state !== undefined) Kernel.notPorted("hydration")
           const root = start(component, props, container, ctx, options)
           return Effect.as(
-            Scope.addFinalizer(
-              Context.get(ctx, Scope.Scope),
-              Effect.sync(root.close)
-            ),
+            Scope.addFinalizer(Context.get(ctx, Scope.Scope), root.close),
             root.root
           )
         }
@@ -166,7 +164,7 @@ const start = (
     ) {
       emitted.push(...(draft.events as ReadonlyArray<unknown>))
     }
-    recording.record(inst, draft)
+    return recording.record(inst, draft)
   }
   const fallback = options?.fallback
   const kernelRoot = recording.session(() =>
@@ -194,12 +192,13 @@ const start = (
         },
         log: record,
         schedule: (task) => {
-          const run = recording.later(task)
+          const run = recording.follow()
           executor.schedule(() => {
             flushes++
-            run()
+            run(task)
           })
         },
+        follow: recording.follow,
         report: (path, where, cause) => {
           Effect.runForkWith(forkContext)(
             Effect.logError(`${path} failed in ${where}`, cause)
@@ -226,7 +225,7 @@ const start = (
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) =>
       recording.step(() => kernelRoot.send(message, dispatched)),
-    pending: () => [],
+    pending: () => pendingOf(instance),
     loads: () => [],
     cache: {
       pending: () => [],
@@ -242,7 +241,37 @@ const start = (
     whenIdle: () => Kernel.notPorted("server rendering"),
     freeze: () => Kernel.notPorted("server rendering")
   } satisfies Root & Renderer.Root<any, any>
-  return { root, close: kernelRoot.close }
+  const tree = instance.tree
+  // Waits until every fiber the tree forked has exited, stopped runs included.
+  const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
+    tree.owned === undefined || tree.owned.size === 0
+      ? Effect.void
+      : Effect.andThen(Fiber.awaitAll([...tree.owned]), awaitOwned)
+  )
+  return { root, close: Effect.suspend(() => (kernelRoot.close(), awaitOwned)) }
+}
+
+type Pending = ReturnType<Root["pending"]>[number]
+
+/** The runs of `inst` and of the instances it shows, parents first. */
+const pendingOf = (
+  inst: Kernel.Instance,
+  out: Array<Pending> = []
+): Array<Pending> => {
+  const runs = inst.runs
+  if (runs !== undefined) {
+    for (const run of runs.pending()) {
+      out.push({ path: inst.path, ...run } as Pending)
+    }
+  }
+  if (inst.rendered !== undefined) pendingIn(inst.rendered, out)
+  return out
+}
+
+const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
+  const kids = rec.kids
+  if (kids !== undefined) { for (const kid of kids) pendingIn(kid, out) }
+  else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
 }
 
 /**

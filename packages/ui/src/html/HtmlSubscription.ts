@@ -155,14 +155,8 @@ export interface GlobalEvents {
  * @category references
  * @since 0.1.0
  */
-export const GlobalEvents: Context.Reference<GlobalEvents> = Context.Reference<
-  GlobalEvents
->(
-  "@effect/ui/html/HtmlSubscription/GlobalEvents",
-  { defaultValue: () => silent }
-)
-
-const silent: GlobalEvents = { listen: () => () => {} }
+export const GlobalEvents: Context.Reference<GlobalEvents> =
+  globalEvents.GlobalEvents
 
 const listenFor = (
   target: "document" | "window",
@@ -489,13 +483,8 @@ export interface AnimationFrames {
  * @category references
  * @since 0.1.0
  */
-export const AnimationFrames: Context.Reference<AnimationFrames> = Context
-  .Reference<AnimationFrames>(
-    "@effect/ui/html/HtmlSubscription/AnimationFrames",
-    { defaultValue: () => still }
-  )
-
-const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
+export const AnimationFrames: Context.Reference<AnimationFrames> =
+  frames.AnimationFrames
 
 /**
  * A Subscription that sends a message on every animation frame, with the

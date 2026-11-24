@@ -5,8 +5,23 @@
  *
  * @internal
  */
+import * as Context from "effect/Context"
 import { handle } from "../../internal/handler.ts"
 import type * as View from "../../View.ts"
+import type * as HtmlSubscription from "../HtmlSubscription.ts"
+
+/**
+ * `HtmlSubscription.GlobalEvents`, here so a host provides it without importing `HtmlSubscription`,
+ * which loads what runs Subscriptions.
+ *
+ * @internal
+ */
+export const GlobalEvents = Context.Reference<HtmlSubscription.GlobalEvents>(
+  "@effect/ui/html/HtmlSubscription/GlobalEvents",
+  { defaultValue: () => silent }
+)
+
+const silent: HtmlSubscription.GlobalEvents = { listen: () => () => {} }
 
 /**
  * A document or window listener carries its declaration under this key.

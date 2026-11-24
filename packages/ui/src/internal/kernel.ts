@@ -4,6 +4,7 @@
 import { checkContent, checkKeys, checkPaths, checkShown, dev } from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
+import type * as Fiber from "effect/Fiber"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { TypeId as FeatureId } from "../Feature.ts"
 import * as View from "../View.ts"
@@ -40,6 +41,8 @@ export interface Runnable {
   readonly view: Function
   readonly layer?: unknown
   readonly boot?: ((inst: Instance) => void) | undefined
+  /** Called after each Model or props change the instance takes, and once it first rendered. */
+  readonly "~sync"?: ((inst: Instance) => void) | undefined
 }
 
 /** @internal */
@@ -62,6 +65,8 @@ export type FailedIn =
   | "onFailure"
   | "fallback"
   | "layer"
+  | "command"
+  | "subscription"
 
 /** @internal */
 export interface Env {
@@ -72,17 +77,68 @@ export interface Env {
 
 /**
  * What a mount records into, if it was given one: a draft per entry, and `rendering` and `rendered`
- * around each dirty instance's render, which are not entries.
+ * around each dirty instance's render, which are not entries. Returns the entry's number, if it has one.
  *
  * @internal
  */
 export type Recorder = (
   inst: Instance,
   draft: { readonly _tag: string; readonly [field: string]: unknown }
-) => void
+) => number | undefined | void
+
+/**
+ * Where an issued Command, or a Command of `init`, came from: the number of the entry that logged it,
+ * and its index there.
+ *
+ * @internal
+ */
+export interface Issued {
+  readonly seq: number
+  readonly index: number
+}
+
+/**
+ * What a Command carries to run itself, so the kernel runs one without importing what runs it.
+ *
+ * @internal
+ */
+export interface Issuable {
+  /** `seq` is the number of the entry that logged it, if the tree records a log, and `index` its index there. */
+  readonly "~run": (
+    inst: Instance,
+    seq: number | undefined | void,
+    index: number
+  ) => void
+}
+
+/**
+ * An instance's Command runs, once it has issued one: what `h.isRunning` and a root's `pending` read.
+ *
+ * @internal
+ */
+export interface Runs {
+  readonly running: (name: string, groupKey: string | undefined) => boolean
+  readonly pending: () => ReadonlyArray<
+    { readonly name: string; readonly status: string }
+  >
+}
+
+/**
+ * The kernel's functions a Command's runner and a Subscription's call, reached through the tree so they
+ * never import the kernel: an app on another runtime that makes a Command doesn't carry the kernel.
+ *
+ * @internal
+ */
+export interface Ops {
+  readonly send: typeof send
+  readonly fail: typeof fail
+  readonly markDirty: typeof markDirty
+  readonly renderAbove: typeof renderAbove
+}
 
 /** @internal */
 export interface Tree {
+  readonly ops: Ops
   readonly host: Host
   readonly report: (
     path: string,
@@ -95,6 +151,13 @@ export interface Tree {
     | ((cause: Cause.Cause<unknown>) => View.Node<any, any>)
     | undefined
   readonly schedule: (task: () => void) => void
+  /**
+   * Returns how to run something later as what follows from the fact running now, or, outside one, as a
+   * fact of its own: for what reaches the tree from a fiber. Without it, it runs as it is.
+   */
+  readonly follow: (() => <A>(f: () => A) => A) | undefined
+  /** The fibers the tree's close waits for, until they exit, once a feature has started one. */
+  owned?: Set<Fiber.Fiber<unknown, unknown>> | undefined
   dirty: Array<Instance>
   scheduled: boolean
   closed: boolean
@@ -138,6 +201,8 @@ export class Instance {
   lazy: unknown = undefined
   placed: Map<string, Placed> | undefined = undefined
   closers: Array<() => void> | undefined = undefined
+  // Set by what runs its Commands, once it issues one.
+  declare runs: Runs | undefined
   named: string | undefined = undefined
   constructor(
     tree: Tree,
@@ -281,13 +346,21 @@ export const fail = (
   where: FailedIn,
   cause: Cause.Cause<unknown>,
   update?: { readonly message: unknown; readonly source: unknown },
-  from?: number
+  from?: number,
+  name?: string
 ): void => {
   if (inst.closed) return
   const tree = inst.tree
   const log = tree.log
   if (log !== undefined) {
-    log(inst, { _tag: "Failed", props: inst.props, in: where, cause, update })
+    log(inst, {
+      _tag: "Failed",
+      props: inst.props,
+      in: where,
+      name,
+      cause,
+      update
+    })
   }
   inst.failure = cause
   const old = inst.rendered
@@ -352,32 +425,39 @@ export const send = (
     return fail(inst, "update", Cause.die(error), { message, source })
   }
   if (next === undefined) return
-  const log = inst.tree.log
-  if (log !== undefined) {
-    log(inst, {
-      _tag: "Update",
-      source,
-      message,
-      props: inst.props,
-      model: next.model,
-      commands: next.commands,
-      events: next.events
-    })
-  }
+  // Without a log, the draft isn't built.
+  const seq = inst.tree.log?.(inst, {
+    _tag: "Update",
+    source,
+    message,
+    props: inst.props,
+    model: next.model,
+    commands: next.commands,
+    events: next.events
+  })
   if (next.model !== inst.model) {
     inst.model = next.model
     markDirty(inst)
   }
-  apply(inst, next)
+  apply(inst, next, seq)
 }
 
-const apply = (inst: Instance, next: Next): void => {
-  if (next.commands.length > 0) notPorted("Commands")
+const apply = (
+  inst: Instance,
+  next: Next,
+  seq: number | undefined | void
+): void => {
+  const commands = next.commands
   if (next.sends !== undefined && next.sends.length > 0) notPorted("$.send")
   if (next.lists !== undefined && next.lists.length > 0) {
     notPorted("infinite queries")
   }
   if (next.viewTransition !== undefined) notPorted("view transitions")
+  for (let index = 0; index < commands.length; index++) {
+    if (inst.closed) return
+    ;(commands[index] as Issuable)["~run"](inst, seq, index)
+  }
+  inst.component["~sync"]?.(inst)
   const events = next.events
   if (events.length === 0) return
   const parent = inst.parent
@@ -461,7 +541,7 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
     const tree: View.Node<any, any> = Reflect.apply(view, component, [
       inst.model,
       inst.props,
-      undefined,
+      inst.runs?.running,
       undefined,
       View.takesPathSource(view) ? inst : inst.path,
       undefined,
@@ -479,7 +559,6 @@ const check = (component: any): void => {
   const definition = component.definition
   if (component.init === undefined) notPorted("Component.lazy")
   if (component.parts !== undefined) notPorted("headless components")
-  if (component.subscriptions !== undefined) notPorted("Subscriptions")
   if (component.head !== undefined) notPorted("head")
   if (component["~queries"] !== undefined) notPorted("queries")
   if (definition.shared !== undefined || definition.shares !== undefined) {
@@ -511,17 +590,14 @@ const start = (inst: Instance): Rec | undefined => {
       return undefined
     }
     inst.model = first.model
-    const log = inst.tree.log
-    if (log !== undefined) {
-      log(inst, {
-        _tag: "Mounted",
-        props: inst.props,
-        model: first.model,
-        commands: first.commands,
-        events: first.events,
-        adopted: false
-      })
-    }
+    const seq = inst.tree.log?.(inst, {
+      _tag: "Mounted",
+      props: inst.props,
+      model: first.model,
+      commands: first.commands,
+      events: first.events,
+      adopted: false
+    })
     const tree = viewOf(inst)
     if (tree === undefined) return undefined
     let rendered: Rec
@@ -537,7 +613,7 @@ const start = (inst: Instance): Rec | undefined => {
       return undefined
     }
     inst.rendered = rendered
-    apply(inst, first)
+    apply(inst, first, seq)
     return rendered
   } finally {
     busy--
@@ -604,8 +680,9 @@ const release = (owner: Instance, rec: Rec): void => {
     }
     owner = owner.parent!
   }
+  // Newest first, as siblings close.
   if (kids !== undefined) {
-    for (let index = 0; index < kids.length; index++) {
+    for (let index = kids.length - 1; index >= 0; index--) {
       release(owner, kids[index]!)
     }
   }
@@ -959,6 +1036,8 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
         if (log !== undefined) {
           log(child, { _tag: "PropsChanged", props: view.props })
         }
+        child.component["~sync"]?.(child)
+        if (child.closed) return old
         if (child === receiving) markDirty(child)
         else render(child)
       }
@@ -1210,6 +1289,7 @@ export interface Options {
   readonly fallback?: Tree["fallback"]
   readonly init?: Tree["init"] | undefined
   readonly schedule?: Tree["schedule"] | undefined
+  readonly follow?: Tree["follow"] | undefined
 }
 
 const initOf = (inst: Instance): Next => inst.component.init(inst.props)
@@ -1230,6 +1310,8 @@ export const mount = (
     fallback: options.fallback,
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
     schedule: options.schedule ?? ((task) => queueMicrotask(task)),
+    follow: options.follow,
+    ops: { send, fail, markDirty, renderAbove },
     dirty: [],
     scheduled: false,
     closed: false

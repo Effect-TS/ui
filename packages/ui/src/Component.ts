@@ -73,6 +73,7 @@ import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as sharedReads from "./internal/shared.ts"
+import * as subscriptionCore from "./internal/subscriptions.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
 import * as UiStruct from "./UiStruct.ts"
@@ -2294,6 +2295,12 @@ const Proto = Object.assign(Object.create(Function.prototype), {
   },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
+  },
+  // The kernel calls it as the instance's Model or props change.
+  "~sync"(this: Any, inst: unknown) {
+    if (this.subscriptions !== undefined) {
+      subscriptionCore.loaded?.(inst as never)
+    }
   }
 })
 

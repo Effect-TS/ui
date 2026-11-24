@@ -15,8 +15,8 @@ export interface Recording {
   readonly step: <A>(f: () => A) => A
   /** Runs `f` as what follows from the session's start. */
   readonly session: <A>(f: () => A) => A
-  /** `task`, to run later as what follows from the fact running now. */
-  readonly later: (task: () => void) => () => void
+  /** Runs a function later as what follows from the fact running now, or as a fact of its own. */
+  readonly follow: NonNullable<Kernel.Tree["follow"]>
 }
 
 const dispatched: MessageLog.Source = { _tag: "Dispatch" }
@@ -130,7 +130,6 @@ export const make = (
         break
       }
       case "Failed": {
-        entry.name = undefined
         const update = draft.update as {
           readonly message: unknown
           readonly source: unknown
@@ -145,6 +144,7 @@ export const make = (
       }
     }
     log.record(entry as unknown as MessageLog.Entry)
+    return next
   }
   return {
     record,
@@ -161,9 +161,9 @@ export const make = (
       )
       return under(next, f)
     },
-    later: (task) => {
+    follow: () => {
       const from = origin
-      return from === undefined ? () => step(task) : () => under(from, task)
+      return from === undefined ? step : (f) => under(from, f)
     }
   }
 }
