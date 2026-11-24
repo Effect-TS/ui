@@ -77,7 +77,7 @@ function loaded(
 ): Kernel.Runnable | undefined {
   const state = this.state
   if (state._tag === "Loaded") return state.component as any
-  if (watched.has(rec)) return undefined
+  if (watched.has(rec) || owner.tree.host.inert) return undefined
   const unwatch = watch(this, () => {
     const loaded = this.state._tag === "Loaded"
     if (rec.inst !== owner || owner.closed || loaded) {
