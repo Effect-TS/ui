@@ -191,28 +191,8 @@ export interface Runs {
   >
 }
 
-interface Ops {
-  readonly send: typeof send
-  readonly fail: typeof fail
-  readonly markDirty: typeof markDirty
-  readonly renderAbove: typeof renderAbove
-  readonly clear: typeof clear
-  readonly flush: typeof flush
-  readonly mountChild: typeof mountChild
-  readonly patchChild: typeof patchChild
-  readonly replace: typeof replace
-  readonly create: typeof create
-  readonly place: typeof place
-  readonly unplace: typeof unplace
-  readonly release: typeof release
-  readonly close: typeof close
-  readonly nodeOf: typeof nodeOf
-  readonly stand: typeof stand
-}
-
 /** @internal */
 export interface Tree {
-  readonly ops: Ops
   readonly host: Host
   readonly report: (
     path: string,
@@ -375,7 +355,7 @@ export const rendering = { _tag: "Render" } as const
 /** @internal */
 export const rendered = { _tag: "Rendered" } as const
 
-const emptyText = View.text("")
+const emptyText: View.Text = { _tag: "Text", text: "" }
 
 const fallbackOf = (
   owner: Instance,
@@ -429,7 +409,8 @@ const rootFallback = (
   }
 }
 
-const stand = (inst: Instance, cause: Cause.Cause<unknown>): Rec => {
+/** @internal */
+export const stand = (inst: Instance, cause: Cause.Cause<unknown>): Rec => {
   const parent = inst.parent
   const outer = slot
   const from = born.length
@@ -621,20 +602,25 @@ const applied = (
   }
 }
 
-const markDirty = (inst: Instance): void => {
+/** @internal */
+export const wake = (tree: Tree): void => {
+  if (tree.scheduled) return
+  tree.scheduled = true
+  tree.schedule(() => flush(tree))
+}
+
+/** @internal */
+export const markDirty = (inst: Instance): void => {
   if (inst.dirty) return
   inst.dirty = true
-  const tree = inst.tree
-  tree.dirty.push(inst)
-  if (!tree.scheduled) {
-    tree.scheduled = true
-    tree.schedule(() => flush(tree))
-  }
+  inst.tree.dirty.push(inst)
+  wake(inst.tree)
 }
 
 const byDepth = (a: Instance, b: Instance): number => a.depth - b.depth
 
-const renderAbove = (inst: Instance): void => {
+/** @internal */
+export const renderAbove = (inst: Instance): void => {
   const dirty = inst.tree.dirty
   if (busy > 0 || dirty.length === 0) return
   const above: Array<Instance> = []
@@ -828,11 +814,13 @@ const render = (inst: Instance): void => {
   }
 }
 
-const clear = (inst: Instance): void => {
+/** @internal */
+export const clear = (inst: Instance): void => {
   inst.rendered = patch(authorOf(inst), inst.rendered!, emptyText)
 }
 
-const close = (inst: Instance): void => {
+/** @internal */
+export const close = (inst: Instance): void => {
   if (inst.closed) return
   inst.closed = true
   inst.tree.drew = true
@@ -852,7 +840,8 @@ const close = (inst: Instance): void => {
 
 const released = undefined as unknown as Instance
 
-const release = (owner: Instance, rec: Rec): void => {
+/** @internal */
+export const release = (owner: Instance, rec: Rec): void => {
   if (owner.live === 0) return
   const view = rec.v
   const kids = rec.kids
@@ -884,7 +873,8 @@ const release = (owner: Instance, rec: Rec): void => {
   }
 }
 
-const nodeOf = (rec: Rec): any => {
+/** @internal */
+export const nodeOf = (rec: Rec): any => {
   while (rec.node === undefined) {
     rec = rec.kids !== undefined
       ? rec.kids[0]!
@@ -902,7 +892,8 @@ const lastNodeOf = (rec: Rec): any => {
   return rec.node
 }
 
-const place = (
+/** @internal */
+export const place = (
   host: Host,
   parent: unknown,
   rec: Rec,
@@ -931,7 +922,8 @@ const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
   return out
 }
 
-const unplace = (host: Host, parent: unknown, rec: Rec): void => {
+/** @internal */
+export const unplace = (host: Host, parent: unknown, rec: Rec): void => {
   for (const node of nodesOf(rec, [])) host.remove(parent, node)
 }
 
@@ -940,7 +932,12 @@ const keeperOf = (view: View.Child<any, any>): Keeper | undefined =>
     ? undefined
     : (view.component as Partial<Runnable>)["~kept"]
 
-const mountChild = (owner: Instance, rec: Rec, fresh?: boolean): void => {
+/** @internal */
+export const mountChild = (
+  owner: Instance,
+  rec: Rec,
+  fresh?: boolean
+): void => {
   const view = rec.v as View.Child<any, any>
   let component = view.component as any
   if (!fresh) {
@@ -1068,7 +1065,8 @@ const contentOf = (
   return views
 }
 
-const failLater = (inst: Instance, error: unknown): void =>
+/** @internal */
+export const failLater = (inst: Instance, error: unknown): void =>
   inst.tree.schedule(() => fail(inst, "view", Cause.die(error)))
 
 const slotOf = (receiver: Instance, name: string): unknown =>
@@ -1134,7 +1132,8 @@ const setProps = (
   for (const name in props) host.setProp(node, name, props[name])
 }
 
-const create = (inst: Instance, view: View.Node<any, any>): Rec => {
+/** @internal */
+export const create = (inst: Instance, view: View.Node<any, any>): Rec => {
   const host = inst.tree.host
   switch (view._tag) {
     case "Text":
@@ -1256,7 +1255,8 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
   }
 }
 
-const patchChild = (
+/** @internal */
+export const patchChild = (
   inst: Instance,
   old: Rec,
   view: View.Child<any, any>
@@ -1309,7 +1309,12 @@ const patchChild = (
   return old
 }
 
-const replace = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
+/** @internal */
+export const replace = (
+  inst: Instance,
+  old: Rec,
+  view: View.Node<any, any>
+): Rec => {
   const host = inst.tree.host
   const at = nodeOf(old)
   const parent = host.parentOf(at)
@@ -1618,25 +1623,6 @@ export interface Options {
   readonly follow?: Tree["follow"] | undefined
 }
 
-const ops: Ops = {
-  send,
-  fail,
-  markDirty,
-  renderAbove,
-  clear,
-  flush,
-  mountChild,
-  patchChild,
-  replace,
-  create,
-  place,
-  unplace,
-  release,
-  close,
-  nodeOf,
-  stand
-}
-
 const initOf = (inst: Instance): Next => inst.component.init(inst.props)
 
 /** @internal */
@@ -1653,7 +1639,6 @@ export const mount = (
     init: options.init ?? initOf,
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
     schedule: options.schedule ?? ((task) => queueMicrotask(task)),
-    ops,
     dirty: [],
     scheduled: true,
     flushing: true,

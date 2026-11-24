@@ -1,5 +1,4 @@
 import { checkLayers, dev } from "#dev"
-import * as Cause from "effect/Cause"
 import type * as View from "../View.ts"
 import * as Kernel from "./kernel.ts"
 
@@ -130,7 +129,7 @@ export const layer = (
 /** @internal */
 export const failed = (owner: View.Owner, error: unknown): View.Text => {
   const inst = owner as Kernel.Instance
-  inst.tree.schedule(() => Kernel.fail(inst, "view", Cause.die(error)))
+  Kernel.failLater(inst, error)
   return blank
 }
 

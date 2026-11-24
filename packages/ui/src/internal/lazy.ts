@@ -81,11 +81,7 @@ function loaded(
     if (rec.inst !== owner || owner.closed) return
     if (loaded) rec.v = keepAliveOnceLoaded(rec.v as View.Child<any, any>)
     Kernel.settle(owner, rec, at)
-    const tree = owner.tree
-    if (!tree.flushing && !tree.scheduled) {
-      tree.scheduled = true
-      tree.schedule(() => tree.ops.flush(tree))
-    }
+    Kernel.wake(owner.tree)
   })
   watched.set(rec, unwatch)
   if (state._tag !== "Loading") this.preload()

@@ -315,11 +315,10 @@ export const make = (
             on && !pass && old !== undefined && adopting.has(kept) &&
             env.ctx === undefined && env.cause === undefined
           ) {
-            const ops = tree.ops
-            const at = tree.host.parentOf(ops.nodeOf(old))
-            kept.rendered = ops.create(kept, old.v)
-            if (at != null) ops.unplace(tree.host, at, old)
-            ops.release(kept, old)
+            const at = tree.host.parentOf(Kernel.nodeOf(old))
+            kept.rendered = Kernel.create(kept, old.v)
+            if (at != null) Kernel.unplace(tree.host, at, old)
+            Kernel.release(kept, old)
           }
           if (on) parked.delete(kept)
           else parked.add(kept)
@@ -455,8 +454,8 @@ export class Waits {
     if (!inst.closed) this.log(inst, { ...draft, model: inst.model })
     this.checkAdopted()
     if (latest !== undefined && !inst.closed && !latest[0].closed) {
-      inst.tree.ops.patchChild(latest[0], inst.at!, latest[1])
-      inst.tree.ops.markDirty(latest[0])
+      Kernel.patchChild(latest[0], inst.at!, latest[1])
+      Kernel.markDirty(latest[0])
     }
   }
   step(

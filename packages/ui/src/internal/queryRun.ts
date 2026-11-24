@@ -9,7 +9,7 @@ import type * as Component from "../Component.ts"
 import type * as Query from "../Query.ts"
 import { defer } from "./due.ts"
 import { follow, fork, servicesOf } from "./fork.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import * as subscriptionCore from "./subscriptions.ts"
@@ -127,7 +127,7 @@ const boundOf = (inst: Kernel.Instance): componentQueries.Bound =>
   queryCore.boundOf(inst.component as unknown as Component.Any)!
 
 const failWith = (inst: Kernel.Instance, error: unknown, key?: string): void =>
-  inst.tree.ops.fail(
+  Kernel.fail(
     inst,
     "subscription",
     Cause.isCause(error) ? error : Cause.die(error),
@@ -332,7 +332,7 @@ const watch = (
         return requestKeyed(inst, state)
       }
       follow(inst.tree)(() => {
-        inst.tree.ops.renderAbove(inst)
+        Kernel.renderAbove(inst)
         if (running.released || inst.closed) return
         const entry = bound.byName.get(running.marker.name)!
         writeResult(
@@ -429,7 +429,7 @@ const requestKeyed = (inst: Kernel.Instance, state: State): void => {
   state.queued = true
   defer(inst.tree, () => {
     state.queued = false
-    inst.tree.ops.renderAbove(inst)
+    Kernel.renderAbove(inst)
     drainKeyed(inst, state)
   })
 }
@@ -516,7 +516,7 @@ const writeResult = (
   if (state.mounting) {
     for (const fold of watch(inst, state)) fold()
   } else {
-    inst.tree.ops.markDirty(inst)
+    Kernel.markDirty(inst)
     follows(inst, state)
   }
   if (entry.onChange === undefined || inst.closed) return
@@ -534,7 +534,7 @@ const writeResult = (
     return failWith(inst, error, key)
   }
   if (message !== undefined) {
-    inst.tree.ops.send(inst, message.value, {
+    Kernel.send(inst, message.value, {
       _tag: "Query",
       name: entry.name,
       seq

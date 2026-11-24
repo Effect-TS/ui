@@ -9,7 +9,7 @@ import type * as MessageLog from "../MessageLog.ts"
 import type * as Subscription from "../Subscription.ts"
 import { going, hold } from "./closing.ts"
 import { follow, fork, servicesOf } from "./fork.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import * as services from "./services.ts"
 import { duplicateKey } from "./subscriptions.ts"
 
@@ -47,7 +47,7 @@ export const sync = (inst: Kernel.Instance): void => {
     }).subscriptions(inst.model, inst.props, inst.results)
   } catch (error) {
     if (server !== undefined) throw error
-    return inst.tree.ops.fail(inst, "subscription", Cause.die(error))
+    return Kernel.fail(inst, "subscription", Cause.die(error))
   }
   const byKey = new Map<string, Subscription.Subscription<any, any>>()
   let declaration: services.Prefetch | undefined
@@ -58,7 +58,7 @@ export const sync = (inst: Kernel.Instance): void => {
       ]
     if (declared !== undefined) {
       if (declaration !== undefined) {
-        return inst.tree.ops.fail(
+        return Kernel.fail(
           inst,
           "subscription",
           Cause.die(
@@ -75,7 +75,7 @@ export const sync = (inst: Kernel.Instance): void => {
       continue
     }
     if (byKey.has(subscription.key)) {
-      return inst.tree.ops.fail(
+      return Kernel.fail(
         inst,
         "subscription",
         Cause.die(duplicateKey(inst.path, subscription.key)),
@@ -213,17 +213,17 @@ const start = (
   const context = Context.add(ctx, Scope.Scope, scope)
   const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
     follow(tree)(() => {
-      inst.tree.ops.renderAbove(inst)
+      Kernel.renderAbove(inst)
       if (current()) f(running.latest)
     })
   const deliver = (message: unknown, accepted?: () => void) =>
     enter(() => {
       accepted?.()
-      inst.tree.ops.send(inst, message, source)
+      Kernel.send(inst, message, source)
     })
   const failed = (cause: Cause.Cause<unknown>) =>
     follow(tree)(() =>
-      inst.tree.ops.fail(inst, "subscription", cause, undefined, undefined, key)
+      Kernel.fail(inst, "subscription", cause, undefined, undefined, key)
     )
   const attached = (subscription as services.Direct)[services.direct]?.(
     context,

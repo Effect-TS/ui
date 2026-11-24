@@ -7,7 +7,7 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Mount from "../Mount.ts"
 import { follow, fork, servicesOf } from "./fork.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import type * as mountArgs from "./mountArgs.ts"
 import { isNoop } from "./noop.ts"
 import { afterCommit, refsOf } from "./refs.ts"
@@ -58,7 +58,7 @@ class Running {
           args: latest.args,
           argsSchema: latest.argsSchema
         }
-        follow(tree)(() => tree.ops.send(inst, message, source))
+        follow(tree)(() => Kernel.send(inst, message, source))
       })
     const changes = Stream.suspend(() => {
       const kept = this.mount["~args"]
@@ -104,7 +104,7 @@ class Running {
           silent: silent === true
         })
         if (failure !== undefined) {
-          tree.ops.fail(inst, "mount", failure, undefined, undefined, name)
+          Kernel.fail(inst, "mount", failure, undefined, undefined, name)
         }
       })
     })

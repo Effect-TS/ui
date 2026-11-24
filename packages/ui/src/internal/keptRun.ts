@@ -1,6 +1,5 @@
-import * as Cause from "effect/Cause"
 import * as View from "../View.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import { segment } from "./paths.ts"
 
 type Inst = Kernel.Instance
@@ -19,9 +18,6 @@ const off = new WeakSet<Inst>()
 
 const blankView = View.text("")
 
-const failLater = (inst: Inst, error: unknown): void =>
-  inst.tree.schedule(() => inst.tree.ops.fail(inst, "view", Cause.die(error)))
-
 const aliveOf = (view: View.Child<any, any>): Alive | undefined =>
   view.alive === true ? undefined : view.alive
 
@@ -33,7 +29,7 @@ export class Table {
   constructor(author: Inst) {
     this.author = author
     ;(author.closers ??= []).push(() => {
-      for (const entry of this.kids.values()) author.tree.ops.close(entry.inst)
+      for (const entry of this.kids.values()) Kernel.close(entry.inst)
     })
   }
   done(): void {
@@ -84,14 +80,14 @@ export class Table {
       }
       if (result === true) return true
     } catch (error) {
-      failLater(author, error)
+      Kernel.failLater(author, error)
     }
     author.tree.ended?.(author, author.path + "/" + segment(view))
     if (entry !== undefined) {
       this.kids.delete(segment(view))
       if (entry.rec !== undefined) vacate(author, entry.rec, true)
       entry.rec = undefined
-      author.tree.ops.close(entry.inst)
+      Kernel.close(entry.inst)
     }
     return false
   }
@@ -109,24 +105,24 @@ const plainOf = (rec: Rec, out: Set<string>): void => {
 }
 
 const failTwice = (author: Inst, named: string): void =>
-  failLater(
+  Kernel.failLater(
     author,
     new Error(author.path + " writes " + named + " twice in one render")
   )
 
 const vacate = (author: Inst, rec: Rec, drop: boolean): void => {
-  const { host, ops } = author.tree
-  const first = ops.nodeOf(rec)
+  const host = author.tree.host
+  const first = Kernel.nodeOf(rec)
   const parent = host.parentOf(first)
-  const blank = ops.create(author, blankView)
+  const blank = Kernel.create(author, blankView)
   const kids = rec.kids
   if (parent != null) {
     host.insert(parent, blank.node, first)
-    if (drop || kids !== undefined) ops.unplace(host, parent, rec)
+    if (drop || kids !== undefined) Kernel.unplace(host, parent, rec)
   }
   if (kids !== undefined) {
     for (let index = kids.length - 1; index >= 0; index--) {
-      ops.release(author, kids[index]!)
+      Kernel.release(author, kids[index]!)
     }
   }
   rec.kids = [blank]
@@ -160,13 +156,13 @@ const park = (tree: Kernel.Tree, entries: Array<Entry>): void => {
     if (entry.rec !== undefined || child.closed || off.has(child)) continue
     const make = tree.host.createContainer
     if (make === undefined) {
-      failLater(
+      Kernel.failLater(
         child.parent!,
         new Error(child.path + " is kept, and this host has no createContainer")
       )
       continue
     }
-    tree.ops.place(tree.host, make(), child.rendered!, null)
+    Kernel.place(tree.host, make(), child.rendered!, null)
     off.add(child)
     toggle(child.rendered!, false)
     tree.drawn?.(child, false)
@@ -186,17 +182,14 @@ const keep = (tree: Kernel.Tree, entry: Entry): void => {
     }
   }
   entries.push(entry)
-  if (!tree.scheduled) {
-    tree.scheduled = true
-    tree.schedule(() => tree.ops.flush(tree))
-  }
+  Kernel.wake(tree)
 }
 
 const held = (author: Inst, rec: Rec): boolean =>
   rec.inst === author && rec.kids![0]!.v !== blankView
 
 const blank = (author: Inst, rec: Rec): void => {
-  rec.kids = [author.tree.ops.create(author, blankView)]
+  rec.kids = [Kernel.create(author, blankView)]
 }
 
 /** @internal */
@@ -204,7 +197,6 @@ export const keeper: Kernel.Keeper = {
   mount(author, rec, at) {
     const view = rec.v as View.Child<any, any>
     const tree = author.tree
-    const ops = tree.ops
     const table = (author.kept ??= new Table(author)) as Table
     const named = segment(view)
     const entry = table.kids.get(named)
@@ -232,7 +224,7 @@ export const keeper: Kernel.Keeper = {
       return blank(author, rec)
     }
     if (entry === undefined) {
-      ops.mountChild(author, rec, true)
+      Kernel.mountChild(author, rec, true)
       if (rec.inst === author) return
       table.kids.set(named, {
         inst: rec.inst,
@@ -249,7 +241,7 @@ export const keeper: Kernel.Keeper = {
     if (entry.rec !== undefined) vacate(author, entry.rec, false)
     else if (last.kids !== undefined) {
       for (let index = last.kids.length - 1; index >= 0; index--) {
-        ops.release(author, last.kids[index]!)
+        Kernel.release(author, last.kids[index]!)
       }
       last.kids = undefined
     }
@@ -258,7 +250,7 @@ export const keeper: Kernel.Keeper = {
     child.under = at
     entry.rec = rec
     if (child.closed) {
-      rec.kids = [ops.stand(child, child.failure!)]
+      rec.kids = [Kernel.stand(child, child.failure!)]
       return
     }
     if (off.has(child)) {
@@ -267,14 +259,14 @@ export const keeper: Kernel.Keeper = {
       tree.log?.(child, { _tag: "Drawn" })
     }
     tree.drawn?.(child, true)
-    ops.patchChild(author, rec, view)
+    Kernel.patchChild(author, rec, view)
   },
   patch(inst, old, view) {
     const table = inst.kept as Table | undefined
     const entry = table?.kids.get(segment(view))
     if (entry === undefined || entry.rec !== old) {
       if (held(inst, old)) return undefined
-      return inst.tree.ops.replace(inst, old, view)
+      return Kernel.replace(inst, old, view)
     }
     const alive = aliveOf(view)
     if (alive !== undefined && !table!.ask(alive, view, entry)) {
@@ -296,7 +288,7 @@ export const keeper: Kernel.Keeper = {
     else {
       const kids = rec.kids!
       for (let index = kids.length - 1; index >= 0; index--) {
-        owner.tree.ops.release(owner, kids[index]!)
+        Kernel.release(owner, kids[index]!)
       }
       rec.kids = undefined
     }

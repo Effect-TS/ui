@@ -1,5 +1,5 @@
 import { defer } from "./due.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 
 class Running implements Kernel.Transitions {
   readonly tree: Kernel.Tree
@@ -53,7 +53,7 @@ class Running implements Kernel.Transitions {
     for (let index = 0; index < waiting.length; index++) {
       defer(tree, waiting[index]!)
     }
-    if (!this.starting) tree.ops.flush(tree)
+    if (!this.starting) Kernel.flush(tree)
   }
 }
 

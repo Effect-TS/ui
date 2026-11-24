@@ -1,5 +1,5 @@
 import { follow } from "./fork.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 
 const queues = new WeakMap<Kernel.Tree, Array<() => void>>()
 
@@ -21,7 +21,5 @@ export const defer = (tree: Kernel.Tree, f: () => void): void => {
   }
   const run = follow(tree)
   due.push(() => run(f))
-  if (tree.flushing || tree.scheduled) return
-  tree.scheduled = true
-  tree.schedule(() => tree.ops.flush(tree))
+  Kernel.wake(tree)
 }

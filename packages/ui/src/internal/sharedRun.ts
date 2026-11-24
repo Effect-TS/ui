@@ -2,7 +2,7 @@ import * as Cause from "effect/Cause"
 import type * as Component from "../Component.ts"
 import * as View from "../View.ts"
 import { sharedEqual } from "./equal.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import { readsOf } from "./shared.ts"
 
 type Inst = Kernel.Instance
@@ -85,8 +85,7 @@ const fail = (
   where: Kernel.FailedIn,
   error: unknown,
   name?: string
-) =>
-  inst.tree.ops.fail(inst, where, Cause.die(error), undefined, undefined, name)
+) => Kernel.fail(inst, where, Cause.die(error), undefined, undefined, name)
 
 const definitionOf = (inst: Inst): Component.Definition.Any =>
   (inst.component as unknown as Component.Any).definition
@@ -140,7 +139,7 @@ const bindAll = (inst: Inst): boolean => {
     const was = reading.owners.get(owned)
     const owner = nearest(inst, owned)
     if (owner === was && (owner !== undefined || read.optional)) continue
-    inst.tree.ops.markDirty(inst)
+    Kernel.markDirty(inst)
     if (was !== undefined) {
       reading.owners.delete(owned)
       reading.seen.delete(was)
@@ -209,10 +208,7 @@ export const restored = (owner: Inst): void => {
 const due = (owner: Inst): void => {
   const tree = owner.tree
   sharedOf(tree).due.add(owner)
-  if (!tree.scheduled) {
-    tree.scheduled = true
-    tree.schedule(() => tree.ops.flush(tree))
-  }
+  Kernel.wake(tree)
 }
 
 const leave = (inst: Inst): void => {
@@ -255,7 +251,7 @@ const refresh = (inst: Inst, seq: number | undefined | void): boolean => {
   let listened = false
   for (const reader of owning.readers) {
     if (reader.closed) continue
-    inst.tree.ops.markDirty(reader)
+    Kernel.markDirty(reader)
     if ((reader.reading as Reading).seen.has(inst)) listened = true
   }
   if (listened && !owning.round) {
@@ -328,7 +324,7 @@ const round = (owner: Inst): void => {
       fail(reader, "shared", error, read.name)
     }
     if (message !== undefined && !reader.closed) {
-      owner.tree.ops.send(reader, message, {
+      Kernel.send(reader, message, {
         _tag: "Shared",
         name: read.name,
         path: owner.path,
@@ -376,7 +372,7 @@ const collect = (owner: Inst): void => {
   if (sharedEqual(owning.collected.message, message)) return
   owning.collected = { message }
   if (countShared(owner)) {
-    owner.tree.ops.send(owner, message, { _tag: "Collected" })
+    Kernel.send(owner, message, { _tag: "Collected" })
   }
 }
 
@@ -399,7 +395,7 @@ const send = (
     const definition = sends[index]!.owner.definition
     const owner = nearest(inst, definition)
     if (owner !== undefined) {
-      inst.tree.ops.send(owner, sends[index]!.message, {
+      Kernel.send(owner, sends[index]!.message, {
         _tag: "Send",
         path: inst.path,
         seq

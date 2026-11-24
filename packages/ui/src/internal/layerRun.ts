@@ -10,7 +10,7 @@ import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import { heldBy, hold } from "./closing.ts"
 import { follow, owned, servicesOf, withScheduler } from "./fork.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import { scopeAddFinalizerUnsafe } from "./scope.ts"
 import { serverFailure } from "./slotStatus.ts"
 
@@ -198,9 +198,7 @@ const counted = (
   building.add(stamp)
   const done = () => building.delete(stamp)
   const settled = () => {
-    if (!building.delete(stamp) || tree.flushing || tree.scheduled) return
-    tree.scheduled = true
-    tree.schedule(() => tree.ops.flush(tree))
+    if (building.delete(stamp)) Kernel.wake(tree)
   }
   whenSettled(env, settled, settled)
   addFinalizer(tree, context, scope, Effect.sync(done))
@@ -312,7 +310,7 @@ class Provide {
     if (handle === undefined) {
       if (this.booting) this.failedEarly = cause
       else {tree.schedule(() =>
-          inst.env === own && tree.ops.fail(inst, "layer", cause)
+          inst.env === own && Kernel.fail(inst, "layer", cause)
         )}
       return
     }
@@ -358,7 +356,7 @@ class Provide {
     inst.env = envOf(this.parent)
     const waits: Array<Fiber.Fiber<unknown, unknown>> = []
     if (inst.swaps !== undefined) { for (const swap of inst.swaps) swap(waits) }
-    inst.tree.ops.clear(inst)
+    Kernel.clear(inst)
     waits.push(...heldBy(inst))
     const retired = { scope: this.scope, waits }
     if (previous.ctx !== undefined && this.retired === undefined) {
@@ -506,7 +504,7 @@ export const boot = (inst: Kernel.Instance): void => {
   }
   provide.booting = false
   if (provide.failedEarly !== undefined) {
-    tree.ops.fail(inst, "layer", provide.failedEarly)
+    Kernel.fail(inst, "layer", provide.failedEarly)
   }
 }
 

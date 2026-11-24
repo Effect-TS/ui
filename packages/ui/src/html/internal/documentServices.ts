@@ -146,14 +146,15 @@ export const make = (
 ) =>
   Effect.suspend(() => {
     const signal = signals(document)
-    const context: Context.Context<any> = Context.make(Html.Host, htmlHost).pipe(
-      Context.add(queryCore.Visibility, signal.visibility),
-      Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(globalEvents.GlobalEvents, globalEventsOf(document, held)),
-      Context.add(frames.AnimationFrames, framesOf(document)),
-      Context.add(HtmlImages.Images, imagesOf(document)),
-      Context.add(files.Files, filesOf(document, htmlHost))
-    )
+    const context: Context.Context<any> = Context.make(Html.Host, htmlHost)
+      .pipe(
+        Context.add(queryCore.Visibility, signal.visibility),
+        Context.add(queryCore.Connectivity, signal.connectivity),
+        Context.add(globalEvents.GlobalEvents, globalEventsOf(document, held)),
+        Context.add(frames.AnimationFrames, framesOf(document)),
+        Context.add(HtmlImages.Images, imagesOf(document)),
+        Context.add(files.Files, filesOf(document, htmlHost))
+      )
     return Effect.as(
       Effect.addFinalizer(() => Effect.sync(signal.dispose)),
       context

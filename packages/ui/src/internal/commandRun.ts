@@ -13,7 +13,7 @@ import type * as Query from "../Query.ts"
 import { going, heldBy, hold } from "./closing.ts"
 import { defer, routed } from "./due.ts"
 import { follow, fork, servicesOf } from "./fork.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import { isNoop } from "./noop.ts"
 import * as queryCore from "./queryCore.ts"
 import { refsOf } from "./refs.ts"
@@ -197,7 +197,7 @@ class Runs implements Kernel.Runs {
       if (run.done) return
       const silent = isNoop(message)
       run.silent = silent && run.silent !== false
-      if (!silent) follow(tree)(() => inst.tree.ops.send(inst, message, source))
+      if (!silent) follow(tree)(() => Kernel.send(inst, message, source))
     }
     const program = Effect.useSpan(
       command.name,
@@ -352,7 +352,7 @@ class Runs implements Kernel.Runs {
       (Cause.hasDies(exit.cause) || reject === undefined)
     ) {
       this.remove(run)
-      inst.tree.ops.fail(
+      Kernel.fail(
         inst,
         "command",
         exit.cause,
@@ -379,7 +379,7 @@ class Runs implements Kernel.Runs {
         : command.resolve(exit.value as never)
     } catch (error) {
       this.remove(run)
-      inst.tree.ops.fail(
+      Kernel.fail(
         inst,
         "command",
         Cause.die(error),
@@ -460,7 +460,7 @@ class Runs implements Kernel.Runs {
     const held = run.held!
     run.held = undefined
     if (!isNoop(held.message)) {
-      inst.tree.ops.send(inst, held.message, held.source)
+      Kernel.send(inst, held.message, held.source)
     }
     if (run.done) return
     this.remove(run)
@@ -482,7 +482,7 @@ const endWait = (run: Run, by: MessageLog.WaitEnded): void => {
 }
 
 const redraw = (inst: Kernel.Instance): void => {
-  if (!inst.closed) inst.tree.ops.markDirty(inst)
+  if (!inst.closed) Kernel.markDirty(inst)
 }
 
 const entryOf = (run: Run): schedule.Entry<Run> => ({
@@ -542,7 +542,7 @@ export const issue = (
       const where = inst.rendered === undefined && inst.failure === undefined
         ? "init"
         : "update"
-      return inst.tree.ops.fail(
+      return Kernel.fail(
         inst,
         where,
         Cause.die(error),

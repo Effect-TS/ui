@@ -4,7 +4,7 @@ import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import type * as View from "../View.ts"
 import { skipsEmpty } from "./headFold.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import { Problems } from "./queryCore.ts"
 
 const none: ReadonlyArray<never> = []
@@ -83,7 +83,7 @@ class Folding {
     })
     if (failed.length > 0) {
       for (let index = 0; index < failed.length; index += 2) {
-        tree.ops.fail(
+        Kernel.fail(
           failed[index] as Kernel.Instance,
           "head",
           Cause.die(failed[index + 1])
