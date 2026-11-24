@@ -147,8 +147,12 @@ ${markRules}
 .filter, .tab { padding: 8px 0 7px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .filter:hover, .tab:hover { color: var(--ink); }
 .filter.on, .tab[data-active] { color: var(--ink); border-bottom-color: var(--ink); }
-.timeline-box { --chain: var(--ink); display: grid; min-height: 0; }
+.timeline-box { --chain: var(--ink); position: relative; display: grid; min-height: 0; }
 .timeline-box.cmd { --chain: var(--cmd); }
+.gutter { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; border-left: 1px solid var(--line); pointer-events: none; }
+.gutter i { position: absolute; left: 1px; right: 1px; height: 3px; border-radius: 1px; }
+.gutter .g-bad { background: var(--bad); }
+.gutter .g-link { left: 2px; right: 2px; background: var(--chain); }
 .timeline { overflow: auto; min-height: 0; }
 .row { display: grid; grid-template-columns: 14px minmax(0, 1fr); height: 28px; white-space: nowrap; }
 .row-button { display: grid; grid-template-columns: calc(var(--seq-digits, 3) * 1ch + 10px) 22px minmax(0, 1fr); align-items: center; padding: 0 20px 0 0; height: 28px; }

@@ -683,6 +683,36 @@ const scrollOf = (model: OverlayModel, keys: ReadonlyArray<string>) =>
     }
     : {}
 
+const gutterSteps = 200
+
+const Gutter = (
+  h: H,
+  timeline: ReadonlyArray<Entry>,
+  chain: ReadonlySet<number>,
+  selected: number | undefined
+) => {
+  const failed = new Set<number>()
+  const linked = new Set<number>()
+  timeline.forEach((entry, index) => {
+    const at = Math.floor(index / timeline.length * gutterSteps)
+    if (Read.markOf(entry) === "bad") failed.add(at)
+    if (entry.seq === selected || chain.has(entry.seq)) linked.add(at)
+  })
+  const marks = (set: ReadonlySet<number>, kind: string) =>
+    Array.from(
+      set,
+      (at) =>
+        h.i.key(kind + at).class("g-" + kind).attr(
+          "style",
+          "top:" + (at * 100 / gutterSteps) + "%"
+        )
+    )
+  return h.div.class("gutter").attr("aria-hidden", "true").children(
+    ...marks(linked, "link"),
+    ...marks(failed, "bad")
+  )
+}
+
 const Timeline = (
   h: H,
   session: Session,
@@ -782,7 +812,8 @@ const Timeline = (
               )
           )
         )
-    })
+    }),
+    timeline.length > 20 ? Gutter(h, timeline, chain, selected) : null
   )
 }
 

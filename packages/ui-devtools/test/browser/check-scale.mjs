@@ -170,4 +170,20 @@ await run("scale", async ({ browser, expect, failures, url }) => {
     "the sub line reads in minutes and seconds",
     sub
   )
+
+  await page.click("[data-fail='s9-9']")
+  await settle()
+  const gutter = await page.evaluate(() => {
+    const doc =
+      document.querySelector("iframe[data-effect-ui-devtools]").contentDocument
+    return {
+      bad: doc.querySelectorAll(".gutter .g-bad").length,
+      link: doc.querySelectorAll(".gutter .g-link").length
+    }
+  })
+  expect(
+    gutter.bad > 0 && gutter.link > 0,
+    "the scroll gutter marks a failure and the selected chain",
+    gutter
+  )
 })
