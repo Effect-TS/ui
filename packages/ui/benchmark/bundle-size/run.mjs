@@ -1,14 +1,13 @@
 // Bundle sizes of small @effect/ui clients, bundled with Vite against the packed @effect/ui and
 // @effect/ui-kit as an external consumer would. Run from the repository root, after `pnpm build`:
 //
-//   pnpm bundle-size [--app <name>]... [--spike] [--development] [--vocabulary] [--json <file>] [--base <file>]
+//   pnpm bundle-size [--app <name>]... [--development] [--vocabulary] [--json <file>] [--base <file>]
 //
 // Apps: `counter` (counter.ts), `features` (features.ts: a Layer, a slot, a failure fallback and the
 // message log) and `routing` (examples/routing). Every app is measured unless --app picks some. Each
 // bundle runs in happy-dom before it counts. Added gzip bytes are an app's total minus a separately
 // bundled effect-only client.
 //
-//   --spike        counter-spike.ts and features-spike.ts, on the EFF-4218 kernel spike; no routing
 //   --development  bundle without the `production` export condition, keeping development-only checks
 //   --vocabulary   the counter with `elements: Html.vocabulary`
 //   --json         write the result to a file
@@ -25,13 +24,12 @@ import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
 import { build, version as vite } from "vite"
 
-const { values: { app: only, base, development, json, spike, vocabulary } } =
+const { values: { app: only, base, development, json, vocabulary } } =
   parseArgs({
     options: {
       app: { type: "string", multiple: true },
       development: { type: "boolean", default: false },
       vocabulary: { type: "boolean", default: false },
-      spike: { type: "boolean", default: false },
       base: { type: "string" },
       json: { type: "string" }
     }
@@ -116,12 +114,6 @@ async function checkFeatures(chunks) {
       "badgedown1",
       "the app did not show the fallback and hear of the failure"
     )
-    if (spike) {
-      assert.ok(
-        window.entries().some((entry) => entry._tag === "Failed"),
-        "the log has no failure"
-      )
-    }
   })
 }
 
@@ -237,13 +229,11 @@ const benchmark = (file) => path.join(import.meta.dirname, file)
 const apps = [
   {
     name: "counter",
-    variant: [vocabulary && "Html.vocabulary", spike && "kernel spike"].filter(
-      Boolean
-    ).join(", "),
+    variant: vocabulary ? "Html.vocabulary" : "",
     check: checkCounter,
     prepare: (root) => {
       const source = fs.readFileSync(
-        benchmark(spike ? "counter-spike.ts" : "counter.ts"),
+        benchmark("counter.ts"),
         "utf8"
       )
       const binding = "elements: Html"
@@ -266,12 +256,12 @@ const apps = [
   },
   {
     name: "features",
-    variant: spike ? "kernel spike" : "",
+    variant: "",
     check: checkFeatures,
     prepare: (root) => {
       const input = path.join(root, "features.ts")
       fs.copyFileSync(
-        benchmark(spike ? "features-spike.ts" : "features.ts"),
+        benchmark("features.ts"),
         input
       )
       return { root, input }
@@ -280,7 +270,6 @@ const apps = [
   {
     name: "routing",
     variant: "",
-    skip: spike,
     check: checkRouting,
     prepare: (root) => {
       const example = path.join(repo, "examples/routing")
@@ -295,11 +284,11 @@ const apps = [
       return { root: app, input: path.join(app, "src/main.ts") }
     }
   }
-].filter((app) => (only === undefined || only.includes(app.name)) && !app.skip)
+].filter((app) => only === undefined || only.includes(app.name))
 for (const name of only ?? []) {
   assert.ok(
     apps.some((app) => app.name === name),
-    "unknown or skipped app: " + name
+    "unknown app: " + name
   )
 }
 
