@@ -25,8 +25,9 @@ import { follow, fork, servicesOf } from "./fork.ts"
 import type * as Kernel from "./kernel.ts"
 import { isNoop } from "./noop.ts"
 import * as queryCore from "./queryCore.ts"
+import { refsOf } from "./refs.ts"
 import * as schedule from "./schedule.ts"
-import { isNavigation } from "./services.ts"
+import { isNavigation, Refs } from "./services.ts"
 
 type Issued =
   | Command.Issued<any, any, never, "Effect">
@@ -288,7 +289,7 @@ class Runs implements Kernel.Runs {
       if (run.done || inst.closed) return
       const fiber = fork(
         tree,
-        Context.add(ctx, Scope.Scope, scope),
+        Context.add(Context.add(ctx, Scope.Scope, scope), Refs, refsOf(inst)),
         Effect.onExit(program, (exit) => Scope.close(scope, exit)),
         now
       )

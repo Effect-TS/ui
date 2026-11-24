@@ -46,7 +46,9 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Command from "./Command.ts"
+import type * as Kernel from "./internal/kernel.ts"
 import * as mountArgs from "./internal/mountArgs.ts"
+import * as mountRun from "./internal/mountRun.ts"
 
 /**
  * Identifies an issued mount.
@@ -304,6 +306,12 @@ const Proto = {
   },
   "~sameArgs"(this: Any, that: Any) {
     return sameArgs(this, that)
+  },
+  "~attach"(this: Any, rec: Kernel.Rec) {
+    mountRun.attach(this, rec)
+  },
+  "~detach"(rec: Kernel.Rec) {
+    mountRun.detach(rec)
   },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)

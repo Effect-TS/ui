@@ -16,7 +16,12 @@ export interface Host<N = any> {
   readonly createElement: (tag: string) => N
   readonly createText: (text: string) => N
   readonly setText: (node: N, text: string) => void
-  readonly setAttr: (node: N, name: string, value: string | undefined) => void
+  readonly setAttr: (
+    node: N,
+    name: string,
+    value: string | undefined,
+    previous?: string | undefined
+  ) => void
   readonly normalizeAttrs?:
     | ((
       node: N,
@@ -31,6 +36,20 @@ export interface Host<N = any> {
   readonly parentOf: (node: N) => N
   readonly nextOf: (node: N) => N | null
   readonly commit?: (() => void) | undefined
+  /** The properties a patch sets again even when the view's value is the same: the user may have changed them. */
+  readonly controlled?: ReadonlySet<string> | undefined
+  readonly runsMounts?: boolean | undefined
+}
+
+/**
+ * What an element's mount carries to run itself on the element's record, so the kernel runs one without
+ * importing what runs it. `~attach` is called as the element is made, and with each new mount a patch gives it.
+ *
+ * @internal
+ */
+export interface Attachable {
+  readonly "~attach": (rec: Rec) => void
+  readonly "~detach": (rec: Rec) => void
 }
 
 /** @internal */
@@ -78,6 +97,7 @@ export type FailedIn =
   | "layer"
   | "command"
   | "subscription"
+  | "mount"
 
 /** @internal */
 export interface Env {
@@ -191,6 +211,8 @@ export interface Tree {
    * render. Returns whether it did something, which may have more to render.
    */
   work?: ((idle: boolean) => boolean) | undefined
+  /** Called once the flush running or scheduled commits, or at once when none is. */
+  committed?: Array<() => void> | undefined
   dirty: Array<Instance>
   scheduled: boolean
   flushing: boolean
@@ -610,6 +632,11 @@ export const flush = (tree: Tree): void => {
   }
   tree.scheduled = tree.flushing = false
   tree.host.commit?.()
+  const committed = tree.committed
+  if (committed !== undefined) {
+    tree.committed = undefined
+    for (let index = 0; index < committed.length; index++) committed[index]!()
+  }
 }
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
@@ -752,6 +779,11 @@ const release = (owner: Instance, rec: Rec): void => {
     if (rec.inst === owner) {
       owner.live--
       rec.inst = released
+    }
+  } else if (view._tag === "Element") {
+    if (view.mount !== undefined) {
+      owner.live--
+      ;(view.mount as unknown as Attachable)["~detach"](rec)
     }
   } else if (view._tag === "Outlet") {
     if (rec.inst !== owner) return
@@ -1016,13 +1048,15 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
         }
       }
       if (view.props !== View.noFields) setProps(host, node, view.props)
-      if (view.mount !== undefined) notPorted("mounts")
-      if (view.refKey !== undefined) notPorted("refs")
       if (view.owned !== undefined && view.owned.length > 0) {
         notPorted("headless parts")
       }
       const rec = new Rec(view, node, kids, inst)
       if (view.handlers !== View.noFields) host.setEvents(node, rec, true)
+      if (view.mount !== undefined) {
+        inst.live++
+        ;(view.mount as unknown as Attachable)["~attach"](rec)
+      }
       return rec
     }
     case "Child": {
@@ -1088,7 +1122,13 @@ const pairs = (
 
 const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
   const prev = old.v
-  if (prev === view) return old
+  if (prev === view) {
+    const controlled = inst.tree.host.controlled
+    if (controlled !== undefined && view._tag === "Element") {
+      restore(controlled, inst.tree.host, old)
+    }
+    return old
+  }
   if (!pairs(prev, view)) {
     const host = inst.tree.host
     const at = nodeOf(old)
@@ -1157,6 +1197,24 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
 
 const refreshed = {}
 
+const restore = (
+  controlled: ReadonlySet<string>,
+  host: Host,
+  rec: Rec
+): void => {
+  const kids = rec.kids
+  if (kids !== undefined) {
+    for (let index = 0; index < kids.length; index++) {
+      const kid = kids[index]!
+      if (kid.v._tag === "Element") restore(controlled, host, kid)
+    }
+  }
+  const props = (rec.v as View.Element<any, any>).props
+  for (const name in props) {
+    if (controlled.has(name)) host.setProp(rec.node, name, props[name])
+  }
+}
+
 const patchAttrs = (
   host: Host,
   node: unknown,
@@ -1168,11 +1226,14 @@ const patchAttrs = (
     attrs = host.normalizeAttrs(node, attrs)
   }
   for (const name in before) {
-    if (typeof attrs[name] !== "string") host.setAttr(node, name, undefined)
+    if (typeof attrs[name] !== "string") {
+      host.setAttr(node, name, undefined, before[name])
+    }
   }
   for (const name in attrs) {
     const value = attrs[name]
-    if (before[name] !== value) host.setAttr(node, name, value)
+    const previous = before[name]
+    if (previous !== value) host.setAttr(node, name, value, previous)
   }
 }
 
@@ -1182,11 +1243,14 @@ const patchProps = (
   was: Readonly<Record<string, unknown>>,
   props: Readonly<Record<string, unknown>>
 ): void => {
+  const controlled = host.controlled
   for (const name in was) {
     if (!(name in props)) host.setProp(node, name, undefined)
   }
   for (const name in props) {
-    if (was[name] !== props[name]) host.setProp(node, name, props[name])
+    if (was[name] !== props[name] || controlled?.has(name) === true) {
+      host.setProp(node, name, props[name])
+    }
   }
 }
 
@@ -1200,20 +1264,31 @@ const patchElement = (
   const node = rec.node
   rec.v = view
   if (prev.attrs !== view.attrs) patchAttrs(host, node, prev.attrs, view.attrs)
-  if (prev.props !== view.props) patchProps(host, node, prev.props, view.props)
   if (view.handlers !== prev.handlers) {
     host.setEvents(node, rec, prev.handlers === View.noFields)
+  }
+  const mount = view.mount as unknown as Attachable | undefined
+  const was = prev.mount as unknown as Attachable | undefined
+  if (mount !== was) {
+    if (mount === undefined) {
+      inst.live--
+      was!["~detach"](rec)
+    } else {
+      if (was === undefined) inst.live++
+      mount["~attach"](rec)
+    }
   }
   const views = view.children
   const olds = rec.kids
   if (dev && views.length > 1) checkKeys(inst.path, views)
   if (olds === undefined) {
-    if (views.length === 0) return
-    const kids: Array<Rec> = new Array(views.length)
-    for (let index = 0; index < views.length; index++) {
-      place(host, node, kids[index] = create(inst, views[index]!), null)
+    if (views.length > 0) {
+      const kids: Array<Rec> = new Array(views.length)
+      for (let index = 0; index < views.length; index++) {
+        place(host, node, kids[index] = create(inst, views[index]!), null)
+      }
+      rec.kids = kids
     }
-    rec.kids = kids
   } else if (views.length === 0) {
     for (let index = 0; index < olds.length; index++) {
       release(inst, olds[index]!)
@@ -1230,6 +1305,13 @@ const patchElement = (
       patchElement(inst, old, old.v as View.Element<any, any>, next)
     } else olds[0] = patch(inst, old, next)
   } else rec.kids = patchList(inst, node, olds, views, null)
+  // After the children, so a select's value wins over its options'.
+  if (
+    prev.props !== view.props ||
+    (host.controlled !== undefined && view.props !== View.noFields)
+  ) {
+    patchProps(host, node, prev.props, view.props)
+  }
 }
 
 const keyOf = (view: View.Node<any, any>): unknown =>
@@ -1401,7 +1483,7 @@ export const mount = (
     follow: options.follow,
     ops: { send, fail, markDirty, renderAbove, clear, flush },
     dirty: [],
-    scheduled: false,
+    scheduled: true,
     flushing: true,
     closed: false
   }

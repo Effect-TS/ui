@@ -3,6 +3,7 @@
  *
  * @internal
  */
+import * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -52,10 +53,18 @@ const bridge = (
   host: Renderer.Host<any>,
   step: Recorder.Recording["step"]
 ): Kernel.Host => ({
-  createElement: (tag) => host.createElement(tag),
+  createElement: (tag) => {
+    const node = host.createElement(tag)
+    // An entry marks a form as the app's, so its submission is prevented without a handler.
+    if (node?.nodeName === "FORM") {
+      host.setEvents(node, View.noFields, () => false, View.noFields)
+    }
+    return node
+  },
   createText: (text) => host.createText(text),
   setText: (node, text) => host.setText(node, text),
-  setAttr: (node, name, value) => host.setAttr(node, name, value),
+  setAttr: (node, name, value, previous) =>
+    host.setAttr(node, name, value, previous),
   normalizeAttrs: host.normalizeAttrs === undefined
     ? undefined
     : (node, attrs) => host.normalizeAttrs!(node, attrs),
@@ -67,9 +76,21 @@ const bridge = (
       view.handlers,
       (event, handler, payload, onMessage) =>
         step(() => {
-          const sent = rec.inst.fire(handler, payload, event)
-          if (sent) onMessage?.()
-          return sent
+          const inst = rec.inst
+          if (inst.closed) return false
+          let message: unknown = handler
+          if (typeof handler === "function") {
+            try {
+              message = handler(payload)
+            } catch (error) {
+              Kernel.fail(inst, "event", Cause.die(error))
+              return false
+            }
+          }
+          if (message === undefined) return false
+          onMessage?.()
+          Kernel.send(inst, message, event)
+          return true
         }),
       view.eventOptions
     )
@@ -80,7 +101,9 @@ const bridge = (
   remove: (_parent, node) => host.remove(node),
   parentOf: (node) => host.parentOf(node),
   nextOf: (node) => host.nextOf(node) ?? null,
-  commit: host.commit === undefined ? undefined : () => host.commit!()
+  commit: host.commit === undefined ? undefined : () => host.commit!(),
+  controlled: host.controlled.size === 0 ? undefined : host.controlled,
+  runsMounts: host.runsMounts
 })
 
 interface Options {
