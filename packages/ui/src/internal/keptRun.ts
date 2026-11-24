@@ -118,6 +118,17 @@ const unplaceParked = (host: Kernel.Host, rec: Rec): void => {
   if (parent != null) Kernel.unplace(host, parent, rec)
 }
 
+const clearKids = (author: Inst, rec: Rec, unplace: boolean): void => {
+  const kids = rec.kids
+  if (kids === undefined) return
+  rec.kids = undefined
+  for (let index = kids.length - 1; index >= 0; index--) {
+    const kid = kids[index]!
+    Kernel.release(author, kid)
+    if (unplace) unplaceParked(author.tree.host, kid)
+  }
+}
+
 const drop = (author: Inst, entry: Entry): void => {
   const at = entry.loading
   if (at === undefined) {
@@ -127,6 +138,13 @@ const drop = (author: Inst, entry: Entry): void => {
     Kernel.close(entry.inst)
     if (parked && rendered !== undefined) {
       unplaceParked(author.tree.host, rendered)
+    }
+    const last = entry.inst.at
+    if (
+      entry.rec === undefined && last !== undefined &&
+      last.inst === entry.inst
+    ) {
+      clearKids(author, last, parked)
     }
     return
   }
@@ -422,17 +440,13 @@ export const keeper: Kernel.Keeper = {
     const child = entry.inst
     const last = child.at!
     if (entry.rec !== undefined) vacate(author, entry.rec, false)
-    else if (last.kids !== undefined) {
-      for (let index = last.kids.length - 1; index >= 0; index--) {
-        Kernel.release(author, last.kids[index]!)
-      }
-      last.kids = undefined
-    }
+    else clearKids(author, last, off.has(child))
     rec.inst = child
     ;(child as { at: Rec }).at = rec
     child.under = at
     entry.rec = rec
     if (child.closed) {
+      off.delete(child)
       rec.kids = [Kernel.stand(child, child.failure!)]
       return
     }

@@ -1,4 +1,4 @@
-import { Component, Head, UiSchema } from "@effect/ui"
+import { Command, Component, Head, Mount, UiSchema } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
@@ -7,7 +7,7 @@ import {
 import { OpenTuiTest } from "@effect/ui-opentui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import * as OT from "@opentui/core"
-import { Effect, Option, Schema } from "effect"
+import { Deferred, Effect, Option, Schema } from "effect"
 
 describe("OpenTuiHost", () => {
   it.effect("renders layout, text modifiers, mouse clicks, controlled input, and head title", () =>
@@ -331,7 +331,7 @@ describe("OpenTuiHost", () => {
       expect(app.setup.renderer.isDestroyed).toBe(true)
     }))
 
-  it.effect("reuses keepAlive children across hide/show and destroys parked nodes on expiry, owner teardown, and parked lazy fallback disposal", () =>
+  it.effect("reuses keepAlive children across hide/show and destroys parked nodes on expiry, owner teardown, lazy fallback, and error fallback disposal", () =>
     Effect.gen(function*() {
       const boxes: Array<OT.BoxRenderable> = []
       class TrackedBox extends OT.BoxRenderable {
@@ -362,11 +362,58 @@ describe("OpenTuiHost", () => {
         () => new Promise<typeof Tab>(() => {})
       )
 
+      const gates = [
+        yield* Deferred.make<void>(),
+        yield* Deferred.make<void>(),
+        yield* Deferred.make<void>()
+      ]
+      let nextGate = 0
+      const Boom = Command.make(
+        "Boom",
+        { args: {} },
+        () => {
+          const gate = gates[nextGate++]!
+          return Deferred.await(gate).pipe(Effect.andThen(Effect.die("boom")))
+        }
+      )
+      const Fragile = Component.define({
+        name: "Fragile",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: OpenTui
+      }).make({
+        init: ($) => $.set(null).run(Boom.make()),
+        update: ($) => $.model,
+        view: (h) =>
+          h.el("tracked-box").prop("width", 20).prop("height", 2)
+            .children(h.text("fragile-ok"))
+      })
+
+      let fallbackActive = 0
+      let fallbackReleases = 0
+      const TrackFallback = Mount.make(
+        "TrackFallback",
+        { args: {} },
+        () =>
+          Effect.acquireRelease(
+            Effect.sync(() => {
+              fallbackActive++
+            }),
+            () =>
+              Effect.sync(() => {
+                fallbackActive--
+                fallbackReleases++
+              })
+          ).pipe(Effect.as(Component.noop))
+      )
+
       const OwnerProps = Schema.Struct({
         showTab: Schema.Boolean,
         keepTab: Schema.Boolean,
         showLazy: Schema.Boolean,
-        keepLazy: Schema.Boolean
+        keepLazy: Schema.Boolean,
+        showFragile: Schema.Boolean,
+        keepFragile: Schema.Boolean
       })
 
       const Owner = Component.define({
@@ -379,7 +426,7 @@ describe("OpenTuiHost", () => {
         init: () => undefined,
         update: () => undefined,
         view: (h) =>
-          h.box.style({ flexDirection: "column", width: 24, height: 8 })
+          h.box.style({ flexDirection: "column", width: 24, height: 10 })
             .children(
               h.keepAlive(
                 ({ props }) => props.keepTab,
@@ -399,6 +446,19 @@ describe("OpenTuiHost", () => {
                           .children(h.text("loading-lazy"))
                     })
                     : h.text("hidden-lazy")
+              ),
+              h.keepAlive(
+                ({ props }) => props.keepFragile,
+                (s) =>
+                  h.props.showFragile
+                    ? Fragile(s, {
+                      key: "f",
+                      fallback: () =>
+                        h.el("tracked-box").prop("width", 20).prop("height", 2)
+                          .onMount(TrackFallback())
+                          .children(h.text("fragile-down"))
+                    })
+                    : h.text("hidden-fragile")
               )
             )
       })
@@ -409,7 +469,9 @@ describe("OpenTuiHost", () => {
           showTab: Schema.optional(Schema.Boolean),
           keepTab: Schema.optional(Schema.Boolean),
           showLazy: Schema.optional(Schema.Boolean),
-          keepLazy: Schema.optional(Schema.Boolean)
+          keepLazy: Schema.optional(Schema.Boolean),
+          showFragile: Schema.optional(Schema.Boolean),
+          keepFragile: Schema.optional(Schema.Boolean)
         }
       })
 
@@ -420,7 +482,9 @@ describe("OpenTuiHost", () => {
           showTab: Schema.Boolean,
           keepTab: Schema.Boolean,
           showLazy: Schema.Boolean,
-          keepLazy: Schema.Boolean
+          keepLazy: Schema.Boolean,
+          showFragile: Schema.Boolean,
+          keepFragile: Schema.Boolean
         }),
         message: RootMsg,
         elements: OpenTui
@@ -430,7 +494,9 @@ describe("OpenTuiHost", () => {
           showTab: true,
           keepTab: true,
           showLazy: true,
-          keepLazy: true
+          keepLazy: true,
+          showFragile: true,
+          keepFragile: true
         }),
         update: {
           Set: ($, patch) =>
@@ -439,7 +505,9 @@ describe("OpenTuiHost", () => {
               showTab: patch.showTab ?? $.model.showTab,
               keepTab: patch.keepTab ?? $.model.keepTab,
               showLazy: patch.showLazy ?? $.model.showLazy,
-              keepLazy: patch.keepLazy ?? $.model.keepLazy
+              keepLazy: patch.keepLazy ?? $.model.keepLazy,
+              showFragile: patch.showFragile ?? $.model.showFragile,
+              keepFragile: patch.keepFragile ?? $.model.keepFragile
             })
         },
         view: (h, model) =>
@@ -449,7 +517,9 @@ describe("OpenTuiHost", () => {
                 showTab: model.showTab,
                 keepTab: model.keepTab,
                 showLazy: model.showLazy,
-                keepLazy: model.keepLazy
+                keepLazy: model.keepLazy,
+                showFragile: model.showFragile,
+                keepFragile: model.keepFragile
               }
             })
             : h.text("unmounted")
@@ -457,61 +527,131 @@ describe("OpenTuiHost", () => {
 
       const app = yield* OpenTuiTest.mount(Root, {}, {
         width: 28,
-        height: 10,
+        height: 12,
         renderables: { "tracked-box": TrackedBox }
       })
-      expect(boxes).toHaveLength(2)
-      const [firstTabBox, lazyFallbackBox] = boxes
+      expect(boxes).toHaveLength(3)
+      const [firstTabBox, lazyFallbackBox, firstFragileBox] = boxes
       expect(app.captureFrame()).toContain("tab-count=0")
       expect(app.captureFrame()).toContain("loading-lazy")
+      expect(app.captureFrame()).toContain("fragile-ok")
 
       yield* app.click(2, 0)
       expect(app.captureFrame()).toContain("tab-count=1")
 
-      app.root.send(RootMsg.Set({ showTab: false, showLazy: false }))
+      app.root.send(RootMsg.Set({
+        showTab: false,
+        showLazy: false,
+        showFragile: false
+      }))
       yield* app.settle
       expect(app.captureFrame()).toContain("hidden-tab")
       expect(app.captureFrame()).toContain("hidden-lazy")
       expect(firstTabBox!.isDestroyed).toBe(false)
       expect(lazyFallbackBox!.isDestroyed).toBe(false)
+      expect(firstFragileBox!.isDestroyed).toBe(false)
+
+      yield* Deferred.succeed(gates[0]!, undefined)
+      yield* app.settle
+      expect(boxes).toHaveLength(4)
+      const expiredErrorFallbackBox = boxes[3]!
+      expect(expiredErrorFallbackBox.isDestroyed).toBe(false)
+      expect(fallbackActive).toBe(1)
+      expect(fallbackReleases).toBe(0)
 
       app.root.send(RootMsg.Set({ showTab: true }))
       yield* app.settle
       expect(app.captureFrame()).toContain("tab-count=1")
-      expect(boxes).toHaveLength(2)
+      expect(firstFragileBox!.isDestroyed).toBe(true)
+      expect(boxes).toHaveLength(4)
 
       app.root.send(RootMsg.Set({ showTab: false }))
       yield* app.settle
       expect(firstTabBox!.isDestroyed).toBe(false)
 
-      app.root.send(RootMsg.Set({ keepTab: false, keepLazy: false }))
+      app.root.send(RootMsg.Set({
+        keepTab: false,
+        keepLazy: false,
+        keepFragile: false
+      }))
       yield* app.settle
       expect(firstTabBox!.isDestroyed).toBe(true)
       expect(lazyFallbackBox!.isDestroyed).toBe(true)
+      expect(expiredErrorFallbackBox.isDestroyed).toBe(true)
+      expect(fallbackActive).toBe(0)
+      expect(fallbackReleases).toBe(1)
+
+      app.root.send(RootMsg.Set({ showFragile: true, keepFragile: true }))
+      yield* app.settle
+      expect(boxes).toHaveLength(5)
+      app.root.send(RootMsg.Set({ showFragile: false }))
+      yield* app.settle
+      yield* Deferred.succeed(gates[1]!, undefined)
+      yield* app.settle
+      expect(boxes).toHaveLength(6)
+      const reshowParkedFallbackBox = boxes[5]!
+      expect(reshowParkedFallbackBox.isDestroyed).toBe(false)
+      expect(fallbackActive).toBe(1)
+      expect(fallbackReleases).toBe(1)
+
+      app.root.send(RootMsg.Set({ showFragile: true }))
+      yield* app.settle
+      expect(app.captureFrame()).toContain("fragile-down")
+      expect(reshowParkedFallbackBox.isDestroyed).toBe(true)
+      expect(boxes).toHaveLength(7)
+      const reshowLiveFallbackBox = boxes[6]!
+      expect(reshowLiveFallbackBox.isDestroyed).toBe(false)
+      expect(fallbackActive).toBe(1)
+      expect(fallbackReleases).toBe(2)
+
+      app.root.send(RootMsg.Set({ showFragile: false, keepFragile: false }))
+      yield* app.settle
+      expect(reshowLiveFallbackBox.isDestroyed).toBe(true)
+      expect(fallbackActive).toBe(0)
+      expect(fallbackReleases).toBe(3)
 
       app.root.send(RootMsg.Set({
         showTab: true,
         keepTab: true,
         showLazy: true,
-        keepLazy: true
+        keepLazy: true,
+        showFragile: true,
+        keepFragile: true
       }))
       yield* app.settle
-      expect(boxes).toHaveLength(4)
-      const teardownTabBox = boxes[2]!
-      const teardownLazyBox = boxes[3]!
+      expect(boxes).toHaveLength(10)
+      const teardownTabBox = boxes[7]!
+      const teardownLazyBox = boxes[8]!
+      const teardownFragileBox = boxes[9]!
       expect(teardownTabBox.isDestroyed).toBe(false)
       expect(teardownLazyBox.isDestroyed).toBe(false)
+      expect(teardownFragileBox.isDestroyed).toBe(false)
 
-      app.root.send(RootMsg.Set({ showTab: false, showLazy: false }))
+      app.root.send(RootMsg.Set({
+        showTab: false,
+        showLazy: false,
+        showFragile: false
+      }))
+      yield* app.settle
+      yield* Deferred.succeed(gates[2]!, undefined)
       yield* app.settle
       expect(teardownTabBox.isDestroyed).toBe(false)
       expect(teardownLazyBox.isDestroyed).toBe(false)
+      expect(boxes).toHaveLength(11)
+      const teardownErrorFallbackBox = boxes[10]!
+      expect(teardownErrorFallbackBox.isDestroyed).toBe(false)
+      expect(fallbackActive).toBe(1)
+      expect(fallbackReleases).toBe(3)
 
       app.root.send(RootMsg.Set({ mounted: false }))
       yield* app.settle
       expect(app.captureFrame()).toContain("unmounted")
       expect(teardownTabBox.isDestroyed).toBe(true)
       expect(teardownLazyBox.isDestroyed).toBe(true)
+      expect(teardownFragileBox.isDestroyed).toBe(true)
+      expect(teardownErrorFallbackBox.isDestroyed).toBe(true)
+      expect(fallbackActive).toBe(0)
+      expect(fallbackReleases).toBe(4)
     }))
 
   it.effect("stops mouse propagation on innermost handler even when returning undefined, and resets removed style props", () =>
