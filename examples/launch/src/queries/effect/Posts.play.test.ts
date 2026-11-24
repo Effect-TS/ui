@@ -14,7 +14,6 @@ const titles = [
 
 const TwoPosts = Component.define({
   name: "TwoPosts",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

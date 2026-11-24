@@ -15,7 +15,6 @@ const button = [
 
 export const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage,

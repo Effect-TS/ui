@@ -165,7 +165,6 @@ const Panel = (
 
 export const Diagram = Component.define({
   name: "Diagram",
-  scoped: false,
   props: Schema.Struct({ scenario: ScenarioName }),
   model: DiagramModel,
   message: DiagramMessage,

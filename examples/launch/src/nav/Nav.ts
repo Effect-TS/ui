@@ -54,7 +54,6 @@ const TrackSection = (ids: ReadonlyArray<string>) =>
 
 export const Nav = Component.define({
   name: "Nav",
-  scoped: false,
   props: Schema.Struct({ sections: Schema.Array(Section) }),
   model: Schema.Struct({
     current: Schema.NullOr(Schema.String),

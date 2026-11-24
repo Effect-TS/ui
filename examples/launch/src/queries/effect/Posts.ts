@@ -13,7 +13,6 @@ export class GetPosts extends Query.Service<GetPosts>()("GetPosts", {
 
 export const Posts = Component.define({
   name: "Posts",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,

@@ -6,7 +6,6 @@ import { button, CounterMessage, DelayReset } from "../Counter.ts"
 
 const CounterDef = Component.define({
   name: "Counter",
-  scoped: false,
   model: Schema.Struct({
     count: Schema.Number,
     isAutoCounting: Schema.Boolean

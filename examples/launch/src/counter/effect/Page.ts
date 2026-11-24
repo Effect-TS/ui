@@ -9,7 +9,6 @@ const PageMessage = UiSchema.TaggedEnum({
 
 export const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Struct({ isCounterShown: Schema.Boolean }),
   message: PageMessage,
   elements: Html

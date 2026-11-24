@@ -54,7 +54,6 @@ const Caption = <M>(
 
 export const LaunchPage = Component.define({
   name: "LaunchPage",
-  scoped: false,
   props: Schema.Struct({ snippets: Snippets }),
   model: Schema.Null,
   message: Schema.Never,

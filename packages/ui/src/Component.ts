@@ -2549,8 +2549,12 @@ export interface Definition<
   ) => UR[keyof UR]
   /** A subscriptions function, with the definition's Model, props and query results. */
   subscriptions<Sub extends Subscription.Subscription<Msg, any>>(
-    subscriptions: ($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>
-  ): ($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>
+    subscriptions: (
+      $: Current<Model, Props, QueryResults<L>>
+    ) => ReadonlyArray<Sub | false | null | undefined>
+  ): (
+    $: Current<Model, Props, QueryResults<L>>
+  ) => ReadonlyArray<Sub | false | null | undefined>
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (

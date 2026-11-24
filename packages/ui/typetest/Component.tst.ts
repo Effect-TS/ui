@@ -7,14 +7,7 @@ import {
   UiSchema,
   type View
 } from "@effect/ui"
-import {
-  Context,
-  Effect,
-  Layer,
-  Schema,
-  Scope,
-  Stream
-} from "effect"
+import { Context, Effect, Layer, Schema, Scope, Stream } from "effect"
 import type { KeyValueStore } from "effect/persistence"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
@@ -86,7 +79,6 @@ describe("Component", () => {
   describe("definition helpers", () => {
     const Def = Component.define({
       name: "Extracted",
-      scoped: false,
       props: Schema.Struct({ initial: Schema.Number }),
       model: Schema.Struct({ count: Schema.Number }),
       message: Message
@@ -99,7 +91,11 @@ describe("Component", () => {
           ? $.set({ count: $.props.initial }).run(CA.make())
           : $.set({ count: 0 }).run(CB.make())
       })
-      const C = Def.make({ init, update: ($) => $.model, view: (h) => h.el("div") })
+      const C = Def.make({
+        init,
+        update: ($) => $.model,
+        view: (h) => h.el("div")
+      })
       expect<Component.Requirements<typeof C>>().type.toBe<CA | CB>()
       expect(Def.init).type.not.toBeCallableWith(() => ({ count: "wrong" }))
     })
@@ -110,7 +106,8 @@ describe("Component", () => {
         expect(props).type.toBe<{ readonly initial: number }>()
         expect(queries).type.toBe<{}>()
         return [
-          model.count > props.initial && Subscription.make("a", Stream.fromEffect(Effect.as(A, Message.X()))),
+          model.count > props.initial &&
+          Subscription.make("a", Stream.fromEffect(Effect.as(A, Message.X()))),
           Subscription.make("b", Stream.fromEffect(Effect.as(B, Message.Y()))),
           false,
           null,

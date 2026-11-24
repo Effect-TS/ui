@@ -159,7 +159,6 @@ const AllResultsMessage = UiSchema.TaggedEnum({
 
 export const AllResults = Component.define({
   name: "AllResults",
-  scoped: false,
   model: Schema.Struct({ isOpen: Schema.Boolean }),
   message: AllResultsMessage,
   elements: Html

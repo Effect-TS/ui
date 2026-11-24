@@ -138,7 +138,7 @@ One test can now cover a whole flow. It clicks a button, lets the real Command r
 - **Services per Component:** Provide services to a Component and everything below it with `Component.provide`. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
 - **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The chunk loads the first time the Component is rendered, so it stays out of the initial bundle. In Foldkit 0.x, the routes of a single app couldn't be split.
 - **Recover from Component failures:** Show a fallback for a Component that fails while the rest of the app keeps running.
-- **Keep state while hidden:** Mark a Component `scoped` to keep its Model while it's hidden. Otherwise the Model is discarded when the Component stops being rendered.
+- **Keep state while hidden:** Set `keepAlive: true` on a Component to keep its Model while it's hidden. Otherwise the Model is discarded when the Component stops being rendered.
 - **Control overlapping Commands:** When a Command is issued again while still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
 - **Commands without result Messages:** Use `Command.asNoop` to run a Command when update doesn't need its result.
 - **Custom markup for headless Components:** A headless Component such as the UI kit's Dialog manages state and behavior and hands your view its parts. You apply each part to an element you write, as in `dialog.title(h.h2)`, so the markup and styling stay yours. Foldkit UI passed your `toView` callback bundles of attributes to spread onto your elements.
