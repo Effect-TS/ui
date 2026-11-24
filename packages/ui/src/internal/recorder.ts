@@ -140,6 +140,7 @@ export const make = (
     switch (draft._tag) {
       case "Update": {
         entry.source = sourceOf(draft.source)
+        if (draft.viewTransition === undefined) delete entry.viewTransition
         entry.lists = draft.lists ?? []
         entry.sends = []
         if (draft.model !== inst.model && origin !== undefined) {

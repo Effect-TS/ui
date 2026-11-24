@@ -24,6 +24,7 @@ import * as Recorder from "../recorder.ts"
 import type * as routeRun from "../routeRun.ts"
 import type * as runtime from "../runtime.ts"
 import * as services from "../services.ts"
+import * as transitionRun from "../transitionRun.ts"
 
 /** @internal */
 export type Root = runtime.Root
@@ -113,7 +114,10 @@ const bridge = (
   runsMounts: host.runsMounts,
   head: ownsHead && host.head !== undefined
     ? (head) => host.head!(head)
-    : undefined
+    : undefined,
+  transitions: host.viewTransition === undefined
+    ? undefined
+    : transitionRun.make(host.viewTransition)
 })
 
 interface Options {

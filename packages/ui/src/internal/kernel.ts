@@ -41,6 +41,18 @@ export interface Host<N = any> {
   readonly runsMounts?: boolean | undefined
   /** Given the tree's folded head, when it changed. */
   readonly head?: ((head: unknown) => void) | undefined
+  /** Makes what runs the view transitions updates ask for. Without it, they're ignored. */
+  readonly transitions?: ((tree: Tree) => Transitions) | undefined
+}
+
+/** @internal */
+export interface Transitions {
+  readonly request: (types: ReadonlyArray<string>) => void
+  /** Whether a message to `inst` waits for a transition, to read the props it gives. */
+  readonly waits: (inst: Instance) => boolean
+  readonly wait: (f: () => void) => void
+  /** At the start of a flush: whether it waits for a transition to start. */
+  readonly hold: () => boolean
 }
 
 /**
@@ -220,6 +232,7 @@ export interface Tree {
   head?:
     | { readonly value: unknown; readonly title: string | undefined }
     | undefined
+  transitions?: Transitions | undefined
   dirty: Array<Instance>
   scheduled: boolean
   flushing: boolean
@@ -501,6 +514,10 @@ export const send = (
   message: unknown,
   source?: unknown
 ): void => {
+  const transitions = inst.tree.transitions
+  if (transitions?.waits(inst)) {
+    return transitions.wait(() => send(inst, message, source))
+  }
   renderAbove(inst)
   if (inst.closed) return
   let next: Next | undefined
@@ -524,11 +541,15 @@ export const send = (
     model: next.model,
     commands: next.commands,
     events: next.events,
-    lists: next.lists
+    lists: next.lists,
+    viewTransition: next.viewTransition
   })
   if (next.model !== inst.model) {
     inst.model = next.model
     markDirty(inst)
+  }
+  if (next.viewTransition !== undefined) {
+    transitions?.request(next.viewTransition)
   }
   apply(inst, next, seq)
 }
@@ -549,7 +570,6 @@ const issueAll = (
 ): void => {
   const commands = next.commands
   if (next.sends !== undefined && next.sends.length > 0) notPorted("$.send")
-  if (next.viewTransition !== undefined) notPorted("view transitions")
   for (let index = 0; index < commands.length; index++) {
     if (inst.closed) return
     ;(commands[index] as Issuable)["~run"](inst, seq, index)
@@ -627,6 +647,10 @@ export const flush = (tree: Tree): void => {
   tree.flushing = true
   for (;;) {
     if (tree.closed) return
+    if (tree.transitions?.hold()) {
+      tree.flushing = false
+      return
+    }
     const batch = tree.dirty
     if (tree.work?.(batch.length === 0)) continue
     if (batch.length === 0) break
@@ -1493,6 +1517,7 @@ export const mount = (
     flushing: true,
     closed: false
   }
+  tree.transitions = host.transitions?.(tree)
   const ctx: Context.Context<any> = options.context ??
     (Context.empty() as Context.Context<any>)
   const env: Env = { ctx, cause: undefined, waiting: [] }
