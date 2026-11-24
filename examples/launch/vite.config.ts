@@ -1,7 +1,9 @@
+import { markdown } from "@effect/ui/html/MarkdownVite"
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 import { codeToTokens } from "shiki"
 import { defineConfig, type Plugin } from "vite"
+import { Frontmatter, Islands } from "./src/domain/Island.ts"
 import type { Snippet, Snippets } from "./src/domain/Snippet.ts"
 
 const id = "virtual:snippets"
@@ -114,5 +116,8 @@ const snippets = (): Plugin => {
 }
 
 export default defineConfig({
-  plugins: [snippets()]
+  plugins: [
+    snippets(),
+    markdown({ islands: Islands, frontmatter: Frontmatter })
+  ]
 })

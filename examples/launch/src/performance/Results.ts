@@ -156,6 +156,5 @@ const base =
 export const links = {
   methodology:
     `https://github.com/Effect-TS/ui/blob/${commit}/packages/ui/benchmark/js-framework-benchmark/README.md`,
-  data: `${base}/results`,
-  harness: "https://github.com/krausest/js-framework-benchmark"
+  data: `${base}/results`
 }
