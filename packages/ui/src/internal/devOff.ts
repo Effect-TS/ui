@@ -11,10 +11,16 @@ export const dev: boolean = false
 export const checkKeys: typeof On.checkKeys = () => {}
 
 /** Does nothing. */
-export const checkPaths: typeof On.checkPaths = () => {}
+export const checkPaths: typeof On.checkPaths = () => undefined
+
+/** Does nothing. */
+export const checkPlaced: typeof On.checkPlaced = () => {}
 
 /** Does nothing. */
 export const checkContent: typeof On.checkContent = () => {}
 
 /** Does nothing. */
 export const checkShown: typeof On.checkShown = () => {}
+
+/** Does nothing. */
+export const checkLayers: typeof On.checkLayers = () => {}

@@ -376,6 +376,9 @@ export const makeHost = (
     const inst = rec!.inst
     step(() => {
       if (inst.closed) return false
+      if (handler?.["~fire"] !== undefined) {
+        return handler["~fire"](payload(), name, () => event?.preventDefault())
+      }
       let message = handler
       if (typeof handler === "function") {
         try {

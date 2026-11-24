@@ -1,7 +1,14 @@
 /**
  * @internal
  */
-import { checkContent, checkKeys, checkPaths, checkShown, dev } from "#dev"
+import {
+  checkContent,
+  checkKeys,
+  checkPaths,
+  checkPlaced,
+  checkShown,
+  dev
+} from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import type * as Fiber from "effect/Fiber"
@@ -108,6 +115,10 @@ export interface Runnable {
     | undefined
   /** A headless component's view: its parts, given to the closure whoever declared the instance wrote. */
   readonly "~content"?: Function | undefined
+  /** A headless component's: the element `inst` renders, with the layers its parts added merged in. */
+  readonly "~owned"?:
+    | ((inst: Instance, view: View.Element<any, any>) => View.Element<any, any>)
+    | undefined
   /** Called once `init`'s Commands are issued, before the first view. */
   readonly "~first"?: ((inst: Instance) => void) | undefined
   /** Called before each view after the first. */
@@ -560,12 +571,24 @@ export const fail = (
     ? undefined
     : (at.v as View.Child<any, any>).onFailure
   if (onFailure !== undefined) {
-    const parent = inst.parent!
+    const parent = upOf(inst)
     tree.schedule(() =>
       parent.fire(onFailure, AsyncResult.failure(cause), inst, "onFailure")
     )
   }
   tree.report(path, where, cause)
+}
+
+const upOf = (inst: Instance): Instance =>
+  ((inst.at!.v as View.Child<any, any>).owner as Instance | undefined) ??
+    inst.parent!
+
+const recheckPlaced = (author: Instance): void => {
+  try {
+    checkPlaced(author)
+  } catch (error) {
+    fail(author, "view", Cause.die(error))
+  }
 }
 
 const recheck = (inst: Instance): void => {
@@ -662,9 +685,8 @@ const applied = (
   if (inst.closed) return
   inst.component["~sync"]?.(inst, next, seq)
   const events = next.events
-  if (events.length === 0) return
-  const parent = inst.parent
-  if (parent === undefined) return
+  if (events.length === 0 || inst.at === undefined) return
+  const parent = upOf(inst)
   for (let index = 0; index < events.length; index++) {
     if (inst.closed) return
     const onEmit = (inst.at!.v as View.Child<any, any>).onEmit
@@ -768,7 +790,10 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
         inst
       ]
     )
-    if (dev && tree !== undefined) checkPaths(inst.path, tree)
+    if (dev && tree !== undefined) {
+      const author = checkPaths(inst, tree)
+      if (author !== undefined) inst.tree.schedule(() => recheckPlaced(author))
+    }
     return tree
   } catch (error) {
     fail(inst, "view", Cause.die(error))
@@ -961,13 +986,37 @@ const place = (
     }}
 }
 
-const unplace = (host: Host, parent: unknown, rec: Rec): void => {
-  if (rec.node !== undefined) host.remove(parent, rec.node)
-  else if (rec.kids === undefined) unplace(host, parent, rec.inst.rendered!)
-  else {for (let index = 0; index < rec.kids.length; index++) {
-      unplace(host, parent, rec.kids[index]!)
-    }}
+/**
+ * Releases `rec`, then takes its nodes out: a handler the removal sets off, as a focusout, finds the
+ * instances it closed closed. The nodes are read first, as a release can change the Recs.
+ */
+const remove = (inst: Instance, parent: unknown, rec: Rec): void => {
+  const nodes = nodesOf(rec, [])
+  release(inst, rec)
+  unplaceAll(inst.tree.host, parent, nodes)
 }
+
+const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
+  if (rec.node !== undefined) out.push(rec.node)
+  else if (rec.kids === undefined) nodesOf(rec.inst.rendered!, out)
+  else {for (let index = 0; index < rec.kids.length; index++) {
+      nodesOf(rec.kids[index]!, out)
+    }}
+  return out
+}
+
+const unplaceAll = (
+  host: Host,
+  parent: unknown,
+  nodes: ReadonlyArray<unknown>
+): void => {
+  for (let index = 0; index < nodes.length; index++) {
+    host.remove(parent, nodes[index])
+  }
+}
+
+const unplace = (host: Host, parent: unknown, rec: Rec): void =>
+  unplaceAll(host, parent, nodesOf(rec, []))
 
 const keeperOf = (view: View.Child<any, any>): Keeper | undefined =>
   view.alive === undefined
@@ -987,7 +1036,6 @@ const mountChild = (owner: Instance, rec: Rec, fresh?: boolean): void => {
       env = env.parent
     }
   }
-  if (view.owner !== undefined) notPorted("headless components")
   const at = slot
   let held: Rec | undefined
   if (FeatureId in component) {
@@ -1173,6 +1221,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
     case "Text":
       return new Rec(view, host.createText(view.text), undefined, inst)
     case "Element": {
+      if (view.owned?.length) view = owned(inst, view, view.owned)
       const node = host.createElement(view.tag)
       if (view.attrs !== View.noFields) setAttrs(host, node, view.attrs)
       const views = view.children
@@ -1185,9 +1234,6 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
         }
       }
       if (view.props !== View.noFields) setProps(host, node, view.props)
-      if (view.owned !== undefined && view.owned.length > 0) {
-        notPorted("headless parts")
-      }
       const rec = new Rec(view, node, kids, inst)
       if (
         view.handlers !== View.noFields || view.eventOptions !== View.noFields
@@ -1341,8 +1387,7 @@ const replace = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
   const parent = host.parentOf(at)
   const next = create(inst, view)
   place(host, parent, next, at)
-  unplace(host, parent, old)
-  release(inst, old)
+  remove(inst, parent, old)
   return next
 }
 
@@ -1421,6 +1466,9 @@ const patchElement = (
 ): void => {
   const host = inst.tree.host
   const node = rec.node
+  // A part's layers dropped since the last render still have their owner's mounts to stop.
+  const layers = view.owned?.length ? view.owned : prev.owned
+  if (layers?.length) view = owned(inst, view, layers)
   rec.v = view
   if (prev.attrs !== view.attrs) patchAttrs(host, node, prev.attrs, view.attrs)
   if (
@@ -1479,6 +1527,13 @@ const patchElement = (
   }
 }
 
+const owned = (
+  inst: Instance,
+  view: View.Element<any, any>,
+  layers: ReadonlyArray<View.Owned>
+): View.Element<any, any> =>
+  (layers[0]!.owner as Instance).component["~owned"]!(inst, view)
+
 const keyOf = (view: View.Node<any, any>): unknown =>
   view._tag === "Element"
     ? view.elementKey
@@ -1531,7 +1586,6 @@ const patchList = (
   }
   let moved = false
   let last = 0
-  // Released once the new views are made, as `replace` does: what mounts in their place starts first.
   let gone: Array<Rec> | undefined
   for (let index = start; index <= oldEnd; index++) {
     const old = olds[index]!
@@ -1554,10 +1608,7 @@ const patchList = (
       sources[to - start] = index + 1
       if (to < last) moved = true
       else last = to
-    } else {
-      unplace(host, parent, old)
-      ;(gone ??= []).push(old)
-    }
+    } else (gone ??= []).push(old)
   }
   for (let index = start; index <= end; index++) {
     const source = sources[index - start]!
@@ -1565,7 +1616,7 @@ const patchList = (
       ? create(inst, views[index]!)
       : patch(inst, olds[source - 1]!, views[index]!)
   }
-  if (gone !== undefined) { for (const old of gone) release(inst, old) }
+  if (gone !== undefined) { for (const old of gone) remove(inst, parent, old) }
   for (let index = end + 1; index < views.length; index++) {
     out[index] = patch(
       inst,

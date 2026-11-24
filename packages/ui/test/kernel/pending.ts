@@ -57,7 +57,21 @@ export const files: ReadonlyArray<string> = [
   "html/StateCodec.test.ts",
   "html/Markdown.test.ts",
   "Paint.test.ts",
-  "html/Pause.test.ts"
+  "html/Pause.test.ts",
+  "Story.test.ts",
+  "Scene.test.ts",
+  "Play.test.ts",
+  "Headless.test.ts",
+  "html/Headless.test.ts",
+  "html/HeadlessStory.test.ts",
+  "html/HtmlPlay.test.ts",
+  "html/HtmlScene.test.ts",
+  "html/SlotsStory.test.ts",
+  "html/Slots.test.ts",
+  "html/SlotStatus.test.ts",
+  "Lazy.test.ts",
+  "Redacted.test.ts",
+  "WorkedExample.test.ts"
 ]
 
 export const pending: {
@@ -70,22 +84,11 @@ export const pending: {
   "RenderTiming.test.ts": {},
   "Runtime.test.ts": {},
   "SlotStatus.test.ts": {},
-  "Slots.test.ts": {
-    "placing a slot twice fails the receiver > once in a headless child's closure":
-      "headless components (step 8): a slot placed in the author's view and again in a headless child's closure is checked across the author's trees, which the kernel doesn't do"
-  },
+  "Slots.test.ts": {},
   "html/Canvas.test.ts": {},
   "html/HtmlFiles.test.ts": {},
-  "KeepAlive.test.ts": {
-    "keep-alive children of a headless child > headless owners in a keep-alive child moved up a level get an event deepest first":
-      "headless components (step 8): its headless child stamps nodes with `p.part`, and the kernel doesn't run headless parts",
-    "keep-alive children written into closed slots > keeps a child whose headless writer is replaced by another that writes it":
-      "headless components (step 8): its headless child stamps nodes with `p.part`, and the kernel doesn't run headless parts"
-  },
-  "Shared.test.ts": {
-    "a component that reads its own kind > sends to the nearest instance of its own kind above it, and the outermost one's send is dropped":
-      "headless parts (step 8): Menu's parts stamp its button with p.part, and the kernel doesn't apply a part's layers"
-  },
+  "KeepAlive.test.ts": {},
+  "Shared.test.ts": {},
   "html/KeepAlive.test.ts": {
     "keep-alive children in a receiver that waits for its Layer > don't start when their author last wrote them out of a headless child's view, as the receiver resumes":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
@@ -156,23 +159,33 @@ export const pending: {
     "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
       "hydration (step 7, unfinished): a style mismatch keeps the server's style text, where today's replaces it (cause not investigated)"
   },
-  "html/Composed.test.ts": {
-    "p.child > an owned child's event goes through the declaring component's update, and replays from the log":
-      "headless parts (step 8)",
-    "p.child > an event the child emits from init goes to the declaring component":
-      "headless parts (step 8)",
-    "p.child > a failed owned child stays blank, and the declaring component hears of it without failing":
-      "headless parts (step 8)",
-    "p.child > a throw in p.child's parts, or a refused option, fails the declaring component with the source view":
-      "headless parts (step 8)",
-    "p.child on the server > the client adopts the server's render of every owned child":
-      "server rendering and hydration (step 7), headless parts (step 8)"
+  "html/Composed.test.ts": {},
+  "html/Forward.test.ts": {},
+  "html/Slots.test.ts": {
+    "slots on the server > writes a marker pair per outlet, and the client adopts the content":
+      "hydration (step 7, unfinished): the client doesn't adopt an outlet's marker pair, so its markers stay in the document",
+    "slots on the server > builds content fresh when it doesn't match the server's, and adopts the rest":
+      "hydration (step 7, unfinished): the client doesn't adopt an outlet's marker pair, so its markers stay in the document",
+    "slots on the server > ssr() names the slot whose content the client rebuilt":
+      "hydration (step 7, unfinished): the client doesn't adopt an outlet's marker pair, so ssr() reports the markers, not the rebuilt slot"
   },
-  "html/Forward.test.ts": {
-    "children > a part's children come before the consumer's, in the order the parts were applied":
-      "headless parts (step 8)",
-    "forward > renders around the element, and what the caller chains and its children land on the element":
-      "headless parts (step 8)"
+  "html/SlotStatus.test.ts": {
+    "slot status after SSR > a slot whose Layer failed on the server ships Failed, and the client adopts its failure branch, cause included":
+      "hydration (step 7, unfinished): a receiver whose Layer failed on the server isn't adopted in its failure branch; the client rebuilds the slot",
+    "slot status after SSR > a slot the server rendered whose client Layer isn't ready reports that it awaits the client's Layer":
+      "hydration (step 7, unfinished): a server-rendered receiver waiting for its client Layer reports Pending, where today's reports Awaiting"
+  },
+  "Lazy.test.ts": {
+    "Component.lazy > shows the fallback until the module loads, which settle waits for, and loads it once":
+      "Component.lazy: the kernel doesn't run it",
+    "Component.lazy > shows the fallback's Failure branch when the load fails, and a retry shows the component in every slot":
+      "Component.lazy: the kernel doesn't run it",
+    "Component.lazy > keeps a lazy keep-alive child once loaded, and closes its Scope when the predicate ends it":
+      "Component.lazy: the kernel doesn't run it",
+    "Component.lazy > preload loads the module before a child renders":
+      "Component.lazy: the kernel doesn't run it",
+    "Component.lazy > the server waits for the load and renders the component":
+      "Component.lazy: the kernel doesn't run it"
   },
   "html/HtmlServer.test.ts": {
     "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":

@@ -23,7 +23,18 @@ const find = (rec: Kernel.Rec, key: string, inst: Kernel.Instance): unknown => {
   const view = rec.v
   if (view._tag === "Element") {
     if (rec.inst === inst && view.refKey === key) return rec.node
+    const owned = view.owned
+    if (owned !== undefined) {
+      for (let index = 0; index < owned.length; index++) {
+        const layer = owned[index]!
+        if (layer.owner === inst && layer.refKey === key) return rec.node
+      }
+    }
   } else if (view._tag === "Child" && rec.kids === undefined) {
+    if (view.view !== undefined) {
+      const rendered = rec.inst.rendered
+      return rendered === undefined ? undefined : find(rendered, key, inst)
+    }
     const placed = rec.inst.placed
     if (placed === undefined) return undefined
     for (const entry of placed.values()) {

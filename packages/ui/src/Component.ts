@@ -74,6 +74,7 @@ import { keeper } from "./internal/keptRun.ts"
 import * as layerRun from "./internal/layerRun.ts"
 import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
+import { failed, layer as owned } from "./internal/partsRun.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as sharedReads from "./internal/shared.ts"
 import * as sharedRun from "./internal/sharedRun.ts"
@@ -2340,6 +2341,7 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   "~sync": Proto["~sync"],
   "~first": Proto["~first"],
   "~kept": keeper,
+  "~owned": owned,
   // The kernel's view of a headless instance: the closure its declarer wrote, given its parts.
   "~content"(
     this: Headless.Any,
@@ -2359,7 +2361,8 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
           queries,
           shared
         }),
-        inst.at.v.view!
+        inst.at.v.view!,
+        failed
       )
     )
   }

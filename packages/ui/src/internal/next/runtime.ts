@@ -24,6 +24,7 @@ import * as hydrateRun from "../hydrateRun.ts"
 import type * as keptRun from "../keptRun.ts"
 import * as Kernel from "../kernel.ts"
 import * as messageLog from "../messageLog.ts"
+import * as partsRun from "../partsRun.ts"
 import * as queryCore from "../queryCore.ts"
 import * as Recorder from "../recorder.ts"
 import type * as routeRun from "../routeRun.ts"
@@ -45,7 +46,8 @@ export type Instance = runtime.Instance
 export { stateCodecOf } from "../stateCodec.ts"
 
 /**
- * No part is headless yet, so no event has owners.
+ * For each event a part handles, the paths of the instances that get it, deepest owner first and the
+ * view's author last.
  *
  * Only the kernel test project calls it, through its alias for `internal/runtime.ts`.
  *
@@ -53,8 +55,17 @@ export { stateCodecOf } from "../stateCodec.ts"
  */
 // oxlint-disable-next-line effect/no-unused-internal
 export const eventOwners = (
-  _handlers: Readonly<Record<string, unknown>>
-): Readonly<Record<string, ReadonlyArray<string>>> => View.noFields
+  handlers: Readonly<Record<string, unknown>>
+): Readonly<Record<string, ReadonlyArray<string>>> => {
+  const out: Record<string, ReadonlyArray<string>> = {}
+  for (const event in handlers) {
+    const handler = handlers[event]
+    if (handler instanceof partsRun.Layered) {
+      out[event] = handler.layers.map((layer) => layer.inst.path)
+    }
+  }
+  return out
+}
 
 const dispatched = { _tag: "Dispatch" } as const
 
@@ -99,6 +110,9 @@ const bridge = (
         step(() => {
           const inst = rec.inst
           if (inst.closed) return false
+          if (handler instanceof partsRun.Layered) {
+            return handler["~fire"](payload, event, onMessage)
+          }
           let message: unknown = handler
           if (typeof handler === "function") {
             try {
