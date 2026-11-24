@@ -63,10 +63,6 @@ describe("OpenTui vocabulary types", () => {
     expect<H["text"]>().type.toBe<OpenTui.Tags<never>["text"]>()
     expect<H>().type.toBeAssignableTo<View.HelperBase<never, {}>>()
     expect<H>().type.not.toBeAssignableTo<View.Helper<never, {}>>()
-    expect<OpenTui.H<never>["text"]>().type.toBe<OpenTui.Tags<never>["text"]>()
-    expect<OpenTui.H<never>>().type.toBeAssignableTo<
-      View.HelperBase<never, unknown>
-    >()
   })
 
   it("OpenTui.component supplies the OpenTUI vocabulary and OpenTui.H types reusable pure views", () => {

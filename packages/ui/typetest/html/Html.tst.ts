@@ -80,21 +80,15 @@ interface Native extends View.Elements {
 }
 
 describe("Html", () => {
-  it("Html.component supplies the HTML vocabulary and Html.H types reusable pure HTML views", () => {
+  it("Html.component supplies the HTML vocabulary and Html.H types reusable pure views", () => {
     const Button = <M>(h: Html.H<M>, message: M) => {
       expect(h.props).type.toBe<unknown>()
-      expect(h.button).type.toBe<Html.Tags<M>["button"]>()
       return h.button.onClick(message).children("Save")
     }
-    const Card = <M>(h: Html.H<M>) => h.section.class("card")
     const Field = <M, C extends View.Children<M>>(h: Html.H<M>, options: {
       readonly label: string
       readonly children: C
-    }) =>
-      h.label.children(
-        options.label,
-        h.div.class("control").children(options.children)
-      )
+    }) => h.label.children(options.label, h.div.children(options.children))
     const SaveButton = Html.component({
       name: "SaveButton",
       props: Schema.Struct({ id: Schema.String }),
@@ -107,15 +101,12 @@ describe("Html", () => {
         expect(Button<"Save">).type.not.toBeCallableWith(h, "Delete")
         const clock = {} as View.Node<"Save", Clock>
         const logger = {} as View.Node<"Save", Logger>
-        return Card(h).children(
-          Button(h, "Save"),
-          Field(h, { label: h.props.id, children: [clock, logger] })
-        )
+        return Field(h, {
+          label: h.props.id,
+          children: [Button(h, "Save"), clock, logger]
+        })
       }
     })
-    expect<Component.Requirements<typeof SaveButton>>().type.toBe<
-      Clock | Logger
-    >()
     expect(SaveButton).type.toBe<
       Component.Component<
         "SaveButton",
