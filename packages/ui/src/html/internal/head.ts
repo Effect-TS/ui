@@ -1,9 +1,9 @@
 /**
- * The browser host's head sync: it diffs each folded `HtmlHead.HtmlHead` against the
+ * The browser host's full head sync: it diffs each folded `HtmlHead.HtmlHead` against the
  * document, owning only marked tags plus `<title>` and `lang` / `dir`. Every host on one
- * document shares one sync, so they share the shell's baseline.
+ * document shares one sync, through `documentHead`, so they share the shell's baseline.
  */
-import * as Head from "../HtmlHead.ts"
+import type * as Head from "../HtmlHead.ts"
 import * as headAttributes from "./headAttributes.ts"
 
 type Warn = (message: string) => void
@@ -14,7 +14,7 @@ const ldType = "application/ld+json"
 const signatureOf = (element: Element): string => {
   const attributes: Array<string> = []
   for (const attribute of element.attributes) {
-    if (attribute.name !== Head.marker) {
+    if (attribute.name !== headAttributes.marker) {
       attributes.push(`${attribute.name}=${attribute.value}`)
     }
   }
@@ -49,8 +49,12 @@ const wanted = (
 }
 
 const wantedOf = (head: Head.HtmlHead): Array<Wanted> => [
-  ...head.meta.map((entry) => wanted("meta", Head.attributes(entry), "")),
-  ...head.links.map((entry) => wanted("link", Head.attributes(entry), "")),
+  ...head.meta.map((entry) =>
+    wanted("meta", headAttributes.attributes(entry), "")
+  ),
+  ...head.links.map((entry) =>
+    wanted("link", headAttributes.attributes(entry), "")
+  ),
   ...head.jsonLd.map((entry) =>
     wanted("script", [["type", ldType]], entry.json)
   )
@@ -61,9 +65,10 @@ const quote = (value: string): string =>
 
 /** The attribute names the marker on `<html>` or `<body>` lists. */
 const listed = (element: Element): ReadonlyArray<string> =>
-  (element.getAttribute(Head.marker) ?? "").split(/[\t\n\f\r ]+/).filter((
-    name
-  ) => name !== "")
+  (element.getAttribute(headAttributes.marker) ?? "").split(/[\t\n\f\r ]+/)
+    .filter((
+      name
+    ) => name !== "")
 
 interface Owner {
   readonly element: Element
@@ -80,50 +85,12 @@ interface Shared {
   hosts: number
 }
 
-/** The sync of each document with a live host: one baseline per document, not per host. */
-const shared = new WeakMap<Document, Shared>()
-
 /**
- * Makes the `head` member of the browser host, and `release` for its `dispose`.
- *
- * **Details**
- *
- * Hosts on one document share one sync, made with the first host's `warn`,
- * so the shell's values are captured once, before any host writes. When
- * the last host on the document is released, the shell's values go back if
- * any host wrote, and the next host captures the shell again. A server's
- * head that no host synced stays as it is.
+ * The sync of one document, which `documentHead` shares between its hosts. `HtmlHead` loads it.
  *
  * @internal
  */
-export const make = (
-  document: Document,
-  warn: Warn
-): {
-  readonly sync: (head: Head.HtmlHead) => void
-  readonly release: () => void
-} => {
-  let entry = shared.get(document)
-  if (entry === undefined) {
-    entry = { ...makeSync(document, warn), hosts: 0 }
-    shared.set(document, entry)
-  }
-  const current = entry
-  current.hosts++
-  let released = false
-  return {
-    sync: current.sync,
-    release: () => {
-      if (released) return
-      released = true
-      if (--current.hosts > 0) return
-      shared.delete(document)
-      current.restore()
-    }
-  }
-}
-
-const makeSync = (
+export const makeSync = (
   document: Document,
   warn: Warn
 ): Pick<Shared, "sync" | "restore"> => {
@@ -154,7 +121,7 @@ const makeSync = (
       : owner.element.getAttribute(name)
   const titleElement = document.querySelector("title")
   const originalTitle =
-    titleElement !== null && titleElement.hasAttribute(Head.marker)
+    titleElement !== null && titleElement.hasAttribute(headAttributes.marker)
       ? ""
       : document.title
   for (const name of ["lang", "dir"]) {
@@ -168,7 +135,7 @@ const makeSync = (
     const out = new Map<string, Array<Element>>()
     for (
       const element of document.head.querySelectorAll(
-        `meta[${Head.marker}], link[${Head.marker}], script[${Head.marker}]`
+        `meta[${headAttributes.marker}], link[${headAttributes.marker}], script[${headAttributes.marker}]`
       )
     ) {
       const signature = signatureOf(element)
@@ -182,7 +149,7 @@ const makeSync = (
   const checkShell = (head: Head.HtmlHead) => {
     // Attributes are compared directly rather than through selectors built from entry values.
     const shellTags = [...document.head.children].filter((element) =>
-      !element.hasAttribute(Head.marker)
+      !element.hasAttribute(headAttributes.marker)
     )
     const unmarked = (
       tag: string,
@@ -221,7 +188,7 @@ const makeSync = (
     }
     for (const entry of head.links) {
       const attributes = new Map(
-        headAttributes.normalize(Head.attributes(entry))
+        headAttributes.normalize(headAttributes.attributes(entry))
       )
       const rel = attributes.get("rel") ?? ""
       const href = attributes.get("href") ?? ""
@@ -240,8 +207,8 @@ const makeSync = (
     if (head.title !== undefined) {
       const first = document.querySelector("title")
       if (
-        first !== null && !first.hasAttribute(Head.marker) &&
-        document.querySelector(`title[${Head.marker}]`) !== null
+        first !== null && !first.hasAttribute(headAttributes.marker) &&
+        document.querySelector(`title[${headAttributes.marker}]`) !== null
       ) {
         warn(
           "Head: an unmarked <title> comes before the marked one, so the browser shows the shell's"
@@ -342,16 +309,16 @@ const makeSync = (
     owner.data = data
     set.push(...data)
     const marker = set.join(" ")
-    if (marker === "") owner.element.removeAttribute(Head.marker)
-    else if (owner.element.getAttribute(Head.marker) !== marker) {
-      owner.element.setAttribute(Head.marker, marker)
+    if (marker === "") owner.element.removeAttribute(headAttributes.marker)
+    else if (owner.element.getAttribute(headAttributes.marker) !== marker) {
+      owner.element.setAttribute(headAttributes.marker, marker)
     }
   }
 
   const sync = (given: Head.HtmlHead) => {
     const head: Head.HtmlHead = given.meta !== undefined
       ? given
-      : { ...Head.empty, title: given.title }
+      : { ...headAttributes.empty, title: given.title }
     if (owned === undefined) {
       checkShell(head)
       owned = index()
@@ -380,7 +347,7 @@ const makeSync = (
         for (const [name, value] of want.attributes) {
           tag.setAttribute(name, value)
         }
-        tag.setAttribute(Head.marker, "")
+        tag.setAttribute(headAttributes.marker, "")
         if (want.text !== "") tag.textContent = want.text
       }
       tags.push(tag)
@@ -410,7 +377,7 @@ const makeSync = (
   return {
     sync,
     restore: () => {
-      if (owned !== undefined) sync(Head.empty)
+      if (owned !== undefined) sync(headAttributes.empty)
     }
   }
 }

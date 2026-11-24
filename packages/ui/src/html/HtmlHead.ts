@@ -53,6 +53,8 @@ import * as Head from "../Head.ts"
 import * as headFold from "../internal/headFold.ts"
 import type * as View from "../View.ts"
 import * as Html from "./Html.ts"
+import * as documentHead from "./internal/documentHead.ts"
+import * as headSync from "./internal/head.ts"
 import * as headAttributes from "./internal/headAttributes.ts"
 
 /**
@@ -621,14 +623,7 @@ export const reduce = (apply: (below: HtmlHead) => HtmlHead): Reduce => ({
  * @category constants
  * @since 0.1.0
  */
-export const empty: HtmlHead = {
-  title: undefined,
-  meta: [],
-  links: [],
-  jsonLd: [],
-  html: { lang: undefined, dir: undefined, class: [], data: {} },
-  body: { class: [], data: {} }
-}
+export const empty: HtmlHead = headAttributes.empty
 
 /**
  * The identity of a meta, link or JSON-LD entry: two entries with the same
@@ -669,23 +664,9 @@ export const identity = (entry: Meta | Link | JsonLd): string => {
  * @category utils
  * @since 0.1.0
  */
-export const attributes = (
+export const attributes: (
   entry: Meta | Link
-): ReadonlyArray<readonly [string, string]> => {
-  if (entry._tag === "Meta") {
-    return [
-      entry.name !== undefined
-        ? ["name", entry.name] as const
-        : ["property", entry.property!] as const,
-      ["content", entry.content]
-    ]
-  }
-  const out: Array<readonly [string, string]> = []
-  for (const [name, value] of Object.entries(entry.attributes)) {
-    if (value !== undefined) out.push([name, value])
-  }
-  return out
-}
+) => ReadonlyArray<readonly [string, string]> = headAttributes.attributes
 
 const linkSignature = (entry: Link): string =>
   headAttributes.normalize(attributes(entry)).map((pair) =>
@@ -929,3 +910,7 @@ export const vocabulary: View.Vocabulary<Elements> = {
   tags: Html.tags,
   head
 }
+
+// A browser host syncs every head entry once this module is loaded, as only it makes them besides
+// `Head.title`.
+documentHead.load(headSync.makeSync)

@@ -14,7 +14,6 @@ import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
 import * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
-import * as Head from "../Head.ts"
 import type * as Query from "../Query.ts"
 import type * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
@@ -131,10 +130,9 @@ const noCommands: ReadonlyArray<unknown> = []
 
 const unchanged: Dispatched = { _tag: "Ignored", reason: "unchanged" }
 
-const neutralFold: View.HeadFold = {
-  merge: Head.merge,
-  title: (head: Head.Head) => head.title
-}
+// What `Head.merge` folds a tree with no entries to: without a fold of its own, a root's head before its
+// first fold, or with `Head` never loaded.
+const noHead = { title: undefined }
 
 let sessions = 0
 
@@ -767,10 +765,8 @@ const start = (
     buildsPendingSince: building,
     head: () =>
       tree.head?.value ??
-        (component.elements()?.head ?? neutralFold).merge({
-          entries: [],
-          children: []
-        }),
+        component.elements()?.head?.merge({ entries: [], children: [] }) ??
+        noHead,
     adoptionHead: () => adoptedDone ? adoptionHead : undefined,
     adopted: Effect.callback<void>((resume) => {
       if (adoptedDone) resume(Effect.void)

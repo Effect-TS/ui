@@ -15,9 +15,10 @@ afterEach(() => {
   }
 })
 
-/** A host from modules loaded fresh, by an app that imports nothing from HtmlHead. */
-const freshHost = async () => {
+/** A host from modules loaded fresh, by an app that imports HtmlHead or nothing from it. */
+const freshHost = async (options?: { readonly htmlHead?: boolean }) => {
   vi.resetModules()
+  if (options?.htmlHead === true) await import("@effect/ui/html/HtmlHead")
   const BrowserHost = await import("@effect/ui/html/BrowserHost")
   const warnings: Array<string> = []
   const host = BrowserHost.makeHost(document, {
@@ -47,15 +48,42 @@ const literal = (
 })
 
 // Every test syncs the one global document.
-describe("BrowserHost head in an app that imports nothing from HtmlHead", {
+describe("BrowserHost head", {
   concurrent: false
 }, () => {
-  it("syncs a literal head, adopts wanted server tags, and removes unwanted ones", async () => {
+  it("syncs only the title in an app that imports nothing from HtmlHead, the only head it can write", async () => {
+    document.head.innerHTML =
+      `<title>Shell</title><meta name="robots" content="noindex">`
+    const { apply, warnings } = await freshHost()
+    apply({ title: "Ada" })
+    expect(document.title).toBe("Ada")
+    apply({ title: undefined })
+    expect(document.title).toBe("Shell")
+    apply({ title: "Grace" })
+    expect(document.title).toBe("Grace")
+    expect(document.head.querySelector("meta[name=robots]")).not.toBeNull()
+    expect(warnings).toEqual([])
+    hosts.splice(0).forEach((host) => host.dispose())
+    expect(document.title).toBe("Shell")
+  })
+
+  it("warns once when an unmarked title shadows the marked one, without HtmlHead", async () => {
+    document.head.innerHTML =
+      `<title>Shell</title><title data-eui>Server</title>`
+    const { apply, warnings } = await freshHost()
+    apply({ title: "Ada" })
+    apply({ title: "Grace" })
+    expect(warnings).toEqual([
+      "Head: an unmarked <title> comes before the marked one, so the browser shows the shell's"
+    ])
+  })
+
+  it("syncs a literal head, adopts wanted server tags, and removes unwanted ones, with HtmlHead", async () => {
     document.head.innerHTML =
       `<title data-eui>Old</title><meta name="description" content="About" data-eui>` +
       `<meta name="robots" content="noindex" data-eui>`
     const kept = document.head.querySelector("meta[name=description]")
-    const { apply, warnings } = await freshHost()
+    const { apply, warnings } = await freshHost({ htmlHead: true })
     apply(literal([meta("description", "About"), meta("author", "Ada")]))
     expect(document.title).toBe("App")
     expect(document.head.querySelector("meta[name=description]")).toBe(kept)

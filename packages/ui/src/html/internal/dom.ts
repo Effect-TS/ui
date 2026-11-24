@@ -8,8 +8,8 @@ import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
+import * as documentHead from "./documentHead.ts"
 import { attributeName, svgTags } from "./elements.ts"
-import * as headSync from "./head.ts"
 import { ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
@@ -119,13 +119,10 @@ type Node = globalThis.Node & { $r?: Kernel.Rec }
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
 /** @internal */
-export type HeadSync = (
-  document: Document,
-  warn: (message: string) => void
-) => { readonly sync: (head: never) => void; readonly release: () => void }
+export type HeadSync = documentHead.HeadSync
 
 /** @internal */
-export const syncHead: HeadSync = headSync.make
+export const syncHead: HeadSync = documentHead.make
 
 /** @internal */
 export interface HostOptions {
