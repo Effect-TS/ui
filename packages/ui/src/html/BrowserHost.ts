@@ -132,6 +132,7 @@ import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
 import * as HtmlScheduler from "./HtmlScheduler.ts"
+import * as browserHosts from "./internal/browserHosts.ts"
 import * as documentServices from "./internal/documentServices.ts"
 import * as elements from "./internal/elements.ts"
 import * as headSync from "./internal/head.ts"
@@ -1494,6 +1495,7 @@ export const makeHost = (
     }
   }
   holds.set(host, { held: () => held, hold, release })
+  browserHosts.made.add(host)
   return host
 }
 

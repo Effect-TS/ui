@@ -1,6 +1,6 @@
 import { Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
-import * as SpikeDom from "@effect/ui/html/SpikeDom"
+import * as KernelDom from "@effect/ui/html/KernelDom"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
 import type { Message as TableMessage, Model as TableModel } from "./harness.ts"
@@ -181,7 +181,7 @@ const mount = (component: Table) => async (container: HTMLElement) => {
 const spike = (component: Table) => async (container: HTMLElement) => {
   const scope = Effect.runSync(Scope.make())
   const root = Effect.runSync(
-    Scope.provide(SpikeDom.mountEffect(component, {}, container), scope)
+    Scope.provide(KernelDom.mountEffect(component, {}, container), scope)
   )
   return {
     send: (message: typeof Message.Type) => root.send(message),

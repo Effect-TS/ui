@@ -2,7 +2,7 @@
 // message log, on the kernel and its DOM host. `pnpm bundle-size --spike` measures it.
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import * as SpikeDom from "@effect/ui/html/SpikeDom"
+import * as KernelDom from "@effect/ui/html/KernelDom"
 import * as Log from "@effect/ui/spike/Log"
 import { Effect, Layer, Schema } from "effect"
 
@@ -86,7 +86,7 @@ const log = Log.make()
 const Provided = Component.provide(App, badge)
 
 Layer.launch(
-  SpikeDom.mount(Provided, {}, document.getElementById("app")!, {
+  KernelDom.mount(Provided, {}, document.getElementById("app")!, {
     log: log.record
   })
 ).pipe(Effect.runFork)
