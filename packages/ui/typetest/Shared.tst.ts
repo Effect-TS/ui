@@ -268,6 +268,31 @@ describe("shared state", () => {
       init: () => null,
       update: ($: { readonly model: null }) => $.model
     })
+
+    const enabled = Math.random() > 0.5
+    const OwnerDef = Component.define({
+      name: "OwnerDef",
+      model: Schema.Null,
+      message: TipMessage,
+      shares: () => 1
+    })
+    expect(OwnerDef.make).type.not.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      parts: enabled ? () => ({ label: "ok" }) : undefined
+    })
+    // @ts-expect-error Property 'parts' is missing
+    OwnerDef.make<{ label: string }>({
+      init: () => null,
+      update: ($) => $.model
+    })
+
+    expect(Component.define).type.not.toBeCallableWith({
+      name: "MaybeOwnerDef",
+      model: Schema.Null,
+      message: TipMessage,
+      shares: enabled ? () => 1 : undefined
+    })
   })
 })
 

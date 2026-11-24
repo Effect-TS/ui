@@ -2300,6 +2300,10 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
     never
 }
 
+type OmittingPartsRequiresShares<Sl, SV> = [Sl] extends [never]
+  ? [SV] extends [never] ? { readonly parts: never } : unknown
+  : { readonly parts: never }
+
 // The owners `shared` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
 // a string index of its own is kept.
 type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends
@@ -2516,11 +2520,10 @@ export interface Definition<
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
    * declares it, by calling it with `view`, writes the view from what
-   * `parts` returns. A definition with `shares` may omit `parts`, in which
-   * case the caller's `view` receives `{}`.
+   * `parts` returns.
    */
   make<
-    Parts = {},
+    Parts,
     UI extends Model | InitStep<Model, Msg, Events, any> = Model,
     U extends Model | Step<Model, Msg, Events, any, L> = Model,
     UR extends {
@@ -2536,6 +2539,17 @@ export interface Definition<
         readonly update:
           | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
           | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
+        /**
+         * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
+         */
+        readonly parts: [Sl] extends [never] ? (
+            p:
+              & PartsHelper<Msg, Props, V>
+              & QueryHelpers<L>
+              & SharedHelpers<SR>,
+            model: Model
+          ) => Parts
+          : never
         readonly view?: never
         readonly subscriptions?:
           | ((
@@ -2548,32 +2562,6 @@ export interface Definition<
           ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
-      & ([Sl] extends [never] ? [SV] extends [never] ? {
-            readonly parts: (
-              p:
-                & PartsHelper<Msg, Props, V>
-                & QueryHelpers<L>
-                & SharedHelpers<SR>,
-              model: Model
-            ) => Parts
-          }
-          : {
-            readonly parts?:
-              | ((
-                p:
-                  & PartsHelper<Msg, Props, V>
-                  & QueryHelpers<L>
-                  & SharedHelpers<SR>,
-                model: Model
-              ) => Parts)
-              | undefined
-          }
-        : {
-          /**
-           * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
-           */
-          readonly parts: never
-        })
       & SelfShares<SR, SV>
   ): Headless<
     Props,
@@ -2592,6 +2580,57 @@ export interface Definition<
     >,
     Rcv,
     ([SV] extends [never] ? never : Shared<Name>) | Composed.Shares<Parts>,
+    SV,
+    Rp
+  >
+  /**
+   * Finishes a headless owner with no parts of its own. The caller's `view`
+   * closure receives `{}`.
+   */
+  make<
+    UI extends Model | InitStep<Model, Msg, Events, any> = Model,
+    U extends Model | Step<Model, Msg, Events, any, L> = Model,
+    UR extends {
+      readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
+    } = {
+      readonly [T in TagOf<Msg>]: Model
+    },
+    Sub extends Subscription.Subscription<Msg, any> = never
+  >(
+    options:
+      & {
+        readonly init: ($: Init<Model, Msg, Events, Props>) => UI
+        readonly update:
+          | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
+          | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
+        readonly parts?: never
+        readonly view?: never
+        readonly subscriptions?:
+          | ((
+            $: Current<Model, Props, QueryResults<L>>
+          ) => ReadonlyArray<Sub | false | null | undefined>)
+          | undefined
+        readonly head?:
+          | ((
+            $: Current<Model, Props, QueryResults<L>>
+          ) => ReadonlyArray<View.HeadEntry<V>>)
+          | undefined
+      }
+      & OmittingPartsRequiresShares<Sl, SV>
+      & SelfShares<SR, SV>
+  ): Headless<
+    Props,
+    Events,
+    {},
+    Exclude<
+      | OwnStepRequirements<UI | U | UR[keyof UR], SR>
+      | Subscription.Requirements<Sub>
+      | QueryServices<L>
+      | SharedRequirements<SR>,
+      Command.FrameworkService
+    >,
+    Rcv,
+    Shared<Name>,
     SV,
     Rp
   >
@@ -3236,7 +3275,6 @@ export const define = <
           ) => NoInfer<Msg>
         }
       }
-      | undefined
     /**
      * What Back, forward and a reload bring back of the component. Left out, the Router saves the
      * instance's Model and query results when it leaves a history entry, and an instance mounted for
@@ -3411,6 +3449,11 @@ const finish = (
   if (parts !== undefined && definition.slots.length > 0) {
     throw new Error(
       `${definition.name} declares slots, so it needs a view to place them and can't take parts`
+    )
+  }
+  if (view === undefined && parts === undefined) {
+    throw new Error(
+      `${definition.name}: finish a component with view or parts`
     )
   }
   // Made once, so a slot forwarded as another's content is the same value on every render.
