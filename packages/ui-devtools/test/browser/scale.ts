@@ -20,7 +20,6 @@ const RowMessage = UiSchema.TaggedEnum({
 })
 const Row = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
   message: RowMessage,
@@ -45,7 +44,6 @@ const Row = Component.define({
 
 const Shelf = Component.define({
   name: "Shelf",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String, drop: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never,
@@ -65,7 +63,6 @@ const Shelf = Component.define({
 
 const Section = Component.define({
   name: "Section",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String, drop: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never,
@@ -79,7 +76,6 @@ const Section = Component.define({
 const AppMessage = UiSchema.TaggedEnum({ ClickedDrop: {} })
 const App = Component.define({
   name: "App",
-  scoped: false,
   model: Schema.Struct({ drop: Schema.Boolean }),
   message: AppMessage,
   elements: Html

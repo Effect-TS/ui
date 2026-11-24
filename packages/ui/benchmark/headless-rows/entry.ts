@@ -1,5 +1,5 @@
 import { Component, UiSchema, type View } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 
 const Row = Schema.Struct({
@@ -503,9 +503,7 @@ const pass = async (
   start = performance.now()
   const hydrated = await Effect.runPromise(
     Scope.provide(
-      BrowserHost.mountEffect(App, { count }, target, {
-        state: rendered.state
-      }),
+      HtmlHydrate.hydrateEffect(App, { count }, target, rendered.state),
       hydrateScope
     )
   )

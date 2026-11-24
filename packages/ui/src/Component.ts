@@ -69,10 +69,16 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
+import * as heads from "./internal/heads.ts"
+import { keeper } from "./internal/keptRun.ts"
+import * as layerRun from "./internal/layerRun.ts"
 import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
+import { failed, layer as owned } from "./internal/partsRun.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as sharedReads from "./internal/shared.ts"
+import * as sharedRun from "./internal/sharedRun.ts"
+import * as subscriptionCore from "./internal/subscriptions.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
 import * as UiStruct from "./UiStruct.ts"
@@ -2294,8 +2300,29 @@ const Proto = Object.assign(Object.create(Function.prototype), {
   },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
-  }
+  },
+  "~sync"(this: Any, inst: unknown, next: unknown, seq: unknown) {
+    if (this["~queries"] !== undefined) {
+      queryCore.loaded!.run.sync(inst as never, next as never)
+    } else if (this.subscriptions !== undefined) {
+      subscriptionCore.loaded?.(inst as never)
+    }
+    if (sharing(this) || (next as Next<any, any, any, any>)?.sends?.length) {
+      sharedRun.sync(inst as never, next as never, seq as never)
+    }
+  },
+  "~first"(this: Any, inst: unknown) {
+    if (sharing(this)) sharedRun.first(inst as never)
+    if (this["~queries"] !== undefined) {
+      queryCore.loaded!.run.first(inst as never)
+    }
+    if (this.head !== undefined) heads.loaded?.(inst as never)
+  },
+  "~kept": keeper
 })
+
+const sharing = ({ definition }: Any): boolean =>
+  definition.shares !== undefined || definition.shared !== undefined
 
 const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   [HeadlessTypeId]: {
@@ -2308,7 +2335,34 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
     _SV: (_: never) => _,
     _Rp: (_: never) => _
   },
-  pipe: Proto.pipe
+  pipe: Proto.pipe,
+  "~sync": Proto["~sync"],
+  "~first": Proto["~first"],
+  "~kept": keeper,
+  "~owned": owned,
+  "~content"(
+    this: Headless.Any,
+    model: unknown,
+    props: unknown,
+    running: View.Running | undefined,
+    queries: unknown,
+    _: unknown,
+    shared: SharedLookup | undefined,
+    inst: { readonly at: { readonly v: View.Child<any, any> } } & View.Owner
+  ) {
+    return View.toNode(
+      child.expand(
+        (this as any).parts(model, props, {
+          owner: inst,
+          running,
+          queries,
+          shared
+        }),
+        inst.at.v.view!,
+        failed
+      )
+    )
+  }
 })
 
 // A callable component: calling it declares a child of it. The function's own
@@ -2974,7 +3028,7 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
- * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
+ * vocabulary, and `HtmlHead`'s on `HtmlHead.vocabulary`. It's a pure function of the
  * Model, the props and the queries' results, like a view. On every flush that
  * changed a view, the runtime folds the head of the placed tree, a child's
  * `fallback` content included, with the root vocabulary's merge (see
@@ -3509,7 +3563,7 @@ const finish = (
         msg: unknown,
         props: unknown,
         results?: Results,
-        shared?: SharedRecord
+        shared?: SharedRecord | SharedLookup
       ) =>
         toNext(
           updateFn(
@@ -3517,7 +3571,11 @@ const finish = (
               model,
               props,
               open(model, props, results),
-              shared ?? unsupplied,
+              shared === undefined
+                ? unsupplied
+                : typeof shared === "function"
+                ? sharedReads.values(definition.name, reads, shared)
+                : shared,
               msg,
               component
             ),
@@ -4244,7 +4302,9 @@ export const provide: {
       layerFailure,
       sharedLayer,
       // Nested provides are built as one Layer, so one opt-out keeps all of them off the server.
-      layerOnServer: component.layerOnServer && options?.server !== false
+      layerOnServer: component.layerOnServer && options?.server !== false,
+      boot: layerRun.boot,
+      "~render": layerKeys === undefined ? undefined : layerRun.reselect
     })
   }
   // A component is an object with the type id; a Layer, an array, a function or a keyed selection means the curried form.

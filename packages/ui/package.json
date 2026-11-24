@@ -31,6 +31,12 @@
     "./src/html/register.ts",
     "./dist/html/register.js"
   ],
+  "imports": {
+    "#dev": {
+      "production": "./src/internal/devOff.ts",
+      "default": "./src/internal/devOn.ts"
+    }
+  },
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
@@ -59,6 +65,12 @@
   "publishConfig": {
     "access": "public",
     "provenance": true,
+    "imports": {
+      "#dev": {
+        "production": "./dist/internal/devOff.js",
+        "default": "./dist/internal/devOn.js"
+      }
+    },
     "exports": {
       "./package.json": "./package.json",
       ".": "./dist/index.js",

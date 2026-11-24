@@ -138,14 +138,14 @@ export interface HostEvents<Node> {
  * of each flush and after mounting, for hosts that apply changes in a batch.
  *
  * `head` receives the head the runtime folded, in the root vocabulary's form
- * (an `HtmlHead` for `Html`), after the commit of every flush that changed
+ * (an `HtmlHead` for `HtmlHead.vocabulary`), after the commit of every flush that changed
  * a view, once every instance has adopted. The host diffs it against what it
  * applied last. A mount with `head: false` never calls it. A host without a
  * document, such as a native one, leaves it out and the head is only
  * computed.
  *
- * `hydration` lets the renderer read nodes a server rendered, so `mount` with
- * a server `state` adopts them. A host without it builds every node fresh.
+ * `hydration` lets the renderer read nodes a server rendered, so a
+ * hydrating mount adopts them. A host without it builds every node fresh.
  *
  * `createContainer` makes a node that holds the nodes of a kept child out of
  * the document, such as a `DocumentFragment`. It is never inserted. A host
@@ -361,7 +361,7 @@ export interface Prerendered<out Model, out H = unknown> {
   readonly state: State
   /** The root's Model after the server run, or `undefined` if the root failed. */
   readonly model: Model | undefined
-  /** The head folded with the root vocabulary's merge: an `HtmlHead` for `Html`. */
+  /** The head folded with the root vocabulary's merge: an `HtmlHead` for `HtmlHead.vocabulary`. */
   readonly head: H
 }
 
@@ -558,21 +558,8 @@ export type HostOf<V> = [V] extends [never] ? never
  * requirements are added to the mount's. `init` still only sees plain props,
  * so a Story or a test can pass them directly.
  *
- * With `state` from a server render, the tree hydrates: each instance adopts
- * its server Model instead of running `init` and, on a host with
- * `hydration`, adopts the server's nodes inside `container`. `init` is
- * replayed only for its Commands, and every one of them runs. Where an
- * instance's view stops matching its nodes, the nodes before stay adopted and
- * the rest is built fresh, and a deferred instance is built fresh. An
- * instance whose provided Layer is still building
- * keeps the server's nodes, inert, until the Layer is ready; `adopted`
- * completes when none is left waiting.
- *
- * The cache hydrates from the state's `~query` entries. Until `adopted`
- * completes or the Router first navigates, a watch, `get` or `prefetch` over
- * a hydrated entry doesn't fetch, even when it is stale. The first emission
- * of each watch after adoption is delivered to `update`, and the view
- * doesn't change, since it equals the adopted snapshot.
+ * It builds every node fresh. A server render is hydrated with
+ * `HtmlHydrate.hydrate`.
  *
  * The mount owns the head: on every flush that changed a view it folds the
  * placed tree's head with the root vocabulary's merge, and gives it to the
@@ -612,7 +599,6 @@ export const mount: <
         h: View.Helper<never, {}> & View.Tags<V, never>
       ) => View.Content<never, RF>)
       | undefined
-    readonly state?: State | undefined
     readonly query?: QueryOptions | undefined
     readonly head?: boolean | undefined
   }

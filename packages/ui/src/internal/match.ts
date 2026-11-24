@@ -14,7 +14,7 @@ import { segment } from "./paths.ts"
  *
  * @internal
  */
-export const isKeyed = (view: View.Node<any, any>): boolean =>
+const isKeyed = (view: View.Node<any, any>): boolean =>
   view._tag === "Child" || view._tag === "Outlet" ||
   (view._tag === "Element" && view.elementKey !== undefined)
 
@@ -23,7 +23,7 @@ export const isKeyed = (view: View.Node<any, any>): boolean =>
  *
  * @internal
  */
-export const keyOf = (view: View.Node<any, any>): string =>
+const keyOf = (view: View.Node<any, any>): string =>
   view._tag === "Child" ?
     "c:" + segment(view) :
     view._tag === "Outlet" ?

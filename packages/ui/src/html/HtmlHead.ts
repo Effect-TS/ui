@@ -4,10 +4,12 @@
  * `<body>`, on top of the host-neutral `Head.title` and
  * `Head.titleTemplate`.
  *
- * A component on the `Html` vocabulary returns these entries from its `head`
- * option, next to `Head`'s. `Html` installs `merge` as its fold, so the
- * runtime folds the placed tree into one `HtmlHead`, which the browser host
- * diffs against the document and the server prints.
+ * A component whose `elements` is `HtmlHead.vocabulary` returns these
+ * entries from its `head` option, next to `Head`'s. The vocabulary is
+ * `Html` with `merge` as its fold, so the runtime folds the placed tree into
+ * one `HtmlHead`, which the browser host diffs against the document and the
+ * server prints. A component on `Html` itself takes `Head`'s entries only,
+ * and an app that declares no HTML head doesn't carry this module.
  *
  * **Merge rules**
  *
@@ -49,6 +51,10 @@
  */
 import * as Head from "../Head.ts"
 import * as headFold from "../internal/headFold.ts"
+import type * as View from "../View.ts"
+import * as Html from "./Html.ts"
+import * as documentHead from "./internal/documentHead.ts"
+import * as headSync from "./internal/head.ts"
 import * as headAttributes from "./internal/headAttributes.ts"
 
 /**
@@ -617,14 +623,7 @@ export const reduce = (apply: (below: HtmlHead) => HtmlHead): Reduce => ({
  * @category constants
  * @since 0.1.0
  */
-export const empty: HtmlHead = {
-  title: undefined,
-  meta: [],
-  links: [],
-  jsonLd: [],
-  html: { lang: undefined, dir: undefined, class: [], data: {} },
-  body: { class: [], data: {} }
-}
+export const empty: HtmlHead = headAttributes.empty
 
 /**
  * The identity of a meta, link or JSON-LD entry: two entries with the same
@@ -665,23 +664,9 @@ export const identity = (entry: Meta | Link | JsonLd): string => {
  * @category utils
  * @since 0.1.0
  */
-export const attributes = (
+export const attributes: (
   entry: Meta | Link
-): ReadonlyArray<readonly [string, string]> => {
-  if (entry._tag === "Meta") {
-    return [
-      entry.name !== undefined
-        ? ["name", entry.name] as const
-        : ["property", entry.property!] as const,
-      ["content", entry.content]
-    ]
-  }
-  const out: Array<readonly [string, string]> = []
-  for (const [name, value] of Object.entries(entry.attributes)) {
-    if (value !== undefined) out.push([name, value])
-  }
-  return out
-}
+) => ReadonlyArray<readonly [string, string]> = headAttributes.attributes
 
 const linkSignature = (entry: Link): string =>
   headAttributes.normalize(attributes(entry)).map((pair) =>
@@ -853,3 +838,77 @@ export const merge: (
     )
   }
 )
+
+/**
+ * The type-level half of `vocabulary`: `Html`'s elements, with `Entry` as a
+ * component's head entries and `HtmlHead` as the folded head.
+ *
+ * @stability experimental
+ * @category vocabulary
+ * @since 0.1.0
+ */
+export interface Elements extends Html.Elements {
+  readonly Head: Entry
+  readonly HeadValue: HtmlHead
+}
+
+/**
+ * How `vocabulary` folds its head: `merge`, with the title read from the
+ * folded `HtmlHead`.
+ *
+ * @stability experimental
+ * @category vocabulary
+ * @since 0.1.0
+ */
+export const head: View.HeadFold<Entry, HtmlHead> = {
+  merge,
+  title: (head) => head.title
+}
+
+/**
+ * The `Html` vocabulary with the HTML head: its name and tags, and `head` as
+ * its fold.
+ *
+ * **When to use**
+ *
+ * Use as the `elements` of a component whose `head` returns `HtmlHead`
+ * entries, such as `meta`, `link` or `lang`, and of the root of a mount
+ * that should fold them. A component that sets only `Head.title` and
+ * `Head.titleTemplate` can stay on `Html`.
+ *
+ * **Details**
+ *
+ * The mount folds with the root's vocabulary. Under a root without a fold of
+ * its own, the first instance in the tree on this vocabulary picks it.
+ *
+ * **Example** (A page that sets its description)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, Head } from "@effect/ui"
+ * import { HtmlHead } from "@effect/ui/html"
+ * import { Schema } from "effect"
+ *
+ * const Page = Component.define({
+ *   name: "Page",
+ *   model: Schema.Void,
+ *   message: Schema.Never,
+ *   elements: HtmlHead.vocabulary
+ * }).make({
+ *   init: () => undefined,
+ *   update: () => undefined,
+ *   head: () => [Head.title("Ada"), HtmlHead.meta({ name: "description", content: "Ada's page" })],
+ *   view: (h) => h.h1("Ada")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category vocabulary
+ * @since 0.1.0
+ */
+export const vocabulary: View.Vocabulary<Elements> = {
+  name: Html.name,
+  tags: Html.tags,
+  head
+}
+
+documentHead.load(headSync.makeSync)

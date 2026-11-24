@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { Component, Mount, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlCommand, HtmlServer } from "@effect/ui/html"
+import {
+  BrowserHost,
+  Html,
+  HtmlCommand,
+  HtmlHydrate,
+  HtmlServer
+} from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -511,9 +517,12 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(serverIds[0], serverIds[1])
 
       const stub = yield* popoverStub
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       yield* tick
       // Adopted: the same nodes, with the ids the server wrote.

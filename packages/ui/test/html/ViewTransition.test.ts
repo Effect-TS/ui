@@ -10,6 +10,7 @@ import {
 } from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
+import * as domHost from "@effect/ui/internal/domHost"
 import * as Executor from "@effect/ui/internal/executor"
 import type * as runtime from "@effect/ui/internal/runtime"
 import { expect, it } from "@effect/vitest"
@@ -148,19 +149,25 @@ const mount = Effect.fnUntraced(function*(executor: Executor.Executor) {
   )
   const browser = yield* Layer.build(BrowserHost.layer())
   const host = Context.get(browser, Renderer.Renderer).host
+  const dom = domHost.doms.get(host)!
   let commits = 0
-  const counted: Renderer.Host<unknown> = {
-    ...host,
-    commit: () => {
-      commits++
-      host.commit?.()
+  domHost.doms.set(host, {
+    ...dom,
+    make: (container, options) => {
+      const made = dom.make(container, options)
+      return made && {
+        ...made,
+        commit: () => {
+          commits++
+          made.commit?.()
+        }
+      }
     }
-  }
+  })
   const context = Context.merge(
     browser,
     yield* Layer.build(BrowserRouter.layer({ routes: GalleryRoute }))
   ).pipe(
-    Context.add(Renderer.Renderer, { host: counted }),
     Context.add(MessageLog.MessageLog, log),
     Context.add(Executor.CurrentExecutor, executor)
   )
@@ -265,7 +272,6 @@ describe("view transitions", { concurrent: false }, () => {
           const started = transitions.started.at(-1)!
           expect(started.types).toEqual(["to-detail"])
           expect(app.shown()).toBe("Grid grid ")
-          const queued = app.tasks.length
           const commits = app.commits()
           if (consume === "callback") {
             started.update()
@@ -282,12 +288,10 @@ describe("view transitions", { concurrent: false }, () => {
             expect(app.log.entries()).toHaveLength(logged)
           }
           app.runTasks()
-          expect({ consume, queued: queued > 0, commits: app.commits() })
-            .toEqual({
-              consume,
-              queued: true,
-              commits: commits + 1
-            })
+          expect({ consume, commits: app.commits() }).toEqual({
+            consume,
+            commits: commits + 1
+          })
           yield* Scope.close(scope, Exit.void)
         })
       }

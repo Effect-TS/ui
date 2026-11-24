@@ -1,5 +1,6 @@
 /** Shared attribute rules for head tags and document ownership markers. */
 import { attributeName } from "../../internal/attributeName.ts"
+import type * as HtmlHead from "../HtmlHead.ts"
 
 /** @internal */
 export const marker = "data-eui"
@@ -20,4 +21,33 @@ export const normalize = (
     if (normalized !== undefined) out.set(normalized, value)
   }
   return [...out]
+}
+
+/** The attributes of a meta or link tag, in a stable order, without the marker. @internal */
+export const attributes = (
+  entry: HtmlHead.Meta | HtmlHead.Link
+): ReadonlyArray<readonly [string, string]> => {
+  if (entry._tag === "Meta") {
+    return [
+      entry.name !== undefined
+        ? ["name", entry.name] as const
+        : ["property", entry.property!] as const,
+      ["content", entry.content]
+    ]
+  }
+  const out: Array<readonly [string, string]> = []
+  for (const [name, value] of Object.entries(entry.attributes)) {
+    if (value !== undefined) out.push([name, value])
+  }
+  return out
+}
+
+/** The head with no entries. @internal */
+export const empty: HtmlHead.HtmlHead = {
+  title: undefined,
+  meta: [],
+  links: [],
+  jsonLd: [],
+  html: { lang: undefined, dir: undefined, class: [], data: {} },
+  body: { class: [], data: {} }
 }

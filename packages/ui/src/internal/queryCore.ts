@@ -7,10 +7,11 @@
  * @internal
  */
 import * as Context from "effect/Context"
-import * as Duration from "effect/Duration"
+import type * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
+import type * as queryRun from "./queryRun.ts"
 
 // -----------------------------------------------------------------------------
 // The loaded module
@@ -23,10 +24,9 @@ export type Cache = ReturnType<typeof Query.internals>
 export interface CacheOptions {
   readonly visibility: Query.Signal
   readonly connectivity: Query.Signal
-  /** The problems sink. A throw from it is swallowed. */
   readonly report: (problem: Query.Problem.Any) => void
-  /** In milliseconds, from `cacheIdleMs`. */
-  readonly idleMs: number
+  readonly idleMs?: number | undefined
+  readonly idleTimeToLive?: Duration.Input | undefined
   /**
    * The server's per-request mode: an entry settles at most once and is never
    * stale after, every settle is stored, a query's own `invalidate` is ignored
@@ -46,7 +46,7 @@ export interface Loaded extends
   Pick<
     typeof Query,
     | "defOf"
-    | "infiniteItems"
+    | "internals"
     | "makeSnapshot"
     | "makeSnapshotMap"
     | "sameMore"
@@ -62,6 +62,7 @@ export interface Loaded extends
     options: CacheOptions
   ) => { readonly cache: Cache; readonly dispose: Effect.Effect<void> }
   readonly bind: typeof componentQueries.bind
+  readonly run: typeof queryRun
 }
 
 /**
@@ -146,19 +147,6 @@ export const CacheKey: Context.Key<Query.Cache, Query.Cache["Service"]> =
     Query.Cache["Service"]
   >("@effect/ui/Query/Cache")
 
-/**
- * The cache-wide idle time in milliseconds. Throws on a negative one.
- *
- * @internal
- */
-export const cacheIdleMs = (input: Duration.Input | undefined): number => {
-  const duration = Duration.fromInputUnsafe(input ?? "5 minutes")
-  if (Duration.isNegative(duration)) {
-    throw new Error("[Query] idleTimeToLive can't be negative")
-  }
-  return Duration.toMillis(duration)
-}
-
 // -----------------------------------------------------------------------------
 // Host signals
 // -----------------------------------------------------------------------------
@@ -220,6 +208,17 @@ export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> =
     // oxlint-disable-next-line no-console
     defaultValue: () => (problem) => console.warn(problem.message)
   })
+
+/** @internal */
+export const report = (
+  ctx: Context.Context<never>,
+  problem: unknown
+): void => {
+  try {
+    Context.get(ctx, Problems)(problem as never)
+  } catch {
+  }
+}
 
 // -----------------------------------------------------------------------------
 // Keys

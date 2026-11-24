@@ -82,6 +82,35 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     expect(app.textContent).toBe("clicked 1")
   }).pipe(Effect.scoped))
 
+const FieldMessage = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+const Field = Component.define({
+  name: "Field",
+  model: Schema.Struct({ value: Schema.String, typed: Schema.Number }),
+  message: FieldMessage,
+  elements: Html
+}).make({
+  init: () => ({ value: "", typed: 0 }),
+  update: ($, { value }) => ({ value, typed: $.model.typed + 1 }),
+  view: (h, { value }) =>
+    h.input.value(value).onInput(({ value }) => FieldMessage.Typed({ value }))
+})
+
+it.effect("the copy's host listens only on the copy, so a live event while paused is reported once", () =>
+  Effect.gen(function*() {
+    const { app } = yield* place()
+    const roots: Array<BrowserHost.Controllable> = []
+    const root = yield* BrowserHost.mountEffect(Field, {}, app).pipe(
+      register(roots)
+    )
+    yield* roots[0].pause(() => ({ model: { value: "copy", typed: 0 } }))
+    const input = app.querySelector("input")!
+    input.value = "live"
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+    yield* tick
+    expect(root.model()).toEqual({ value: "live", typed: 1 })
+    yield* roots[0].resume
+  }).pipe(Effect.scoped))
+
 class Editor extends Feature.Service<Editor>()("Pause/Editor", {
   props: Schema.Struct({})
 }) {}

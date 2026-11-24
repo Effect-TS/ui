@@ -38,7 +38,7 @@ The overlay starts as a button, with a count of the failures logged since the pa
 
 The copy runs no Command, Subscription, query or Layer build, and takes no events. A provided Layer isn't built in the copy, so a feature slot whose service comes from one shows its fallback, and the bar lists the path of each instance that shows one. An instance with no recorded state at that entry starts from `init`, and the bar lists it too. With the panel closed, the launcher shows the Paused badge and Resume. A modal dialog or an auto popover in the copy shows as a manual popover, so the copy never blocks the panel or closes the live page's popovers, and the panel stays above it.
 
-The overlay keeps the raw entries, alongside the Wire frames, to paint from. The entries before the oldest one it holds are folded into the state it starts from, so it can show any entry it still lists. Only roots mounted with `BrowserHost.mount` or `mountEffect` under the Layer can be shown. To combine the overlay with another log, use `MessageLog.fanout`, which keeps the roots reaching the overlay.
+The overlay keeps the raw entries, alongside the Wire frames, to paint from. The entries before the oldest one it holds are folded into the state it starts from, so it can show any entry it still lists. Only roots mounted with `BrowserHost.mount`, `mountEffect` or `HtmlHydrate.hydrate` under the Layer can be shown. To combine the overlay with another log, use `MessageLog.fanout`, which keeps the roots reaching the overlay.
 
 ### Other details
 

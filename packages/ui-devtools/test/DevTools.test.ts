@@ -762,7 +762,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const LeafMessage = UiSchema.TaggedEnum({ Pinged: {} })
       const Leaf = Component.define({
         name: "Leaf",
-        scoped: false,
         model: Schema.Null,
         message: LeafMessage,
         elements: Html
@@ -773,7 +772,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       })
       const Pane = Component.define({
         name: "Pane",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -785,7 +783,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const HostMessage = UiSchema.TaggedEnum({ Toggled: {} })
       const Host = Component.define({
         name: "Host",
-        scoped: false,
         model: Schema.Boolean,
         message: HostMessage,
         elements: Html

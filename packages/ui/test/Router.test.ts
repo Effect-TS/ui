@@ -11,14 +11,16 @@ import {
 } from "@effect/ui"
 import type { HtmlHead } from "@effect/ui/html"
 import * as componentQueries from "@effect/ui/internal/queries"
-import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
+  Deferred,
   Effect,
   Exit,
+  Fiber,
   type Layer,
   Option,
+  Scheduler,
   Schema,
   type Scope,
   Stream
@@ -1422,34 +1424,18 @@ describe("Router.prefetch", { concurrent: false }, () => {
       })
     ))
 
-  it.effect("records watches only while a check after a push is outstanding", () =>
+  it.effect("ends both checks quietly when a push supersedes another before it settles", () =>
     prefetching(
       "/people/1",
       Effect.gen(function*() {
         const router = yield* Router.Router
-        const testHost = yield* TestHost.TestHost
-        const route = yield* Router.currentRoute(Routes)
-        const root = yield* runtime.mount(
-          Prefetching.App,
-          { route },
-          testHost.host.createElement("#app")
-        )
-        const recorded = () => {
-          const out: Array<string> = []
-          const visit = (inst: runtime.Instance) => {
-            if (inst.watched !== undefined) out.push(inst.path)
-            for (const child of inst.children.values()) visit(child)
-          }
-          visit(root.instance)
-          return out
-        }
+        const root = yield* mountApp
         yield* TestHost.settle
-        assert.deepStrictEqual(recorded(), [])
-        // The second push supersedes the first before it settles: both checks end.
         yield* router.navigate("/people/2")
         yield* router.navigate("/people/3")
         yield* TestHost.settle
-        assert.deepStrictEqual(recorded(), [])
+        assert.strictEqual(router.location().url, "/people/3")
+        assert.isDefined(root.model())
         assert.deepStrictEqual(tags(yield* TestHost.problems), [])
       })
     ))
@@ -1807,4 +1793,86 @@ describe("Router throttle", { concurrent: false }, () => {
       assert.deepStrictEqual(history.entries(), ["/search?q=abc"])
     }).pipe(Effect.provide(Router.memory({ routes: Routes, history })))
   })
+
+  it.effect("changes subscribers see nested navigations in order, new subscribers skip older queued publications, and same-sequence hrefs emit", () =>
+    Effect.gen(function*() {
+      const router = yield* Router.Router
+      const scope = yield* Effect.scope
+      const firstReady = yield* Deferred.make<void>()
+      const existingReady = yield* Deferred.make<void>()
+      const lateStarted = yield* Deferred.make<void>()
+      const firstSeqs: Array<number> = []
+      const existingSeqs: Array<number> = []
+      const lateSeqs: Array<number> = []
+      let late: Fiber.Fiber<void> | undefined
+      const first = yield* router.changes.pipe(
+        Stream.take(5),
+        Stream.runForEach((location) =>
+          Effect.gen(function*() {
+            firstSeqs.push(location.seq)
+            if (location.seq === 0) yield* Deferred.succeed(firstReady, void 0)
+            if (location.seq === 1) {
+              yield* router.navigate("/search?q=b")
+              yield* router.navigate("/search?q=c")
+              late = yield* router.changes.pipe(
+                Stream.take(3),
+                Stream.runForEach((loc) =>
+                  Effect.gen(function*() {
+                    lateSeqs.push(loc.seq)
+                    if (lateSeqs.length === 1) {
+                      yield* Deferred.succeed(lateStarted, void 0)
+                    }
+                  })
+                ),
+                Effect.forkIn(scope, { startImmediately: true })
+              )
+            }
+          })
+        ),
+        Effect.forkIn(scope)
+      )
+      const existing = yield* router.changes.pipe(
+        Stream.take(6),
+        Stream.runForEach((location) =>
+          Effect.gen(function*() {
+            existingSeqs.push(location.seq)
+            if (location.seq === 0) {
+              yield* Deferred.succeed(existingReady, void 0)
+            }
+          })
+        ),
+        Effect.forkIn(scope)
+      )
+      yield* Deferred.await(firstReady)
+      yield* Deferred.await(existingReady)
+      yield* Effect.promise(() =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            Effect.runSync(router.navigate("/search?q=a"))
+            resolve()
+          }, 0)
+        })
+      )
+      yield* Deferred.await(lateStarted)
+      yield* router.navigate("/search?q=d")
+      yield* router.navigate("/search?q=d")
+      yield* Fiber.join(first)
+      yield* Fiber.join(existing)
+      yield* Fiber.join(late!)
+      assert.deepStrictEqual(firstSeqs, [0, 1, 2, 3, 4])
+      assert.deepStrictEqual(existingSeqs, [0, 1, 2, 3, 4, 4])
+      assert.deepStrictEqual(lateSeqs, [3, 4, 4])
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Router.memory({
+          routes: Routes,
+          history: Router.memoryHistory("/search")
+        })
+      ),
+      Effect.provideService(
+        Scheduler.Scheduler,
+        new Scheduler.MixedScheduler("sync")
+      )
+    ))
 })

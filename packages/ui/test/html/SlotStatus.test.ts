@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Feature, MessageLog, UiSchema, type View } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import * as replay from "@effect/ui/internal/replay"
 import { Story } from "@effect/ui/testing"
 import { expect, it } from "@effect/vitest"
@@ -86,9 +86,7 @@ const hydrate = Effect.fnUntraced(
     const app = yield* container(rendered.html)
     const before = app.querySelector("p")!
     const log = MessageLog.makeMemory({ size: 1000 })
-    yield* BrowserHost.mountEffect(component, {}, app, {
-      state: rendered.state
-    }).pipe(
+    yield* HtmlHydrate.hydrateEffect(component, {}, app, rendered.state).pipe(
       Effect.provideService(MessageLog.MessageLog, log)
     )
     yield* tick

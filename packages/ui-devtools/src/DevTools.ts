@@ -94,7 +94,8 @@ export type Position = internal.Position
  * is disabled while the page is paused.
  *
  * The Layer also provides `BrowserHost.Controllables`, so each root mounted
- * with `BrowserHost.mount` or `mountEffect` under it can be paused. Time
+ * with `BrowserHost.mount`, `mountEffect` or `HtmlHydrate.hydrate` under it
+ * can be paused. Time
  * travel, on a selected entry, hides the root's container and paints an
  * `inert` copy from each instance's state at that entry, folded from the
  * raw entries the overlay keeps beside the frames. Resume removes it. While

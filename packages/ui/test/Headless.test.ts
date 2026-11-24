@@ -286,7 +286,56 @@ const Shell = Component.define({
     })
 })
 
+const ProbeMessage = UiSchema.TaggedEnum({ Read: {} })
+
+const Probe = Component.define({
+  name: "Probe",
+  props: Schema.Struct({ count: Schema.Number }),
+  model: Schema.Array(Schema.Number),
+  message: ProbeMessage,
+  elements: Html
+}).make({
+  init: (): ReadonlyArray<number> => [],
+  update: ($) => [...$.model, $.props.count],
+  view: (h, read) =>
+    h.button.onClick(ProbeMessage.Read()).children(
+      "read [" + read.join(",") + "]"
+    )
+})
+
+const Counted = Component.define({
+  name: "Counted",
+  model: Schema.Number,
+  message: Schema.Literal("bump"),
+  elements: Html
+}).make({
+  init: () => 0,
+  update: ($) => $.model + 1,
+  view: (h, count) =>
+    Menu(h, {
+      key: "m",
+      props: { items },
+      view: (menu) =>
+        h.div(
+          menu.trigger(h.button).children("toggle"),
+          h.button.onClick("bump").children("bump"),
+          Probe(h, { key: "p", props: { count } })
+        )
+    })
+})
+
 describe("headless components", () => {
+  it.effect("a child in the closure reads the props its author gives, though the headless component hasn't drawn them yet", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(Counted, {})
+      yield* TestHost.settle
+      click(root, "bump")
+      click(root, "toggle")
+      click(root, "read []")
+      yield* TestHost.settle
+      assert.include(root.text(), "read [1]")
+    })))
+
   it.effect("three owners on one element each get the event, deepest first and the author last", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Picker, {})

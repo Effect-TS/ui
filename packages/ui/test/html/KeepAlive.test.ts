@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Query } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -258,9 +258,12 @@ const hydrateAt = Effect.fnUntraced(function*(where: string) {
     }),
     (element) => Effect.sync(() => element.remove())
   )
-  const root = yield* BrowserHost.mountEffect(Page, { where }, app, {
-    state: rendered.state
-  })
+  const root = yield* HtmlHydrate.hydrateEffect(
+    Page,
+    { where },
+    app,
+    rendered.state
+  )
   yield* root.adopted
   return { app, root }
 })
@@ -342,9 +345,12 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         (element) => Effect.sync(() => element.remove())
       )
       const field = app.querySelector("p")
-      const root = yield* BrowserHost.mountEffect(SlowPage, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        SlowPage,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       assert.strictEqual(app.querySelector("p"), field)
     }).pipe(Effect.scoped))
@@ -451,7 +457,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         )
         const field = app.querySelector("input")!
         field.value = "typed"
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(null)
         yield* tick
         yield* open
@@ -576,7 +582,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         HtmlServer.renderToHtml(Moving, {})
       )
       const served = app.querySelector("input")!
-      const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+      const root = yield* HtmlHydrate.hydrateEffect(Moving, {}, app, state)
       root.send("aside")
       yield* tick
       const moved = app.querySelector<HTMLInputElement>("aside input")!
@@ -593,7 +599,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       const { app, open, state } = yield* serve(
         HtmlServer.renderToHtml(Moving, {})
       )
-      const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+      const root = yield* HtmlHydrate.hydrateEffect(Moving, {}, app, state)
       root.send("aside")
       yield* tick
       const moved = app.querySelector<HTMLInputElement>("aside input")!
@@ -614,7 +620,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         const { app, open, state } = yield* serve(
           HtmlServer.renderToHtml(Moving, {})
         )
-        const root = yield* BrowserHost.mountEffect(Moving, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Moving, {}, app, state)
         root.send(left)
         yield* tick
         yield* open
@@ -639,9 +645,12 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           HtmlServer.renderToHtml(Restarting, {})
         )
         const served = app.querySelector("input")!
-        const root = yield* BrowserHost.mountEffect(Restarting, {}, app, {
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Restarting,
+          {},
+          app,
           state
-        })
+        )
         root.send(to)
         yield* tick
         yield* open
@@ -684,7 +693,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       )
       const field = app.querySelector("input")!
       field.value = "typed"
-      const root = yield* BrowserHost.mountEffect(Mixed, {}, app, { state })
+      const root = yield* HtmlHydrate.hydrateEffect(Mixed, {}, app, state)
       root.send(true)
       yield* tick
       yield* open
@@ -724,9 +733,12 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         HtmlServer.renderToHtml(Lead, { moved: false })
       )
       const field = app.querySelector("input")!
-      const root = yield* BrowserHost.mountEffect(Lead, { moved: true }, app, {
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Lead,
+        { moved: true },
+        app,
         state
-      })
+      )
       yield* open
       yield* root.adopted
       field.value = "typed"
@@ -781,7 +793,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         HtmlServer.renderToHtml(Cards, {})
       )
       const served = Array.from(app.querySelectorAll("p"))
-      const root = yield* BrowserHost.mountEffect(Cards, {}, app, { state })
+      const root = yield* HtmlHydrate.hydrateEffect(Cards, {}, app, state)
       root.send(false)
       yield* tick
       assert.strictEqual(app.querySelector("p"), null)
@@ -841,7 +853,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         )
         stuck = true
         passed = []
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         yield* open
         yield* tick
         assert.strictEqual(app.querySelector("section")?.textContent, "0")
@@ -901,7 +913,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           }
         })
         const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         let adopted = false
         yield* Effect.forkChild(
           Effect.andThen(root.adopted, Effect.sync(() => adopted = true))
@@ -938,7 +950,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           HtmlServer.renderToHtml(Page, {})
         )
         const drawn = app.querySelector("p")
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(true)
         yield* tick
         yield* open
@@ -1058,7 +1070,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             )
         })
         const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(1)
         yield* tick
         root.send(2)
@@ -1107,7 +1119,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           h.main(shown ? h.keepAlive((s) => Slowly(s, { key: "s" })) : null)
       })
       const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+      const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
       yield* tick
       assert.strictEqual(decoding, 1)
       root.send(false)
@@ -1164,11 +1176,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           HtmlServer.renderToHtml(Page, { drawn: true })
         )
         passed = []
-        const root = yield* BrowserHost.mountEffect(
+        const root = yield* HtmlHydrate.hydrateEffect(
           Page,
           { drawn: false },
           app,
-          { state }
+          state
         )
         root.send(1)
         yield* tick
@@ -1246,7 +1258,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           HtmlServer.renderToHtml(Page, {})
         )
         labels.length = decoded.length = 0
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(true)
         yield* tick
         yield* open
@@ -1321,7 +1333,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           HtmlServer.renderToHtml(Page, {})
         )
         labels.length = decoded.length = 0
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(true)
         yield* tick
         yield* open
@@ -1398,7 +1410,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           HtmlServer.renderToHtml(Page, {})
         )
         labels.length = 0
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(true)
         yield* tick
         yield* open
@@ -1446,11 +1458,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       const { app, open, state } = yield* serve(
         HtmlServer.renderToHtml(Page, { first: "l" })
       )
-      const root = yield* BrowserHost.mountEffect(
+      const root = yield* HtmlHydrate.hydrateEffect(
         Page,
         { first: "other" },
         app,
-        { state }
+        state
       )
       root.send(1)
       yield* tick
@@ -1503,11 +1515,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       const { app, open, state } = yield* serve(
         HtmlServer.renderToHtml(Page, { compact: false })
       )
-      const root = yield* BrowserHost.mountEffect(
+      const root = yield* HtmlHydrate.hydrateEffect(
         Page,
         { compact: true },
         app,
-        { state }
+        state
       )
       root.send(true)
       yield* tick
@@ -1565,11 +1577,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         const { app, open, state } = yield* serve(
           HtmlServer.renderToHtml(Page, { allowed: true })
         )
-        const root = yield* BrowserHost.mountEffect(
+        const root = yield* HtmlHydrate.hydrateEffect(
           Page,
           { allowed: false },
           app,
-          { state }
+          state
         )
         app.querySelector("button")!.click()
         yield* tick
@@ -1634,7 +1646,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         leafInits = 0
         noteInits = 0
         const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
         root.send(1)
         yield* tick
         root.send(2)
@@ -1777,9 +1789,12 @@ describe("keep-alive children of a headless child", () => {
           }),
           (element) => Effect.sync(() => element.remove())
         )
-        const root = yield* BrowserHost.mountEffect(Rows, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Rows,
+          {},
+          app,
+          rendered.state
+        )
         for (let i = 0; i < 6; i++) {
           root.send(null)
           yield* tick
@@ -1794,4 +1809,65 @@ describe("keep-alive children of a headless child", () => {
         ])
       }).pipe(Effect.scoped)
   )
+})
+
+let lateGate: Effect.Effect<void> = Effect.void
+let lateServing = true
+const Late = Schema.String.pipe(Schema.decode({
+  decode: SchemaGetter.transformEffect((text: string) =>
+    Effect.as(Effect.suspend(() => lateGate), text)
+  ),
+  encode: SchemaGetter.passthrough()
+}))
+const LateDraft = Component.define({
+  name: "LateDraft",
+  keepAlive: true,
+  model: Late,
+  message: Schema.String,
+  elements: Html
+}).make({
+  init: () => lateServing ? "server" : "client",
+  update: (_, text) => text,
+  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+})
+const LateKeeper = Component.define({
+  name: "LateKeeper",
+  model: Schema.Number,
+  message: Schema.Literal("bump"),
+  elements: Html
+}).make({
+  init: () => 0,
+  update: ($) => $.model + 1,
+  view: (h, count) =>
+    h.div(
+      h.button.onClick("bump").children(String(count)),
+      h.keepAlive((s) => LateDraft(s, { key: "d" }))
+    )
+})
+
+describe("keep-alive children whose state decodes asynchronously", () => {
+  it.effect("take the server's Model and nodes after their author renders again as they decode", () =>
+    Effect.gen(function*() {
+      lateServing = true
+      const { html, state } = yield* HtmlServer.renderToHtml(LateKeeper, {})
+      lateServing = false
+      const latch = yield* Deferred.make<void>()
+      lateGate = Deferred.await(latch)
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      app.innerHTML = html
+      const served = app.querySelector("input")
+      yield* HtmlHydrate.hydrateEffect(LateKeeper, {}, app, state)
+      yield* tick
+      app.querySelector("button")!.click()
+      yield* tick
+      yield* Deferred.succeed(latch, undefined)
+      yield* tick
+      assert.strictEqual(app.querySelector("button")!.textContent, "1")
+      assert.deepStrictEqual(
+        Array.from(app.querySelectorAll("input"), (field) => field.value),
+        ["server"]
+      )
+      assert.strictEqual(app.querySelector("input"), served)
+    }).pipe(Effect.scoped))
 })

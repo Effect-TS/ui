@@ -46,13 +46,14 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Context from "effect/Context"
+import type * as Context from "effect/Context"
 import * as Data from "effect/Data"
 import * as Effect from "effect/Effect"
 import * as Base64 from "effect/encoding/Base64"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Command from "../Command.ts"
+import * as files from "./internal/files.ts"
 
 /**
  * A read of a `Blob` failed, such as for a file deleted or changed after the
@@ -190,12 +191,30 @@ export interface Files {
  * @category references
  * @since 0.1.0
  */
-export const Files: Context.Reference<Files> = Context.Reference<Files>(
-  "@effect/ui/html/HtmlFiles/Files",
-  { defaultValue: () => pending }
-)
+export const Files: Context.Reference<Files> = files.Files
 
-const pending: Files = { pick: () => Effect.never }
+files.load((document, htmlHost, options) =>
+  Effect.callback((resume) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.multiple = options.multiple === true
+    if (options.accept !== undefined) input.accept = options.accept.join(",")
+    if (options.capture !== undefined) {
+      input.setAttribute("capture", options.capture)
+    }
+    const settle = (picked: ReadonlyArray<File>) =>
+      resume(Effect.succeed({ opened: true, files: picked }))
+    input.onchange = () => settle(Array.from(input.files ?? []))
+    input.oncancel = () => settle([])
+    if (!htmlHost.showPicker(input)) {
+      return resume(Effect.succeed({ opened: false, files: [] }))
+    }
+    return Effect.sync(() => {
+      input.onchange = null
+      input.oncancel = null
+    })
+  })
+)
 
 /**
  * The Command behind `pick`, for a story's `.resolve(HtmlFiles.Pick, { opened, files })`.

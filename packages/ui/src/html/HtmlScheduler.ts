@@ -96,6 +96,9 @@ export interface Options {
 export const make = (options?: Options): Scheduler.Scheduler =>
   new HtmlScheduler(Duration.toMillis(options?.budget ?? 5))
 
+/** @internal */
+export const makeDefault = (): Scheduler.Scheduler => new HtmlScheduler(5)
+
 /**
  * Provides a Scheduler made by `make`.
  *

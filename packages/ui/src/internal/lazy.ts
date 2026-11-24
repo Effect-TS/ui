@@ -1,8 +1,10 @@
 /** @internal */
+import * as Cause from "effect/Cause"
 import * as Predicate from "effect/Predicate"
 import type * as Component from "../Component.ts"
 import type * as View from "../View.ts"
 import * as child from "./child.ts"
+import * as Kernel from "./kernel.ts"
 
 /** @internal */
 export const TypeId: Component.LazyTypeId = "~@effect/ui/Component/Lazy"
@@ -47,7 +49,7 @@ const pendingAlive = new WeakMap<
 >()
 
 /** @internal */
-export const keepAliveOnceLoaded = (
+const keepAliveOnceLoaded = (
   view: View.Child<any, any>
 ): View.Child<any, any> => {
   if (view.alive !== undefined) return view
@@ -57,6 +59,38 @@ export const keepAliveOnceLoaded = (
       state.component.definition.keepAlive
     ? { ...view, alive }
     : view
+}
+
+const watched = new WeakMap<Kernel.Rec, () => void>()
+
+function loaded(
+  this: Lazy,
+  owner: Kernel.Instance,
+  rec: Kernel.Rec,
+  at: string | undefined
+): Kernel.Runnable | undefined {
+  const state = this.state
+  if (state._tag === "Loaded") return state.component as any
+  if (watched.has(rec) || owner.tree.host.inert) return undefined
+  const unwatch = watch(this, () => {
+    const loaded = this.state._tag === "Loaded"
+    if (rec.inst !== owner || owner.closed || loaded) {
+      unwatch()
+      watched.delete(rec)
+    }
+    if (rec.inst !== owner || owner.closed) return
+    if (loaded) rec.v = keepAliveOnceLoaded(rec.v as View.Child<any, any>)
+    Kernel.settle(owner, rec, at)
+    Kernel.wake(owner.tree)
+  })
+  watched.set(rec, unwatch)
+  if (state._tag !== "Loading") this.preload()
+  return undefined
+}
+
+function failure(this: Lazy): Cause.Cause<unknown> | undefined {
+  const state = this.state
+  return state._tag === "Failed" ? Cause.die(state.error) : undefined
 }
 
 const variance = {
@@ -114,7 +148,15 @@ export const make = (
     [TypeId]: { ...variance, name },
     state: { _tag: "Idle" } as State,
     listeners: new Set(),
-    preload
+    preload,
+    "~load": loaded,
+    "~cause": failure
   }) as any
+  Object.defineProperty(self, "~kept", {
+    get: () =>
+      self.state._tag === "Loaded"
+        ? (self.state.component as any)["~kept"]
+        : undefined
+  })
   return self
 }

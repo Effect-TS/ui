@@ -83,6 +83,7 @@
  * @since 0.1.0
  */
 import * as Cause from "effect/Cause"
+import * as Channel from "effect/Channel"
 import * as Context from "effect/Context"
 import * as Data from "effect/Data"
 import * as Duration from "effect/Duration"
@@ -94,12 +95,12 @@ import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
-import * as SubscriptionRef from "effect/SubscriptionRef"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
 import * as prefetchWalk from "./internal/prefetch.ts"
 import * as queryCore from "./internal/queryCore.ts"
+import * as routeRun from "./internal/routeRun.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
 import type * as Query from "./Query.ts"
@@ -1431,8 +1432,6 @@ const build = (
       action: "initial",
       seq: 0
     }
-    const ref = yield* SubscriptionRef.make(current)
-    // Each key's holders: two instances may block under one key.
     const blocks = new Map<string, number>()
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
@@ -1604,11 +1603,85 @@ const build = (
       for (const check of pending.checks) check.dropped()
     }
     const listeners = new Set<(location: Location) => void>()
-    /** Delivers `next` to `changes` and to the attached Subscriptions. */
+    const wakes: Array<() => void> = []
+    const publishQueue: Array<{
+      readonly location: Location
+      readonly targets: ReadonlyArray<(location: Location) => void>
+    }> = []
+    let publishing = false
     const publish = (next: Location) => {
-      Effect.runSync(SubscriptionRef.set(ref, next))
-      for (const listener of Array.from(listeners)) listener(next)
+      publishQueue.push({ location: next, targets: Array.from(listeners) })
+      if (publishing) return
+      publishing = true
+      try {
+        while (publishQueue.length > 0) {
+          const { location, targets } = publishQueue.shift()!
+          for (const listener of targets) {
+            if (listeners.has(listener)) listener(location)
+          }
+          while (wakes.length > 0) {
+            const batch = wakes.splice(0)
+            for (const wake of batch) wake()
+          }
+        }
+      } finally {
+        publishing = false
+      }
     }
+    const changes: Stream.Stream<Location> = Stream.fromChannel(
+      Channel.fromTransform((_, scope) =>
+        Effect.uninterruptible(
+          Effect.suspend(() => {
+            const pending: Array<Location> = [current]
+            let resume:
+              | ((
+                effect: Effect.Effect<readonly [Location, ...Array<Location>]>
+              ) => void)
+              | undefined
+            const wake = () => {
+              if (resume === undefined || pending.length === 0) return
+              const r = resume
+              resume = undefined
+              r(
+                Effect.succeed(
+                  pending.splice(0) as [Location, ...Array<Location>]
+                )
+              )
+            }
+            const listener = (next: Location) => {
+              pending.push(next)
+              if (resume !== undefined) wakes.push(wake)
+            }
+            listeners.add(listener)
+            const pull = Effect.callback<
+              readonly [Location, ...Array<Location>]
+            >((r) => {
+              if (pending.length > 0) {
+                r(
+                  Effect.succeed(
+                    pending.splice(0) as [Location, ...Array<Location>]
+                  )
+                )
+                return
+              }
+              resume = r
+              return Effect.sync(() => {
+                if (resume === r) resume = undefined
+              })
+            })
+            return Effect.as(
+              Scope.addFinalizer(
+                scope,
+                Effect.sync(() => {
+                  listeners.delete(listener)
+                })
+              ),
+              pull
+            )
+          })
+        )
+      )
+    )
     /** Whether a route at `url` is on the current page: the same tag and pathname. */
     const samePage = (route: { readonly _tag: string }, url: string) =>
       route._tag === current.route._tag &&
@@ -1884,6 +1957,7 @@ const build = (
           inst,
           declared
         ),
+      kernel: routeRun.make,
       afterFlush: (root, info) => {
         if (info.buildsPendingSince(0) === 0) forgetRestoring(root)
         if (
@@ -1928,7 +2002,7 @@ const build = (
     const router: Router = {
       routes,
       location: () => current,
-      changes: SubscriptionRef.changes(ref),
+      changes,
       navigate: (href, navigateOptions) =>
         Effect.sync(() =>
           navigate(href, navigateOptions?.replace === true, "href")
@@ -2002,7 +2076,7 @@ const build = (
           pending.since === undefined && root !== undefined
         ) {
           // Delivered inside a flush, the root renders it in that flush; otherwise in the next.
-          pending.since = root.flushing() ? root.flush() : root.flush() + 1
+          pending.since = root.since()
         }
       },
       listen: (f) => {

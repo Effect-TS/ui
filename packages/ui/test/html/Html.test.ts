@@ -563,5 +563,45 @@ describe("Html", () => {
         )
         assert.include(rendered.html, "<p>Idle</p>")
       }))
+
+    it("defines event sugar methods with non-enumerable class-method descriptors", () => {
+      const methods = [
+        "onClick",
+        "onDoubleClick",
+        "onKeyDown",
+        "onKeyUp",
+        "onFocus",
+        "onBlur",
+        "onPaste",
+        "onDragEnd",
+        "onDragEnter",
+        "onDragLeave",
+        "onDragOver",
+        "onInput",
+        "onChange",
+        "onCompositionEnd",
+        "onSubmit",
+        "onToggle",
+        "onCancel",
+        "onClose"
+      ] as const
+      for (const name of methods) {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          Html.VoidElement.prototype,
+          name
+        )
+        assert.isDefined(descriptor)
+        assert.strictEqual(descriptor.enumerable, false)
+        assert.strictEqual(descriptor.writable, true)
+        assert.strictEqual(descriptor.configurable, true)
+        assert.strictEqual((descriptor.value as Function).name, name)
+      }
+      const view = button()
+      const enumerableKeys: Array<string> = []
+      for (const key in view) enumerableKeys.push(key)
+      for (const name of methods) {
+        assert.notInclude(enumerableKeys, name)
+      }
+    })
   })
 })

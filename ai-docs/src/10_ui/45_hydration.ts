@@ -1,11 +1,11 @@
 /**
  * @title Hydrating in the browser
  *
- * Hydrate what the server rendered with `BrowserHost`. This is the browser
+ * Hydrate what the server rendered with `HtmlHydrate`. This is the browser
  * entry module of the server-rendered app, served as `/client.js`.
  */
 import { Router } from "@effect/ui"
-import { BrowserHost, BrowserRouter } from "@effect/ui/html"
+import { BrowserRouter, HtmlHydrate } from "@effect/ui/html"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
 // oxlint-disable-next-line no-unassigned-import
@@ -13,8 +13,9 @@ import "@effect/ui/html/register"
 import { App } from "./fixtures/App.ts"
 import { AppRoute } from "./fixtures/routes.ts"
 
-// Mount the same component with the same props, plus the server's state.
-// `Router.props` reads the route from the browser's URL. Each instance then
+// Hydrate the same component with the same props, plus the server's state.
+// An app that only ever mounts in the browser uses `BrowserHost.mount`, and
+// doesn't carry hydration. `Router.props` reads the route from the browser's URL. Each instance then
 // adopts the server's state, its Model and its query results, and its DOM
 // nodes instead of rebuilding them. The query results the server shipped aren't
 // fetched again.
@@ -24,15 +25,13 @@ import { AppRoute } from "./fixtures/routes.ts"
 // server then renders that child's fallback and the client builds it fresh.
 const hydrate = Effect.gen(function*() {
   const state = JSON.parse(document.getElementById("state")!.textContent!)
-  const root = yield* BrowserHost.mountEffect(
+  const root = yield* HtmlHydrate.hydrateEffect(
     App,
     Router.props(AppRoute),
     document.getElementById("app")!,
-    {
-      state
-    }
+    state
   )
-  // `mountEffect` is `mount` as an Effect that returns the root. `adopted`
+  // `hydrateEffect` is `hydrate` as an Effect that returns the root. `adopted`
   // completes once every instance is live. Until then a waiting one is inert.
   yield* root.adopted
   return yield* Effect.never

@@ -10,12 +10,14 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { HtmlCommand } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
+import * as hydrateRun from "@effect/ui/internal/hydrateRun"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
+  Console,
   Context,
   Deferred,
   Effect,
@@ -32,7 +34,8 @@ import {
   Schema,
   SchemaTransformation,
   Scope,
-  Stream
+  Stream,
+  Tracer
 } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
@@ -198,6 +201,50 @@ describe("Runtime", () => {
     })))
 
   describe("keyed list", () => {
+    it.effect("tells an element's key from a child's", () =>
+      provideHost(Effect.gen(function*() {
+        const Leaf = Component.define({
+          name: "Leaf",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.p("leaf")
+        })
+        const Mixed = Component.define({
+          name: "Mixed",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => false,
+          update: (_, flipped) => flipped,
+          view: (h, flipped) =>
+            h.ul(
+              flipped
+                ? [Leaf(h, { key: "x" }), h.li.key("x").children("row")]
+                : [
+                  h.li("first"),
+                  h.li.key("x").children("row"),
+                  Leaf(h, { key: "x" })
+                ]
+            )
+        })
+        const root = yield* TestHost.mount(Mixed, {})
+        const row = root.get(Locator.text("row", { exact: true }))
+        const leaf = root.get(Locator.text("leaf", { exact: true }))
+        root.send(true)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "leafrow")
+        assert.strictEqual(root.get(Locator.text("row", { exact: true })), row)
+        assert.strictEqual(
+          root.get(Locator.text("leaf", { exact: true })),
+          leaf
+        )
+      })))
+
     it.effect("adds, removes and reorders children, closing the Scopes of the removed ones", () =>
       provideHost(Effect.gen(function*() {
         const root = yield* TestHost.mount(List, { ids: ["a", "b", "c"] })
@@ -804,6 +851,45 @@ describe("Runtime", () => {
   })
 
   describe("failures", () => {
+    it.effect("a view that throws partway closes the children it had started", () =>
+      provideHost(Effect.gen(function*() {
+        const Leaf = Component.define({
+          name: "Leaf",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.text("leaf")
+        })
+        const Half = Component.define({
+          name: "Half",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => false,
+          update: (_, broken) => broken,
+          view: (h, broken) =>
+            broken ? h.div(Leaf(h, {}), h.slots.body) : h.p("whole")
+        })
+        const root = yield* TestHost.mount(Half, {})
+        yield* TestHost.settle
+        root.send(true)
+        yield* Effect.exit(TestHost.settle)
+        assert.deepStrictEqual(tags(root, "/Half"), [
+          "Mounted",
+          "Update",
+          "Failed",
+          "Unmounted"
+        ])
+        assert.deepStrictEqual(tags(root, "/Half/Leaf[]"), [
+          "Mounted",
+          "Unmounted"
+        ])
+      })))
+
     const BombMessage = UiSchema.TaggedEnum({ Explode: {} })
     const Bomb = Component.define({
       name: "Bomb",
@@ -2928,6 +3014,67 @@ describe("Runtime", () => {
             assert.include(survivor, "LayerReady")
             assert.notInclude(survivor, "LayerFailed")
           }
+        })))
+
+      it.effect("its users build again without waiting for another root's release", () =>
+        provideHost(Effect.gen(function*() {
+          const otherGate = yield* Deferred.make<void>()
+          const otherReleasing = yield* Deferred.make<void>()
+          const Other = Component.provide(
+            StoreId,
+            ReadStore.layer.pipe(Layer.provide(Layer.effect(
+              Store,
+              Effect.never.pipe(Effect.onInterrupt(() =>
+                Effect.andThen(
+                  Deferred.succeed(otherReleasing, undefined),
+                  Deferred.await(otherGate)
+                )
+              ))
+            )))
+          )
+          const other = yield* TestHost.mount(Siblings({ a: Other }), {})
+          yield* TestHost.settle
+          drop(other, "a")
+          yield* TestHost.settle
+          yield* Deferred.await(otherReleasing)
+          const cleanupStarted = yield* Deferred.make<void>()
+          const finishCleanup = yield* Deferred.make<void>()
+          let builds = 0
+          const slow = Layer.effect(
+            Store,
+            Effect.gen(function*() {
+              yield* Effect.acquireRelease(
+                Effect.void,
+                () =>
+                  Effect.andThen(
+                    Deferred.succeed(cleanupStarted, undefined),
+                    Deferred.await(finishCleanup)
+                  )
+              )
+              yield* Effect.sleep("1 second")
+              return { id: ++builds }
+            })
+          )
+          const A = Component.provide(
+            StoreId,
+            ReadStore.layer.pipe(Layer.provide(slow))
+          )
+          const B = Component.provide(
+            StoreId,
+            ReadStore.layer.pipe(Layer.provide(slow))
+          )
+          const root = yield* TestHost.mount(Siblings({ a: A, b: B }), {})
+          yield* TestHost.settle
+          drop(root, "a")
+          yield* TestHost.settle
+          yield* Deferred.await(cleanupStarted)
+          yield* Deferred.succeed(finishCleanup, undefined)
+          yield* TestHost.settle
+          yield* TestClock.adjust("1 second")
+          yield* TestHost.settle
+          const text = root.text()
+          yield* Deferred.succeed(otherGate, undefined)
+          assert.strictEqual(text, "[1]")
         })))
 
       it.effect("a build whose users unmount while it waits to start again ends there, and isn't started", () =>
@@ -5378,8 +5525,8 @@ describe("Runtime", () => {
             ))
           )
           const mounted = yield* Effect.exit(
-            Renderer.mount(App, {}, container, {
-              state: { "~query": "malformed" }
+            runtime.mount(App, {}, container, {
+              hydrate: hydrateRun.hydrating({ "~query": "malformed" })
             }).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),
@@ -6313,4 +6460,66 @@ describe("Runtime", () => {
         }]
       }])
     }))
+
+  it.effect("default logging formats annotations and records span events on a throwing view", () =>
+    Effect.gen(function*() {
+      const logs: Array<ReadonlyArray<unknown>> = []
+      const errors: Array<ReadonlyArray<unknown>> = []
+      const spanEvents: Array<string> = []
+      const currentConsole = yield* Console.Console
+      const fakeConsole: Console.Console = {
+        ...currentConsole,
+        log: (...args) => {
+          logs.push(args)
+        },
+        error: (...args) => {
+          errors.push(args)
+        }
+      }
+      const Broken = Component.define({
+        name: "BrokenLog",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: () => {
+          throw new Error("boom")
+        }
+      })
+      const parentTracer = yield* Effect.tracer
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = parentTracer.span(options)
+          const orig = span.event.bind(span)
+          span.event = (name, startTime, attributes) => {
+            spanEvents.push(name)
+            return orig(name, startTime, attributes)
+          }
+          return span
+        }
+      })
+      yield* TestHost.mount(Broken, {}).pipe(
+        Effect.annotateLogs({ area: "view-test" }),
+        Effect.withSpan("mount-span"),
+        Effect.provideService(Console.Console, fakeConsole),
+        Effect.provideService(Tracer.Tracer, tracer)
+      )
+      yield* Effect.yieldNow
+      assert.strictEqual(errors.length, 0)
+      assert.isTrue(
+        logs.some((args) =>
+          args.some((arg) =>
+            typeof arg === "string" && arg.includes("/BrokenLog failed in view")
+          ) &&
+          args.some((arg) =>
+            typeof arg === "object" && arg !== null &&
+            (arg as { readonly area?: unknown }).area === "view-test"
+          )
+        )
+      )
+      assert.isTrue(
+        spanEvents.some((name) => name.includes("/BrokenLog failed in view"))
+      )
+    }).pipe(Effect.scoped, provideHost))
 })

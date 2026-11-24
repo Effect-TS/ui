@@ -1,5 +1,6 @@
 import { Component, Query, Renderer } from "@effect/ui"
 import * as componentQueries from "@effect/ui/internal/queries"
+import * as routeRun from "@effect/ui/internal/routeRun"
 import * as runtime from "@effect/ui/internal/runtime"
 import * as services from "@effect/ui/internal/services"
 import { TestHost } from "@effect/ui/testing"
@@ -200,7 +201,8 @@ const historyHooks = (stored: Record<string, unknown> = {}) => {
         ? { state: stored[path], reported: undefined }
         : undefined,
     entry: () => stored,
-    prefetch: () => () => {}
+    prefetch: () => () => {},
+    kernel: routeRun.make
   }
   return {
     hooks,

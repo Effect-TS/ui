@@ -9,11 +9,17 @@ const Neutral = Component.define({
   model: Schema.Null,
   message: Schema.Never
 })
+const Plain = Component.define({
+  name: "Plain",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html.vocabulary
+})
 const Page = Component.define({
   name: "Page",
   model: Schema.Null,
   message: Schema.Never,
-  elements: Html
+  elements: HtmlHead.vocabulary
 })
 
 declare const content: View.Content<never, any>
@@ -40,7 +46,20 @@ describe("Head and HtmlHead", () => {
     })
   })
 
-  it("an Html component takes Head's and HtmlHead's entries", () => {
+  it("an Html component takes only Head's entries", () => {
+    expect(Plain.make).type.toBeCallableWith({
+      ...base,
+      head: () => [Head.title("Ada")],
+      view: () => content
+    })
+    expect(Plain.make).type.not.toBeCallableWith({
+      ...base,
+      head: () => [HtmlHead.meta({ name: "description", content: "Ada" })],
+      view: () => content
+    })
+  })
+
+  it("an HtmlHead.vocabulary component takes Head's and HtmlHead's entries", () => {
     expect(Page.make).type.toBeCallableWith({
       ...base,
       head: () => [

@@ -13,6 +13,7 @@ import type {
 import type * as Route from "../Route.ts"
 import type * as Subscription from "../Subscription.ts"
 import type * as prefetchWalk from "./prefetch.ts"
+import type * as routeRun from "./routeRun.ts"
 
 /** @internal */
 export const Renderer = Context.Service<RendererShape, RendererShape>(
@@ -38,8 +39,7 @@ export interface RootHandle {
   readonly container: unknown
   /** The current flush: 0 for the first render, then one more per flush. */
   readonly flush: () => number
-  /** Whether a flush is running, so what it delivers now renders in `flush()` and not the next one. */
-  readonly flushing: () => boolean
+  readonly since: () => number
   readonly snapshot: (out: Record<string, unknown>) => void
   /**
    * The Router navigated. It closes the cache's fetch-free window after hydration, if adoption
@@ -51,6 +51,9 @@ export interface RootHandle {
   readonly report: (
     problem: { readonly _tag: string; readonly message: string }
   ) => void
+  readonly declare?:
+    | ((inst: never, declaration: Prefetch | undefined) => void)
+    | undefined
 }
 
 /**
@@ -89,6 +92,7 @@ export interface RootHooks {
     inst: prefetchWalk.Instance,
     declared: { readonly declaration: Prefetch }
   ) => () => void
+  readonly kernel?: typeof routeRun.make | undefined
 }
 
 /** @internal */

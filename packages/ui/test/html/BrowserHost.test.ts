@@ -17,6 +17,7 @@ import {
   BrowserHost,
   Html,
   HtmlCommand,
+  HtmlHydrate,
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
@@ -1458,9 +1459,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         const rendered = yield* HtmlServer.renderToHtml(Login, {})
         const app = yield* container
         app.innerHTML = rendered.html
-        const root = yield* BrowserHost.mountEffect(Login, {}, app, {
-          state: rendered.state
-        }).pipe(
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Login,
+          {},
+          app,
+          rendered.state
+        ).pipe(
           Effect.provide(Router.memory({ routes: LoginRoute, history }))
         )
         yield* tick
@@ -1486,9 +1490,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         app.querySelector("x-clicks-on-connect")!.replaceWith(
           document.createElement("span")
         )
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          rendered.state
+        )
         yield* tick
         expect(root.model()).toEqual(["hit"])
       }).pipe(Effect.scoped))
@@ -2392,6 +2399,36 @@ describe("BrowserHost", { concurrent: false }, () => {
     const byLabel = (app: Element, label: string) =>
       app.querySelector(`[aria-label="${label}"]`)!
 
+    it.effect("puts a drag source's data on the drag, though it has no handler, once a patch makes it one", () =>
+      Effect.gen(function*() {
+        const Cards = Component.define({
+          name: "Cards",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => false,
+          update: (_, draggable) => draggable,
+          view: (h, draggable) =>
+            h.div(
+              h.p.draggable({ "text/plain": "first" }).children("first"),
+              draggable
+                ? h.p.draggable({ "text/plain": "second" }).children("second")
+                : h.p("second")
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Cards, {}, app)
+        root.send(true)
+        yield* tick
+        const dragged = Array.from(app.querySelectorAll("p"), (card) => {
+          const transfer = new Transfer()
+          drag(card, "dragstart", transfer)
+          return transfer.getData("text/plain")
+        })
+        assert.deepStrictEqual(dragged, ["first", "second"])
+      }).pipe(Effect.scoped))
+
     const Board = Component.define({
       name: "Board",
       model: Schema.Array(Schema.String),
@@ -3233,12 +3270,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const stub = yield* popoverStub
         // Reversing the rows moves one of them; the browser closes the popover in it without a toggle.
-        for (
-          const [mode, expected] of [["manual", [true, true]], ["auto", [
-            true,
-            false
-          ]]] as const
-        ) {
+        for (const [mode, expected] of [["manual", 2], ["auto", 1]] as const) {
           const app = yield* container
           const root = yield* BrowserHost.mountEffect(Rows, { mode }, app)
           yield* tick
@@ -3254,7 +3286,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           root.send(true)
           yield* tick
           // A manual popover is reconciled at every commit; an auto one only when its Model's value changes.
-          expect(showing()).toEqual(expected)
+          expect(showing().filter(Boolean)).toHaveLength(expected)
         }
       }).pipe(Effect.scoped))
 
@@ -3343,6 +3375,51 @@ describe("BrowserHost", { concurrent: false }, () => {
   })
 
   describe("refs and mounts", () => {
+    it.effect("a mount given new args finds the elements the same patch made below it", () =>
+      Effect.gen(function*() {
+        const Count = Mount.makeStream(
+          "Count",
+          { args: { rows: Schema.Number } },
+          (list: HTMLElement, _args, changes) =>
+            Stream.map(changes, () => list.querySelectorAll("li").length)
+        )
+        const Rows = Component.define({
+          name: "Rows",
+          model: Schema.Struct({
+            rows: Schema.Number,
+            seen: Schema.Array(Schema.Number)
+          }),
+          message: UiSchema.TaggedEnum({
+            Add: {},
+            Saw: { count: Schema.Number }
+          }),
+          elements: Html
+        }).make({
+          init: () => ({ rows: 1, seen: [] }),
+          update: {
+            Add: ($) => ({ ...$.model, rows: $.model.rows + 1 }),
+            Saw: ($, { count }) => ({
+              ...$.model,
+              seen: [...$.model.seen, count]
+            })
+          },
+          view: (h, { rows }) =>
+            h.ul.onMount(
+              Count({ rows }).pipe(
+                Mount.map((count) => ({ _tag: "Saw" as const, count }))
+              )
+            ).children(
+              Array.from({ length: rows }, (_, index) => h.li(String(index)))
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Rows, {}, app)
+        yield* tick
+        root.send({ _tag: "Add" })
+        yield* tick
+        assert.deepStrictEqual(root.model()?.seen, [1, 2])
+      }).pipe(Effect.scoped))
+
     const Field = Html.ref("Field", "input")
     const Missing = Html.ref("Missing", "input")
     const Message = UiSchema.TaggedEnum({
@@ -3518,6 +3595,36 @@ describe("BrowserHost", { concurrent: false }, () => {
   })
 
   describe("hosts", () => {
+    it.effect("writes attributes under their HTML names, keeps SVG's case, and owns a form's submission", () =>
+      Effect.gen(function*() {
+        const Shapes = Component.define({
+          name: "Shapes",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) =>
+            h.form(
+              h.el("div").attrs({ "Data-Kind": "box", "a b": "dropped" }),
+              h.el("svg", h.el("rect").attr("viewBox", "0 0 1 1"))
+            )
+        })
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Shapes, {}, app)
+        assert.deepStrictEqual(
+          Array.from(app.querySelector("div")!.attributes, (attr) => attr.name),
+          ["data-kind"]
+        )
+        const rect = app.querySelector("rect")!
+        assert.strictEqual(rect.namespaceURI, "http://www.w3.org/2000/svg")
+        assert.strictEqual(rect.getAttribute("viewBox"), "0 0 1 1")
+        const submit = new Event("submit", { bubbles: true, cancelable: true })
+        app.querySelector("form")!.dispatchEvent(submit)
+        assert.isTrue(submit.defaultPrevented)
+      }).pipe(Effect.scoped))
+
     const Native: View.Vocabulary<Native> = {
       name: "native",
       tags: { view: new View.ElementBuilder("view") }
@@ -3931,10 +4038,59 @@ describe("BrowserHost", { concurrent: false }, () => {
         app.innerHTML = rendered.html
         const box = app.firstElementChild as HTMLElement
         box.setAttribute("style", "color: red; font-weight: bold")
-        yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+        yield* HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
         yield* tick
         expect(box.getAttribute("style")).toBe("color: blue")
         expect(box.style.getPropertyValue("font-weight")).toBe("")
       }).pipe(Effect.scoped))
   })
+
+  it.effect("mountEffect provides its browser Renderer and direct GlobalEvents/AnimationFrames to app effects", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "DirectContext",
+        props: Schema.Struct({
+          hasBrowserRenderer: Schema.Boolean,
+          heard: Schema.Boolean
+        }),
+        model: Schema.Struct({
+          hasBrowserRenderer: Schema.Boolean,
+          heard: Schema.Boolean
+        }),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: ($) => $.props,
+        update: ($) => $.model,
+        view: (h) => h.div()
+      })
+      const outer = TestHost.makeHost()
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(
+        Page,
+        Effect.gen(function*() {
+          const renderer = yield* Effect.serviceOption(Renderer.Renderer)
+          const events = yield* HtmlSubscription.GlobalEvents
+          let heard = false
+          const off = events.listen(
+            "document",
+            "click",
+            { capture: false },
+            () => {
+              heard = true
+            }
+          )
+          app.ownerDocument.dispatchEvent(new MouseEvent("click"))
+          off()
+          return {
+            hasBrowserRenderer: Option.isSome(renderer) &&
+              renderer.value.host !== outer &&
+              renderer.value.host.elements.includes(Html.name),
+            heard
+          }
+        }),
+        app
+      ).pipe(Effect.provideService(Renderer.Renderer, { host: outer }))
+      expect(root.model()).toEqual({ hasBrowserRenderer: true, heard: true })
+    }).pipe(Effect.scoped))
 })

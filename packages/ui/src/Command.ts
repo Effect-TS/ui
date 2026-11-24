@@ -80,6 +80,8 @@ import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
+import * as commandRun from "./internal/commandRun.ts"
+import type * as Kernel from "./internal/kernel.ts"
 import * as internalNoop from "./internal/noop.ts"
 import { canonical } from "./internal/queryCore.ts"
 import type * as Query from "./Query.ts"
@@ -838,19 +840,35 @@ type CommandOptions<In extends ArgsInput, G extends string> = Options<In, G>
 
 const identity = (result: any) => result
 
-const Proto = {
-  [TypeId]: {
-    _Msg: (_: never) => _,
-    _Source: (_: never) => _,
-    _SourceE: (_: never) => _
-  },
-  pipe() {
-    return Pipeable.pipeArguments(this, arguments)
-  }
+const variance = {
+  _Msg: (_: never) => _,
+  _Source: (_: never) => _,
+  _SourceE: (_: never) => _
 }
 
+function pipe(this: unknown) {
+  return Pipeable.pipeArguments(this, arguments)
+}
+
+function run(
+  this: Command<any, any>,
+  inst: Kernel.Instance,
+  seq: number | undefined | void,
+  index: number
+) {
+  commandRun.issue(inst, this, {
+    seq: typeof seq === "number" ? seq : -1,
+    index
+  }, cleanupFailed)
+}
+
+// Written out rather than spread from `Proto`: a bundler keeps a spread, and with it the runner.
+const Proto = { [TypeId]: variance, pipe, "~run": run }
+
 const UnmatchedProto = {
-  ...Proto,
+  [TypeId]: variance,
+  pipe,
+  "~run": run,
   [UnmatchedTypeId]: {
     _A: (_: never) => _,
     _E: (_: never) => _,
@@ -1697,3 +1715,17 @@ export class CleanupFailed extends TaggedClass("CleanupFailed")<{
   readonly command: string
   readonly cause: Cause.Cause<unknown>
 }> {}
+
+function cleanupFailed(
+  path: string,
+  command: string,
+  cause: Cause.Cause<unknown>
+): CleanupFailed {
+  return new CleanupFailed({
+    path,
+    command,
+    cause,
+    message:
+      `[@effect/ui] ${path}'s Command ${command} was stopped, and it died before its fiber exited.`
+  })
+}

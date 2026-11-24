@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -109,6 +109,31 @@ describe("slots on the server", () => {
       )
     }).pipe(Effect.provide(TestHost.layer())))
 
+  it.effect("adopts a slotted child's shipped state instead of re-initializing it", () =>
+    Effect.gen(function*() {
+      where.server = true
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      const app = yield* container
+      app.innerHTML = rendered.html.replace("add 0", "add 4")
+      const button = app.querySelector("button")!
+      const label = button.firstChild
+
+      const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, {
+        ...rendered.state,
+        "/Page/Card[c]/[body]/Counter[n]": 4
+      })
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("button"), button)
+      assert.strictEqual(button.firstChild, label)
+      assert.strictEqual(button.textContent, "add 4")
+      assert.notInclude(app.innerHTML, "<!--")
+      button.click()
+      yield* tick
+      assert.strictEqual(button.textContent, "add 5")
+      assert.strictEqual(app.querySelector("output")!.textContent, "added 5")
+    }).pipe(Effect.scoped))
+
   it.effect("builds content fresh when it doesn't match the server's, and adopts the rest", () =>
     Effect.gen(function*() {
       where.server = true
@@ -119,9 +144,12 @@ describe("slots on the server", () => {
       const article = app.querySelector("article")!
       const title = app.querySelector("h2")!
 
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       yield* tick
       // Card and the slots that match keep the server's nodes; the body shows the client's content.

@@ -7,9 +7,9 @@
  * view, the runtime folds the entries of the placed tree, fallback content
  * included, into one value with the root vocabulary's merge, and a mount that
  * owns the document hands it to its host. A component on a host-neutral
- * vocabulary may contribute only `title` and `titleTemplate`. The HTML
- * vocabulary adds `meta`, `link`, JSON-LD and the `<html>` and `<body>`
- * attributes in `HtmlHead`.
+ * vocabulary, `Html` included, may contribute only `title` and
+ * `titleTemplate`. `HtmlHead.vocabulary` adds `meta`, `link`, JSON-LD and
+ * the `<html>` and `<body>` attributes in `HtmlHead`.
  *
  * **The fold**
  *
@@ -49,6 +49,8 @@
  */
 import * as Data from "effect/Data"
 import * as headFold from "./internal/headFold.ts"
+import * as headRun from "./internal/headRun.ts"
+import * as heads from "./internal/heads.ts"
 
 /**
  * A host-neutral head entry: a title, a title template or a reduce.
@@ -333,3 +335,5 @@ const reportTo =
   (onConflict: (conflict: Conflict) => void) =>
   (slot: string, paths: ReadonlyArray<string>) =>
     onConflict(conflict(slot, paths))
+
+heads.load(headRun.make({ merge, title: (head: Head) => head.title }))

@@ -1114,8 +1114,9 @@ Known limits:
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta
-  tags with `HtmlHead`. The root adds a title template and `lang`, and the
-  mount folds them into one document head. This entry
+  tags with `HtmlHead`, on `HtmlHead.vocabulary`, which is `Html` with the
+  HTML head. The root adds a title template and `lang`, and the mount folds
+  them into one document head. This entry
   module mounts it with `BrowserRouter`. The routes are in
   `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
 - **[View transitions](./ai-docs/src/10_ui/32_view-transitions.ts)**:
@@ -1135,7 +1136,7 @@ Known limits:
   server's entry module. It serves the same `fixtures/App.ts` the browser
   mounts, and the JSON API in `fixtures/server/NotesApi.ts`.
 - **[Hydrating in the browser](./ai-docs/src/10_ui/45_hydration.ts)**:
-  Hydrate what the server rendered with `BrowserHost`. This is the browser
+  Hydrate what the server rendered with `HtmlHydrate`. This is the browser
   entry module of the server-rendered app, served as `/client.js`.
 - **[Markdown content](./ai-docs/src/10_ui/47_markdown.ts)**:
   Write pages in Markdown, compile them at build time with the Vite plugin
