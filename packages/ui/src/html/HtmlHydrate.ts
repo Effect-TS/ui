@@ -566,7 +566,9 @@ export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
       const held = holds.get(placeholder)
       if (held === undefined) return undefined
       holds.delete(placeholder)
-      const list = held.first.parentNode!
+      const list = held.first.parentNode
+      // Gone with what held them: nothing's left to adopt.
+      if (list === null) return undefined
       return held.first === held.last
         ? between(
           base,

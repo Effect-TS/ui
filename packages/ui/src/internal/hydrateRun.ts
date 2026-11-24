@@ -216,14 +216,24 @@ export const make = (
       ? state as Saved
       : supplyOf(owner, path, view.alive !== undefined)
     if (from?.[path] === undefined) return fallback?.(owner, rec, at) === true
-    // A kept child drawn in the slot of a receiver whose Layer builds starts once it has, with what its
-    // author last wrote: until then it holds the server's nodes, and its state isn't decoded.
-    const receiver = view.alive === undefined || at === undefined
-      ? undefined
-      : started.get(at.slice(0, at.lastIndexOf("/")))
+    // A kept child drawn in a receiver whose Layer builds, below its author, starts once it has, with
+    // what its author last wrote: until then it holds the server's nodes, and its state isn't decoded.
+    let receiver: Kernel.Instance | undefined
+    for (
+      let above = view.alive === undefined ? undefined : at;
+      above !== undefined && above.length > owner.path.length;
+      above = above.slice(0, above.lastIndexOf("/"))
+    ) {
+      const env = started.get(above)?.env
+      if (
+        env !== undefined && env.ctx === undefined && env.cause === undefined
+      ) {
+        receiver = started.get(above)
+        break
+      }
+    }
     const env = receiver?.env
-    const behind = env !== undefined && env.ctx === undefined &&
-      env.cause === undefined
+    const behind = receiver !== undefined
     // One the server drew elsewhere starts once the pass ends, from its state, with nodes of its own.
     const away = served && view.alive !== undefined &&
       active?.has(path) === false
@@ -293,7 +303,8 @@ export const make = (
         if (Exit.isExit(exit)) go(exit)
         else exit.addObserver(go)
       }
-      env!.waiting.push(wake)
+      // Once the receiver has taken its author's latest write.
+      env!.waiting.push(() => owner.tree.schedule(wake))
       ;(receiver!.closers ??= []).push(wake)
       drops.set(rec, [owner, wake])
     }
@@ -320,6 +331,19 @@ export const make = (
         const drawn = tree.drawn
         tree.drawn = (kept, on) => {
           drawn?.(kept, on)
+          // One moved before its Layer builds, as it waits to adopt, leaves the server's nodes behind.
+          const old = kept.rendered
+          const env = kept.env
+          if (
+            on && !pass && old !== undefined && adopting.has(kept) &&
+            env.ctx === undefined && env.cause === undefined
+          ) {
+            const ops = tree.ops
+            const at = tree.host.parentOf(ops.nodeOf(old))
+            kept.rendered = ops.create(kept, old.v)
+            if (at != null) ops.unplace(tree.host, at, old)
+            ops.release(kept, old)
+          }
           if (on) parked.delete(kept)
           else parked.add(kept)
           settled()
