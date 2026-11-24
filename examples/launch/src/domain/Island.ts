@@ -5,6 +5,10 @@ import { Snippets } from "./Snippet.ts"
 const Code = Schema.Literals(Struct.keys(Snippets.fields))
 
 export const Islands = {
+  AgentPrompt: Schema.Struct({
+    title: Schema.String,
+    prompt: Schema.String
+  }),
   Diagram: Schema.Struct({ scenario: ScenarioName }),
   Compare: Schema.Struct({
     foldkit: Code,

@@ -1,11 +1,13 @@
 import { markdown } from "@effect/ui/html/MarkdownVite"
 import tailwindcss from "@tailwindcss/vite"
+import { Schema } from "effect"
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 import { codeToTokens } from "shiki"
 import { defineConfig, type Plugin } from "vite"
+import { toMarkdown } from "./src/domain/ArticleText.ts"
 import { Frontmatter, Islands } from "./src/domain/Island.ts"
-import type { Snippet, Snippets } from "./src/domain/Snippet.ts"
+import { type Snippet, Snippets } from "./src/domain/Snippet.ts"
 
 const id = "virtual:snippets"
 const resolved = `\0${id}`
@@ -90,6 +92,29 @@ const tokenize = async (
   }
 }
 
+const files = (root: string) =>
+  Object.values(sources).flatMap((list) =>
+    list.map(([source]) => path.join(root, source))
+  )
+
+const tokenizeAll = async (root: string): Promise<Snippets> => {
+  const entries = await Promise.all(
+    Object.entries(sources).map(async ([key, list]) =>
+      [
+        key,
+        await Promise.all(
+          list.map(([source, select]) =>
+            tokenize(path.join(root, source), select)
+          )
+        )
+      ] as const
+    )
+  )
+  return Schema.decodeUnknownSync(Snippets)(
+    Object.fromEntries(entries)
+  )
+}
+
 const snippets = (): Plugin => {
   let root = ""
   return {
@@ -102,21 +127,43 @@ const snippets = (): Plugin => {
     },
     async load(module) {
       if (module !== resolved) return
-      const entries = await Promise.all(
-        Object.entries(sources).map(async ([key, files]) => {
-          const snippets = await Promise.all(
-            files.map(([source, select]) => {
-              const file = path.join(root, source)
-              this.addWatchFile(file)
-              return tokenize(file, select)
-            })
-          )
-          return [key, snippets] as const
-        })
-      )
+      files(root).forEach((file) => this.addWatchFile(file))
       return `export const snippets = ${
-        JSON.stringify(Object.fromEntries(entries))
+        JSON.stringify(await tokenizeAll(root))
       }\n`
+    }
+  }
+}
+
+const articleText = (): Plugin => {
+  let root = ""
+  const render = async () =>
+    toMarkdown(
+      await readFile(path.join(root, "src/article.md"), "utf8"),
+      await tokenizeAll(root)
+    )
+  return {
+    name: "launch:article-text",
+    configResolved(config) {
+      root = config.root
+    },
+    configureServer(server) {
+      server.middlewares.use("/article.md", (_request, response) => {
+        render().then((text) => {
+          response.setHeader(
+            "Content-Type",
+            "text/markdown; charset=utf-8"
+          )
+          response.end(text)
+        })
+      })
+    },
+    async generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "article.md",
+        source: await render()
+      })
     }
   }
 }
@@ -125,6 +172,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     snippets(),
+    articleText(),
     markdown({ islands: Islands, frontmatter: Frontmatter })
   ]
 })

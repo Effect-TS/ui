@@ -8,7 +8,10 @@ import { LaunchPage } from "./LaunchPage.ts"
 
 const Main = BrowserHost.mount(
   LaunchPage,
-  { snippets },
+  {
+    snippets,
+    articleUrl: new URL("article.md", document.baseURI).href
+  },
   document.getElementById("root")!
 ).pipe(Layer.provide(DevTools.layer({ position: "BottomRight" })))
 

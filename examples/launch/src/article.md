@@ -6,6 +6,8 @@ Effect UI is the new frontend library that continues the work of Foldkit 0.x, th
 
 If you're building with Foldkit 0.x today, we encourage you to continue. The migration to Effect UI will be an upgrade, not a rewrite. Feature work on Foldkit 0.x has moved to Effect UI.
 
+::AgentPrompt{title="TL;DR agent prompt" prompt="Read $URL and explain how Foldkit 0.x is evolving into Effect UI and what the key changes and additions are."}
+
 This article covers a selection of the key changes and additions in Effect UI. It isn't a complete list.
 
 Key changes:

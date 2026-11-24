@@ -12,6 +12,7 @@ import { Counter } from "./autocounter/Counter.ts"
 import { Diagram } from "./diagram/Diagram.ts"
 import { Nav } from "./nav/Nav.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
+import { AgentPrompt } from "./prompt/AgentPrompt.ts"
 
 const article = Markdown.decodeDocument(source)
 
@@ -54,7 +55,10 @@ const Caption = <M>(
 
 export const LaunchPage = Component.define({
   name: "LaunchPage",
-  props: Schema.Struct({ snippets: Snippets }),
+  props: Schema.Struct({
+    snippets: Snippets,
+    articleUrl: Schema.String
+  }),
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -63,7 +67,7 @@ export const LaunchPage = Component.define({
   update: ($) => $.model,
   head: () => [Head.title(title)],
   view: (h) => {
-    const { snippets } = h.props
+    const { articleUrl, snippets } = h.props
     return h.div.class(
       "[--nav-bar:3rem]",
       "[--nav-inset:max(clamp(20px,5vw,48px),calc((100%-68ch)/2))]",
@@ -134,6 +138,13 @@ export const LaunchPage = Component.define({
               h.strong.class("font-semibold").children(content)
           },
           islands: Markdown.islandsFor(Islands, {
+            AgentPrompt: (h, { prompt, title }) =>
+              AgentPrompt(h, {
+                props: {
+                  title,
+                  prompt: prompt.replace("$URL", articleUrl)
+                }
+              }),
             Diagram: (h, { scenario }) =>
               Diagram(h, { key: scenario, props: { scenario } }),
             Compare: (h, attributes, caption) =>
