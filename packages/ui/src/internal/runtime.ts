@@ -70,8 +70,6 @@ export interface Root {
     inst: Instance,
     message: unknown
   ) => Effect.Effect<Dispatched>
-  readonly pending: () => ReadonlyArray<Pending>
-  readonly loads: () => ReadonlyArray<Load>
   readonly cache: ReturnType<typeof Query.internals>
   readonly crashed: () => Cause.Cause<unknown> | undefined
   readonly flush: () => number
@@ -80,7 +78,6 @@ export interface Root {
   readonly adoptionHead: () => unknown
   readonly adopted: Effect.Effect<void>
   readonly waiting: () => ReadonlyArray<string>
-  readonly whenIdle: (f: () => void) => void
   readonly freeze: () => queryCore.Cache | undefined
 }
 
@@ -213,9 +210,87 @@ const bridge = (
     : transitionRun.make(host.viewTransition)
 })
 
+/** What a server render adds to a mount: `prerender` makes it, so an app that renders none doesn't carry it. */
 interface Server {
   readonly host: Renderer.Host<any>
   readonly fetches: boolean
+  readonly hooks: typeof serverHooks
+  readonly idle: typeof idleOf
+}
+
+/** What the kernel calls on the server: a Command an update issued is dropped, and reported. */
+const serverHooks = (
+  ctx: Context.Context<any>,
+  record: Kernel.Recorder,
+  deferred: Set<Kernel.Instance>
+): Kernel.Server => {
+  const problems = Context.get(ctx, queryCore.Problems)
+  const report = (problem: unknown) => {
+    try {
+      problems(problem as never)
+    } catch {
+      // A sink can't change what the runtime does.
+    }
+  }
+  return {
+    drop: (inst, name, issued) => {
+      if (issued !== undefined) {
+        record(inst, {
+          _tag: "CommandDropped",
+          name,
+          issued,
+          reason: "server"
+        })
+      }
+      report(
+        new Command.ServerCommandIssued({
+          path: inst.path,
+          command: name,
+          message: issued === undefined
+            ? `[@effect/ui] ${inst.path}'s update issued ${name} during server rendering, and it was dropped. The server renders a list's first page only.`
+            : `[@effect/ui] ${inst.path}'s update issued ${name} during server rendering, and it was dropped. No Command runs on the server: read data with a query.`
+        })
+      )
+    },
+    defer: (inst) => {
+      deferred.add(inst)
+    },
+    report
+  }
+}
+
+/** Runs what waits for the tree to be idle: nothing to render, fetch or load. */
+const idleOf = (
+  executor: Executor.Executor,
+  root: () => Kernel.Instance | undefined,
+  cache: () => queryCore.Cache | undefined
+) => {
+  const waiters: Array<() => void> = []
+  let checking = false
+  const check = () => {
+    if (waiters.length === 0 || checking) return
+    checking = true
+    executor.schedule(() => {
+      checking = false
+      const instance = root()
+      const tree = instance?.tree
+      if (
+        tree === undefined || tree.scheduled || tree.dirty.length > 0 ||
+        (tree.building?.size ?? 0) > 0
+      ) return
+      const made = cache()
+      if (made !== undefined && made.pending().length > 0) return
+      if (loadsOf(instance!).length > 0) return
+      for (const f of waiters.splice(0)) f()
+    })
+  }
+  return {
+    check,
+    when: (f: () => void) => {
+      waiters.push(f)
+      check()
+    }
+  }
 }
 
 interface Options {
@@ -369,95 +444,19 @@ const start = (
   const hydrate = options?.hydrate
   const state = hydrate?.state
   const fromStatic = state?.["~static"] === true
-  const waiting = new Map<Kernel.Instance, Parameters<Kernel.Recorder>[1]>()
-  // The latest placement of each waiting instance that kept the one it had, the server's, which it
-  // adopts with: this one is applied once it has.
-  const held = new Map<
-    Kernel.Instance,
-    readonly [Kernel.Instance, View.Child<any, any>]
-  >()
-  const holds: Kernel.Tree["holds"] = (child, inst, view) =>
-    waiting.has(child) && held.set(child, [inst, view]) !== undefined
-  const heldAt = (at: string): boolean => {
-    for (const inst of held.keys()) {
-      if (at.startsWith(inst.path + "/")) return true
-    }
-    return false
-  }
-  /** The waiting instance it adopts after: its parent, or the receiver whose slot it's drawn in. */
-  const behindOf = (inst: Kernel.Instance): Kernel.Instance | undefined => {
-    const parent = inst.parent
-    if (parent !== undefined && waiting.has(parent)) return parent
-    for (const at of waiting.keys()) {
-      if (at !== inst && inst.path.startsWith(at.path + "/")) return at
-    }
-    return undefined
-  }
-  const mountWaiting = (inst: Kernel.Instance): void => {
-    const draft = waiting.get(inst)
-    if (draft === undefined) return
-    // The parent that provides the env it waited on mounted first.
-    const parent = inst.parent
-    if (parent?.env.ctx !== undefined) mountWaiting(parent)
-    const behind = behindOf(inst)
-    if (behind !== undefined) {
-      if (behind.env.ctx !== undefined) mountWaiting(behind)
-      if (waiting.has(behind)) return
-    }
-    waiting.delete(inst)
-    const latest = held.get(inst)
-    held.delete(inst)
-    if (!inst.closed) recording.record(inst, { ...draft, model: inst.model })
-    checkAdopted()
-    if (latest !== undefined && !inst.closed && !latest[0].closed) {
-      // Applied now, as `adopted` resolves: the render it asks for folds the head again.
-      inst.tree.ops.patchChild(latest[0], inst.at!, latest[1])
-      inst.tree.ops.markDirty(latest[0])
-    }
-  }
+  // Made before the hydration it serves, which checks adoption against it.
+  const waits = hydrate === undefined
+    ? undefined
+    : new hydrate.Waits(recording.record, () => checkAdopted(), state!)
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
       draft = { ...draft, commands: initCommands }
       initCommands = undefined
     }
     if (hydration !== undefined) {
-      if (draft._tag === "Mounted" && hydration.adopts(inst)) {
-        draft = { ...draft, adopted: true }
-        const env = inst.env
-        const layered =
-          (inst.component as unknown as Component.Any).layer !== undefined &&
-          (state!["~status"] as Record<string, unknown> | undefined)
-              ?.[inst.path] === undefined
-        // A child adopts after the parent that waits to: its Model is reported first.
-        const behind = behindOf(inst) !== undefined
-        if (
-          layered || behind ||
-          (env.ctx === undefined && env.cause === undefined)
-        ) {
-          waiting.set(inst, draft)
-          const bound = queryCore.boundOf(
-            inst.component as unknown as Component.Any
-          )
-          const seq = recording.record(inst, {
-            _tag: "Waiting",
-            props: inst.props,
-            model: draft.model,
-            ...(bound === undefined
-              ? undefined
-              : { queries: inst.results ?? bound.empty })
-          })
-          if (!layered && !behind) env.waiting.push(() => mountWaiting(inst))
-          return seq
-        }
-      } else if (draft._tag === "LayerPending" && waiting.has(inst)) {
-        // Before the children that wait on the env it provides: it mounted before them.
-        inst.env.waiting.push(() => mountWaiting(inst))
-      } else if (draft._tag === "Unmounted" && waiting.delete(inst)) {
-        held.delete(inst)
-        const seq = recording.record(inst, draft)
-        checkAdopted()
-        return seq
-      }
+      const next = waits!.step(inst, draft, hydration)
+      if (next === undefined) return waits!.seq
+      draft = next
     }
     if (
       inst.parent === undefined &&
@@ -489,7 +488,7 @@ const start = (
   ): Dispatched => {
     const reason = inst.closed
       ? "closed"
-      : waiting.has(inst)
+      : waits?.waiting.has(inst) === true
       ? "waiting"
       : frozen
       ? "frozen"
@@ -529,14 +528,6 @@ const start = (
   const ownsHead = options?.head !== false
   const doms = domHost.doms.get(host)
   const dom = doms?.make(container, { head: ownsHead, step: recording.step })
-  const problems = Context.get(ctx, queryCore.Problems)
-  const report = (problem: unknown) => {
-    try {
-      problems(problem as never)
-    } catch {
-      // A sink can't change what the runtime does.
-    }
-  }
   const deferred = new Set<Kernel.Instance>()
   const base = dom ?? bridge(host, recording.step, ownsHead)
   const bridged: Kernel.Host = {
@@ -544,39 +535,11 @@ const start = (
     hold: routing?.hold,
     commit: () => {
       base.commit?.()
-      for (const inst of waiting.keys()) {
-        if (inst.env.ctx !== undefined || inst.env.cause !== undefined) {
-          mountWaiting(inst)
-        }
-      }
+      waits?.commit()
       routing?.flushed()
-      checkIdle()
+      idle?.check()
     },
-    server: server === undefined ? undefined : {
-      drop: (inst, name, issued) => {
-        if (issued !== undefined) {
-          record(inst, {
-            _tag: "CommandDropped",
-            name,
-            issued,
-            reason: "server"
-          })
-        }
-        report(
-          new Command.ServerCommandIssued({
-            path: inst.path,
-            command: name,
-            message: issued === undefined
-              ? `[@effect/ui] ${inst.path}'s update issued ${name} during server rendering, and it was dropped. The server renders a list's first page only.`
-              : `[@effect/ui] ${inst.path}'s update issued ${name} during server rendering, and it was dropped. No Command runs on the server: read data with a query.`
-          })
-        )
-      },
-      defer: (inst) => {
-        deferred.add(inst)
-      },
-      report
-    }
+    server: server?.hooks(ctx, record, deferred)
   }
   let started = false
   let firstHeld = 0
@@ -590,7 +553,7 @@ const start = (
   }
   const checkAdopted = () => {
     if (adoptedDone || !started || hydration?.settled() === false) return
-    for (const inst of waiting.keys()) if (!hydration?.parked(inst)) return
+    if (waits !== undefined && !waits.parked(hydration!)) return
     adoptedDone = true
     if (firstHeld > 0 || adoptionHead === undefined) adoptionHead = root.head()
     closeWindow()
@@ -610,31 +573,18 @@ const start = (
       routing?.heldFor
     )
   const hydratedAt = clock.currentTimeMillisUnsafe()
-  const idleWaiters: Array<() => void> = []
-  let idleCheck = false
-  const checkIdle = () => {
-    if (idleWaiters.length === 0 || idleCheck) return
-    idleCheck = true
-    executor.schedule(() => {
-      idleCheck = false
-      const tree = kernelRoot?.instance.tree
-      if (
-        tree === undefined || tree.scheduled || tree.dirty.length > 0 ||
-        (tree.building?.size ?? 0) > 0
-      ) return
-      const cache = queries.made()
-      if (cache !== undefined && cache.pending().length > 0) return
-      if (loadsOf(kernelRoot!.instance).length > 0) return
-      for (const f of idleWaiters.splice(0)) f()
-    })
-  }
+  const idle = server?.idle(
+    executor,
+    () => kernelRoot?.instance,
+    () => queries.made()
+  )
   const fallback = options?.fallback
   let frozen = false
   const queries = makeCell(ctx, options, server, (cache) => {
     cache.onFetch((event) => {
       if (!frozen) recording.tree({ _tag: "FetchStarted", ...event })
     })
-    if (server !== undefined) cache.onFetchEnd(checkIdle)
+    if (idle !== undefined) cache.onFetchEnd(idle.check)
     const shipped = state?.["~query"]
     if (shipped !== undefined) {
       cache.hydrate(shipped, { static: fromStatic, at: hydratedAt })
@@ -670,8 +620,8 @@ const start = (
           }
           const first = inst.component.init(inst.props)
           if (hydration !== undefined && inst.tree.holds === undefined) {
-            inst.tree.holds = holds
-            inst.tree.held = heldAt
+            inst.tree.holds = waits!.holds
+            inst.tree.held = waits!.heldAt
           }
           const adopted = hydration?.init(inst, first)
           if (adopted !== undefined) {
@@ -753,8 +703,6 @@ const start = (
         if (tree.transitions?.waits(target)) tree.transitions.wait(go)
         else go()
       }),
-    pending: () => pendingOf(instance),
-    loads: () => loadsOf(instance),
     get cache() {
       return (queries.cache() ?? { pending: () => [] }) as unknown as Root[
         "cache"
@@ -772,15 +720,8 @@ const start = (
       if (adoptedDone) resume(Effect.void)
       else adoptedWaiters.push(() => resume(Effect.void))
     }),
-    waiting: () => {
-      const out: Array<string> = []
-      for (const inst of waiting.keys()) if (!inst.closed) out.push(inst.path)
-      return hydration === undefined ? out : out.concat(hydration.held())
-    },
-    whenIdle: (f: () => void) => {
-      idleWaiters.push(f)
-      checkIdle()
-    },
+    waiting: () =>
+      waits === undefined ? [] : waits.paths().concat(hydration!.held()),
     freeze: () => {
       if (!frozen) {
         tree.transitions?.settle()
@@ -804,6 +745,7 @@ const start = (
   return {
     root,
     deferred,
+    idle,
     close: Effect.suspend(() => {
       routing?.detach()
       dom?.dispose()
@@ -853,6 +795,22 @@ const findInRec = (
   }
   return undefined
 }
+
+/**
+ * The runs of a root and of the instances it shows, parents first.
+ *
+ * @internal
+ */
+export const pending = (root: Root): ReadonlyArray<Pending> =>
+  pendingOf(root.instance as unknown as Kernel.Instance)
+
+/**
+ * The slots of a root and of the instances it shows that wait for a lazy component's load.
+ *
+ * @internal
+ */
+export const loads = (root: Root): ReadonlyArray<Load> =>
+  loadsOf(root.instance as unknown as Kernel.Instance)
 
 /** The runs of `inst` and of the instances it shows, parents first. */
 const pendingOf = (
@@ -957,14 +915,14 @@ export const prerender = (
           host.createElement("#root"),
           ctx,
           undefined,
-          { host, fetches: started }
+          { host, fetches: started, hooks: serverHooks, idle: idleOf }
         )
         yield* Scope.addFinalizer(scope, made.close)
         const root = made.root
         if (started) {
           yield* Effect.raceFirst(
             Effect.callback<void>((resume) => {
-              root.whenIdle(() => resume(Effect.void))
+              made.idle!.when(() => resume(Effect.void))
             }),
             Effect.sleep(budget)
           )

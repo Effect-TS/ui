@@ -9,6 +9,7 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as Kernel from "./kernel.ts"
 import { segmentOf } from "./paths.ts"
+import { boundOf } from "./queryCore.ts"
 import { restored } from "./sharedRun.ts"
 import { type Decoded, reportedOf, stateCodecOf } from "./stateCodec.ts"
 
@@ -429,16 +430,160 @@ export const make = (
   }
 }
 
+type Draft = Parameters<Kernel.Recorder>[1]
+
+/**
+ * The instances that adopt once what they wait on is ready, the env a provided Layer builds or the
+ * waiting instance they adopt after, and log `Waiting` until then.
+ *
+ * @internal
+ */
+export class Waits {
+  readonly waiting = new Map<Kernel.Instance, Draft>()
+  /**
+   * The latest placement of each waiting instance that kept the one it had, the server's, which it
+   * adopts with: this one is applied once it has.
+   */
+  readonly held = new Map<
+    Kernel.Instance,
+    readonly [Kernel.Instance, View.Child<any, any>]
+  >()
+  /** The seq of the entry `step` logged itself. */
+  seq: ReturnType<Kernel.Recorder> = undefined
+  readonly log: Kernel.Recorder
+  readonly checkAdopted: () => void
+  readonly state: Renderer.State
+  constructor(
+    log: Kernel.Recorder,
+    checkAdopted: () => void,
+    state: Renderer.State
+  ) {
+    this.log = log
+    this.checkAdopted = checkAdopted
+    this.state = state
+  }
+  readonly holds: NonNullable<Kernel.Tree["holds"]> = (child, inst, view) =>
+    this.waiting.has(child) &&
+    this.held.set(child, [inst, view as View.Child<any, any>]) !== undefined
+  readonly heldAt = (at: string): boolean => {
+    for (const inst of this.held.keys()) {
+      if (at.startsWith(inst.path + "/")) return true
+    }
+    return false
+  }
+  /** The waiting instance it adopts after: its parent, or the receiver whose slot it's drawn in. */
+  behindOf(inst: Kernel.Instance): Kernel.Instance | undefined {
+    const parent = inst.parent
+    if (parent !== undefined && this.waiting.has(parent)) return parent
+    for (const at of this.waiting.keys()) {
+      if (at !== inst && inst.path.startsWith(at.path + "/")) return at
+    }
+    return undefined
+  }
+  mount(inst: Kernel.Instance): void {
+    const draft = this.waiting.get(inst)
+    if (draft === undefined) return
+    // The parent that provides the env it waited on mounted first.
+    const parent = inst.parent
+    if (parent?.env.ctx !== undefined) this.mount(parent)
+    const behind = this.behindOf(inst)
+    if (behind !== undefined) {
+      if (behind.env.ctx !== undefined) this.mount(behind)
+      if (this.waiting.has(behind)) return
+    }
+    this.waiting.delete(inst)
+    const latest = this.held.get(inst)
+    this.held.delete(inst)
+    if (!inst.closed) this.log(inst, { ...draft, model: inst.model })
+    this.checkAdopted()
+    if (latest !== undefined && !inst.closed && !latest[0].closed) {
+      // Applied now, as `adopted` resolves: the render it asks for folds the head again.
+      inst.tree.ops.patchChild(latest[0], inst.at!, latest[1])
+      inst.tree.ops.markDirty(latest[0])
+    }
+  }
+  /**
+   * The draft to log for `inst`, or `undefined` when it logged one itself, as an instance starts or
+   * stops waiting, with its seq in `seq`.
+   */
+  step(
+    inst: Kernel.Instance,
+    draft: Draft,
+    hydration: Hydration
+  ): Draft | undefined {
+    if (draft._tag === "Mounted" && hydration.adopts(inst)) {
+      draft = { ...draft, adopted: true }
+      const env = inst.env
+      const layered =
+        (inst.component as unknown as Component.Any).layer !== undefined &&
+        (this.state["~status"] as Record<string, unknown> | undefined)
+            ?.[inst.path] === undefined
+      // A child adopts after the parent that waits to: its Model is reported first.
+      const behind = this.behindOf(inst) !== undefined
+      if (
+        layered || behind ||
+        (env.ctx === undefined && env.cause === undefined)
+      ) {
+        this.waiting.set(inst, draft)
+        const bound = boundOf(inst.component as unknown as Component.Any)
+        this.seq = this.log(inst, {
+          _tag: "Waiting",
+          props: inst.props,
+          model: draft.model,
+          ...(bound === undefined
+            ? undefined
+            : { queries: inst.results ?? bound.empty })
+        })
+        if (!layered && !behind) env.waiting.push(() => this.mount(inst))
+        return undefined
+      }
+    } else if (draft._tag === "LayerPending" && this.waiting.has(inst)) {
+      // Before the children that wait on the env it provides: it mounted before them.
+      inst.env.waiting.push(() => this.mount(inst))
+    } else if (draft._tag === "Unmounted" && this.waiting.delete(inst)) {
+      this.held.delete(inst)
+      this.seq = this.log(inst, draft)
+      this.checkAdopted()
+      return undefined
+    }
+    return draft
+  }
+  /** Mounts the instances whose env is ready, or failed, as a flush commits. */
+  commit(): void {
+    for (const inst of this.waiting.keys()) {
+      if (inst.env.ctx !== undefined || inst.env.cause !== undefined) {
+        this.mount(inst)
+      }
+    }
+  }
+  /** Whether every instance left waiting is in a kept child off the page. */
+  parked(hydration: Hydration): boolean {
+    for (const inst of this.waiting.keys()) {
+      if (!hydration.parked(inst)) return false
+    }
+    return true
+  }
+  /** The paths of the open instances that still wait. */
+  paths(): Array<string> {
+    const out: Array<string> = []
+    for (const inst of this.waiting.keys()) {
+      if (!inst.closed) out.push(inst.path)
+    }
+    return out
+  }
+}
+
 /** @internal */
 export interface Hydrating {
   readonly state: Renderer.State
   readonly adopt: Adopt | undefined
   readonly make: typeof make
   readonly decodeRoot: typeof decodeRoot
+  readonly Waits: typeof Waits
 }
 
 /** @internal */
 export const hydrating = (
   state: Renderer.State,
   adopt?: Adopt
-): Hydrating => ({ state, adopt, make, decodeRoot })
+): Hydrating => ({ state, adopt, make, decodeRoot, Waits })
