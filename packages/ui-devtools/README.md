@@ -1,6 +1,6 @@
 # @effect/ui-devtools
 
-A read-only inspector for the message log of an [`@effect/ui`](../ui) app.
+An inspector for the message log of an [`@effect/ui`](../ui) app: an overlay in the page, and an MCP server agents use to read and control the app.
 
 ## The overlay
 
@@ -46,6 +46,51 @@ It follows the latest entry until one is selected, and remembers whether the pan
 `DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude` (message `_tag` values matched across every component). Excluded updates add no rows and coalesce per instance between shown entries so high-frequency bursts do not evict the buffer, while keeping the next shown entry's Model diff and Time travel state accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
 
 It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`.
+
+## The MCP server
+
+`@effect/ui-devtools/node` runs a local server that agents connect to over MCP (Streamable HTTP). With Vite, add the plugin and keep `DevTools.layer()` in the app:
+
+```ts
+import { DevToolsVite } from "@effect/ui-devtools/node"
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  plugins: [DevToolsVite.plugin({ dispatch: true })]
+})
+```
+
+Then point the agent at `http://127.0.0.1:4774/mcp`, for example in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "effect-ui": { "type": "http", "url": "http://127.0.0.1:4774/mcp" }
+  }
+}
+```
+
+The plugin starts the server with `vite dev` only and adds a `<meta>` tag with its URL and `size` to the page, which `DevTools.layer` reads. Without Vite, run `effect-ui-devtools [--port <n>] [--size <n>] [--dispatch]` or `DevToolsServer.layer`, and pass `DevTools.layer({ server: "http://127.0.0.1:4774" })`. A server process can add `MessageLog.socket("ws://127.0.0.1:4774/log", { host: "server" })` to show its renders as sessions.
+
+| Tool                 | Does                                                                      |
+| -------------------- | ------------------------------------------------------------------------- |
+| `list_sessions`      | the sessions held: app, host, connected, controllable, paused at          |
+| `list_instances`     | the instances of a session, with how their Command runs ended             |
+| `list_entries`       | entries as rows without payloads, filtered by instance, kind or `_tag`    |
+| `count_entries`      | entries by entry and message `_tag`                                       |
+| `get_entry`          | one entry's Wire frame                                                    |
+| `get_chain`          | the causal chain the panel shows                                          |
+| `get_state`          | an instance's Model, props and query results, now or at an entry          |
+| `diff_state`         | what an entry changed in its instance's Model                             |
+| `show_entry`         | paints the page at an entry, as Time travel does                          |
+| `resume`             | shows the live page again                                                 |
+| `get_message_schema` | the JSON Schema of an instance's messages, or of one `_tag`               |
+| `dispatch`           | sends 1 to 100 messages to an instance, all decoded first; off by default |
+| `wait`               | waits for the Command runs started since an entry to end                  |
+
+The read tools answer from the server's own copy of the log, so they keep working after a reload or a closed tab. The others go to the page while it is open. An agent's `show_entry` is the same pause as Time travel, so the panel shows it and either side can resume it. `dispatch` runs `update` and its real Commands, which is why it needs `dispatch: true` (or `--dispatch`). A redacted field needs a real value, and comes back redacted.
+
+The server listens on loopback only. `/mcp` refuses requests with an `Origin` header, and the WebSocket routes accept only loopback origins. There is no token, so any local user can connect, as they can to the Vite dev server.
 
 ## The core
 

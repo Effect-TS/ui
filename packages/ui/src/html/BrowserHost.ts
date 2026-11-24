@@ -124,6 +124,7 @@ import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
+import type * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
@@ -2214,15 +2215,15 @@ export const mountEffect = <
       Renderer.mount(component, props, container, options),
       scheduled
     )) as unknown as runtime.Root
-    const paused = pausable(
+    const controlled = controllable(
       component as any,
       root,
       container,
       Context.merge(outer, scheduled)
     )
-    const unregister = Context.get(outer, Pausables).register(paused)
+    const unregister = Context.get(outer, Controllables).register(controlled)
     yield* Effect.addFinalizer(() =>
-      Effect.andThen(Effect.sync(unregister), paused.resume)
+      Effect.andThen(Effect.sync(unregister), controlled.resume)
     )
     return root
   }) as any
@@ -2252,10 +2253,14 @@ export interface Recorded {
 }
 
 /**
- * A root mounted with `mount` or `mountEffect`, offered to `Pausables` so
- * a tool such as DevTools can show the page as it was at an earlier state.
+ * A root mounted with `mount` or `mountEffect`, offered to `Controllables`
+ * so a tool such as DevTools can show the page as it was at an earlier state,
+ * and send a message to any of its instances.
  *
  * **Details**
+ *
+ * `instance` finds an instance of the root by the `instance` number its
+ * `MessageLog` entries carry, while it is mounted. See `ControlledInstance`.
  *
  * `pause` hides the root's container and paints a frozen copy of the tree
  * next to it, in a copy of the container without its children and with the
@@ -2298,7 +2303,7 @@ export interface Recorded {
  * @category models
  * @since 0.1.0
  */
-export interface Pausable {
+export interface Controllable {
   /** The session the root's `MessageLog` entries carry. */
   readonly session: string
   /** The root instance's path, `/<name>`. */
@@ -2307,10 +2312,65 @@ export interface Pausable {
     state: (path: string) => Recorded | undefined
   ) => Effect.Effect<Painted>
   readonly resume: Effect.Effect<void>
+  /**
+   * The instance of this root with this `instance` number (the number its
+   * `MessageLog` entries carry), while it is mounted.
+   */
+  readonly instance: (instance: number) => ControlledInstance | undefined
 }
 
 /**
- * What `Pausable.pause` painted that differs from the page at that state.
+ * An instance of a `Controllable` root, which a tool can send a message to.
+ *
+ * **Details**
+ *
+ * `dispatch` sends the message as the root's `send` does: the `Update` it
+ * logs has the source `{ _tag: "Dispatch" }`. It runs in a step of its
+ * own, after a pending view transition when there is one, and completes
+ * with what happened once it ran. See `Dispatched`. The message isn't
+ * decoded: a tool that takes it as JSON decodes it with `message` first.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ControlledInstance {
+  /** The number the instance's `MessageLog` entries carry. */
+  readonly instance: number
+  readonly path: string
+  /** The component's name. */
+  readonly component: string
+  /** The component's `message` Schema. */
+  readonly message: Schema.Top
+  /** Sends a message to the instance as a dispatch, and tells what happened. */
+  readonly dispatch: (message: unknown) => Effect.Effect<Dispatched>
+}
+
+/**
+ * What `ControlledInstance.dispatch` did.
+ *
+ * **Details**
+ *
+ * `Updated` has the seq of the `Update` entry it logged, and `Failed` the
+ * seq of the `Failed` entry, when `update` threw. `Ignored` ran no
+ * `update`, because the instance had closed, was waiting to adopt the
+ * server's nodes or the root was frozen, or it ran one that returned
+ * nothing, which is `unchanged`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Dispatched =
+  | { readonly _tag: "Updated"; readonly seq: number }
+  | { readonly _tag: "Failed"; readonly seq: number }
+  | {
+    readonly _tag: "Ignored"
+    readonly reason: "closed" | "waiting" | "frozen" | "unchanged"
+  }
+
+/**
+ * What `Controllable.pause` painted that differs from the page at that state.
  *
  * **Details**
  *
@@ -2330,37 +2390,37 @@ export interface Painted {
 }
 
 /**
- * Where `mount` and `mountEffect` offer their roots to be paused.
+ * Where `mount` and `mountEffect` offer their roots to be paused and sent
+ * messages.
  *
  * **Details**
  *
  * `register` is called with each root as it mounts, and the function it
  * returns when the root unmounts. The default ignores every root, so a tool
- * that pauses roots provides its own.
+ * that controls roots provides its own.
  *
  * @stability experimental
  * @category services
  * @since 0.1.0
  */
-export interface Pausables {
-  readonly register: (root: Pausable) => () => void
+export interface Controllables {
+  readonly register: (root: Controllable) => () => void
 }
 
 const unregistered = () => {}
 
 /**
- * The `Pausables` service, read by `mount` and `mountEffect`.
+ * The `Controllables` service, read by `mount` and `mountEffect`.
  *
  * @stability experimental
  * @category services
  * @since 0.1.0
  */
-export const Pausables: Context.Reference<Pausables> = Context.Reference<
-  Pausables
->(
-  "@effect/ui/html/BrowserHost/Pausables",
-  { defaultValue: () => ({ register: () => unregistered }) }
-)
+export const Controllables: Context.Reference<Controllables> = Context
+  .Reference<Controllables>(
+    "@effect/ui/html/BrowserHost/Controllables",
+    { defaultValue: () => ({ register: () => unregistered }) }
+  )
 
 // `showModal()` makes everything outside the dialog inert, DevTools included, while the copy's own `inert`
 // leaves the dialog unusable, and an auto popover shown in the copy would close the live page's. Both are
@@ -2386,12 +2446,12 @@ const paintHost = (
   }
 })
 
-const pausable = (
+const controllable = (
   component: Component.Any,
   root: runtime.Root,
   container: globalThis.Element,
   context: Context.Context<Scope.Scope | Renderer.Renderer>
-): Pausable => {
+): Controllable => {
   const owner = Context.get(context, Scope.Scope)
   const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<
     globalThis.Node
@@ -2469,6 +2529,16 @@ const pausable = (
         yield* unpaint(was)
         return result
       })),
-    resume
+    resume,
+    instance: (born) => {
+      const inst = root.find(born)
+      return inst === undefined ? undefined : {
+        instance: inst.born,
+        path: inst.path,
+        component: inst.component.definition.name,
+        message: inst.component.definition.message,
+        dispatch: (message) => root.dispatch(inst, message)
+      }
+    }
   }
 }

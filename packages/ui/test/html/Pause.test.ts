@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Feature, Mount, UiSchema } from "@effect/ui"
+import { Component, Feature, MessageLog, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
@@ -33,8 +33,8 @@ const Counter = Component.define({
       .children(`clicked ${count}`)
 })
 
-const register = (roots: Array<BrowserHost.Pausable>) =>
-  Effect.provideService(BrowserHost.Pausables, {
+const register = (roots: Array<BrowserHost.Controllable>) =>
+  Effect.provideService(BrowserHost.Controllables, {
     register: (root) => {
       roots.push(root)
       return () => roots.splice(roots.indexOf(root), 1)
@@ -46,7 +46,7 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     const { app, page } = yield* place("main")
     app.className = "app"
     app.style.display = "grid"
-    const roots: Array<BrowserHost.Pausable> = []
+    const roots: Array<BrowserHost.Controllable> = []
     const root = yield* BrowserHost.mountEffect(Counter, {}, app).pipe(
       register(roots)
     )
@@ -149,7 +149,7 @@ const Page = Component.define({
 it.effect("pause reports the instances whose feature slot shows its fallback in the copy", () =>
   Effect.gen(function*() {
     const { app } = yield* place()
-    const roots: Array<BrowserHost.Pausable> = []
+    const roots: Array<BrowserHost.Controllable> = []
     yield* BrowserHost.mountEffect(Page, {}, app).pipe(register(roots))
     yield* tick
     expect(app.textContent).toBe("editornotenote")
@@ -164,7 +164,7 @@ it.effect("a paint that fails removes its copy and leaves the page as it was", (
   Effect.gen(function*() {
     const { app, page } = yield* place()
     app.style.display = "grid"
-    const roots: Array<BrowserHost.Pausable> = []
+    const roots: Array<BrowserHost.Controllable> = []
     yield* BrowserHost.mountEffect(Counter, {}, app).pipe(register(roots))
     const boom = () => {
       throw new Error("boom")
@@ -201,7 +201,7 @@ const Settings = Component.define({
 it.effect("the live root's modal dialogs are closed while it's paused and shown again on resume", () =>
   Effect.gen(function*() {
     const { app } = yield* place()
-    const roots: Array<BrowserHost.Pausable> = []
+    const roots: Array<BrowserHost.Controllable> = []
     const root = yield* BrowserHost.mountEffect(Settings, {}, app).pipe(
       register(roots)
     )
@@ -224,4 +224,101 @@ it.effect("the live root's modal dialogs are closed while it's paused and shown 
     yield* roots[0].resume
     expect(dialog.open).toBe(true)
     expect(root.model()).toBe(true)
+  }).pipe(Effect.scoped))
+
+const TallyMessage = UiSchema.TaggedEnum({
+  Added: { by: Schema.Number },
+  Broke: {}
+})
+const Tally = Component.define({
+  name: "Tally",
+  scoped: false,
+  model: Schema.Number,
+  message: TallyMessage,
+  elements: Html
+}).make({
+  init: () => 0,
+  update: ($, message) => {
+    if (message._tag === "Broke") throw new Error("broke")
+    return $.model + message.by
+  },
+  view: (h, total) => h.span(`total ${total}`)
+})
+const Board = Component.define({
+  name: "Board",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.div(Tally(h, { key: "t" }))
+})
+
+const mountBoard = Effect.fnUntraced(function*() {
+  const { app } = yield* place()
+  const log = MessageLog.makeMemory()
+  const roots: Array<BrowserHost.Controllable> = []
+  yield* BrowserHost.mountEffect(Board, {}, app).pipe(
+    register(roots),
+    Effect.provideService(MessageLog.MessageLog, log)
+  )
+  const mounted = log.entries().find((entry) =>
+    entry._tag === "Mounted" && entry.path === "/Board/Tally[t]"
+  )!
+  return {
+    app,
+    log,
+    root: roots[0],
+    tally: (mounted as MessageLog.Mounted).instance
+  }
+})
+
+it.effect("a tool sends a message to an instance by its number, as a dispatch", () =>
+  Effect.gen(function*() {
+    const { app, log, root, tally } = yield* mountBoard()
+    expect(root.instance(tally)).toMatchObject({
+      instance: tally,
+      path: "/Board/Tally[t]",
+      component: "Tally",
+      message: TallyMessage
+    })
+    expect(root.instance(tally + 100)).toBeUndefined()
+
+    const outcome = yield* root.instance(tally)!.dispatch(
+      TallyMessage.Added({ by: 2 })
+    )
+    expect(outcome._tag).toBe("Updated")
+    expect(
+      log.entries().find((entry) =>
+        entry.seq === (outcome as { readonly seq: number }).seq
+      )
+    ).toMatchObject({
+      _tag: "Update",
+      path: "/Board/Tally[t]",
+      source: { _tag: "Dispatch" },
+      message: TallyMessage.Added({ by: 2 }),
+      model: 2
+    })
+    yield* tick
+    expect(app.textContent).toBe("total 2")
+  }).pipe(Effect.scoped))
+
+it.effect("a dispatch whose update throws tells the Failed entry, and the failed instance is gone", () =>
+  Effect.gen(function*() {
+    const { log, root, tally } = yield* mountBoard()
+
+    const outcome = yield* root.instance(tally)!.dispatch(TallyMessage.Broke())
+    expect(outcome._tag).toBe("Failed")
+    expect(
+      log.entries().find((entry) =>
+        entry.seq === (outcome as { readonly seq: number }).seq
+      )
+    ).toMatchObject({
+      _tag: "Failed",
+      path: "/Board/Tally[t]",
+      in: "update"
+    })
+    expect(root.instance(tally)).toBeUndefined()
   }).pipe(Effect.scoped))

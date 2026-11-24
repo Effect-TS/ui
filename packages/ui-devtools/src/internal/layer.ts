@@ -4,10 +4,14 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
+import * as Semaphore from "effect/Semaphore"
+import * as Socket from "effect/socket/Socket"
 import * as Stream from "effect/Stream"
+import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
+import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
 
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
@@ -37,14 +41,38 @@ const lower = (frame: HTMLIFrameElement) => {
   frame.removeAttribute("popover")
 }
 
+const fromPage = (): { readonly url?: unknown; readonly size?: unknown } => {
+  const content = document.querySelector<HTMLMetaElement>(
+    "meta[name=\"" + Control.metaName + "\"]"
+  )?.content
+  try {
+    return content === undefined ? {} : JSON.parse(content)
+  } catch {
+    return {}
+  }
+}
+
+const socketUrl = (server: string, path: string) => {
+  const url = new URL(path, server)
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  return url.href
+}
+
 export const make = (options: {
   readonly position?: Position | undefined
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
+  readonly server?: string | undefined
 }): Layer.Layer<never> =>
   Layer.effectContext(
     Effect.gen(function*() {
-      const size = Math.max(1, options.size ?? 1_000)
+      const page = fromPage()
+      const server = options.server ??
+        (typeof page.url === "string" ? page.url : undefined)
+      const size = Math.max(
+        1,
+        options.size ?? (typeof page.size === "number" ? page.size : 1_000)
+      )
       const isExcluded = InspectorInternal.matchTags(new Set(options.exclude))
       const excluded = new Map<string, Set<number>>()
       const inspector = InspectorInternal.make({
@@ -53,11 +81,20 @@ export const make = (options: {
           excluded.get(entry.session)?.delete(entry.seq) === true
       })
       const history = History.make(size)
-      const roots = new Map<string, BrowserHost.Pausable>()
-      let paused: BrowserHost.Pausable | undefined
+      const roots = new Map<string, BrowserHost.Controllable>()
+      let paused: {
+        readonly root: BrowserHost.Controllable
+        readonly at: Control.Paused
+      } | undefined
+      const lock = Semaphore.makeUnsafe(1)
       const origins = new Map<string, number>()
       const latest = new Map<string, number>()
       const changes = yield* PubSub.sliding<void>(1)
+      const states = yield* PubSub.sliding<void>(1)
+      const changed = () => {
+        PubSub.publishUnsafe(changes, undefined)
+        PubSub.publishUnsafe(states, undefined)
+      }
       const view = document.defaultView
       const load = (key: string): unknown => {
         try {
@@ -79,36 +116,53 @@ export const make = (options: {
         changes: Stream.fromPubSub(changes),
         paintable: (session, seq) =>
           roots.has(session) && history.holds(session, seq),
-        pausing: () => paused !== undefined,
+        paused: () => paused?.at,
         open: load(openKey) === true
       }
-      const resume: Effect.Effect<void> = Effect.suspend(() => {
-        const root = paused
-        paused = undefined
-        return root === undefined
-          ? Effect.void
-          : Effect.andThen(root.resume, Effect.sync(() => lower(frame)))
+      const unpause: Effect.Effect<void> = Effect.suspend(() => {
+        const was = paused
+        if (was === undefined) return Effect.void
+        return Effect.andThen(
+          was.root.resume,
+          Effect.sync(() => {
+            if (paused !== was) return
+            paused = undefined
+            lower(frame)
+            changed()
+          })
+        )
       })
+      const resume = lock.withPermit(unpause)
+      const paint = (
+        session: string,
+        seq: number
+      ): Effect.Effect<BrowserHost.Painted | undefined> =>
+        lock.withPermit(Effect.uninterruptible(Effect.suspend(() => {
+          const root = roots.get(session)
+          const state = history.at(session, seq)
+          if (root === undefined || state === undefined) return Effect.undefined
+          return (paused === undefined || paused.root === root
+            ? Effect.void
+            : unpause).pipe(
+              Effect.andThen(root.pause(state)),
+              Effect.map((painted) => {
+                paused = {
+                  root,
+                  at: {
+                    session,
+                    seq,
+                    fellBack: painted.fellBack,
+                    fallbacks: painted.fallbacks
+                  }
+                }
+                raise(frame)
+                changed()
+                return painted
+              })
+            )
+        })))
       const pages = Pages.of({
-        paint: (session, seq) =>
-          Effect.suspend(() => {
-            const root = roots.get(session)
-            const state = history.at(session, seq)
-            if (root === undefined || state === undefined) {
-              return Effect.undefined
-            }
-            const previous = paused
-            paused = root
-            return (previous === undefined || previous === root
-              ? Effect.void
-              : previous.resume).pipe(
-                Effect.andThen(root.pause(state)),
-                Effect.map((painted) => {
-                  raise(frame)
-                  return painted
-                })
-              )
-          }),
+        paint,
         resume,
         clear: (sessionId) =>
           Effect.sync(() => {
@@ -120,15 +174,17 @@ export const make = (options: {
           }),
         setOpen: (open) => Effect.sync(() => save(openKey, open))
       })
-      const pausables: BrowserHost.Pausables = {
+      const controllables: BrowserHost.Controllables = {
         register: (root) => {
           roots.set(root.session, root)
+          PubSub.publishUnsafe(states, undefined)
           return () => {
             if (roots.get(root.session) === root) roots.delete(root.session)
-            if (paused !== root) return
-            paused = undefined
-            lower(frame)
-            PubSub.publishUnsafe(changes, undefined)
+            if (paused?.root === root) {
+              paused = undefined
+              lower(frame)
+            }
+            changed()
           }
         }
       }
@@ -265,9 +321,25 @@ export const make = (options: {
         }
         history.record(entry, hide)
       }
-      const log = MessageLog.fanoutAll([{ enabled: true, record }, encoded])
-      return Context.make(MessageLog.MessageLog, log).pipe(
-        Context.add(BrowserHost.Pausables, pausables)
-      )
-    })
+      const logs = [{ enabled: true, record }, encoded]
+      if (server !== undefined) {
+        const sent = yield* Layer.build(
+          MessageLog.socket(socketUrl(server, "/log"), { buffer: size })
+        )
+        logs.push(Context.get(sent, MessageLog.MessageLog))
+        yield* Remote.connect(socketUrl(server, "/control"), {
+          roots,
+          size,
+          paused: () => paused?.at,
+          paintable: feed.paintable,
+          paint,
+          resume,
+          changes: Stream.fromPubSub(states)
+        })
+      }
+      return Context.make(MessageLog.MessageLog, MessageLog.fanoutAll(logs))
+        .pipe(
+          Context.add(BrowserHost.Controllables, controllables)
+        )
+    }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
   )

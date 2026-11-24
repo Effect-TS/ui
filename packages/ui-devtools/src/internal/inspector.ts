@@ -475,6 +475,9 @@ export const make = (options: {
         state.ingest(entry)
       }
     },
-    sessions: () => Array.from(sessions.values(), (state) => state.session)
+    sessions: () => Array.from(sessions.values(), (state) => state.session),
+    remove: (session) => {
+      sessions.delete(session)
+    }
   }
 }

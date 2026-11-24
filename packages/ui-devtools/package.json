@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "license": "MIT",
-  "description": "A read-only inspector and overlay for @effect/ui's message log",
+  "description": "An inspector, overlay and MCP server for @effect/ui's message log",
   "homepage": "https://effect.website",
   "repository": {
     "type": "git",
@@ -29,10 +29,14 @@
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
+    "./node": "./src/node/index.ts",
     "./*": "./src/*.ts",
     "./internal/*": null,
     "./index": null,
     "./*/index": null
+  },
+  "bin": {
+    "effect-ui-devtools": "./src/node/internal/bin.ts"
   },
   "files": [
     "src/**/*.ts",
@@ -50,10 +54,14 @@
     "exports": {
       "./package.json": "./package.json",
       ".": "./dist/index.js",
+      "./node": "./dist/node/index.js",
       "./*": "./dist/*.js",
       "./internal/*": null,
       "./index": null,
       "./*/index": null
+    },
+    "bin": {
+      "effect-ui-devtools": "./dist/node/internal/bin.js"
     }
   },
   "scripts": {
@@ -67,13 +75,21 @@
     "check": "tsc -b tsconfig.json"
   },
   "peerDependencies": {
+    "@effect/platform-node": "^4.1.4",
     "@effect/ui": "workspace:^",
     "@effect/ui-kit": "workspace:^",
     "effect": "^4.1.4"
   },
   "devDependencies": {
+    "@effect/platform-node": "^4.1.4",
     "@effect/ui": "workspace:^",
     "@effect/ui-kit": "workspace:^",
-    "effect": "^4.1.4"
+    "effect": "^4.1.4",
+    "@types/node": "^26.6.6"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    }
   }
 }

@@ -303,6 +303,8 @@ export interface Inspector {
   readonly ingest: (batch: ReadonlyArray<MessageLog.WireEntry>) => void
   /** The sessions, in the order they were first seen. */
   readonly sessions: () => ReadonlyArray<Session>
+  /** Forgets a session and every entry of it. Later entries of that id start a new `Session`. */
+  readonly remove: (session: string) => void
 }
 
 /**

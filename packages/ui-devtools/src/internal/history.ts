@@ -1,20 +1,41 @@
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
-import type * as MessageLog from "@effect/ui/MessageLog"
+import * as MessageLog from "@effect/ui/MessageLog"
 
-interface Held extends BrowserHost.Recorded {
+type Entry = MessageLog.Entry | MessageLog.WireEntry
+
+export interface Held {
   readonly path: string
+  readonly model: unknown
+  readonly props: unknown
+  readonly queries: unknown
+  readonly unmounted?: number | undefined
 }
 
-type State = (path: string) => BrowserHost.Recorded | undefined
+export type State = (path: string) => BrowserHost.Recorded | undefined
 
 export interface History {
-  readonly record: (entry: MessageLog.Entry, excluded?: boolean) => void
+  readonly record: (entry: Entry, excluded?: boolean) => void
   readonly clear: (session: string, upTo: number) => void
+  readonly drop: (session: string) => void
   readonly holds: (session: string, seq: number) => boolean
   readonly at: (session: string, seq: number) => State | undefined
+  readonly instanceAt: (
+    session: string,
+    seq: number,
+    instance: number
+  ) => Held | "outside" | undefined
 }
 
-const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
+const merge = (queries: unknown, name: string, result: unknown) =>
+  MessageLog.isPlaceholder(queries)
+    ? queries
+    : { ...(queries as object | undefined), [name]: result }
+
+const apply = (
+  states: Map<number, Held>,
+  entry: Entry,
+  keepUnmounted: boolean
+) => {
   switch (entry._tag) {
     case "Waiting":
     case "Mounted":
@@ -38,41 +59,57 @@ const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
       if (held !== undefined) {
         states.set(entry.instance, {
           ...held,
-          queries: { ...held.queries, [entry.name]: entry.result }
+          queries: merge(held.queries, entry.name, entry.result)
         })
       }
       return
     }
-    case "Unmounted":
-      states.delete(entry.instance)
+    case "Unmounted": {
+      const held = states.get(entry.instance)
+      if (keepUnmounted && held !== undefined) {
+        states.set(entry.instance, { ...held, unmounted: entry.seq })
+      } else states.delete(entry.instance)
       return
+    }
   }
 }
 
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
-  const entries: Array<MessageLog.Entry> = []
+  const entries: Array<Entry> = []
   const shown = new Set<number>()
-  const coalesced = new Map<number, MessageLog.Update>()
+  const coalesced = new Map<number, Entry>()
+  let floor = -Infinity
   const drop = () => {
     const oldest = entries.shift()!
+    floor = oldest.seq
     shown.delete(oldest.seq)
     if (oldest._tag === "Update" && coalesced.get(oldest.instance) === oldest) {
       coalesced.delete(oldest.instance)
     }
-    apply(base, oldest)
+    apply(base, oldest, false)
+  }
+  const fold = (seq: number) => {
+    const states = new Map(base)
+    for (const entry of entries) {
+      if (entry.seq > seq) break
+      apply(states, entry, true)
+    }
+    return states
   }
   return {
-    record: (entry: MessageLog.Entry, excluded = false) => {
+    record: (entry: Entry, excluded = false) => {
       if (excluded && entry._tag === "Update") {
         const replaced = coalesced.get(entry.instance)
         if (replaced !== undefined) {
           entries.splice(entries.lastIndexOf(replaced), 1)
         }
-        const merged =
-          entry.queries === undefined && replaced?.queries !== undefined
-            ? { ...entry, queries: replaced.queries }
-            : entry
+        const queries = replaced !== undefined && "queries" in replaced
+          ? replaced.queries
+          : undefined
+        const merged = entry.queries === undefined && queries !== undefined
+          ? { ...entry, queries } as Entry
+          : entry
         entries.push(merged)
         coalesced.set(entry.instance, merged)
         return
@@ -87,18 +124,18 @@ const makeSession = (size: number) => {
     },
     holds: (seq: number) => shown.has(seq),
     at: (seq: number): State => {
-      const states = new Map(base)
-      for (const entry of entries) {
-        if (entry.seq > seq) break
-        apply(states, entry)
-      }
+      const states = fold(seq)
       const byPath = new Map<string, BrowserHost.Recorded>()
       for (const instance of Array.from(states.keys()).sort((a, b) => a - b)) {
-        const { path, ...recorded } = states.get(instance)!
-        byPath.set(path, recorded)
+        const { path, unmounted, ...recorded } = states.get(instance)!
+        if (unmounted === undefined) {
+          byPath.set(path, recorded as BrowserHost.Recorded)
+        }
       }
       return (path) => byPath.get(path)
-    }
+    },
+    instanceAt: (seq: number, instance: number): Held | "outside" | undefined =>
+      seq < floor ? "outside" : fold(seq).get(instance)
   }
 }
 
@@ -115,10 +152,15 @@ export const make = (size: number): History => {
     clear: (session, upTo) => {
       sessions.get(session)?.clear(upTo)
     },
+    drop: (session) => {
+      sessions.delete(session)
+    },
     holds: (session, seq) => sessions.get(session)?.holds(seq) ?? false,
     at: (session, seq) => {
       const held = sessions.get(session)
       return held === undefined || !held.holds(seq) ? undefined : held.at(seq)
-    }
+    },
+    instanceAt: (session, seq, instance) =>
+      sessions.get(session)?.instanceAt(seq, instance)
   }
 }

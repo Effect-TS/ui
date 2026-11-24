@@ -26,7 +26,7 @@ export interface Feed {
   readonly origin: (session: string) => number | undefined
   readonly changes: Stream.Stream<void>
   readonly paintable: (session: string, seq: number) => boolean
-  readonly pausing: () => boolean
+  readonly paused: () => typeof Paused.Type | undefined
   readonly open: boolean
 }
 
@@ -1341,6 +1341,14 @@ const Panel = (h: H, model: OverlayModel) => {
   )
 }
 
+const synced = (model: OverlayModel, feed: Feed) => {
+  const paused = feed.paused() ?? null
+  return paused?.session === model.paused?.session &&
+      paused?.seq === model.paused?.seq
+    ? {}
+    : { paused }
+}
+
 const resumePage = () => Paint.make({ session: "", seq: null })
 
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
@@ -1382,9 +1390,7 @@ export const Overlay = Component.define({
         ...($.model.reveal === null
           ? {}
           : { reveal: null, pinned: $.model.atStart, pins: increment }),
-        ...($.model.paused === null || $.props.feed.pausing()
-          ? {}
-          : { paused: null })
+        ...synced($.model, $.props.feed)
       }),
     ClickedOpen: ($) =>
       $.evolve({ open: true, atStart: true, ...following }).run(

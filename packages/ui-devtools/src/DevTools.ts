@@ -94,13 +94,23 @@ export type Position = internal.Position
  * instance's pre-clear state for the next entry's diff and Time travel. Clear
  * is disabled while the page is paused.
  *
- * The Layer also provides `BrowserHost.Pausables`, so each root mounted
+ * The Layer also provides `BrowserHost.Controllables`, so each root mounted
  * with `BrowserHost.mount` or `mountEffect` under it can be paused. Time
  * travel, on a selected entry, hides the root's container and paints an
  * `inert` copy from each instance's state at that entry, folded from the
  * raw entries the overlay keeps beside the frames. Resume removes it. While
  * the copy is shown, the overlay's iframe is in the top layer, so the
  * copy's dialogs and popovers never cover it.
+ *
+ * `server` is the URL of a DevTools server (see `DevToolsServer` in
+ * `@effect/ui-devtools/node`), which agents read and control the app
+ * through over MCP. The Layer then also sends the frames there with
+ * `MessageLog.socket`, and opens a second connection the server sends
+ * requests on: paint the page at an entry, resume, and, when the server
+ * allows it, dispatch a message to an instance. An agent's paint is the
+ * same pause as Time travel, so the overlay shows it as paused and either
+ * one can resume it. With `DevToolsVite.plugin`, the page carries the URL
+ * and the plugin's `size`, so neither option is needed.
  *
  * Browser only: building the Layer needs `document`.
  *
@@ -112,4 +122,5 @@ export const layer = (options?: {
   readonly position?: Position | undefined
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
+  readonly server?: string | undefined
 }): Layer.Layer<never> => internal.make(options ?? {})

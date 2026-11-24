@@ -439,12 +439,18 @@ importers:
 
   packages/ui-devtools:
     devDependencies:
+      '@effect/platform-node':
+        specifier: ^4.1.4
+        version: 4.1.4(effect@4.1.4)(redis@6.3.1)
       '@effect/ui':
         specifier: workspace:^
         version: link:../ui
       '@effect/ui-kit':
         specifier: workspace:^
         version: link:../ui-kit
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
       effect:
         specifier: ^4.1.4
         version: 4.1.4
