@@ -39,7 +39,7 @@ try {
 
   const before = await entries()
   await frame.locator(".row-button", { hasText: "ClickedStartUpload" }).first().click()
-  await frame.getByRole("button", { name: "Show on page" }).click({ timeout: 5_000 })
+  await frame.getByRole("button", { name: "Time travel" }).click({ timeout: 5_000 })
   await frame.getByRole("button", { name: "Resume the live page" }).waitFor()
   await frame.locator(".row-button", { hasText: "Mounted" }).first().click()
   await page.waitForTimeout(200)

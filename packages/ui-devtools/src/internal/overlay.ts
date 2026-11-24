@@ -83,7 +83,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedCopyFrame: { seq: Schema.Number, text: Schema.String },
   SucceededCopyFrame: { seq: Schema.Number },
   FailedCopyFrame: {},
-  ClickedShowOnPage: { session: Schema.String, seq: Schema.Number },
+  ClickedTimeTravel: { session: Schema.String, seq: Schema.Number },
   ScrubbedPage: { seq: Schema.Number },
   ClickedResume: {},
   Painted: Paused.fields
@@ -875,9 +875,12 @@ const Inspected = (
       h.div.class("ehead-top").children(
         h.h3.class("headline").children(label.text, label.detail === undefined ? null : " " + label.detail),
         h.button.class("show", shown && "on").attr("aria-pressed", String(shown)).disabled(!paintable)
-          .attr("title", paintable ? undefined : "No longer held, or no page to show it on")
-          .onClick(OverlayMessage.ClickedShowOnPage({ session: entry.session, seq: entry.seq })).children(
-            "Show on page"
+          .attr(
+            "title",
+            paintable ? "Open the time travel slider at this entry" : "No longer held, or no page to show it on"
+          )
+          .onClick(OverlayMessage.ClickedTimeTravel({ session: entry.session, seq: entry.seq })).children(
+            "Time travel"
           )
       ),
       h.p.class("sub").children(
@@ -1005,7 +1008,7 @@ export const Overlay = Component.define({
     ClickedCopyFrame: ($, { seq, text }) => $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
     SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
     FailedCopyFrame: ($) => $.evolve({ copied: null }),
-    ClickedShowOnPage: ($, { session, seq }) =>
+    ClickedTimeTravel: ($, { session, seq }) =>
       shows($.model, session, seq)
         ? $.evolve({ paused: null }).run(resumePage())
         : $.run(Paint.make({ session, seq })),

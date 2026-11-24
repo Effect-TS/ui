@@ -69,7 +69,10 @@ try {
   await frame.getByRole("button", { name: "Open the Effect UI inspector" }).click()
   await frame.getByRole("dialog", { name: "Effect UI inspector" }).waitFor()
   await frame.locator(".row-button", { hasText: "ClickedOpenDialog" }).first().click()
-  await frame.getByRole("button", { name: "Show on page" }).click({ timeout: 5_000 })
+  const travel = frame.getByRole("button", { name: "Time travel", exact: true })
+  const tooltip = await travel.getAttribute("title")
+  expect(tooltip === "Open the time travel slider at this entry", "the Time travel toggle has its tooltip", tooltip)
+  await travel.click({ timeout: 5_000 })
   await frame.getByRole("button", { name: "Resume the live page" }).waitFor()
   await page.waitForTimeout(100)
 

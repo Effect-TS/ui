@@ -173,7 +173,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const { app, root } = yield* mount("closed")
       yield* open(root)
       const copy = () => app.nextElementSibling?.hasAttribute("inert") === true ? app.nextElementSibling : null
-      const show = () => HtmlLocator.getByRole(root, "button", { name: "Show on page" })
+      const show = () => HtmlLocator.getByRole(root, "button", { name: "Time travel" })
 
       yield* selectClickedSave(root)
       yield* click(show())
@@ -207,7 +207,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* open(root)
       const inert = () => document.querySelectorAll("[inert]").length
       yield* selectClickedSave(root)
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Show on page" }))
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
       assert.strictEqual(app.style.getPropertyValue("display"), "none")
 
       const scope = yield* Scope.make()
@@ -222,7 +222,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(other.style.getPropertyValue("display"), "")
       assert.strictEqual(inert(), 0)
 
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Show on page" }))
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
       assert.strictEqual(inert(), 1)
       yield* Scope.close(scope, Exit.void)
       yield* settle
@@ -250,7 +250,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Open the Effect UI inspector" }))
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Everything" }))
       yield* click(entry(root, new RegExp("^#" + changed[0].seq + " "))[0]!)
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Show on page" }))
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
       const copy = app.nextElementSibling!
       assert.isTrue(copy.hasAttribute("inert"))
       assert.strictEqual(Array.from(copy.querySelectorAll("span"), (node) => node.textContent).join(), "1,0")

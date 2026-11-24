@@ -8,8 +8,9 @@
  * its Model with what changed, its message, Commands and raw frame, and the
  * Layer builds, Subscriptions, mounts and Command runs of its instance.
  *
- * Show on page paints the page as it was at the selected entry, beside the
- * live tree, which keeps running hidden until Resume. See `layer`.
+ * Time travel, on the selected entry, opens a slider and paints the page as
+ * it was at that entry, beside the live tree, which keeps running hidden
+ * until Resume. See `layer`.
  *
  * The overlay is an Effect UI component tree in its own document, mounted
  * with `MessageLog.noop`: it never records its own updates, the page's
