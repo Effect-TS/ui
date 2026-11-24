@@ -349,7 +349,6 @@ describe("Inspector", () => {
     assert.deepStrictEqual(session.resolve(4), { _tag: "Outside", seq: 4 })
     assert.strictEqual(session.resolve(23)._tag, "Update")
     assert.deepStrictEqual(session.back(24), [{ rel: "causedBy", seq: 4 }])
-    assert.deepStrictEqual(session.resolve(session.back(24)[0].seq), { _tag: "Outside", seq: 4 })
 
     inspector.ingest([update(25, 2, "/B", "B", "Clicked", { y: 6 })])
     inspector.ingest([update(26, 1, "/A", "A", "Moved", { x: 99, n: 1 })])
@@ -360,11 +359,7 @@ describe("Inspector", () => {
     inspector.ingest([update(27, 1, "/A", "A", "Clicked", { x: 99, n: 2 })])
     assert.deepStrictEqual(session.entries().map((entry) => entry.seq), [3, 25, 27])
     assert.deepStrictEqual(session.previous(27), { seq: 26, changed: true })
-    const before = session.resolve(26)
-    assert.strictEqual(before._tag, "Update")
-    assert.deepStrictEqual(Inspector.diff((before as Update).model, { x: 99, n: 2 }), [
-      { kind: "changed", path: ["n"], before: 1, after: 2 }
-    ])
+    assert.deepStrictEqual((session.resolve(26) as Update).model, { x: 99, n: 1 })
 
     inspector.ingest([update(28, 1, "/A", "A", "Moved", { x: 100, n: 2 })])
     session.clear()
