@@ -13,7 +13,6 @@ domHost.set(
     browserHosts.made.has(host) && (container as Node).nodeType !== undefined
       ? KernelDom.makeHost(container as Element, {
         head: options.head ? KernelDom.syncHead : undefined,
-        viewTransitions: KernelDom.viewTransitions,
         step: options.step
       })
       : undefined,

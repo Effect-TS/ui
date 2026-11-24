@@ -2,9 +2,9 @@
  * SPIKE (EFF-4218), not for release. The DOM host for `Kernel`: nodes, attributes under their HTML or SVG
  * names, properties, and one listener for each event name on the container, which gives a handler the
  * event's typed payload. Controlled form properties are put back after an event the Model didn't follow,
- * keeping a focused field's selection. Updates that ask for a view transition run in one when the mount is
- * given `viewTransitions: KernelDom.viewTransitions`, and the document head follows the tree's folded head
- * when it's given `head: KernelDom.syncHead`, so an app without either doesn't carry what runs it.
+ * keeping a focused field's selection. Updates that ask for a view transition run in one. The document head
+ * follows the tree's folded head when the mount is given `head: KernelDom.syncHead`, so an app without a
+ * head doesn't carry what writes one.
  *
  * Left out, each to arrive with what uses it: dialogs and popovers, drag and drop, and hydration.
  */
@@ -97,67 +97,15 @@ export type HeadSync = (
 export const syncHead: HeadSync = headSync.make
 
 /**
- * Runs the view transitions updates ask for in a document: `transitions` makes what runs them for a kernel
- * tree, and `release` skips the one running.
- *
- * @stability experimental
- */
-export type ViewTransitions = (
-  document: Document
-) => {
-  readonly transitions: (tree: never) => unknown
-  readonly release: () => void
-}
-
-/**
- * The view transitions of `BrowserHost`, for `HostOptions.viewTransitions`.
- *
- * @stability experimental
- */
-export const viewTransitions: ViewTransitions = (document) => {
-  const view = document.defaultView
-  let transition: ViewTransition | undefined
-  return {
-    transitions: transitionRun.make((update, types) => {
-      if (
-        typeof document.startViewTransition !== "function" ||
-        view?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
-      ) return update()
-      let ran = false
-      const run = () => {
-        ran = true
-        update()
-      }
-      try {
-        transition = document.startViewTransition(
-          types.length > 0 && "types" in (view?.ViewTransition?.prototype ?? {})
-            ? { update: run, types: [...types] }
-            : run
-        )
-      } catch (error) {
-        if (ran) throw error
-        return update()
-      }
-      transition.ready.catch(ignore)
-      transition.finished.catch(ignore)
-    }),
-    release() {
-      transition?.skipTransition()
-      transition = undefined
-    }
-  }
-}
-
-/**
  * What `makeHost` takes: `head` writes the document head, which is otherwise left alone, and
- * `viewTransitions` runs the updates that ask for a view transition in one, which otherwise run without.
- * `warn` reports a shell that conflicts with the head, and defaults to `console.warn`.
+ * `viewTransitions: false` runs the updates that ask for a view transition without one. `warn` reports a
+ * shell that conflicts with the head, and defaults to `console.warn`.
  *
  * @stability experimental
  */
 export interface HostOptions {
   readonly head?: HeadSync | undefined
-  readonly viewTransitions?: ViewTransitions | undefined
+  readonly viewTransitions?: boolean | undefined
   readonly warn?: ((message: string) => void) | undefined
   /** @internal */
   readonly step?: ((f: () => boolean) => boolean) | undefined
@@ -194,6 +142,7 @@ export const makeHost = (
   }
   let lastPointer: Html.PointerType | undefined
   let restore: Set<globalThis.Node> | undefined
+  let transition: ViewTransition | undefined
   const later: (f: () => void) => void =
     typeof view?.requestAnimationFrame === "function"
       ? (f) => view.requestAnimationFrame(f)
@@ -366,7 +315,29 @@ export const makeHost = (
     options?.warn ?? ((message) => console.warn(message))
   )
 
-  const transitions = options?.viewTransitions?.(document)
+  const start = (update: () => void, types: ReadonlyArray<string>) => {
+    if (
+      typeof document.startViewTransition !== "function" ||
+      view?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+    ) return update()
+    let ran = false
+    const run = () => {
+      ran = true
+      update()
+    }
+    try {
+      transition = document.startViewTransition(
+        types.length > 0 && "types" in (view?.ViewTransition?.prototype ?? {})
+          ? { update: run, types: [...types] }
+          : run
+      )
+    } catch (error) {
+      if (ran) throw error
+      return update()
+    }
+    transition.ready.catch(ignore)
+    transition.finished.catch(ignore)
+  }
 
   return {
     createElement(tag) {
@@ -474,9 +445,12 @@ export const makeHost = (
     controlled,
     runsMounts: true,
     head: sync === undefined ? undefined : (head) => sync.sync(head as never),
-    transitions: transitions?.transitions as Kernel.Host["transitions"],
+    transitions: options?.viewTransitions === false
+      ? undefined
+      : transitionRun.make(start),
     dispose() {
-      transitions?.release()
+      transition?.skipTransition()
+      transition = undefined
       sync?.release()
       for (const node of container.querySelectorAll("*")) {
         delete (node as Node).$r
