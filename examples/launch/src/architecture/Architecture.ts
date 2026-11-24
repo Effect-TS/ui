@@ -7,32 +7,14 @@ import {
 import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
 
-const leaves = ["A1", "A2", "B1", "B2"] as const
+const names = ["Root", "A", "A1", "A2"] as const
 
-const Leaf = Schema.Literals(leaves)
-type Leaf = typeof Leaf.Type
-
-type Branch = "A" | "B"
-type Name = "Root" | Branch | Leaf
-
-const tree: ReadonlyArray<
-  { readonly name: Branch; readonly leaves: ReadonlyArray<Leaf> }
-> = [
-  { name: "A", leaves: ["A1", "A2"] },
-  { name: "B", leaves: ["B1", "B2"] }
-]
-
-const names: ReadonlyArray<Name> = [
-  "Root",
-  ...tree.flatMap((branch) => [branch.name, ...branch.leaves])
-]
-
-const branchOf = (leaf: Leaf): Branch =>
-  tree.find((branch) => branch.leaves.includes(leaf))!.name
+const Name = Schema.Literals(names)
+type Name = typeof Name.Type
 
 interface Step {
-  readonly at: "leaf" | "branch" | "root" | "all"
-  readonly text: (leaf: Leaf, branch: Branch) => string
+  readonly nodes: ReadonlyArray<Name>
+  readonly text: string
 }
 
 const SideId = Schema.Literals(["foldkit", "effect"])
@@ -43,51 +25,88 @@ interface Side {
   readonly title: string
   readonly subtitle: string
   readonly submodels: ReadonlyArray<Name>
-  readonly steps: ReadonlyArray<Step>
+  readonly steps: (sender: Name) => ReadonlyArray<Step>
+}
+
+const sent = (sender: Name): Step => ({
+  nodes: [sender],
+  text: `${sender}'s view sends a Message.`
+})
+
+const rendered: Step = {
+  nodes: names,
+  text: "The view runs from the root with the new Model."
 }
 
 const foldkit: Side = {
   id: "foldkit",
   title: "Foldkit 0.x",
   subtitle: "One Model, held at the root",
-  submodels: names.filter((name) => name !== "Root"),
-  steps: [
-    { at: "leaf", text: (leaf) => `${leaf}'s view sends a Message.` },
-    {
-      at: "branch",
-      text: (_leaf, branch) =>
-        `${branch} wraps it in a Message of its own.`
-    },
-    {
-      at: "root",
-      text: () =>
-        "Root wraps it again, and the root update receives it."
-    },
-    {
-      at: "branch",
-      text: (_leaf, branch) =>
-        `Root's update passes it to ${branch}'s update.`
-    },
-    {
-      at: "leaf",
-      text: (leaf, branch) =>
-        `${branch}'s update passes it to ${leaf}'s update, which returns a new value.`
-    },
-    {
-      at: "branch",
-      text: (_leaf, branch) =>
-        `${branch} puts that value in its part of the Model.`
-    },
-    {
-      at: "root",
-      text: (_leaf, branch) =>
-        `Root puts ${branch}'s part in the application Model.`
-    },
-    {
-      at: "all",
-      text: () => "The view runs from the root with the new Model."
+  submodels: ["A", "A1", "A2"],
+  steps: (sender) => {
+    switch (sender) {
+      case "Root":
+        return [
+          sent(sender),
+          {
+            nodes: ["Root"],
+            text:
+              "The root update receives it and returns a new Model."
+          },
+          rendered
+        ]
+      case "A":
+        return [
+          sent(sender),
+          {
+            nodes: ["Root"],
+            text:
+              "Root wraps it in a Message of its own, and the root update receives it."
+          },
+          {
+            nodes: ["A"],
+            text:
+              "Root's update passes it to A's update, which returns a new value."
+          },
+          {
+            nodes: ["Root"],
+            text: "Root puts that value in the application Model."
+          },
+          rendered
+        ]
+      default:
+        return [
+          sent(sender),
+          {
+            nodes: ["A"],
+            text: "A wraps it in a Message of its own."
+          },
+          {
+            nodes: ["Root"],
+            text:
+              "Root wraps it again, and the root update receives it."
+          },
+          {
+            nodes: ["A"],
+            text: "Root's update passes it to A's update."
+          },
+          {
+            nodes: [sender],
+            text:
+              `A's update passes it to ${sender}'s update, which returns a new value.`
+          },
+          {
+            nodes: ["A"],
+            text: "A puts that value in its part of the Model."
+          },
+          {
+            nodes: ["Root"],
+            text: "Root puts A's part in the application Model."
+          },
+          rendered
+        ]
     }
-  ]
+  }
 }
 
 const effect: Side = {
@@ -95,22 +114,22 @@ const effect: Side = {
   title: "Effect UI",
   subtitle: "One Model per Component",
   submodels: [],
-  steps: [
-    { at: "leaf", text: (leaf) => `${leaf}'s view sends a Message.` },
+  steps: (sender) => [
+    sent(sender),
     {
-      at: "leaf",
-      text: (leaf) => `The runtime delivers it to ${leaf}'s update.`
+      nodes: [sender],
+      text: `The runtime delivers it to ${sender}'s update.`
     },
     {
-      at: "leaf",
-      text: (leaf) =>
-        `The runtime stores ${leaf}'s new Model, and ${leaf}'s view runs.`
+      nodes: [sender],
+      text:
+        `The runtime stores ${sender}'s new Model, and ${sender}'s view runs.`
     }
   ]
 }
 
 const ArchitectureModel = Schema.Struct({
-  leaf: Leaf,
+  sender: Name,
   foldkit: Schema.NullOr(Schema.Number),
   effect: Schema.NullOr(Schema.Number),
   isPlaying: Schema.Boolean,
@@ -119,28 +138,16 @@ const ArchitectureModel = Schema.Struct({
 type ArchitectureModel = typeof ArchitectureModel.Type
 
 export const ArchitectureMessage = UiSchema.TaggedEnum({
-  ClickedLeaf: { leaf: Leaf },
+  ClickedSender: { sender: Name },
   ClickedStep: { side: SideId, index: Schema.Number },
   Ticked: {}
 })
 
-const nodesAt = (step: Step, leaf: Leaf): ReadonlyArray<Name> => {
-  switch (step.at) {
-    case "leaf":
-      return [leaf]
-    case "branch":
-      return [branchOf(leaf)]
-    case "root":
-      return ["Root"]
-    case "all":
-      return names
-  }
-}
+const last = (side: Side, sender: Name) =>
+  side.steps(sender).length - 1
 
-const last = (side: Side) => side.steps.length - 1
-
-const advance = (side: Side, index: number | null) =>
-  Math.min((index ?? -1) + 1, last(side))
+const advance = (side: Side, sender: Name, index: number | null) =>
+  Math.min((index ?? -1) + 1, last(side, sender))
 
 const Node = <M>(
   h: View.H<M>,
@@ -168,10 +175,8 @@ const Panel = (
   model: ArchitectureModel
 ) => {
   const active = model[side.id]
-  const parent = branchOf(model.leaf)
-  const highlighted = active === null
-    ? []
-    : nodesAt(side.steps[active], model.leaf)
+  const steps = side.steps(model.sender)
+  const highlighted = active === null ? [] : steps[active].nodes
   return h.div.class("arch2-panel").attrs({
     role: "group",
     "aria-label": side.title
@@ -180,23 +185,16 @@ const Panel = (
     h.p.class("arch2-subtitle").children(side.subtitle),
     h.div.class("arch2-tree").attr("aria-hidden", "true").children(
       Node(h, side, highlighted, "Root"),
+      h.div.class("arch2-stem"),
+      Node(h, side, highlighted, "A"),
       h.div.class("arch2-fork"),
       h.div.class("arch2-children").children(
-        ...tree.map((branch) =>
-          h.div.class("arch2-branch").key(branch.name).children(
-            Node(h, side, highlighted, branch.name),
-            h.div.class("arch2-fork"),
-            h.div.class("arch2-children").children(
-              ...branch.leaves.map((leaf) =>
-                Node(h, side, highlighted, leaf).key(leaf)
-              )
-            )
-          )
-        )
+        Node(h, side, highlighted, "A1"),
+        Node(h, side, highlighted, "A2")
       )
     ),
     h.ol.class("arch2-steps").children(
-      ...side.steps.map((step, index) =>
+      ...steps.map((step, index) =>
         h.li.key(String(index)).children(
           h.button.class("arch2-step").attrs({
             type: "button",
@@ -207,7 +205,7 @@ const Panel = (
             h.span.class("arch2-step-number").children(
               String(index + 1)
             ),
-            h.span.children(step.text(model.leaf, parent))
+            h.span.children(step.text)
           )
         )
       )
@@ -215,9 +213,7 @@ const Panel = (
     h.p.class("sr-only").attr("aria-live", "polite").children(
       active === null
         ? ""
-        : `Step ${active + 1}: ${
-          side.steps[active].text(model.leaf, parent)
-        }`
+        : `Step ${active + 1}: ${steps[active].text}`
     )
   )
 }
@@ -230,16 +226,16 @@ export const Architecture = Component.define({
   elements: Html
 }).make({
   init: () => ({
-    leaf: "A1",
+    sender: "A1",
     foldkit: null,
     effect: null,
     isPlaying: false,
     runs: 0
   }),
   update: {
-    ClickedLeaf: ($, { leaf }) =>
+    ClickedSender: ($, { sender }) =>
       $.set({
-        leaf,
+        sender,
         foldkit: 0,
         effect: 0,
         isPlaying: true,
@@ -247,14 +243,16 @@ export const Architecture = Component.define({
       }),
     ClickedStep: ($, { side, index }) =>
       $.evolve({ [side]: index, isPlaying: false }),
-    Ticked: ($) =>
-      $.model.foldkit === last(foldkit) &&
-        $.model.effect === last(effect)
+    Ticked: ($) => {
+      const { sender } = $.model
+      return $.model.foldkit === last(foldkit, sender) &&
+          $.model.effect === last(effect, sender)
         ? $.evolve({ foldkit: null, effect: null, isPlaying: false })
         : $.evolve({
-          foldkit: advance(foldkit, $.model.foldkit),
-          effect: advance(effect, $.model.effect)
+          foldkit: advance(foldkit, sender, $.model.foldkit),
+          effect: advance(effect, sender, $.model.effect)
         })
+    }
   },
   subscriptions: ({ model }) => [
     model.isPlaying &&
@@ -276,14 +274,14 @@ export const Architecture = Component.define({
       }).children(
         h.span.class("arch2-prompt").attr("aria-hidden", "true")
           .children("Send a Message from"),
-        h.div.class("arch2-leaves").children(
-          ...leaves.map((leaf) =>
+        h.div.class("arch2-senders").children(
+          ...names.map((sender) =>
             h.button
-              .key(leaf)
-              .class("arch2-leaf")
+              .key(sender)
+              .class("arch2-sender")
               .attr("type", "button")
-              .onClick(ArchitectureMessage.ClickedLeaf({ leaf }))
-              .children(leaf)
+              .onClick(ArchitectureMessage.ClickedSender({ sender }))
+              .children(sender)
           )
         )
       ),

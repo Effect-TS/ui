@@ -72,6 +72,8 @@ export const Counter = Component.define({
       h.button
         .onClick(CounterMessage.ClickedResetAfterDelay())
         .children(
+          // True while a DelayReset Command is running. The runtime
+          // tracks that, so the Model doesn't need a flag for it.
           h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
         ),
       h.button
