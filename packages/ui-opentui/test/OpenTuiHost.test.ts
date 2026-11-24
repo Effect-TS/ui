@@ -331,8 +331,16 @@ describe("OpenTuiHost", () => {
       expect(app.setup.renderer.isDestroyed).toBe(true)
     }))
 
-  it.effect("keeps keepAlive children alive across hide/show", () =>
+  it.effect("reuses keepAlive children across hide/show and destroys parked nodes on expiry, owner teardown, and parked lazy fallback disposal", () =>
     Effect.gen(function*() {
+      const boxes: Array<OT.BoxRenderable> = []
+      class TrackedBox extends OT.BoxRenderable {
+        constructor(ctx: OT.RenderContext, options: OT.BoxOptions) {
+          super(ctx, options)
+          boxes.push(this)
+        }
+      }
+
       const TabMsg = UiSchema.TaggedEnum({ Incremented: {} })
       const Tab = Component.define({
         name: "Tab",
@@ -343,41 +351,167 @@ describe("OpenTuiHost", () => {
         init: () => 0,
         update: { Incremented: ($) => $.model + 1 },
         view: (h, count) =>
-          h.box.style({ width: 20, height: 3 }).onMouseDown(
-            TabMsg.Incremented()
-          ).children(h.text(`tab-count=${count}`))
-      })
-
-      const HostMsg = UiSchema.TaggedEnum({ Toggled: {} })
-      const Tabs = Component.define({
-        name: "Tabs",
-        model: Schema.Boolean,
-        message: HostMsg,
-        elements: OpenTui
-      }).make({
-        init: () => true,
-        update: { Toggled: ($) => !$.model },
-        view: (h, show) =>
-          h.box.style({ flexDirection: "column", width: 24, height: 6 })
-            .children(
-              h.keepAlive((s) => show ? Tab(s, { key: "a" }) : h.text("hidden"))
+          h.el("tracked-box").prop("width", 20).prop("height", 3)
+            .on("mousedown", TabMsg.Incremented()).children(
+              h.text(`tab-count=${count}`)
             )
       })
 
-      const app = yield* OpenTuiTest.mount(Tabs, {}, { width: 28, height: 8 })
+      const PendingLazy = Component.lazy(
+        "PendingLazy",
+        () => new Promise<typeof Tab>(() => {})
+      )
+
+      const OwnerProps = Schema.Struct({
+        showTab: Schema.Boolean,
+        keepTab: Schema.Boolean,
+        showLazy: Schema.Boolean,
+        keepLazy: Schema.Boolean
+      })
+
+      const Owner = Component.define({
+        name: "Owner",
+        props: OwnerProps,
+        model: Schema.Void,
+        message: Schema.Never,
+        elements: OpenTui
+      }).make({
+        init: () => undefined,
+        update: () => undefined,
+        view: (h) =>
+          h.box.style({ flexDirection: "column", width: 24, height: 8 })
+            .children(
+              h.keepAlive(
+                ({ props }) => props.keepTab,
+                (s) =>
+                  h.props.showTab
+                    ? Tab(s, { key: "a" })
+                    : h.text("hidden-tab")
+              ),
+              h.keepAlive(
+                ({ props }) => props.keepLazy,
+                (s) =>
+                  h.props.showLazy
+                    ? PendingLazy(s, {
+                      key: "lazy",
+                      fallback: () =>
+                        h.el("tracked-box").prop("width", 20).prop("height", 2)
+                          .children(h.text("loading-lazy"))
+                    })
+                    : h.text("hidden-lazy")
+              )
+            )
+      })
+
+      const RootMsg = UiSchema.TaggedEnum({
+        Set: {
+          mounted: Schema.optional(Schema.Boolean),
+          showTab: Schema.optional(Schema.Boolean),
+          keepTab: Schema.optional(Schema.Boolean),
+          showLazy: Schema.optional(Schema.Boolean),
+          keepLazy: Schema.optional(Schema.Boolean)
+        }
+      })
+
+      const Root = Component.define({
+        name: "Root",
+        model: Schema.Struct({
+          mounted: Schema.Boolean,
+          showTab: Schema.Boolean,
+          keepTab: Schema.Boolean,
+          showLazy: Schema.Boolean,
+          keepLazy: Schema.Boolean
+        }),
+        message: RootMsg,
+        elements: OpenTui
+      }).make({
+        init: () => ({
+          mounted: true,
+          showTab: true,
+          keepTab: true,
+          showLazy: true,
+          keepLazy: true
+        }),
+        update: {
+          Set: ($, patch) =>
+            $.set({
+              mounted: patch.mounted ?? $.model.mounted,
+              showTab: patch.showTab ?? $.model.showTab,
+              keepTab: patch.keepTab ?? $.model.keepTab,
+              showLazy: patch.showLazy ?? $.model.showLazy,
+              keepLazy: patch.keepLazy ?? $.model.keepLazy
+            })
+        },
+        view: (h, model) =>
+          model.mounted
+            ? Owner(h, {
+              props: {
+                showTab: model.showTab,
+                keepTab: model.keepTab,
+                showLazy: model.showLazy,
+                keepLazy: model.keepLazy
+              }
+            })
+            : h.text("unmounted")
+      })
+
+      const app = yield* OpenTuiTest.mount(Root, {}, {
+        width: 28,
+        height: 10,
+        renderables: { "tracked-box": TrackedBox }
+      })
+      expect(boxes).toHaveLength(2)
+      const [firstTabBox, lazyFallbackBox] = boxes
       expect(app.captureFrame()).toContain("tab-count=0")
+      expect(app.captureFrame()).toContain("loading-lazy")
 
       yield* app.click(2, 0)
       expect(app.captureFrame()).toContain("tab-count=1")
 
-      app.root.send(HostMsg.Toggled())
+      app.root.send(RootMsg.Set({ showTab: false, showLazy: false }))
       yield* app.settle
-      expect(app.captureFrame()).toContain("hidden")
-      expect(app.captureFrame()).not.toContain("tab-count=1")
+      expect(app.captureFrame()).toContain("hidden-tab")
+      expect(app.captureFrame()).toContain("hidden-lazy")
+      expect(firstTabBox!.isDestroyed).toBe(false)
+      expect(lazyFallbackBox!.isDestroyed).toBe(false)
 
-      app.root.send(HostMsg.Toggled())
+      app.root.send(RootMsg.Set({ showTab: true }))
       yield* app.settle
       expect(app.captureFrame()).toContain("tab-count=1")
+      expect(boxes).toHaveLength(2)
+
+      app.root.send(RootMsg.Set({ showTab: false }))
+      yield* app.settle
+      expect(firstTabBox!.isDestroyed).toBe(false)
+
+      app.root.send(RootMsg.Set({ keepTab: false, keepLazy: false }))
+      yield* app.settle
+      expect(firstTabBox!.isDestroyed).toBe(true)
+      expect(lazyFallbackBox!.isDestroyed).toBe(true)
+
+      app.root.send(RootMsg.Set({
+        showTab: true,
+        keepTab: true,
+        showLazy: true,
+        keepLazy: true
+      }))
+      yield* app.settle
+      expect(boxes).toHaveLength(4)
+      const teardownTabBox = boxes[2]!
+      const teardownLazyBox = boxes[3]!
+      expect(teardownTabBox.isDestroyed).toBe(false)
+      expect(teardownLazyBox.isDestroyed).toBe(false)
+
+      app.root.send(RootMsg.Set({ showTab: false, showLazy: false }))
+      yield* app.settle
+      expect(teardownTabBox.isDestroyed).toBe(false)
+      expect(teardownLazyBox.isDestroyed).toBe(false)
+
+      app.root.send(RootMsg.Set({ mounted: false }))
+      yield* app.settle
+      expect(app.captureFrame()).toContain("unmounted")
+      expect(teardownTabBox.isDestroyed).toBe(true)
+      expect(teardownLazyBox.isDestroyed).toBe(true)
     }))
 
   it.effect("stops mouse propagation on innermost handler even when returning undefined, and resets removed style props", () =>

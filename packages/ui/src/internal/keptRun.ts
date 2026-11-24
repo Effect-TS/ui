@@ -112,11 +112,34 @@ const end = (table: Table, named: string, entry: Entry): void => {
   drop(table.author, entry)
 }
 
+const unplaceParked = (host: Kernel.Host, rec: Rec): void => {
+  const first = Kernel.nodeOf(rec)
+  const parent = host.parentOf(first)
+  if (parent != null) Kernel.unplace(host, parent, rec)
+}
+
 const drop = (author: Inst, entry: Entry): void => {
   const at = entry.loading
-  if (at === undefined) return Kernel.close(entry.inst)
+  if (at === undefined) {
+    const parked = entry.rec === undefined && off.has(entry.inst)
+    const rendered = entry.inst.rendered
+    if (parked) off.delete(entry.inst)
+    Kernel.close(entry.inst)
+    if (parked && rendered !== undefined) {
+      unplaceParked(author.tree.host, rendered)
+    }
+    return
+  }
   lazy.unwatch(at)
-  if (entry.rec === undefined) Kernel.release(author, at)
+  if (entry.rec === undefined) {
+    const parked = entry.parked
+    const fallback = at.kids?.[0]
+    entry.parked = false
+    Kernel.release(author, at)
+    if (parked && fallback !== undefined) {
+      unplaceParked(author.tree.host, fallback)
+    }
+  }
 }
 
 const plainOf = (rec: Rec, out: Set<string>): void => {

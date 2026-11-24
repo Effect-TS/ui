@@ -143,13 +143,14 @@ describe("Subscription", () => {
       yield* TestHost.settle
 
       fire!(2)
+      assert.deepStrictEqual(accepted, [1])
       yield* TestHost.settle
       assert.strictEqual(root.model()?.count, 3)
 
       fire!(2)
+      assert.deepStrictEqual(accepted, [1, 3])
       yield* TestHost.settle
       assert.strictEqual(root.model()?.count, 9)
-      assert.deepStrictEqual(accepted, [1, 3])
 
       root.send(Message.Stop())
       yield* TestHost.settle
