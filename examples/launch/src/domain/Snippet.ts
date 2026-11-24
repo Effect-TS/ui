@@ -29,6 +29,7 @@ export const Snippets = Schema.Struct({
   partsFoldkit: Files,
   partsEffect: Files,
   partsOwn: Files,
-  mount: Files
+  mount: Files,
+  provider: Files
 })
 export type Snippets = typeof Snippets.Type

@@ -78,7 +78,11 @@ const sources: {
     "src/parts/Details.ts",
     whole
   ]],
-  mount: [["src/main.ts", whole]]
+  mount: [["src/main.ts", whole]],
+  provider: [["src/provider/CartProvider.ts", whole], [
+    "src/provider/Shop.ts",
+    whole
+  ]]
 }
 
 const tokenize = async (

@@ -139,6 +139,10 @@ In Foldkit 0.x, state that several Submodels needed lived in the Model of a pare
 
 In Effect UI, a Provider is a Component that shares part of its Model with every Component rendered inside it, at any depth. A Component lists the Provider to read its value and sends it a Message to ask for a change. The Components in between don't pass the value down or forward the Message. The value changes only in the Provider's update.
 
+:::Listing{code="provider"}
+A Provider that shares a cart's count, and the Components inside it that read and change it. `Product` sits in between and doesn't mention the cart.
+:::
+
 ::Diagram{scenario="sharedState"}
 
 ## Addition: Play tests
