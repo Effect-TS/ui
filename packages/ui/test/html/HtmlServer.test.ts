@@ -1869,6 +1869,53 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.state["~query"]).toEqual({})
     }))
 
+  it.effect("shows the fallback of an instance whose Layer fails on the client, and adopts what follows it", () =>
+    Effect.gen(function*() {
+      let serving = true
+      class Greeting extends Context.Service<Greeting, string>()("Greeting") {}
+      const Inner = Component.define({
+        name: "Inner",
+        model: Schema.String,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => "inner",
+        update: ($) => $.model,
+        view: (h, text) => h.p(text)
+      }).pipe(Component.provide(Layer.effect(
+        Greeting,
+        Effect.suspend(() =>
+          serving ? Effect.succeed("hello") : Effect.die("offline")
+        )
+      )))
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.main(
+            Inner(h, { key: "i", fallback: () => h.em("fallback") }),
+            h.span("after")
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toContain("<p>inner</p>")
+      serving = false
+      const app = yield* container(rendered.html)
+      const after = app.querySelector("span")
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
+        state: rendered.state
+      })
+      yield* root.adopted
+      expect(app.querySelector("main")!.innerHTML.replace(/<!--.*?-->/g, ""))
+        .toBe("<em>fallback</em><span>after</span>")
+      expect(app.querySelector("span")).toBe(after)
+    }).pipe(Effect.scoped))
+
   /** What `Object.prototype` has under each reserved key as a render runs: setting one of them wouldn't add it. */
   const inherited: ReadonlyArray<
     readonly [string, PropertyDescriptor | undefined]
