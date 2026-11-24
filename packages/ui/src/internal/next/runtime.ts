@@ -25,7 +25,7 @@ import type * as keptRun from "../keptRun.ts"
 import * as Kernel from "../kernel.ts"
 import * as lazy from "../lazy.ts"
 import * as messageLog from "../messageLog.ts"
-import * as partsRun from "../partsRun.ts"
+import type * as partsRun from "../partsRun.ts"
 import { childName, segment } from "../paths.ts"
 import * as queryCore from "../queryCore.ts"
 import * as Recorder from "../recorder.ts"
@@ -62,8 +62,10 @@ export const eventOwners = (
   const out: Record<string, ReadonlyArray<string>> = {}
   for (const event in handlers) {
     const handler = handlers[event]
-    if (handler instanceof partsRun.Layered) {
-      out[event] = handler.layers.map((layer) => layer.inst.path)
+    if ((handler as partsRun.Layered | undefined)?.["~fire"] !== undefined) {
+      out[event] = (handler as partsRun.Layered).layers.map((layer) =>
+        layer.inst.path
+      )
     }
   }
   return out
@@ -112,8 +114,15 @@ const bridge = (
         step(() => {
           const inst = rec.inst
           if (inst.closed) return false
-          if (handler instanceof partsRun.Layered) {
-            return handler["~fire"](payload, event, onMessage)
+          // A part's layers, fired each in its owner.
+          if (
+            (handler as partsRun.Layered | undefined)?.["~fire"] !== undefined
+          ) {
+            return (handler as partsRun.Layered)["~fire"](
+              payload,
+              event,
+              onMessage
+            )
           }
           let message: unknown = handler
           if (typeof handler === "function") {

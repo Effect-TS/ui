@@ -1006,7 +1006,7 @@ const place = (
 const remove = (inst: Instance, parent: unknown, rec: Rec): void => {
   const nodes = nodesOf(rec, [])
   release(inst, rec)
-  unplaceAll(inst.tree.host, parent, nodes)
+  for (const node of nodes) inst.tree.host.remove(parent, node)
 }
 
 const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
@@ -1018,18 +1018,9 @@ const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
   return out
 }
 
-const unplaceAll = (
-  host: Host,
-  parent: unknown,
-  nodes: ReadonlyArray<unknown>
-): void => {
-  for (let index = 0; index < nodes.length; index++) {
-    host.remove(parent, nodes[index])
-  }
+const unplace = (host: Host, parent: unknown, rec: Rec): void => {
+  for (const node of nodesOf(rec, [])) host.remove(parent, node)
 }
-
-const unplace = (host: Host, parent: unknown, rec: Rec): void =>
-  unplaceAll(host, parent, nodesOf(rec, []))
 
 const keeperOf = (view: View.Child<any, any>): Keeper | undefined =>
   view.alive === undefined
