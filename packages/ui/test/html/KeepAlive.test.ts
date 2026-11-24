@@ -1795,3 +1795,64 @@ describe("keep-alive children of a headless child", () => {
       }).pipe(Effect.scoped)
   )
 })
+
+let lateGate: Effect.Effect<void> = Effect.void
+let lateServing = true
+const Late = Schema.String.pipe(Schema.decode({
+  decode: SchemaGetter.transformEffect((text: string) =>
+    Effect.as(Effect.suspend(() => lateGate), text)
+  ),
+  encode: SchemaGetter.passthrough()
+}))
+const LateDraft = Component.define({
+  name: "LateDraft",
+  keepAlive: true,
+  model: Late,
+  message: Schema.String,
+  elements: Html
+}).make({
+  init: () => lateServing ? "server" : "client",
+  update: (_, text) => text,
+  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+})
+const LateKeeper = Component.define({
+  name: "LateKeeper",
+  model: Schema.Number,
+  message: Schema.Literal("bump"),
+  elements: Html
+}).make({
+  init: () => 0,
+  update: ($) => $.model + 1,
+  view: (h, count) =>
+    h.div(
+      h.button.onClick("bump").children(String(count)),
+      h.keepAlive((s) => LateDraft(s, { key: "d" }))
+    )
+})
+
+describe("keep-alive children whose state decodes asynchronously", () => {
+  it.effect("take the server's Model and nodes after their author renders again as they decode", () =>
+    Effect.gen(function*() {
+      lateServing = true
+      const { html, state } = yield* HtmlServer.renderToHtml(LateKeeper, {})
+      lateServing = false
+      const latch = yield* Deferred.make<void>()
+      lateGate = Deferred.await(latch)
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      app.innerHTML = html
+      const served = app.querySelector("input")
+      yield* BrowserHost.mountEffect(LateKeeper, {}, app, { state })
+      yield* tick
+      app.querySelector("button")!.click()
+      yield* tick
+      yield* Deferred.succeed(latch, undefined)
+      yield* tick
+      assert.strictEqual(app.querySelector("button")!.textContent, "1")
+      assert.deepStrictEqual(
+        Array.from(app.querySelectorAll("input"), (field) => field.value),
+        ["server"]
+      )
+      assert.strictEqual(app.querySelector("input"), served)
+    }).pipe(Effect.scoped))
+})
