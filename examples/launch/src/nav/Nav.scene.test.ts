@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { DomCommand } from "@effect/ui/html"
+import { HtmlCommand } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
@@ -50,7 +50,7 @@ describe("Nav", () => {
       s.click(closed)
         .fireDocument("keydown", { key: "Enter" }).expectIgnored()
         .fireDocument("keydown", { key: "Escape" })
-        .resolve(DomCommand.Focus, { found: true })
+        .resolve(HtmlCommand.Focus, { found: true })
         .expect(closed).toExist()
     }))
 
