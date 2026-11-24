@@ -101,7 +101,7 @@ The runtime also tracks which Commands are running, and a view can check with `h
 
 A Component's Model holds the state it changes through update. It no longer has to hold everything its view shows.
 
-You can still reconstruct a Component's Model from a log of its Messages. With a `MessageLog`, the runtime records each Message in order, along with the props, query results and Provider values its update read. It also records changes to props and query results, and when Commands start and end. Replaying the log reproduces the Model without running Commands, fetches or Subscriptions.
+You can still reconstruct a Component's Model from a log of its Messages. When you enable logging for your app, the runtime records each Message in order, along with the props, query results and Provider values its update read. It also records changes to props and query results, and when Commands start and end. Replaying the log reproduces the Model without running Commands, fetches or Subscriptions.
 
 ## Addition: Built-in queries
 
@@ -152,18 +152,32 @@ What people value in Foldkit 0.x carries over to Effect UI.
 - **The same structure everywhere:** Every Component has a Model, Messages, init and update, with a view or, for a headless Component, parts. You, a new teammate or an AI agent always know where to look.
 - **Explicit state transitions:** Once a Component is running, its Model changes only in its update, in response to a Message.
 - **Side effects as values:** Commands, Subscriptions and Mounts describe work for the runtime to run. update and view don't perform it themselves.
-- **Tests that declare what happened:** A Story or Scene test is a list of steps in order: a Message or a click, the Command that update returned and the result that Command came back with. You supply that result in the test, so there is nothing to mock and no waiting for the UI to settle. A test that leaves a Command unresolved fails. Play tests use Scene's steps and run the Commands for real.
-- **A record of what happened:** With a `MessageLog`, the runtime records Messages, query results and lifecycle events in order. You can replay a Component's Model and query results from its log without running its side effects again. The inspector in the corner of this article reads that log, and its time travel shows the article as it was at an earlier entry.
+- **Tests that declare what happened:** A Story or Scene test reads as a list of steps: a Message or a click, the Command that update returned and the result you give that Command. Because you supply the result, there is nothing to mock and no waiting for the UI to settle. A test that leaves a Command unresolved fails. Play tests use Scene's steps and run the Commands for real.
+- **A record of what happened:** Enable message logging to record Messages, Model changes and query results. You can inspect that history and replay a Component's recorded state without rerunning side effects. The inspector in the corner of this article lists that history, and its time travel shows the article as it was at an earlier entry.
 
 ## You can keep building on Foldkit 0.x
 
-Effect UI doesn't have everything Foldkit 0.x has yet. We're publishing it now so you can try it, get a feel for the new APIs and tell us what you think.
+Effect UI doesn't have everything Foldkit 0.x has yet. We're making it public now so you can try it, get a feel for the new APIs and tell us what you think.
 
 You can keep building with Foldkit 0.x, and it will receive critical bug fixes at least until Effect UI ships with an upgrade guide.
 
 Effect UI is developed in [Effect-TS/ui](https://github.com/Effect-TS/ui). Applicable Foldkit issues and pull requests will be transferred there, so you don't need to open them again.
 
 Thanks for building with Effect UI! :)
+
+## Try a snapshot build
+
+Effect UI isn't on npm yet. Every commit to `main` is published as a snapshot build on [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). To install the latest one:
+
+```sh
+pnpm add effect \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui@main \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@main
+```
+
+The second URL adds the UI kit, which is optional. To stay on one build, replace `main` with a commit's short SHA.
+
+The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the repository are complete apps you can read and run.
 
 :::Footer
 This article is built with Effect UI. Browse the source in `examples/launch` in Effect-TS/ui.
