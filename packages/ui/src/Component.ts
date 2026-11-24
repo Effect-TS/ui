@@ -984,6 +984,14 @@ const makeUpdate = (
     "~self": self
   })
 
+// An `update` as a function: a record dispatches on the message's `_tag`.
+const toUpdateFn = (
+  update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
+): AnyUpdate =>
+  typeof update === "function"
+    ? update
+    : ($, msg) => update[(msg as { readonly _tag: string })._tag]($, msg)
+
 const initSet = (model: unknown) =>
   makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
 const makeInit = (props: unknown): Init<any, any, any, any> => ({
@@ -2415,18 +2423,20 @@ type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
     : UnknownTag<T>
 }
 
-type IsKnownTag<T extends string> = T extends unknown
-  ? [{}] extends [{ readonly [K in T]: unknown }] ? false : true
+// The tags no record key stands for: `string` and template literals, which a mapped type turns into an
+// index signature.
+type OpenTag<T extends string> = T extends unknown
+  ? {} extends Record<T, unknown> ? T : never
   : never
 
-type CanUseUpdateRecord<Msg> = [Msg] extends [never] ? false
-  : [Msg] extends [{ readonly _tag: string }]
-    ? [IsKnownTag<TagOf<Msg>>] extends [true] ? true : false
-  : false
-
-type NonCallable = {
-  readonly [Symbol.hasInstance]?: never
-}
+// What a record given to `Def.update` is besides an `UpdateRecord`. It is dispatched on `_tag`, so this is
+// `never` unless every member of `Msg` has one and no tag is open. Every function has `Symbol.hasInstance`,
+// so it also rules out a function with handlers for properties, which is called as a function.
+type DispatchedByTag<Msg> = [Msg] extends [{ readonly _tag: string }]
+  ? [OpenTag<TagOf<Msg>>] extends [never]
+    ? { readonly [Symbol.hasInstance]?: never }
+  : never
+  : never
 
 /**
  * What `define` returns: a component's name, Schemas, queries and
@@ -2435,13 +2445,13 @@ type NonCallable = {
  *
  * **Details**
  *
- * `update` with a tag returns a slice for that tag. Without one, it takes
- * either a function over the whole message type or a record with a handler
- * for every `_tag` of the message, and returns an update function over the
- * whole message type. Either fits the matching key of a record `update`, and
- * `$.combine` takes either where the message fits. A record key that isn't a
- * message tag is a type error. `view` and `fragment` return the function
- * they're given.
+ * `update` with a tag returns a slice for that tag. Without one, it takes a
+ * function over the whole message type, or a record with a handler for every
+ * `_tag` of a tagged message, and returns an update function over that type.
+ * A slice or an update function fits the matching key of a record `update`,
+ * and `$.combine` takes either where the message fits. A record key that
+ * isn't a message tag is a type error. `view` and `fragment` return the
+ * function they're given.
  *
  * `make` takes `init`, `update`, `view`, `subscriptions` and `head`,
  * and reads `R` off what they return.
@@ -2517,9 +2527,9 @@ export interface Definition<
       readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
     }
   >(
-    update: CanUseUpdateRecord<Msg> extends true
-      ? UpdateRecord<Model, Msg, Events, Props, L, SR, UR> & NonCallable
-      : never
+    update:
+      & UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
+      & DispatchedByTag<Msg>
   ): (
     $: Update<Model, Msg, Events, Props, L, Msg, SR>,
     msg: Msg
@@ -3483,7 +3493,7 @@ export const define = <
       ? shares.collects
       : undefined,
     restore: options.restore,
-    // A slice is the function given, with `$` bound to the message it's called with.
+    // What it returns is the function given, or a record as one, with `$` bound to the message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update = toUpdateFn(args[args.length - 1])
       return ($: Update<any, any, any, any>, msg: unknown) =>
@@ -3541,13 +3551,6 @@ const bindQueries = (
     `${component}: queries must be a record of { query, args } or { queryMany, args } entries.`
   )
 }
-
-const toUpdateFn = (
-  update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
-): AnyUpdate =>
-  typeof update === "function"
-    ? update
-    : ($, msg) => update[(msg as { readonly _tag: string })._tag]($, msg)
 
 const finish = (
   definition: Definition.Any,
