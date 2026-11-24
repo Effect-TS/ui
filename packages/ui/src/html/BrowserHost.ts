@@ -820,41 +820,47 @@ export const makeHost = (
       }
       if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
       keepingScroll(() => element.showPopover())
+      if (heldPopovers.has(element) && popoverShowing(element)) expectToggle(element, "open")
     }
   }
 
-  const heldPopovers = new Set<HTMLElement>()
-  const hostToggles = new WeakSet<globalThis.Node>()
-  const togglePopover = (element: HTMLElement, show: boolean) => {
-    if (show) keepingScroll(() => element.showPopover())
-    else element.hidePopover()
-    if (popoverShowing(element) === show && listening.has("toggle")) hostToggles.add(element)
+  const heldDialogs = new Set<globalThis.Node>()
+  const heldPopovers = new Set<globalThis.Node>()
+  const hostToggles = new WeakMap<globalThis.Node, "open" | "closed">()
+  const expectToggle = (node: globalThis.Node, state: "open" | "closed") => {
+    if (listening.has("toggle")) hostToggles.set(node, state)
   }
   const isAuto = (element: globalThis.Element) =>
     element.hasAttribute("popover") && element.getAttribute("popover") !== "manual"
   const hold = (container: globalThis.Element | undefined) => {
     held = container !== undefined
     if (container !== undefined) {
+      const popovers = Array.from(container.querySelectorAll<HTMLElement>("[popover]")).filter((element) =>
+        wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)
+      )
       for (const dialog of Array.from(shown).reverse()) {
-        if (modals.has(dialog)) closeDialog(dialog, true)
+        if (!modals.has(dialog)) continue
+        closeDialog(dialog, true)
+        heldDialogs.add(dialog)
+        expectToggle(dialog, "closed")
       }
-      for (const element of container.querySelectorAll<HTMLElement>("[popover]")) {
-        if (wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)) {
-          togglePopover(element, false)
-          heldPopovers.add(element)
-        }
+      for (const element of popovers.reverse()) {
+        if (popoverShowing(element)) element.hidePopover()
+        heldPopovers.add(element)
+        expectToggle(element, "closed")
       }
       return
     }
     showModals()
-    for (const element of heldPopovers) {
-      if (
-        element.isConnected && isAuto(element) && wanted.get(element)?.get("popoverOpen") === true &&
-        !popoverShowing(element)
-      ) togglePopover(element, true)
+    for (const dialog of heldDialogs) {
+      if ((dialog as HTMLDialogElement).open) expectToggle(dialog, "open")
     }
-    heldPopovers.clear()
+    heldDialogs.clear()
+    for (const element of heldPopovers) {
+      if (wanted.get(element)?.get("popoverOpen") === true) popoversToShow.add(element as HTMLElement)
+    }
     showPopovers()
+    heldPopovers.clear()
   }
 
   const restoreNode = (node: globalThis.Node) => {
@@ -1152,7 +1158,11 @@ export const makeHost = (
   }
 
   const listener = (name: string) => (event: Event) => {
-    if (name === "toggle" && event.target !== null && hostToggles.delete(event.target as globalThis.Node)) return
+    if (name === "toggle" && event.target !== null) {
+      const expected = hostToggles.get(event.target as globalThis.Node)
+      hostToggles.delete(event.target as globalThis.Node)
+      if (expected !== undefined && (event as ToggleEvent).newState === expected) return
+    }
     if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
     if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
       const dialog = event.target as HTMLDialogElement
@@ -1336,6 +1346,7 @@ export const makeHost = (
         else manualPopovers.delete(node as HTMLElement)
         // Edge-triggered: an auto popover the browser closed stays closed until the Model's value changes.
         if (mode === "auto" && !modeChanged && previous === want) return
+        heldPopovers.delete(node)
         applyPopover(node as HTMLElement, want)
         return
       }
@@ -1347,6 +1358,7 @@ export const makeHost = (
           wanted.set(node, values)
         }
         values.set(name, want)
+        heldDialogs.delete(node)
         if (want === "modal") {
           // Shown at the commit, once it's connected, outer dialogs first.
           modalWanted.add(node)

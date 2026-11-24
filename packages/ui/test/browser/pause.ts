@@ -9,7 +9,11 @@ const Message = UiSchema.TaggedEnum({
   Closed: {},
   ClickedMenu: {},
   ClosedMenu: {},
-  ToggledMenu: { open: Schema.Boolean }
+  ToggledMenu: { open: Schema.Boolean },
+  ToggledDialog: { open: Schema.Boolean },
+  ClickedSub: {},
+  ClosedSub: {},
+  ToggledSub: { open: Schema.Boolean }
 })
 
 const Model = Schema.Struct({
@@ -17,8 +21,22 @@ const Model = Schema.Struct({
   heard: Schema.Number,
   dialog: Schema.Boolean,
   menu: Schema.Boolean,
-  toggles: Schema.Number
+  toggles: Schema.Number,
+  dialogToggles: Schema.Number,
+  sub: Schema.Boolean,
+  subToggles: Schema.Number
 })
+
+const initial: typeof Model.Type = {
+  count: 0,
+  heard: 0,
+  dialog: false,
+  menu: false,
+  toggles: 0,
+  dialogToggles: 0,
+  sub: false,
+  subToggles: 0
+}
 
 const Scene = Component.define({
   name: "Scene",
@@ -27,7 +45,7 @@ const Scene = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ count: 0, heard: 0, dialog: false, menu: false, toggles: 0 }),
+  init: () => initial,
   update: {
     ClickedCount: ($) => $.evolve({ count: $.model.count + 1 }),
     HeardClick: ($) => $.evolve({ heard: $.model.heard + 1 }),
@@ -35,7 +53,11 @@ const Scene = Component.define({
     Closed: ($) => $.evolve({ dialog: false }),
     ClickedMenu: ($) => $.evolve({ menu: true }),
     ClosedMenu: ($) => $.evolve({ menu: false }),
-    ToggledMenu: ($, { open }) => $.evolve({ menu: open, toggles: $.model.toggles + 1 })
+    ToggledMenu: ($, { open }) => $.evolve({ menu: open, toggles: $.model.toggles + 1 }),
+    ToggledDialog: ($, { open }) => $.evolve({ dialog: open, dialogToggles: $.model.dialogToggles + 1 }),
+    ClickedSub: ($) => $.evolve({ sub: true }),
+    ClosedSub: ($) => $.evolve({ sub: false }),
+    ToggledSub: ($, { open }) => $.evolve({ sub: open, subToggles: $.model.subToggles + 1 })
   },
   view: (h, model) =>
     h.main(
@@ -43,10 +65,16 @@ const Scene = Component.define({
       h.p.class("heard").children(`Heard ${model.heard}`),
       h.button.class("open-menu").onClick(Message.ClickedMenu()).children("Open menu"),
       h.div.class("menu").popover("auto", model.menu).onToggle(({ open }) => Message.ToggledMenu({ open }))
-        .children("Menu"),
-      h.dialog.modal(model.dialog).onCancel(Message.Closed()).children(
-        h.button.class("close").onClick(Message.Closed()).children("Close")
-      )
+        .children(
+          h.p("Menu"),
+          h.button.class("open-sub").onClick(Message.ClickedSub()).children("Open submenu"),
+          h.div.class("sub").popover("auto", model.sub).onToggle(({ open }) => Message.ToggledSub({ open }))
+            .children("Submenu")
+        ),
+      h.dialog.modal(model.dialog).onCancel(Message.Closed()).onToggle(({ open }) => Message.ToggledDialog({ open }))
+        .children(
+          h.button.class("close").onClick(Message.Closed()).children("Close")
+        )
     ),
   subscriptions: () => [HtmlSubscription.onDocument("click", Message.HeardClick())]
 })
@@ -66,9 +94,11 @@ Effect.runFork(
       check: {
         model: () => root.model(),
         open: () => root.send(Message.Opened()),
+        dialog: (open: boolean) => root.send(open ? Message.Opened() : Message.Closed()),
         menu: (open: boolean) => root.send(open ? Message.ClickedMenu() : Message.ClosedMenu()),
-        pause: (model: typeof Model.Type) =>
-          Effect.runSync(pausable.pause((path) => path === "/Scene" ? { model } : undefined))
+        sub: (open: boolean) => root.send(open ? Message.ClickedSub() : Message.ClosedSub()),
+        pause: () =>
+          Effect.runSync(pausable.pause((path) => path === "/Scene" ? { model: { ...initial, count: 5 } } : undefined))
       }
     })
     document.body.setAttribute("data-ready", "")
