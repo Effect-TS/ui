@@ -388,6 +388,69 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }))
     }))
 
+  it.live("collapses Model branches and counts the changes hidden inside them", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Typed: {}, Replaced: {} })
+      const Form = Component.define({
+        name: "Form",
+        scoped: false,
+        model: Schema.Struct({
+          form: Schema.Struct({
+            name: Schema.Struct({ value: Schema.String })
+          }),
+          lists: Schema.Record(Schema.String, Schema.Array(Schema.Number))
+        }),
+        message: Message,
+        elements: Html
+      }).make({
+        init: () => ({ form: { name: { value: "" } }, lists: { old: [1] } }),
+        update: {
+          Typed: ($) => $.set({ ...$.model, form: { name: { value: "Ada" } } }),
+          Replaced: ($) => $.set({ ...$.model, lists: { fresh: [2, 3] } })
+        },
+        view: (h) =>
+          h.div.children(
+            h.button.onClick(Message.Typed()).children("Type"),
+            h.button.onClick(Message.Replaced()).children("Replace")
+          )
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer()).pipe(
+        Effect.flatMap((services) => BrowserHost.mountEffect(Form, {}, app).pipe(Effect.provide(services)))
+      )
+      yield* settle
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Type" }))
+      const root = overlay()
+      yield* open(root)
+      yield* click(oldest(root, /Update Typed$/))
+
+      const toggle = (name: string) => HtmlLocator.getByRole(root, "button", { name })
+      assert.isNull(root.querySelector(".tree .tl[data-change]"))
+      assert.strictEqual(toggle("form, 1 change").getAttribute("aria-expanded"), "false")
+      assert.strictEqual(text(toggle("form, 1 change").closest(".tl")), "▸form{ name } 1 change")
+      assert.strictEqual(text(toggle("lists").closest(".tl")), "▸lists{ old }")
+
+      yield* click(toggle("form, 1 change"))
+      assert.strictEqual(toggle("form").getAttribute("aria-expanded"), "true")
+      yield* click(toggle("name, 1 change"))
+      assert.strictEqual(text(root.querySelector(".tree .tl[data-change=changed]")), "value\"\" → \"Ada\"")
+
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Replace" }))
+      yield* click(oldest(root, /Update Replaced$/))
+      assert.strictEqual(toggle("name").getAttribute("aria-expanded"), "true")
+
+      yield* click(toggle("lists, 2 changes"))
+      const rows = () => Array.from(root.querySelectorAll(".tree .tl"), (row) => text(row))
+      const lists = () => rows().slice(rows().indexOf("▾lists{"))
+      assert.deepStrictEqual(lists(), ["▾lists{", "▸fresh[ 2 items ] added", "▸old[ 1 item ] removed", "}"])
+      yield* click(toggle("fresh, added"))
+      assert.deepStrictEqual(lists(), ["▾lists{", "▾fresh[ added", "02", "13", "]", "▸old[ 1 item ] removed", "}"])
+      yield* click(toggle("fresh, added"))
+      yield* click(toggle("old, removed"))
+      assert.deepStrictEqual(lists(), ["▾lists{", "▸fresh[ 2 items ] added", "▾old[ removed", "01", "]", "}"])
+    }))
+
   it.live("reads a run whose defect failed its instance as failed, not running", () =>
     Effect.gen(function*() {
       const Upload = Command.make("files/Upload", { args: {} }, () => Effect.die("disk full"))

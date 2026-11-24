@@ -63,7 +63,8 @@ const OverlayModel = Schema.Struct({
   reveal: Schema.NullOr(Schema.Number),
   pins: Schema.Number,
   pane: Pane,
-  paused: Schema.NullOr(Paused)
+  paused: Schema.NullOr(Paused),
+  expanded: Schema.Array(Schema.String)
 })
 
 type OverlayModel = typeof OverlayModel.Type
@@ -80,6 +81,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedBack: {},
   ScrolledTimeline: { atStart: Schema.Boolean },
   SelectedTab: { value: Schema.String },
+  ToggledModelPath: { path: Schema.String },
   ClickedCopyFrame: { seq: Schema.Number, text: Schema.String },
   SucceededCopyFrame: { seq: Schema.Number },
   FailedCopyFrame: {},
@@ -547,16 +549,33 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
     })
   )
 
+const changesText = (count: number) => count + (count === 1 ? " change" : " changes")
+
 const treeRow = (h: H, row: Read.Row) => {
-  const change = row.change
-  const kind = change?.kind === "unknown" ? undefined : change?.kind
-  return h.div.key(row.id).class("tl", kind !== undefined && "chg").attr(
+  const { branch, change } = row
+  const kind = change?.kind
+  const key = row.key === undefined ? "" : String(row.key)
+  const closed = branch !== undefined && !branch.expanded
+  const label = kind === "added" || kind === "removed"
+    ? kind
+    : closed && branch.changes > 0
+    ? changesText(branch.changes)
+    : undefined
+  return h.div.key(row.id).class("tl", (kind ?? label) !== undefined && "chg").attr(
     "style",
     "padding-left:" + (row.depth * 16 + 12) + "px"
   ).attr("data-change", kind).children(
-    h.span.class("k").children(row.key === undefined ? "" : String(row.key)),
+    branch === undefined
+      ? h.span.class("k").children(key)
+      : h.button.class("k", "toggle").attr("aria-expanded", String(branch.expanded)).attr(
+        "aria-label",
+        label === undefined ? key : key + ", " + label
+      ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path })).children(
+        h.span.class("chev").attr("aria-hidden", "true").children(branch.expanded ? "▾" : "▸"),
+        key
+      ),
     h.span.class("v").children(
-      row.open ?? row.close ?? null,
+      closed ? h.span.class("t-punct").children(branch.preview) : row.open ?? row.close ?? null,
       ...(kind === "changed"
         ? [
           h.del.class("old").children(...Json(h, change!.before)),
@@ -566,7 +585,7 @@ const treeRow = (h: H, row: Read.Row) => {
         : row.open === undefined && row.close === undefined
         ? Json(h, row.value)
         : []),
-      kind === "added" || kind === "removed" ? h.span.class("muted").children(" " + kind) : null
+      label === undefined ? null : h.span.class("muted").children(" " + label)
     )
   )
 }
@@ -749,7 +768,12 @@ const Details = (
               ", the previous state of " + name
             )
         ),
-        VirtualTree(h, "Model after #" + entry.seq, String(entry.seq), Read.treeOf(state.model, changes))
+        VirtualTree(
+          h,
+          "Model after #" + entry.seq,
+          String(entry.seq),
+          Read.treeOf(state.model, changes, new Set(model.expanded))
+        )
       ]
     }]),
     ...(entry._tag === "Update"
@@ -973,7 +997,8 @@ export const Overlay = Component.define({
     reveal: null,
     pins: 0,
     pane: "timeline",
-    paused: null
+    paused: null,
+    expanded: []
   }),
   update: {
     ReceivedFrames: ($) =>
@@ -1005,6 +1030,10 @@ export const Overlay = Component.define({
           : $.evolve({ atStart, pinned: true, pins: increment })
         : $.evolve({ atStart, pinned: false, reveal: null }),
     SelectedTab: ($, { value }) => $.evolve({ tab: value }),
+    ToggledModelPath: ($, { path }) =>
+      $.evolve({
+        expanded: (paths) => paths.includes(path) ? paths.filter((open) => open !== path) : [...paths, path]
+      }),
     ClickedCopyFrame: ($, { seq, text }) => $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
     SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
     FailedCopyFrame: ($) => $.evolve({ copied: null }),

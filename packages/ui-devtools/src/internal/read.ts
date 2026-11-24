@@ -334,6 +334,14 @@ export interface Row {
   readonly open?: "{" | "[" | undefined
   readonly close?: "}" | "]" | undefined
   readonly change?: Inspector.Change | undefined
+  readonly branch?: Branch | undefined
+}
+
+export interface Branch {
+  readonly path: string
+  readonly expanded: boolean
+  readonly preview: string
+  readonly changes: number
 }
 
 const pathKey = (path: ReadonlyArray<string | number>) => JSON.stringify(path)
@@ -341,9 +349,25 @@ const pathKey = (path: ReadonlyArray<string | number>) => JSON.stringify(path)
 const isBranch = (value: Schema.Json): value is Schema.JsonObject | ReadonlyArray<Schema.Json> =>
   typeof value === "object" && value !== null && !MessageLog.isPlaceholder(value)
 
-export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Change>): ReadonlyArray<Row> => {
+const previewKeys = 3
+
+const previewOf = (value: Schema.JsonObject | ReadonlyArray<Schema.Json>): string => {
+  if (Array.isArray(value)) return "[ " + value.length + (value.length === 1 ? " item ]" : " items ]")
+  const tag = tagOf(value)
+  const prefix = tag === undefined ? "" : tag + " "
+  const keys = Object.keys(value).filter((key) => key !== "_tag")
+  if (keys.length === 0) return prefix + "{}"
+  return prefix + "{ " + keys.slice(0, previewKeys).join(", ") + (keys.length > previewKeys ? ", … }" : " }")
+}
+
+export const treeOf = (
+  value: Schema.Json,
+  changes: ReadonlyArray<Inspector.Change>,
+  expanded?: ReadonlySet<string>
+): ReadonlyArray<Row> => {
   const byPath = new Map<string, Inspector.Change>()
   const removedUnder = new Map<string, Array<Inspector.Change>>()
+  const changesUnder = new Map<string, number>()
   for (const change of changes) {
     byPath.set(pathKey(change.path), change)
     if (change.kind === "removed") {
@@ -352,35 +376,52 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
       list.push(change)
       removedUnder.set(parent, list)
     }
+    if (change.kind !== "unknown") {
+      for (let length = 1; length < change.path.length; length++) {
+        const ancestor = pathKey(change.path.slice(0, length))
+        changesUnder.set(ancestor, (changesUnder.get(ancestor) ?? 0) + 1)
+      }
+    }
   }
   const rows: Array<Row> = []
   const visit = (value: Schema.Json, key: string | number | undefined, path: Array<string | number>, depth: number) => {
     const id = pathKey(path)
-    const change = byPath.get(id)
-    if (!isBranch(value) || change !== undefined && change.kind !== "unknown") {
+    const found = byPath.get(id)
+    const change = found?.kind === "unknown" ? undefined : found
+    const nested = depth > 0 || key !== undefined
+    const hidden = changesUnder.get(id) ?? 0
+    if (
+      !isBranch(value) ||
+      change !== undefined && (expanded === undefined || change.kind === "changed") ||
+      expanded !== undefined && nested && hidden === 0 && Object.keys(value).length === 0
+    ) {
       rows.push({ id, depth, key, value, change })
       return
     }
     const array = Array.isArray(value)
-    if (depth > 0 || key !== undefined) {
-      rows.push({ id: id + "{", depth, key, value: undefined, open: array ? "[" : "{" })
+    if (nested) {
+      const open = expanded?.has(id) ?? true
+      rows.push({
+        id: id + "{",
+        depth,
+        key,
+        value: undefined,
+        open: array ? "[" : "{",
+        change,
+        branch: expanded && { path: id, expanded: open, preview: previewOf(value), changes: hidden }
+      })
+      if (!open) return
     }
-    const inner = depth > 0 || key !== undefined ? depth + 1 : depth
+    const inner = nested ? depth + 1 : depth
     if (array) {
       value.forEach((item, index) => visit(item, index, [...path, index], inner))
     } else {
       for (const [name, item] of Object.entries(value)) visit(item, name, [...path, name], inner)
     }
     for (const removed of removedUnder.get(id) ?? []) {
-      rows.push({
-        id: pathKey(removed.path),
-        depth: inner,
-        key: removed.path[removed.path.length - 1],
-        value: removed.before,
-        change: removed
-      })
+      visit(removed.before!, removed.path[removed.path.length - 1], [...removed.path], inner)
     }
-    if (depth > 0 || key !== undefined) {
+    if (nested) {
       rows.push({ id: id + "}", depth, key: undefined, value: undefined, close: array ? "]" : "}" })
     }
   }
