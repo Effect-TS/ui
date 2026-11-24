@@ -261,9 +261,7 @@ describe("Toolbar", () => {
       scene.keydown(item("help"), "ArrowRight", { shift: true }).expectIgnored()
         .expectDefaultPrevented(false)
       scene.keydown(item("bold"), "Enter").expectIgnored()
-        .expectDefaultPrevented(
-          false
-        )
+        .expectDefaultPrevented(false)
 
       scene.props(props({ orientation: "vertical", loopFocus: false }))
       assert.deepStrictEqual(press("bold", "ArrowDown"), [{ to: "italic" }])

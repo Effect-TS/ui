@@ -433,9 +433,7 @@ describe("Menu", () => {
       assert.isNull(partsOf(scene).transitionStatus)
       assert.isUndefined(scene.get(popup).attrs?.["data-starting-style"])
       scene.mounted(tracked(scene), sent("FinishedTransition", { open: true }))
-        .emitted(
-          { _tag: "Settled", open: true }
-        )
+        .emitted({ _tag: "Settled", open: true })
       scene.mounted(
         tracked(scene),
         sent("ChangedPlacement", {
@@ -506,9 +504,7 @@ describe("Menu", () => {
       })
       assert.deepInclude(scene.get(popup).attrs, { "data-instant": "click" })
       scene.fire(popup, "keydown", key("Escape")).expectDefaultPrevented()
-        .emitted(
-          dismissed("escape-key")
-        )
+        .emitted(dismissed("escape-key"))
       scene.props({ open: false, items })
       assert.deepInclude(scene.get(positioner).attrs, {
         "data-instant": "dismiss"

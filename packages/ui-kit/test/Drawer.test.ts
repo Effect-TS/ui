@@ -113,14 +113,10 @@ describe("Drawer", () => {
         assert.deepStrictEqual(scene.current.emitted, [])
       }
       scene.mounted(tracked(scene), release({ deltaY: 30, velocityY: 0.5 }))
-        .emitted(
-          swiped
-        )
+        .emitted(swiped)
       scene.mounted(tracked(scene), sent("StartedSwipe"))
       scene.mounted(tracked(scene), release({ deltaY: 150, velocityY: 0.3 }))
-        .emitted(
-          swiped
-        )
+        .emitted(swiped)
       assert.isUndefined(scene.get(popup).attrs?.["data-swiping"])
     }))
 

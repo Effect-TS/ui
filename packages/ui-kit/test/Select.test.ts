@@ -506,9 +506,7 @@ describe("Select", () => {
     Effect.gen(function*() {
       const scene = yield* open()
       scene.mounted(tracked(scene), sent("ReleasedPointer", { outside: true }))
-        .emitted(
-          dismissed("cancel-open")
-        )
+        .emitted(dismissed("cancel-open"))
       scene.mounted(tracked(scene), sent("FocusedTrigger")).emitted(
         dismissed("none")
       )
@@ -589,9 +587,7 @@ describe("Select", () => {
       scene.mounted(tracked(scene), sent("RenderedFirstFrame"))
       assert.isNull(partsOf(scene).transitionStatus)
       scene.mounted(tracked(scene), sent("FinishedTransition", { open: true }))
-        .emitted(
-          { _tag: "Settled", open: true }
-        )
+        .emitted({ _tag: "Settled", open: true })
       scene.props({ open: false, items })
       assert.strictEqual(partsOf(scene).transitionStatus, "ending")
       assert.deepInclude(scene.get(positioner).attrs, {

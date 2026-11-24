@@ -143,9 +143,7 @@ describe("PreviewCard", () => {
       const [opening] = scene.current.pending
       assert.deepStrictEqual(opening?.command.args, { delay: 600 })
       scene.resolve(opening!.command, sent("CompletedWaitBeforeOpening"))
-        .emitted(
-          opened("typography", "trigger-hover")
-        )
+        .emitted(opened("typography", "trigger-hover"))
       running(
         scene.props({ open: true, triggerId: "typography", sideOffset: 8 })
       )

@@ -373,9 +373,7 @@ describe("OTPField", () => {
       )
       assert.deepStrictEqual(commands(scene), [...focusOn(3), submitted])
       scene.fire(slot(0), "paste", { text: "ab" }).expectDefaultPrevented()
-        .emitted(
-          rejected("ab", "input-paste")
-        )
+        .emitted(rejected("ab", "input-paste"))
       assert.deepStrictEqual(commands(scene), [])
 
       store(scene, "12")
@@ -425,9 +423,7 @@ describe("OTPField", () => {
       composing("k")
       quiet(scene)
       scene.keydown(slot(0), "Backspace").expectIgnored()
-        .expectDefaultPrevented(
-          false
-        )
+        .expectDefaultPrevented(false)
       composing("か")
       scene.fire(slot(0), "compositionend", { value: "か" }).emitted(
         updated("か")
@@ -472,9 +468,7 @@ describe("OTPField", () => {
         ]
       )
       scene.fire(slot(1), "mousedown", {}).expectIgnored()
-        .expectDefaultPrevented(
-          false
-        )
+        .expectDefaultPrevented(false)
       scene.blur(slot(0))
       assert.isUndefined(scene.get(root).attrs?.["data-focused"])
       assert.deepStrictEqual(
@@ -526,9 +520,7 @@ describe("OTPField", () => {
       scene.props(redact({ value: "12", length: 4, readOnly: true }))
       edits()
       scene.keydown(slot(1), "Backspace").expectIgnored()
-        .expectDefaultPrevented(
-          false
-        )
+        .expectDefaultPrevented(false)
       scene.keydown(slot(1), "Delete").expectIgnored().expectDefaultPrevented(
         false
       )

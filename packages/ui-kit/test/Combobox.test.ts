@@ -310,9 +310,7 @@ describe("Combobox", () => {
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Combobox, base, standIn)
       scene.fire(input, "input", typed("Apple", "insertReplacementText"))
-        .emitted(
-          edited("Apple")
-        )
+        .emitted(edited("Apple"))
       scene.fire(input, "input", typed("ba", "")).emitted(edited("ba"))
       scene.fire(input, "input", typed("ap")).emitted(
         edited("ap"),
@@ -742,9 +740,7 @@ describe("Combobox", () => {
         scene.get(popup).attrs?.id
       )
       scene.mounted(tracked(scene), sent("ReleasedPointer", { outside: true }))
-        .emitted(
-          dismissed("cancel-open")
-        )
+        .emitted(dismissed("cancel-open"))
       scene.fire(input, "input", typed("ba")).emitted(
         edited("ba"),
         highlighted(null, -1, "none")
