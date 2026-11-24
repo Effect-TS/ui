@@ -4,9 +4,9 @@
  * event's typed payload. Controlled form properties are put back after an event the Model didn't follow,
  * keeping a focused field's selection. Updates that ask for a view transition run in one. The document head
  * follows the tree's folded head when the mount is given `head: KernelDom.syncHead`, so an app without a
- * head doesn't carry what writes one. Dialogs open, close and stay modal as `BrowserHost`'s do.
+ * head doesn't carry what writes one. Dialogs and popovers open and close as `BrowserHost`'s do.
  *
- * Left out, each to arrive with what uses it: popovers, drag and drop, and hydration.
+ * Left out, each to arrive with what uses it: drag and drop, and hydration.
  */
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
@@ -38,7 +38,8 @@ const controlled: ReadonlySet<string> = new Set([
   "value",
   "checked",
   "selected",
-  "open"
+  "open",
+  "popoverOpen"
 ])
 
 const restoring: ReadonlySet<string> = new Set([
@@ -264,12 +265,30 @@ export const makeHost = (
     shown.add(dialog)
   }
 
+  const popoversToShow = new Set<HTMLElement>()
+  const manualPopovers = new Set<HTMLElement>()
+  const popoverModes = new WeakMap<globalThis.Node, string | null>()
+  const applyPopover = (element: HTMLElement, want: unknown, now?: boolean) => {
+    if (want !== true) {
+      popoversToShow.delete(element)
+      if (matches(element, ":popover-open")) element.hidePopover()
+    } else if (!now) popoversToShow.add(element)
+    else if (
+      element.isConnected && element.hasAttribute("popover") &&
+      !matches(element, ":popover-open")
+    ) keepingScroll(() => element.showPopover())
+  }
+
   const restoreNode = (node: globalThis.Node) => {
     const values = wanted.get(node)
     if (values === undefined) return
     for (const [name, value] of values) {
       if (name === "open" && isDialog(node)) {
         if (node.isConnected) showDialog(node, value)
+      } else if (name === "popoverOpen") {
+        if ((node as globalThis.Element).getAttribute("popover") === "manual") {
+          applyPopover(node as HTMLElement, value, true)
+        }
       } else if ((node as any)[name] !== value) {
         writeControlled(node, name, value)
       }
@@ -498,7 +517,8 @@ export const makeHost = (
       if (controlled.has(name)) {
         let values = wanted.get(node)
         const dialog = name === "open" && isDialog(node)
-        if (value === undefined && !dialog) {
+        const popover = name === "popoverOpen"
+        if (value === undefined && !dialog && !popover) {
           values?.delete(name)
           value = name === "value" ? "" : false
         } else {
@@ -506,6 +526,17 @@ export const makeHost = (
           for (const event of restoring) listen(event)
           listen("compositionstart")
           listen("beforeinput")
+          if (popover) {
+            value = value === true
+            const mode = element.getAttribute("popover")
+            const same = values.get(name) === value &&
+              popoverModes.get(node) === mode
+            values.set(name, value)
+            popoverModes.set(node, mode)
+            manualPopovers[mode === "manual" ? "add" : "delete"](element)
+            if (mode !== "auto" || !same) applyPopover(element, value)
+            return
+          }
           if (dialog) {
             value = value === "modal" ? value : value === true
             values.set(name, value)
@@ -564,6 +595,15 @@ export const makeHost = (
         if (dialog.isConnected) showDialog(dialog, "modal")
         else modalWanted.delete(dialog)
       }
+      for (const element of manualPopovers) {
+        if (!element.isConnected) manualPopovers.delete(element)
+        else if (wanted.get(element)?.get("popoverOpen") === true) {
+          popoversToShow.add(element)
+        } else applyPopover(element, false)
+      }
+      const popovers = inOrder([...popoversToShow])
+      popoversToShow.clear()
+      for (const element of popovers) applyPopover(element, true, true)
     },
     head: sync === undefined ? undefined : (head) => sync.sync(head as never),
     transitions: options?.viewTransitions === false

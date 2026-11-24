@@ -395,20 +395,6 @@ export const pending: {
       "drag and drop on the kernel DOM host (unscheduled)",
     "BrowserHost > drag and drop > dragover is sent once per frame when the position changed, and a queued one is dropped":
       "drag and drop on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > a manual popover is controlled: shown and hidden by the Model, and put back after other changes":
-      "popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > an auto popover is followed: a light dismiss is reported and never reverted":
-      "popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > a coalesced toggle with equal states still reaches the Model, which converges on the latest":
-      "popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > a keyed move closes the popover in it: a manual one is shown again, an auto one isn't":
-      "popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > a mode change applies the Model's state under the new mode":
-      "popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > a detached or removed popover is never shown, and a popover in a modal opens after it":
-      "popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > popovers > showing a modal dialog or a popover that takes focus leaves the page's scroll where it was":
-      "modal dialogs and popovers on the kernel DOM host (unscheduled)",
     "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
       "hydration (step 7, unfinished): a style mismatch keeps the server's style text, where today's replaces it (cause not investigated)"
   },

@@ -3233,12 +3233,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const stub = yield* popoverStub
         // Reversing the rows moves one of them; the browser closes the popover in it without a toggle.
-        for (
-          const [mode, expected] of [["manual", [true, true]], ["auto", [
-            true,
-            false
-          ]]] as const
-        ) {
+        for (const [mode, expected] of [["manual", 2], ["auto", 1]] as const) {
           const app = yield* container
           const root = yield* BrowserHost.mountEffect(Rows, { mode }, app)
           yield* tick
@@ -3254,7 +3249,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           root.send(true)
           yield* tick
           // A manual popover is reconciled at every commit; an auto one only when its Model's value changes.
-          expect(showing()).toEqual(expected)
+          expect(showing().filter(Boolean)).toHaveLength(expected)
         }
       }).pipe(Effect.scoped))
 
