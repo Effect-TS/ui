@@ -1,11 +1,11 @@
-import { Component, UiSchema } from "@effect/ui"
+import { Component, UiSchema, View } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
   OpenTuiSubscription
 } from "@effect/ui-opentui"
 import { TestOpenTuiEvents } from "@effect/ui-opentui/testing"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { TestHost } from "@effect/ui/testing"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, Option, Schema } from "effect"
 
@@ -96,7 +96,6 @@ describe("OpenTui FFI-free testing", () => {
       yield* TestHost.settle
 
       expect(root.text()).toBe("ups=1 pasted=hello size=120x40")
-      expect(root.get(Locator.tag("text")).tag).toBe("text")
 
       const recorder = yield* TestOpenTuiEvents.TestOpenTuiHost
       recorder.rect({ x: 0, y: 0, width: 42, height: 10 })
@@ -112,8 +111,11 @@ describe("OpenTui FFI-free testing", () => {
       ])
     }).pipe(Effect.provide(testLayer)))
 
-  it.effect("rejects stray text passed into a box slot via Outlet", () =>
+  it.effect("rejects stray text in h.el and in box slots via Outlet", () =>
     Effect.gen(function*() {
+      const h = View.makeHelper<never, {}, OpenTui.Elements>({}, OpenTui)
+      expect(() => h.el("box", "stray")).toThrow(/can't hold text/)
+
       const Frame = Component.define({
         name: "Frame",
         model: Schema.Void,

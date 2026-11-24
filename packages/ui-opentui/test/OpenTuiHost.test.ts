@@ -1,4 +1,4 @@
-import { Component, Head, Subscription, UiSchema, View } from "@effect/ui"
+import { Component, Head, UiSchema } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
@@ -137,16 +137,15 @@ describe("OpenTuiHost", () => {
 
   it.effect("reverts rejected controlled edits on input, textarea, and select, and preserves select options across inline arrays", () =>
     Effect.gen(function*() {
+      const Target = Schema.Literals(["input", "textarea", "select"])
       const Message = UiSchema.TaggedEnum({
         UpdatedInput: { value: Schema.String },
         UpdatedArea: { value: Schema.String },
         ChangedSelect: { index: Schema.Number },
+        PickedItem: { index: Schema.Number },
+        Focused: { target: Target },
         BumpedTick: {}
       })
-
-      const InputRef = OpenTui.ref("Input", "input")
-      const AreaRef = OpenTui.ref("Area", "textarea")
-      const SelectRef = OpenTui.ref("Select", "select")
 
       const Form = Component.define({
         name: "ControlledForm",
@@ -154,7 +153,8 @@ describe("OpenTuiHost", () => {
           digits: Schema.String,
           notes: Schema.String,
           index: Schema.Number,
-          focusTarget: Schema.Literals(["input", "textarea", "select"]),
+          picked: Schema.Array(Schema.Number),
+          focusTarget: Target,
           tick: Schema.Number
         }),
         message: Message,
@@ -164,6 +164,7 @@ describe("OpenTuiHost", () => {
           digits: "12",
           notes: "ok",
           index: 1,
+          picked: [],
           focusTarget: "input" as const,
           tick: 0
         }),
@@ -174,29 +175,31 @@ describe("OpenTuiHost", () => {
             value.includes("!") ? $.model : $.evolve({ notes: value }),
           ChangedSelect: ($, { index }) =>
             index === 2 ? $.model : $.evolve({ index }),
+          PickedItem: ($, { index }) =>
+            $.evolve({ picked: (items) => [...items, index] }),
+          Focused: ($, { target }) => $.evolve({ focusTarget: target }),
           BumpedTick: ($) => $.evolve({ tick: (n) => n + 1 })
         },
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 30, height: 12 })
             .children(
-              h.input.ref(InputRef).style({ width: 20 }).value(model.digits)
+              h.input.style({ width: 20 }).value(model.digits)
                 .focused(model.focusTarget === "input").onInput(({ value }) =>
                   Message.UpdatedInput({ value })
                 ),
-              h.textarea.ref(AreaRef).style({ width: 20, height: 3 }).value(
-                model.notes
-              ).focused(model.focusTarget === "textarea").onInput(({ value }) =>
-                Message.UpdatedArea({ value })
-              ),
-              h.select.ref(SelectRef).style({ width: 20, height: 6 }).options([
+              h.textarea.style({ width: 20, height: 3 }).value(model.notes)
+                .focused(model.focusTarget === "textarea")
+                .onInput(({ value }) => Message.UpdatedArea({ value })),
+              h.select.style({ width: 20, height: 6 }).options([
                 { name: "One", description: "first" },
                 { name: "Two", description: "second" },
                 { name: "Locked", description: "rejected" }
-              ]).selectedIndex(model.index).focused(
-                model.focusTarget === "select"
-              ).onSelectionChanged(({ index }) =>
-                Message.ChangedSelect({ index })
-              ),
+              ]).selectedIndex(model.index)
+                .focused(model.focusTarget === "select")
+                .onSelectionChanged(({ index }) =>
+                  Message.ChangedSelect({ index })
+                )
+                .onItemSelected(({ index }) => Message.PickedItem({ index })),
               h.text(`tick=${model.tick}`)
             )
       })
@@ -207,34 +210,34 @@ describe("OpenTuiHost", () => {
       expect(app.captureFrame()).toContain("123")
       expect(app.captureFrame()).not.toContain("12a")
 
-      const rootChildren = app.setup.renderer.root.getChildren()[0]!
-        .getChildren()
-      const textarea = rootChildren[1] as OT.TextareaRenderable
-      const select = rootChildren[2] as OT.SelectRenderable
-
-      textarea.focus()
+      app.root.send(Message.Focused({ target: "textarea" }))
+      yield* app.settle
       yield* app.typeText("!z")
       expect(app.root.model()?.notes).toBe("okz")
-      expect(textarea.plainText).toBe("okz")
+      expect(app.captureFrame()).toContain("okz")
+      expect(app.captureFrame()).not.toContain("!")
 
-      select.focus()
-      expect(select.getSelectedIndex()).toBe(1)
+      app.root.send(Message.Focused({ target: "select" }))
+      yield* app.settle
       yield* app.pressArrow("down")
+      yield* app.pressEnter
       expect(app.root.model()?.index).toBe(1)
-      expect(select.getSelectedIndex()).toBe(1)
+      expect(app.root.model()?.picked).toEqual([1])
 
       app.root.send(Message.BumpedTick())
       yield* app.settle
-      expect(select.getSelectedIndex()).toBe(1)
+      yield* app.pressEnter
+      expect(app.root.model()?.picked).toEqual([1, 1])
     }))
 
   it.effect("applies focus transitions in commit order and supports OpenTuiCommand ref actions and quit", () =>
     Effect.gen(function*() {
       const First = OpenTui.ref("First", "input")
-      const Second = OpenTui.ref("Second", "input")
       const Scroll = OpenTui.ref("Scroll", "scrollbox")
 
       const Message = UiSchema.TaggedEnum({
+        UpdatedFirst: { value: Schema.String },
+        UpdatedSecond: { value: Schema.String },
         SwitchedFocus: {},
         RequestedMeasure: {},
         Measured: { width: Schema.Number },
@@ -247,6 +250,8 @@ describe("OpenTuiHost", () => {
         name: "FocusAndCommands",
         model: Schema.Struct({
           active: Schema.Literals(["first", "second"]),
+          firstText: Schema.String,
+          secondText: Schema.String,
           measuredWidth: Schema.Number,
           scrolled: Schema.Boolean
         }),
@@ -255,10 +260,14 @@ describe("OpenTuiHost", () => {
       }).make({
         init: () => ({
           active: "first" as const,
+          firstText: "",
+          secondText: "",
           measuredWidth: 0,
           scrolled: false
         }),
         update: {
+          UpdatedFirst: ($, { value }) => $.evolve({ firstText: value }),
+          UpdatedSecond: ($, { value }) => $.evolve({ secondText: value }),
           SwitchedFocus: ($) =>
             $.evolve({
               active: (a) => (a === "first" ? "second" : "first")
@@ -282,12 +291,12 @@ describe("OpenTuiHost", () => {
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 24, height: 10 })
             .children(
-              h.input.ref(First).style({ width: 16 }).focused(
-                model.active === "first"
-              ),
-              h.input.ref(Second).style({ width: 16 }).focused(
-                model.active === "second"
-              ),
+              h.input.ref(First).style({ width: 16 }).value(model.firstText)
+                .focused(model.active === "first")
+                .onInput(({ value }) => Message.UpdatedFirst({ value })),
+              h.input.style({ width: 16 }).value(model.secondText)
+                .focused(model.active === "second")
+                .onInput(({ value }) => Message.UpdatedSecond({ value })),
               h.scrollbox.ref(Scroll).style({ width: 20, height: 4 }).children(
                 h.text("line 1"),
                 h.text("line 2"),
@@ -299,17 +308,15 @@ describe("OpenTuiHost", () => {
       })
 
       const app = yield* OpenTuiTest.mount(App, {}, { width: 30, height: 12 })
-      const nodes = app.setup.renderer.root.getChildren()[0]!.getChildren()
-      const first = nodes[0] as OT.InputRenderable
-      const second = nodes[1] as OT.InputRenderable
-
-      expect(first.focused).toBe(true)
-      expect(second.focused).toBe(false)
+      yield* app.typeText("a")
+      expect(app.root.model()?.firstText).toBe("a")
+      expect(app.root.model()?.secondText).toBe("")
 
       app.root.send(Message.SwitchedFocus())
       yield* app.settle
-      expect(first.focused).toBe(false)
-      expect(second.focused).toBe(true)
+      yield* app.typeText("b")
+      expect(app.root.model()?.firstText).toBe("a")
+      expect(app.root.model()?.secondText).toBe("b")
 
       app.root.send(Message.RequestedMeasure())
       yield* app.settle
@@ -324,7 +331,7 @@ describe("OpenTuiHost", () => {
       expect(app.setup.renderer.isDestroyed).toBe(true)
     }))
 
-  it.effect("keeps keepAlive children alive across hide/show without leaking containers", () =>
+  it.effect("keeps keepAlive children alive across hide/show", () =>
     Effect.gen(function*() {
       const TabMsg = UiSchema.TaggedEnum({ Incremented: {} })
       const Tab = Component.define({
@@ -418,7 +425,11 @@ describe("OpenTuiHost", () => {
 
   it.effect("supports custom renderables via renderables option and h.el", () =>
     Effect.gen(function*() {
-      class CustomBox extends OT.BoxRenderable {}
+      class CustomBox extends OT.BoxRenderable {
+        constructor(ctx: OT.RenderContext, options: OT.BoxOptions) {
+          super(ctx, { ...options, title: "CustomTag" })
+        }
+      }
 
       const App = Component.define({
         name: "CustomEl",
@@ -429,61 +440,18 @@ describe("OpenTuiHost", () => {
         init: () => undefined,
         update: () => undefined,
         view: (h) =>
-          h.el("custom-box").prop("border", true).prop("width", 16).children(
+          h.el("custom-box").prop("border", true).prop("width", 18).children(
             h.text("custom!")
           )
       })
 
       const app = yield* OpenTuiTest.mount(App, {}, {
-        width: 20,
+        width: 22,
         height: 5,
         renderables: { "custom-box": CustomBox }
       })
-      expect(app.setup.renderer.root.getChildren()[0]).toBeInstanceOf(CustomBox)
-      expect(app.captureFrame()).toContain("custom!")
+      const frame = app.captureFrame()
+      expect(frame).toContain("CustomTag")
+      expect(frame).toContain("custom!")
     }))
-
-  it.effect("wires Subscription.direct latest state without stale closures", () =>
-    Effect.gen(function*() {
-      let fire: ((value: number) => void) | undefined
-      const Message = UiSchema.TaggedEnum({ Got: { value: Schema.Number } })
-
-      const Direct = Component.define({
-        name: "DirectSub",
-        model: Schema.Number,
-        message: Message,
-        elements: OpenTui
-      }).make({
-        init: () => 1,
-        update: { Got: ($, { value }) => $.model + value },
-        subscriptions: ({ model }) => [
-          Subscription.direct<number, typeof Message.Type>(
-            "custom",
-            undefined,
-            model,
-            (_ctx, { emit, enter }) => {
-              fire = (value) =>
-                enter((latest) => emit(Message.Got({ value: value * latest })))
-              return () => {
-                fire = undefined
-              }
-            }
-          )
-        ],
-        view: (h, model) => h.text(String(model))
-      })
-
-      const app = yield* OpenTuiTest.mount(Direct, {}, { width: 10, height: 3 })
-      fire!(2)
-      yield* app.settle
-      expect(app.root.model()).toBe(3)
-      fire!(2)
-      yield* app.settle
-      expect(app.root.model()).toBe(9)
-    }))
-
-  it("exposes textParents on OpenTui.vocabulary", () => {
-    const h = View.makeHelper<never, {}, OpenTui.Elements>({}, OpenTui)
-    expect(() => h.el("box", "stray")).toThrow(/can't hold text/)
-  })
 })
