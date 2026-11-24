@@ -46,7 +46,7 @@ const isText = (node: Node): boolean => node.nodeType === 3
 let wantedTag = ""
 
 const isWanted = (node: Node): boolean =>
-  node.nodeType === ELEMENT && (node as Element).localName === wantedTag
+  (node as Element).localName === wantedTag
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
@@ -210,6 +210,12 @@ interface Held {
   readonly last: Node
 }
 
+interface Building {
+  readonly node: Node
+  readonly names: Array<string>
+  last: Node | undefined
+}
+
 const between = (
   base: Kernel.Host<Node>,
   container: Node,
@@ -229,9 +235,11 @@ const between = (
     node !== null && node !== end;
     node = node.nextSibling
   ) span.push(node)
-  const last = new WeakMap<Node, Node>()
-  if (edges.length > 0) last.set(container, edges[0]!)
-  const written = new WeakMap<Node, Array<string>>()
+  const stack: Array<Building> = [{
+    node: container,
+    names: [],
+    last: edges[0]
+  }]
   const fresh = new WeakSet<Node>()
   const taken = new WeakSet<Node>()
   const kept = new WeakSet<Node>()
@@ -350,10 +358,19 @@ const between = (
     return node
   }
 
-  const complete = (element: Element, names: Array<string>): void => {
-    written.delete(element)
+  const building = (node: Node): Building | undefined => {
+    if (freshDepth > 0) return
+    for (let index = stack.length - 1; index > 0; index--) {
+      if (stack[index]!.node === node) return stack[index]
+    }
+  }
+
+  const complete = (
+    into: Node,
+    { node, names, last: previous }: Building
+  ): void => {
+    const element = node as Element
     const inside = parent === element || element.contains(parent)
-    const previous = last.get(element)
     for (
       let node = previous === undefined
         ? element.firstChild
@@ -364,9 +381,12 @@ const between = (
       element.removeChild(node)
       node = following
     }
-    if (propped === element || element.attributes.length !== names.length) {
-      for (const name of element.getAttributeNames()) {
-        if (!names.includes(name)) element.removeAttribute(name)
+    if (names.length > 0 || propped === element || element.hasAttributes()) {
+      const served = element.getAttributeNames()
+      if (propped === element || served.length !== names.length) {
+        for (const name of served) {
+          if (!names.includes(name)) element.removeAttribute(name)
+        }
       }
     }
     if (inside) {
@@ -374,7 +394,7 @@ const between = (
         ranges.length > 0 && element.contains(ranges[ranges.length - 1]!.open)
       ) ranges.pop()
       at = element.nextSibling
-      parent = element.parentNode!
+      parent = into
     }
   }
 
@@ -391,7 +411,7 @@ const between = (
         freshDepth++
         return element
       }
-      written.set(node, [])
+      stack.push({ node, names: [], last: undefined })
       edits.take(node, tag)
       parent = node
       at = node.firstChild
@@ -430,7 +450,7 @@ const between = (
       return node
     },
     setAttr(node, name, value) {
-      const names = written.get(node)
+      const names = building(node)?.names
       if (names !== undefined) {
         const element = node as Element
         const normalized = attributeName(name, element.namespaceURI === SVG)
@@ -443,7 +463,7 @@ const between = (
       base.setAttr(node, name, value)
     },
     setProp(node, name, value) {
-      const names = written.get(node)
+      const names = building(node)?.names
       if (names !== undefined) {
         names.push(name.toLowerCase())
         propped = node
@@ -458,26 +478,44 @@ const between = (
       base.setProp(node, name, value)
     },
     made(node) {
-      if (fresh.delete(node)) freshDepth--
+      if (freshDepth > 0 && fresh.delete(node)) freshDepth--
     },
     insert(into, node, before) {
       if (before !== null) return base.insert(into, node, before)
-      const held = holds.get(node)
+      let index = stack.length
+      let own = 0
+      while (--index > 0 && stack[index]!.node !== into) {
+        if (stack[index]!.node === node) own = index
+      }
+      const list = stack[index]!.node === into ? stack[index] : undefined
+      const held = holds.size > 0 ? holds.get(node) : undefined
       if (held !== undefined && held.first.parentNode === into) {
         into.insertBefore(node, held.first)
-        last.set(into, held.last)
+        if (list !== undefined) list.last = held.last
         return
       }
-      const previous = last.get(into)
-      let ref = previous === undefined ? into.firstChild : previous.nextSibling
-      while (ref !== null && ref !== end && ref.nodeType === COMMENT) {
-        if (!kept.has(ref)) passed.push(ref)
-        ref = ref.nextSibling
+      if (list === undefined) base.insert(into, node, null)
+      else {
+        const previous = list.last
+        let ref = previous === undefined
+          ? into.firstChild
+          : previous.nextSibling
+        while (
+          ref !== node && ref !== null && ref !== end &&
+          ref.nodeType === COMMENT
+        ) {
+          if (!kept.has(ref)) passed.push(ref)
+          ref = ref.nextSibling
+        }
+        if (ref !== node) into.insertBefore(node, ref)
+        list.last = node
       }
-      if (ref !== node) into.insertBefore(node, ref)
-      last.set(into, node)
-      const names = written.get(node)
-      if (names !== undefined) complete(node as Element, names)
+      if (own > 0) {
+        complete(
+          into,
+          own < stack.length - 1 ? stack.splice(own, 1)[0]! : stack.pop()!
+        )
+      }
     }
   }
 
