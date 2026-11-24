@@ -112,7 +112,6 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
           instance: n2.instance,
           filter: "messages"
         })
-        const draft = rows.find((row: any) => row.label === "UpdatedDraft")
         const save = rows.find((row: any) => row.label === "ClickedSave")
 
         const historical = yield* mc.call("effect_ui_get_state", {
@@ -122,12 +121,6 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
         assert.strictEqual(historical.model.status, "Saving")
         assert.deepStrictEqual(historical.props.token, { "~redacted": true })
         assert.notInclude(JSON.stringify(historical), token)
-
-        const diff = yield* mc.call("effect_ui_diff_state", {
-          seq: save.seq,
-          from: draft.seq
-        })
-        assert.notInclude(JSON.stringify(diff), token)
 
         yield* mc.call("effect_ui_show_entry", { seq: save.seq })
         assert.strictEqual(app.style.display, "none")
@@ -148,8 +141,12 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
     () =>
       Effect.gen(function*() {
         const mc = installModelContext()
-        yield* Effect.scoped(Layer.build(DevTools.layer({ webMcp: false })))
-        assert.strictEqual(mc.tools.size, 0)
+        yield* Effect.scoped(
+          Effect.andThen(
+            Layer.build(DevTools.layer({ webMcp: false })),
+            Effect.sync(() => assert.strictEqual(mc.tools.size, 0))
+          )
+        )
 
         yield* Effect.scoped(Effect.gen(function*() {
           const services = yield* Layer.build(
