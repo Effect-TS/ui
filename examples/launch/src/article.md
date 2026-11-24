@@ -48,13 +48,11 @@ The diagram below illustrates how each architecture handles a Message.
 
 ::Diagram{scenario="messages"}
 
-Much simpler!
-
 ### Foldkit 0.x vs. Effect UI code comparison
 
-To render a child Component in Effect UI, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages, as a Foldkit 0.x parent did for a Submodel.
+To render a child Component, the parent calls it in its view and passes props. The child declares its props with a Schema and reads them in init, update and view.
 
-What the parent does pass is props. A Component declares its props with a Schema, and the parent passes them when it calls the child. The child reads them in init, update and view, and when the parent passes different props, the child's view runs again. When the props are the same, the child's view doesn't run, even though its parent's did.
+When the parent passes different props, the child's view runs again. When the props are the same, the child's view doesn't run, even though its parent's did.
 
 ::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter"}
 
@@ -72,7 +70,7 @@ The auto-counter from [A complete Component](#a-complete-component) with each fu
 
 In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down, and a Submodel communicated back up the tree with an OutMessage, which each parent forwarded until it reached the owner.
 
-In Effect UI, a Provider is a Component that shares part of its Model with every Component rendered inside it, at any depth. A Component lists the Provider to read its value and sends it a Message to ask for a change. The Components in between don't pass the value down or forward the Message. The value changes only in the Provider's update.
+A Provider shares part of its Model with Components inside it, at any depth. In this example, CartProvider holds the cart count. CartCount reads that count, and AddToCart sends CartProvider a Message to change it. Product sits between CartProvider and AddToCart but passes no cart value or Message. Only CartProvider's update changes the count.
 
 :::Listing{code="provider"}
 A Provider that shares a cart's count, and the Components inside it that read and change it. `Product` sits in between and doesn't mention the cart.
@@ -107,7 +105,7 @@ The runtime also tracks which Commands are running, and a view can check with `h
 
 A Component's Model holds the state it changes through update. It no longer has to hold everything its view shows.
 
-You can still reconstruct a Component's Model from a log of its Messages. When you enable logging for your app, the runtime records each Message in order, along with the props, query results and Provider values its update read. It also records changes to props and query results, and when Commands start and end. Replaying the log reproduces the Model without running Commands, fetches or Subscriptions.
+With logging enabled, you can still replay a Component's recorded Model without rerunning side effects. The log includes the Messages and the values update read from props, queries and Providers.
 
 ## Views and rendering
 
@@ -129,9 +127,9 @@ A headless Disclosure that keeps its own open state and a Component that draws i
 
 In Foldkit 0.x, the runtime rendered a view by patching the browser DOM directly.
 
-In Effect UI, the core in `effect/ui` doesn't refer to HTML or the DOM. The runtime renders through a host that creates and updates nodes. A Layer provides the host, so you choose it where you mount the app. HTML elements and the browser host are in `effect/ui/html`, which is where the `Html` in a Component's `elements: Html` comes from.
+Effect UI renders through a host rather than updating the DOM directly. The browser host creates DOM nodes; the test host creates plain objects. Both can run the same Components.
 
-A second host, the test host, builds plain objects, so a test can mount the same Components without a browser or DOM. The host interface is public, so you can write your own host.
+You choose the host when mounting the app. The entry point below uses `BrowserHost.mount`. The host interface is public, so you can also implement your own.
 
 :::Listing{code="mount"}
 This article's entry point. `BrowserHost.mount` selects the browser host.
@@ -181,7 +179,7 @@ What people value in Foldkit 0.x carries over to Effect UI.
 - **The same structure everywhere:** Every Component has a Model, Messages, init and update, with a view or, for a headless Component, parts. You, a new teammate or an AI agent always know where to look.
 - **Explicit state transitions:** Once a Component is running, its Model changes only in its update, in response to a Message.
 - **Side effects as values:** Commands, Subscriptions and Mounts describe work for the runtime to run. update and view don't perform it themselves.
-- **Tests that declare what happened:** A Story, Scene or Play test reads as a list of steps. In a Story or Scene test, the steps are a Message or a click, the Command that update returned and the result you give that Command. Because you supply the result, there is nothing to mock and no waiting for the UI to settle, and a test that leaves a Command unresolved fails. A Play test uses a Scene test's steps for clicks and checks, but you resolve nothing by hand: its Commands run for real against the Layers the test provides.
+- **Tests that declare what happened:** Tests read as steps you can follow. Story and Scene let you supply Command results, and fail if a Command is left unresolved; Play runs the work against the Layers you provide.
 - **A record of what happened:** Enable message logging to record Messages, Model changes and query results. You can inspect that history and replay a Component's recorded state without rerunning side effects. The inspector in the corner of this article lists that history, and its time travel shows the article as it was at an earlier entry.
 
 ## You can keep building on Foldkit 0.x
