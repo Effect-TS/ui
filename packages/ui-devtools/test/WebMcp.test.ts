@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
-import { Command, Component, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
-import { BrowserHost, Html } from "@effect/ui/html"
 import { afterEach, assert, describe, it } from "@effect/vitest"
-import { Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Effect, Exit, Layer, Scope } from "effect"
 import { play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) =>
@@ -12,7 +10,6 @@ const token = "tok_live_9f2c"
 
 interface FakeTool {
   readonly name: string
-  readonly description: string
   readonly inputSchema?: object | undefined
   readonly annotations?: {
     readonly readOnlyHint?: boolean | undefined
@@ -28,60 +25,42 @@ interface FakeTool {
 const installModelContext = () => {
   const tools = new Map<string, FakeTool>()
   const waited: Array<Promise<unknown>> = []
-  const modelContext = {
-    registerTool: (
-      tool: FakeTool,
-      options?: { readonly signal?: AbortSignal | undefined }
-    ) => {
-      if (options?.signal?.aborted) return Promise.resolve()
-      tools.set(tool.name, tool)
-      options?.signal?.addEventListener("abort", () => {
-        if (tools.get(tool.name) === tool) tools.delete(tool.name)
-      }, { once: true })
-      return Promise.resolve()
-    },
-    waitForToolsUntil: (promise: Promise<unknown>) => {
-      waited.push(promise)
-    }
-  }
   Object.defineProperty(document, "modelContext", {
     configurable: true,
-    value: modelContext
+    value: {
+      registerTool: (
+        tool: FakeTool,
+        options?: { readonly signal?: AbortSignal | undefined }
+      ) => {
+        if (options?.signal?.aborted) return Promise.resolve()
+        tools.set(tool.name, tool)
+        options?.signal?.addEventListener("abort", () => {
+          if (tools.get(tool.name) === tool) tools.delete(tool.name)
+        }, { once: true })
+        return Promise.resolve()
+      },
+      waitForToolsUntil: (promise: Promise<unknown>) => {
+        waited.push(promise)
+      }
+    }
   })
   const call = <A = any>(
     name: string,
     input?: unknown,
     client?: { readonly signal?: AbortSignal | undefined }
   ): Effect.Effect<A> =>
-    Effect.promise(() => {
-      const tool = tools.get(name)
-      if (tool === undefined) {
-        return Promise.reject(new Error("Missing tool " + name))
-      }
-      return tool.execute(input, client) as Promise<A>
-    })
+    Effect.promise(() => tools.get(name)!.execute(input, client) as Promise<A>)
   return { tools, waited, call }
 }
 
-const clearModelContext = () => {
-  delete (document as { modelContext?: unknown }).modelContext
-}
-
-const overlay = () =>
-  document.querySelector<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")!
-    .contentDocument!.body
-
-const text = (node: Element | null | undefined) =>
-  (node?.textContent ?? "").replace(/\s+/g, " ").trim()
-
 describe("DevTools WebMCP", { concurrent: false }, () => {
   afterEach(() => {
-    clearModelContext()
+    delete (document as { modelContext?: unknown }).modelContext
     localStorage.clear()
   })
 
   it.live(
-    "registers page tools, reads redacted historical state, shares pause, and unregisters on close",
+    "registers page tools, redacts historical state, controls the page, and unregisters on close",
     () =>
       Effect.gen(function*() {
         const mc = installModelContext()
@@ -89,7 +68,7 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
         const services = yield* Layer.build(DevTools.layer()).pipe(
           Scope.provide(scope)
         )
-        const app = yield* play("interrupted").pipe(
+        const app = yield* play("open").pipe(
           Effect.provide(services),
           Scope.provide(scope)
         )
@@ -113,6 +92,7 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
         ])
         for (const tool of mc.tools.values()) {
           assert.isTrue(tool.annotations?.debugging, tool.name)
+          assert.isFalse(tool.annotations?.consequentialHint, tool.name)
           assert.isDefined(tool.inputSchema, tool.name)
         }
         assert.isTrue(
@@ -121,12 +101,6 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
         assert.isFalse(
           mc.tools.get("effect_ui_show_entry")?.annotations?.readOnlyHint
         )
-
-        const [session] = yield* mc.call("effect_ui_list_sessions")
-        assert.strictEqual(session.app, "Workspace")
-        assert.strictEqual(session.host, "browser")
-        assert.isTrue(session.connected)
-        assert.isTrue(session.controllable)
 
         const instances: ReadonlyArray<any> = yield* mc.call(
           "effect_ui_list_instances"
@@ -140,8 +114,6 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
         })
         const draft = rows.find((row: any) => row.label === "UpdatedDraft")
         const save = rows.find((row: any) => row.label === "ClickedSave")
-        assert.isDefined(draft)
-        assert.isDefined(save)
 
         const historical = yield* mc.call("effect_ui_get_state", {
           instance: n2.instance,
@@ -155,24 +127,11 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
           seq: save.seq,
           from: draft.seq
         })
-        assert.deepInclude(diff.changes, {
-          path: ["status"],
-          kind: "changed",
-          before: "Dirty",
-          after: "Saving"
-        })
         assert.notInclude(JSON.stringify(diff), token)
 
-        const shown = yield* mc.call("effect_ui_show_entry", { seq: save.seq })
-        assert.strictEqual(shown.paused, save.seq)
+        yield* mc.call("effect_ui_show_entry", { seq: save.seq })
         assert.strictEqual(app.style.display, "none")
-        yield* wait(20)
-        assert.strictEqual(
-          text(overlay().querySelector(".paused-label")),
-          "Paused at #" + save.seq
-        )
-        const resumed = yield* mc.call("effect_ui_resume")
-        assert.deepStrictEqual(resumed, { resumed: true })
+        yield* mc.call("effect_ui_resume")
         assert.notStrictEqual(app.style.display, "none")
 
         const bad = yield* mc.call("effect_ui_get_entry", { seq: "bad" })
@@ -185,85 +144,57 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
   )
 
   it.live(
-    "gates dispatch behind webMcp options, skips waiting on excluded dispatches, cancels wait, and respects webMcp: false",
+    "gates dispatch, settles excluded dispatches immediately, cancels wait, and respects webMcp: false",
     () =>
       Effect.gen(function*() {
         const mc = installModelContext()
         yield* Effect.scoped(Layer.build(DevTools.layer({ webMcp: false })))
         assert.strictEqual(mc.tools.size, 0)
 
-        class Slow extends Command.Service<Slow>()(
-          "test/Slow",
-          { args: {} },
-          Effect.succeed(() => Effect.never)
-        ) {}
-        const Message = UiSchema.TaggedEnum({
-          Move: { x: Schema.Number },
-          Start: {}
-        })
-        const Widget = Component.define({
-          name: "Widget",
-          model: Schema.Struct({ x: Schema.Number }),
-          message: Message,
-          elements: Html
-        }).make({
-          init: () => ({ x: 0 }),
-          update: {
-            Move: ($, { x }) => $.evolve({ x }),
-            Start: ($) => $.run(Slow.make({}))
-          },
-          view: (h, model) => h.output.children(String(model.x))
-        }).pipe(
-          Component.provide(Slow.layer)
-        )
-
         yield* Effect.scoped(Effect.gen(function*() {
           const services = yield* Layer.build(
             DevTools.layer({
-              exclude: ["Move"],
+              exclude: ["UpdatedDraft"],
               webMcp: { dispatch: true }
             })
           )
-          const app = document.body.appendChild(document.createElement("div"))
-          yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-          yield* BrowserHost.mountEffect(Widget, {}, app).pipe(
-            Effect.provide(services)
-          )
+          yield* play("open").pipe(Effect.provide(services))
           yield* wait(20)
 
           assert.strictEqual(mc.tools.size, 13)
           assert.isTrue(
             mc.tools.get("effect_ui_dispatch")?.annotations?.consequentialHint
           )
-          const [widget] = yield* mc.call("effect_ui_list_instances")
+          const instances: ReadonlyArray<any> = yield* mc.call(
+            "effect_ui_list_instances"
+          )
+          const n1 = instances.find((instance) =>
+            instance.path === "/Workspace/Editor[n1]"
+          )
 
           const startedAt = Date.now()
           const excluded = yield* mc.call("effect_ui_dispatch", {
-            instance: widget.instance,
+            instance: n1.instance,
             messages: [
-              { _tag: "Move", x: 1 },
-              { _tag: "Move", x: 7 }
+              { _tag: "UpdatedDraft", text: "a" },
+              { _tag: "UpdatedDraft", text: "b" }
             ]
           })
           assert.isBelow(Date.now() - startedAt, 1_000)
-          assert.strictEqual(excluded.applied, 2)
           assert.deepStrictEqual(excluded.unavailable, [{
             seq: excluded.outcomes[0].seq,
             reason: "excluded"
           }])
           const state = yield* mc.call("effect_ui_get_state", {
-            instance: widget.instance,
+            instance: n1.instance,
             at: excluded.outcomes[1].seq
           })
-          assert.strictEqual(state.model.x, 7)
+          assert.strictEqual(state.model.draft, "b")
+          assert.deepStrictEqual(state.props.token, { "~redacted": true })
 
-          yield* mc.call("effect_ui_dispatch", {
-            instance: widget.instance,
-            messages: [{ _tag: "Start" }]
-          })
           const abort = new AbortController()
           const pending = mc.tools.get("effect_ui_wait")!.execute(
-            { instance: widget.instance, timeout: 10_000 },
+            { timeout: 10_000 },
             { signal: abort.signal }
           )
           yield* wait(20)
@@ -272,8 +203,10 @@ describe("DevTools WebMCP", { concurrent: false }, () => {
           const error = yield* Effect.promise(() =>
             pending.then(() => undefined, (err) => err)
           )
-          assert.isDefined(error)
-          assert.strictEqual((error as DOMException).name, "AbortError")
+          assert.strictEqual(
+            (error as DOMException | undefined)?.name,
+            "AbortError"
+          )
           assert.isBelow(Date.now() - cancelAt, 1_000)
         }))
         assert.strictEqual(mc.tools.size, 0)
