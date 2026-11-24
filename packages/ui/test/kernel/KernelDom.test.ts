@@ -249,7 +249,7 @@ describe("KernelDom", () => {
         },
         view: (h, count) => h.p(String(count))
       })
-      for (const viewTransitions of [true, false]) {
+      for (const viewTransitions of [KernelDom.viewTransitions, undefined]) {
         const app = yield* container
         const root = yield* KernelDom.mountEffect(Swap, {}, app, {
           viewTransitions
