@@ -6,7 +6,7 @@ Reads and sends now require `Component.Shared<"OwnerName">`. Replace `Component.
 
 `Component.SharedOptional` is removed: `make` no longer subtracts optional owners by name.
 
-If an update sends to an optional owner, omit its explicit step return type. For example, with `shared: { a: { owner: A, optional: true } }`:
+If an update sends to an optional owner, omit its explicit step return type. For example, with `reads: { a: { owner: A, optional: true } }`:
 
 ```diff
 // Required: the annotation could describe a send to any owner named "Provider".

@@ -7,4 +7,4 @@ Add `CheckboxGroup` to ui-kit: the checkboxes inside it share one list of ticked
 
 `Checkbox`'s `checked` prop is now optional and defaults to unticked. `Checkbox` also takes `parent` and `id`.
 
-A reader's `report` in `shared` gets the reader's `id` as a third argument, the same as `p.id` and `h.id`, so a report can name one of the reader's elements.
+A reader's `report` in `reads` gets the reader's `id` as a third argument, the same as `p.id` and `h.id`, so a report can name one of the reader's elements.

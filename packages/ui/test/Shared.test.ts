@@ -39,15 +39,15 @@ const Tip = Component.define({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
-  shared: { provider: TipsProvider }
+  reads: { provider: TipsProvider }
 }).make({
   init: () => null,
   update: ($, message) => $.send(TipsProvider, message),
   view: (h) =>
     h.el("button").on("click", TipMessage.Enter({ id: h.props.id })).children(
       `${h.props.id}:${
-        h.shared.provider.open === h.props.id ? "open" : "closed"
-      }${h.shared.provider.label}`
+        h.reads.provider.open === h.props.id ? "open" : "closed"
+      }${h.reads.provider.label}`
     )
 })
 
@@ -56,14 +56,14 @@ const Trigger = Component.define({
   name: "Trigger",
   model: Schema.Null,
   message: TipMessage,
-  shared: { provider: TipsProvider }
+  reads: { provider: TipsProvider }
 })
   .make({
     init: () => null,
     update: ($) => $.model,
     parts: (p) => ({
-      open: p.shared.provider.open,
-      label: p.shared.provider.label
+      open: p.reads.provider.open,
+      label: p.reads.provider.label
     })
   })
 
@@ -138,14 +138,14 @@ describe("shared state", () => {
         name: "Face",
         model: Schema.Null,
         message: Tick,
-        shared: { provider: ClockProvider }
+        reads: { provider: ClockProvider }
       })
         .make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => {
             renders++
-            return h.el("p", String(h.shared.provider.getTime()))
+            return h.el("p", String(h.reads.provider.getTime()))
           }
         })
       const Ticker = Component.define({
@@ -374,12 +374,12 @@ describe("shared state in a Scene", () => {
           name: "Sum",
           model: Schema.Null,
           message: TipMessage,
-          shared: { a: AProvider, b: BProvider }
+          reads: { a: AProvider, b: BProvider }
         })
           .make({
             init: () => null,
             update: ($) => $.model,
-            view: (h) => h.el("p", String(h.shared.a + h.shared.b))
+            view: (h) => h.el("p", String(h.reads.a + h.reads.b))
           })
         const shared = yield* Scene.make(Sum, {})
         assert.strictEqual(
@@ -444,7 +444,7 @@ const makeReader = (answer: (told: boolean) => boolean) =>
     name: "Reader",
     model: Schema.Boolean,
     message: ReaderMessage,
-    shared: {
+    reads: {
       group: {
         owner: Group,
         report: (on) => on,
@@ -469,7 +469,7 @@ const Bumper = Component.define({
   props: Schema.Struct({ times: Schema.Number }),
   model: Schema.Null,
   message: BumperMessage,
-  shared: { group: Group }
+  reads: { group: Group }
 }).make({
   init: () => null,
   update: ($, { times }) => {
@@ -513,13 +513,13 @@ describe("optional owners, reports and onChange", () => {
         name: "Lone",
         model: Schema.Null,
         message: TipMessage,
-        shared: { provider: { owner: TipsProvider, optional: true } }
+        reads: { provider: { owner: TipsProvider, optional: true } }
       }).make({
         init: () => null,
         update: ($, message) => $.send(TipsProvider, message),
         view: (h) =>
           h.el("button").on("click", TipMessage.Enter({ id: "a" })).children(
-            h.shared.provider === undefined ? "alone" : "grouped"
+            h.reads.provider === undefined ? "alone" : "grouped"
           )
       })
       const root = yield* TestHost.mount(Lone, {})
@@ -541,7 +541,7 @@ describe("optional owners, reports and onChange", () => {
         props: Schema.Struct({ open: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
-        shared: { group: { owner: Group, report: (_, props) => props.open } }
+        reads: { group: { owner: Group, report: (_, props) => props.open } }
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -609,7 +609,7 @@ describe("optional owners, reports and onChange", () => {
         name: "Box",
         model: Schema.Null,
         message: Schema.Never,
-        shared: {
+        reads: {
           controls: { owner: Controls, report: (_, __, id) => id("box") }
         }
       }).make({
@@ -747,14 +747,14 @@ describe("shared state in update", () => {
     name: "Watch",
     model: Schema.Array(Schema.Number),
     message: WatchMessage,
-    shared: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
+    reads: { clock: Clock, tips: { owner: TipsProvider, optional: true } }
   }).make({
     init: () => [],
     update: ($) =>
       $.set([
         ...$.model,
-        Object.hasOwn($.shared, "tips") && $.shared.tips === undefined
-          ? $.shared.clock.at.getTime()
+        Object.hasOwn($.reads, "tips") && $.reads.tips === undefined
+          ? $.reads.clock.at.getTime()
           : -1
       ])
         .send(Clock, ClockMessage.Ticked()),
@@ -767,7 +767,7 @@ describe("shared state in update", () => {
     name: "Ticker",
     model: Schema.Null,
     message: ClockMessage,
-    shared: { clock: Clock }
+    reads: { clock: Clock }
   }).make({
     init: () => null,
     update: ($, message) => $.send(Clock, message),
@@ -846,7 +846,7 @@ describe("onChange rounds and declarations", () => {
         name: "Replier",
         model: Schema.Null,
         message: ReaderMessage,
-        shared: {
+        reads: {
           group: {
             owner: Group,
             onChange: (value) => ReaderMessage.ChangedGroup({ ...value })
@@ -915,7 +915,7 @@ describe("onChange rounds and declarations", () => {
           name: "Twice",
           model: Schema.Null,
           message: ReaderMessage,
-          shared: {
+          reads: {
             a: { owner: Group, onChange },
             b: { owner: Group, optional: true, onChange }
           }
@@ -926,7 +926,7 @@ describe("onChange rounds and declarations", () => {
       name: "Aliased",
       model: Schema.Null,
       message: ReaderMessage,
-      shared: {
+      reads: {
         a: { owner: Group, onChange },
         b: Group,
         c: { owner: Group, report: () => true }
@@ -940,7 +940,7 @@ describe("optional owners, reports and onChange in a Story", () => {
     name: "OptionalReader",
     model: Schema.Boolean,
     message: ReaderMessage,
-    shared: {
+    reads: {
       group: {
         owner: Group,
         optional: true,
@@ -957,7 +957,7 @@ describe("optional owners, reports and onChange in a Story", () => {
       }),
     view: (h) =>
       h.el("button").on("click", ReaderMessage.Clicked()).children(
-        h.shared.group === undefined ? "alone" : `bumps ${h.shared.group.bumps}`
+        h.reads.group === undefined ? "alone" : `bumps ${h.reads.group.bumps}`
       )
   })
 
@@ -1020,7 +1020,7 @@ describe("a component that reads its own kind", () => {
           })
       }
     },
-    shared: {
+    reads: {
       parent: {
         owner: "self",
         optional: true,
@@ -1031,7 +1031,7 @@ describe("a component that reads its own kind", () => {
     init: () => 0,
     update: (_, message) =>
       NestMessage.match(message, { ChangedBelow: ({ open }) => open }),
-    parts: (p, below) => ({ nested: p.shared.parent !== undefined, below })
+    parts: (p, below) => ({ nested: p.reads.parent !== undefined, below })
   })
   const Toggle = UiSchema.TaggedEnum({ Toggled: {} })
   const Nests = Component.define({
@@ -1111,7 +1111,7 @@ describe("a component that reads its own kind", () => {
     message: MenuMessage,
     elements: Html,
     shares: { value: (picked) => picked, receives: ["Picked"] },
-    shared: { parent: { owner: "self", optional: true } }
+    reads: { parent: { owner: "self", optional: true } }
   }).make({
     init: () => 0,
     update: ($, message) =>
@@ -1190,7 +1190,7 @@ describe("a component that reads its own kind", () => {
           name: "Bare",
           model: Schema.Null,
           message: Schema.Never,
-          shared: { parent: self } as any
+          reads: { parent: self } as any
         }),
       /Bare reads its own kind under parent, so it must share state: add shares/
     )
@@ -1201,7 +1201,7 @@ describe("a component that reads its own kind", () => {
           model: Schema.Null,
           message: Schema.Never,
           shares: () => null,
-          shared: { parent: { owner: "self" } } as any
+          reads: { parent: { owner: "self" } } as any
         }),
       /Required reads its own kind under parent, and the outermost one has none above it: add optional: true/
     )

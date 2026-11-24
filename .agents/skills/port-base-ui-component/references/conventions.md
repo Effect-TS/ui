@@ -127,7 +127,7 @@ Choose a popup control's Field recipe by where focus actually goes:
 
 A context that wraps several fields, as `Fieldset` does, reaches `Field`
 through shared state: `Fieldset` has `shares`, and `Field` reads it with an
-optional `shared` entry, so a field with no fieldset above needs nothing.
+optional `reads` entry, so a field with no fieldset above needs nothing.
 The chain stops at the field. A control still takes `disabled` from its
 field's parts, and never reads the fieldset. A nested `Fieldset` takes the
 outer one's state as a prop, `disabled: outer.disabled || own`. That is

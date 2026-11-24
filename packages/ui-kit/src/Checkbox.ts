@@ -342,7 +342,7 @@ export const Checkbox = Component.define({
   model: Schema.Struct({}),
   message: CheckboxMessage,
   events: CheckboxEvents,
-  shared: {
+  reads: {
     group: {
       owner: CheckboxGroup,
       optional: true,
@@ -361,7 +361,7 @@ export const Checkbox = Component.define({
   init: () => ({}),
   update: {
     ClickedRoot: ($) => {
-      const resolved = resolve($.props, $.shared.group)
+      const resolved = resolve($.props, $.reads.group)
       if (!interactive(resolved)) return $.model
       const toggled = $.emit(
         CheckboxEvents.Toggled({ checked: !resolved.checked })
@@ -385,7 +385,7 @@ export const Checkbox = Component.define({
     PressedEnter: ($) => $.model
   },
   parts: (p) => {
-    const resolved = resolve(p.props, p.shared.group)
+    const resolved = resolve(p.props, p.reads.group)
     const hidden = field(resolved.field)
     const id = resolved.role === "member" ? memberId(p.props, p.id) : p.props.id
     return {

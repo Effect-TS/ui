@@ -1100,7 +1100,7 @@ describe("Story", () => {
         }),
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),
         elements: Html,
-        shared: { receiver: Receiver }
+        reads: { receiver: Receiver }
       }).make({
         init: () => null,
         update: ($, { at, kind }) =>

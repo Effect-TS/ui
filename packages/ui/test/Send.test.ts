@@ -27,12 +27,12 @@ const ItemDef = Component.define({
   name: "Item",
   model: Schema.Number,
   message: ItemMessage,
-  shared: { log: Log }
+  reads: { log: Log }
 })
 
 const itemView = ItemDef.view((h) =>
   h.el("button").on("click", ItemMessage.Adds({ ids: ["b", "a", "b"] }))
-    .children(`log:${h.shared.log.join(",")}`)
+    .children(`log:${h.reads.log.join(",")}`)
 )
 
 const Item = ItemDef.make({

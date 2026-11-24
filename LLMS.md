@@ -226,8 +226,8 @@ last segment.
 
 A component that exists to be an owner, for the components inside it to read
 or send to, takes the `Provider` suffix, as in `TooltipProvider` and
-`ToastProvider`. A reader names it `provider` in `shared`, so it reads
-`h.shared.provider`. A control or an enclosing instance that also shares
+`ToastProvider`. A reader names it `provider` in `reads`, so it reads
+`h.reads.provider`. A control or an enclosing instance that also shares
 state keeps its own name, and a reader names the entry for its role: `group`
 for `CheckboxGroup`, `fieldset` for `Fieldset`, `parent` for an enclosing
 `Dialog`, `Drawer` or `Menu`. A reader of several owners names each one
@@ -591,23 +591,23 @@ A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. An owner with no parts of its own can omit `parts` in `make`; its
 `view` closure receives `{}`. A reader lists the owners it reads in
-`shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
-`p.shared.provider` in `view` or `parts`, and `$.shared.provider` in
+`reads: { provider: TooltipProvider }` and reads `h.reads.provider` or
+`p.reads.provider` in `view` or `parts`, and `$.reads.provider` in
 `update`. The long form of an entry, `{ owner: TooltipProvider, ... }`, adds
 three options. `optional: true` lets the reader work with no owner above it,
 where the value reads as `undefined`. `report` is what the reader tells an
 owner whose `shares` has `collects`. `onChange` is the reader's message when
 the shared value changes, for an `update` that must act on the change. To
-read the value, `update` has `$.shared`, so a reader doesn't copy it into its
+read the value, `update` has `$.reads`, so a reader doesn't copy it into its
 Model.
 
-`$.shared` follows the rule of `$.props`: it is the owner's value as the
+`$.reads` follows the rule of `$.props`: it is the owner's value as the
 reader's `update` runs. A reader that sends to its owner still reads the old
-value in that `update`. An `onChange` message can be older than `$.shared`,
+value in that `update`. An `onChange` message can be older than `$.reads`,
 when another reader changed the owner within the same round.
 
 A descendant's `update` can call `$.send(TooltipProvider, message)` without a
-`shared` entry. The owner lists the tags it takes in `shares.receives`, and
+`reads` entry. The owner lists the tags it takes in `shares.receives`, and
 can't tell which descendant sent a message. A read or a send
 puts `Component.Shared<"TooltipProvider">` in a component's requirements,
 unless the owner's entry is optional, and the owner's closure removes it. The
@@ -619,7 +619,7 @@ requirement from the component, use
 `Component.Shared.Of<typeof TooltipProvider>`.
 
 The state is the owner's Model, so the log records every change, and each
-reader's `Update` records what `$.shared` held, so `Story.fromLog` replays
+reader's `Update` records what `$.reads` held, so `Story.fromLog` replays
 it. On the Wire the value is encoded through the `schema` of the owner's
 `shares`, `{ value, schema }`, or best effort without one. An owner
 restores from history like any other component, as **History restore**
@@ -630,10 +630,10 @@ each send to the owner is acknowledged with
 `s.sent(TooltipProvider, message)`.
 
 A component can read its own kind, as a submenu reads the menu it's in:
-`shared: { parent: { owner: "self", optional: true } }` reads the nearest
+`reads: { parent: { owner: "self", optional: true } }` reads the nearest
 instance of the same component above it. The outermost one has none, so the
 entry is `optional: true`, and the component must have `shares` itself. Write
-`shares` before `shared`, so `report` and `onChange` are typed by it. In a
+`shares` before `reads`, so `report` and `onChange` are typed by it. In a
 `Scene`, the component itself is the owner: `s.shared(Menu, value)`.
 
 Every owner update re-runs its closure, and headless children in it
@@ -658,7 +658,7 @@ As a convention, give each value one authoritative source:
 | -------------------- | ------------------------------ | ------------------------------------ |
 | Parent to child      | props                          | props                                |
 | Child to parent      | a headless child's part values | `events`                             |
-| Owner to descendants | `shares`                       | `shared.onChange`                    |
+| Owner to descendants | `shares`                       | `reads.onChange`                     |
 | Descendant to owner  | `report` and `collects`        | `receives` and `$.send(Owner)`       |
 
 The columns differ in how long they last. A send happens once. If an

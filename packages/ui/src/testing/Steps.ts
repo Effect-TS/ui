@@ -130,7 +130,7 @@ export interface Record<Props, Model, Msg, Events> {
   /** Each of the component's queries, with its `Query`'s name and the args it returns for the current Model and props. */
   readonly queryInfo: () => ReadonlyArray<QueryInfo>
   /**
-   * What the component reports to each owner its `shared` lists with a
+   * What the component reports to each owner its `reads` lists with a
    * `report`, by the name it lists the owner under, from the current Model
    * and props. An optional owner with no value given is absent, and has no
    * report.
@@ -371,7 +371,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * When the component had a value for `owner`, given before or the
    * default of a required read, and this one differs, each `onChange` its
-   * `shared` lists for `owner` sends its message, and the step is a
+   * `reads` lists for `owner` sends its message, and the step is a
    * message step. A first value of an optional owner sends nothing: in an
    * app the owner is found once, when the reader mounts. The test never
    * runs `owner`'s `update`: what the component sends it must be

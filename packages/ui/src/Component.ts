@@ -291,7 +291,7 @@ export type SharedTypeId = typeof SharedTypeId
  * **Details**
  *
  * An owner is a headless component with `shares`. A component that lists it
- * in `shared` to read its value, or that calls `$.send(Owner, message)`,
+ * in `reads` to read its value, or that calls `$.send(Owner, message)`,
  * carries `Shared.Of<typeof Owner>`. Declaring the reader inside the owner's
  * `view` closure removes it, so a reader with no owner above it doesn't
  * compile. `provide` never removes it.
@@ -390,7 +390,7 @@ export declare namespace Shared {
 }
 
 /**
- * One entry of a reader's `shared` option: the owner, or the owner with what
+ * One entry of a reader's `reads` option: the owner, or the owner with what
  * else the reader declares about it.
  *
  * **Details**
@@ -436,8 +436,8 @@ export type SharedRead =
   }
 
 /**
- * What a reader's `shared` option lists: owners, by the local name `h.shared`
- * and `p.shared` read them under.
+ * What a reader's `reads` option lists: owners, by the local name `h.reads`
+ * and `p.reads` read them under.
  *
  * @stability experimental
  * @category models
@@ -446,7 +446,7 @@ export type SharedRead =
 export type SharedReads = { readonly [name: string]: SharedRead }
 
 /**
- * The owner an entry of `shared` names.
+ * The owner an entry of `reads` names.
  *
  * @stability experimental
  * @category utility types
@@ -454,11 +454,11 @@ export type SharedReads = { readonly [name: string]: SharedRead }
  */
 export type SharedOwner<E> = E extends { readonly owner: infer O } ? O : E
 
-// Whether an entry of `shared` is `optional: true`.
+// Whether an entry of `reads` is `optional: true`.
 type IsOptional<E> = E extends { readonly optional: true } ? true : false
 
 /**
- * Each owner's current value under the local name a reader's `shared`
+ * Each owner's current value under the local name a reader's `reads`
  * lists it by, or `undefined` for an optional owner that isn't above.
  *
  * @stability experimental
@@ -473,7 +473,7 @@ export type SharedValues<SR> = {
 
 /**
  * What `h` in `view` and `p` in `parts` gain for a component that reads
- * shared state: `shared`, each owner's current value under its local name,
+ * shared state: `reads`, each owner's current value under its local name,
  * or `undefined` for an optional owner that isn't above.
  *
  * @stability experimental
@@ -481,10 +481,10 @@ export type SharedValues<SR> = {
  * @since 0.1.0
  */
 export type SharedHelpers<SR> = [keyof SR] extends [never] ? {}
-  : { readonly shared: SharedValues<SR> }
+  : { readonly reads: SharedValues<SR> }
 
 /**
- * The requirements a component's `shared` option adds: one
+ * The requirements a component's `reads` option adds: one
  * `Shared.Of<typeof Owner>` per owner it reads, optional ones aside.
  *
  * @stability experimental
@@ -629,7 +629,7 @@ export interface Step<
    *
    * **Details**
    *
-   * The sender needs no `shared` declaration: the step carries
+   * The sender needs no `reads` declaration: the step carries
    * `Shared.Of<typeof owner>` in `R`, as `run` carries a Command's
    * requirements, so the sender compiles only where an owner is above it.
    * A sender whose updates send in more than 100 rounds in one flush
@@ -718,19 +718,19 @@ export interface Step<
  *
  * `Cur` is the message being handled: the whole message type in an update
  * function, and one tag's member in a slice for that tag. `$.combine` takes
- * functions over it. `SR` is what the component's `shared` lists.
+ * functions over it. `SR` is what the component's `reads` lists.
  *
  * `$.props` is what the Models above the instance give it now, whether or
  * not the flush that renders them has run: an ancestor waiting to render
  * renders before a message reaches the instance. One that no longer
  * renders the instance removes it then, and the message is dropped.
  *
- * `$.shared` follows the same rule: each owner's value from its Model as
+ * `$.reads` follows the same rule: each owner's value from its Model as
  * this `update` runs, which the reader's view may not have rendered yet. A
  * reader that sends to its owner still reads the old value in that
  * `update`, since the send applies after it returns. An `onChange` message
- * says a value changed, and `$.shared` holds the current one: when another
- * reader answers the owner within the same round, `$.shared` is already
+ * says a value changed, and `$.reads` holds the current one: when another
+ * reader answers the owner within the same round, `$.reads` is already
  * newer than the `onChange` message being handled.
  *
  * @stability experimental
@@ -749,8 +749,8 @@ export interface Update<
   readonly props: Props
   /** The queries' results, as `h.queries` shows them for the Model before this `update`. */
   readonly queries: QueryResults<L>
-  /** Each owner's current value, by the name `shared` lists it under, as `h.shared` reads it. */
-  readonly shared: SharedValues<SR>
+  /** Each owner's current value, by the name `reads` lists it under, as `h.reads` reads it. */
+  readonly reads: SharedValues<SR>
   /** Sends `message` to the nearest instance of `owner` above this one, as `Step`'s `send` does. */
   send<O extends Headless.Any>(
     owner: O,
@@ -758,13 +758,13 @@ export interface Update<
   ): Step<Model, Msg, Events, Shared.Of<O> & SendTarget<O>, L>
   /**
    * Sends `message` to the nearest instance of this component above this
-   * one, the instance a `shared` entry with `owner: "self"` reads, as this
+   * one, the instance a `reads` entry with `owner: "self"` reads, as this
    * `update` applies, before its emits are delivered. `message` is one of
    * the messages this component `receives`.
    *
    * **Details**
    *
-   * Only a component whose `shared` has an entry for `"self"` can send to
+   * Only a component whose `reads` has an entry for `"self"` can send to
    * itself: in any other, `message` is `never`. The send adds nothing to
    * `R`. The outermost instance has none above it, so its send is dropped
    * and logged as `SendDropped`, as a send to any optional owner is. A step
@@ -792,7 +792,7 @@ export interface Update<
    * It is a left fold. Each function gets a `$` holding the Model the
    * previous one returned, so a Command it runs sees the earlier
    * changes. The Commands, emitted events, `loadMore` and `reset` of every
-   * function are kept, in call order. `$.props`, `$.queries` and `$.shared` are
+   * function are kept, in call order. `$.props`, `$.queries` and `$.reads` are
    * the same for each, as they were when this `update` started. `R` is the union of
    * the functions' requirements.
    */
@@ -944,7 +944,7 @@ const UpdateProto = {
             model,
             this.props,
             this.queries,
-            this.shared,
+            this.reads,
             msg,
             this["~self"]
           ),
@@ -967,7 +967,7 @@ const makeUpdate = (
   model: unknown,
   props: unknown,
   queries: unknown,
-  shared: unknown,
+  reads: unknown,
   message: unknown,
   self: Any
 ): Update<any, any, any, any> =>
@@ -980,7 +980,7 @@ const makeUpdate = (
     viewTransitionTypes: undefined,
     props,
     queries,
-    shared,
+    reads,
     "~message": message,
     "~self": self
   })
@@ -1082,7 +1082,7 @@ export declare namespace Mountable {
     readonly init: (props: Props) => Next<any, any, Events, R>
     /**
      * `queries` is the instance's query results. Without it every result is empty. `shared` is what
-     * `$.shared` holds, by local name. Without it, reading a required owner's value throws.
+     * `$.reads` holds, by local name. Without it, reading a required owner's value throws.
      */
     readonly update: (
       model: any,
@@ -1101,7 +1101,7 @@ export declare namespace Mountable {
       queries?: Results | undefined,
       /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
       path?: string | undefined,
-      /** Answers `h.shared`: an owner's current value. Without it, a component that reads shared state throws. */
+      /** Answers `h.reads`: an owner's current value. Without it, a component that reads shared state throws. */
       shared?: SharedLookup | undefined,
       /** Where `h.lazy` keeps its nodes between renders. Without it, `h.lazy` builds every time. */
       lazy?: View.LazyStore | undefined
@@ -1496,12 +1496,12 @@ export interface PartsContext {
     | ((name: string, groupKey: string | undefined) => boolean)
     | undefined
   readonly queries?: Results | undefined
-  /** Answers `p.shared`: an owner's current value. Without it, a component that reads shared state throws. */
+  /** Answers `p.reads`: an owner's current value. Without it, a component that reads shared state throws. */
   readonly shared?: SharedLookup | undefined
 }
 
 /**
- * How a host answers `h.shared` and `p.shared`: the current value of the
+ * How a host answers `h.reads` and `p.reads`: the current value of the
  * owner the reader lists, from the nearest instance above it in a running
  * tree, or from what a story was given.
  *
@@ -1512,8 +1512,8 @@ export interface PartsContext {
 export type SharedLookup = (owner: Headless.Any, optional?: boolean) => unknown
 
 /**
- * What a reader's `$.shared` holds: each owner's value by the local name its
- * `shared` lists it under. The runtime records it on each `Update`, so a
+ * What a reader's `$.reads` holds: each owner's value by the local name its
+ * `reads` lists it under. The runtime records it on each `Update`, so a
  * replay hands it back.
  *
  * @stability experimental
@@ -2218,7 +2218,7 @@ const Proto = Object.assign(Object.create(Function.prototype), {
 })
 
 const sharing = ({ definition }: Any): boolean =>
-  definition.shares !== undefined || definition.shared !== undefined
+  definition.shares !== undefined || definition.reads !== undefined
 
 const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   [HeadlessTypeId]: {
@@ -2304,14 +2304,14 @@ type OnlyOwnersOmitParts<Sl, SV> = [Sl] extends [never]
   ? [SV] extends [never] ? { readonly parts: never } : unknown
   : { readonly parts: never }
 
-// The owners `shared` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
+// The owners `reads` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
 // a string index of its own is kept.
 type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends
   (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
 
 type ReportId = PartsHelper<never, unknown, any>["id"]
 
-// One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
+// One entry of `reads`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `SR` holds what's written, and `optional` with it, and this checks it against the owner. An entry for
 // `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
 type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
@@ -2337,18 +2337,18 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
     readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
   }
 
-// An owner listed in `shared` is a headless component with `shares`, or the component itself. `make` checks
+// An owner listed in `reads` is a headless component with `shares`, or the component itself. `make` checks
 // that one which reads itself shares: `SV` here would be fixed before `shares` is inferred.
 type OwnersOnly<SO> = {
   readonly [K in keyof SO]: [SO[K]] extends ["self"] ? unknown
     : [Shared.Of<SO[K]>] extends [never] ? {
         readonly owner:
-          "A component in shared must be a headless component with shares"
+          "A component in reads must be a headless component with shares"
       }
     : unknown
 }
 
-// Whether `shared`, as `define` keeps it, has an entry for `"self"`.
+// Whether `reads`, as `define` keeps it, has an entry for `"self"`.
 type ReadsSelf<SR> = {
   readonly [K in keyof SR]: SR[K] extends { readonly owner: infer O }
     ? "self" extends O ? true : never
@@ -2369,13 +2369,13 @@ type SelfShares<SR, SV> = [ReadsSelf<SR>] extends [never] ? unknown
     }
   : unknown
 
-// The component being defined, as a `"self"` entry of `shared` names it: an owner with its own props, events,
+// The component being defined, as a `"self"` entry of `reads` names it: an owner with its own props, events,
 // receives, shared value and reports, so the read is typed by its `shares`.
 type SelfOwner<Name extends string, Props, Events, Rcv, SV, Rp> =
   | Headless<Props, Events, unknown, never, Rcv, Shared<Name>, SV, Rp>
   | "self"
 
-// `shared` as `define` keeps it, each `"self"` entry naming the component.
+// `reads` as `define` keeps it, each `"self"` entry naming the component.
 type ResolveSelf<SR, S> = {
   readonly [K in keyof SR]: SR[K] extends { readonly owner: "self" } ?
     Omit<SR[K], "owner"> & { readonly owner: S }
@@ -2462,7 +2462,7 @@ export interface Definition<
   /** The names of the slots a parent may fill. */
   readonly slots: ReadonlyArray<Sl>
   /** The owners whose shared state the component reads, by local name. */
-  readonly shared: SR | undefined
+  readonly reads: SR | undefined
   /** What an owner shares with the components below it, from its Model and props: the `value` of `shares`. */
   readonly shares: ((model: Model, props: Props) => SV) | undefined
   /** The Schema of what an owner shares: the `schema` of `shares`. */
@@ -2721,7 +2721,7 @@ export declare namespace Definition {
     readonly elements: View.Vocabulary<any> | undefined
     readonly slots: ReadonlyArray<string>
     /** The owners whose shared state the component reads, by local name. */
-    readonly shared: SharedReads | undefined
+    readonly reads: SharedReads | undefined
     /** What the component shares as an owner, or `undefined` when it isn't one. */
     readonly shares: ((model: any, props: any) => unknown) | undefined
     /** The Schema of what the component shares, or `undefined` when its `shares` gives none. */
@@ -3162,12 +3162,12 @@ export const define = <
   V extends View.Elements = View.Registered,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
-  // What `shared` lists, as written. It defaults to its constraint, which stands for no `shared`: a `{}` default
+  // What `reads` lists, as written. It defaults to its constraint, which stands for no `reads`: a `{}` default
   // would be fixed before `optional` is read.
   SR extends SharedReads = SharedReads,
   SV = never,
   Rp = never,
-  // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
+  // The owner of each entry of `reads`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {}
 >(
   options: {
@@ -3210,16 +3210,16 @@ export const define = <
     /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
     readonly slots?: ReadonlyArray<Sl> | undefined
     /**
-     * The owners whose shared state the component reads, by the name `h.shared`, `p.shared` and `$.shared` use:
+     * The owners whose shared state the component reads, by the name `h.reads`, `p.reads` and `$.reads` use:
      * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
      * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
      * component tells an owner whose `shares` has `collects`, from its Model, props and `id`.
      * `onChange` is its message when the value changes, delivered once per owner round before the next render, with the latest value.
      * One `onChange` per owner: `define` throws for an owner listed twice with one each.
      * `owner: "self"` reads the nearest instance of this component above, and is `optional: true`;
-     * write `shares` before `shared`, so `report` and `onChange` are typed by it.
+     * write `shares` before `reads`, so `report` and `onChange` are typed by it.
      */
-    readonly shared?:
+    readonly reads?:
       | (
         & SR
         & {
@@ -3340,7 +3340,7 @@ export const define = <
     queries: options.queries,
     elements: options.elements,
     slots: options.slots ?? [],
-    shared: options.shared as any,
+    reads: options.reads as any,
     shares: typeof shares === "function" ? shares : shares?.value,
     sharesSchema: typeof shares === "function" ? undefined : shares?.schema,
     collects: shares !== undefined && typeof shares !== "function" &&
@@ -3357,7 +3357,7 @@ export const define = <
             $.model,
             $.props,
             $.queries,
-            $.shared,
+            $.reads,
             msg,
             ($ as AnyUpdate$)["~self"]
           ),
@@ -3366,7 +3366,7 @@ export const define = <
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
-    // The type of `shared` names the component in each `"self"` entry. The value keeps `"self"`, which `finish`
+    // The type of `reads` names the component in each `"self"` entry. The value keeps `"self"`, which `finish`
     // resolves once the component exists.
     make: (rest: any) => finish(definition as any, rest) as any
   }
@@ -3519,7 +3519,7 @@ const finish = (
             h.patched = context.patched
           }
           if (reads.length > 0) {
-            h.shared = sharedReads.values(definition.name, reads, shared)
+            h.reads = sharedReads.values(definition.name, reads, shared)
           }
           const lazies = lazy?.lazy as View.Lazies | undefined
           lazies?.begin()
@@ -3571,7 +3571,7 @@ const finish = (
             p.patched = opened.patched
           }
           if (reads.length > 0) {
-            p.shared = sharedReads.values(
+            p.reads = sharedReads.values(
               definition.name,
               reads,
               context.shared

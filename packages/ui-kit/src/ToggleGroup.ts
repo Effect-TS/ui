@@ -334,7 +334,7 @@ export const ToggleGroup = Component.define({
   message: ToggleGroupMessage,
   events: ToggleGroupEvents,
   restore: false,
-  shared: {
+  reads: {
     provider: { owner: DirectionProvider, optional: true },
     toolbar: { owner: Toolbar, optional: true }
   },
@@ -343,16 +343,16 @@ export const ToggleGroup = Component.define({
   init: () => ({ active: null }),
   update: {
     ClickedItem: ($, { value }) =>
-      enabled($.props, $.shared.toolbar, value)
+      enabled($.props, $.reads.toolbar, value)
         ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) }))
         : $.model,
     FocusedItem: ($, { value }) => $.evolve({ active: value }),
     PressedKey: ($, { key, value }) => {
-      const items = enabledOf($.props, $.shared.toolbar)
+      const items = enabledOf($.props, $.reads.toolbar)
       const last = items.length - 1
       const { next } = arrowKeys(
         $.props.orientation ?? "horizontal",
-        $.shared.provider?.direction === "rtl"
+        $.reads.provider?.direction === "rtl"
       )
       const target = items[
         key === "Home"
@@ -376,7 +376,7 @@ export const ToggleGroup = Component.define({
   },
   parts: (p, model) => {
     const props = p.props
-    const toolbar = p.shared.toolbar
+    const toolbar = p.reads.toolbar
     const disabled = disabledOf(props, toolbar)
     const multiple = props.multiple === true
     const orientation = props.orientation ?? "horizontal"

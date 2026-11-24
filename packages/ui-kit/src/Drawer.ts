@@ -1830,7 +1830,7 @@ export const Drawer = Component.define({
         })
     }
   },
-  shared: {
+  reads: {
     parent: {
       owner: "self",
       optional: true,
@@ -1940,9 +1940,9 @@ export const Drawer = Component.define({
       drawerId,
       open,
       rest,
-      indent: p.shared.parent !== undefined
+      indent: p.reads.parent !== undefined
         ? null
-        : p.shared.provider?.indent ?? null
+        : p.reads.provider?.indent ?? null
     }
     const frontmost = frontmostOf(model)
     const active = props.snapPoint ?? props.snapPoints?.[0]

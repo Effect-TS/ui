@@ -312,7 +312,7 @@ const ReaderRow = Component.define({
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,
-  shared: { provider: Provider },
+  reads: { provider: Provider },
   elements: Html
 }).make({
   init: () => null,
@@ -323,7 +323,7 @@ const ReaderRow = Component.define({
       view: (disclosure) =>
         h.li.class("row").attrs({
           "data-done": h.props.row.done ? "" : undefined,
-          "data-open": h.shared.provider.open === h.props.row.id
+          "data-open": h.reads.provider.open === h.props.row.id
             ? ""
             : undefined
         }).children(

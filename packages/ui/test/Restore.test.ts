@@ -84,7 +84,7 @@ const makeReader = (name: string, restore: false | undefined) =>
     model: Schema.Boolean,
     message: ReaderMessage,
     restore,
-    shared: { group: { owner: Group, report: (on) => on } }
+    reads: { group: { owner: Group, report: (on) => on } }
   }).make({
     init: () => false,
     update: ($, message) =>
@@ -103,7 +103,7 @@ const makeReader = (name: string, restore: false | undefined) =>
         ),
         h.el(
           "span",
-          `${name} on=${h.shared.group.on} picks=${h.shared.group.picks}`
+          `${name} on=${h.reads.group.on} picks=${h.reads.group.picks}`
         )
       )
   })

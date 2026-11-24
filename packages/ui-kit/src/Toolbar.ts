@@ -340,7 +340,7 @@ type ToolbarUpdate =
     ToolbarProps
   >
   & {
-    readonly shared: {
+    readonly reads: {
       readonly provider?: { readonly direction: "ltr" | "rtl" } | undefined
     }
   }
@@ -348,7 +348,7 @@ type ToolbarUpdate =
 const keysOf = ($: ToolbarUpdate) =>
   arrowKeys(
     $.props.orientation ?? "horizontal",
-    $.shared.provider?.direction === "rtl"
+    $.reads.provider?.direction === "rtl"
   )
 
 const targetOf = (
@@ -447,7 +447,7 @@ export const Toolbar = Component.define({
       disabledItems: Schema.Array(Schema.String)
     })
   },
-  shared: {
+  reads: {
     provider: { owner: DirectionProvider, optional: true }
   },
   elements: Html

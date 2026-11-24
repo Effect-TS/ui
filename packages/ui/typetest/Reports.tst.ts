@@ -47,7 +47,7 @@ const Tip = Component.define({
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ hovered: Schema.Boolean }),
   message: TipMessage,
-  shared: {
+  reads: {
     provider: {
       owner: Provider,
       optional: true,
@@ -66,7 +66,7 @@ const Tip = Component.define({
   init: () => ({ hovered: false }),
   update: ($) => $.send(Provider, { _tag: "Completed" }),
   view: (h) => {
-    expect(h.shared.provider).type.toBe<
+    expect(h.reads.provider).type.toBe<
       { open: boolean; instant: boolean } | undefined
     >()
     return h.span()
@@ -77,13 +77,13 @@ const Required = Component.define({
   name: "Required",
   model: Schema.Null,
   message: Schema.Never,
-  shared: { provider: { owner: Provider, report: () => true }, plain: Plain }
+  reads: { provider: { owner: Provider, report: () => true }, plain: Plain }
 }).make({
   init: () => null,
   update: ($) => $.model,
   parts: (p) => {
-    expect(p.shared.provider).type.toBe<{ open: boolean; instant: boolean }>()
-    expect(p.shared.plain).type.toBe<{ model: null }>()
+    expect(p.reads.provider).type.toBe<{ open: boolean; instant: boolean }>()
+    expect(p.reads.plain).type.toBe<{ model: null }>()
     return {}
   }
 })
@@ -110,7 +110,7 @@ describe("reports", () => {
       name: "Sender",
       model: Schema.Null,
       message: TipMessage,
-      shared: { a: { owner: Provider, optional: true } }
+      reads: { a: { owner: Provider, optional: true } }
     })
     const sendsB = sender.make({
       init: () => null,
@@ -144,14 +144,14 @@ describe("reports", () => {
       name: "Indexed",
       model: Schema.Null,
       message: Schema.Never,
-      shared: reads
+      reads
     })
       .make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => {
           // `| undefined` from the index signature, as for any record.
-          expect(h.shared["provider"]).type.toBe<
+          expect(h.reads["provider"]).type.toBe<
             { open: boolean; instant: boolean } | undefined
           >()
           return h.text("")
@@ -166,7 +166,7 @@ describe("reports", () => {
       name: "Child",
       model: Schema.Null,
       message: Schema.Never,
-      shared: { p: Provider }
+      reads: { p: Provider }
     })
       .make({
         init: () => null,
@@ -177,7 +177,7 @@ describe("reports", () => {
       name: "Wrapper",
       model: Schema.Null,
       message: TipMessage,
-      shared: { p: { owner: Provider, optional: true } }
+      reads: { p: { owner: Provider, optional: true } }
     }).make({
       init: () => null,
       update: ($) => $.send(Provider, { _tag: "Completed" }),
@@ -204,7 +204,7 @@ describe("reports", () => {
       name: "Bad",
       model: Schema.Null,
       message: Schema.Never,
-      shared: {
+      reads: {
         provider: {
           owner: Provider,
           // @ts-expect-error  Type 'string' is not assignable to type 'boolean'
@@ -216,7 +216,7 @@ describe("reports", () => {
       name: "Bad",
       model: Schema.Null,
       message: Schema.Never,
-      shared: {
+      reads: {
         plain: {
           owner: Plain,
           // @ts-expect-error  This owner collects no reports
@@ -228,7 +228,7 @@ describe("reports", () => {
       name: "Bad",
       model: Schema.Null,
       message: TipMessage,
-      shared: {
+      reads: {
         provider: {
           owner: Provider,
           // @ts-expect-error  is not assignable to type '{ readonly _tag: "Completed"; } | { readonly _tag: "Entered"; }'
@@ -240,8 +240,8 @@ describe("reports", () => {
       name: "Bad",
       model: Schema.Null,
       message: TipMessage,
-      // @ts-expect-error  A component in shared must be a headless component with shares
-      shared: { plain: { owner: Tip } }
+      // @ts-expect-error  A component in reads must be a headless component with shares
+      reads: { plain: { owner: Tip } }
     })
   })
 })

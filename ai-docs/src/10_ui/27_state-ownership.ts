@@ -213,7 +213,7 @@ export const ModalProvider = Component.define({
 
 const OpenButtonMessage = UiSchema.TaggedEnum({ ClickedOpen: {} })
 
-// Guaranteed: a sender needs no `shared` entry. The send puts the owner in
+// Guaranteed: a sender needs no `reads` entry. The send puts the owner in
 // this component's requirements, which only the owner's `view` closure
 // removes.
 export const OpenButton = Component.define({
@@ -244,7 +244,7 @@ export const ModalHost = Component.define({
   name: "ModalHost",
   model: Schema.Null,
   message: ModalHostMessage,
-  shared: { provider: ModalProvider },
+  reads: { provider: ModalProvider },
   elements: Html
 }).make({
   init: () => null,
@@ -258,7 +258,7 @@ export const ModalHost = Component.define({
   },
   view: (h) =>
     ConfirmDialog(h, {
-      props: { open: h.shared.provider.open },
+      props: { open: h.reads.provider.open },
       onEmit: {
         RequestedClose: () => ModalHostMessage.RequestedCloseDialog(),
         Confirmed: () => ModalHostMessage.ConfirmedDialog()
@@ -336,7 +336,7 @@ export const Dual = Component.define({
 })
 
 // Routing around the owner. The closure hands the owner's parts to a child
-// as props: the value a reader gets through `h.shared`, by a second route.
+// as props: the value a reader gets through `h.reads`, by a second route.
 // The dialog's events now land on `Around`, over the owner. Guaranteed: a
 // send reaches only an owner above the sender, so `Around` can't ask the
 // provider to close, and the dialog stays open.

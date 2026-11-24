@@ -458,13 +458,13 @@ export const AccordionItem = Component.define({
   model: Schema.Struct({}),
   message: AccordionItemMessage,
   events: AccordionItemEvents,
-  shared: { accordion: Accordion },
+  reads: { accordion: Accordion },
   elements: Html
 }).make({
   init: () => ({}),
   update: {
     ToggledCollapsible: ($, { open, reason }) =>
-      $.props.disabled === true || $.shared.accordion.disabled
+      $.props.disabled === true || $.reads.accordion.disabled
         ? $.model
         : $.send(Accordion, {
           _tag: "ToggledItem",
@@ -479,7 +479,7 @@ export const AccordionItem = Component.define({
   },
   parts: (p) => {
     const props = p.props
-    const accordion = p.shared.accordion
+    const accordion = p.reads.accordion
     const open = accordion.value.includes(props.value)
     const disabled = props.disabled === true || accordion.disabled
     const orientation = accordion.orientation

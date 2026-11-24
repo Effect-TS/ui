@@ -885,7 +885,7 @@ export const OTPField = Component.define({
   model: OTPFieldModel,
   message: OTPFieldMessage,
   events: OTPFieldEvents,
-  shared: {
+  reads: {
     provider: { owner: DirectionProvider, optional: true }
   },
   restore: false,
@@ -951,7 +951,7 @@ export const OTPField = Component.define({
           "input-paste"
         ),
     PressedKey: ($, message) =>
-      pressKey($, message, $.shared.provider?.direction === "rtl"),
+      pressKey($, message, $.reads.provider?.direction === "rtl"),
     PressedSlot: (
       $,
       { index }

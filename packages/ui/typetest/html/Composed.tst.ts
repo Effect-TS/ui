@@ -162,7 +162,7 @@ describe("p.child", () => {
       name: "Tip",
       model: Schema.Null,
       message: Msg,
-      shared: { tips: Tips }
+      reads: { tips: Tips }
     }).make({
       init: () => null,
       update: ($) => $.model,

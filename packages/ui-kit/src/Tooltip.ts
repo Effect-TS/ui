@@ -613,7 +613,7 @@ export const Tooltip = Component.define({
   events: TooltipEvents,
   // A TooltipProvider above, if there is one. Each tooltip tells it its turn
   // while it shows, and hears when the shown tooltips change.
-  shared: {
+  reads: {
     provider: {
       owner: TooltipProvider,
       optional: true,
@@ -645,7 +645,7 @@ export const Tooltip = Component.define({
         return entered.run(Command.interrupt(WaitBeforeClosing))
       }
       // A provider's group is open, or closed less than `timeout` ago.
-      if ($.shared.provider?.instant === true) {
+      if ($.reads.provider?.instant === true) {
         return entered.evolve({ instant: "delay" }).run(
           Command.interrupt(WaitBeforeOpening)
         ).emit(requestedOpen)
@@ -739,7 +739,7 @@ export const Tooltip = Component.define({
           "data-side": side,
           "data-align": align
         })
-    const group = p.shared.provider
+    const group = p.reads.provider
     // Closed while another tooltip of the group shows: this one was replaced.
     const instantBy = !shown && group?.open === true ? "delay" : model.instant
     const instant = <B extends Attributed<B>>(builder: B): B =>

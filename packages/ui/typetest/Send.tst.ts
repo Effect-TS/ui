@@ -150,7 +150,7 @@ const NestDef = Component.define({
   model: Schema.Number,
   message: NestMessage,
   shares: { value: (picked) => picked, receives: ["Picked"] },
-  shared: { parent: { owner: "self", optional: true } }
+  reads: { parent: { owner: "self", optional: true } }
 })
 
 const FlatDef = Component.define({

@@ -437,7 +437,7 @@ export const RadioGroup = Component.define({
   model: RadioGroupModel,
   message: RadioGroupMessage,
   events: RadioGroupEvents,
-  shared: {
+  reads: {
     provider: { owner: DirectionProvider, optional: true }
   },
   restore: false,
@@ -518,7 +518,7 @@ export const RadioGroup = Component.define({
     const readOnly = props.readOnly === true
     const required = props.required === true
     const invalid = props.invalid === true
-    const rtl = p.shared.provider?.direction === "rtl"
+    const rtl = p.reads.provider?.direction === "rtl"
     const byValue = new Map(props.items.map((item) => [item.value, item]))
     const stateOf = (value: string) => {
       const item = byValue.get(value)

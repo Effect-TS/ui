@@ -1261,7 +1261,7 @@ export const Dialog = Component.define({
         })
     }
   },
-  shared: {
+  reads: {
     parent: {
       owner: "self",
       optional: true,
@@ -1337,7 +1337,7 @@ export const Dialog = Component.define({
     const open = props.open
     const shown = open || model.mounted
     const transitionStatus: DialogTransitionStatus = statusOf(model, props)
-    const nested = p.shared.parent !== undefined && props.nested !== false
+    const nested = p.reads.parent !== undefined && props.nested !== false
     const nestedDialogs = model.nestedOpen
     const portalId = props.id ?? p.id("portal")
     const openMethod = open ? props.openMethod ?? model.openMethod : null

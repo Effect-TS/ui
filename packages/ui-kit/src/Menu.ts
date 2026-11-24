@@ -817,7 +817,7 @@ interface Shared {
 type MenuUpdate =
   & Component.Update<MenuModel, MenuMessage, MenuEvents, MenuProps>
   & {
-    readonly shared: Shared
+    readonly reads: Shared
     send(
       owner: "self",
       message: Extract<MenuMessage, { readonly _tag: "RequestedCloseByChild" }>
@@ -858,14 +858,14 @@ const WaitBeforeContextGrace = wait(
 
 interface Reads {
   readonly props: MenuProps
-  readonly shared: Shared
+  readonly reads: Shared
 }
 
-const parentOf = ({ props, shared }: Reads): ParentState | undefined =>
-  props.parentItem === undefined ? undefined : shared.parent
+const parentOf = ({ props, reads }: Reads): ParentState | undefined =>
+  props.parentItem === undefined ? undefined : reads.parent
 
-const barOf = ({ props, shared }: Reads): MenubarShared | undefined =>
-  props.parentItem === undefined ? shared.menubar : undefined
+const barOf = ({ props, reads }: Reads): MenubarShared | undefined =>
+  props.parentItem === undefined ? reads.menubar : undefined
 
 const disabledOf = (input: Reads): boolean =>
   input.props.disabled === true || parentOf(input)?.disabled === true ||
@@ -1140,7 +1140,7 @@ const toSibling = (
   key: string,
   opens: string
 ) => {
-  const bar = $.shared.menubar
+  const bar = $.reads.menubar
   if (bar === undefined) return undefined
   const nested = $.props.parentItem !== undefined
   if (bar.orientation === "vertical") {
@@ -2500,7 +2500,7 @@ export const Menu = Component.define({
         })
     }
   },
-  shared: {
+  reads: {
     parent: {
       owner: "self",
       optional: true,
@@ -2858,7 +2858,7 @@ export const Menu = Component.define({
     const shown = open || model.mounted
     const transitionStatus: MenuTransitionStatus = statusOf(model, props)
     const disabled = disabledOf(p)
-    const arrowsOpen = p.shared.toolbar?.orientation !== "vertical"
+    const arrowsOpen = p.reads.toolbar?.orientation !== "vertical"
     const orientation = props.orientation ?? "vertical"
     const rtl = nested ? parent.rtl : model.rtl
     const hover = hoverOf(props, nested)

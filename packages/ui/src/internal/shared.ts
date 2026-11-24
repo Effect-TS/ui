@@ -1,5 +1,5 @@
 /**
- * The entries of a reader's `shared` option, normalized: an owner alone is
+ * The entries of a reader's `reads` option, normalized: an owner alone is
  * short for `{ owner }`.
  *
  * @internal
@@ -8,7 +8,7 @@ import type * as Component from "../Component.ts"
 
 /** @internal */
 export interface Read {
-  /** The local name `h.shared`, `p.shared` and `$.shared` read the owner under. */
+  /** The local name `h.reads`, `p.reads` and `$.reads` read the owner under. */
   readonly name: string
   readonly owner: Component.Headless.Any
   readonly optional: boolean
@@ -26,7 +26,7 @@ const none: ReadonlyArray<Read> = []
 const cache = new WeakMap<object, ReadonlyArray<Read>>()
 
 /**
- * A definition's `shared` entries, in order. `self` is the component `make` built from it, which an
+ * A definition's `reads` entries, in order. `self` is the component `make` built from it, which an
  * entry for `"self"` names: `make` reads them first, and every later read is of the ones it kept.
  *
  * @internal
@@ -35,11 +35,11 @@ export const readsOf = (
   definition: Component.Definition.Any,
   self?: Component.Any
 ): ReadonlyArray<Read> => {
-  const shared = definition.shared
-  if (shared === undefined) return none
-  let reads = cache.get(shared)
+  const declared = definition.reads
+  if (declared === undefined) return none
+  let reads = cache.get(declared)
   if (reads === undefined) {
-    reads = Object.entries(shared).map(([name, entry]): Read =>
+    reads = Object.entries(declared).map(([name, entry]): Read =>
       // A component is a function, and the long form a plain object.
       typeof entry === "function"
         ? {
@@ -59,7 +59,7 @@ export const readsOf = (
           onChange: entry.onChange as Read["onChange"]
         }
     )
-    cache.set(shared, reads)
+    cache.set(declared, reads)
   }
   return reads
 }
@@ -115,17 +115,17 @@ export const unsupplied = (
 }
 
 /**
- * Throws for a definition whose `shared` gives one owner two `onChange`s: a reader gets one message per
+ * Throws for a definition whose `reads` gives one owner two `onChange`s: a reader gets one message per
  * round of an owner. Aliases of an owner with one `onChange` among them are fine. Throws too for an
  * entry for `"self"` that isn't optional, or in a component that shares nothing.
  *
  * @internal
  */
 export const check = (definition: Component.Definition.Any): void => {
-  const { name, shared } = definition
-  if (shared === undefined) return
+  const { name, reads } = definition
+  if (reads === undefined) return
   const handled = new Map<Component.Definition.Any, string>()
-  for (const [key, entry] of Object.entries(shared)) {
+  for (const [key, entry] of Object.entries(reads)) {
     if (typeof entry === "function") continue
     if (entry.owner === "self") {
       if (definition.shares === undefined) {
