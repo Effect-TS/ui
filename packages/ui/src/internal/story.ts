@@ -355,7 +355,7 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
 }
 
 /**
- * `h.shared` and `p.shared` in a story: a given value, else the nearest owner above, else `undefined`
+ * `h.reads` and `p.reads` in a story: a given value, else the nearest owner above, else `undefined`
  * for an optional read and the default for a required one.
  *
  * @internal
@@ -445,7 +445,7 @@ export const withReports = (
 }
 
 /**
- * What the story's component reports to each owner it reads, by the name `shared` lists it under. An
+ * What the story's component reports to each owner it reads, by the name `reads` lists it under. An
  * optional owner with no value given is absent, and gets no report.
  *
  * @internal

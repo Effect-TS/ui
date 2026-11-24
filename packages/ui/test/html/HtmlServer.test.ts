@@ -272,7 +272,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         props: Schema.Struct({ open: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
-        shared: { group: { owner: Group, report: (_, props) => props.open } }
+        reads: { group: { owner: Group, report: (_, props) => props.open } }
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -1947,7 +1947,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         const Item = Component.define({
           ...leaf,
           name: "Item",
-          shared: { group: { owner: Group, report: () => true } }
+          reads: { group: { owner: Group, report: () => true } }
         })
           .make({ ...made, view: (h) => h.span("item") })
         const Asks = Component.define({

@@ -55,7 +55,7 @@ export const TooltipProvider = Html.component({
 })
 
 // ---------------------------------------------------------------------------
-// A reader: `shared` names the owners it reads, `$.send` reaches the owner
+// A reader: `reads` names the owners it reads, `$.send` reaches the owner
 // ---------------------------------------------------------------------------
 
 const TooltipMessage = UiSchema.TaggedEnum({
@@ -63,25 +63,25 @@ const TooltipMessage = UiSchema.TaggedEnum({
   BlurredTooltip: { id: Schema.String }
 })
 
-// `h.shared.provider` is the nearest TooltipProvider's value, and
-// `$.shared.provider` is the same value in `update`. Reading it, or sending
+// `h.reads.provider` is the nearest TooltipProvider's value, and
+// `$.reads.provider` is the same value in `update`. Reading it, or sending
 // to it, puts `Component.Shared<"TooltipProvider">` in the component's
 // requirements, which the provider's `view` closure removes. Each `Update` in
-// the log records what `$.shared` held, so a replay reads the same value.
+// the log records what `$.reads` held, so a replay reads the same value.
 export const Tooltip = Html.component({
   name: "Tooltip",
   props: Schema.Struct({ label: Schema.String, tip: Schema.String }),
   model: Schema.Null,
   message: TooltipMessage,
-  shared: { provider: TooltipProvider }
+  reads: { provider: TooltipProvider }
 }).make({
   init: () => null,
-  // `$.shared.provider` is the provider's value as this update runs: a blur
+  // `$.reads.provider` is the provider's value as this update runs: a blur
   // of a tooltip that isn't open would change nothing, so it isn't sent. A
   // send is delivered as this update applies, and logged with this update as
   // its source.
   update: ($, message) =>
-    message._tag === "BlurredTooltip" && $.shared.provider.open !== message.id
+    message._tag === "BlurredTooltip" && $.reads.provider.open !== message.id
       ? $.model
       : $.send(TooltipProvider, message),
   view: (h) => {
@@ -92,7 +92,7 @@ export const Tooltip = Html.component({
         .onBlur(TooltipMessage.BlurredTooltip({ id }))
         .attr("aria-describedby", id)
         .children(h.props.label),
-      h.shared.provider.open === id &&
+      h.reads.provider.open === id &&
         h.span.id(id).attr("role", "tooltip").children(h.props.tip)
     )
   }
@@ -200,10 +200,10 @@ const PanelMessage = UiSchema.TaggedEnum({
   ChangedGroup: { anyOpen: Schema.Boolean }
 })
 
-// The long form of a `shared` entry, typed by its `owner`.
+// The long form of a `reads` entry, typed by its `owner`.
 //
 // - `optional: true`: a Panel works with no PanelGroup above it. There
-//   `h.shared.group` is `undefined`, a `$.send(PanelGroup, ...)` is dropped
+//   `h.reads.group` is `undefined`, a `$.send(PanelGroup, ...)` is dropped
 //   and logged as `SendDropped`, and the Panel needs no
 //   `Component.Shared<"PanelGroup">`.
 // - `report`: what the Panel tells the owner, from its own Model and props.
@@ -214,12 +214,12 @@ const PanelMessage = UiSchema.TaggedEnum({
 // - `onChange`: the Panel's message when the owner's value changes, for an
 //   `update` that must act on the change, as counting the times the group
 //   opened does here. To read the current value, `update` has
-//   `$.shared.group`, so there's no need to copy it into the Model. It isn't
+//   `$.reads.group`, so there's no need to copy it into the Model. It isn't
 //   sent at mount, and never with an optional owner absent. Changes are
 //   delivered in one round per owner before the next render, with the value
 //   as it is then: a burst of changes is one message, and a value that
 //   changes back sends nothing. When another reader changes the owner within
-//   that round, `$.shared` is already newer than the message being handled.
+//   that round, `$.reads` is already newer than the message being handled.
 //
 // A `report` or `onChange` that answers the shared value with a change of
 // its own can loop. The owner counts its `collects.onChange` messages and
@@ -231,7 +231,7 @@ export const Panel = Html.component({
   model: Schema.Struct({ open: Schema.Boolean, groupOpened: Schema.Number }),
   message: PanelMessage,
 
-  shared: {
+  reads: {
     group: {
       owner: PanelGroup,
       optional: true,
@@ -251,7 +251,7 @@ export const Panel = Html.component({
     h.section(
       h.button.onClick(PanelMessage.Toggled()).children(h.props.title),
       model.open &&
-        h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
+        h.p.children(h.reads.group === undefined ? "On its own" : "In a group")
     )
 })
 
@@ -319,7 +319,7 @@ export const Menu = Html.component({
     }
   },
 
-  shared: {
+  reads: {
     parent: {
       owner: "self",
       optional: true,
@@ -333,16 +333,16 @@ export const Menu = Html.component({
       ChangedOpenBelow: ({ count }) => count,
       // A pick goes up to the outermost menu, which tells its consumer.
       // `$.send("self", message)` sends to the menu this one is nested in:
-      // the one `$.shared.parent` reads. It needs nothing above, as an
+      // the one `$.reads.parent` reads. It needs nothing above, as an
       // optional owner doesn't: from the outermost menu the send would be
       // dropped and logged as `SendDropped`, so that one emits instead.
       PickedItem: ({ item }) =>
-        $.shared.parent === undefined
+        $.reads.parent === undefined
           ? $.emit(MenuEvents.Picked({ item }))
           : $.send("self", MenuMessage.PickedItem({ item }))
     }),
   parts: (p, below) => ({
-    nested: p.shared.parent !== undefined,
+    nested: p.reads.parent !== undefined,
     openBelow: below,
     item: p.part(
       "button",

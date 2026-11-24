@@ -21,7 +21,7 @@ const Sender = Html.component({
   name: "Sender",
   model: Schema.Struct({}),
   message: SenderMessage,
-  shared: { group: { owner: CheckboxGroup } }
+  reads: { group: { owner: CheckboxGroup } }
 }).make({
   init: () => ({}),
   update: {

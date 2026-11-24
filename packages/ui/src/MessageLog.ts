@@ -142,7 +142,7 @@ export interface Issued {
  * entry. `Send` is a descendant's `$.send` to an owner of shared state,
  * pointing at the sender's entry. `Shared` is a
  * reader's `onChange` for its owner's shared value: the name the reader's
- * `shared` lists the owner under, the owner's path, and the owner's entry
+ * `reads` lists the owner under, the owner's path, and the owner's entry
  * that last changed the value. `Collected` is an owner's `collects.onChange` for
  * a change in its readers' reports. `Mount` is an
  * `onMount` result, pointing at its `MountStarted` entry and carrying the
@@ -295,8 +295,8 @@ export interface Update extends InstanceBase {
    */
   readonly queries?: Component.Results | undefined
   /**
-   * The shared values `update` read as `$.shared`, by the local name its
-   * `shared` lists each owner under: what `Story.fromLog` gives it back.
+   * The shared values `update` read as `$.reads`, by the local name its
+   * `reads` lists each owner under: what `Story.fromLog` gives it back.
    * Only a component that reads shared state has them.
    */
   readonly shared?: Component.SharedRecord | undefined
@@ -785,7 +785,7 @@ export interface CommandDropped extends InstanceBase {
 }
 
 /**
- * A `$.send` that reached no owner: the sender's `shared` lists the owner
+ * A `$.send` that reached no owner: the sender's `reads` lists the owner
  * as `optional`, and no instance of it is above the sender. `path` is the
  * sender's, `owner` the name of the owner, and `issued` the sender's
  * `Update` entry and the send's index in its `sends`.

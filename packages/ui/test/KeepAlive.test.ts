@@ -1028,7 +1028,7 @@ describe("keep-alive children of a headless child", () => {
         props: Schema.Struct({ title: Schema.String }),
         model: Schema.Boolean,
         message: Schema.Literal("toggle"),
-        shared: {
+        reads: {
           group: { owner: PanelGroup, optional: true, report: (open) => open }
         }
       }).make({
@@ -1559,7 +1559,7 @@ describe("keep-alive children that read shared state", () => {
           name: "Reader",
           model: Schema.Number,
           message: Schema.Literal("changed"),
-          shared: {
+          reads: {
             side: {
               owner: Side,
               optional: optional as true,
@@ -1570,7 +1570,7 @@ describe("keep-alive children that read shared state", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h, changes) =>
-            h.el("p", (h.shared.side?.name ?? "none") + ":" + changes)
+            h.el("p", (h.reads.side?.name ?? "none") + ":" + changes)
         })
         const Open = Component.define({
           name: "Open",
@@ -2291,7 +2291,7 @@ describe("keep-alive children written into closed slots", () => {
         name: "Member",
         model: Schema.Null,
         message: Schema.Never,
-        shared: { group: { owner: Group, optional: true, report: () => true } }
+        reads: { group: { owner: Group, optional: true, report: () => true } }
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -3056,7 +3056,7 @@ describe("keep-alive children that report to shared state", () => {
         name: "Member",
         model: Schema.Null,
         message: Schema.Never,
-        shared: { count: { owner: Count, optional: true, report: () => true } }
+        reads: { count: { owner: Count, optional: true, report: () => true } }
       }).make({
         init: () => null,
         update: ($) => $.model,

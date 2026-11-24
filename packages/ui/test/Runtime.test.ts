@@ -114,10 +114,10 @@ describe("Runtime", () => {
       const Reader = Component.define({
         ...state,
         name: "Reader",
-        shared: { value: Expected }
+        reads: { value: Expected }
       }).make({
         ...impl,
-        view: (h) => h.el("p", h.shared.value)
+        view: (h) => h.el("p", h.reads.value)
       })
       const App = Component.define({ ...state, name: "App" })
         .make({

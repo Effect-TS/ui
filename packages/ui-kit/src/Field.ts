@@ -362,7 +362,7 @@ export const Field = Html.component({
   props: FieldProps,
   model: FieldModel,
   message: FieldMessage,
-  shared: {
+  reads: {
     fieldset: {
       owner: Fieldset,
       optional: true,
@@ -379,7 +379,7 @@ export const Field = Html.component({
     // browser can send the blur of a control a fieldset disabled before the
     // field hears of it, so the event says so too.
     BlurredControl: ($, { disabled }) =>
-      disabled || disabledBy($.props, $.shared.fieldset)
+      disabled || disabledBy($.props, $.reads.fieldset)
         ? $.evolve({ focused: false })
         : { focused: false, touched: true },
     // `subscriptions` gets no shared value, so `lostFocus` can't report the
@@ -393,7 +393,7 @@ export const Field = Html.component({
     { model, props }
   ) => [model.focused && props.disabled === true && lostFocus],
   parts: (p, model) => {
-    const disabled = disabledBy(p.props, p.shared.fieldset)
+    const disabled = disabledBy(p.props, p.reads.fieldset)
     const invalid = p.props.invalid === true
     const valid = p.props.invalid === false
     const dirty = p.props.dirty === true

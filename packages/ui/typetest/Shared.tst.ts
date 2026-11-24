@@ -38,17 +38,17 @@ const Tip = Html.component({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
-  shared: { provider: TipsProvider }
+  reads: { provider: TipsProvider }
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => {
-    expect(h.shared.provider).type.toBe<{ open: string | null }>()
+    expect(h.reads.provider).type.toBe<{ open: string | null }>()
     return h.span()
   }
 })
 
-// Sends to the owner with no `shared` declaration.
+// Sends to the owner with no `reads` declaration.
 const Sender = Component.define({
   name: "Sender",
   model: Schema.Null,
@@ -107,25 +107,25 @@ describe("shared state", () => {
     expect<Component.Requirements<typeof provided>>().type.toBe<TipsShared>()
   })
 
-  it("types $.shared in update by the entries of shared, undefined for an optional owner", () => {
+  it("types $.reads in update by the entries of reads, undefined for an optional owner", () => {
     const def = Component.define({
       name: "Reads",
       model: Schema.Null,
       message: TipMessage,
-      shared: {
+      reads: {
         provider: TipsProvider,
         maybe: { owner: TipsProvider, optional: true }
       }
     })
     def.update(($) => {
-      expect($.shared).type.toBe<{
+      expect($.reads).type.toBe<{
         readonly provider: { open: string | null }
         readonly maybe: { open: string | null } | undefined
       }>()
       return $.model
     })
     def.update("Enter", ($) => {
-      expect($.shared.maybe).type.toBe<{ open: string | null } | undefined>()
+      expect($.reads.maybe).type.toBe<{ open: string | null } | undefined>()
       return $.model
     })
   })
@@ -171,7 +171,7 @@ describe("shared state", () => {
     })
   })
 
-  it("rejects an owner that isn't headless, and a component in shared that isn't an owner", () => {
+  it("rejects an owner that isn't headless, and a component in reads that isn't an owner", () => {
     const options = {
       init: () => null,
       update: ($: { readonly model: null }) => $.model,
@@ -194,7 +194,7 @@ describe("shared state", () => {
       name: "Bad",
       model: Schema.Null,
       message: TipMessage,
-      shared: { plain: Plain }
+      reads: { plain: Plain }
     })
   })
 
@@ -275,7 +275,7 @@ describe("a component that reads its own kind", () => {
             NestMessage.ChangedBelow({ open: counts.length })
         }
       },
-      shared: {
+      reads: {
         parent: {
           owner: "self",
           optional: true,
@@ -293,7 +293,7 @@ describe("a component that reads its own kind", () => {
       init: () => 0,
       update: ($) => $.model,
       parts: (p) => {
-        expect(p.shared.parent).type.toBe<{ open: boolean } | undefined>()
+        expect(p.reads.parent).type.toBe<{ open: boolean } | undefined>()
         return {}
       }
     })
@@ -306,14 +306,14 @@ describe("a component that reads its own kind", () => {
       model: Schema.Null,
       message: NestMessage,
       shares: () => ({ open: true }),
-      shared: { parent: { owner: "self" as const } }
+      reads: { parent: { owner: "self" as const } }
     })
     expect(Component.define).type.not.toBeCallableWith({
       name: "Uncollected",
       model: Schema.Null,
       message: NestMessage,
       shares: () => ({ open: true }),
-      shared: {
+      reads: {
         parent: {
           owner: "self" as const,
           optional: true as const,
@@ -325,7 +325,7 @@ describe("a component that reads its own kind", () => {
       name: "Bare",
       model: Schema.Null,
       message: NestMessage,
-      shared: { parent: { owner: "self", optional: true } }
+      reads: { parent: { owner: "self", optional: true } }
     })
     expect(Bare.make).type.not.toBeCallableWith({
       init: () => null,

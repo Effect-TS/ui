@@ -1827,7 +1827,7 @@ export const Drawer = Html.component({
         })
     }
   },
-  shared: {
+  reads: {
     parent: {
       owner: "self",
       optional: true,
@@ -1936,9 +1936,9 @@ export const Drawer = Html.component({
       drawerId,
       open,
       rest,
-      indent: p.shared.parent !== undefined
+      indent: p.reads.parent !== undefined
         ? null
-        : p.shared.provider?.indent ?? null
+        : p.reads.provider?.indent ?? null
     }
     const frontmost = frontmostOf(model)
     const active = props.snapPoint ?? props.snapPoints?.[0]

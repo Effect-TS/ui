@@ -375,11 +375,11 @@ const enabledIn = (
 
 const rtlOf = (
   $: {
-    readonly shared: {
+    readonly reads: {
       readonly provider?: { readonly direction: string } | undefined
     }
   }
-) => $.shared.provider?.direction === "rtl"
+) => $.reads.provider?.direction === "rtl"
 
 const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
   if (!enabledIn($.props.tabs, value) || value === $.props.value) return model
@@ -847,7 +847,7 @@ export const Tabs = Html.component({
   model: TabsModel,
   message: TabsMessage,
   events: TabsEvents,
-  shared: {
+  reads: {
     provider: { owner: DirectionProvider, optional: true }
   },
   restore: false

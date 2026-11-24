@@ -1365,7 +1365,7 @@ export const Select = Html.component({
   message: SelectMessage,
   events: SelectEvents,
   restore: false,
-  shared: {
+  reads: {
     toolbar: { owner: Toolbar, optional: true }
   }
 }).make({
@@ -1531,7 +1531,7 @@ export const Select = Html.component({
     const readOnly = props.readOnly === true
     const required = props.required === true
     const multiple = props.multiple === true
-    const arrowsOpen = p.shared.toolbar?.orientation !== "vertical"
+    const arrowsOpen = p.reads.toolbar?.orientation !== "vertical"
     const values = valuesOf(props)
     const chosen = new Set(values)
     const filled = filledOf(props)

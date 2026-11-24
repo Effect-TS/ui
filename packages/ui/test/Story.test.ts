@@ -1096,7 +1096,7 @@ describe("Story", () => {
           at: Schema.Number
         }),
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),
-        shared: { receiver: Receiver }
+        reads: { receiver: Receiver }
       }).make({
         init: () => null,
         update: ($, { at, kind }) =>
