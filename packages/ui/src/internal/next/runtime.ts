@@ -8,6 +8,7 @@ import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
 import * as Latch from "effect/Latch"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
@@ -34,6 +35,7 @@ import type * as runtime from "../runtime.ts"
 import { scopeAddFinalizerUnsafe } from "../scope.ts"
 import * as serverHost from "../serverHost.ts"
 import * as services from "../services.ts"
+import type { Decoded } from "../stateCodec.ts"
 import * as transitionRun from "../transitionRun.ts"
 import * as domHost from "./domHost.ts"
 import * as serialize from "./serialize.ts"
@@ -242,9 +244,9 @@ export const mount = (
   never,
   Scope.Scope | Renderer.Renderer
 > =>
-  withProps(
-    rootProps,
-    (props) =>
+  withProps(rootProps, (props) => {
+    const path = "/" + component.definition.name
+    const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
       Effect.uninterruptible(
         Effect.contextWith(
           (ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
@@ -259,7 +261,15 @@ export const mount = (
                 setUp.whenOpen(Effect.suspend(() => made?.close ?? Effect.void))
             )
             try {
-              made = start(component, props, container, ctx, options)
+              made = start(
+                component,
+                props,
+                container,
+                ctx,
+                options,
+                undefined,
+                decoded && [path, decoded]
+              )
             } finally {
               setUp.openUnsafe()
             }
@@ -269,7 +279,18 @@ export const mount = (
           }
         )
       )
-  )
+    // A root whose state decodes asynchronously mounts once it has, and adopts with it.
+    const decoded = options?.state === undefined
+      ? undefined
+      : hydrateRun.decodeRoot(
+        component as unknown as Kernel.Runnable,
+        options.state,
+        path
+      )
+    return decoded === undefined || Exit.isExit(decoded)
+      ? go(decoded)
+      : Effect.flatMap(Fiber.await(decoded), go)
+  })
 
 const start = (
   component: Component.Any,
@@ -277,7 +298,8 @@ const start = (
   container: unknown,
   caller: Context.Context<any>,
   options: Options | undefined,
-  server?: Server
+  server?: Server,
+  decodedRoot?: readonly [string, Exit.Exit<Decoded, unknown>]
 ) => {
   const ctx = onScheduler(caller)
   const host = server?.host ?? Context.get(ctx, services.Renderer).host
@@ -475,6 +497,7 @@ const start = (
   const base = dom ?? bridge(host, recording.step, ownsHead)
   const bridged: Kernel.Host = {
     ...base,
+    hold: routing?.hold,
     commit: () => {
       base.commit?.()
       for (const inst of waiting.keys()) {
@@ -536,7 +559,8 @@ const start = (
       bridged,
       base,
       domHost.adopt?.(base, container, "/" + component.definition.name),
-      checkAdopted
+      checkAdopted,
+      decodedRoot
     )
   const hydratedAt = clock.currentTimeMillisUnsafe()
   const idleWaiters: Array<() => void> = []

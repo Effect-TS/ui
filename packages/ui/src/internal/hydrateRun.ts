@@ -81,6 +81,21 @@ const decode = (
   return exit
 }
 
+/**
+ * The decode of the root's state from the server, which the mount waits for when it's asynchronous, as
+ * the root holds the server's nodes until it adopts with it.
+ *
+ * @internal
+ */
+export const decodeRoot = (
+  component: Kernel.Runnable,
+  state: Renderer.State,
+  path: string
+): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> | undefined =>
+  state["~deferred"]?.includes(path) === true || !Object.hasOwn(state, path)
+    ? undefined
+    : decode(component, state[path])
+
 const noEvents: ReadonlyArray<unknown> = []
 
 type Saved = Record<string, any>
@@ -91,11 +106,15 @@ export const make = (
   host: Kernel.Host,
   base: Kernel.Host,
   adoption: Adoption | undefined,
-  settled: () => void
+  settled: () => void,
+  root?: readonly [string, Exit.Exit<Decoded, unknown>]
 ): Hydration => {
   const deferred = new Set(state["~deferred"])
   const adopting = new WeakSet<Kernel.Instance>()
   const decoded = new Map<string, Decoded | undefined>()
+  if (root !== undefined) {
+    decoded.set(root[0], Exit.isSuccess(root[1]) ? root[1].value : undefined)
+  }
   const resumed = new WeakSet<Kernel.Rec>()
   const held = new Map<Kernel.Rec, string>()
   // Owners that adopted what their reports sent on the server, compared once nothing below waits to adopt.
@@ -164,13 +183,15 @@ export const make = (
     for (const owner of owners.splice(0)) restored(owner)
     settled()
   }
+  // A child the server's state doesn't have is held as history restore holds it.
+  const fallback = host.hold
   ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
     const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
     if (resumed.delete(rec)) return false
     const served = serves(owner, path)
     if (view.alive === undefined) active?.child(path, served)
-    if (!served) return false
+    if (!served) return fallback?.(owner, rec, at) === true
     const exit = decode(view.component as never, state[path])
     if (Exit.isExit(exit)) {
       decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)

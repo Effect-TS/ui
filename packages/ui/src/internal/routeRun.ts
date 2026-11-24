@@ -17,12 +17,14 @@ import * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../Component.ts"
 import type * as View from "../View.ts"
 import type * as keptRun from "./keptRun.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
+import { segmentOf } from "./paths.ts"
 import type * as prefetchWalk from "./prefetch.ts"
 import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
 import {
+  type Decoded,
   encodePage,
   redactedIssue,
   reportedOf,
@@ -61,6 +63,8 @@ export interface Routed {
   ) => Kernel.Next
   /** Whether the instance started from what history saved. */
   readonly restored: (inst: Kernel.Instance) => boolean
+  /** Holds a child whose saved state decodes asynchronously, until it has. */
+  readonly hold: NonNullable<Kernel.Host["hold"]>
   /** Attaches the root to the Router, once it has rendered. */
   readonly attach: (instance: Kernel.Instance) => void
   /** Tells the Router a flush committed. */
@@ -288,6 +292,39 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     }
     return undefined
   }
+  // The saved state a hold took for each path, decoded, for the instance that starts there.
+  const taken = new Map<
+    string,
+    readonly [services.PageState, Exit.Exit<Decoded, unknown>]
+  >()
+  const hold: Routed["hold"] = (owner, rec, at) => {
+    const view = rec.v as View.Child<any, any>
+    const component = view.component as unknown as Component.Any
+    if (
+      view.alive !== undefined || component.definition?.restore === false
+    ) return false
+    for (let up: Kernel.Instance | undefined = owner; up; up = up.parent) {
+      if (supplies.has(up)) return false
+    }
+    const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
+    const found = hooks.restore(path)
+    if (found === undefined) return false
+    const decoded = runCodec(stateCodecOf(component).decode(found.state))
+    if (Exit.isExit(decoded)) {
+      taken.set(path, [found, decoded])
+      return false
+    }
+    decoded.addObserver((exit) => {
+      const tree = owner.tree
+      tree.schedule(() => {
+        taken.set(path, [found, exit])
+        Kernel.settle(owner, rec, at)
+        taken.delete(path)
+        Kernel.flush(tree)
+      })
+    })
+    return true
+  }
   let made = 0
   let recording = 0
   const recorded = new Set<Walked>()
@@ -407,7 +444,11 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       if (adopted === true || component.definition.restore === false) {
         return first
       }
-      const found: services.PageState | undefined = own === undefined
+      const held = taken.get(inst.path)
+      taken.delete(inst.path)
+      const found: services.PageState | undefined = held !== undefined
+        ? held[0]
+        : own === undefined
         ? hooks.restore(inst.path)
         : own[inst.path] === undefined
         ? undefined
@@ -416,7 +457,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
           reported: (own["~reported"] as Saved | undefined)?.[inst.path]
         }
       if (found === undefined) return first
-      const exit = Effect.runSyncExit(
+      const exit = held?.[1] ?? Effect.runSyncExit(
         stateCodecOf(component).decode(found.state)
       )
       if (Exit.isFailure(exit)) return first
@@ -432,6 +473,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       }
     },
     restored: (inst) => restored.has(inst),
+    hold,
     attach: (inst) => {
       instance = inst
       inst.tree.watched = (at, query, argsKey) =>
