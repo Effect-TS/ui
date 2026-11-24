@@ -7,6 +7,7 @@ import { codeToTokens } from "shiki"
 import { defineConfig, type Plugin } from "vite"
 import { toMarkdown } from "./src/domain/ArticleText.ts"
 import { type Excerpt, test, whole } from "./src/domain/Excerpt.ts"
+import { bodies, type Folds, none } from "./src/domain/Fold.ts"
 import { Frontmatter, Islands } from "./src/domain/Island.ts"
 import { type Snippet, Snippets } from "./src/domain/Snippet.ts"
 
@@ -15,11 +16,15 @@ const resolved = `\0${id}`
 
 const sources: {
   readonly [K in keyof Snippets]: ReadonlyArray<
-    readonly [string, Excerpt]
+    readonly [string, Excerpt, Folds?]
   >
 } = {
   intro: [["src/autocounter/Counter.ts", whole]],
-  split: [["src/autocounter/split/Counter.ts", whole]],
+  split: [[
+    "src/autocounter/split/Counter.ts",
+    whole,
+    bodies("init", "update", "subscriptions", "view")
+  ]],
   counterFoldkit: [["src/counter/foldkit/Counter.ts", whole], [
     "src/counter/foldkit/Page.ts",
     whole
@@ -64,8 +69,10 @@ const sources: {
 }
 
 const tokenize = async (
+  key: string,
   file: string,
-  select: Excerpt
+  select: Excerpt,
+  fold: Folds = none
 ): Promise<Snippet> => {
   const code = select(await readFile(file, "utf8"))
   if (code === "") throw new Error(`Nothing to show from ${file}`)
@@ -74,14 +81,17 @@ const tokenize = async (
     themes: { light: "github-light", dark: "github-dark" },
     defaultColor: "light-dark()"
   })
+  const name = path.basename(file)
   return {
-    name: path.basename(file),
+    id: `${key}/${name}`,
+    name,
     lines: result.tokens.map((line) =>
       line.map((token) => ({
         text: token.content,
         color: token.htmlStyle?.color ?? ""
       }))
-    )
+    ),
+    folds: fold(code)
   }
 }
 
@@ -96,8 +106,8 @@ const tokenizeAll = async (root: string): Promise<Snippets> => {
       [
         key,
         await Promise.all(
-          list.map(([source, select]) =>
-            tokenize(path.join(root, source), select)
+          list.map(([source, select, fold]) =>
+            tokenize(key, path.join(root, source), select, fold)
           )
         )
       ] as const

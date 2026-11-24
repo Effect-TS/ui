@@ -151,8 +151,9 @@ export const Nav = Component.define({
                       "text-muted-foreground hover:text-foreground",
                       "aria-[current]:border-foreground aria-[current]:bg-muted",
                       "aria-[current]:text-foreground aria-[current]:font-medium",
+                      "wrap-break-word focus-visible:-outline-offset-2",
                       "max-rail:py-2.5 max-rail:pe-3.5",
-                      "rail:py-[5px] rail:text-[0.8125rem]",
+                      "rail:py-[5px] rail:pe-3 rail:text-[0.8125rem]",
                       isNested
                         ? "max-rail:ps-[30px] rail:ps-[26px]"
                         : "max-rail:ps-3.5 rail:ps-3"

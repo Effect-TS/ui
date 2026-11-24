@@ -7,7 +7,6 @@
 @custom-variant compact (@media (width <= 520px));
 @custom-variant diagram-medium (@container diagram (width <= 720px));
 @custom-variant diagram-narrow (@container diagram (width <= 560px));
-@custom-variant panel-narrow (@container diagram-panel (width <= 330px));
 
 @theme {
   --color-*: initial;
@@ -24,6 +23,9 @@
   --color-wash: color-mix(in oklab, var(--color-foreground) 7%, transparent);
   --color-accent: oklch(55% 0.2 270);
   --color-accent-foreground: oklch(100% 0 0);
+  --color-white: oklch(100% 0 0);
+  --color-positive: oklch(50% 0.14 150);
+  --color-negative: oklch(53% 0.2 27);
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -56,6 +58,9 @@
   --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --icon-copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E");
   --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E");
+  --icon-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E");
+  --icon-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7 4.5v15a1 1 0 0 0 1.5.86l13-7.5a1 1 0 0 0 0-1.72l-13-7.5A1 1 0 0 0 7 4.5Z'/%3E%3C/svg%3E");
+  --icon-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Crect x='5' y='5' width='14' height='14' rx='2'/%3E%3C/svg%3E");
 }
 
 @property --column {
@@ -112,13 +117,41 @@
     @apply border-t border-border pt-7;
   }
 
-  .code-window,
-  .live-demo {
+  .code-window {
+    @apply bg-card;
     box-shadow: 0 2px 3px -2px var(--color-ring);
   }
 
-  .code-window {
-    @apply bg-card;
+  .code-comparison {
+    container-type: inline-size;
+  }
+
+  .comparison-columns {
+    @apply grid grid-cols-2 gap-x-6 gap-y-3;
+  }
+
+  .comparison-side {
+    @apply grid min-w-0 grid-rows-subgrid;
+    grid-row: span var(--comparison-rows);
+
+    > * {
+      @apply min-w-0;
+    }
+  }
+
+  @container (width < 1134px) {
+    .comparison-columns {
+      @apply mx-auto w-full max-w-(--column) grid-cols-1 gap-y-6;
+    }
+
+    .comparison-side {
+      @apply flex flex-col gap-y-3;
+      grid-row: auto;
+    }
+
+    .code-comparison > figcaption {
+      @apply mx-auto;
+    }
   }
 
   .counter {
@@ -134,24 +167,61 @@
   }
 
   .counter-button {
-    @apply min-w-9 cursor-pointer rounded-md border border-border-strong bg-background px-3 py-1.5 text-control font-medium;
-    transition: border-color 150ms, background-color 150ms;
+    @apply inline-flex min-w-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border-strong bg-background px-3 py-1.5 text-control font-medium;
+    transition: border-color 150ms, background-color 150ms, opacity 150ms;
 
     &:hover {
       @apply border-foreground bg-muted;
+    }
+
+    &:disabled {
+      @apply cursor-not-allowed border-border-strong bg-background opacity-50;
+    }
+  }
+
+  .counter-increment,
+  .counter-start,
+  .counter-stop {
+    &::before {
+      content: "";
+      @apply size-3.5 flex-none bg-current;
+      mask: var(--counter-icon) center / contain no-repeat;
+    }
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+
+  .counter-increment {
+    --counter-icon: var(--icon-plus);
+    @apply border-foreground bg-foreground text-background;
+
+    &:hover {
+      @apply border-foreground bg-foreground;
+    }
+  }
+
+  .counter-start {
+    --counter-icon: var(--icon-play);
+    @apply border-positive bg-positive text-white;
+
+    &:hover {
+      @apply border-positive bg-positive;
+    }
+  }
+
+  .counter-stop {
+    --counter-icon: var(--icon-stop);
+    @apply border-negative bg-negative text-white;
+
+    &:hover {
+      @apply border-negative bg-negative;
     }
   }
 
   .counter-page {
     @apply grid justify-items-start gap-3;
-  }
-
-  .live-demo .counter-button:first-of-type {
-    @apply border-foreground bg-foreground text-background;
-
-    &:hover {
-      opacity: 0.85;
-    }
   }
 
   @media (width <= 520px) {
@@ -214,5 +284,53 @@
   :focus-visible {
     outline: 2px solid var(--color-foreground);
     outline-offset: 2px;
+  }
+}
+
+/* Diagram motion: a packet travels its path once and fades out, and
+   a link draws itself as the packet goes. With reduced motion the
+   packet stays hidden and the link is drawn at once. */
+@layer components {
+  .diagram-packet {
+    offset-rotate: 0deg;
+    offset-distance: 100%;
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .diagram-packet {
+      animation: diagram-travel var(--diagram-travel, 850ms) ease-in-out both;
+    }
+
+    .diagram-draw {
+      stroke-dasharray: 1;
+      animation: diagram-draw var(--diagram-travel, 850ms) ease-in-out both;
+    }
+  }
+}
+
+/* The dot stays opaque for the whole trip, so it never looks as if it
+   sinks into the node it arrives at. It disappears once it's there. */
+@keyframes diagram-travel {
+  0% {
+    offset-distance: 0%;
+    opacity: 1;
+  }
+  99% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes diagram-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }

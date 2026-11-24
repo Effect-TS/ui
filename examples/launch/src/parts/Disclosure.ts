@@ -14,8 +14,12 @@ export const Disclosure = Component.define({
   update: {
     ClickedTrigger: ($) => $.evolve({ isOpen: !$.model.isOpen })
   },
+  // What parts returns is what the consumer's view receives: plain
+  // values such as isOpen, and parts.
   parts: (p, model) => ({
     isOpen: model.isOpen,
+    // A part decorates a <button> that the consumer supplies. The
+    // click sends Disclosure's own Message to Disclosure's update.
     trigger: p.part("button", (button) =>
       button.attrs({
         type: "button",

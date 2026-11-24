@@ -6,6 +6,8 @@ import { Counter, CounterMessage, DelayReset } from "./Counter.ts"
 describe("Counter", () => {
   it.effect("resets after the delay", () =>
     Effect.gen(function*() {
+      // {} is Counter's props. Each step on s runs when it is called,
+      // and s.model is the Model after the last one.
       const s = yield* Story.make(Counter, {})
       s.given({ count: 5, isAutoCounting: false })
       s.send(CounterMessage.ClickedResetAfterDelay())

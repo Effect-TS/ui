@@ -9,6 +9,9 @@ const CounterMessage = UiSchema.TaggedEnum({
 
 export const Counter = Component.define({
   name: "Counter",
+  // What the parent passes in. init and update read it as $.props
+  // and view as h.props. In Foldkit 0.x, viewInputs went to view
+  // alone.
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage,
@@ -16,6 +19,7 @@ export const Counter = Component.define({
 }).make({
   init: () => ({ count: 0 }),
   update: {
+    // A handler can also return the next Model as a plain value.
     ClickedDecrement: ($) => ({ count: $.model.count - 1 }),
     ClickedIncrement: ($) => ({ count: $.model.count + 1 })
   },

@@ -18,6 +18,7 @@ export const Islands = {
   }),
   Counter: Schema.Struct({ code: Code, label: Schema.String }),
   Listing: Schema.Struct({ code: Code }),
+  PlayTest: Schema.Struct({}),
   PerformanceChart: Schema.Struct({}),
   AllResults: Schema.Struct({}),
   Footer: Schema.Struct({})

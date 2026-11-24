@@ -5,6 +5,7 @@ import { Disclosure } from "./Disclosure.ts"
 
 export const Details = Component.define({
   name: "Details",
+  // Nothing to store: Disclosure holds the open state.
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

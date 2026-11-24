@@ -5,6 +5,8 @@ import { CartMessage, CartProvider } from "./CartProvider.ts"
 
 export const Shop = Component.define({
   name: "Shop",
+  // Shop keeps no state and has no Messages: a null Model and an
+  // update with nothing to handle.
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -13,6 +15,9 @@ export const Shop = Component.define({
   update: ($) => $.model,
   view: (h) =>
     CartProvider(h, {
+      // CartProvider draws nothing. Shop passes it this view, and
+      // every Component rendered in it, at any depth, is inside the
+      // Provider.
       view: () => h.main(CartCount(h, {}), Product(h, {}))
     })
 })
@@ -21,6 +26,8 @@ const CartCount = Component.define({
   name: "CartCount",
   model: Schema.Null,
   message: Schema.Never,
+  // Lists the Provider to read. Its value is h.shared.cart, and
+  // CartCount renders again when that value changes.
   shared: { cart: CartProvider },
   elements: Html
 }).make({
@@ -50,7 +57,10 @@ const AddToCart = Component.define({
 }).make({
   init: () => null,
   update: {
-    ClickedAdd: ($) => $.send(CartProvider, CartMessage.AddedItem())
+    // Sends the Message to the nearest CartProvider above. Sending
+    // needs no shared entry.
+    ClickedAdd: ($) =>
+      $.send(CartProvider, CartMessage.RequestedAddItem())
   },
   view: (h) =>
     h.button.onClick(AddToCartMessage.ClickedAdd())

@@ -20,10 +20,15 @@ export const Faq = Component.define({
   view: (h, model) =>
     Collapsible(h, {
       props: { open: model.isAnswerOpen },
+      // Maps each event Collapsible emits to one of Faq's Messages,
+      // or to undefined to ignore it. Events are what Foldkit 0.x
+      // called OutMessages.
       onEmit: {
         Toggled: ({ open }) => Message.ToggledAnswer({ open }),
         Settled: () => undefined
       },
+      // Each part returns the builder it is given with its attributes
+      // and handlers added. panel returns undefined once closed.
       view: (collapsible) =>
         collapsible.root(h.div.class("faq")).children(
           collapsible.trigger(h.button.class("faq-question"))

@@ -20,6 +20,8 @@ export const init = () => ({
   model: { isCounterShown: true, counter: Counter.init() }
 })
 
+// Runs Counter.update on the Counter Model stored in Page's Model
+// and writes the result back.
 const foldCounter = Update.foldChild({
   update: Counter.update,
   read: (model: Model) => Option.some(model.counter),

@@ -12,6 +12,7 @@ import { Counter } from "./autocounter/Counter.ts"
 import { Diagram } from "./diagram/Diagram.ts"
 import { Nav } from "./nav/Nav.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
+import { PlayTest } from "./playtest/PlayTest.ts"
 import { AgentPrompt } from "./prompt/AgentPrompt.ts"
 
 const article = Markdown.decodeDocument(source)
@@ -21,6 +22,11 @@ const sections = fromDocument(article)
 const title = frontmatter?.title ?? ""
 
 const block = "mx-auto max-w-(--column)"
+
+const listing = [
+  block,
+  "my-10 flex flex-col gap-3 [p+&]:mt-[1.1em]"
+].join(" ")
 
 const heading = [
   block,
@@ -37,13 +43,11 @@ const Example = <M>(
   title: string,
   files: ReadonlyArray<Snippet>
 ) =>
-  h.section.class("row-span-2 grid min-w-0 grid-rows-subgrid gap-y-3")
-    .attr("aria-label", title).children(
+  h.section.class("comparison-side").attr("aria-label", title)
+    .children(
       h.p.class("text-[0.9375rem]/[1.4] font-semibold text-pretty")
         .children(title),
-      h.div.class("flex min-w-0 flex-col gap-3").children(
-        ...Files(h, files)
-      )
+      ...Files(h, files)
     )
 
 const Caption = <M>(
@@ -169,11 +173,17 @@ export const LaunchPage = Component.define({
             Diagram: (h, { scenario }) =>
               Diagram(h, { key: scenario, props: { scenario } }),
             Compare: (h, attributes, caption) =>
-              h.figure.class(wide).children(
-                h.div.class(
-                  "grid gap-6",
-                  "grid-cols-[repeat(auto-fit,minmax(min(100%,calc(70*7.5px+30px)),1fr))]"
-                ).children(
+              h.figure.class(wide, "code-comparison").children(
+                // One row for the titles and one per file, shared by
+                // both sides, so the n-th file starts level on each.
+                h.div.class("comparison-columns").style({
+                  "--comparison-rows": String(
+                    1 + Math.max(
+                      snippets[attributes.foldkit].length,
+                      snippets[attributes.effect].length
+                    )
+                  )
+                }).children(
                   Example(
                     h,
                     attributes.foldkitTitle,
@@ -188,41 +198,49 @@ export const LaunchPage = Component.define({
                 Caption(h, caption)
               ),
             Counter: (h, { code, label }, caption, occurrence) =>
-              h.figure.class(wide).children(
-                h.div.class(
-                  "grid items-start gap-6",
-                  "grid-cols-[minmax(0,1fr)_minmax(220px,280px)]",
-                  "stacked:grid-cols-1"
-                ).children(
-                  h.div.class("flex min-w-0 flex-col gap-3").children(
-                    ...Files(h, snippets[code])
-                  ),
-                  h.div.class(
-                    "live-demo sticky top-[calc(var(--nav-bar)+24px)] rounded-lg",
-                    "border border-border bg-card p-5",
-                    "stacked:static stacked:-order-1 compact:p-3.5",
-                    "[&>div]:grid [&>div]:grid-cols-1",
-                    "[&_output]:text-start [&_output]:text-[2rem]/[normal]",
-                    "[&_output]:font-features-[normal]",
-                    "[&_button]:font-features-[normal]"
-                  ).attr("role", "group")
-                    .attr("aria-label", label).children(
-                      h.p.class("article-eyebrow mb-5").children(
-                        "// LIVE EXAMPLE"
-                      ),
-                      Counter(h, { key: `counter-${occurrence}` })
+              h.figure.class(listing).children(
+                ...snippets[code].map((snippet, index) =>
+                  h.div.key(snippet.name).children(
+                    Code(
+                      h,
+                      snippet,
+                      // The Counter's grid tracks are sized by the
+                      // panel, never by a label, so a changing label
+                      // or count can't move them.
+                      index === 0
+                        ? [
+                          h.div.class(
+                            "live-demo @container border-b border-border",
+                            "bg-background px-3.5 py-4",
+                            "[&>div]:grid [&>div]:grid-cols-1",
+                            "[&>div]:items-center",
+                            "@min-[312px]:[&>div]:grid-cols-[repeat(2,minmax(0,1fr))]",
+                            "@min-[560px]:[&>div]:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,3fr))]",
+                            "[&_output]:text-start",
+                            "[&_output]:text-[2rem]/[normal]",
+                            "[&_output]:font-features-[normal]",
+                            "[&_button]:font-features-[normal]",
+                            "[&_button]:whitespace-nowrap"
+                          ).attr("role", "group")
+                            .attr("aria-label", label).children(
+                              Counter(h, {
+                                key: `counter-${occurrence}`
+                              })
+                            )
+                        ]
+                        : []
                     )
+                  )
                 ),
                 Caption(h, caption)
               ),
             Listing: (h, { code }, caption) =>
-              h.figure.class(
-                wide,
-                "flex flex-col gap-3 [--wide:880px]"
-              ).children(
+              h.figure.class(listing).children(
                 ...Files(h, snippets[code]),
                 Caption(h, caption)
               ),
+            PlayTest: (h) =>
+              PlayTest(h, { props: { snippet: snippets.play[0] } }),
             PerformanceChart: (h) => PerformanceChart(h),
             AllResults: (h) => AllResults(h, {}),
             Footer: (h, _attributes, content) =>

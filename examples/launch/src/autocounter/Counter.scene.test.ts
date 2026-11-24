@@ -11,10 +11,12 @@ const reset = HtmlLocator.role("button", {
 describe("Counter", () => {
   it.effect("resets after the delay", () =>
     Effect.gen(function*() {
+      // reset and count are role locators declared above the test.
       const s = yield* HtmlScene.make(Counter, {})
       s.given({ count: 5, isAutoCounting: false })
         .click(reset)
         .expectExact(DelayReset)
+        // DelayReset is still pending, so h.isRunning is true.
         .expect(HtmlLocator.role("button", { name: "Resetting" }))
         .toExist()
         .resolve(DelayReset, CounterMessage.CompletedDelayReset())

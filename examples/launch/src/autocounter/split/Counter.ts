@@ -4,6 +4,8 @@ import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
 import { CounterMessage, DelayReset } from "../Counter.ts"
 
+// The definition: the name and the Schemas. Its init, update,
+// subscriptions and view helpers type the functions below.
 const CounterDef = Component.define({
   name: "Counter",
   model: Schema.Struct({
@@ -19,6 +21,8 @@ const init = CounterDef.init(() => ({
   isAutoCounting: false
 }))
 
+// update as one function that matches on the Message, as in
+// Foldkit 0.x, instead of a record of handlers.
 const update = CounterDef.update(($, message) =>
   CounterMessage.match(message, {
     ClickedIncrement: () => $.evolve({ count: (count) => count + 1 }),
@@ -47,15 +51,19 @@ const view = CounterDef.view((h, model) =>
   h.div.class("counter").children(
     h.output.class("counter-value").children(String(model.count)),
     Button(h, { onPress: CounterMessage.ClickedIncrement() })
-      .class("counter-button").children("Increment"),
-    Button(h, { onPress: CounterMessage.ClickedResetAfterDelay() })
-      .class("counter-button").children(
-        h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
-      ),
+      .class("counter-button counter-increment")
+      .children("Increment"),
+    Button(h, {
+      props: { disabled: h.isRunning(DelayReset) },
+      onPress: CounterMessage.ClickedResetAfterDelay()
+    }).class("counter-button").children(
+      h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
+    ),
     Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })
-      .class("counter-button").children(
-        model.isAutoCounting ? "Stop" : "Auto-count"
-      )
+      .class(
+        "counter-button",
+        model.isAutoCounting ? "counter-stop" : "counter-start"
+      ).children(model.isAutoCounting ? "Stop" : "Auto-count")
   )
 )
 

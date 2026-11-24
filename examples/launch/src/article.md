@@ -1,29 +1,20 @@
 ---
-title: Foldkit 0.x is becoming Effect UI
+title: Introducing Effect UI
 ---
 
 Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
 
 If you're building with Foldkit 0.x today, we encourage you to continue. The migration to Effect UI will be an upgrade, not a rewrite. Feature work on Foldkit 0.x has moved to Effect UI.
 
-::AgentPrompt{title="TL;DR agent prompt" prompt="Read $URL and explain how Foldkit 0.x is evolving into Effect UI and what the key changes and additions are."}
+::AgentPrompt{title="TL;DR agent prompt" prompt="Read $URL and explain what Effect UI is, how it continues Foldkit 0.x and what the key changes are."}
 
-This article covers a selection of the key changes and additions in Effect UI. It isn't a complete list.
+This article isn't a complete list of what changes from Foldkit 0.x to Effect UI. It covers key changes in these areas:
 
-Key changes:
-
-- [Component-based architecture](#the-core-change-component-based-architecture)
-- [Improved performance](#change-improved-performance)
-- [Simpler Story and Scene tests](#change-simpler-story-and-scene-tests)
-- [Where state lives](#change-where-state-lives)
-- [Parts for headless Components](#change-parts-for-headless-components)
-
-Key additions:
-
-- [Built-in queries](#addition-built-in-queries)
-- [Shared state with Providers](#addition-shared-state-with-providers)
-- [Play tests](#addition-play-tests)
-- [Host-agnostic rendering](#addition-host-agnostic-rendering)
+- [Components](#components)
+- [State and data](#state-and-data)
+- [Views and rendering](#views-and-rendering)
+- [Testing](#testing)
+- [Performance](#performance)
 
 ## Terms
 
@@ -31,7 +22,7 @@ Key additions:
 - **Effect UI:** The new frontend library that continues that work. You import it from `effect/ui`.
 - **Foldkit:** The future full-stack framework built on Effect UI.
 
-## The core change: Component-based architecture
+## Components
 
 Foldkit 0.x used the Elm Architecture. The architecture has many benefits, but it also has meaningful drawbacks in performance, code splitting and scalability.
 
@@ -75,29 +66,41 @@ As a Component grows, you can still move init, update, subscriptions and view in
 The auto-counter from [A complete Component](#a-complete-component) with each function extracted.
 :::
 
-## Change: Improved performance
+## State and data
 
-In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark), Effect UI spent less time running JavaScript overall than Foldkit 0.x, painted sooner and used less memory. The chart highlights Effect UI among all seven entries we ran on the same machine.
+### Shared state with Providers
 
-::PerformanceChart
+In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down, and a Submodel communicated back up the tree with an OutMessage, which each parent forwarded until it reached the owner.
 
-::AllResults
+In Effect UI, a Provider is a Component that shares part of its Model with every Component rendered inside it, at any depth. A Component lists the Provider to read its value and sends it a Message to ask for a change. The Components in between don't pass the value down or forward the Message. The value changes only in the Provider's update.
 
-## Change: Simpler Story and Scene tests
+:::Listing{code="provider"}
+A Provider that shares a cart's count, and the Components inside it that read and change it. `Product` sits in between and doesn't mention the cart.
+:::
 
-A Story test sends Messages to update, and a Scene test does the same through the view. In Foldkit 0.x, you passed those functions and a starting Model with `given`. In Effect UI, you pass the Component, and the test starts from the Model its init returns. To start from a different state, you may replace that Model with `given`.
+::Diagram{scenario="sharedState"}
 
-::Compare{foldkit="storyFoldkit" foldkitTitle="Foldkit 0.x Story: update and a given Model" effect="storyEffect" effectTitle="Effect UI Story: the Component itself"}
+### Built-in queries
 
-::Compare{foldkit="sceneFoldkit" foldkitTitle="Foldkit 0.x Scene: update, view and a given Model" effect="sceneEffect" effectTitle="Effect UI Scene: the Component itself"}
+In Foldkit 0.x, fetched data lived in the Model like any other state. Each resource needed a field in the Model, a Command to fetch it, a Message for the result and update branches for loading, success and failure.
 
-## Change: Where state lives
+Foldkit 0.x's experimental `Query` packaged that loop, but it was still a Submodel: the parent stored its Model, wrapped its Messages and decided when to load or refresh. As the Foldkit 0.x docs put it, Query did not "react to rendering, expire data after a duration, poll, or refresh related resources on its own".
+
+Because the Model was also the cache, two parts of the app that showed the same data needed a shared ancestor to hold it. When a Command changed data on the server, the code that made the change had to refresh each affected Query by hand.
+
+In Effect UI, you define a query once: its arguments, its result, how long the result stays fresh and how to fetch it. The fetcher is built once, when the query's Layer is built, so it can use services such as an API client. A Component lists the queries it needs and derives each query's arguments from its Model and props. The runtime fetches the data when the Component is rendered and again when the arguments change, and the `debounce` option delays that fetch until the arguments stop changing. The view reads each result as an `AsyncResult` and renders its states: no result yet, failure and success.
+
+:::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
+Both search the same posts as you type and wait 300 ms after the last keystroke before they fetch. Foldkit 0.x needed a version counter in the Model and a `DelaySearch` Command for the wait. In Effect UI, the wait is the `debounce` option. Only the Effect UI version refetches a result that is more than a minute old.
+:::
+
+### Where state lives
 
 In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, each Component has its own Model, and a Component can read state that is owned elsewhere:
 
 - **Its own Model:** State the Component changes in its update, such as a form draft or whether a dialog is open.
-- **Another Component's Model:** A parent passes state down as props, and a [Provider](#addition-shared-state-with-providers) shares state with every Component inside it.
-- **The query cache:** The runtime keeps the data a [query](#addition-built-in-queries) fetches, with its loading and failure states.
+- **Another Component's Model:** A parent passes state down as props, and a [Provider](#shared-state-with-providers) shares state with every Component inside it.
+- **The query cache:** The runtime keeps the data a [query](#built-in-queries) fetches, with its loading and failure states.
 
 The runtime also tracks which Commands are running, and a view can check with `h.isRunning`. The auto-counter in [A complete Component](#a-complete-component) shows "Resetting" this way, so its Model needs no flag for a reset in progress.
 
@@ -105,7 +108,9 @@ A Component's Model holds the state it changes through update. It no longer has 
 
 You can still reconstruct a Component's Model from a log of its Messages. When you enable logging for your app, the runtime records each Message in order, along with the props, query results and Provider values its update read. It also records changes to props and query results, and when Commands start and end. Replaying the log reproduces the Model without running Commands, fetches or Subscriptions.
 
-## Change: Parts for headless Components
+## Views and rendering
+
+### Parts for headless Components
 
 The components in Foldkit UI were headless: each one managed behavior, keyboard handling and ARIA, and you wrote the markup. Your `toView` callback received bundles of attributes, and you spread each bundle onto the element it belonged to.
 
@@ -119,53 +124,45 @@ A headless Component defines `parts` instead of a view. It has its own Model, Me
 A headless Disclosure that keeps its own open state and a Component that draws it.
 :::
 
-## Addition: Built-in queries
-
-In Foldkit 0.x, fetched data lived in the Model like any other state. Each resource needed a field in the Model, a Command to fetch it, a Message for the result and update branches for loading, success and failure.
-
-Foldkit 0.x's experimental `Query` packaged that loop, but it was still a Submodel: the parent stored its Model, wrapped its Messages and decided when to load or refresh. As the Foldkit 0.x docs put it, Query did not "react to rendering, expire data after a duration, poll, or refresh related resources on its own".
-
-Because the Model was also the cache, two parts of the app that showed the same data needed a shared ancestor to hold it. When a Command changed data on the server, the code that made the change had to refresh each affected Query by hand.
-
-In Effect UI, you define a query once: its arguments, its result, how long the result stays fresh and how to fetch it. A Component lists the queries it needs and their arguments. The runtime fetches the data when the Component is rendered and the view reads the results.
-
-:::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
-Both load the same list of posts and show it.
-:::
-
-## Addition: Shared state with Providers
-
-In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down, and a Submodel communicated back up the tree with an OutMessage, which each parent forwarded until it reached the owner.
-
-In Effect UI, a Provider is a Component that shares part of its Model with every Component rendered inside it, at any depth. A Component lists the Provider to read its value and sends it a Message to ask for a change. The Components in between don't pass the value down or forward the Message. The value changes only in the Provider's update.
-
-:::Listing{code="provider"}
-A Provider that shares a cart's count, and the Components inside it that read and change it. `Product` sits in between and doesn't mention the cart.
-:::
-
-::Diagram{scenario="sharedState"}
-
-## Addition: Play tests
-
-Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve each Command by hand, so the Command itself never runs. A Play test mounts the Component with its children and runs their Commands, Subscriptions and query fetches for real, against the Layers the test provides.
-
-One test can now cover a whole flow. It clicks a button, lets the real Command run and checks what is on screen afterwards, with no browser and no DOM.
-
-`TestClock` controls time, so the delayed-reset Play test can check that the count is 1 at 999 ms and changes to 0 at 1,000 ms.
-
-::Listing{code="play"}
-
-## Addition: Host-agnostic rendering
+### Host-agnostic rendering
 
 In Foldkit 0.x, the runtime rendered a view by patching the browser DOM directly.
 
 In Effect UI, the core in `effect/ui` doesn't refer to HTML or the DOM. The runtime renders through a host that creates and updates nodes. A Layer provides the host, so you choose it where you mount the app. HTML elements and the browser host are in `effect/ui/html`, which is where the `Html` in a Component's `elements: Html` comes from.
 
-Play tests use a second host. They mount the same Components on a test host that builds plain objects, so the tests run without a browser or DOM. The host interface is public, so you can write your own host.
+A second host, the test host, builds plain objects, so a test can mount the same Components without a browser or DOM. The host interface is public, so you can write your own host.
 
 :::Listing{code="mount"}
 This article's entry point. `BrowserHost.mount` selects the browser host.
 :::
+
+## Testing
+
+### Story and Scene tests
+
+A Story test sends Messages to update, and a Scene test does the same through the view. In Foldkit 0.x, you passed those functions and a starting Model with `given`. In Effect UI, you pass the Component, and the test starts from the Model its init returns. To start from a different state, you may replace that Model with `given`.
+
+::Compare{foldkit="storyFoldkit" foldkitTitle="Foldkit 0.x Story: update and a given Model" effect="storyEffect" effectTitle="Effect UI Story: the Component itself"}
+
+::Compare{foldkit="sceneFoldkit" foldkitTitle="Foldkit 0.x Scene: update, view and a given Model" effect="sceneEffect" effectTitle="Effect UI Scene: the Component itself"}
+
+### Play tests
+
+Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve each Command by hand, so the Command itself never runs. A Play test mounts the Component with its children on the [test host](#host-agnostic-rendering) and runs their Commands, Subscriptions and query fetches for real, against the Layers the test provides.
+
+One test can now cover a whole flow. It clicks a button, lets the real Command run and checks what is on screen afterwards, with no browser and no DOM.
+
+`TestClock` controls time, so the delayed-reset Play test can check that the count is 1 at 999 ms and changes to 0 at 1,000 ms.
+
+::PlayTest
+
+## Performance
+
+In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark), Effect UI spent less time running JavaScript overall than Foldkit 0.x, painted sooner and used less memory. The chart highlights Effect UI among all seven entries we ran on the same machine.
+
+::PerformanceChart
+
+::AllResults
 
 ## More changes
 
@@ -183,7 +180,7 @@ What people value in Foldkit 0.x carries over to Effect UI.
 - **The same structure everywhere:** Every Component has a Model, Messages, init and update, with a view or, for a headless Component, parts. You, a new teammate or an AI agent always know where to look.
 - **Explicit state transitions:** Once a Component is running, its Model changes only in its update, in response to a Message.
 - **Side effects as values:** Commands, Subscriptions and Mounts describe work for the runtime to run. update and view don't perform it themselves.
-- **Tests that declare what happened:** A Story or Scene test reads as a list of steps: a Message or a click, the Command that update returned and the result you give that Command. Because you supply the result, there is nothing to mock and no waiting for the UI to settle. A test that leaves a Command unresolved fails. Play tests use Scene's steps and run the Commands for real.
+- **Tests that declare what happened:** A Story, Scene or Play test reads as a list of steps. In a Story or Scene test, the steps are a Message or a click, the Command that update returned and the result you give that Command. Because you supply the result, there is nothing to mock and no waiting for the UI to settle, and a test that leaves a Command unresolved fails. A Play test uses a Scene test's steps for clicks and checks, but you resolve nothing by hand: its Commands run for real against the Layers the test provides.
 - **A record of what happened:** Enable message logging to record Messages, Model changes and query results. You can inspect that history and replay a Component's recorded state without rerunning side effects. The inspector in the corner of this article lists that history, and its time travel shows the article as it was at an earlier entry.
 
 ## You can keep building on Foldkit 0.x

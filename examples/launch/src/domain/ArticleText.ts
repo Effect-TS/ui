@@ -95,6 +95,11 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
           body
         ]
           .filter((part) => part !== "").join("\n\n")
+      case "PlayTest":
+        return [
+          files(snippets.play),
+          "An interactive figure runs this test in the browser, on the test host with a TestClock. A slider steps through it one line at a time and shows the count, the TestClock and whether DelayReset is running. After the two clicks the count is 1 and DelayReset is asleep. At 999 ms the count is still 1. One more millisecond wakes DelayReset, the runtime delivers CompletedDelayReset, and the count is 0."
+        ].join("\n\n")
       case "PerformanceChart":
         return [
           "| Library | JavaScript time, as a multiple of vanilla JS |",

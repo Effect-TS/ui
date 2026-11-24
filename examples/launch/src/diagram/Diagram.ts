@@ -1,330 +1,315 @@
 import { srOnly, wide } from "#components/Classes"
-import {
-  Component,
-  Subscription,
-  UiSchema,
-  type View
-} from "@effect/ui"
-import { Button, Select } from "@effect/ui-kit"
+import { Component, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Schema, Stream } from "effect"
+import { Schema } from "effect"
+import { panel, SenderPicker, Transport } from "./controls.ts"
+import * as P from "./player.ts"
 import {
   Name,
-  names,
+  type Scenario,
   ScenarioName,
   scenarios,
-  type Side,
-  SideId
+  type Side
 } from "./scenarios.ts"
+import { Tree } from "./tree.ts"
 
-const DiagramModel = Schema.Struct({
-  choice: Name,
-  isSelectOpen: Schema.Boolean,
-  foldkit: Schema.NullOr(Schema.Number),
-  effect: Schema.NullOr(Schema.Number),
-  isPlaying: Schema.Boolean,
-  runs: Schema.Number
-})
-type DiagramModel = typeof DiagramModel.Type
+// The two architectures handle the same Message in turn,
+// Foldkit 0.x and then Effect UI, on one timeline. Position -1 is
+// before anything is sent. Then comes a position per step of the first
+// side and a position per step of the second, and at the last position
+// both are done.
 
 export const DiagramMessage = UiSchema.TaggedEnum({
-  RequestedOpenSelect: {},
-  RequestedCloseSelect: {},
-  PickedSelectChoice: { choice: Name },
-  ClickedSend: {},
-  ClickedStep: { side: SideId, index: Schema.Number },
+  PickedChoice: { choice: Name },
+  ClickedPlay: {},
+  ClickedPause: {},
+  ClickedBack: {},
+  ClickedNext: {},
+  ClickedReset: {},
+  Scrubbed: { value: Schema.String },
   Ticked: {}
 })
+type Msg = typeof DiagramMessage.Type
 
-const last = (side: Side, choice: Name) =>
-  side.steps(choice).length - 1
+const Model = Schema.Struct({ choice: Name, player: P.Player })
 
-const advance = (side: Side, choice: Name, index: number | null) =>
-  Math.min((index ?? -1) + 1, last(side, choice))
+interface Turn {
+  readonly side: Side
+  readonly steps: ReturnType<Side["steps"]>
+  // The timeline position of the side's first step.
+  readonly start: number
+}
 
-const Node = <M>(
-  h: View.H<M>,
-  side: Side,
-  highlighted: ReadonlyArray<Name>,
-  name: Name
-) =>
-  h.div.class(
-    "group/node flex min-w-[min(100%,7.5rem)] flex-col items-center",
-    "self-center rounded-md border border-border-strong",
-    "bg-background px-[3px] py-1.5 text-center",
-    side.plain.includes(name) && "border-dashed",
-    "data-[active]:border-solid data-[active]:border-accent",
-    "data-[active]:bg-accent data-[active]:text-accent-foreground",
-    "motion-safe:transition-[background-color,border-color,color]",
-    "motion-safe:duration-200"
-  ).attr("data-active", highlighted.includes(name) ? "" : undefined)
-    .children(
-      h.span.class(
-        "font-mono text-[0.8125rem]/[1.4] font-semibold",
-        "font-features-[normal]"
-      ).attr("data-part", "name").children(
-        name === "Root" ? side.rootName : name
-      ),
-      h.span.class(
-        "text-[0.625rem]/[1.3] text-muted-foreground",
-        "group-data-[active]/node:text-inherit",
-        "motion-safe:transition-[color] motion-safe:duration-200"
-      ).children(side.roles[name])
-    )
+const turnsOf = (
+  scenario: Scenario,
+  choice: Name
+): ReadonlyArray<Turn> => {
+  const [first, second] = scenario.sides
+  const steps = first.steps(choice)
+  return [
+    { side: first, steps, start: 0 },
+    { side: second, steps: second.steps(choice), start: steps.length }
+  ]
+}
 
-const Panel = (
-  h: View.H<typeof DiagramMessage.Type>,
-  side: Side,
-  model: DiagramModel
+const endOf = (scenario: ScenarioName, choice: Name) =>
+  turnsOf(scenarios[scenario], choice).reduce(
+    (total, turn) => total + turn.steps.length,
+    0
+  )
+
+const isPlayingAt = (turn: Turn, time: number) =>
+  time >= turn.start && time < turn.start + turn.steps.length
+
+const Lane = (
+  h: View.H<Msg>,
+  turn: Turn,
+  options: {
+    readonly time: number
+    readonly isDimmed: boolean
+    readonly waiting: string
+    readonly runs: number
+  }
 ) => {
-  const active = model[side.id]
-  const steps = side.steps(model.choice)
-  const highlighted = active === null ? [] : steps[active].nodes
+  const { side, steps } = turn
+  const last = steps.length - 1
+  const local = options.time - turn.start
+  const shown = Math.max(Math.min(local, last), -1)
+  const done = local > last
+  const isActive = isPlayingAt(turn, options.time)
+  const step = shown >= 0 ? steps[shown] : undefined
   return h.div.class(
-    "@container/diagram-panel flex min-w-0 flex-col rounded-lg",
-    "border border-border bg-muted p-4 diagram-medium:p-3"
+    panel,
+    "gap-3 diagram-narrow:p-2.5",
+    isActive &&
+      "border-accent [box-shadow:0_0_0_1px_var(--color-accent)]",
+    options.isDimmed && "opacity-55",
+    "motion-safe:transition-[border-color,box-shadow,opacity]",
+    "motion-safe:duration-300"
   ).attrs({
     role: "group",
-    "aria-label": side.title
+    "aria-label": side.title,
+    "data-active": isActive ? "true" : undefined
   }).children(
-    h.p.class("text-[0.9375rem]/[1.4] font-semibold text-pretty")
-      .children(side.title),
-    h.p.class(
-      "mt-0.5 text-sm/[1.4] text-pretty text-muted-foreground"
-    ).children(side.subtitle),
-    h.div.class("mt-4 flex min-w-0 flex-col").attr(
-      "aria-hidden",
-      "true"
-    ).children(
-      Node(h, side, highlighted, "Root"),
-      h.div.class("h-4.5 w-px self-center bg-border-strong"),
-      Node(h, side, highlighted, "A"),
-      h.div.class(
-        "relative mx-[calc((100%-8px)/4)] h-4.5",
-        "before:absolute before:top-0 before:bottom-1/2",
-        "before:left-[calc(50%-0.5px)] before:border-l",
-        "before:border-border-strong before:content-['']",
-        "after:absolute after:inset-x-0 after:top-1/2 after:bottom-0",
-        "after:border-x after:border-t after:border-border-strong",
-        "after:content-['']"
-      ),
-      h.div.class(
-        "grid grid-cols-2 gap-2 *:min-w-0 *:self-stretch",
-        "panel-narrow:gap-1.5"
-      ).children(
-        Node(h, side, highlighted, "A1"),
-        Node(h, side, highlighted, "A2")
+    h.div.class("flex items-baseline justify-between gap-2").children(
+      h.p.class(
+        "text-[0.9375rem]/[1.4] font-semibold whitespace-nowrap"
+      )
+        .children(side.title),
+      h.p.class(
+        "font-mono text-[0.6875rem] whitespace-nowrap tabular-nums",
+        "font-features-[normal]",
+        done || isActive
+          ? "font-semibold text-accent"
+          : "text-muted-foreground"
+      ).attr("data-part", "progress").children(
+        done ? "Done" : `${shown + 1}/${steps.length}`
       )
     ),
-    h.ol.class("mt-4 flex flex-col gap-0.5").children(
-      ...steps.map((step, index) =>
-        h.li.key(String(index)).children(
-          Button(h, {
-            onPress: DiagramMessage.ClickedStep({
-              side: side.id,
-              index
-            })
-          }).class(
-            "group/step grid w-full cursor-pointer items-start gap-2",
-            "grid-cols-[1.5rem_minmax(0,1fr)] rounded-md border",
-            "border-transparent px-2 py-1.5 text-start text-sm/[1.5]",
-            "font-features-[normal] hover:border-border-strong",
-            "aria-[current]:border-accent",
-            "aria-[current]:bg-background",
-            "motion-safe:transition-[background-color,border-color]",
-            "motion-safe:duration-200"
-          ).attr(
-            "aria-current",
-            index === active ? "step" : undefined
-          ).children(
-            h.span.class(
-              "grid h-[1.5rem] place-items-center rounded-[50%]",
-              "border border-border-strong pt-0.5 font-mono",
-              "text-xs/none font-semibold",
-              "group-aria-[current]/step:border-accent",
-              "group-aria-[current]/step:bg-accent",
-              "group-aria-[current]/step:text-accent-foreground",
-              "motion-safe:transition-[background-color,border-color,color]",
-              "motion-safe:duration-200"
-            ).children(
-              String(index + 1)
-            ),
-            h.span.children(step.text)
+    Tree(h, {
+      side,
+      step,
+      past: steps.slice(0, Math.max(shown, 0)),
+      // Changes only on this side's own steps, so its packets don't
+      // play again while the other side takes its turn.
+      key: `${options.runs}-${Math.min(shown, last)}-${done}`,
+      compact: true,
+      still: done
+    }),
+    // One segment per step, across the full width.
+    h.div.class("flex gap-[3px]").attr("aria-hidden", "true")
+      .children(
+        ...steps.map((_, index) =>
+          h.span.key(String(index)).class(
+            "h-1.5 flex-1 rounded-full",
+            index <= shown ? "bg-accent" : "bg-border-strong",
+            "motion-safe:transition-[background-color]",
+            "motion-safe:duration-300"
           )
         )
-      )
-    ),
-    h.p.class(srOnly, "text-pretty").attr("aria-live", "polite")
+      ),
+    // Every caption in one cell, so the tallest sets the height and
+    // nothing moves while the steps play.
+    h.div.class("grid text-[0.8125rem]/[1.5]").attr(
+      "aria-hidden",
+      "true"
+    )
       .children(
-        active === null
-          ? ""
-          : `Step ${active + 1}: ${steps[active].text}`
+        ...[undefined, ...steps].map((s, index) =>
+          h.p.key(String(index)).class(
+            "col-start-1 row-start-1 text-pretty",
+            index - 1 !== shown && "invisible",
+            s === undefined && "text-muted-foreground"
+          ).children(s === undefined ? options.waiting : s.text)
+        )
       )
   )
 }
 
+// What the slider and the live region say about a position.
+const describe = (
+  turns: ReadonlyArray<Turn>,
+  time: number,
+  end: number
+) => {
+  if (time < 0) return "Not sent yet"
+  if (time >= end) {
+    return turns.map(({ side, steps }) =>
+      `${side.title} took ${steps.length} steps.`
+    ).join(" ")
+  }
+  const turn = turns.find((candidate) => isPlayingAt(candidate, time))
+  if (turn === undefined) return ""
+  const index = time - turn.start
+  return `${turn.side.title}, step ${
+    index + 1
+  } of ${turn.steps.length}: ${turn.steps[index]!.text}`
+}
+
+// The slider has a stop before the first step and one after the last,
+// so each side's label sits under the stops of its own steps.
+const Timeline = (
+  h: View.H<Msg>,
+  turns: ReadonlyArray<Turn>,
+  time: number,
+  end: number
+) =>
+  h.div.class("flex flex-col gap-1").children(
+    h.input.class(
+      "w-full accent-accent focus-visible:outline-accent"
+    ).attrs({
+      type: "range",
+      min: "0",
+      max: String(end + 1),
+      step: "1",
+      "aria-label": "Step",
+      "aria-valuetext": describe(turns, time, end)
+    }).value(String(time + 1)).onInput(({ value }) =>
+      DiagramMessage.Scrubbed({ value })
+    ),
+    h.div.class(
+      "flex font-mono text-[0.6875rem] text-muted-foreground",
+      "font-features-[normal]"
+    ).attr("aria-hidden", "true").children(
+      h.span.style({ flex: "0.5" }),
+      ...turns.map((turn) =>
+        h.span.key(turn.side.id).style({
+          flex: String(turn.steps.length)
+        }).class(
+          "truncate border-t-2 border-border-strong pt-1 text-center",
+          "not-last:me-1",
+          isPlayingAt(turn, time) &&
+            "border-accent font-semibold text-accent",
+          "motion-safe:transition-[border-color,color]",
+          "motion-safe:duration-300"
+        ).children(turn.side.title)
+      ),
+      h.span.style({ flex: "0.5" })
+    )
+  )
+
 export const Diagram = Component.define({
   name: "Diagram",
   props: Schema.Struct({ scenario: ScenarioName }),
-  model: DiagramModel,
+  model: Model,
   message: DiagramMessage,
   elements: Html
 }).make({
-  init: () => ({
-    choice: "A1",
-    isSelectOpen: false,
-    foldkit: null,
-    effect: null,
-    isPlaying: false,
-    runs: 0
-  }),
+  init: () => ({ choice: "A1", player: P.idle }),
   update: {
-    RequestedOpenSelect: ($) => $.evolve({ isSelectOpen: true }),
-    RequestedCloseSelect: ($) => $.evolve({ isSelectOpen: false }),
-    PickedSelectChoice: ($, { choice }) =>
+    PickedChoice: ($, { choice }) =>
+      $.evolve({ choice, player: P.reset($.model.player) }),
+    ClickedPlay: ($) =>
       $.evolve({
-        choice,
-        foldkit: null,
-        effect: null,
-        isPlaying: false
+        player: P.play(
+          $.model.player,
+          endOf($.props.scenario, $.model.choice)
+        )
       }),
-    ClickedSend: ($) =>
+    ClickedPause: ($) =>
+      $.evolve({ player: P.pause($.model.player) }),
+    ClickedBack: ($) => $.evolve({ player: P.back($.model.player) }),
+    ClickedNext: ($) =>
       $.evolve({
-        foldkit: 0,
-        effect: 0,
-        isPlaying: true,
-        runs: $.model.runs + 1
+        player: P.next(
+          $.model.player,
+          endOf($.props.scenario, $.model.choice)
+        )
       }),
-    ClickedStep: ($, { side, index }) =>
-      $.evolve({ [side]: index, isPlaying: false }),
-    Ticked: ($) => {
-      const [foldkit, effect] = scenarios[$.props.scenario].sides
-      const { choice } = $.model
-      return $.model.foldkit === last(foldkit, choice) &&
-          $.model.effect === last(effect, choice)
-        ? $.evolve({ foldkit: null, effect: null, isPlaying: false })
-        : $.evolve({
-          foldkit: advance(foldkit, choice, $.model.foldkit),
-          effect: advance(effect, choice, $.model.effect)
-        })
-    }
+    ClickedReset: ($) =>
+      $.evolve({ player: P.reset($.model.player) }),
+    Scrubbed: ($, { value }) =>
+      $.evolve({
+        player: P.seek(
+          $.model.player,
+          Math.min(
+            Math.max(Number(value) - 1, -1),
+            endOf($.props.scenario, $.model.choice)
+          )
+        )
+      }),
+    Ticked: ($) =>
+      $.evolve({
+        player: P.tick(
+          $.model.player,
+          endOf($.props.scenario, $.model.choice)
+        )
+      })
   },
   subscriptions: ({ model }) => [
-    model.isPlaying &&
-    Subscription.make(
-      "tick",
-      model.runs,
-      () =>
-        Stream.tick("900 millis").pipe(
-          Stream.drop(1),
-          Stream.map(() => DiagramMessage.Ticked())
-        )
+    P.ticks(
+      model.player,
+      "1000 millis",
+      () => DiagramMessage.Ticked()
     )
   ],
   view: (h, model) => {
     const scenario = scenarios[h.props.scenario]
+    const { step: time, isPlaying, runs } = model.player
+    const turns = turnsOf(scenario, model.choice)
+    const end = endOf(h.props.scenario, model.choice)
+    const isOnePlaying = turns.some((turn) => isPlayingAt(turn, time))
     return h.figure.class(
       wide,
       "@container/diagram flex flex-col gap-4 [--wide:920px]"
     ).children(
-      h.div.class("flex flex-wrap items-end gap-3").children(
-        Select(h, {
-          props: {
-            open: model.isSelectOpen,
-            value: model.choice,
-            items: scenario.choices.map((value) => ({
-              value,
-              label: value
-            })),
-            alignItemWithTrigger: false
-          },
-          onEmit: {
-            RequestedOpen: () => DiagramMessage.RequestedOpenSelect(),
-            RequestedClose: () =>
-              DiagramMessage.RequestedCloseSelect(),
-            Picked: ({ value }) => {
-              const choice = names.find((name) => name === value)
-              return choice &&
-                DiagramMessage.PickedSelectChoice({ choice })
-            },
-            Settled: () => undefined
-          },
-          view: (select) =>
-            h.div.class("flex flex-col gap-1.5").children(
-              select.label(h.div.class("text-sm font-medium"))
-                .children(
-                  scenario.label
-                ),
-              select.trigger(
-                h.button.class(
-                  "flex min-w-42 cursor-pointer items-center",
-                  "justify-between gap-3 rounded-md border",
-                  "border-border-strong bg-background px-3 py-1.5",
-                  "font-mono text-control font-medium text-foreground",
-                  "font-features-[normal]",
-                  "hover:border-muted-foreground",
-                  "focus-visible:outline-accent",
-                  "data-[popup-open]:border-muted-foreground",
-                  "motion-safe:transition-[border-color,box-shadow]",
-                  "motion-safe:duration-150"
-                )
-              )
-                .children(
-                  select.value(h.span),
-                  select.icon(
-                    h.span.class(
-                      "-mt-[3px] size-[7px] border-r-[1.5px]",
-                      "border-b-[1.5px] border-muted-foreground",
-                      "transform-[rotate(45deg)]"
-                    )
-                  )
-                ),
-              select.positioner(
-                h.div.class("overflow-visible bg-transparent")
-              )
-                .children(
-                  select.popup(
-                    h.div.class(
-                      "mt-1 min-w-(--anchor-width) rounded-lg border",
-                      "border-border-strong bg-background p-1",
-                      "[box-shadow:0_8px_24px_-8px_oklch(0%_0_0/0.2)]"
-                    )
-                  ).children(
-                    ...scenario.choices.map((value) =>
-                      select.item({
-                        element: h.div.class(
-                          "cursor-default rounded-[5px] px-2.5 py-1.5",
-                          "font-mono text-control font-medium",
-                          "text-foreground font-features-[normal]",
-                          "not-first:mt-0.5 data-[highlighted]:bg-muted",
-                          "data-[selected]:bg-wash"
-                        ),
-                        value
-                      }).children(
-                        select.itemText(h.div).children(value)
-                      )
-                    )
-                  )
-                )
+      h.div.class("flex flex-wrap items-end justify-between gap-3")
+        .children(
+          SenderPicker(
+            h,
+            scenario,
+            model.choice,
+            (choice) => DiagramMessage.PickedChoice({ choice })
+          ),
+          Transport(h, {
+            isPlaying,
+            atStart: time < 0,
+            atEnd: time >= end,
+            play: DiagramMessage.ClickedPlay(),
+            pause: DiagramMessage.ClickedPause(),
+            back: DiagramMessage.ClickedBack(),
+            next: DiagramMessage.ClickedNext(),
+            replay: DiagramMessage.ClickedReset()
+          })
+        ),
+      Timeline(h, turns, time, end),
+      h.div.class("grid grid-cols-2 gap-4 diagram-narrow:gap-2")
+        .children(
+          ...turns.map((turn, index) =>
+            h.div.key(turn.side.id).class("contents").children(
+              Lane(h, turn, {
+                time,
+                isDimmed: isOnePlaying && !isPlayingAt(turn, time),
+                waiting: index === 0 || time < 0
+                  ? "Waiting for the Message."
+                  : `Plays after ${turns[0]!.side.title}.`,
+                runs
+              })
             )
-        }),
-        Button(h, { onPress: DiagramMessage.ClickedSend() })
-          .class(
-            "cursor-pointer rounded-md border border-foreground",
-            "bg-foreground px-3.5 py-1.5 text-control font-medium",
-            "text-background font-features-[normal]",
-            "hover:border-prose-foreground hover:bg-prose-foreground",
-            "focus-visible:outline-accent active:translate-y-px",
-            "motion-safe:transition-[background-color,border-color]",
-            "motion-safe:duration-150"
           )
-          .children(scenario.action)
-      ),
-      h.div.class(
-        "grid grid-cols-2 gap-4 diagram-narrow:grid-cols-1"
-      ).children(
-        Panel(h, scenario.sides[0], model),
-        Panel(h, scenario.sides[1], model)
+        ),
+      h.p.class(srOnly).attr("aria-live", "polite").children(
+        time < 0 ? "" : describe(turns, time, end)
       )
     )
   }

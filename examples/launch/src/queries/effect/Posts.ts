@@ -1,33 +1,69 @@
-import { Component, Query } from "@effect/ui"
+import { Component, Query, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
-import { fetchPosts, Post } from "../Posts.ts"
+import { Post, PostsApi } from "../Posts.ts"
 
-export class GetPosts extends Query.Service<GetPosts>()("GetPosts", {
-  args: {},
-  success: Schema.Array(Post),
-  error: Schema.String,
-  staleTime: "1 minute"
-}, Effect.succeed(() => fetchPosts)) {}
+// A query is a service. Its value is the fetcher, a function from
+// args to an Effect, and the cache keeps one result per args.
+export class SearchPosts extends Query.Service<SearchPosts>()(
+  "SearchPosts",
+  {
+    args: { search: Schema.String },
+    success: Schema.Array(Post),
+    error: Schema.String,
+    // A result older than this is refetched when it is next needed.
+    staleTime: "1 minute"
+  },
+  // Runs once, when SearchPosts.layer is built.
+  Effect.gen(function*() {
+    const api = yield* PostsApi
+    // Runs on each fetch.
+    return ({ search }) => api.search(search)
+  })
+) {}
+
+export const PostsMessage = UiSchema.TaggedEnum({
+  UpdatedSearch: { search: Schema.String }
+})
 
 export const Posts = Component.define({
   name: "Posts",
-  model: Schema.Null,
-  message: Schema.Never,
+  model: Schema.Struct({ search: Schema.String }),
+  message: PostsMessage,
   elements: Html,
   queries: {
-    posts: { query: GetPosts, args: () => ({}) }
+    posts: {
+      query: SearchPosts,
+      // The query's args, derived from the Model when it changes.
+      args: ({ model }) => ({ search: model.search }),
+      // New args wait this long before they fetch, and newer args
+      // restart the wait. A fresh cached result is shown at once.
+      debounce: "300 millis"
+    }
   }
 }).make({
-  init: () => null,
-  update: ($) => $.model,
-  view: (h) =>
-    Option.match(AsyncResult.value(h.queries.posts), {
-      onNone: () => h.p.children("Loading posts"),
-      onSome: (posts) =>
-        h.ul.children(
-          posts.map((post) => h.li.key(post.id).children(post.title))
-        )
-    })
-}).pipe(Component.provide(GetPosts.layer))
+  init: () => ({ search: "" }),
+  update: { UpdatedSearch: ($, { search }) => $.evolve({ search }) },
+  view: (h, model) =>
+    h.div.children(
+      h.input.attr("aria-label", "Search posts").value(model.search)
+        .onInput(({ value }) =>
+          PostsMessage.UpdatedSearch({ search: value })
+        ),
+      // The result for the current args, as an AsyncResult.
+      AsyncResult.match(h.queries.posts, {
+        // No result yet: the wait or the first fetch is running.
+        onInitial: () => h.p.children("Loading posts"),
+        onFailure: () => h.p.children("Could not load posts"),
+        // waiting is true while a stale result is being refetched.
+        onSuccess: ({ value, waiting }) =>
+          h.ul.attr("aria-busy", String(waiting)).children(
+            value.map((post) =>
+              h.li.key(post.id).children(post.title)
+            )
+          )
+      })
+    )
+  // SearchPosts.layer needs PostsApi, which the app provides.
+}).pipe(Component.provide(SearchPosts.layer))

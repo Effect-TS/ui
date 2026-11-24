@@ -26,6 +26,9 @@ export const Page = Component.define({
         .children(
           model.isCounterShown ? "Hide counter" : "Show counter"
         ),
+      // Calling a Component in the view renders it as a child. The
+      // runtime holds its Model until the view stops rendering it.
+      // Two Counters here would each take a key, as with slotId.
       model.isCounterShown &&
         Counter(h, { props: { label: "Likes" } })
     )

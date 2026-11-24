@@ -19,6 +19,8 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
   (it) => {
     it.effect("resets one second after the click", () =>
       Effect.gen(function*() {
+        // Mounts Counter on the test host. Each step lets the runtime
+        // settle, so expect sees what a click or the clock set off.
         const play = yield* HtmlPlay.make(Counter, {})
         yield* play.click(increment)
         yield* play.click(reset)
