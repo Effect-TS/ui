@@ -1,5 +1,5 @@
 import { Component, Head, UiSchema } from "@effect/ui"
-import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
+import { HtmlHead, HtmlServer } from "@effect/ui/html"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -182,7 +182,7 @@ describe("HtmlHead", () => {
         props: Schema.Struct({ post: Post }),
         model: Schema.Null,
         message: Schema.Never,
-        elements: Html
+        elements: HtmlHead.vocabulary
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -198,7 +198,7 @@ describe("HtmlHead", () => {
         props: Schema.Struct({ post: Schema.optional(Post) }),
         model: Schema.Null,
         message: Schema.Never,
-        elements: Html
+        elements: HtmlHead.vocabulary
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -224,7 +224,7 @@ describe("HtmlHead", () => {
         name: "Site",
         model: Schema.Struct({ post: Schema.optional(Post) }),
         message: Message,
-        elements: Html
+        elements: HtmlHead.vocabulary
       }).make({
         init: () => ({}),
         update: (_, message) =>
@@ -328,7 +328,7 @@ describe("HtmlHead", () => {
     name: "Page",
     model: Schema.Null,
     message: Schema.Never,
-    elements: Html
+    elements: HtmlHead.vocabulary
   }).make({
     init: () => null,
     update: ($) => $.model,

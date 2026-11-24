@@ -20,7 +20,7 @@
  * **Example** (Rendering a page)
  *
  * ```ts
- * import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
+ * import { HtmlHead, HtmlServer } from "@effect/ui/html"
  * import { Effect, Schema } from "effect"
  * import { Component, Head } from "@effect/ui"
  *
@@ -28,7 +28,7 @@
  *   name: "App",
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
- *   elements: Html
+ *   elements: HtmlHead.vocabulary
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,

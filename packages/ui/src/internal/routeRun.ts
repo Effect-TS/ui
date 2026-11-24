@@ -356,7 +356,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       if (instance === undefined) return
       hooks.afterFlush(handle, {
         flush: root.flush(),
-        title: undefined,
+        title: instance.tree.head?.title,
         buildsPendingSince: root.buildsPendingSince
       })
     },

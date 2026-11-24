@@ -22,6 +22,9 @@ const NoteType = "application/x-note"
 
 export const NotesIndexNoDeps = Component.define({
   name: "NotesIndex",
+  // `HtmlHead.vocabulary` is `Html` with the HTML head, for a `head` with
+  // `HtmlHead` entries.
+  elements: HtmlHead.vocabulary,
   // The Model holds only what the user did here. The notes live in the
   // `notes` query's result, which the runtime keeps beside the Model.
   model: Schema.Struct({

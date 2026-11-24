@@ -12,6 +12,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
+import * as Head from "../../Head.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as View from "../../View.ts"
 import { routed } from "../due.ts"
@@ -47,11 +48,17 @@ export const eventOwners = (
 
 const dispatched = { _tag: "Dispatch" } as const
 
+const neutralFold: View.HeadFold = {
+  merge: Head.merge,
+  title: (head: Head.Head) => head.title
+}
+
 let sessions = 0
 
 const bridge = (
   host: Renderer.Host<any>,
-  step: Recorder.Recording["step"]
+  step: Recorder.Recording["step"],
+  ownsHead: boolean
 ): Kernel.Host => ({
   createElement: (tag) => {
     const node = host.createElement(tag)
@@ -103,7 +110,10 @@ const bridge = (
   nextOf: (node) => host.nextOf(node) ?? null,
   commit: host.commit === undefined ? undefined : () => host.commit!(),
   controlled: host.controlled.size === 0 ? undefined : host.controlled,
-  runsMounts: host.runsMounts
+  runsMounts: host.runsMounts,
+  head: ownsHead && host.head !== undefined
+    ? (head) => host.head!(head)
+    : undefined
 })
 
 interface Options {
@@ -249,10 +259,11 @@ const start = (
     flushing: () => inFlush,
     buildsPendingSince: building
   })
+  const ownsHead = options?.head !== false
   const bridged: Kernel.Host = routing === undefined ?
-    bridge(host, recording.step) :
+    bridge(host, recording.step, ownsHead) :
     {
-      ...bridge(host, recording.step),
+      ...bridge(host, recording.step, ownsHead),
       commit: () => {
         host.commit?.()
         routing.flushed()
@@ -350,7 +361,12 @@ const start = (
     crashed: () => instance.failure,
     flush: () => flushes,
     buildsPendingSince: building,
-    head: () => Kernel.notPorted("head"),
+    head: () =>
+      tree.head?.value ??
+        (component.elements()?.head ?? neutralFold).merge({
+          entries: [],
+          children: []
+        }),
     adoptionHead: () => undefined,
     adopted: Effect.void,
     waiting: () => [],

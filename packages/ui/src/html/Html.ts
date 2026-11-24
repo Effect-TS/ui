@@ -115,7 +115,6 @@ import type * as Component from "../Component.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
-import * as HtmlHead from "./HtmlHead.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1580,7 +1579,8 @@ export type VoidTag = typeof voidTags[number]
  * The element names the vocabulary adds to `h`, bound to a component's
  * message type. Document-level tags (`html`, `head`, `body`, `title`, `meta`,
  * `link`, `base`, `script`, `style`) aren't here: the document head is managed
- * through a component's `head`.
+ * through a component's `head`, with `HtmlHead.vocabulary` for its HTML
+ * entries.
  *
  * @stability experimental
  * @category vocabulary
@@ -1612,8 +1612,6 @@ export type Tags<Msg> =
 export interface Elements extends View.Elements {
   readonly Tags: Tags<this["Msg"]>
   readonly Host: Host
-  readonly Head: HtmlHead.Entry
-  readonly HeadValue: HtmlHead.HtmlHead
 }
 
 /**
@@ -1634,19 +1632,6 @@ export const Elements: Elements | undefined = undefined
  * @since 0.1.0
  */
 export const name = "html"
-
-/**
- * How the vocabulary folds its head: `HtmlHead.merge`, with the title read
- * from the folded `HtmlHead`.
- *
- * @stability experimental
- * @category vocabulary
- * @since 0.1.0
- */
-export const head: View.HeadFold<HtmlHead.Entry, HtmlHead.HtmlHead> = {
-  merge: HtmlHead.merge,
-  title: (head) => head.title
-}
 
 const makeTags = (): Readonly<
   Record<string, VoidElement<any, any, any, any>>
@@ -1670,7 +1655,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
   makeTags()
 
 /**
- * The vocabulary alone: its name, its tags and its head fold.
+ * The vocabulary alone: its name and its tags.
  *
  * **When to use**
  *
@@ -1702,7 +1687,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
  * @category vocabulary
  * @since 0.1.0
  */
-export const vocabulary: View.Vocabulary<Elements> = { name, tags, head }
+export const vocabulary: View.Vocabulary<Elements> = { name, tags }
 
 // ---------------------------------------------------------------------------
 // refs

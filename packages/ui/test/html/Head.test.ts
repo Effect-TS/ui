@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Head, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlHead, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, HtmlHead, HtmlServer } from "@effect/ui/html"
 import type * as runtime from "@effect/ui/internal/runtime"
 import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
@@ -15,7 +15,7 @@ const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
         name: "HeadNames",
         model: Schema.Null,
         message: Schema.Never,
-        elements: Html.vocabulary
+        elements: HtmlHead.vocabulary
       })
         .make({
           init: () => null,
@@ -359,7 +359,7 @@ const Titled = Component.define({
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.String,
   message: Rename,
-  elements: Html
+  elements: HtmlHead.vocabulary
 }).make({
   init: ($) => $.props.title,
   update: (_, message) => message.title,

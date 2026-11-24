@@ -69,6 +69,7 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
+import * as heads from "./internal/heads.ts"
 import * as layerRun from "./internal/layerRun.ts"
 import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
@@ -2309,6 +2310,7 @@ const Proto = Object.assign(Object.create(Function.prototype), {
     if (this["~queries"] !== undefined) {
       queryCore.loaded!.run.first(inst as never)
     }
+    if (this.head !== undefined) heads.loaded?.(inst as never)
   }
 })
 
@@ -2989,7 +2991,7 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
- * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
+ * vocabulary, and `HtmlHead`'s on `HtmlHead.vocabulary`. It's a pure function of the
  * Model, the props and the queries' results, like a view. On every flush that
  * changed a view, the runtime folds the head of the placed tree, a child's
  * `fallback` content included, with the root vocabulary's merge (see

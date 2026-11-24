@@ -39,6 +39,8 @@ export interface Host<N = any> {
   /** The properties a patch sets again even when the view's value is the same: the user may have changed them. */
   readonly controlled?: ReadonlySet<string> | undefined
   readonly runsMounts?: boolean | undefined
+  /** Given the tree's folded head, when it changed. */
+  readonly head?: ((head: unknown) => void) | undefined
 }
 
 /**
@@ -98,6 +100,7 @@ export type FailedIn =
   | "command"
   | "subscription"
   | "mount"
+  | "head"
 
 /** @internal */
 export interface Env {
@@ -213,6 +216,10 @@ export interface Tree {
   work?: ((idle: boolean) => boolean) | undefined
   /** Called once the flush running or scheduled commits, or at once when none is. */
   committed?: Array<() => void> | undefined
+  /** The folded head and its title, once an instance that declares a head has mounted. */
+  head?:
+    | { readonly value: unknown; readonly title: string | undefined }
+    | undefined
   dirty: Array<Instance>
   scheduled: boolean
   flushing: boolean
@@ -664,7 +671,6 @@ const check = (component: any): void => {
   const definition = component.definition
   if (component.init === undefined) notPorted("Component.lazy")
   if (component.parts !== undefined) notPorted("headless components")
-  if (component.head !== undefined) notPorted("head")
   if (definition.shared !== undefined || definition.shares !== undefined) {
     notPorted("shared state")
   }
