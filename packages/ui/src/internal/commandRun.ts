@@ -17,7 +17,8 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Command from "../Command.ts"
 import type * as MessageLog from "../MessageLog.ts"
-import { follow, fork } from "./fork.ts"
+import { going, heldBy, hold } from "./closing.ts"
+import { follow, fork, servicesOf } from "./fork.ts"
 import type * as Kernel from "./kernel.ts"
 import { isNoop } from "./noop.ts"
 import { Problems } from "./queryCore.ts"
@@ -43,6 +44,8 @@ interface Run {
   traceId: string | undefined
   /** What the `CommandInterrupted` of a run stopped with its fiber going follows from. */
   cut: (<A>(f: () => A) => A) | undefined
+  /** Its start waits for the next read of a keyed provide's keys: a change keeps it. */
+  gated: boolean
 }
 
 type CleanupFailed = (
@@ -59,6 +62,7 @@ class Runs implements Kernel.Runs {
     this.inst = inst
     this.cleanupFailed = cleanupFailed
     ;(inst.closers ??= []).push(() => this.close())
+    ;(inst.swaps ??= []).push((waits) => this.swap(waits))
   }
   /**
    * Its descendants have closed, and it has logged `Unmounted`. Its runs stop once the runs its
@@ -67,7 +71,7 @@ class Runs implements Kernel.Runs {
    */
   close(): void {
     const inst = this.inst
-    const waits = (holds.get(inst) ?? []).filter(going)
+    const waits = heldBy(inst)
     const stopAll = () => {
       for (const run of this.list.slice()) this.stop(run)
     }
@@ -81,10 +85,27 @@ class Runs implements Kernel.Runs {
     for (const run of this.list) {
       if (run.fiber !== undefined && going(run.fiber)) waits.push(run.fiber)
     }
-    if (waits.length === 0) return
-    for (let at = inst.parent; at !== undefined; at = at.parent) {
-      holds.set(at, [...(holds.get(at) ?? []).filter(going), ...waits])
+    hold(inst, waits)
+  }
+  /**
+   * A keyed provide selected new services: every run but those waiting for the selection stops, and
+   * an awaiting run's message is dropped. The fibers still exiting go in `waits`.
+   */
+  swap(waits: Array<Fiber.Fiber<unknown, unknown>>): void {
+    const stopped = this.list.filter((run) => !run.gated)
+    // Queued and awaiting runs first, so stopping a running one promotes only a kept run.
+    for (const run of stopped) if (run.status !== "running") this.drop(run)
+    for (const run of stopped) if (!run.done) this.drop(run)
+    for (const run of this.list) {
+      if (run.status === "stopping") waits.push(run.fiber!)
     }
+  }
+  drop(run: Run): void {
+    if (run.held === undefined) return this.stop(run)
+    run.held = undefined
+    this.remove(run)
+    ended(this.inst, run)
+    redraw(this.inst)
   }
   running = (name: string, groupKey: string | undefined): boolean =>
     this.list.some((run) =>
@@ -143,15 +164,30 @@ class Runs implements Kernel.Runs {
   }
   start(run: Run): void {
     const inst = this.inst
-    const env = inst.env
-    const ctx = env.ctx
-    // Its services are still building: it starts once they're there, and is stopped if they failed.
-    if (ctx === undefined) {
-      if (env.cause === undefined) env.waiting.push(() => this.start(run))
-      else this.stop(run)
+    if (run.done) return
+    if (
+      inst.hold?.(() => {
+        run.gated = false
+        this.start(run)
+      })
+    ) {
+      run.gated = true
       return
     }
-    if (run.done) return
+    const env = inst.env
+    let ctx = env.ctx
+    if (ctx === undefined) {
+      // Its services are still building: it starts once they're there, and is stopped if they fail.
+      if (env.cause === undefined) {
+        env.waiting.push(() =>
+          env.cause === undefined ? this.start(run) : this.stop(run)
+        )
+        return
+      }
+      // Issued after a handled failure: it runs against the services above.
+      ctx = servicesOf(env)
+      if (ctx === undefined) return this.stop(run)
+    }
     const command = run.command
     const tree = inst.tree
     // Every run gets a Scope of its own, closed with the run's exit, so what the body acquires is
@@ -338,19 +374,10 @@ class Runs implements Kernel.Runs {
   }
 }
 
-/** The run fibers of closed descendants that each instance's own close waits for. */
-const holds = new WeakMap<
-  Kernel.Instance,
-  ReadonlyArray<Fiber.Fiber<unknown, unknown>>
->()
-
 /** Renders the instance again, for `h.isRunning`. */
 const redraw = (inst: Kernel.Instance): void => {
   if (!inst.closed) inst.tree.ops.markDirty(inst)
 }
-
-const going = (fiber: Fiber.Fiber<unknown, unknown>): boolean =>
-  fiber.pollUnsafe() === undefined
 
 const entryOf = (run: Run): schedule.Entry<Run> => ({
   name: run.command.name,
@@ -391,7 +418,8 @@ export const issue = (
     silent: undefined,
     spanId: undefined,
     traceId: undefined,
-    cut: undefined
+    cut: undefined,
+    gated: false
   }
   runs.list.push(run)
   if (run.status === "running") runs.start(run)

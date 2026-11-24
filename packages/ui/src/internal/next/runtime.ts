@@ -151,6 +151,8 @@ const start = (
   }`
   const emitted: Array<unknown> = []
   let flushes = 0
+  // A build that begins between flushes belongs to the next one, which commits what began it.
+  let inFlush = true
   const recording = Recorder.make(
     log,
     clock,
@@ -167,7 +169,7 @@ const start = (
     return recording.record(inst, draft)
   }
   const fallback = options?.fallback
-  const kernelRoot = recording.session(() =>
+  const kernelRoot: Kernel.Root = recording.session(() =>
     Kernel.mount(
       component as unknown as Kernel.Runnable,
       props,
@@ -195,7 +197,12 @@ const start = (
           const run = recording.follow()
           executor.schedule(() => {
             flushes++
-            run(task)
+            inFlush = true
+            try {
+              run(task)
+            } finally {
+              inFlush = false
+            }
           })
         },
         follow: recording.follow,
@@ -216,7 +223,10 @@ const start = (
       }
     )
   )
+  inFlush = false
   const instance = kernelRoot.instance
+  const tree = instance.tree
+  tree.flush = () => inFlush ? flushes : flushes + 1
   const root = {
     path: instance.path,
     session,
@@ -233,7 +243,13 @@ const start = (
     } as unknown as Root["cache"],
     crashed: () => instance.failure,
     flush: () => flushes,
-    buildsPendingSince: () => Kernel.notPorted("Component.provide"),
+    buildsPendingSince: (flush: number) => {
+      let count = 0
+      if (tree.building !== undefined) {
+        for (const stamp of tree.building) if (stamp.flush >= flush) count++
+      }
+      return count
+    },
     head: () => Kernel.notPorted("head"),
     adoptionHead: () => undefined,
     adopted: Effect.void,
@@ -241,7 +257,6 @@ const start = (
     whenIdle: () => Kernel.notPorted("server rendering"),
     freeze: () => Kernel.notPorted("server rendering")
   } satisfies Root & Renderer.Root<any, any>
-  const tree = instance.tree
   // Waits until every fiber the tree forked has exited, stopped runs included.
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
     tree.owned === undefined || tree.owned.size === 0

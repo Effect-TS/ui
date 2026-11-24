@@ -3,7 +3,6 @@
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import * as SpikeDom from "@effect/ui/html/SpikeDom"
-import * as Layers from "@effect/ui/spike/Layers"
 import * as Log from "@effect/ui/spike/Log"
 import { Effect, Layer, Schema } from "effect"
 
@@ -84,7 +83,7 @@ const badge = Badge.toLayer(BadgeView).pipe(
 )
 const log = Log.make()
 ;(globalThis as any).entries = log.entries
-const Provided = Layers.provide(App, badge)
+const Provided = Component.provide(App, badge)
 
 Layer.launch(
   SpikeDom.mount(Provided, {}, document.getElementById("app")!, {

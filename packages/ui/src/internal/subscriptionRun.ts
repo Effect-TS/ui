@@ -14,7 +14,8 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as MessageLog from "../MessageLog.ts"
 import type * as Subscription from "../Subscription.ts"
-import { follow, fork } from "./fork.ts"
+import { going, hold } from "./closing.ts"
+import { follow, fork, servicesOf } from "./fork.ts"
 import type * as Kernel from "./kernel.ts"
 import * as services from "./services.ts"
 import { duplicateKey } from "./subscriptions.ts"
@@ -76,8 +77,20 @@ export const sync = (inst: Kernel.Instance): void => {
     const made = subscriptions = new Map()
     runningOf.set(inst, made)
     ;(inst.closers ??= []).push(() => {
-      for (const running of made.values()) stop(running)
-      made.clear()
+      const waits: Array<Fiber.Fiber<unknown, unknown>> = []
+      stopAll(made, waits)
+      hold(inst, waits)
+    })
+    ;(inst.swaps ??= []).push((waits) => {
+      for (const [key, running] of made) {
+        inst.tree.log?.(inst, {
+          _tag: "SubscriptionStopped",
+          key,
+          name: running.name,
+          deps: running.deps
+        })
+      }
+      stopAll(made, waits)
     })
   }
   const log = inst.tree.log
@@ -91,6 +104,10 @@ export const sync = (inst: Kernel.Instance): void => {
       deps: running.deps
     })
     stop(running)
+    // Its cleanup may use the instance's services: they're released once it has run.
+    if (running.fiber !== undefined && going(running.fiber)) {
+      hold(inst, [running.fiber])
+    }
   }
   for (const [key, subscription] of byKey) {
     const existing = subscriptions.get(key)
@@ -112,6 +129,19 @@ export const sync = (inst: Kernel.Instance): void => {
   }
 }
 
+const stopAll = (
+  made: Map<string, Running>,
+  waits: Array<Fiber.Fiber<unknown, unknown>>
+): void => {
+  for (const running of made.values()) {
+    stop(running)
+    if (running.fiber !== undefined && going(running.fiber)) {
+      waits.push(running.fiber)
+    }
+  }
+  made.clear()
+}
+
 const start = (
   inst: Kernel.Instance,
   subscriptions: Map<string, Running>,
@@ -119,16 +149,21 @@ const start = (
   running: Running
 ): void => {
   const current = () => !inst.closed && subscriptions.get(key) === running
+  const again = () => start(inst, subscriptions, key, running)
+  if (!current() || inst.hold?.(again)) return
   const env = inst.env
-  const ctx = env.ctx
-  // Its services are still building: it starts once they're there.
+  let ctx = env.ctx
   if (ctx === undefined) {
+    // Its services are still building: it starts once they're there.
     if (env.cause === undefined) {
-      env.waiting.push(() => start(inst, subscriptions, key, running))
+      env.waiting.push(() => env.ctx !== undefined && again())
+      return
     }
-    return
+    // After a handled failure it runs against the services above, but under a keyed provide it waits
+    // for the next selection.
+    ctx = inst.hold === undefined ? servicesOf(env) : undefined
+    if (ctx === undefined) return
   }
-  if (!current()) return
   const tree = inst.tree
   const subscription = running.latest
   const source: MessageLog.Source = {

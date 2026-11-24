@@ -2,7 +2,6 @@
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import * as SpikeHydrate from "@effect/ui/html/SpikeHydrate"
-import * as Layers from "@effect/ui/spike/Layers"
 import { assert, describe, it } from "@effect/vitest"
 import { Deferred, Effect, Layer, Option, Schema, SchemaGetter } from "effect"
 
@@ -264,7 +263,7 @@ describe("spike hydration", () => {
         view: (h) => h.p("panel")
       })
       const gate = yield* Deferred.make<void>()
-      const Shell = Layers.provide(
+      const Shell = Component.provide(
         Component.define({
           name: "Shell",
           model: Schema.Number,

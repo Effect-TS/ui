@@ -39,10 +39,14 @@ export interface Runnable {
   readonly init: (props: any) => Next
   readonly update: (model: any, message: never, props: any) => Next | undefined
   readonly view: Function
+  /** Set by `Component.provide`: the kernel never reads it. */
   readonly layer?: unknown
+  /** Called once `Mounted` is logged, before the first view: a provided Layer starts building. */
   readonly boot?: ((inst: Instance) => void) | undefined
   /** Called after each Model or props change the instance takes, and once it first rendered. */
   readonly "~sync"?: ((inst: Instance) => void) | undefined
+  /** Called before each view after the first. */
+  readonly "~render"?: ((inst: Instance) => void) | undefined
 }
 
 /** @internal */
@@ -73,6 +77,8 @@ export interface Env {
   ctx: Context.Context<any> | undefined
   cause: Cause.Cause<unknown> | undefined
   readonly waiting: Array<() => void>
+  /** The Env whose services work runs against once this one's Layer failed and the failure was handled. */
+  readonly parent?: Env | undefined
 }
 
 /**
@@ -134,6 +140,7 @@ export interface Ops {
   readonly fail: typeof fail
   readonly markDirty: typeof markDirty
   readonly renderAbove: typeof renderAbove
+  readonly clear: typeof clear
 }
 
 /** @internal */
@@ -158,6 +165,10 @@ export interface Tree {
   readonly follow: (() => <A>(f: () => A) => A) | undefined
   /** The fibers the tree's close waits for, until they exit, once a feature has started one. */
   owned?: Set<Fiber.Fiber<unknown, unknown>> | undefined
+  /** The provided Layer builds still pending, each with the flush it began in. */
+  building?: Set<{ readonly flush: number }> | undefined
+  /** The flush a build that begins now belongs to. Without it, the first. */
+  flush?: (() => number) | undefined
   dirty: Array<Instance>
   scheduled: boolean
   closed: boolean
@@ -203,6 +214,12 @@ export class Instance {
   closers: Array<() => void> | undefined = undefined
   // Set by what runs its Commands, once it issues one.
   declare runs: Runs | undefined
+  /** Set by a keyed provide: takes `go` and returns `true` when work must wait for the next read of its keys. */
+  declare hold: ((go: () => void) => boolean) | undefined
+  /** What stops the work started against `env`, when a keyed provide replaces it, adding the fibers still exiting. */
+  declare swaps:
+    | Array<(waits: Array<Fiber.Fiber<unknown, unknown>>) => void>
+    | undefined
   named: string | undefined = undefined
   constructor(
     tree: Tree,
@@ -263,6 +280,9 @@ let busy = 0
 let receiving: Instance | undefined
 let shown = 0
 const born: Array<Instance | Rec> = []
+// The instance whose feature slot's fallback is being made: what it places resolves from the nearest Env
+// with services.
+let fallen: Instance | undefined
 
 /** Recorded before a dirty instance renders, so a log can name what made it dirty. @internal */
 export const rendering = { _tag: "Render" } as const
@@ -297,6 +317,15 @@ const fallbackOf = (
     owner.tree.schedule(() => fail(owner, "fallback", Cause.die(error)))
     return emptyText
   }
+}
+
+/** Makes a feature slot's fallback. One that throws fails an instance, so `fallen` needs no restoring then. */
+const inFallback = <A>(owner: Instance, f: () => A): A => {
+  const outer = fallen
+  fallen = owner
+  const out = f()
+  fallen = outer
+  return out
 }
 
 const rootFallback = (
@@ -447,6 +476,15 @@ const apply = (
   next: Next,
   seq: number | undefined | void
 ): void => {
+  issueAll(inst, next, seq)
+  applied(inst, next)
+}
+
+const issueAll = (
+  inst: Instance,
+  next: Next,
+  seq: number | undefined | void
+): void => {
   const commands = next.commands
   if (next.sends !== undefined && next.sends.length > 0) notPorted("$.send")
   if (next.lists !== undefined && next.lists.length > 0) {
@@ -457,6 +495,11 @@ const apply = (
     if (inst.closed) return
     ;(commands[index] as Issuable)["~run"](inst, seq, index)
   }
+}
+
+/** What follows a Next once its Commands are issued: Subscriptions follow it, and its events are emitted. */
+const applied = (inst: Instance, next: Next): void => {
+  if (inst.closed) return
   inst.component["~sync"]?.(inst)
   const events = next.events
   if (events.length === 0) return
@@ -564,9 +607,6 @@ const check = (component: any): void => {
   if (definition.shared !== undefined || definition.shares !== undefined) {
     notPorted("shared state")
   }
-  if (component.layer !== undefined && component.boot === undefined) {
-    notPorted("Component.provide")
-  }
 }
 
 const start = (inst: Instance): Rec | undefined => {
@@ -580,10 +620,6 @@ const start = (inst: Instance): Rec | undefined => {
   try {
     try {
       check(component)
-      if (component.boot !== undefined) {
-        component.boot(inst)
-        if (inst.closed) return undefined
-      }
       first = inst.tree.init(inst)
     } catch (error) {
       fail(inst, "init", Cause.die(error))
@@ -598,6 +634,12 @@ const start = (inst: Instance): Rec | undefined => {
       events: first.events,
       adopted: false
     })
+    component.boot?.(inst)
+    // `init`'s Commands are issued before the first view, so it shows them running: the redraw they
+    // ask for is already done by it.
+    issueAll(inst, first, seq)
+    if (inst.closed) return undefined
+    inst.dirty = false
     const tree = viewOf(inst)
     if (tree === undefined) return undefined
     let rendered: Rec
@@ -613,7 +655,7 @@ const start = (inst: Instance): Rec | undefined => {
       return undefined
     }
     inst.rendered = rendered
-    apply(inst, first, seq)
+    applied(inst, first)
     return rendered
   } finally {
     busy--
@@ -630,6 +672,7 @@ const render = (inst: Instance): void => {
   slot = undefined
   busy++
   try {
+    inst.component["~render"]?.(inst)
     const tree = viewOf(inst)
     if (tree === undefined) return
     inst.rendered = patch(inst, inst.rendered!, tree)
@@ -641,6 +684,10 @@ const render = (inst: Instance): void => {
     born.length = from
     slot = outer
   }
+}
+
+const clear = (inst: Instance): void => {
+  inst.rendered = patch(inst, inst.rendered!, emptyText)
 }
 
 const close = (inst: Instance): void => {
@@ -732,6 +779,11 @@ const mountChild = (owner: Instance, rec: Rec): void => {
   const view = rec.v as View.Child<any, any>
   let component = view.component as any
   let env = owner.env
+  if (owner === fallen) {
+    while (env.ctx === undefined && env.parent !== undefined) {
+      env = env.parent
+    }
+  }
   if (view.alive !== undefined) notPorted("kept children")
   if (view.owner !== undefined) notPorted("headless components")
   if (FeatureId in component) {
@@ -743,7 +795,12 @@ const mountChild = (owner: Instance, rec: Rec): void => {
             " isn't available, because a Layer above it is still building or failed. Pass `fallback`."
         )
       }
-      rec.kids = [create(owner, fallbackOf(owner, view, env.cause))]
+      rec.kids = [
+        inFallback(
+          owner,
+          () => create(owner, fallbackOf(owner, view, env.cause))
+        )
+      ]
       rec.inst = owner
       owner.live++
       born.push(owner, rec)
@@ -786,10 +843,14 @@ const settle = (owner: Instance, rec: Rec, at: string | undefined): void => {
   slot = at
   try {
     if (owner.env.ctx === undefined) {
-      rec.kids![0] = patch(
+      rec.kids![0] = inFallback(
         owner,
-        old,
-        fallbackOf(owner, rec.v as View.Child<any, any>, owner.env.cause)
+        () =>
+          patch(
+            owner,
+            old,
+            fallbackOf(owner, rec.v as View.Child<any, any>, owner.env.cause)
+          )
       )
       return
     }
@@ -1018,15 +1079,12 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
       old.v = view
       const shown = old.kids
       if (shown !== undefined) {
-        shown[0] = patch(
-          inst,
-          shown[0]!,
-          fallbackOf(
+        shown[0] = child === inst
+          ? inFallback(
             inst,
-            view,
-            child === inst ? inst.env.cause : child.failure
+            () => patch(inst, shown[0]!, fallbackOf(inst, view, inst.env.cause))
           )
-        )
+          : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
         return old
       }
       if (child.closed) return old
@@ -1311,7 +1369,7 @@ export const mount = (
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
     schedule: options.schedule ?? ((task) => queueMicrotask(task)),
     follow: options.follow,
-    ops: { send, fail, markDirty, renderAbove },
+    ops: { send, fail, markDirty, renderAbove, clear },
     dirty: [],
     scheduled: false,
     closed: false

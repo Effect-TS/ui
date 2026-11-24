@@ -81,6 +81,22 @@ export const make = (
         seq: seqs.get(source) ?? -1
       }
       : (source as MessageLog.Source | undefined) ?? dispatched
+  /**
+   * The provider whose Layer entries the feature slots in `inst`'s view read: the one above, `inst`
+   * included, whose own Env is the one `inst` renders with. None for an Env that is always ready.
+   */
+  const boundaryOf = (inst: Kernel.Instance): number | undefined => {
+    for (
+      let at: Kernel.Instance | undefined = inst;
+      at !== undefined;
+      at = at.parent
+    ) {
+      if (at.component.layer !== undefined && at.env === inst.env) {
+        return numbers.get(at)
+      }
+    }
+    return undefined
+  }
   const record: Kernel.Recorder = (inst, draft) => {
     switch (draft._tag) {
       case "Render": {
@@ -109,6 +125,10 @@ export const make = (
       path: inst.path,
       instance,
       component: inst.component
+    }
+    if (draft._tag === "Update" || draft._tag === "Mounted") {
+      const boundary = boundaryOf(inst)
+      if (boundary !== undefined) entry.boundary = boundary
     }
     switch (draft._tag) {
       case "Update": {

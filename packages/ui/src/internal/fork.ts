@@ -32,15 +32,52 @@ export const fork = <A, E>(
   tree: Kernel.Tree,
   context: Context.Context<any>,
   effect: Effect.Effect<A, E, any>
-): Fiber.Fiber<A, E> => {
+): Fiber.Fiber<A, E> =>
+  owned(
+    tree,
+    Effect.runForkWith(withScheduler(context))(
+      Effect.andThen(Effect.yieldNow, effect)
+    )
+  )
+
+/**
+ * `context` with the Scheduler the mount's Executor gives, if it gives one.
+ *
+ * @internal
+ */
+export const withScheduler = (
+  context: Context.Context<any>
+): Context.Context<any> => {
   const scheduler = Context.get(context, CurrentExecutor).scheduler
-  const fiber = Effect.runForkWith(
-    scheduler === undefined
-      ? context
-      : Context.add(context, Scheduler.Scheduler, scheduler)
-  )(Effect.andThen(Effect.yieldNow, effect))
+  return scheduler === undefined
+    ? context
+    : Context.add(context, Scheduler.Scheduler, scheduler)
+}
+
+/**
+ * Makes the tree's close wait for `fiber`, until it exits.
+ *
+ * @internal
+ */
+export const owned = <A, E>(
+  tree: Kernel.Tree,
+  fiber: Fiber.Fiber<A, E>
+): Fiber.Fiber<A, E> => {
   const owned = tree.owned ??= new Set()
   owned.add(fiber)
   fiber.addObserver(() => owned.delete(fiber))
   return fiber
+}
+
+/**
+ * The services of `env`, or of the nearest Env above it that has them: what work runs against once a
+ * provided Layer's failure was handled.
+ *
+ * @internal
+ */
+export const servicesOf = (
+  env: Kernel.Env | undefined
+): Context.Context<any> | undefined => {
+  while (env !== undefined && env.ctx === undefined) env = env.parent
+  return env?.ctx
 }

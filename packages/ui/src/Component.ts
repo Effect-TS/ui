@@ -69,6 +69,7 @@ import * as Schema from "effect/Schema"
 import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
+import * as layerRun from "./internal/layerRun.ts"
 import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
@@ -4251,7 +4252,10 @@ export const provide: {
       layerFailure,
       sharedLayer,
       // Nested provides are built as one Layer, so one opt-out keeps all of them off the server.
-      layerOnServer: component.layerOnServer && options?.server !== false
+      layerOnServer: component.layerOnServer && options?.server !== false,
+      // What builds it on the kernel, which never imports Layers.
+      boot: layerRun.boot,
+      "~render": layerKeys === undefined ? undefined : layerRun.reselect
     })
   }
   // A component is an object with the type id; a Layer, an array, a function or a keyed selection means the curried form.
