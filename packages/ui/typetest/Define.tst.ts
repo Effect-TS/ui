@@ -79,6 +79,27 @@ describe("Component.define", () => {
       >()
       return $.model
     })
+    expect<ReturnType<typeof save>>().type.toBe<
+      Component.Step<
+        Model,
+        Message,
+        typeof Events.Type,
+        Save,
+        { readonly user: Component.QueryOne<typeof GetUser> }
+      >
+    >()
+
+    const ToggleDef = Html.component({
+      name: "Toggle",
+      model: Schema.Boolean,
+      message: Schema.Literal("ClickedToggle")
+    })
+    ToggleDef.update(($, msg) => {
+      expect(msg).type.toBe<"ClickedToggle">()
+      return !$.model
+    })
+    expect(ToggleDef.update).type.not.toBeCallableWith({})
+    expect(ToggleDef.update).type.not.toBeCallableWith(() => 123)
   })
 
   it("narrows the message of a slice by tag", () => {
@@ -275,6 +296,88 @@ describe("Component.define", () => {
       init,
       update: record,
       parts: (_: unknown, model: Model) => ({ body: model.body })
+    })
+  })
+
+  it("extracts a record update with narrowed handlers and infers its requirements", () => {
+    const update = NoteDef.update({
+      Edited: ($, msg) => {
+        expect(msg).type.toBe<
+          { readonly _tag: "Edited"; readonly body: string }
+        >()
+        expect($.combine).type.not.toBeCallableWith(
+          touch as (
+            $: Parameters<typeof touch>[0],
+            msg: { readonly _tag: "Saved" }
+          ) => Model
+        )
+        return { ...$.model, body: msg.body }
+      },
+      SaveClicked: NoteDef.update(
+        "SaveClicked",
+        ($) => $.combine(touch, save)
+      ),
+      Saved: touch
+    })
+    const Note = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update,
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
+
+    const HeadlessNote = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update,
+      parts: (_, model) => ({ body: model.body })
+    })
+    expect<Component.Headless.Requirements<typeof HeadlessNote>>().type.toBe<
+      GetUser | Save
+    >()
+
+    const Combined = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: ($) => $.combine(update, audit),
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof Combined>>().type.toBe<
+      GetUser | Save | Audit
+    >()
+  })
+
+  it("enforces exhaustiveness and rejects unknown keys on an extracted record update", () => {
+    expect(NoteDef.update).type.not.toBeCallableWith({
+      Edited: touch,
+      SaveClicked: touch
+    })
+
+    NoteDef.update({
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch,
+      // @ts-expect-error 'Deleted' is not a tag of this component's message
+      Deleted: touch
+    })
+
+    expect(NoteDef.update).type.not.toBeCallableWith({
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch,
+      Deleted: "'Deleted' is not a tag of this component's message" as const
+    })
+
+    const record = { ...shared, Edited: touch, SaveClicked: touch }
+    expect(NoteDef.update).type.not.toBeCallableWith({
+      ...shared,
+      Edited: touch,
+      SaveClicked: touch
+    })
+    expect(NoteDef.update).type.not.toBeCallableWith(record)
+
+    expect(NoteDef.update).type.not.toBeCallableWith("Edited", {
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch
     })
   })
 
