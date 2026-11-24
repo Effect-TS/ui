@@ -1100,7 +1100,9 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
         notPorted("headless parts")
       }
       const rec = new Rec(view, node, kids, inst)
-      if (view.handlers !== View.noFields) host.setEvents(node, rec, true)
+      if (
+        view.handlers !== View.noFields || view.eventOptions !== View.noFields
+      ) host.setEvents(node, rec, true)
       if (view.mount !== undefined) {
         inst.live++
         ;(view.mount as unknown as Attachable)["~attach"](rec)
@@ -1319,8 +1321,14 @@ const patchElement = (
   const node = rec.node
   rec.v = view
   if (prev.attrs !== view.attrs) patchAttrs(host, node, prev.attrs, view.attrs)
-  if (view.handlers !== prev.handlers) {
-    host.setEvents(node, rec, prev.handlers === View.noFields)
+  if (
+    view.handlers !== prev.handlers || view.eventOptions !== prev.eventOptions
+  ) {
+    host.setEvents(
+      node,
+      rec,
+      prev.handlers === View.noFields && prev.eventOptions === View.noFields
+    )
   }
   const mount = view.mount as unknown as Attachable | undefined
   const was = prev.mount as unknown as Attachable | undefined

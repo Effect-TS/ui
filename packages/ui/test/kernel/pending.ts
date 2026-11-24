@@ -385,16 +385,6 @@ export const pending: {
   "html/BrowserHost.test.ts": {
     "BrowserHost > events > a kept keep-alive child gets the events it fires as it is drawn again":
       "kept children (step 4, blocked on a seam)",
-    "BrowserHost > drag and drop > a drag between two elements carries the source's data, and the source hears it was dropped":
-      "drag and drop on the kernel DOM host (unscheduled)",
-    "BrowserHost > drag and drop > a drag of a type no target accepts is left alone, so the browser refuses the drop":
-      "drag and drop on the kernel DOM host (unscheduled)",
-    "BrowserHost > drag and drop > a file drop sends the files, and the log's wire encoding replaces a message it can't encode":
-      "drag and drop on the kernel DOM host (unscheduled)",
-    "BrowserHost > drag and drop > enter and leave follow the active target, not its children, and a window exit leaves":
-      "drag and drop on the kernel DOM host (unscheduled)",
-    "BrowserHost > drag and drop > dragover is sent once per frame when the position changed, and a queued one is dropped":
-      "drag and drop on the kernel DOM host (unscheduled)",
     "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
       "hydration (step 7, unfinished): a style mismatch keeps the server's style text, where today's replaces it (cause not investigated)"
   },

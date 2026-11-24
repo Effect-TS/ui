@@ -4,9 +4,9 @@
  * event's typed payload. Controlled form properties are put back after an event the Model didn't follow,
  * keeping a focused field's selection. Updates that ask for a view transition run in one. The document head
  * follows the tree's folded head when the mount is given `head: KernelDom.syncHead`, so an app without a
- * head doesn't carry what writes one. Dialogs and popovers open and close as `BrowserHost`'s do.
+ * head doesn't carry what writes one. Dialogs, popovers and drag and drop work as `BrowserHost`'s do.
  *
- * Left out, each to arrive with what uses it: drag and drop, and hydration.
+ * Left out, to arrive with what uses it: hydration.
  */
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
@@ -50,6 +50,29 @@ const restoring: ReadonlySet<string> = new Set([
   "close",
   "reset"
 ])
+
+const dropTargetEvents: ReadonlySet<string> = new Set([
+  "dragenter",
+  "dragleave",
+  "dragover",
+  "drop"
+])
+
+const typesOf = (event: DragEvent): ReadonlyArray<string> =>
+  Array.from(event.dataTransfer?.types ?? [], (type) => type.toLowerCase())
+
+const boxOf = (
+  event: DragEvent,
+  element: globalThis.Element
+): Html.DragOverPayload => {
+  const rect = element.getBoundingClientRect()
+  return {
+    x: (event.clientX ?? 0) - rect.left,
+    y: (event.clientY ?? 0) - rect.top,
+    width: rect.width,
+    height: rect.height
+  }
+}
 
 const isDialog = (node: globalThis.Node): node is HTMLDialogElement =>
   (node as globalThis.Element).localName === "dialog"
@@ -225,7 +248,9 @@ export const makeHost = (
   const adoptShowing = (dialog: HTMLDialogElement) => {
     if (!dialog.open) return
     const list = showingsOf(dialog)
-    if (list.at(-1)?.closed !== false) list.push({ byHost: false, closed: false })
+    if (list.at(-1)?.closed !== false) {
+      list.push({ byHost: false, closed: false })
+    }
     shown.add(dialog)
   }
   const closeDialog = (dialog: HTMLDialogElement, byHost: boolean) => {
@@ -325,9 +350,176 @@ export const makeHost = (
     restore.add(target)
   }
 
+  const elementOf = (node: globalThis.Node) =>
+    (node as Node).$r?.v as View.Element<any, any> | undefined
+
+  const dispatch = (
+    node: globalThis.Node,
+    name: string,
+    payload: () => unknown,
+    event?: Event
+  ): boolean => {
+    const rec = (node as Node).$r
+    const element = rec?.v as View.Element<any, any> | undefined
+    const handler = element?.handlers[name]
+    if (handler === undefined) return false
+    const prevents = element!.eventOptions[name]?.preventDefault
+    if (prevents === "always") event?.preventDefault()
+    const inst = rec!.inst
+    step(() => {
+      if (inst.closed) return false
+      let message = handler
+      if (typeof handler === "function") {
+        try {
+          message = handler(payload())
+        } catch (error) {
+          Kernel.fail(inst, "event", Cause.die(error))
+          return false
+        }
+      }
+      if (message === undefined) return false
+      if (prevents === true) event?.preventDefault()
+      Kernel.send(inst, message, name)
+      return true
+    })
+    return true
+  }
+
+  let active: globalThis.Element | undefined
+  let entered: EventTarget | null = null
+  let exitCheck: ReturnType<typeof setTimeout> | undefined
+  let droppedHere = false
+  let overFrame = false
+  let over:
+    | readonly [globalThis.Element, Html.DragOverPayload, ReadonlyArray<string>]
+    | undefined
+  let overSent: Html.DragOverPayload | undefined
+
+  const accepts = (node: globalThis.Node, types: ReadonlyArray<string>) => {
+    const element = elementOf(node)
+    return element?.handlers.drop !== undefined &&
+      (element.eventOptions.drop as Html.DropTargetOptions | undefined)?.accepts
+          ?.some((type) => types.includes(type.toLowerCase())) === true
+  }
+
+  const dropTargetOf = (event: DragEvent, path: ReadonlyArray<Node>) => {
+    const types = typesOf(event)
+    for (const node of path) {
+      if (node === container) return
+      if (accepts(node, types)) return node as globalThis.Element
+    }
+  }
+
+  const activate = (next: globalThis.Element | undefined) => {
+    if (next === active) return
+    const previous = active
+    active = next
+    over = overSent = undefined
+    if (previous !== undefined) dispatch(previous, "dragleave", () => ({}))
+    if (next !== undefined) dispatch(next, "dragenter", () => ({}))
+  }
+
+  const endTargets = () => {
+    clearTimeout(exitCheck)
+    entered = null
+    activate(undefined)
+  }
+
+  const queueOver = (element: globalThis.Element, event: DragEvent) => {
+    if (elementOf(element)?.handlers.dragover === undefined) return
+    over = [element, boxOf(event, element), typesOf(event)]
+    if (overFrame) return
+    overFrame = true
+    later(() => {
+      overFrame = false
+      const queued = over
+      over = undefined
+      if (queued === undefined) return
+      const [element, next, types] = queued
+      if (
+        active !== element || !element.isConnected ||
+        !accepts(element, types) ||
+        (overSent !== undefined && overSent.x === next.x &&
+          overSent.y === next.y && overSent.width === next.width &&
+          overSent.height === next.height)
+      ) return
+      overSent = next
+      dispatch(element, "dragover", () => next)
+    })
+  }
+
+  const onDropTarget = (
+    name: string,
+    event: DragEvent,
+    path: ReadonlyArray<Node>
+  ) => {
+    if (name === "dragleave") {
+      if (event.target !== entered) return
+      clearTimeout(exitCheck)
+      exitCheck = setTimeout(endTargets, 0)
+      return
+    }
+    const target = dropTargetOf(event, path)
+    if (name === "drop") {
+      if (target !== undefined) {
+        event.preventDefault()
+        droppedHere = true
+        const transfer = event.dataTransfer
+        const data: Record<string, string> = Object.create(null)
+        for (const type of transfer?.types ?? []) {
+          if (type !== "Files") data[type] = transfer!.getData(type)
+        }
+        const payload: Html.DropPayload = {
+          data,
+          files: Array.from(transfer?.files ?? []),
+          ...boxOf(event, target)
+        }
+        dispatch(target, "drop", () => payload)
+      }
+      return endTargets()
+    }
+    clearTimeout(exitCheck)
+    if (name === "dragenter") entered = event.target
+    if (target !== undefined) {
+      event.preventDefault()
+      const dropEffect =
+        (elementOf(target)!.eventOptions.drop as Html.DropTargetOptions)
+          .dropEffect
+      if (dropEffect !== undefined && event.dataTransfer !== null) {
+        event.dataTransfer.dropEffect = dropEffect
+      }
+    }
+    activate(target)
+    if (name === "dragover" && target !== undefined) queueOver(target, event)
+  }
+
+  const startDrag = (event: DragEvent, path: ReadonlyArray<Node>) => {
+    droppedHere = false
+    const transfer = event.dataTransfer
+    if (transfer === null) return
+    for (const node of path) {
+      if (node === container) return
+      const source = elementOf(node)?.eventOptions.dragstart as
+        | Html.DragSourceOptions
+        | undefined
+      if (source?.data !== undefined) {
+        for (const type in source.data) {
+          transfer.setData(type, source.data[type]!)
+        }
+        if (source.effectAllowed !== undefined) {
+          transfer.effectAllowed = source.effectAllowed
+        }
+        return
+      }
+    }
+  }
+
   const listener = (event: Event): void => {
     const name = event.type
     const path = event.composedPath() as Array<Node>
+    if (dropTargetEvents.has(name)) {
+      return onDropTarget(name, event as DragEvent, path)
+    }
     const target = path[0] ?? event.target as Node
     const composed = (event as InputEvent).isComposing === true
     if (isDialog(target)) {
@@ -374,46 +566,38 @@ export const makeHost = (
       event.preventDefault()
       submit.ownedUnhandled.add(event)
     }
+    if (name === "dragstart") startDrag(event as DragEvent, path)
     const own = ownEvents.has(name)
     for (let index = 0; index < path.length; index++) {
       const node = path[index]!
       if (node === container) break
-      const rec = node.$r
-      const element = rec?.v as View.Element<any, any> | undefined
-      const handler = element?.handlers[name]
-      if (handler !== undefined) {
+      if (
+        dispatch(
+          node,
+          name,
+          () =>
+            name === "dragend"
+              ? {
+                dropped: droppedHere ||
+                  ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !==
+                    "none"
+              }
+              : payloadOf(
+                name,
+                event,
+                target,
+                node as globalThis.Element,
+                lastPointer
+              ),
+          event
+        )
+      ) {
         if (owned) submit.ownedUnhandled.delete(event)
-        const prevents = element!.eventOptions[name]?.preventDefault
-        if (prevents === "always") event.preventDefault()
-        const inst = rec!.inst
-        step(() => {
-          if (inst.closed) return false
-          let message = handler
-          if (typeof handler === "function") {
-            try {
-              message = handler(
-                payloadOf(
-                  name,
-                  event,
-                  target,
-                  node as globalThis.Element,
-                  lastPointer
-                )
-              )
-            } catch (error) {
-              Kernel.fail(inst, "event", Cause.die(error))
-              return false
-            }
-          }
-          if (message === undefined) return false
-          if (prevents === true) event.preventDefault()
-          Kernel.send(inst, message, name)
-          return true
-        })
         break
       }
       if (own) break
     }
+    if (name === "dragend") endTargets()
     if (restoring.has(name) && target !== undefined && target !== null) {
       restoreSoon(target)
     }
@@ -565,8 +749,17 @@ export const makeHost = (
     },
     setEvents(node, record, first) {
       if (first) (node as Node).$r = record
-      for (const name in (record.v as View.Element<any, any>).handlers) {
-        listen(name)
+      const { eventOptions, handlers } = record.v as View.Element<any, any>
+      for (const name in handlers) listen(name)
+      if (handlers.drop !== undefined) {
+        for (const name of dropTargetEvents) listen(name)
+      }
+      if (
+        handlers.drop !== undefined || handlers.dragend !== undefined ||
+        eventOptions.dragstart !== undefined
+      ) {
+        listen("dragstart")
+        listen("dragend")
       }
       if (listening.has("click") || listening.has("pointerdown")) {
         listen("pointerdown")
@@ -620,6 +813,7 @@ export const makeHost = (
         container.removeEventListener(name, listener, true)
       }
       listening.clear()
+      endTargets()
     }
   }
 }

@@ -261,4 +261,39 @@ describe("KernelDom", () => {
       }
       assert.deepStrictEqual(started, [["swap"]])
     }).pipe(Effect.scoped))
+  it.effect("puts a drag source's data on the drag, though it has no handler", () =>
+    Effect.gen(function*() {
+      const Cards = Component.define({
+        name: "Cards",
+        model: Schema.Boolean,
+        message: Schema.Boolean,
+        elements: Html
+      }).make({
+        init: () => false,
+        update: (_, draggable) => draggable,
+        view: (h, draggable) =>
+          h.div(
+            h.p.draggable({ "text/plain": "first" }).children("first"),
+            draggable
+              ? h.p.draggable({ "text/plain": "second" }).children("second")
+              : h.p("second")
+          )
+      })
+      const app = yield* container
+      const root = yield* KernelDom.mountEffect(Cards, {}, app)
+      root.send(true)
+      yield* frame
+      const dragged = Array.from(app.querySelectorAll("p"), (card) => {
+        const data = new Map<string, string>()
+        const event = new MouseEvent("dragstart", { bubbles: true })
+        Object.defineProperty(event, "dataTransfer", {
+          value: {
+            setData: (type: string, value: string) => data.set(type, value)
+          }
+        })
+        card.dispatchEvent(event)
+        return data.get("text/plain")
+      })
+      assert.deepStrictEqual(dragged, ["first", "second"])
+    }).pipe(Effect.scoped))
 })
