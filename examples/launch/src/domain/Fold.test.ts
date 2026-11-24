@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { bodies, none } from "./Fold.ts"
 
-const source = `const Def = Component.define({
+const source = `const Def = Html.component({
   name: "Counter"
 })
 

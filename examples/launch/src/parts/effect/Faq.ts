@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Collapsible } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -7,11 +7,10 @@ export const Message = UiSchema.TaggedEnum({
   ToggledAnswer: { open: Schema.Boolean }
 })
 
-export const Faq = Component.define({
+export const Faq = Html.component({
   name: "Faq",
   model: Schema.Struct({ isAnswerOpen: Schema.Boolean }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ isAnswerOpen: false }),
   update: {

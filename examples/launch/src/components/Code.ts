@@ -1,11 +1,11 @@
 import { type Fold, Snippet, type Token } from "#domain/Snippet"
-import { Component, UiSchema, type View } from "@effect/ui"
+import { UiSchema, type View } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 const Line = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   tokens: ReadonlyArray<Token>,
   index: number
 ) =>
@@ -17,7 +17,7 @@ const Line = <M>(
   )
 
 const Lines = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   lines: Snippet["lines"],
   start: number,
   end: number
@@ -27,7 +27,7 @@ const Lines = <M>(
   )
 
 const Body = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   lines: ReadonlyArray<View.Content<M>>
 ) =>
   h.pre.class(
@@ -36,7 +36,7 @@ const Body = <M>(
   ).children(h.code.children(...lines))
 
 const Window = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   name: string,
   demo: ReadonlyArray<View.Content<M>>,
   body: View.Content<M>
@@ -71,12 +71,11 @@ export const CodeWindowMessage = UiSchema.TaggedEnum({
   ClickedFold: { index: Schema.Number }
 })
 
-export const CodeWindow = Component.define({
+export const CodeWindow = Html.component({
   name: "CodeWindow",
   props: Schema.Struct({ snippet: Snippet }),
   model: Schema.Struct({ expanded: Schema.Array(Schema.Number) }),
-  message: CodeWindowMessage,
-  elements: Html
+  message: CodeWindowMessage
 }).make({
   init: () => ({ expanded: [] }),
   update: {
@@ -135,7 +134,7 @@ export const CodeWindow = Component.define({
 // demo is a running example of the file. It sits in the window,
 // between the file name and the code.
 export const Code = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   snippet: Snippet,
   demo: ReadonlyArray<View.Content<M>> = []
 ) =>

@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { Counter } from "./Counter.ts"
@@ -7,11 +7,10 @@ const PageMessage = UiSchema.TaggedEnum({
   ClickedToggleCounter: {}
 })
 
-export const Page = Component.define({
+export const Page = Html.component({
   name: "Page",
   model: Schema.Struct({ isCounterShown: Schema.Boolean }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: () => ({ isCounterShown: true }),
   update: {

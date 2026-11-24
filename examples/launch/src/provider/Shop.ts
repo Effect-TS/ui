@@ -1,15 +1,14 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { CartMessage, CartProvider } from "./CartProvider.ts"
 
-export const Shop = Component.define({
+export const Shop = Html.component({
   name: "Shop",
   // Shop keeps no state and has no Messages: a null Model and an
   // update with nothing to handle.
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -22,25 +21,23 @@ export const Shop = Component.define({
     })
 })
 
-const CartCount = Component.define({
+const CartCount = Html.component({
   name: "CartCount",
   model: Schema.Null,
   message: Schema.Never,
   // Lists the Provider to read. Its value is h.shared.cart, and
   // CartCount renders again when that value changes.
-  shared: { cart: CartProvider },
-  elements: Html
+  shared: { cart: CartProvider }
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.output(`${h.shared.cart.count} in cart`)
 })
 
-const Product = Component.define({
+const Product = Html.component({
   name: "Product",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -49,11 +46,10 @@ const Product = Component.define({
 
 const AddToCartMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })
 
-const AddToCart = Component.define({
+const AddToCart = Html.component({
   name: "AddToCart",
   model: Schema.Null,
-  message: AddToCartMessage,
-  elements: Html
+  message: AddToCartMessage
 }).make({
   init: () => null,
   update: {

@@ -52,15 +52,14 @@ const TrackSection = (ids: ReadonlyArray<string>) =>
       )
   )
 
-export const Nav = Component.define({
+export const Nav = Html.component({
   name: "Nav",
   props: Schema.Struct({ sections: Schema.Array(Section) }),
   model: Schema.Struct({
     current: Schema.NullOr(Schema.String),
     isOpen: Schema.Boolean
   }),
-  message: NavMessage,
-  elements: Html
+  message: NavMessage
 }).make({
   init: () => ({ current: null, isOpen: false }),
   update: {

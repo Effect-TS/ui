@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -7,15 +7,14 @@ const CounterMessage = UiSchema.TaggedEnum({
   ClickedIncrement: {}
 })
 
-export const Counter = Component.define({
+export const Counter = Html.component({
   name: "Counter",
   // What the parent passes in. init and update read it as $.props
   // and view as h.props. In Foldkit 0.x, viewInputs went to view
   // alone.
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
-  message: CounterMessage,
-  elements: Html
+  message: CounterMessage
 }).make({
   init: () => ({ count: 0 }),
   update: {

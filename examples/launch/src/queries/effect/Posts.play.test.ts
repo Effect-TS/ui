@@ -32,11 +32,10 @@ const fetched = (
   }
 ) => play.root.fetches().map((fetch) => fetch.logKey)
 
-const TwoPosts = Component.define({
+const TwoPosts = Html.component({
   name: "TwoPosts",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

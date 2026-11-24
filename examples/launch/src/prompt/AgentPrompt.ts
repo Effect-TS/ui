@@ -1,4 +1,4 @@
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, UiSchema } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
@@ -37,7 +37,7 @@ const labels = {
   Failed: "Couldn't copy"
 } as const
 
-export const AgentPrompt = Component.define({
+export const AgentPrompt = Html.component({
   name: "AgentPrompt",
   props: Schema.Struct({
     title: Schema.String,
@@ -46,8 +46,7 @@ export const AgentPrompt = Component.define({
   model: Schema.Struct({
     status: Schema.Literals(["Idle", "Copied", "Failed"])
   }),
-  message: AgentPromptMessage,
-  elements: Html
+  message: AgentPromptMessage
 }).make({
   init: () => ({ status: "Idle" }),
   update: {

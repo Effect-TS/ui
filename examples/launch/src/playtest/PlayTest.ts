@@ -1,13 +1,7 @@
 import { caption, srOnly } from "#components/Classes"
 import { Scrubber } from "#components/Scrubber"
 import { Snippet } from "#domain/Snippet"
-import {
-  Command,
-  Component,
-  Subscription,
-  UiSchema,
-  type View
-} from "@effect/ui"
+import { Command, Subscription, UiSchema } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
@@ -62,7 +56,7 @@ const mono =
   "font-mono font-features-[normal] [font-variant-ligatures:none]"
 
 const Fact = (
-  h: View.H<PlayTestMessage>,
+  h: Html.H<PlayTestMessage>,
   part: string,
   label: string,
   value: string
@@ -78,7 +72,7 @@ const Fact = (
 
 // What the test can see after the line it just ran: the count on the
 // test host, the TestClock and whether DelayReset is running.
-const Facts = (h: View.H<PlayTestMessage>, model: PlayTestModel) => {
+const Facts = (h: Html.H<PlayTestMessage>, model: PlayTestModel) => {
   const frame = model.position === null
     ? undefined
     : model.frames[model.position]
@@ -103,7 +97,7 @@ const Facts = (h: View.H<PlayTestMessage>, model: PlayTestModel) => {
 }
 
 const Lines = (
-  h: View.H<PlayTestMessage>,
+  h: Html.H<PlayTestMessage>,
   snippet: Snippet,
   position: number | null
 ) => {
@@ -135,7 +129,7 @@ const Lines = (
 }
 
 const Controls = (
-  h: View.H<PlayTestMessage>,
+  h: Html.H<PlayTestMessage>,
   model: PlayTestModel
 ) => {
   const isLoaded = model.frames.length > 0
@@ -179,7 +173,7 @@ const Controls = (
 
 // Every note in one cell, so the tallest sets the height and nothing
 // moves from one line to the next.
-const Note = (h: View.H<PlayTestMessage>, model: PlayTestModel) => {
+const Note = (h: Html.H<PlayTestMessage>, model: PlayTestModel) => {
   const shown = model.position === null ? 0 : model.position + 1
   return h.figcaption.class(caption, "mt-0 grid").attr(
     "aria-hidden",
@@ -194,12 +188,11 @@ const Note = (h: View.H<PlayTestMessage>, model: PlayTestModel) => {
   )
 }
 
-export const PlayTest = Component.define({
+export const PlayTest = Html.component({
   name: "PlayTest",
   props: Schema.Struct({ snippet: Snippet }),
   model: PlayTestModel,
-  message: PlayTestMessage,
-  elements: Html
+  message: PlayTestMessage
 }).make({
   init: ($) =>
     $.set({ frames: [], position: null, isPlaying: false, runs: 0 })

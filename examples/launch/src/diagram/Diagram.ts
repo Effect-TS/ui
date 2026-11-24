@@ -1,6 +1,6 @@
 import { srOnly, wide } from "#components/Classes"
 import { Scrubber } from "#components/Scrubber"
-import { Component, UiSchema, type View } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { panel, SenderPicker, Transport } from "./controls.ts"
@@ -63,7 +63,7 @@ const isPlayingAt = (turn: Turn, time: number) =>
   time >= turn.start && time < turn.start + turn.steps.length
 
 const Lane = (
-  h: View.H<Msg>,
+  h: Html.H<Msg>,
   turn: Turn,
   options: {
     readonly time: number
@@ -170,7 +170,7 @@ const describe = (
 // A cell per step of each side and a last cell for the end, with
 // each side's name under its own cells.
 const Timeline = (
-  h: View.H<Msg>,
+  h: Html.H<Msg>,
   turns: ReadonlyArray<Turn>,
   time: number,
   end: number
@@ -200,12 +200,11 @@ const Timeline = (
     )
   )
 
-export const Diagram = Component.define({
+export const Diagram = Html.component({
   name: "Diagram",
   props: Schema.Struct({ scenario: ScenarioName }),
   model: Model,
-  message: DiagramMessage,
-  elements: Html
+  message: DiagramMessage
 }).make({
   init: () => ({ choice: "A1", player: P.idle }),
   update: {

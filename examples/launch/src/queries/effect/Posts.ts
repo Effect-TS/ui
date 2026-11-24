@@ -27,11 +27,10 @@ export const PostsMessage = UiSchema.TaggedEnum({
   UpdatedSearch: { search: Schema.String }
 })
 
-export const Posts = Component.define({
+export const Posts = Html.component({
   name: "Posts",
   model: Schema.Struct({ search: Schema.String }),
   message: PostsMessage,
-  elements: Html,
   queries: {
     posts: {
       query: SearchPosts,

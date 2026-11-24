@@ -1,4 +1,4 @@
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 
 // Shorter than the row, so the cursor on it stands out.
 const divider = [
@@ -15,7 +15,7 @@ const divider = [
  * they do on any slider.
  */
 export const Scrubber = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   options: {
     readonly label: string
     readonly valueText: string

@@ -1,5 +1,5 @@
-import type { View } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
+import type { Html } from "@effect/ui/html"
 import type { Name, Scenario } from "./scenarios.ts"
 
 const control = [
@@ -40,7 +40,7 @@ const segment = [
 // A row of toggle buttons, one pressed: Tab to a button and press
 // Enter or Space to choose it.
 export const Segmented = <M, A extends string>(
-  h: View.H<M>,
+  h: Html.H<M>,
   options: {
     readonly label: string
     readonly items: ReadonlyArray<A>
@@ -70,7 +70,7 @@ export const Segmented = <M, A extends string>(
   )
 
 export const SenderPicker = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   scenario: Scenario,
   choice: Name,
   onPick: (name: Name) => M
@@ -96,7 +96,7 @@ export interface TransportOptions<M> {
 
 // Play or pause, one step back or forward, and back to the start.
 export const Transport = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   options: TransportOptions<M>
 ) =>
   h.div.class("flex flex-wrap items-center gap-1.5").attrs({

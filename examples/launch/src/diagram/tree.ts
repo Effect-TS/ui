@@ -1,4 +1,3 @@
-import type { View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Array, Option } from "effect"
 import {
@@ -123,10 +122,10 @@ const strokeOf: Readonly<Record<Carries, string>> = {
   render: "stroke-accent/55"
 }
 
-export const svg = <M>(h: View.H<M>, tag: string) => h.el(tag)
+export const svg = <M>(h: Html.H<M>, tag: string) => h.el(tag)
 
 const Link = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   d: string,
   className: string,
   key: string
@@ -155,7 +154,7 @@ const dotAttrs = (carries: Carries) => ({
 // One dot per packet, travelling the track's path once and staying
 // where it ends. The key restarts it whenever the step changes.
 const Packet = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   track: ReadonlyArray<Move>,
   key: string
 ) => {
@@ -242,7 +241,7 @@ const restsOf = (
 }
 
 // A dot at rest, where the packet that brought it stopped.
-const Resting = <M>(h: View.H<M>, rest: Rest, index: number) =>
+const Resting = <M>(h: Html.H<M>, rest: Rest, index: number) =>
   svg(h, "circle").key(`rest-${index}`).attrs({
     ...dotAttrs(rest.carries),
     cx: String(at[rest.name].x),
@@ -251,7 +250,7 @@ const Resting = <M>(h: View.H<M>, rest: Rest, index: number) =>
   })
 
 // The tree of one side: Root, A under it, A1 and A2 under A.
-export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
+export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
   const { side, step, key, compact = false, still = false } = options
   const rests = restsOf(step, options.past)
   // A step that moves the dots draws them as packets, which stop

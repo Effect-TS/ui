@@ -1,14 +1,13 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 export const Message = UiSchema.TaggedEnum({ ClickedTrigger: {} })
 
-export const Disclosure = Component.define({
+export const Disclosure = Html.component({
   name: "Disclosure",
   model: Schema.Struct({ isOpen: Schema.Boolean }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ isOpen: false }),
   update: {

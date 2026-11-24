@@ -1,5 +1,5 @@
 import { caption, srOnly } from "#components/Classes"
-import { Component, UiSchema, type View } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Collapsible } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -22,7 +22,7 @@ const spoken = {
   MB: "megabytes"
 } as const
 
-const Amount = <M>(h: View.H<M>, row: Row, framework: Framework) => [
+const Amount = <M>(h: Html.H<M>, row: Row, framework: Framework) => [
   format(value(row, framework)),
   h.span.class("font-normal text-muted-foreground").attr(
     "aria-hidden",
@@ -42,7 +42,7 @@ const label = `${cell} text-start`
 const amount = `${cell} ps-3 text-end whitespace-nowrap`
 const header = "border-b border-border-strong text-muted-foreground"
 
-const Label = <M>(h: View.H<M>, row: Row) =>
+const Label = <M>(h: Html.H<M>, row: Row) =>
   h.th.class(label).attr("scope", "row").children(
     row.label,
     row.slowdown !== undefined &&
@@ -53,7 +53,7 @@ const Label = <M>(h: View.H<M>, row: Row) =>
 
 const slowest = Math.max(...summary.map((entry) => entry.multiple))
 
-export const PerformanceChart = <M>(h: View.H<M>) =>
+export const PerformanceChart = <M>(h: Html.H<M>) =>
   h.figure.class("mx-auto max-w-(--column) [p+&]:mt-[1.1em]")
     .children(
       h.ol.class(
@@ -103,7 +103,7 @@ const scriptTitle = "Median time running JavaScript per operation"
 const loadTitle = "Page load and memory"
 
 const Full = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   title: string,
   rows: ReadonlyArray<Row>
 ) =>
@@ -157,11 +157,10 @@ const AllResultsMessage = UiSchema.TaggedEnum({
   ToggledResults: { open: Schema.Boolean }
 })
 
-export const AllResults = Component.define({
+export const AllResults = Html.component({
   name: "AllResults",
   model: Schema.Struct({ isOpen: Schema.Boolean }),
-  message: AllResultsMessage,
-  elements: Html
+  message: AllResultsMessage
 }).make({
   init: () => ({ isOpen: false }),
   update: {

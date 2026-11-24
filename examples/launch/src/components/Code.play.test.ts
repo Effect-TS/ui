@@ -1,6 +1,5 @@
 import { bodies } from "#domain/Fold"
 import { Snippet } from "#domain/Snippet"
-import { Component } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -25,12 +24,11 @@ const files = [
   file("parts/Counter.ts", bodies("init")(code))
 ]
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ files: Schema.Array(Snippet) }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

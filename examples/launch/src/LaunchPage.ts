@@ -4,7 +4,7 @@ import { Code } from "#components/Code"
 import { Islands } from "#domain/Island"
 import { fromDocument, fromHeading } from "#domain/Section"
 import { type Snippet, Snippets } from "#domain/Snippet"
-import { Component, Head, type View } from "@effect/ui"
+import { Head, type View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
 import { Option, Schema } from "effect"
 import source, { frontmatter } from "./article.md"
@@ -33,13 +33,13 @@ const heading = [
   "scroll-mt-[calc(var(--nav-bar)+24px)] text-balance font-[620]"
 ].join(" ")
 
-const Files = <M>(h: View.H<M>, files: ReadonlyArray<Snippet>) =>
+const Files = <M>(h: Html.H<M>, files: ReadonlyArray<Snippet>) =>
   files.map((snippet) =>
     h.div.key(snippet.name).children(Code(h, snippet))
   )
 
 const Example = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   title: string,
   files: ReadonlyArray<Snippet>
 ) =>
@@ -51,21 +51,20 @@ const Example = <M>(
     )
 
 const Caption = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   content: ReadonlyArray<View.Content<M>>
 ) =>
   content.length > 0 &&
   h.figcaption.class(caption).children(content)
 
-export const LaunchPage = Component.define({
+export const LaunchPage = Html.component({
   name: "LaunchPage",
   props: Schema.Struct({
     snippets: Snippets,
     articleUrl: Schema.String
   }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

@@ -1,9 +1,4 @@
-import {
-  Command,
-  Component,
-  Subscription,
-  UiSchema
-} from "@effect/ui"
+import { Command, Subscription, UiSchema } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
@@ -30,17 +25,15 @@ export const DelayReset = Command.make(
     )
 )
 
-export const Counter = Component.define({
+// Html.component defines a Component whose view builds HTML
+// elements, such as h.div. HTML isn't built into the core.
+export const Counter = Html.component({
   name: "Counter",
   model: Schema.Struct({
     count: Schema.Number,
     isAutoCounting: Schema.Boolean
   }),
-  message: CounterMessage,
-  // The vocabulary: which elements h offers in view, such as h.div.
-  // HTML isn't built into the core, so the Component names it here.
-  // An app that imports "@effect/ui/html/register" can omit this.
-  elements: Html
+  message: CounterMessage
 }).make({
   init: () => ({ count: 0, isAutoCounting: false }),
   // A handler per Message. $ holds the current Model and builds

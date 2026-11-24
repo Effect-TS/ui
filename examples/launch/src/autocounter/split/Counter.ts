@@ -1,4 +1,4 @@
-import { Component, Subscription } from "@effect/ui"
+import { Subscription } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
@@ -6,14 +6,13 @@ import { CounterMessage, DelayReset } from "../Counter.ts"
 
 // The definition: the name and the Schemas. Its init, update,
 // subscriptions and view helpers type the functions below.
-const CounterDef = Component.define({
+const CounterDef = Html.component({
   name: "Counter",
   model: Schema.Struct({
     count: Schema.Number,
     isAutoCounting: Schema.Boolean
   }),
-  message: CounterMessage,
-  elements: Html
+  message: CounterMessage
 })
 
 const init = CounterDef.init(() => ({
