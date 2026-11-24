@@ -73,7 +73,6 @@ import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import { handle } from "../../internal/handler.ts"
-import * as match from "../../internal/match.ts"
 import * as internal from "../../internal/scene.ts"
 import * as cursor from "../../internal/steps.ts"
 import * as engine from "../../internal/story.ts"
@@ -153,8 +152,9 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * - A button with `popovertarget` fires `toggle` on the popover with the
    *   state `popovertargetaction` asks for, when that changes it.
    *
-   * Each event goes to the view as the event before it left it. The click is
-   * ignored when none of them produced a message.
+   * Each event goes to the view as the event before it left it. The click
+   * throws when nothing handles any of them, and is ignored when none
+   * produced a message.
    */
   click(target: string | Locator.Locator): this
   /**
@@ -288,51 +288,14 @@ export declare namespace Steps {
   export type Any = Steps<AnyComponent, any>
 }
 
-/** Child indices from the root to `node`, to find it again in a view rendered after an event. */
-const indexPath = (
-  root: Locator.Node,
-  node: Locator.Node
-): ReadonlyArray<number> | undefined => {
-  if (root === node) return []
-  const children = root.children ?? []
-  for (let i = 0; i < children.length; i++) {
-    const rest = indexPath(children[i]!, node)
-    if (rest !== undefined) return [i, ...rest]
-  }
-  return undefined
-}
-
-const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
-  engine.expansionOf.get(node)?.[0] ?? node
-
 const followOptional =
   (root: Locator.Node, node: Locator.Node) =>
-  (state: engine.State<any, any, any, any>): Locator.Node | undefined => {
-    if (state.root === root) return node
-    const path = indexPath(root, node)
-    if (path === undefined) return undefined
-    let oldAt = root as View.Node<any, any>
-    let newAt = state.root as View.Node<any, any>
-    if (!match.patches(asSibling(oldAt), asSibling(newAt))) return undefined
-    for (const oldIndex of path) {
-      const olds = (oldAt as {
-        readonly children?: ReadonlyArray<View.Node<any, any>>
-      }).children ?? []
-      const news = (newAt as {
-        readonly children?: ReadonlyArray<View.Node<any, any>>
-      }).children ?? []
-      const paired = match.matchSiblings(
-        olds.map(asSibling),
-        news.map(asSibling)
-      )
-      const newIndex = paired.indexOf(oldIndex)
-      if (newIndex < 0) return undefined
-      oldAt = olds[oldIndex]!
-      newAt = news[newIndex]!
-      if (!match.patches(oldAt, newAt)) return undefined
-    }
-    return newAt as Locator.Node
-  }
+  (state: engine.State<any, any, any, any>): Locator.Node | undefined =>
+    internal.followNode(
+      root as View.Node<any, any>,
+      node as View.Node<any, any>,
+      state.root as View.Node<any, any>
+    ) as Locator.Node | undefined
 
 const follow =
   (root: Locator.Node, node: Locator.Node, description: string) =>
@@ -386,12 +349,12 @@ class StepsImpl extends internal.SceneCursor {
           description: string
         ): boolean => {
           const status = engine.handlesOwn(out, target, event)
-          if (status === "none") return false
-          if (status === "child") {
+          if (status.kind === "none") return false
+          if (status.kind === "child") {
             if (childOnly === undefined || event === "click") {
               childOnly = { state: out, node: target, event, description }
             }
-            return false
+            return status.alwaysPrevented
           }
           reachedOwn = true
           const fired = engine.fireNode(
@@ -412,7 +375,13 @@ class StepsImpl extends internal.SceneCursor {
         for (const planned of press) {
           if (planned.event === "mousedown" && pointerDownCancelled) continue
           const target = followPress(out)
-          if (target === undefined) return out
+          if (target === undefined) break
+          if (
+            planned.event !== "pointerdown" &&
+            defaults.isClickDisabled(
+              engine.ancestry(out, target) as ReadonlyArray<Locator.Node>
+            )
+          ) break
           const cancelled = runEvent(
             target,
             planned.event,
@@ -445,6 +414,12 @@ class StepsImpl extends internal.SceneCursor {
                 if (!planned.isDefault) break
                 continue
               }
+              if (
+                !planned.isDefault &&
+                defaults.isClickDisabled(
+                  engine.ancestry(out, target) as ReadonlyArray<Locator.Node>
+                )
+              ) break
               const cancelled = runEvent(
                 target,
                 planned.event,
@@ -465,14 +440,19 @@ class StepsImpl extends internal.SceneCursor {
           }
         }
 
-        if (!reachedOwn && childOnly !== undefined) {
-          engine.fireNode(
-            childOnly.state,
-            childOnly.node,
-            childOnly.event,
-            {},
-            step,
-            childOnly.description
+        if (!reachedOwn) {
+          if (childOnly !== undefined) {
+            engine.fireNode(
+              childOnly.state,
+              childOnly.node,
+              childOnly.event,
+              {},
+              step,
+              childOnly.description
+            )
+          }
+          throw new Error(
+            `${step}: nothing handles "click" at ${locator.description}`
           )
         }
         return out

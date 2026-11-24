@@ -1839,15 +1839,23 @@ export const handlesOwn = (
   story: State<any, any, any, any>,
   node: Locator.Node,
   event: string
-): "own" | "child" | "none" => {
+): {
+  readonly kind: "own" | "child" | "none"
+  readonly alwaysPrevented: boolean
+} => {
   const handler = handlerOn(ancestry(story, node), event)
-  if (handler === undefined) return "none"
+  if (handler === undefined) return { kind: "none", alwaysPrevented: false }
   const own = "/" + story.component.definition.name
+  const owned = handler.owned ?? []
   const hasOwn = Object.hasOwn(handler.handlers, event) ||
-    (handler.owned ?? []).some((layer) =>
+    owned.some((layer) =>
       layer.owner.path === own && Object.hasOwn(layer.handlers, event)
     )
-  return hasOwn ? "own" : "child"
+  const alwaysPrevented = !hasOwn &&
+    owned.some((layer) =>
+      layer.eventOptions[event]?.preventDefault === "always"
+    )
+  return { kind: hasOwn ? "own" : "child", alwaysPrevented }
 }
 
 /** What one event did: the record after it, whether its default was cancelled, and whether a layer sent a message. */

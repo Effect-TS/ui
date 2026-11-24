@@ -191,6 +191,49 @@ const groups = (
   return out
 }
 
+const nodePath = (
+  root: View.Node<any, any>,
+  target: View.Node<any, any>
+): ReadonlyArray<readonly [slot: string, index: number]> | undefined => {
+  if (root === target) return []
+  for (const [name, list] of groups(root)) {
+    for (let index = 0; index < list.length; index++) {
+      const rest = nodePath(list[index]!, target)
+      if (rest !== undefined) return [[name, index], ...rest]
+    }
+  }
+  return undefined
+}
+
+/** @internal */
+export const followNode = (
+  oldRoot: View.Node<any, any>,
+  node: View.Node<any, any>,
+  newRoot: View.Node<any, any>
+): View.Node<any, any> | undefined => {
+  if (oldRoot === newRoot) return node
+  const path = nodePath(oldRoot, node)
+  if (path === undefined || !continues(oldRoot, newRoot)) return undefined
+  let oldAt = oldRoot
+  let newAt = newRoot
+  for (const [slot, oldIndex] of path) {
+    const olds = groups(oldAt).get(slot) ?? []
+    const news = groups(newAt).get(slot) ?? []
+    const paired = match.matchSiblings(
+      olds.map(asSibling),
+      news.map(asSibling)
+    )
+    const newIndex = paired.indexOf(oldIndex)
+    if (newIndex < 0) return undefined
+    const oldChild = olds[oldIndex]!
+    const newChild = news[newIndex]!
+    if (!continues(oldChild, newChild)) return undefined
+    oldAt = oldChild
+    newAt = newChild
+  }
+  return newAt
+}
+
 /**
  * The scene's mounts in `tree`, each followed from the render before as the runtime keeps a mount
  * running: on an element the runtime patched, an element's own mount for the same definition, and a
