@@ -33,11 +33,10 @@ const MarkSeen = Mount.make(
   () => Tracker.use((tracker) => tracker.seen)
 )
 
-const Timed = Component.define({
+const Timed = Html.component({
   name: "Timed",
   model: Schema.Number,
-  message: Schema.Number,
-  elements: Html
+  message: Schema.Number
 }).make({
   init: () => 0,
   update: (_, now) => now,
@@ -49,16 +48,17 @@ const AppMsg = UiSchema.TaggedEnum({ Clicked: {} })
 type AppMsg = typeof AppMsg.Type
 
 const define = () =>
-  Component.define({
+  Html.component({
     name: "Combo",
+
     props: Schema.Struct({
       items: Schema.Array(
         Schema.Struct({ id: Schema.String, label: Schema.String })
       )
     }),
+
     model: Schema.Number,
-    message: Msg,
-    elements: Html
+    message: Msg
   })
 
 declare const h: View.Helper<AppMsg, unknown> & View.Tags<Html.Elements, AppMsg>
@@ -173,11 +173,10 @@ describe("p.child", () => {
       update: ($) => $.model,
       parts: (p) => p.child(Tips, { parts: (tips) => tips })
     })
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make(
       {
         init: () => null,
@@ -222,11 +221,10 @@ describe("p.child", () => {
 
 describe("Scene.childEmit", () => {
   it("takes the events of a headless child", () => {
-    const Page = Component.define({
+    const Page = Html.component({
       name: "Page",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     })
       .make({
         init: () => null,

@@ -19,33 +19,30 @@ import { collectGarbage } from "../utils/gc.ts"
 let inits = { avatar: 0, profile: 0, badge: 0 }
 const side = (count: number) => count === 0 ? "server" : "client"
 
-const Avatar = Component.define({
+const Avatar = Html.component({
   name: "Avatar",
   model: Schema.String,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => "avatar from the " + side(inits.avatar++),
   update: ($) => $.model,
   view: (h, text) => h.i(text)
 })
 
-const Badge = Component.define({
+const Badge = Html.component({
   name: "Badge",
   model: Schema.String,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => "badge from the " + side(inits.badge++),
   update: ($) => $.model,
   view: (h, text) => h.b(text)
 })
 
-const Broken = Component.define({
+const Broken = Html.component({
   name: "Broken",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -54,19 +51,17 @@ const Broken = Component.define({
   }
 })
 
-const Pin = Component.define({
+const Pin = Html.component({
   name: "Pin",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({ init: () => null, update: ($) => $.model, view: (h) => h.u("pin") })
 
-const Profile = Component.define({
+const Profile = Html.component({
   name: "Profile",
   model: Schema.String,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => "draft from the " + side(inits.profile++),
@@ -87,11 +82,10 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
   staleTime: "30 seconds"
 }, Effect.succeed(() => Effect.succeed("billing"))) {}
 
-const Settings = Component.define({
+const Settings = Html.component({
   name: "Settings",
   model: Schema.Boolean,
   message: Schema.Boolean,
-  elements: Html,
   queries: { tab: { query: GetTab, args: () => ({}) } }
 }).make({
   init: () => false,
@@ -107,22 +101,20 @@ const Settings = Component.define({
   }
 }).pipe(Component.provide(GetTab.layer))
 
-const Sketch = Component.define({
+const Sketch = Html.component({
   name: "Sketch",
   model: Schema.declare((u): u is () => string => typeof u === "function"),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => () => "sketch",
   update: ($) => $.model,
   view: (h, text) => h.em(text())
 })
 
-const Board = Component.define({
+const Board = Html.component({
   name: "Board",
   model: Schema.Boolean,
   message: Schema.Boolean,
-  elements: Html,
   queries: { tab: { query: GetTab, args: () => ({}) } }
 }).make({
   init: () => false,
@@ -182,22 +174,20 @@ describe("keep-alive children on the server", () => {
 
 let leafInits = 0
 let noteInits = 0
-const Note = Component.define({
+const Note = Html.component({
   name: "Note",
   model: Schema.String,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => noteInits++ === 0 ? "server-note" : "client-note",
     update: ($) => $.model,
     view: (h, note) => h.i(note)
   })
-const Leaf = Component.define({
+const Leaf = Html.component({
   name: "Leaf",
   model: Schema.String,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => leafInits++ === 0 ? "server-draft" : "client-initial",
@@ -205,11 +195,10 @@ const Leaf = Component.define({
     view: (h, draft) => h.div(h.p(draft), Note(h, { key: "n" }))
   })
 
-const Frame = Component.define({
+const Frame = Html.component({
   name: "Frame",
   model: Schema.Null,
   message: Schema.Never,
-  elements: Html,
   slots: ["body"]
 }).make({
   init: () => null,
@@ -217,12 +206,11 @@ const Frame = Component.define({
   view: (h) => h.section(h.slots.body)
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ where: Schema.String }),
   model: Schema.NullOr(Schema.String),
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => null,
   update: (_, where) => where,
@@ -288,11 +276,10 @@ const tick = Effect.promise(() =>
 )
 
 class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-const SlowFrame = Component.define({
+const SlowFrame = Html.component({
   name: "SlowFrame",
   model: Schema.Null,
   message: Schema.Never,
-  elements: Html,
   slots: ["body"]
 }).make({
   init: () => null,
@@ -304,11 +291,10 @@ const SlowFrame = Component.define({
       Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
     )
   )
-const SlowPage = Component.define({
+const SlowPage = Html.component({
   name: "SlowPage",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
@@ -351,11 +337,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     }).pipe(Effect.scoped))
 
   let gate: Effect.Effect<void> = Effect.void
-  const Gated = Component.define({
+  const Gated = Html.component({
     name: "Gated",
     model: Schema.Null,
     message: Schema.Never,
-    elements: Html,
     slots: ["body"]
   }).make({
     init: () => null,
@@ -392,21 +377,19 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     }
   )
 
-  const Field = Component.define({
+  const Field = Html.component({
     name: "Field",
     model: Schema.String,
-    message: Schema.String,
-    elements: Html
+    message: Schema.String
   }).make({
     init: () => "server",
     update: (_, text) => text,
     view: (h, text) => h.input.value(text).onInput(({ value }) => value)
   })
-  const Box = Component.define({
+  const Box = Html.component({
     name: "Box",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   })
     .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
   const fieldPage = (
@@ -416,11 +399,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       | "by a forwarded builder"
       | "by a headless child's view"
   ) =>
-    Component.define({
+    Html.component({
       name: "FieldPage",
       model: Schema.Number,
-      message: Schema.Null,
-      elements: Html
+      message: Schema.Null
     })
       .make({
         init: () => 0,
@@ -461,21 +443,19 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       }).pipe(Effect.scoped)
   )
 
-  const Note = Component.define({
+  const Note = Html.component({
     name: "Note",
     model: Schema.String,
-    message: Schema.String,
-    elements: Html
+    message: Schema.String
   }).make({
     init: () => "server",
     update: (_, text) => text,
     view: (h, note) => h.input.value(note).onInput(({ value }) => value)
   })
-  const Bare = Component.define({
+  const Bare = Html.component({
     name: "Bare",
     model: Schema.Null,
     message: Schema.Never,
-    elements: Html,
     slots: ["body"]
   }).make({
     init: () => null,
@@ -488,11 +468,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         Effect.suspend(() => Effect.as(gate, "ready"))
       ))
     )
-  const Row = Component.define({
+  const Row = Html.component({
     name: "Row",
     model: Schema.String,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => "",
     update: ($) => $.model,
@@ -502,11 +481,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   let start: "slot" | "aside" = "slot"
   const Where = Schema.Literals(["slot", "aside", "none", "ended"])
   const draft = (name: string) =>
-    Component.define({
+    Html.component({
       name,
       model: Schema.String,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => side(drafts++),
       update: ($) => $.model,
@@ -521,11 +499,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       ))
     )
   const moving = (headless: boolean) =>
-    Component.define({
+    Html.component({
       name: "Moving",
       model: Where,
-      message: Where,
-      elements: Html
+      message: Where
     })
       .make({
         init: () => "slot" as const,
@@ -548,11 +525,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           })
       })
   const Moving = moving(false)
-  const Restarting = Component.define({
+  const Restarting = Html.component({
     name: "Restarting",
     model: Where,
-    message: Where,
-    elements: Html
+    message: Where
   }).make({
     init: () => start,
     update: (_, where) => where,
@@ -659,11 +635,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   it.effect("keep what the user typed, when the one drawn before them leaves the slot", () =>
     Effect.gen(function*() {
-      const Mixed = Component.define({
+      const Mixed = Html.component({
         name: "Mixed",
         model: Schema.Boolean,
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: () => false,
         update: (_, moved) => moved,
@@ -695,12 +670,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   it.effect("leave the one field drawn after them, which takes an edit once, when moved out of the slot", () =>
     Effect.gen(function*() {
-      const Lead = Component.define({
+      const Lead = Html.component({
         name: "Lead",
         props: Schema.Struct({ moved: Schema.Boolean }),
         model: Schema.String,
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       }).make({
         init: () => "",
         update: ($, typed) => $.model + typed,
@@ -739,12 +713,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       assert.strictEqual(app.querySelector("em")!.textContent, "typed")
     }).pipe(Effect.scoped))
 
-  const Item = Component.define({
+  const Item = Html.component({
     name: "Item",
     props: Schema.Struct({ n: Schema.Number }),
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,
@@ -753,22 +726,20 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   it.effect("keep the server's nodes of a receiver they draw, when taken out of the document and drawn again while it waits", () =>
     Effect.gen(function*() {
-      const Card = Component.define({
+      const Card = Html.component({
         name: "Card",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
           Bare(h, { key: "g", slots: { body: [h.p("a"), h.p("b")] } })
       })
-      const Cards = Component.define({
+      const Cards = Html.component({
         name: "Cards",
         model: Schema.Boolean,
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: () => true,
         update: (_, shown) => shown,
@@ -800,11 +771,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     () =>
       Effect.gen(function*() {
         let stuck = false
-        const Stuck = Component.define({
+        const Stuck = Html.component({
           name: "Stuck",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -819,11 +789,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             ))
           )
         let passed: Array<WeakRef<object>> = []
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => true,
           update: (_, shown) => shown,
@@ -857,11 +826,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     "let adoption finish when their receiver is removed as they wait for their own Layer in the slot of a keep-alive child there",
     () =>
       Effect.gen(function*() {
-        const Waits = Component.define({
+        const Waits = Html.component({
           name: "Waits",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -871,22 +839,20 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             Slow,
             Effect.suspend(() => Effect.as(gate, "ready"))
           )))
-        const Shell = Component.define({
+        const Shell = Html.component({
           name: "Shell",
           model: Schema.Null,
           message: Schema.Never,
-          elements: Html,
           slots: ["inner"]
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.div(h.slots.inner)
         })
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => true,
           update: (_, shown) => shown,
@@ -915,11 +881,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     "keep the server's nodes under the predicate their author last wrote them with, when the receiver resumes",
     () =>
       Effect.gen(function*() {
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, changed) => changed,
@@ -990,31 +955,28 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           }))
         let tips = 0
         let dots = 0
-        const Tip = Component.define({
+        const Tip = Html.component({
           name: "Tip",
           model: Schema.String,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => side(tips++),
           update: ($) => $.model,
           view: (h, tip) => h.i(tip)
         })
-        const Dot = Component.define({
+        const Dot = Html.component({
           name: "Dot",
           model: Schema.String,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => side(dots++),
           update: ($) => $.model,
           view: (h, dot) => h.u(dot)
         })
-        const Mid = Component.define({
+        const Mid = Html.component({
           name: "Mid",
           model: stored(mid),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => "mid",
           update: ($) => $.model,
@@ -1024,21 +986,19 @@ describe("keep-alive children in a receiver that waits for its Layer", {
               h.keepAlive((s) => Dot(s, { key: "d" }))
             )
         })
-        const Card = Component.define({
+        const Card = Html.component({
           name: "Card",
           model: stored(card),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => "card",
           update: ($) => $.model,
           view: (h) => h.article(Mid(h, { key: "m" }))
         })
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Number,
-          message: Schema.Number,
-          elements: Html
+          message: Schema.Number
         }).make({
           init: () => 0,
           update: (_, step) => step,
@@ -1072,8 +1032,9 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   it.effect("stop decoding their state when they're no longer written as it decodes", () =>
     Effect.gen(function*() {
       let decoding = 0
-      const Slowly = Component.define({
+      const Slowly = Html.component({
         name: "Slowly",
+
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.acquireUseRelease(
@@ -1084,18 +1045,17 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           ),
           encode: SchemaGetter.passthrough()
         })),
-        message: Schema.Never,
-        elements: Html
+
+        message: Schema.Never
       }).make({
         init: () => "slowly",
         update: ($) => $.model,
         view: (h, text) => h.b(text)
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Boolean,
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: () => true,
         update: (_, shown) => shown,
@@ -1118,12 +1078,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     () =>
       Effect.gen(function*() {
         let passed: Array<WeakRef<object>> = []
-        const Author = Component.define({
+        const Author = Html.component({
           name: "Author",
           props: Schema.Struct({ drawn: Schema.Boolean }),
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -1134,12 +1093,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             )
           }
         })
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           props: Schema.Struct({ drawn: Schema.Boolean }),
           model: Schema.Number,
-          message: Schema.Number,
-          elements: Html
+          message: Schema.Number
         }).make({
           init: () => 0,
           update: (_, step) => step,
@@ -1181,9 +1139,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   const labels: Array<string> = []
   const decoded: Array<string> = []
-  const Labelled = Component.define({
+  const Labelled = Html.component({
     name: "Labelled",
     props: Schema.Struct({ label: Schema.String }),
+
     model: Schema.String.pipe(Schema.decode({
       decode: SchemaGetter.transform((label: string) => {
         decoded.push(label)
@@ -1191,8 +1150,8 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       }),
       encode: SchemaGetter.passthrough()
     })),
-    message: Schema.Never,
-    elements: Html
+
+    message: Schema.Never
   }).make({
     init: ($) => {
       labels.push($.props.label)
@@ -1212,11 +1171,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     "start with the %s their author last wrote them with, when the receiver resumes (drawn by the server: %s)",
     ([last, drawn, started, shown, read]) =>
       Effect.gen(function*() {
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, changed) => changed,
@@ -1264,12 +1222,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     "don't start when their author last wrote them out of %s, as the receiver resumes",
     (out) =>
       Effect.gen(function*() {
-        const Two = Component.define({
+        const Two = Html.component({
           name: "Two",
           props: Schema.Struct({ open: Schema.Boolean }),
           model: Schema.Null,
           message: Schema.Never,
-          elements: Html,
           slots: ["body", "unplaced"]
         }).make({
           init: () => null,
@@ -1280,11 +1237,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             Slow,
             Effect.suspend(() => Effect.as(gate, "ready"))
           )))
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, moved) => moved,
@@ -1330,12 +1286,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       }).pipe(Effect.scoped)
   )
 
-  const Sides = Component.define({
+  const Sides = Html.component({
     name: "Sides",
     props: Schema.Struct({ shows: Schema.Array(Schema.Literals(["a", "b"])) }),
     model: Schema.Null,
     message: Schema.Never,
-    elements: Html,
     slots: ["a", "b"]
   }).make({
     init: () => null,
@@ -1362,11 +1317,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     "start in the order drawn, and only where placed, when the receiver resumes placing %s",
     ([_, before, after, left, started]) =>
       Effect.gen(function*() {
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, changed) => changed,
@@ -1411,12 +1365,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   it.effect("keep the server's Model when first written out of a slot the receiver resumes without", () =>
     Effect.gen(function*() {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         props: Schema.Struct({ first: Schema.String }),
         model: Schema.Number,
-        message: Schema.Number,
-        elements: Html
+        message: Schema.Number
       }).make({
         init: () => 0,
         update: (_, step) => step,
@@ -1460,27 +1413,27 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     Effect.gen(function*() {
       const decoding = yield* Deferred.make<void>()
       let inits = 0
-      const Late = Component.define({
+      const Late = Html.component({
         name: "Late",
+
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.as(Deferred.await(decoding), text)
           ),
           encode: SchemaGetter.passthrough()
         })),
-        message: Schema.Never,
-        elements: Html
+
+        message: Schema.Never
       }).make({
         init: () => side(inits++),
         update: ($) => $.model,
         view: (h, text) => h.b(text)
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         props: Schema.Struct({ compact: Schema.Boolean }),
         model: Schema.Boolean,
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: () => false,
         update: (_, drawn) => drawn,
@@ -1517,11 +1470,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     "don't start when the receiver resumes after a render that wasn't their author's and the predicate is false",
     () =>
       Effect.gen(function*() {
-        const Middle = Component.define({
+        const Middle = Html.component({
           name: "Middle",
           model: Schema.Number,
           message: Schema.Null,
-          elements: Html,
           slots: ["passed"]
         }).make({
           init: () => 0,
@@ -1532,12 +1484,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
               Gated(h, { key: "f", slots: { body: h.slots.passed } })
             )
         })
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           props: Schema.Struct({ allowed: Schema.Boolean }),
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -1583,31 +1534,28 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         const slow = Component.provide(
           Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))
         )
-        const Author = Component.define({
+        const Author = Html.component({
           name: "Author",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.article(h.keepAlive((s) => Leaf(s, { key: "l" })))
         }).pipe(slow)
-        const Outer = Component.define({
+        const Outer = Html.component({
           name: "Outer",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.article(h.keepAlive((s) => Leaf(s, { key: "l" })))
         }).pipe(slow)
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Number,
-          message: Schema.Number,
-          elements: Html
+          message: Schema.Number
         }).make({
           init: () => 0,
           update: (_, step) => step,
@@ -1644,27 +1592,24 @@ describe("keep-alive children of a headless child", () => {
     "a kept one doesn't keep alive the closure's nodes once the headless child is removed",
     () =>
       Effect.gen(function*() {
-        const Editor = Component.define({
+        const Editor = Html.component({
           name: "Editor",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.p("editor")
         })
-        const Pane = Component.define({
+        const Pane = Html.component({
           name: "Pane",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => true,
           update: (_, shown) => shown,
@@ -1704,11 +1649,10 @@ describe("keep-alive children of a headless child", () => {
       Effect.gen(function*() {
         let stuck = false
         let made: Array<WeakRef<object>> = []
-        const Stuck = Component.define({
+        const Stuck = Html.component({
           name: "Stuck",
           model: Schema.Null,
           message: Schema.Never,
-          elements: Html,
           slots: ["body"]
         }).make({
           init: () => null,
@@ -1723,22 +1667,20 @@ describe("keep-alive children of a headless child", () => {
               )
             ))
           )
-        const Item = Component.define({
+        const Item = Html.component({
           name: "Item",
           props: Schema.Struct({ n: Schema.Number }),
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.b(String(h.props.n))
         })
-        const Rows = Component.define({
+        const Rows = Html.component({
           name: "Rows",
           model: Schema.Number,
-          message: Schema.Null,
-          elements: Html
+          message: Schema.Null
         }).make({
           init: () => 0,
           update: ($) => $.model + 1,
@@ -1798,21 +1740,19 @@ const Late = Schema.String.pipe(Schema.decode({
   ),
   encode: SchemaGetter.passthrough()
 }))
-const LateDraft = Component.define({
+const LateDraft = Html.component({
   name: "LateDraft",
   model: Late,
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => lateServing ? "server" : "client",
   update: (_, text) => text,
   view: (h, text) => h.input.value(text).onInput(({ value }) => value)
 })
-const LateKeeper = Component.define({
+const LateKeeper = Html.component({
   name: "LateKeeper",
   model: Schema.Number,
-  message: Schema.Literal("bump"),
-  elements: Html
+  message: Schema.Literal("bump")
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,

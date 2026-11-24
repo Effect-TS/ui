@@ -30,12 +30,11 @@ const SearchRoute = Route.union({
 })
 
 /** A root that holds a route with an optional search. */
-const SearchApp = Component.define({
+const SearchApp = Html.component({
   name: "SearchApp",
   props: Schema.Struct({ route: SearchRoute }),
   model: SearchRoute,
-  message: SearchRoute,
-  elements: Html
+  message: SearchRoute
 }).make({
   init: ($) => $.props.route,
   update: (_, route) => route,
@@ -64,12 +63,11 @@ const ListMessage = UiSchema.TaggedEnum({
 const patched = Command.map(() => ListMessage.Patched())
 
 /** A page whose search text and page number live in the search only. */
-const ListPage = Component.define({
+const ListPage = Html.component({
   name: "ListPage",
   props: Schema.Struct({ route: ListOnly }),
   model: Schema.Struct({}),
-  message: ListMessage,
-  elements: Html
+  message: ListMessage
 }).make({
   init: () => ({}),
   update: ($, message) =>
@@ -104,12 +102,11 @@ const ListPage = Component.define({
 })
 
 /** Holds the route, and keys the list page by its path. */
-const ListApp = Component.define({
+const ListApp = Html.component({
   name: "ListApp",
   props: Schema.Struct({ route: ListRoute }),
   model: ListRoute,
-  message: ListRoute,
-  elements: Html
+  message: ListRoute
 }).make({
   init: ($) => $.props.route,
   update: (_, route) => route,
@@ -555,11 +552,10 @@ describe("BrowserRouter", { concurrent: false }, () => {
     Effect.gen(function*() {
       window.history.replaceState(null, "", "/")
       yield* Layer.build(BrowserRouter.layer({ routes: AppRoute }))
-      const Peek = Component.define({
+      const Peek = Html.component({
         name: "Peek",
         model: Schema.Number,
-        message: Schema.Literal("Peek"),
-        elements: Html
+        message: Schema.Literal("Peek")
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,

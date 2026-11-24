@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import {
   PreviewCard,
   type PreviewCardDismissReason,
@@ -19,11 +19,10 @@ type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
 
 describe("PreviewCard", () => {
   it("each part returns the builder it was given, and the portal may be absent", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -65,11 +64,10 @@ describe("PreviewCard", () => {
   })
 
   it("the trigger takes only a link, and the events report why the card opened and closed", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -102,11 +100,10 @@ describe("PreviewCard", () => {
   })
 
   it("a trigger drawn elsewhere returns the link it was given", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

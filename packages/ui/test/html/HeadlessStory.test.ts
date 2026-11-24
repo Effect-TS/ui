@@ -17,11 +17,10 @@ const ToolbarMessage = UiSchema.TaggedEnum({
   Clicked: { id: Schema.String }
 })
 
-const Toolbar = Component.define({
+const Toolbar = Html.component({
   name: "Toolbar",
   model: Schema.Array(Schema.String),
-  message: ToolbarMessage,
-  elements: Html
+  message: ToolbarMessage
 }).make({
   init: () => [],
   update: ($, message) => [...$.model, message._tag + " " + message.id],
@@ -78,11 +77,10 @@ const standIn = {
     )
 }
 
-const Ids = Component.define({
+const Ids = Html.component({
   name: "Ids",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
@@ -149,11 +147,10 @@ describe("headless components in a story", () => {
       props: { items }
     })
     assert.deepStrictEqual(menu.visible, items)
-    const Bare = Component.define({
+    const Bare = Html.component({
       name: "Bare",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -275,11 +272,10 @@ describe("headless components in a story", () => {
 
   it.effect("an author's story runs every part layer of one event, and each layer's own preventDefault", () =>
     Effect.gen(function*() {
-      const Dual = Component.define({
+      const Dual = Html.component({
         name: "Dual",
         model: Schema.Number,
-        message: Schema.Literals(["one", "ten"]),
-        elements: Html
+        message: Schema.Literals(["one", "ten"])
       }).make({
         init: () => 0,
         update: ($, message) => $.model + (message === "one" ? 1 : 10),
@@ -305,11 +301,10 @@ describe("headless components in a story", () => {
 
   it.effect("a consumer's story cancels the default when a child's layer always does", () =>
     Effect.gen(function*() {
-      const Guard = Component.define({
+      const Guard = Html.component({
         name: "Guard",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make(
         {
           init: () => null,
@@ -323,11 +318,10 @@ describe("headless components in a story", () => {
         }
       )
       const Clicked = UiSchema.TaggedEnum({ Clicked: {} })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Number,
-        message: Clicked,
-        elements: Html
+        message: Clicked
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
@@ -358,11 +352,10 @@ describe("headless components in a story", () => {
         update: ($) => $.model,
         parts: () => ({})
       })
-      const Outer = Component.define({
+      const Outer = Html.component({
         name: "Outer",
         model: Schema.Number,
-        message: Schema.Literals(["one", "ten", "hundred"]),
-        elements: Html
+        message: Schema.Literals(["one", "ten", "hundred"])
       }).make({
         init: () => 0,
         update: ($, message) =>
@@ -394,11 +387,10 @@ describe("headless components in a story", () => {
 
   it.effect("an author's story drops on a part's drop target", () =>
     Effect.gen(function*() {
-      const Zone = Component.define({
+      const Zone = Html.component({
         name: "Zone",
         model: Schema.String,
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       })
         .make({
           init: () => "",

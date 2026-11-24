@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlFiles } from "@effect/ui/html"
 import { assert, describe, expect, it } from "@effect/vitest"
 import { Effect, Fiber, Layer, Schema } from "effect"
@@ -150,11 +150,10 @@ describe("HtmlFiles", { concurrent: false }, () => {
         ShowedPicker: { found: Schema.Boolean, opened: Schema.Boolean },
         Chose: { files: Schema.Array(Schema.instanceOf(File)) }
       })
-      const Attach = Component.define({
+      const Attach = Html.component({
         name: "Attach",
         model: Schema.Array(Schema.String),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>
@@ -206,11 +205,10 @@ describe("HtmlFiles", { concurrent: false }, () => {
         ShowedPicker: { found: Schema.Boolean, opened: Schema.Boolean },
         Submitted: {}
       })
-      const Form = Component.define({
+      const Form = Html.component({
         name: "Form",
         model: Schema.Array(Schema.String),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>

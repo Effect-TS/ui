@@ -23,16 +23,14 @@
  * **Example** (Adding the overlay in development)
  *
  * ```ts
- * import { Component } from "@effect/ui"
  * import { BrowserHost, Html } from "@effect/ui/html"
  * import { DevTools } from "@effect/ui-devtools"
  * import { Effect, Layer, Schema } from "effect"
  *
- * const App = Component.define({
+ * const App = Html.component({
  *   name: "App",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,

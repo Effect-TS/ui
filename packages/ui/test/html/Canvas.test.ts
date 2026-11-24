@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { BrowserHost, Canvas, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -28,14 +28,15 @@ const Message = UiSchema.TaggedEnum({
   Bumped: {}
 })
 
-const Dots = Component.define({
+const Dots = Html.component({
   name: "Dots",
+
   model: Schema.Struct({
     dots: Schema.Array(Canvas.Point),
     bumps: Schema.Number
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: () => ({ dots: [], bumps: 0 }),
   update: {
@@ -101,8 +102,12 @@ describe("Canvas", { concurrent: false }, () => {
 
       const captured: Array<number> = []
       canvas.setPointerCapture = (id) => void captured.push(id)
-      canvas.getBoundingClientRect = () =>
-        ({ left: 10, top: 20, width: 150, height: 100 }) as DOMRect
+      canvas.getBoundingClientRect = () => (({
+        left: 10,
+        top: 20,
+        width: 150,
+        height: 100
+      }) as DOMRect)
       canvas.dispatchEvent(
         new PointerEvent("pointerdown", {
           clientX: 85,

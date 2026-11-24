@@ -1,4 +1,4 @@
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
@@ -18,12 +18,11 @@ const RowMessage = UiSchema.TaggedEnum({
   ClickedFail: {},
   ClickedHold: {}
 })
-const Row = Component.define({
+const Row = Html.component({
   name: "Row",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
-  message: RowMessage,
-  elements: Html
+  message: RowMessage
 }).make({
   init: () => ({ count: 0 }),
   update: {
@@ -42,12 +41,11 @@ const Row = Component.define({
     )
 })
 
-const Shelf = Component.define({
+const Shelf = Html.component({
   name: "Shelf",
   props: Schema.Struct({ id: Schema.String, drop: Schema.Boolean }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -61,12 +59,11 @@ const Shelf = Component.define({
     )
 })
 
-const Section = Component.define({
+const Section = Html.component({
   name: "Section",
   props: Schema.Struct({ id: Schema.String, drop: Schema.Boolean }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -74,11 +71,10 @@ const Section = Component.define({
 })
 
 const AppMessage = UiSchema.TaggedEnum({ ClickedDrop: {} })
-const App = Component.define({
+const App = Html.component({
   name: "App",
   model: Schema.Struct({ drop: Schema.Boolean }),
-  message: AppMessage,
-  elements: Html
+  message: AppMessage
 }).make({
   init: () => ({ drop: false }),
   update: { ClickedDrop: ($) => $.evolve({ drop: true }) },

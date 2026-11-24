@@ -1,5 +1,4 @@
-import type { Mount } from "@effect/ui"
-import { Component, UiSchema, View } from "@effect/ui"
+import { type Component, type Mount, UiSchema, View } from "@effect/ui"
 import {
   Dialog,
   type DialogEvents,
@@ -71,8 +70,10 @@ const tracked = (scene: Rendered): TrackDialog =>
   )
     ?.mount as unknown as TrackDialog
 // A message the mount sends, as its Stream would.
-const sent = (tag: string, fields: object = {}) =>
-  ({ _tag: tag, ...fields }) as never
+const sent = (tag: string, fields: object = {}) => (({
+  _tag: tag,
+  ...fields
+}) as never)
 
 // The plain values the parts carry now.
 const partsOf = (
@@ -85,8 +86,10 @@ const partsOf = (
   return parts!
 }
 
-const dismissed = (reason: string) =>
-  ({ _tag: "RequestedClose", reason }) as DialogEvents
+const dismissed = (reason: string) => (({
+  _tag: "RequestedClose",
+  reason
+}) as DialogEvents)
 
 describe("Dialog", () => {
   it.effect("remembers the trigger that opened it, and only that one asks to close it", () =>
@@ -379,11 +382,10 @@ describe("Dialog", () => {
 
 // Two dialogs, one in the other's popup, open from the start.
 const NestedMessage = UiSchema.TaggedEnum({ RequestedCloseInner: {} })
-const Nested = Component.define({
+const Nested = Html.component({
   name: "Nested",
   model: Schema.Struct({ inner: Schema.Boolean }),
-  message: NestedMessage,
-  elements: Html
+  message: NestedMessage
 }).make({
   init: () => ({ inner: true }),
   update: {

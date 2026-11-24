@@ -17,11 +17,10 @@ const place = Effect.fnUntraced(function*(tag: string = "div") {
 const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
 let mounts = 0
 const Seen = Mount.make("Seen", { args: {} }, () => Effect.sync(() => mounts++))
-const Counter = Component.define({
+const Counter = Html.component({
   name: "Counter",
   model: Schema.Number,
-  message: CounterMessage,
-  elements: Html
+  message: CounterMessage
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,
@@ -83,11 +82,10 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
   }).pipe(Effect.scoped))
 
 const FieldMessage = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
-const Field = Component.define({
+const Field = Html.component({
   name: "Field",
   model: Schema.Struct({ value: Schema.String, typed: Schema.Number }),
-  message: FieldMessage,
-  elements: Html
+  message: FieldMessage
 }).make({
   init: () => ({ value: "", typed: 0 }),
   update: ($, { value }) => ({ value, typed: $.model.typed + 1 }),
@@ -114,22 +112,20 @@ it.effect("the copy's host listens only on the copy, so a live event while pause
 class Editor extends Feature.Service<Editor>()("Pause/Editor", {
   props: Schema.Struct({})
 }) {}
-const EditorView = Component.define({
+const EditorView = Html.component({
   name: "EditorView",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.span("editor")
 })
 
-const Note = Component.define({
+const Note = Html.component({
   name: "Note",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
@@ -137,11 +133,10 @@ const Note = Component.define({
     view: (h) => h.span("note")
   })
 
-const Pane = Component.define({
+const Pane = Html.component({
   name: "Pane",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
@@ -158,11 +153,10 @@ const Pane = Component.define({
   })
   .pipe(Component.provide(Editor.toLayer(EditorView)))
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
@@ -209,11 +203,10 @@ it.effect("a paint that fails removes its copy and leaves the page as it was", (
   }).pipe(Effect.scoped))
 
 const DialogMessage = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
-const Settings = Component.define({
+const Settings = Html.component({
   name: "Settings",
   model: Schema.Boolean,
-  message: DialogMessage,
-  elements: Html
+  message: DialogMessage
 }).make({
   init: () => false,
   update: (_, message) => message._tag === "Opened",
@@ -253,11 +246,10 @@ const TallyMessage = UiSchema.TaggedEnum({
   Added: { by: Schema.Number },
   Broke: {}
 })
-const Tally = Component.define({
+const Tally = Html.component({
   name: "Tally",
   model: Schema.Number,
-  message: TallyMessage,
-  elements: Html
+  message: TallyMessage
 }).make({
   init: () => 0,
   update: ($, message) => {
@@ -266,11 +258,10 @@ const Tally = Component.define({
   },
   view: (h, total) => h.span(`total ${total}`)
 })
-const Board = Component.define({
+const Board = Html.component({
   name: "Board",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

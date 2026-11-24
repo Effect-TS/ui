@@ -1,26 +1,24 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const Note = Component.define({
+const Note = Html.component({
   name: "Note",
   model: Schema.Number,
   message: Schema.Never,
-  events: UiSchema.TaggedEnum({ Saved: { text: Schema.String } }),
-  elements: Html
+  events: UiSchema.TaggedEnum({ Saved: { text: Schema.String } })
 }).make({
   init: () => 0,
   update: ($) => $.model,
   view: (h, n) => h.span("note " + n)
 })
 
-const Panel = Component.define({
+const Panel = Html.component({
   name: "Panel",
   model: Schema.Null,
   message: Schema.Never,
-  elements: Html,
   slots: ["title", "body"]
 }).make({
   init: () => null,
@@ -32,11 +30,10 @@ const PageMsg = UiSchema.TaggedEnum({
   Bump: {},
   Saved: { text: Schema.String }
 })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Struct({ bumps: Schema.Number, saved: Schema.String }),
-  message: PageMsg,
-  elements: Html
+  message: PageMsg
 }).make({
   init: () => ({ bumps: 0, saved: "" }),
   update: ($, msg) =>
@@ -124,21 +121,19 @@ describe("View queries", () => {
 })
 
 describe("headless closures in slot content", () => {
-  const Headless = Component.define({
+  const Headless = Html.component({
     name: "Headless",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   })
     .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
 
   it.effect("childEmit finds a child a headless closure renders in content the story's component passes", () =>
     Effect.gen(function*() {
-      const Parent = Component.define({
+      const Parent = Html.component({
         name: "Parent",
         model: Schema.String,
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       })
         .make({
           init: () => "",
@@ -163,11 +158,10 @@ describe("headless closures in slot content", () => {
 
   it.effect("keys in content a parent passed don't clash with the receiver's own", () =>
     Effect.gen(function*() {
-      const Receiver = Component.define({
+      const Receiver = Html.component({
         name: "Receiver",
         model: Schema.Null,
         message: Schema.Never,
-        elements: Html,
         slots: ["body"]
       }).make({
         init: () => null,

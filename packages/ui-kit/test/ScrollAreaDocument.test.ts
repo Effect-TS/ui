@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import { Component } from "@effect/ui"
 import { ScrollArea, type ScrollAreaProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -30,11 +29,10 @@ const mountArea = Effect.fnUntraced(function*(
   options: { readonly keepMounted?: boolean; readonly horizontal?: boolean } =
     {}
 ) {
-  const Demo = Component.define({
+  const Demo = Html.component({
     name: "Demo",
     model: Schema.Struct({}),
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => ({}),
     update: ($) => $.model,

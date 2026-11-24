@@ -51,18 +51,17 @@
  * **Example** (A labelled switch whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Switch } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const SettingsMessage = UiSchema.TaggedEnum({ ToggledNotify: { checked: Schema.Boolean } })
  *
- * const Settings = Component.define({
+ * const Settings = Html.component({
  *   name: "Settings",
  *   model: Schema.Struct({ notify: Schema.Boolean }),
- *   message: SettingsMessage,
- *   elements: Html
+ *   message: SettingsMessage
  * }).make({
  *   init: () => ({ notify: false }),
  *   update: {

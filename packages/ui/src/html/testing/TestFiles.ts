@@ -9,7 +9,7 @@
  * **Example** (Choosing a file in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlFiles } from "@effect/ui/html"
  * import { TestFiles } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
@@ -20,11 +20,10 @@
  *   Picked: { names: Schema.Array(Schema.String) }
  * })
  *
- * const Attach = Component.define({
+ * const Attach = Html.component({
  *   name: "Attach",
  *   model: Schema.Array(Schema.String),
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => [],
  *   update: {

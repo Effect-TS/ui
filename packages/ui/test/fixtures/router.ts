@@ -39,11 +39,10 @@ export type AppRoute = typeof AppRoute.Type
 // Pages
 // ---------------------------------------------------------------------------
 
-export const Home = Component.define({
+export const Home = Html.component({
   name: "Home",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -104,17 +103,19 @@ export const CountVisit = Command.make(
   () => Effect.succeed(PersonMessage.Visited())
 )
 
-export const Person = Component.define({
+export const Person = Html.component({
   name: "Person",
   props: Schema.Struct({ id: Schema.Number }),
+
   model: Schema.Struct({
     id: Schema.Number,
     name: Schema.String,
     count: Schema.Number,
     visits: Schema.Number
   }),
+
   message: PersonMessage,
-  elements: Html,
+
   queries: {
     person: {
       query: GetPerson,
@@ -167,11 +168,10 @@ export class SlowData
   )
 {}
 
-export const Slow = Component.define({
+export const Slow = Html.component({
   name: "Slow",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -201,16 +201,17 @@ export const AppMessage = UiSchema.TaggedEnum({
 
 const navigated = (outcome: Router.Outcome) => AppMessage.Navigated({ outcome })
 
-export const App = Component.define({
+export const App = Html.component({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
+
   model: Schema.Struct({
     route: AppRoute,
     outcomes: Schema.Array(Schema.String),
     blocked: Schema.Boolean
   }),
-  message: AppMessage,
-  elements: Html
+
+  message: AppMessage
 }).make({
   init: ($) => ({ route: $.props.route, outcomes: [], blocked: false }),
   update: ($, message) =>

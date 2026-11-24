@@ -65,18 +65,17 @@
  * **Example** (A section whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Collapsible } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const ShippingMessage = UiSchema.TaggedEnum({ ToggledDetails: { open: Schema.Boolean } })
  *
- * const Shipping = Component.define({
+ * const Shipping = Html.component({
  *   name: "Shipping",
  *   model: Schema.Struct({ details: Schema.Boolean }),
- *   message: ShippingMessage,
- *   elements: Html
+ *   message: ShippingMessage
  * }).make({
  *   init: () => ({ details: true }),
  *   update: {
@@ -108,7 +107,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -433,14 +431,13 @@ const TrackPanel = Mount.makeStream(
  * @category components
  * @since 0.1.0
  */
-export const Collapsible = Component.define({
+export const Collapsible = Html.component({
   name: "Collapsible",
   props: CollapsibleProps,
   model: CollapsibleModel,
   message: CollapsibleMessage,
   events: CollapsibleEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: ($) => ({
     mounted: $.props.open,

@@ -139,18 +139,17 @@
  * **Example** (A price in euros whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, NumberField } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const CartMessage = UiSchema.TaggedEnum({ UpdatedPrice: { value: Schema.NullOr(Schema.Number) } })
  *
- * const Cart = Component.define({
+ * const Cart = Html.component({
  *   name: "Cart",
  *   model: Schema.Struct({ price: Schema.NullOr(Schema.Number) }),
- *   message: CartMessage,
- *   elements: Html
+ *   message: CartMessage
  * }).make({
  *   init: () => ({ price: 1234.5 }),
  *   update: {
@@ -199,7 +198,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -1377,14 +1376,13 @@ const stepperDefaults = {
  * @category components
  * @since 0.1.0
  */
-export const NumberField = Component.define({
+export const NumberField = Html.component({
   name: "NumberField",
   props: NumberFieldProps,
   model: NumberFieldModel,
   message: NumberFieldMessage,
   events: NumberFieldEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     text: null,

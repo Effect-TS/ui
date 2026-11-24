@@ -1,26 +1,24 @@
-import { Component, type View } from "@effect/ui"
+import type { Component, View } from "@effect/ui"
 import { OpenTui } from "@effect/ui-opentui"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 describe("OpenTui vocabulary types", () => {
   it("gives h.text the OpenTui TextElement type and enforces no-text containers", () => {
-    const Child = Component.define({
+    const Child = OpenTui.component({
       name: "Child",
       model: Schema.Void,
-      message: Schema.Never,
-      elements: OpenTui
+      message: Schema.Never
     }).make({
       init: () => undefined,
       update: () => undefined,
       view: (h) => h.text("child")
     })
 
-    const Kept = Component.define({
+    const Kept = OpenTui.component({
       name: "Kept",
       model: Schema.Void,
-      message: Schema.Never,
-      elements: OpenTui
+      message: Schema.Never
     }).make({
       init: () => undefined,
       update: () => undefined,
@@ -29,11 +27,10 @@ describe("OpenTui vocabulary types", () => {
 
     const InputRef = OpenTui.ref("Input", "input")
 
-    Component.define({
+    OpenTui.component({
       name: "Parent",
       model: Schema.Void,
-      message: Schema.Never,
-      elements: OpenTui
+      message: Schema.Never
     }).make({
       init: () => undefined,
       update: () => undefined,

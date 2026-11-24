@@ -126,7 +126,7 @@
  * **Example** (A theme picker in a field, with the open state and the value in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Select } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -143,11 +143,10 @@
  *   PickedTheme: { theme: Schema.String }
  * })
  *
- * const Settings = Component.define({
+ * const Settings = Html.component({
  *   name: "Settings",
  *   model: Schema.Struct({ open: Schema.Boolean, theme: Schema.String }),
- *   message: SettingsMessage,
- *   elements: Html
+ *   message: SettingsMessage
  * }).make({
  *   init: () => ({ open: false, theme: "system" }),
  *   update: {
@@ -197,7 +196,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
@@ -1359,17 +1358,17 @@ const scrolling =
  * @category components
  * @since 0.1.0
  */
-export const Select = Component.define({
+export const Select = Html.component({
   name: "Select",
   props: SelectProps,
   model: SelectModel,
   message: SelectMessage,
   events: SelectEvents,
   restore: false,
+
   shared: {
     toolbar: { owner: Toolbar, optional: true }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({
     mounted: false,

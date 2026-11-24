@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Collapsible } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -22,17 +22,18 @@ const PageMessage = UiSchema.TaggedEnum({
   ReleaseHold: {}
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: PageProps,
+
   model: Schema.Struct({
     config: PageProps,
     open: Schema.Boolean,
     holdExit: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: PageMessage,
-  elements: Html
+
+  message: PageMessage
 }).make({
   init: ($) => ({
     config: $.props,
@@ -84,10 +85,9 @@ const Page = Component.define({
 const layout = Effect.acquireRelease(
   Effect.sync(() => {
     const proto = window.HTMLElement.prototype
-    const sized = (value: number) =>
-      function(this: HTMLElement) {
-        return this.id === "panel" ? value : 0
-      }
+    const sized = (value: number) => (function(this: HTMLElement) {
+      return this.id === "panel" ? value : 0
+    })
     Object.defineProperty(proto, "scrollHeight", {
       configurable: true,
       get: sized(120)

@@ -107,7 +107,7 @@
  * **Example** (A save button that shows a toast)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { ToastProvider } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -115,7 +115,11 @@
  * const EditorMessage = UiSchema.TaggedEnum({ ClickedSave: {} })
  *
  * // Any component below the provider can send to it.
- * const Editor = Component.define({ name: "Editor", model: Schema.Null, message: EditorMessage, elements: Html }).make({
+ * const Editor = Html.component({
+ *   name: "Editor",
+ *   model: Schema.Null,
+ *   message: EditorMessage
+ * }).make({
  *   init: () => null,
  *   update: {
  *     ClickedSave: ($) =>
@@ -127,7 +131,11 @@
  *   view: (h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
  * })
  *
- * const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
+ * const App = Html.component({
+ *   name: "App",
+ *   model: Schema.Null,
+ *   message: Schema.Never
+ * }).make({
  *   init: () => null,
  *   update: ($) => $.model,
  *   view: (h) =>
@@ -156,7 +164,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import * as Mount from "@effect/ui/Mount"
@@ -718,19 +726,20 @@ const withToast = <Tag extends string, R>(
  * @category components
  * @since 0.1.0
  */
-export const ToastProvider = Component.define({
+export const ToastProvider = Html.component({
   name: "ToastProvider",
   props: ToastProviderProps,
   model: ToastProviderModel,
   message: ToastProviderMessage,
   events: ToastProviderEvents,
+
   // Senders only post, so there's nothing for them to read.
   shares: {
     value: () => ({}),
     receives: ["RequestedAdd", "RequestedUpdate", "RequestedClose"]
   },
-  restore: false,
-  elements: Html
+
+  restore: false
 }).make({
   init: () => ({
     toasts: [],

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Mount, UiSchema } from "@effect/ui"
+import { Mount, UiSchema } from "@effect/ui"
 import * as VirtualKeyboard from "@effect/ui-kit/VirtualKeyboard"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -130,13 +130,14 @@ const Message = UiSchema.TaggedEnum({
   ChangedBand: { band: Schema.NullOr(VirtualKeyboard.Band) }
 })
 
-const Sheet = Component.define({
+const Sheet = Html.component({
   name: "Sheet",
+
   model: Schema.Struct({
     bands: Schema.Array(Schema.NullOr(VirtualKeyboard.Band))
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: () => ({ bands: [] }),
   update: {

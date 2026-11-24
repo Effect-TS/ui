@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
@@ -9,8 +9,9 @@ const CardMessage = UiSchema.TaggedEnum({ PressedSave: {}, ClickedCard: {} })
 
 // A card whose click handler stands behind a button in its short form, to
 // see which one a click reaches.
-const Card = Component.define({
+const Card = Html.component({
   name: "Card",
+
   props: Schema.Struct({
     press: Schema.Boolean,
     button: Schema.Struct({
@@ -19,9 +20,9 @@ const Card = Component.define({
       focusableWhenDisabled: Schema.optional(Schema.Boolean)
     })
   }),
+
   model: Schema.Struct({ clicked: Schema.String }),
-  message: CardMessage,
-  elements: Html
+  message: CardMessage
 }).make({
   init: () => ({ clicked: "" }),
   update: {

@@ -48,12 +48,14 @@ const FocusBody = Mount.make(
   (node: HTMLElement) => Effect.sync(() => node.focus())
 )
 
-const EditorNoDeps = Component.define({
+const EditorNoDeps = Html.component({
   name: "Editor",
+
   props: Schema.Struct({
     noteId: Schema.String,
     token: Schema.Redacted(Schema.String)
   }),
+
   model: Schema.Struct({
     draft: Schema.String,
     saved: Schema.String,
@@ -61,8 +63,8 @@ const EditorNoDeps = Component.define({
     viewers: Schema.Number,
     linkPickerOpen: Schema.Boolean
   }),
-  message: EditorMessage,
-  elements: Html
+
+  message: EditorMessage
 }).make({
   init: () => ({
     draft: "",
@@ -118,11 +120,10 @@ const Editor = EditorNoDeps.pipe(Component.provide(SaveNote.layer))
 const WorkspaceMessage = UiSchema.TaggedEnum({
   ClickedClose: { noteId: Schema.String }
 })
-const Workspace = Component.define({
+const Workspace = Html.component({
   name: "Workspace",
   model: Schema.Struct({ open: Schema.Array(Schema.String) }),
-  message: WorkspaceMessage,
-  elements: Html
+  message: WorkspaceMessage
 }).make({
   init: () => ({ open: ["n1", "n2"] }),
   update: {

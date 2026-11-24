@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { UiSchema, type View } from "@effect/ui"
 import { Toggle, type ToggleElement } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -13,11 +13,10 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Toggle", () => {
   it("returns a button of the consumer's message type, whose chained children keep their requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

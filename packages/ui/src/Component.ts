@@ -679,7 +679,7 @@ export interface Step<
    * **Example** (Animating a layout switch)
    *
    * ```ts
-   * import { Component, UiSchema } from "@effect/ui"
+   * import { UiSchema } from "@effect/ui";
    * import { Html } from "@effect/ui/html"
    * import { Schema } from "effect"
    *
@@ -689,11 +689,10 @@ export interface Step<
    *   TypedFilter: { value: Schema.String }
    * })
    *
-   * export const Gallery = Component.define({
+   * export const Gallery = Html.component({
    *   name: "Gallery",
    *   model: Schema.Struct({ layout: Layout, filter: Schema.String }),
-   *   message: Message,
-   *   elements: Html
+   *   message: Message
    * }).make({
    *   init: () => ({ layout: "grid" as const, filter: "" }),
    *   update: {

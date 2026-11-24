@@ -1,4 +1,4 @@
-import { Component, Route } from "@effect/ui"
+import { Route } from "@effect/ui"
 import { Html, type HtmlServer } from "@effect/ui/html"
 import { layerHttp } from "@effect/ui/html/HtmlServerHttp"
 import { assert, describe, it } from "@effect/vitest"
@@ -53,12 +53,11 @@ describe("HtmlServerHttp.layerHttp", () => {
   it("answers a URL the routes don't resolve with a 404, without rendering", async () => {
     let rendered = 0
     const HomeRoute = Route.union({ Home: Route.make("/") })
-    const Root = Component.define({
+    const Root = Html.component({
       name: "Root",
       props: Schema.Struct({ route: HomeRoute }),
       model: Schema.Struct({}),
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => {
         rendered++
@@ -96,12 +95,11 @@ describe("HtmlServerHttp.layerHttp", () => {
         }
       })
     })
-    const List = Component.define({
+    const List = Html.component({
       name: "List",
       props: Schema.Struct({ route: ListRoute }),
       model: Schema.Struct({}),
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => ({}),
       update: ($) => $.model,

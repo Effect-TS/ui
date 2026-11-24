@@ -11,7 +11,7 @@
  * **Example** (Pressing Escape in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { TestGlobalEvents } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
@@ -19,11 +19,10 @@
  *
  * const Message = UiSchema.TaggedEnum({ PressedEscape: {} })
  *
- * const Menu = Component.define({
+ * const Menu = Html.component({
  *   name: "Menu",
  *   model: Schema.Boolean,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => true,
  *   update: { PressedEscape: () => false },

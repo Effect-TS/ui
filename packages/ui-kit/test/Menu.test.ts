@@ -1,6 +1,6 @@
 import {
   Command,
-  Component,
+  type Component,
   type Mount,
   Route,
   Router,
@@ -156,8 +156,10 @@ const tracked = (scene: Rendered): TrackMenu =>
     layer
   ) => layer.mount !== undefined)
     ?.mount as unknown as TrackMenu
-const sent = (tag: string, fields: object = {}) =>
-  ({ _tag: tag, ...fields }) as never
+const sent = (tag: string, fields: object = {}) => (({
+  _tag: tag,
+  ...fields
+}) as never)
 
 const partsOf = (
   scene: { readonly parts: (f: (menu: Parts) => void) => unknown }
@@ -169,16 +171,24 @@ const partsOf = (
   return parts!
 }
 
-const opened = (reason: string) =>
-  ({ _tag: "RequestedOpen", reason, triggerId: "edit" }) as MenuEvents
-const dismissed = (reason: string) =>
-  ({ _tag: "RequestedClose", reason }) as MenuEvents
+const opened = (reason: string) => (({
+  _tag: "RequestedOpen",
+  reason,
+  triggerId: "edit"
+}) as MenuEvents)
+const dismissed = (reason: string) => (({
+  _tag: "RequestedClose",
+  reason
+}) as MenuEvents)
 const picked = (value: string, checked?: boolean) =>
   (checked === undefined
     ? { _tag: "Picked", value }
     : { _tag: "Picked", value, checked }) as MenuEvents
-const highlighted = (value: string | null, reason: string) =>
-  ({ _tag: "Highlighted", value, reason }) as MenuEvents
+const highlighted = (value: string | null, reason: string) => (({
+  _tag: "Highlighted",
+  value,
+  reason
+}) as MenuEvents)
 
 type Pending = {
   readonly current: {
@@ -235,12 +245,11 @@ const PageMessage = UiSchema.TaggedEnum({
   Navigated: {}
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ route: PageRoute }),
   model: Schema.Struct({ route: PageRoute, open: Schema.Boolean }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: ($) => ({ route: $.props.route, open: false }),
   update: {

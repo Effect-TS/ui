@@ -58,11 +58,10 @@ const Measure = Mount.make(
   (node: HTMLElement) => Effect.sync(() => node.clientWidth)
 )
 
-const Ticker = Component.define({
+const Ticker = Html.component({
   name: "Ticker",
   model: Schema.Number,
-  message: Schema.Number,
-  elements: Html
+  message: Schema.Number
 }).make({
   init: () => 0,
   update: (_, now) => now,
@@ -163,11 +162,10 @@ describe("Html", () => {
   })
 
   it("children returns the builder, so more children and attributes can follow", () => {
-    Component.define({
+    Html.component({
       name: "Order",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,
@@ -228,11 +226,10 @@ describe("Html", () => {
   })
 
   it("forward returns the builder's own class, with what it adds in the requirements", () => {
-    Component.define({
+    Html.component({
       name: "Forward",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,
@@ -289,8 +286,8 @@ describe("Html", () => {
         expect(input).type.not.toHaveProperty("children")
         // The function returns an element: not text, and not a component's child.
         expect(h.button.forward).type.not.toBeCallableWith(() => "Go")
-        expect(h.button.forward).type.not.toBeCallableWith(() =>
-          ({}) as View.Child<Msg, never>
+        expect(h.button.forward).type.not.toBeCallableWith(
+          () => (({}) as View.Child<Msg, never>)
         )
         return framed
       }
@@ -298,11 +295,10 @@ describe("Html", () => {
   })
 
   it("errors point at the offending child", () => {
-    Component.define({
+    Html.component({
       name: "Errors",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,
@@ -318,11 +314,10 @@ describe("Html", () => {
   })
 
   it("events carry the tag's payloads", () => {
-    Component.define({
+    Html.component({
       name: "Events",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,
@@ -407,11 +402,10 @@ describe("Html", () => {
   })
 
   it("controlled properties exist on the elements that have them", () => {
-    Component.define({
+    Html.component({
       name: "Controlled",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,
@@ -452,11 +446,10 @@ describe("Html", () => {
         return Effect.succeed(Msg.Mounted())
       }
     )
-    Component.define({
+    Html.component({
       name: "Refs",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,
@@ -478,11 +471,10 @@ describe("Html", () => {
   })
 
   it("requirements from onMount and from children reach the component", () => {
-    const Mounted = Component.define({
+    const Mounted = Html.component({
       name: "Mounted",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -502,11 +494,10 @@ describe("Html", () => {
         Html.Elements
       >
     >()
-    const Shorthand = Component.define({
+    const Shorthand = Html.component({
       name: "Shorthand",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -523,11 +514,10 @@ describe("Html", () => {
         Html.Elements
       >
     >()
-    const Bare = Component.define({
+    const Bare = Html.component({
       name: "Bare",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -563,11 +553,10 @@ describe("Html", () => {
     )
     expect(DrawChart).type.not.toBeCallableWith()
     expect(DrawChart).type.not.toBeCallableWith({ points: "none" })
-    const Chart = Component.define({
+    const Chart = Html.component({
       name: "Chart",
       model: Schema.Array(Schema.Number),
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: (): ReadonlyArray<number> => [],
       update: ($) => $.model,
@@ -661,11 +650,10 @@ describe("Html", () => {
   })
 
   it("View.Input keeps what a child requires", () => {
-    const PageDef = Component.define({
+    const PageDef = Html.component({
       name: "Page",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     })
     const ticker = {} as View.Node<Msg, Clock>
     const plain = (..._children: ReadonlyArray<View.Input<Msg>>) => {}
@@ -735,11 +723,10 @@ describe("Html", () => {
   })
 
   it("ref Commands add nothing to a component's requirements", () => {
-    const Form = Component.define({
+    const Form = Html.component({
       name: "Form",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) =>
@@ -787,11 +774,10 @@ describe("HtmlLocator", () => {
 })
 
 describe("BrowserHost", () => {
-  const Counter = Component.define({
+  const Counter = Html.component({
     name: "Counter",
     model: Schema.Number,
-    message: Msg,
-    elements: Html
+    message: Msg
   }).make({
     init: () => 0,
     update: ($) => $.model + 1,
@@ -815,12 +801,11 @@ describe("BrowserHost", () => {
       Home: Route.make("/"),
       NotFound: Route.make("/*")
     })
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       props: Schema.Struct({ route: AppRoute }),
       model: AppRoute,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: ($) => $.props.route,
       update: ($) => $.model,

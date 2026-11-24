@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { type Component, UiSchema, View } from "@effect/ui"
 import { Avatar, type AvatarProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { TestImages } from "@effect/ui/html/testing"
@@ -39,11 +39,10 @@ describe("Avatar", () => {
       const ada = { src: "/ada.png" }
       const grace = { src: "/grace.png" }
       const Message = UiSchema.TaggedEnum({ Picked: { src: Schema.String } })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.String,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => ada.src,
         update: { Picked: (_, { src }) => src },

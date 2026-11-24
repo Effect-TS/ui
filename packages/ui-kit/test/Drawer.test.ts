@@ -1,4 +1,4 @@
-import { Component, type Mount, UiSchema, type View } from "@effect/ui"
+import { type Component, type Mount, UiSchema, type View } from "@effect/ui"
 import {
   Dialog,
   Drawer,
@@ -49,8 +49,10 @@ const trackedOn = (locator: Locator.Locator) => (scene: Rendered): Track =>
 const tracked = trackedOn(popup)
 const trackedArea = trackedOn(area)
 const argsOf = (mount: Track) => mount.args as Record<string, unknown>
-const sent = (tag: string, fields: object = {}) =>
-  ({ _tag: tag, ...fields }) as never
+const sent = (tag: string, fields: object = {}) => (({
+  _tag: tag,
+  ...fields
+}) as never)
 
 const release = (fields: object) =>
   sent("ReleasedSwipe", {
@@ -74,8 +76,10 @@ const opened = {
   triggerId: null,
   reason: "swipe"
 } as DrawerEvents
-const snapped = (snapPoint: number) =>
-  ({ _tag: "Snapped", snapPoint }) as DrawerEvents
+const snapped = (snapPoint: number) => (({
+  _tag: "Snapped",
+  snapPoint
+}) as DrawerEvents)
 const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
 const openedByArea = Effect.gen(function*() {
@@ -379,11 +383,10 @@ describe("Drawer", () => {
 })
 
 const PageMessage = UiSchema.TaggedEnum({ Toggled: { open: Schema.Boolean } })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: () => ({ open: false }),
   update: {
@@ -453,11 +456,10 @@ describe("DrawerProvider", () => {
 })
 
 // A drawer in a dialog's popup, and a dialog in the drawer's, all open.
-const Mixed = Component.define({
+const Mixed = Html.component({
   name: "Mixed",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

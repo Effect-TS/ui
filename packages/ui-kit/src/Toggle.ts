@@ -33,18 +33,17 @@
  * **Example** (A bold toggle whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Toggle } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const EditorMessage = UiSchema.TaggedEnum({ ToggledBold: { pressed: Schema.Boolean } })
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Struct({ bold: Schema.Boolean }),
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => ({ bold: false }),
  *   update: {

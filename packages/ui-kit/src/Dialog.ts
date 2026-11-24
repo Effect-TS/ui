@@ -153,18 +153,17 @@
  * **Example** (A settings dialog whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Dialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const ToolbarMessage = UiSchema.TaggedEnum({ RequestedOpenSettings: {}, RequestedCloseSettings: {} })
  *
- * const Toolbar = Component.define({
+ * const Toolbar = Html.component({
  *   name: "Toolbar",
  *   model: Schema.Struct({ settings: Schema.Boolean }),
- *   message: ToolbarMessage,
- *   elements: Html
+ *   message: ToolbarMessage
  * }).make({
  *   init: () => ({ settings: true }),
  *   update: {
@@ -205,7 +204,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -1245,12 +1244,13 @@ export const DialogTrigger = <Msg, R = never>(
  * @category components
  * @since 0.1.0
  */
-export const Dialog = Component.define({
+export const Dialog = Html.component({
   name: "Dialog",
   props: DialogProps,
   model: DialogModel,
   message: DialogMessage,
   events: DialogEvents,
+
   shares: {
     value: (_, props) => ({ open: props.open }),
     collects: {
@@ -1261,6 +1261,7 @@ export const Dialog = Component.define({
         })
     }
   },
+
   shared: {
     parent: {
       owner: "self",
@@ -1271,8 +1272,8 @@ export const Dialog = Component.define({
       ) => (props.open && props.nested !== false ? 1 + model.nestedOpen : 0)
     }
   },
-  restore: false,
-  elements: Html
+
+  restore: false
 }).make({
   init: () => ({
     mounted: false,

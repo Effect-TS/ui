@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Menu, Select, ToggleGroup, Toolbar } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -22,9 +22,10 @@ const Config = Schema.Struct({
   orientation: Schema.Literals(["horizontal", "vertical"])
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Config,
+
   model: Schema.Struct({
     clicks: Schema.Number,
     align: Schema.Array(Schema.String),
@@ -32,8 +33,8 @@ const Page = Component.define({
     select: Schema.Boolean,
     zoom: Schema.String
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: () => ({
     clicks: 0,

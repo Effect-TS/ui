@@ -154,18 +154,17 @@
  * **Example** (A popover whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Popover } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const InboxMessage = UiSchema.TaggedEnum({ RequestedOpenNotifications: {}, RequestedCloseNotifications: {} })
  *
- * const Inbox = Component.define({
+ * const Inbox = Html.component({
  *   name: "Inbox",
  *   model: Schema.Struct({ notifications: Schema.Boolean }),
- *   message: InboxMessage,
- *   elements: Html
+ *   message: InboxMessage
  * }).make({
  *   init: () => ({ notifications: true }),
  *   update: {
@@ -205,7 +204,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Renderer from "@effect/ui/Renderer"
@@ -872,14 +871,13 @@ export const PopoverTrigger = <Msg, R = never>(
  * @category components
  * @since 0.1.0
  */
-export const Popover = Component.define({
+export const Popover = Html.component({
   name: "Popover",
   props: PopoverProps,
   model: PopoverModel,
   message: PopoverMessage,
   events: PopoverEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     onTrigger: false,

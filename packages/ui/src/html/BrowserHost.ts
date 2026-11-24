@@ -95,15 +95,14 @@
  * ```ts
  * import { BrowserHost, Html } from "@effect/ui/html"
  * import { Layer, Schema } from "effect"
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  *
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  *
- * const Counter = Component.define({
+ * const Counter = Html.component({
  *   name: "Counter",
  *   model: Schema.Number,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => 0,
  *   update: ($) => $.model + 1,
@@ -453,13 +452,11 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * ```ts
  * import { BrowserHost, Html } from "@effect/ui/html"
  * import { Effect, Layer, Schema } from "effect"
- * import { Component } from "@effect/ui"
  *
- * const App = Component.define({
+ * const App = Html.component({
  *   name: "App",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,

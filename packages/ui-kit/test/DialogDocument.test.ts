@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Dialog, DialogTrigger, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -79,9 +79,10 @@ const config = (overrides: Partial<Config>): Config => ({
   ...overrides
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Config,
+
   model: Schema.Struct({
     config: Config,
     a: Schema.Boolean,
@@ -93,8 +94,8 @@ const Page = Component.define({
     removed: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: ($) => ({
     config: $.props,

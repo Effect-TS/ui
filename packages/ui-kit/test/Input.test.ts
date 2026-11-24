@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { Input, type InputElement } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
@@ -10,12 +10,11 @@ const ProfileMessage = UiSchema.TaggedEnum({
 })
 
 // A consumer that keeps the value in its Model.
-const Profile = Component.define({
+const Profile = Html.component({
   name: "Profile",
   props: Schema.Struct({ disabled: Schema.optional(Schema.Boolean) }),
   model: Schema.Struct({ name: Schema.String }),
-  message: ProfileMessage,
-  elements: Html
+  message: ProfileMessage
 }).make({
   init: () => ({ name: "Ada" }),
   update: {

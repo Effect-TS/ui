@@ -122,18 +122,17 @@
  * **Example** (A labelled, described name field)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Input } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const ProfileMessage = UiSchema.TaggedEnum({ UpdatedName: { value: Schema.String } })
  *
- * const Profile = Component.define({
+ * const Profile = Html.component({
  *   name: "Profile",
  *   model: Schema.Struct({ name: Schema.String }),
- *   message: ProfileMessage,
- *   elements: Html
+ *   message: ProfileMessage
  * }).make({
  *   init: () => ({ name: "" }),
  *   update: {
@@ -166,7 +165,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -359,11 +357,12 @@ const blurred = ({ disabled }: Partial<Html.BlurPayload>) =>
  * @category components
  * @since 0.1.0
  */
-export const Field = Component.define({
+export const Field = Html.component({
   name: "Field",
   props: FieldProps,
   model: FieldModel,
   message: FieldMessage,
+
   shared: {
     fieldset: {
       owner: Fieldset,
@@ -372,8 +371,8 @@ export const Field = Component.define({
         FieldMessage.ChangedFieldset({ disabled: value.disabled })
     }
   },
-  restore: (model) => UiStruct.evolve(model, { focused: false }),
-  elements: Html
+
+  restore: (model) => UiStruct.evolve(model, { focused: false })
 }).make({
   init: () => ({ focused: false, touched: false }),
   update: {

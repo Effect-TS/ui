@@ -30,7 +30,7 @@
  * ```ts import.meta.vitest
  * import { BrowserHost, BrowserRouter, Html } from "@effect/ui/html"
  * import { Effect, Layer, Schema } from "effect"
- * import { Component, Route, Router, UiSchema } from "@effect/ui"
+ * import { Route, Router, UiSchema } from "@effect/ui";
  * import { TestHost } from "@effect/ui/testing"
  *
  * const AppRoute = Route.union({
@@ -42,12 +42,11 @@
  *
  * const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute } })
  *
- * const App = Component.define({
+ * const App = Html.component({
  *   name: "App",
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: ($) => $.props.route,
  *   update: (_, message) => message.route,

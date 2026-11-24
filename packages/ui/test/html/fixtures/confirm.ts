@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -14,17 +14,18 @@ export const ConfirmMessage = UiSchema.TaggedEnum({
 })
 
 /** A confirm dialog: Escape is accepted only with `acceptEscape`, and its form's choice closes it. */
-export const Confirm = Component.define({
+export const Confirm = Html.component({
   name: "Confirm",
   props: Schema.Struct({ state: State, acceptEscape: Schema.Boolean }),
+
   model: Schema.Struct({
     state: State,
     acceptEscape: Schema.Boolean,
     shown: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: ConfirmMessage,
-  elements: Html
+
+  message: ConfirmMessage
 }).make({
   init: ($) => ({
     state: $.props.state,
@@ -90,11 +91,10 @@ export const Confirm = Component.define({
 })
 
 /** Two modals, one nested in the other, both open from the start. */
-export const Nested = Component.define({
+export const Nested = Html.component({
   name: "Nested",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

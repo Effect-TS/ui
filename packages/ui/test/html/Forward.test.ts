@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Mount, UiSchema, View } from "@effect/ui"
+import { Mount, UiSchema, View } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -45,12 +45,11 @@ const framed = <Msg, R>(
   )
 
 // A headless part that adds a child of its own, and a second one to stack on it.
-const Checkbox = Component.define({
+const Checkbox = Html.component({
   name: "Checkbox",
   props: Schema.Struct({ name: Schema.String }),
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -61,11 +60,10 @@ const Checkbox = Component.define({
     )
   })
 })
-const Described = Component.define({
+const Described = Html.component({
   name: "Described",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -87,11 +85,10 @@ const render = Effect.fnUntraced(function*(
     h: View.Helper<Message, {}> & View.Tags<Html.Elements, Message>
   ) => View.Content<Message, never>
 ) {
-  const App = Component.define({
+  const App = Html.component({
     name: `App${count++}`,
     model: Schema.Null,
-    message: Message,
-    elements: Html
+    message: Message
   }).make({
     init: () => null,
     update: ($) => $.model,
@@ -295,14 +292,15 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
     { args: {} },
     (element: HTMLElement) => Effect.succeed(element.localName)
   )
-  const Rows = Component.define({
+  const Rows = Html.component({
     name: "Rows",
+
     model: Schema.Struct({
       ids: Schema.Array(Schema.String),
       log: Schema.Array(Schema.String)
     }),
-    message: Message,
-    elements: Html
+
+    message: Message
   }).make({
     init: () => ({ ids: ["a", "b", "c"], log: [] as ReadonlyArray<string> }),
     update: ($, message) =>

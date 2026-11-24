@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html, HtmlCommand } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -62,9 +62,10 @@ const activeIn = (
     ? active
     : null
 
-const MenuDef = Component.define({
+const MenuDef = Html.component({
   name: "Menu",
   props: Schema.Struct({ items: Schema.Array(Item) }),
+
   model: Schema.Struct({
     open: Schema.Boolean,
     query: Schema.String,
@@ -72,9 +73,9 @@ const MenuDef = Component.define({
     typed: Schema.String,
     focused: Schema.Array(Schema.String)
   }),
+
   message: MenuMessage,
-  events: MenuEvents,
-  elements: Html
+  events: MenuEvents
 })
 
 /**
@@ -225,13 +226,12 @@ export const DialogMessage = UiSchema.TaggedEnum({ Open: {}, Close: {} })
 export const DialogEvents = UiSchema.TaggedEnum({ Closed: {} })
 
 /** A modal dialog with no markup of its own. Escape and its close part both close it. */
-export const Dialog = Component.define({
+export const Dialog = Html.component({
   name: "Dialog",
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: DialogMessage,
-  events: DialogEvents,
-  elements: Html
+  events: DialogEvents
 }).make({
   init: () => ({ open: false }),
   update: ($, message) =>

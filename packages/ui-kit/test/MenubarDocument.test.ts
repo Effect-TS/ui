@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Menu, Menubar, type MenuItem } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -61,17 +61,18 @@ const Message = UiSchema.TaggedEnum({
   ChangedModal: { modal: Schema.Boolean }
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Config,
+
   model: Schema.Struct({
     open: Schema.Array(Schema.String),
     modal: Schema.Boolean,
     share: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: ($) => ({ open: $.props.initial, modal: true, share: false, log: [] }),
   update: {

@@ -27,15 +27,16 @@ const macrotask = Effect.promise(() =>
 
 const Bumped = UiSchema.TaggedEnum({ Bumped: {} })
 
-const Upload = Component.define({
+const Upload = Html.component({
   name: "Upload",
+
   model: Schema.Struct({
     file: Schema.Option(Schema.File),
     label: Label,
     count: Schema.Number
   }),
-  message: Bumped,
-  elements: Html
+
+  message: Bumped
 }).make({
   init: () => ({
     file: Option.some(
@@ -109,12 +110,11 @@ describe("state codecs", () => {
       Go: {},
       Went: {}
     })
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       props: Schema.Struct({ route: Routes }),
       model: Routes,
-      message: Message,
-      elements: Html
+      message: Message
     }).make({
       init: ($) => $.props.route,
       update: ($, message) =>

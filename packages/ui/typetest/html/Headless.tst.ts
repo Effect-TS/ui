@@ -41,11 +41,10 @@ const MarkSeen = Mount.make(
   { args: {} },
   () => Tracker.use((tracker) => tracker.seen)
 )
-const Timed = Component.define({
+const Timed = Html.component({
   name: "Timed",
   model: Schema.Number,
-  message: Schema.Number,
-  elements: Html
+  message: Schema.Number
 }).make({
   init: () => 0,
   update: (_, now) => now,
@@ -56,11 +55,10 @@ const Timed = Component.define({
 })
 
 // A part that takes either of two headings.
-const Heading = Component.define({
+const Heading = Html.component({
   name: "Heading",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -71,11 +69,10 @@ const Heading = Component.define({
 
 describe("headless components", () => {
   it("the consumer calls parts with no annotations", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -121,11 +118,10 @@ describe("headless components", () => {
   })
 
   it("a part returns the chain type, so the callable shorthand is gone", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -175,11 +171,10 @@ describe("headless components", () => {
       new Html.Element<never>("i").onMount(
         MarkSeen().pipe(Mount.map(() => Component.noop))
       )
-    const Marked = Component.define({
+    const Marked = Html.component({
       name: "Marked",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     })
       .make({
         init: () => null,
@@ -198,11 +193,10 @@ describe("headless components", () => {
     expect<Component.Headless.Requirements<typeof Marked>>().type.toBe<
       Tracker
     >()
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make(
       {
         init: () => null,
@@ -222,11 +216,10 @@ describe("headless components", () => {
   })
 
   it("wrapped parts keep their requirements and the wrapper's call signature", () => {
-    const Wrapped = Component.define({
+    const Wrapped = Html.component({
       name: "Wrapped",
       model: Schema.Null,
-      message: Schema.Number,
-      elements: Html
+      message: Schema.Number
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -255,11 +248,10 @@ describe("headless components", () => {
     expect<Component.Headless.Requirements<typeof Wrapped>>().type.toBe<
       Clock | Tracker
     >()
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make(
       {
         init: () => null,
@@ -304,11 +296,10 @@ describe("headless components", () => {
   })
 
   it("a part for one heading rejects another, and a part may list several tags", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -344,11 +335,10 @@ describe("headless components", () => {
   })
 
   it("view is required for a headless child, and a normal child takes none", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

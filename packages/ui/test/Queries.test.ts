@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import {
   Command,
-  Component,
   Head,
   MessageLog,
   Query,
@@ -53,12 +52,12 @@ const makeApp = () => {
 
   const NoteMessage = UiSchema.TaggedEnum({ Click: {}, Touch: {}, Touched: {} })
   const touched = NoteMessage.Touched()
-  const Note = Component.define({
+  const Note = Html.component({
     name: "Note",
     props: Schema.Struct({ id: Schema.String }),
     model: Schema.Struct({ clicks: Schema.Number, last: Schema.String }),
     message: NoteMessage,
-    elements: Html,
+
     queries: {
       // An empty id disables the query.
       note: {
@@ -107,12 +106,11 @@ const makeApp = () => {
     Note: Route.make("/notes/:id", { params: { id: Schema.String } })
   })
   const AppMessage = UiSchema.TaggedEnum({ RouteChanged: { route: AppRoute } })
-  const App = Component.define({
+  const App = Html.component({
     name: "App",
     props: Schema.Struct({ route: AppRoute }),
     model: AppRoute,
-    message: AppMessage,
-    elements: Html
+    message: AppMessage
   }).make({
     init: ($) => $.props.route,
     update: (_, message) => message.route,
@@ -133,11 +131,10 @@ const makeApp = () => {
 
   // Passes its id to one Note under a fixed key, so a new id is new props, not a re-key.
   const ShellMessage = UiSchema.TaggedEnum({ SetId: { id: Schema.String } })
-  const Shell = Component.define({
+  const Shell = Html.component({
     name: "Shell",
     model: Schema.String,
-    message: ShellMessage,
-    elements: Html
+    message: ShellMessage
   }).make({
     init: () => "1",
     update: (_, message) => message.id,

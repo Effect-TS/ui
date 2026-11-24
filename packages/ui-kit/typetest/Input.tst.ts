@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Input, type InputElement } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -14,11 +14,10 @@ const Other = UiSchema.TaggedEnum({ UpdatedOther: { value: Schema.String } })
 
 describe("Input", () => {
   it("returns an input of the caller's message type, keeps the element's requirements, and rejects another tag or message", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.String,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => "",
       update: ($) => $.model,

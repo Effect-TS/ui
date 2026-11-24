@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import {
   HtmlScene,
@@ -18,15 +18,16 @@ const Message = UiSchema.TaggedEnum({
 
 // Logs every key but Escape, each with the prefix the Model holds, and `!`
 // when something cancelled it first.
-const Keys = Component.define({
+const Keys = Html.component({
   name: "Keys",
+
   model: Schema.Struct({
     listening: Schema.Boolean,
     prefix: Schema.String,
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: () => ({ listening: true, prefix: "a", log: [] }),
   update: {
@@ -65,11 +66,10 @@ const PhaseMessage = UiSchema.TaggedEnum({ Heard: { what: Schema.String } })
 
 // A press in each phase, and the window's focus. The capture listener
 // cancels every press, and stops listening after the first.
-const Phases = Component.define({
+const Phases = Html.component({
   name: "Phases",
   model: Schema.Array(Schema.String),
-  message: PhaseMessage,
-  elements: Html
+  message: PhaseMessage
 }).make({
   init: (): ReadonlyArray<string> => [],
   update: ($, { what }) => [...$.model, what],
@@ -155,11 +155,10 @@ describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
 
   it.effect("a handler that throws fails its instance", () =>
     Effect.gen(function*() {
-      const Throws = Component.define({
+      const Throws = Html.component({
         name: "Throws",
         model: Schema.Null,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -186,12 +185,11 @@ const ParentMessage = UiSchema.TaggedEnum({
 
 // A child listens for keys with the `preventDefault` its parent picks, or not
 // at all for `null`. Its handler emits a message for every key but Escape.
-const Listener = Component.define({
+const Listener = Html.component({
   name: "Listener",
   props: Schema.Struct({ preventDefault: PreventDefault }),
   model: Schema.Null,
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -207,11 +205,10 @@ const Listener = Component.define({
   ]
 })
 
-const Parent = Component.define({
+const Parent = Html.component({
   name: "Parent",
   model: Schema.NullOr(PreventDefault),
-  message: ParentMessage,
-  elements: Html
+  message: ParentMessage
 }).make({
   init: () => "always" as const,
   update: { Set: (_, { listen }) => listen },
@@ -321,11 +318,10 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
 
   it.effect("delivers CustomEvent detail on BrowserHost, TestGlobalEvents and HtmlScene", () =>
     Effect.gen(function*() {
-      const Custom = Component.define({
+      const Custom = Html.component({
         name: "Custom",
         model: Schema.Array(Schema.String),
-        message: PhaseMessage,
-        elements: Html
+        message: PhaseMessage
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, { what }) => [...$.model, what],
@@ -421,11 +417,10 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
 
   it.effect("default editable and repeat to false on document keys and accept overrides", () =>
     Effect.gen(function*() {
-      const Shortcut = Component.define({
+      const Shortcut = Html.component({
         name: "Shortcut",
         model: Schema.Array(Schema.String),
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, entry) => [...$.model, entry],
@@ -464,11 +459,10 @@ describe("HtmlSubscription.shortcuts", () => {
     Effect.gen(function*() {
       const mount = (options?: HtmlSubscription.GlobalEventOptions) =>
         HtmlScene.make(
-          Component.define({
+          Html.component({
             name: "Shortcuts",
             model: Schema.Array(Schema.String),
-            message: Schema.String,
-            elements: Html
+            message: Schema.String
           }).make({
             init: (): ReadonlyArray<string> => [],
             update: ($, entry) => [...$.model, entry],
@@ -507,14 +501,15 @@ const FrameMessage = UiSchema.TaggedEnum({
   Toggled: {}
 })
 
-const Frames = Component.define({
+const Frames = Html.component({
   name: "Frames",
+
   model: Schema.Struct({
     running: Schema.Boolean,
     deltas: Schema.Array(Schema.Number)
   }),
-  message: FrameMessage,
-  elements: Html
+
+  message: FrameMessage
 }).make({
   init: () => ({ running: true, deltas: [] }),
   update: {

@@ -3,7 +3,7 @@
  * with an edit, over an in-memory users API whose calls take time on the
  * clock.
  */
-import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
+import { Command, Query, Route, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -179,12 +179,12 @@ export const UserCardMessage = UiSchema.TaggedEnum({
   Liked: {}
 })
 
-export const UserCard = Component.define({
+export const UserCard = Html.component({
   name: "UserCard",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({}),
   message: UserCardMessage,
-  elements: Html,
+
   queries: {
     user: { query: GetUser, args: ({ props }) => ({ id: props.id }) }
   }
@@ -229,15 +229,17 @@ export const RenameFormMessage = UiSchema.TaggedEnum({
   SaveFailed: { name: Schema.String, reason: Schema.String }
 })
 
-export const RenameForm = Component.define({
+export const RenameForm = Html.component({
   name: "RenameForm",
   props: Schema.Struct({ id: Schema.String }),
+
   model: Schema.Struct({
     draft: Schema.Option(Schema.String),
     error: Schema.Option(Schema.String)
   }),
+
   message: RenameFormMessage,
-  elements: Html,
+
   queries: {
     user: { query: GetUser, args: ({ props }) => ({ id: props.id }) }
   }
@@ -305,12 +307,11 @@ export const RenameForm = Component.define({
 
 export const DetailPageMessage = UiSchema.TaggedEnum({ ToggleRename: {} })
 
-export const DetailPage = Component.define({
+export const DetailPage = Html.component({
   name: "DetailPage",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ renaming: Schema.Boolean }),
-  message: DetailPageMessage,
-  elements: Html
+  message: DetailPageMessage
 }).make({
   init: () => ({ renaming: false }),
   update: ($) => ({ renaming: !$.model.renaming }),
@@ -331,11 +332,11 @@ export const ListPageMessage = UiSchema.TaggedEnum({
   GoTo: { page: Schema.Number }
 })
 
-export const ListPage = Component.define({
+export const ListPage = Html.component({
   name: "ListPage",
   model: Schema.Struct({ page: Schema.Number }),
   message: ListPageMessage,
-  elements: Html,
+
   queries: {
     users: { query: ListUsers, args: ({ model }) => ({ page: model.page }) }
   }
@@ -388,12 +389,11 @@ export const AppMessage = UiSchema.TaggedEnum({
   RouteChanged: { route: AppRoute }
 })
 
-export const App = Component.define({
+export const App = Html.component({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
   model: AppRoute,
-  message: AppMessage,
-  elements: Html
+  message: AppMessage
 }).make({
   init: ($) => $.props.route,
   update: (_, message) => message.route,

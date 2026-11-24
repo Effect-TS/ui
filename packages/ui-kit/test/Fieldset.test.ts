@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { Field, Fieldset, type FieldsetProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
@@ -16,11 +16,10 @@ const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) =>
 
 const Message = UiSchema.TaggedEnum({ ToggledLock: {} })
 
-const Billing = Component.define({
+const Billing = Html.component({
   name: "Billing",
   model: Schema.Struct({ locked: Schema.Boolean }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ locked: false }),
   update: { ToggledLock: ($) => ({ locked: !$.model.locked }) },

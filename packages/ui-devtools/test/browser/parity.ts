@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
@@ -8,14 +8,15 @@ const CounterMessage = UiSchema.TaggedEnum({
   Clicked: {}
 })
 
-const Counter = Component.define({
+const Counter = Html.component({
   name: "Counter",
+
   model: Schema.Struct({
     moves: Schema.Number,
     count: Schema.Number
   }),
-  message: CounterMessage,
-  elements: Html
+
+  message: CounterMessage
 }).make({
   init: () => ({ moves: 0, count: 0 }),
   update: {
@@ -32,11 +33,10 @@ const Counter = Component.define({
 
 const SideMessage = UiSchema.TaggedEnum({ Toggled: {} })
 
-const Side = Component.define({
+const Side = Html.component({
   name: "Side",
   model: Schema.Struct({ on: Schema.Boolean }),
-  message: SideMessage,
-  elements: Html
+  message: SideMessage
 }).make({
   init: () => ({ on: false }),
   update: { Toggled: ($) => $.evolve({ on: !$.model.on }) },
@@ -47,11 +47,10 @@ const Side = Component.define({
     )
 })
 
-const App = Component.define({
+const App = Html.component({
   name: "App",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

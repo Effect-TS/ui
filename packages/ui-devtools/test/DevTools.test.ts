@@ -179,34 +179,31 @@ class Slot
   extends Feature.Service<Slot>()("test/Slot", { props: Schema.Struct({}) })
 {}
 
-const SlotView = Component.define({
+const SlotView = Html.component({
   name: "SlotView",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.strong("ready")
 })
 
-const Shown = Component.define({
+const Shown = Html.component({
   name: "Shown",
   props: Schema.Struct({ n: Schema.Number }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.span.children(String(h.props.n))
 })
 
-const Pair = Component.define({
+const Pair = Html.component({
   name: "Pair",
   model: Schema.Struct({ n: Schema.Number }),
-  message: PairMessage,
-  elements: Html
+  message: PairMessage
 }).make({
   init: () => ({ n: 0 }),
   update: { ClickedAdd: ($) => $.evolve({ n: $.model.n + 1 }) },
@@ -234,11 +231,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
           Schema.encodeKeys({ _tag: "kind" })
         )
       ])
-      const Encoded = Component.define({
+      const Encoded = Html.component({
         name: "Encoded",
         model: Schema.Struct({ x: Schema.Number, c: Schema.Number }),
-        message: EncodedMessage,
-        elements: Html
+        message: EncodedMessage
       }).make({
         init: () => ({ x: 0, c: 0 }),
         update: {
@@ -300,12 +296,11 @@ describe("DevTools overlay", { concurrent: false }, () => {
       localStorage.clear()
 
       const PairMoveMessage = UiSchema.TaggedEnum({ Move: {}, Commit: {} })
-      const Peer = Component.define({
+      const Peer = Html.component({
         name: "Peer",
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.Struct({ v: Schema.Number }),
-        message: PairMoveMessage,
-        elements: Html
+        message: PairMoveMessage
       }).make({
         init: () => ({ v: 0 }),
         update: {
@@ -323,11 +318,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
             )
           )
       })
-      const Two = Component.define({
+      const Two = Html.component({
         name: "Two",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -760,32 +754,29 @@ describe("DevTools overlay", { concurrent: false }, () => {
   it.live("keeps a remounted instance apart from the one it replaced", () =>
     Effect.gen(function*() {
       const LeafMessage = UiSchema.TaggedEnum({ Pinged: {} })
-      const Leaf = Component.define({
+      const Leaf = Html.component({
         name: "Leaf",
         model: Schema.Null,
-        message: LeafMessage,
-        elements: Html
+        message: LeafMessage
       }).make({
         init: () => null,
         update: { Pinged: ($) => $.model },
         view: (h) => h.button.onClick(LeafMessage.Pinged()).children("Ping")
       })
-      const Pane = Component.define({
+      const Pane = Html.component({
         name: "Pane",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => h.div(Leaf(h, { key: "l" }))
       })
       const HostMessage = UiSchema.TaggedEnum({ Toggled: {} })
-      const Host = Component.define({
+      const Host = Html.component({
         name: "Host",
         model: Schema.Boolean,
-        message: HostMessage,
-        elements: Html
+        message: HostMessage
       }).make({
         init: () => true,
         update: { Toggled: ($) => !$.model },
@@ -852,16 +843,17 @@ describe("DevTools overlay", { concurrent: false }, () => {
   it.live("collapses Model branches and counts the changes hidden inside them", () =>
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Typed: {}, Replaced: {} })
-      const Form = Component.define({
+      const Form = Html.component({
         name: "Form",
+
         model: Schema.Struct({
           form: Schema.Struct({
             name: Schema.Struct({ value: Schema.String })
           }),
           lists: Schema.Record(Schema.String, Schema.Array(Schema.Number))
         }),
-        message: Message,
-        elements: Html
+
+        message: Message
       }).make({
         init: () => ({ form: { name: { value: "" } }, lists: { old: [1] } }),
         update: {
@@ -952,22 +944,20 @@ describe("DevTools overlay", { concurrent: false }, () => {
         () => Effect.die("disk full")
       )
       const UploaderMessage = UiSchema.TaggedEnum({ ClickedUpload: {} })
-      const Uploader = Component.define({
+      const Uploader = Html.component({
         name: "Uploader",
         model: Schema.Struct({}),
-        message: UploaderMessage,
-        elements: Html
+        message: UploaderMessage
       }).make({
         init: () => ({}),
         update: { ClickedUpload: ($) => $.run(Upload.make()) },
         view: (h) =>
           h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -1034,11 +1024,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }, () => Effect.never)
       const save = (id: string) =>
         Save.make({ id }).pipe(Command.map(() => Message.Saved()))
-      const Editor = Component.define({
+      const Editor = Html.component({
         name: "Editor",
         model: Schema.Null,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: ($) => $.set(null).run(save("a")).run(save("b")),
         update: {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, View } from "@effect/ui"
+import { type Component, View } from "@effect/ui"
 import {
   Checkbox,
   Field,
@@ -173,12 +173,11 @@ describe("Field", () => {
 
   it.effect("a disabled field submits nothing for its control, and an enabled one submits each value", () =>
     Effect.gen(function*() {
-      const Form = Component.define({
+      const Form = Html.component({
         name: "Form",
         props: Schema.Struct({ disabled: Schema.Boolean }),
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,

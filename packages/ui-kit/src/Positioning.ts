@@ -1719,20 +1719,19 @@ export const trackPosition = (
  * **Example** (A hint that stays next to its button)
  *
  * ```ts import.meta.vitest
- * import { Component, Mount, UiSchema, UiStruct } from "@effect/ui"
+ * import { Mount, UiSchema, UiStruct } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Positioning } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const HintMessage = UiSchema.TaggedEnum({ ChangedPlacement: { placement: Positioning.Placement } })
  *
- * const Hint = Component.define({
+ * const Hint = Html.component({
  *   name: "Hint",
  *   props: Schema.Struct({ open: Schema.Boolean, ...Positioning.PositionerFields }),
  *   model: Schema.Struct({ placement: Schema.NullOr(Positioning.Placement) }),
  *   message: HintMessage,
- *   restore: (model) => UiStruct.evolve(model, { placement: null }),
- *   elements: Html
+ *   restore: (model) => UiStruct.evolve(model, { placement: null })
  * }).make({
  *   init: () => ({ placement: null }),
  *   update: {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema, type View } from "@effect/ui"
+import { UiSchema, type View } from "@effect/ui"
 import { ContextMenu, Menu } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -14,19 +14,21 @@ const PageMessage = UiSchema.TaggedEnum({
   Picked: { menu: Schema.String, value: Schema.String }
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
+
   props: Schema.Struct({
     disabled: Schema.Boolean,
     refuseClose: Schema.Boolean
   }),
+
   model: Schema.Struct({
     outer: Schema.Boolean,
     inner: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: PageMessage,
-  elements: Html
+
+  message: PageMessage
 }).make({
   init: () => ({ outer: false, inner: false, log: [] }),
   update: {
@@ -92,12 +94,11 @@ const HybridMessage = UiSchema.TaggedEnum({
   RequestedClose: {}
 })
 
-const Hybrid = Component.define({
+const Hybrid = Html.component({
   name: "Hybrid",
   props: Schema.Struct({}),
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: HybridMessage,
-  elements: Html
+  message: HybridMessage
 }).make({
   init: () => ({ open: false }),
   update: {

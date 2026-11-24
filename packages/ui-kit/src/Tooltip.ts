@@ -109,18 +109,17 @@
  * **Example** (A toolbar button with a tooltip whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Tooltip } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const ToolbarMessage = UiSchema.TaggedEnum({ RequestedOpenBoldTip: {}, RequestedCloseBoldTip: {} })
  *
- * const Toolbar = Component.define({
+ * const Toolbar = Html.component({
  *   name: "Toolbar",
  *   model: Schema.Struct({ boldTip: Schema.Boolean }),
- *   message: ToolbarMessage,
- *   elements: Html
+ *   message: ToolbarMessage
  * }).make({
  *   init: () => ({ boldTip: false }),
  *   update: {
@@ -153,7 +152,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import * as Mount from "@effect/ui/Mount"
@@ -518,11 +517,12 @@ const WaitBeforeCooling = Command.make(
  * @category components
  * @since 0.1.0
  */
-export const TooltipProvider = Component.define({
+export const TooltipProvider = Html.component({
   name: "TooltipProvider",
   props: TooltipProviderProps,
   model: TooltipProviderModel,
   message: TooltipProviderMessage,
+
   shares: {
     value: (model) => ({
       open: model.open,
@@ -541,8 +541,8 @@ export const TooltipProvider = Component.define({
         })
     }
   },
-  restore: false,
-  elements: Html
+
+  restore: false
 }).make({
   init: () => ({ open: false, instant: false, turns: [], next: 1 }),
   update: {
@@ -605,12 +605,13 @@ export const TooltipProvider = Component.define({
  * @category components
  * @since 0.1.0
  */
-export const Tooltip = Component.define({
+export const Tooltip = Html.component({
   name: "Tooltip",
   props: TooltipProps,
   model: TooltipModel,
   message: TooltipMessage,
   events: TooltipEvents,
+
   // A TooltipProvider above, if there is one. Each tooltip tells it its turn
   // while it shows, and hears when the shown tooltips change.
   shared: {
@@ -625,8 +626,8 @@ export const Tooltip = Component.define({
         })
     }
   },
-  restore: false,
-  elements: Html
+
+  restore: false
 }).make({
   init: () => ({
     hovered: false,

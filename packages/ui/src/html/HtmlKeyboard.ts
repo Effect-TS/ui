@@ -63,7 +63,7 @@ export interface Shortcut<Msg> {
  * **Example** (Shortcuts on an element)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlKeyboard } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -71,11 +71,10 @@ export interface Shortcut<Msg> {
  *
  * const Message = UiSchema.TaggedEnum({ PressedNext: {}, PressedPrevious: {} })
  *
- * const Rows = Component.define({
+ * const Rows = Html.component({
  *   name: "Rows",
  *   model: Schema.Number,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => 0,
  *   update: { PressedNext: ($) => $.model + 1, PressedPrevious: ($) => $.model - 1 },

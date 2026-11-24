@@ -55,7 +55,7 @@
  * **Example** (Fruit with a parent checkbox)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Checkbox, CheckboxGroup } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -64,11 +64,10 @@
  *
  * const BasketMessage = UiSchema.TaggedEnum({ UpdatedFruits: { value: Schema.Array(Schema.String) } })
  *
- * const Basket = Component.define({
+ * const Basket = Html.component({
  *   name: "Basket",
  *   model: Schema.Struct({ fruits: Schema.Array(Schema.String) }),
- *   message: BasketMessage,
- *   elements: Html
+ *   message: BasketMessage
  * }).make({
  *   init: () => ({ fruits: ["apple"] }),
  *   update: {
@@ -105,7 +104,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
@@ -260,12 +258,13 @@ const cycle = (model: CheckboxGroupModel, props: CheckboxGroupProps) => {
  * @category components
  * @since 0.1.0
  */
-export const CheckboxGroup = Component.define({
+export const CheckboxGroup = Html.component({
   name: "CheckboxGroup",
   props: CheckboxGroupProps,
   model: CheckboxGroupModel,
   message: CheckboxGroupMessage,
   events: CheckboxGroupEvents,
+
   shares: {
     value: (model, props) => ({
       value: props.value,
@@ -284,8 +283,7 @@ export const CheckboxGroup = Component.define({
             .sort((a, b) => compare(a.value, b.value) || compare(a.id, b.id))
         })
     }
-  },
-  elements: Html
+  }
 }).make({
   init: ($) => ({ remembered: $.props.value, items: [] }),
   update: {

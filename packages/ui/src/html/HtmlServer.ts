@@ -22,13 +22,12 @@
  * ```ts
  * import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
  * import { Effect, Schema } from "effect"
- * import { Component, Head } from "@effect/ui"
+ * import { Head } from "@effect/ui";
  *
- * const App = Component.define({
+ * const App = Html.component({
  *   name: "App",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,

@@ -42,11 +42,12 @@ const Plain = Component.define({
 
 const TipMessage = UiSchema.TaggedEnum({ Entered: {}, Completed: {} })
 
-const Tip = Component.define({
+const Tip = Html.component({
   name: "Tip",
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ hovered: Schema.Boolean }),
   message: TipMessage,
+
   shared: {
     provider: {
       owner: Provider,
@@ -60,8 +61,7 @@ const Tip = Component.define({
         return TipMessage.Entered()
       }
     }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({ hovered: false }),
   update: ($) => $.send(Provider, { _tag: "Completed" }),

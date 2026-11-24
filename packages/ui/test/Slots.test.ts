@@ -38,18 +38,16 @@ const failures = (root: Root) =>
   )
 
 const define = <const Name extends string>(name: Name) =>
-  Component.define({
+  Html.component({
     name,
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   })
 const slotted = <const Name extends string>(name: Name) =>
-  Component.define({
+  Html.component({
     name,
     model: Schema.Null,
     message: Schema.Never,
-    elements: Html,
     slots: ["body"]
   })
 const Leaf = define("Leaf").make({
@@ -61,11 +59,10 @@ const Leaf = define("Leaf").make({
 // Places its slot until "toggle" hides it.
 let frameViews = 0
 const Toggle = UiSchema.TaggedEnum({ Toggle: {} })
-const Frame = Component.define({
+const Frame = Html.component({
   name: "Frame",
   model: Schema.Boolean,
   message: Toggle,
-  elements: Html,
   slots: ["body"]
 }).make({
   init: () => true,
@@ -80,12 +77,11 @@ const Frame = Component.define({
 })
 
 const EditorMsg = UiSchema.TaggedEnum({ Typed: {}, Break: {} })
-const Editor = Component.define({
+const Editor = Html.component({
   name: "Editor",
   model: Schema.Number,
   message: EditorMsg,
-  events: Schema.Number,
-  elements: Html
+  events: Schema.Number
 }).make({
   init: () => 0,
   update: ($, msg) => {
@@ -103,11 +99,10 @@ const PageMsg = UiSchema.TaggedEnum({
   Changed: { count: Schema.Number },
   Failed: {}
 })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.String,
-  message: PageMsg,
-  elements: Html
+  message: PageMsg
 })
   .make({
     init: () => "",
@@ -212,11 +207,10 @@ describe("slots", () => {
     provideHost(Effect.gen(function*() {
       const LateMsg = UiSchema.TaggedEnum({ Fill: {}, Hit: {} })
       const Late = Component.provide(
-        Component.define({
+        Html.component({
           name: "Late",
           model: Schema.Boolean,
-          message: LateMsg,
-          elements: Html
+          message: LateMsg
         }).make(
           {
             init: () => false,
@@ -268,11 +262,10 @@ describe("slots", () => {
             return Option.isSome(yield* refs.lookup(Field))
           })
       )
-      const Form = Component.define({
+      const Form = Html.component({
         name: "Form",
         model: Schema.optional(Schema.Boolean),
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: ($) => $.set(undefined).run(Look.make()),
         update: (_, found) => found,
@@ -290,11 +283,10 @@ describe("slots", () => {
         update: ($) => $.model,
         view: (h) => Frame(h, { key: "f", slots: { body: h.slots.body } })
       })
-      const Top = Component.define({
+      const Top = Html.component({
         name: "Top",
         model: Schema.Null,
-        message: PageMsg,
-        elements: Html
+        message: PageMsg
       })
         .make({
           init: () => null,

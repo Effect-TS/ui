@@ -66,7 +66,7 @@
  * **Example** (Text alignment, one choice at a time)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { ToggleGroup } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -75,11 +75,10 @@
  *
  * const alignments = ["left", "center", "right"]
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Struct({ align: Schema.Array(Schema.String) }),
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => ({ align: ["left"] }),
  *   update: { ToggledAlign: (_, { value }) => ({ align: value }) },
@@ -108,7 +107,6 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -327,18 +325,18 @@ const tabStopOf = (
  * @category components
  * @since 0.1.0
  */
-export const ToggleGroup = Component.define({
+export const ToggleGroup = Html.component({
   name: "ToggleGroup",
   props: ToggleGroupProps,
   model: ToggleGroupModel,
   message: ToggleGroupMessage,
   events: ToggleGroupEvents,
   restore: false,
+
   shared: {
     provider: { owner: DirectionProvider, optional: true },
     toolbar: { owner: Toolbar, optional: true }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({ active: null }),
   update: {

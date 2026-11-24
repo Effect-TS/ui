@@ -44,18 +44,17 @@
  * **Example** (A save button that stays focusable while it saves)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Button } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const EditorMessage = UiSchema.TaggedEnum({ PressedSave: {} })
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Struct({ saving: Schema.Boolean }),
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => ({ saving: false }),
  *   update: {

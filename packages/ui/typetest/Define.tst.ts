@@ -1,5 +1,4 @@
-import type { View } from "@effect/ui"
-import { Command, Component, Query, UiSchema } from "@effect/ui"
+import { Command, type Component, Query, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
@@ -41,13 +40,12 @@ class Audit extends Command.Service<Audit>()(
 const Model = Schema.Struct({ body: Schema.String, edits: Schema.Number })
 type Model = typeof Model.Type
 
-const NoteDef = Component.define({
+const NoteDef = Html.component({
   name: "Note",
   props: Schema.Struct({ id: Schema.String }),
   model: Model,
   message: Message,
   events: Events,
-  elements: Html,
   queries: { user: { query: GetUser, args: ({ props }) => ({ id: props.id }) } }
 })
 

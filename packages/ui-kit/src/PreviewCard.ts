@@ -144,18 +144,17 @@
  * **Example** (A link with a preview whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { PreviewCard } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const ArticleMessage = UiSchema.TaggedEnum({ RequestedOpenPreview: {}, RequestedClosePreview: {} })
  *
- * const Article = Component.define({
+ * const Article = Html.component({
  *   name: "Article",
  *   model: Schema.Struct({ preview: Schema.Boolean }),
- *   message: ArticleMessage,
- *   elements: Html
+ *   message: ArticleMessage
  * }).make({
  *   init: () => ({ preview: true }),
  *   update: {
@@ -196,7 +195,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -1091,14 +1090,13 @@ export const PreviewCardTrigger = <Msg, R = never>(
  * @category components
  * @since 0.1.0
  */
-export const PreviewCard = Component.define({
+export const PreviewCard = Html.component({
   name: "PreviewCard",
   props: PreviewCardProps,
   model: PreviewCardModel,
   message: PreviewCardMessage,
   events: PreviewCardEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     onTrigger: false,

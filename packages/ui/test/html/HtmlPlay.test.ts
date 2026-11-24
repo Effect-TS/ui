@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component } from "@effect/ui"
+import type { Component } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -8,14 +8,15 @@ import { Cause, Effect, Exit, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
 import { Settings } from "./fixtures/settings.ts"
 
-const Checkout = Component.define({
+const Checkout = Html.component({
   name: "Checkout",
+
   model: Schema.Struct({
     log: Schema.Array(Schema.String),
     zip: Schema.String
   }),
-  message: Schema.String,
-  elements: Html
+
+  message: Schema.String
 }).make({
   init: () => ({ log: [], zip: "old" }),
   update: ($, message) => ({
@@ -160,11 +161,10 @@ describe("HtmlPlay", () => {
 
   it.effect("a part's message counts as handled, and a key no part takes is ignored", () =>
     Effect.gen(function*() {
-      const Toolbar = Component.define({
+      const Toolbar = Html.component({
         name: "Toolbar",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       })
         .make({
           init: () => null,
@@ -193,11 +193,10 @@ describe("HtmlPlay", () => {
 
   it.effect("keydown resolves inherited editability and accepts full key details", () =>
     Effect.gen(function*() {
-      const Keys = Component.define({
+      const Keys = Html.component({
         name: "Keys",
         model: Schema.Array(Schema.String),
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, entry) => [...$.model, entry],

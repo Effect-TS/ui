@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, MessageLog, UiSchema } from "@effect/ui"
+import { MessageLog, UiSchema } from "@effect/ui"
 import { DirectionProvider, Field, OTPField } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
@@ -13,19 +13,21 @@ const Message = UiSchema.TaggedEnum({
   Logged: { entry: Schema.String }
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
+
   props: Schema.Struct({
     autoSubmit: Schema.Boolean,
     upper: Schema.Boolean,
     locked: Schema.Boolean
   }),
+
   model: Schema.Struct({
     code: Schema.Redacted(Schema.String),
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
-  elements: Html
+
+  message: Message
 }).make({
   init: () => ({ code: Redacted.make(""), log: [] }),
   update: {
@@ -137,11 +139,10 @@ const mountPage = Effect.fnUntraced(function*(
 
 const FrameMessage = UiSchema.TaggedEnum({ Pressed: {} })
 
-const Frame = Component.define({
+const Frame = Html.component({
   name: "Frame",
   model: Schema.Number,
-  message: FrameMessage,
-  elements: Html
+  message: FrameMessage
 }).make({
   init: () => 0,
   update: { Pressed: ($) => $.model + 1 },
@@ -152,11 +153,10 @@ const Frame = Component.define({
   })
 })
 
-const Labelled = Component.define({
+const Labelled = Html.component({
   name: "Labelled",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -394,14 +394,15 @@ describe("OTPField in a document", { concurrent: false }, () => {
         Completed: { value: Schema.Redacted(Schema.String) },
         Rejected: { value: Schema.Redacted(Schema.String) }
       })
-      const RedactedPage = Component.define({
+      const RedactedPage = Html.component({
         name: "RedactedPage",
+
         model: Schema.Struct({
           code: Schema.Redacted(Schema.String),
           done: Schema.Boolean
         }),
-        message: Msg,
-        elements: Html
+
+        message: Msg
       }).make({
         init: () => ({ code: Redacted.make(""), done: false }),
         update: {

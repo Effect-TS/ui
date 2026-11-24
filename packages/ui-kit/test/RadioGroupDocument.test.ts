@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { RadioGroup } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -19,19 +19,21 @@ const RadioGroupHostMessage = UiSchema.TaggedEnum({
   SetShowIndicators: { show: Schema.Boolean }
 })
 
-const Host = Component.define({
+const Host = Html.component({
   name: "RadioGroupHost",
+
   props: Schema.Struct({
     showIndicators: Schema.optional(Schema.Boolean),
     keepMounted: Schema.optional(Schema.Boolean)
   }),
+
   model: Schema.Struct({
     value: Schema.NullOr(Schema.String),
     readOnly: Schema.Boolean,
     showIndicators: Schema.Boolean
   }),
-  message: RadioGroupHostMessage,
-  elements: Html
+
+  message: RadioGroupHostMessage
 }).make({
   init: ({ props }) => ({
     value: "ssd",

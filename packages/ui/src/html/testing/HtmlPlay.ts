@@ -23,7 +23,7 @@
  * **Example** (Signing in)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui";
  * import { Html } from "@effect/ui/html"
  * import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
  * import { Locator, TestHost } from "@effect/ui/testing"
@@ -34,11 +34,10 @@
  *   SubmittedForm: {}
  * })
  *
- * const SignIn = Component.define({
+ * const SignIn = Html.component({
  *   name: "SignIn",
  *   model: Schema.Struct({ email: Schema.String, signedIn: Schema.Boolean }),
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => ({ email: "", signedIn: false }),
  *   update: ($, message) =>

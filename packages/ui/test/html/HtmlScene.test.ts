@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Mount, UiSchema } from "@effect/ui"
+import { Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
@@ -7,11 +7,10 @@ import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
 import { Settings } from "./fixtures/settings.ts"
 
-const Board = Component.define({
+const Board = Html.component({
   name: "Board",
   model: Schema.Array(Schema.String),
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: (): ReadonlyArray<string> => [],
   update: ($, message) => [...$.model, message],
@@ -105,14 +104,15 @@ describe("HtmlScene", () => {
         { args: { points: Schema.Array(Schema.Number) } },
         (canvas: HTMLCanvasElement) => Effect.sync(() => canvas.width)
       )
-      const Chart = Component.define({
+      const Chart = Html.component({
         name: "Chart",
+
         model: Schema.Struct({
           points: Schema.Array(Schema.Number),
           width: Schema.Number
         }),
-        message: Message,
-        elements: Html
+
+        message: Message
       }).make({
         init: () => ({ points: [1, 2], width: 0 }),
         update: ($, message) =>
@@ -158,11 +158,10 @@ describe("HtmlScene", () => {
     }))
 
   it("type, change, compositionEnd and keydown default the edit, the composition and the selection, and take them", () => {
-    const Field = Component.define({
+    const Field = Html.component({
       name: "Field",
       model: Schema.Array(Schema.String),
-      message: Schema.String,
-      elements: Html
+      message: Schema.String
     }).make({
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
@@ -229,11 +228,10 @@ describe("HtmlScene", () => {
       const Message = UiSchema.TaggedEnum({
         Changed: { names: Schema.Array(Schema.String) }
       })
-      const Upload = Component.define({
+      const Upload = Html.component({
         name: "Upload",
         model: Schema.Array(Schema.String),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, { names }) => [...$.model, names.join(",")],
@@ -371,14 +369,15 @@ describe("HtmlScene", () => {
     }))
 
   describe("a click's defaults", () => {
-    const Checkout = Component.define({
+    const Checkout = Html.component({
       name: "Checkout",
+
       model: Schema.Struct({
         log: Schema.Array(Schema.String),
         zip: Schema.String
       }),
-      message: Schema.String,
-      elements: Html
+
+      message: Schema.String
     }).make({
       init: () => ({ log: [], zip: "old" }),
       update: ($, message) => ({

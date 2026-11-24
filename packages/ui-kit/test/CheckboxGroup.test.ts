@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Checkbox, CheckboxGroup, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -17,12 +17,11 @@ const BasketMessage = UiSchema.TaggedEnum({
 
 const SenderMessage = UiSchema.TaggedEnum({ Clicked: {} })
 
-const Sender = Component.define({
+const Sender = Html.component({
   name: "Sender",
   model: Schema.Struct({}),
   message: SenderMessage,
-  shared: { group: { owner: CheckboxGroup } },
-  elements: Html
+  shared: { group: { owner: CheckboxGroup } }
 }).make({
   init: () => ({}),
   update: {
@@ -35,16 +34,17 @@ const Sender = Component.define({
     )
 })
 
-const Basket = Component.define({
+const Basket = Html.component({
   name: "Basket",
+
   model: Schema.Struct({
     fruits: Schema.Array(Schema.String),
     pearToggled: Schema.NullOr(Schema.Boolean),
     locked: Schema.Boolean,
     frozen: Schema.Boolean
   }),
-  message: BasketMessage,
-  elements: Html
+
+  message: BasketMessage
 }).make({
   init: () => ({
     fruits: ["apple", "fig"],

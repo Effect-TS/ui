@@ -94,12 +94,11 @@ const hydrateRows = Effect.fnUntraced(
         })
     )
     const RowMessage = UiSchema.TaggedEnum({ Clicked: {}, Seen: {} })
-    const Row = Component.define({
+    const Row = Html.component({
       name: "Row",
       props: Schema.Struct({ label: Schema.String }),
       model: Schema.Number,
-      message: RowMessage,
-      elements: Html
+      message: RowMessage
     }).make({
       init: () => 0,
       update: ($, message) =>
@@ -119,11 +118,10 @@ const hydrateRows = Effect.fnUntraced(
           h.em(`row ${h.props.label}`)
         )
     })
-    const Rows = Component.define({
+    const Rows = Html.component({
       name: "Rows",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -192,11 +190,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         "x/",
         "a\"><script>alert(2)</script"
       ]
-      const Page = Component.define({
+      const Page = Html.component({
         name: "SafeAttributes",
         model: Schema.Boolean,
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: () => false,
         update: (_, message) => message,
@@ -270,25 +267,23 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: ($) => $.model + 1,
         parts: (_, count) => ({ count })
       })
-      const Item = Component.define({
+      const Item = Html.component({
         name: "Item",
         props: Schema.Struct({ open: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
-        shared: { group: { owner: Group, report: (_, props) => props.open } },
-        elements: Html
+        shared: { group: { owner: Group, report: (_, props) => props.open } }
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => h.span.children("item")
       })
       const Shown = item === undefined ? Item : item(Item)
-      return Component.define({
+      return Html.component({
         name: "Page",
         props: Schema.Struct({ item: Schema.NullOr(Schema.Boolean) }),
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -421,11 +416,10 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("folds HTML attribute names with last-write wins, but preserves SVG casing", () =>
     Effect.gen(function*() {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "AttributeCase",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -469,11 +463,10 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
     Effect.gen(function*() {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Text",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -497,11 +490,10 @@ describe("HtmlServer", { concurrent: false }, () => {
     Effect.gen(function*() {
       // `String` of it throws.
       const unreadable: unknown = Object.create(null)
-      const Page = Component.define({
+      const Page = Html.component({
         name: "LeftOut",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -532,11 +524,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         ...(View.toNode(node) as View.Element<never>),
         props: Object.freeze(Object.defineProperty({}, "value", { get: next }))
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "ValueReads",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -561,11 +552,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       const value = Object.freeze({
         toString: () => closed ? "closed" : "open"
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "AfterRelease",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -597,11 +587,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         { loser: "1", winner: undefined, html: "1", svg: "1" }, // Remove the winner, revealing the losing alias.
         { loser: undefined, winner: undefined, html: null, svg: null } // Remove the final alias.
       ] as const
-      const Page = Component.define({
+      const Page = Html.component({
         name: "AttributeUpdates",
         model: Schema.Number,
-        message: Schema.Number,
-        elements: Html
+        message: Schema.Number
       }).make({
         init: () => 0,
         update: (_, message) => message,
@@ -928,12 +917,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         () => Effect.succeed(ChildMessage.Tracked())
       )
       let builds = 0
-      const Child = Component.define({
+      const Child = Html.component({
         name: "Child",
         model: Schema.Struct({ status: Schema.String }),
         message: ChildMessage,
         events: Schema.Literal("loaded"),
-        elements: Html,
+
         queries: {
           text: {
             query: GetText,
@@ -961,11 +950,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         ],
         view: (h, model) => h.span(model.status)
       }).pipe(Component.provide(GetText.layer))
-      const Broken = Component.define({
+      const Broken = Html.component({
         name: "Broken",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -976,11 +964,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       class Connection
         extends Context.Service<Connection, string>()("test/Connection")
       {}
-      const Live = Component.define({
+      const Live = Html.component({
         name: "Live",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -991,11 +978,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         })
       )
       const ParentMessage = UiSchema.TaggedEnum({ Ready: {} })
-      const Parent = Component.define({
+      const Parent = Html.component({
         name: "Parent",
         model: Schema.Boolean,
-        message: ParentMessage,
-        elements: Html
+        message: ParentMessage
       }).make({
         init: () => false,
         update: () => true,
@@ -1067,11 +1053,10 @@ describe("HtmlServer", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Go: {} })
       const Log = Command.make("Log", { args: {} }, () => Effect.never)
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Number,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: ($) => $.set(0).run(Log.make()),
         update: ($) => $.set($.model + 1).run(Log.make()),
@@ -1079,22 +1064,20 @@ describe("HtmlServer", { concurrent: false }, () => {
           h.p.onMount(mountSending("Go", Message.Go())).children(String(count))
       })
       // An event from a child drives the parent's update twice on the server.
-      const Child = Component.define({
+      const Child = Html.component({
         name: "Child",
         model: Schema.Struct({}),
         message: Schema.Never,
-        events: Schema.Literal("twice"),
-        elements: Html
+        events: Schema.Literal("twice")
       }).make({
         init: ($) => $.set({}).emit("twice").emit("twice"),
         update: ($) => $.model,
         view: (h) => h.span("child")
       })
-      const Parent = Component.define({
+      const Parent = Html.component({
         name: "Parent",
         model: Schema.Number,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => 0,
         update: ($) => $.set($.model + 1).run(Log.make()),
@@ -1141,14 +1124,15 @@ describe("HtmlServer", { concurrent: false }, () => {
     Effect.gen(function*() {
       class Store extends Context.Service<Store, string>()("test/Store") {}
       const Message = UiSchema.TaggedEnum({ Mounted: {}, Clicked: {} })
-      const Panel = Component.define({
+      const Panel = Html.component({
         name: "Panel",
+
         model: Schema.Struct({
           mounted: Schema.Boolean,
           clicks: Schema.Number
         }),
-        message: Message,
-        elements: Html
+
+        message: Message
       }).make({
         init: () => ({ mounted: false, clicks: 0 }),
         update: ($, message) =>
@@ -1217,16 +1201,17 @@ describe("HtmlServer", { concurrent: false }, () => {
       Change: { field: Schema.String, value: Schema.String }
     })
     const makeForm = (seen: Array<string>) =>
-      Component.define({
+      Html.component({
         name: "Form",
+
         model: Schema.Struct({
           name: Schema.String,
           other: Schema.String,
           note: Schema.String,
           agree: Schema.Boolean
         }),
-        message: Message,
-        elements: Html
+
+        message: Message
       }).make({
         init: () => ({
           name: "server",
@@ -1345,11 +1330,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).pipe(Effect.scoped))
 
     // The client Model picks what the server's HTML didn't, so the adoption writes reach the edited group.
-    const Choice = Component.define({
+    const Choice = Html.component({
       name: "Choice",
       model: Schema.Struct({ choice: Schema.String, pick: Schema.String }),
-      message: Message,
-      elements: Html
+      message: Message
     })
     const choiceView = (seen: Array<string>) =>
       Choice.make({
@@ -1431,11 +1415,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       // What `init` returns where it runs: the client's is dropped for the Model the server rendered.
       let side = "server"
       const Panel = Component.provide(
-        Component.define({
+        Html.component({
           name: "Panel",
           model: Schema.Struct({ side: Schema.String, store: Schema.String }),
-          message: Schema.String,
-          elements: Html
+          message: Schema.String
         }).make({
           init: ($) => $.set({ side, store: "" }).run(ReadStore.make()),
           update: ($, store) => ({ ...$.model, store }),
@@ -1464,22 +1447,20 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("rebuilds nothing outside the instance whose nodes don't match", () =>
     Effect.gen(function*() {
-      const Item = Component.define({
+      const Item = Html.component({
         name: "Item",
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
         view: (h, label) => h.li(label)
       })
-      const List = Component.define({
+      const List = Html.component({
         name: "List",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -1577,11 +1558,10 @@ describe("HtmlServer", { concurrent: false }, () => {
             return Message.Done()
           }))
         const slotted = (name: string) =>
-          Component.define({
+          Html.component({
             name,
             model: Schema.Null,
             message: Schema.Never,
-            elements: Html,
             slots: ["body"]
           }).make({
             init: () =>
@@ -1600,11 +1580,10 @@ describe("HtmlServer", { concurrent: false }, () => {
             )
           )
           : Ready
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Boolean,
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: () =>
             false,
@@ -1716,22 +1695,20 @@ describe("HtmlServer", { concurrent: false }, () => {
     Effect.gen(function*() {
       // The server renders two keys; the client's view at adoption renders one of them twice.
       let client = false
-      const Item = Component.define({
+      const Item = Html.component({
         name: "Item",
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
         view: (h, label) => h.li(label)
       })
-      const List = Component.define({
+      const List = Html.component({
         name: "List",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -1741,11 +1718,10 @@ describe("HtmlServer", { concurrent: false }, () => {
             Item(h, { key: client ? "a" : "b", props: { label: "B" } })
           )
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -1789,11 +1765,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         props: Schema.Struct({}),
         events: Schema.Never
       }) {}
-      const PanelLive = Component.define({
+      const PanelLive = Html.component({
         name: "PanelLive",
         model: Schema.Struct({}),
         message: Schema.Never,
-        elements: Html,
         queries: { text: { query: GetText, args: () => ({}) } }
       }).make({
         init: () => ({}),
@@ -1805,11 +1780,10 @@ describe("HtmlServer", { concurrent: false }, () => {
               : "loading"
           )
       }).pipe(Component.provide(GetText.layer))
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -1849,22 +1823,20 @@ describe("HtmlServer", { concurrent: false }, () => {
         error: Schema.Never,
         staleTime: "30 seconds"
       }, Effect.succeed(() => Effect.die("boom"))) {}
-      const Doomed = Component.define({
+      const Doomed = Html.component({
         name: "Doomed",
         model: Schema.Struct({}),
         message: Schema.Never,
-        elements: Html,
         queries: { text: { query: Die, args: () => ({}) } }
       }).make({
         init: () => ({}),
         update: ($) => $.model,
         view: (h) => h.p("loading")
       }).pipe(Component.provide(Die.layer))
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -1886,11 +1858,10 @@ describe("HtmlServer", { concurrent: false }, () => {
     Effect.gen(function*() {
       let serving = true
       class Greeting extends Context.Service<Greeting, string>()("Greeting") {}
-      const Inner = Component.define({
+      const Inner = Html.component({
         name: "Inner",
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => "inner",
         update: ($) => $.model,
@@ -1901,11 +1872,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           serving ? Effect.succeed("hello") : Effect.die("offline")
         )
       )))
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -2100,11 +2070,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           Effect.andThen(Effect.sleep("100 millis"))
         )
       )
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2120,21 +2089,19 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("writes only text inside a textarea, and hydration rebuilds just that text", () =>
     hosted(Effect.gen(function*() {
-      const Word = Component.define({
+      const Word = Html.component({
         name: "Word",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
         view: (h) => h.text("hello")
       })
-      const Form = Component.define({
+      const Form = Html.component({
         name: "Form",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2152,11 +2119,10 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("judges adoption when it commits, before onMount updates replace nodes", () =>
     hosted(Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Mounted: {} })
-      const Swap = Component.define({
+      const Swap = Html.component({
         name: "Swap",
         model: Schema.Boolean,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => false,
         update: () => true,
@@ -2173,21 +2139,19 @@ describe("HtmlServer", { concurrent: false }, () => {
     })))
   it.effect("keeps marker paths through the parser's normalisation of CR, NUL and lone surrogates", () =>
     Effect.gen(function*() {
-      const Leaf = Component.define({
+      const Leaf = Html.component({
         name: "Leaf",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
         view: (h) => h.p("leaf")
       })
-      const Root = Component.define({
+      const Root = Html.component({
         name: "Root",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2212,11 +2176,10 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("compares the client's first fold, so a mount update while an instance waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      const Waiting = Component.define({
+      const Waiting = Html.component({
         name: "Waiting",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2227,11 +2190,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         )
       )
       const Message = UiSchema.TaggedEnum({ Mounted: {} })
-      const Titled = Component.define({
+      const Titled = Html.component({
         name: "Titled",
         model: Schema.String,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => "server",
         update: () => "mounted",
@@ -2249,11 +2211,10 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("compares the client's first fold, so a head that mounts while an instance waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      const Waiting = Component.define({
+      const Waiting = Html.component({
         name: "Waiting",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2263,11 +2224,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
         )
       )
-      const Titled = Component.define({
+      const Titled = Html.component({
         name: "Titled",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2276,11 +2236,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const Message = UiSchema.TaggedEnum({ Mounted: {} })
       // Nothing has a head until the mount's message places the child that does.
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Boolean,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => false,
         update: () => true,
@@ -2299,11 +2258,10 @@ describe("HtmlServer", { concurrent: false }, () => {
     hosted(Effect.gen(function*() {
       // Alternates per evaluation, so evaluating it again after adoption would agree with the server.
       let runs = 0
-      const Unstable = Component.define({
+      const Unstable = Html.component({
         name: "Unstable",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2318,12 +2276,11 @@ describe("HtmlServer", { concurrent: false }, () => {
 
       // Siblings whose keys make one path look like the other's descendant: no template applies, and both
       // folds report the siblings' conflict rather than a head mismatch.
-      const Box = Component.define({
+      const Box = Html.component({
         name: "Box",
         props: Schema.Struct({ title: Schema.String }),
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props.title,
         update: ($) => $.model,
@@ -2335,11 +2292,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         ],
         view: (h, title) => h.p(title)
       })
-      const Siblings = Component.define({
+      const Siblings = Html.component({
         name: "Siblings",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2358,11 +2314,10 @@ describe("HtmlServer", { concurrent: false }, () => {
 
       // A template that really applies, and differs on the client, still fails.
       let templates = 0
-      const Outer = Component.define({
+      const Outer = Html.component({
         name: "Outer",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2381,24 +2336,22 @@ describe("HtmlServer", { concurrent: false }, () => {
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
       const titled = (suffix: () => string) => {
-        const Grandchild = Component.define({
+        const Grandchild = Html.component({
           name: "Grandchild",
           model: Schema.Struct({}),
           message: Schema.Never,
-          props: Schema.Struct({ title: Schema.String }),
-          elements: Html
+          props: Schema.Struct({ title: Schema.String })
         }).make({
           init: () => ({}),
           update: ($) => $.model,
           head: ({ props }) => [Head.title(props.title + suffix())],
           view: (h) => h.p("grandchild")
         })
-        const Child = Component.define({
+        const Child = Html.component({
           name: "Child",
           model: Schema.Struct({}),
           message: Schema.Never,
-          props: Schema.Struct({ title: Schema.String }),
-          elements: Html
+          props: Schema.Struct({ title: Schema.String })
         }).make({
           init: () => ({}),
           update: ($) => $.model,
@@ -2417,11 +2370,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           )
         )
         const Message = UiSchema.TaggedEnum({ Mounted: {} })
-        return Component.define({
+        return Html.component({
           name: "Parent",
           model: Schema.String,
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: () => "Server",
           update: () => "Mounted",
@@ -2457,23 +2409,21 @@ describe("HtmlServer", { concurrent: false }, () => {
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
       const titled = (suffix: () => string) => {
-        const Grandchild = Component.define({
+        const Grandchild = Html.component({
           name: "Grandchild",
           model: Schema.Struct({}),
           message: Schema.Never,
-          props: Schema.Struct({ title: Schema.String }),
-          elements: Html
+          props: Schema.Struct({ title: Schema.String })
         }).make({
           init: () => ({}),
           update: ($) => $.model,
           head: ({ props }) => [Head.title(props.title + suffix())],
           view: (h) => h.p(h.props.title)
         })
-        const Framed = Component.define({
+        const Framed = Html.component({
           name: "Framed",
           model: Schema.Struct({}),
           message: Schema.Never,
-          elements: Html,
           slots: ["body"]
         }).make({
           init: () => ({}),
@@ -2485,11 +2435,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           )
         )
         const Message = UiSchema.TaggedEnum({ Mounted: {} })
-        return Component.define({
+        return Html.component({
           name: "Parent",
           model: Schema.String,
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: () => "Server",
           update: () => "Mounted",
@@ -2528,11 +2477,10 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("compares the client's first fold, so removing an instance while another waits isn't a mismatch", () =>
     hosted(Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      const Waiting = Component.define({
+      const Waiting = Html.component({
         name: "Waiting",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2542,11 +2490,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
         )
       )
-      const Titled = Component.define({
+      const Titled = Html.component({
         name: "Titled",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2554,11 +2501,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (h) => h.p("titled")
       })
       const Message = UiSchema.TaggedEnum({ Mounted: {} })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Boolean,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => true,
         update: () => false,
@@ -2588,12 +2534,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         error: Schema.Never,
         staleTime: "30 seconds"
       }, Effect.succeed(() => Effect.succeed("loaded"))) {}
-      const Panel = Component.define({
+      const Panel = Html.component({
         name: "Panel",
         props: Schema.Struct({ id: Schema.String }),
         model: Schema.Struct({ label: Schema.String }),
         message: Schema.Never,
-        elements: Html,
         queries: { text: { query: GetText, args: () => ({}) } }
       }).make({
         init: ($) => ({ label: `panel ${$.props.id}` }),
@@ -2604,11 +2549,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))
         )
       )
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Boolean,
-        message: Schema.Boolean,
-        elements: Html
+        message: Schema.Boolean
       }).make({
         init: () => true,
         update: (_, show) => show,
@@ -2678,12 +2622,11 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("drops the placement held for a waiting instance its parent removes, and never applies it", () =>
     Effect.gen(function*() {
       class Slow extends Context.Service<Slow, string>()("test/Slow") {}
-      const Panel = Component.define({
+      const Panel = Html.component({
         name: "Panel",
         props: Schema.Struct({ id: Schema.String }),
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2693,11 +2636,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))
         )
       )
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.String,
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       }).make({
         init: () => "a",
         update: (_, id) => id,
@@ -2743,11 +2685,10 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("calls a title template once in the server's fold and once in the client's first fold", () =>
     hosted(Effect.gen(function*() {
-      const Leaf = Component.define({
+      const Leaf = Html.component({
         name: "Leaf",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2756,11 +2697,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const withTemplate = (template: (calls: number) => string) => {
         let calls = 0
-        const Parent = Component.define({
+        const Parent = Html.component({
           name: "Parent",
           model: Schema.Struct({}),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => ({}),
           update: ($) => $.model,
@@ -2788,22 +2728,20 @@ describe("HtmlServer", { concurrent: false }, () => {
     })))
   it.effect("leaves an instance its own title template fails out of the client's fold, as the server does", () =>
     hosted(Effect.gen(function*() {
-      const Leaf = Component.define({
+      const Leaf = Html.component({
         name: "Leaf",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title("leaf")],
         view: (h) => h.p("leaf")
       })
-      const Broken = Component.define({
+      const Broken = Html.component({
         name: "Broken",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2814,11 +2752,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         ],
         view: (h) => h.div(Leaf(h, { key: "l", props: {} }))
       })
-      const Parent = Component.define({
+      const Parent = Html.component({
         name: "Parent",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2854,11 +2791,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         calls++
         return `${title} - App`
       })
-      const Leaf = Component.define({
+      const Leaf = Html.component({
         name: "Leaf",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -2866,11 +2802,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (h) => h.p("leaf")
       })
       const Message = UiSchema.TaggedEnum({ Bump: {} })
-      const Layout = Component.define({
+      const Layout = Html.component({
         name: "Layout",
         model: Schema.Number,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
@@ -2912,12 +2847,11 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("recovers from mismatches on marker-free single-element children", () =>
     Effect.gen(function*() {
       let client = false
-      const Item = Component.define({
+      const Item = Html.component({
         name: "Item",
         props: Schema.Struct({ label: Schema.String, tag: Schema.String }),
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
@@ -2931,11 +2865,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       const makeList = (
         order: (isClient: boolean) => ReadonlyArray<readonly [string, string?]>
       ) =>
-        Component.define({
+        Html.component({
           name: "List",
           model: Schema.Struct({}),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => ({}),
           update: ($) => $.model,
@@ -3026,22 +2959,20 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("hydrates single-element children wrapped in legacy marker pairs", () =>
     Effect.gen(function*() {
-      const Item = Component.define({
+      const Item = Html.component({
         name: "Item",
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
         view: (h, label) => h.li(label)
       })
-      const List = Component.define({
+      const List = Html.component({
         name: "List",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       })
         .make({
           init: () => ({}),
@@ -3079,21 +3010,19 @@ describe("HtmlServer", { concurrent: false }, () => {
   it.effect("ssr() includes the rebuilt node's tag when a marker-free child mismatches", () =>
     hosted(Effect.gen(function*() {
       let renders = 0
-      const Item = Component.define({
+      const Item = Html.component({
         name: "Item",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => renders++ === 0 ? h.li("a") : h.p("a")
       })
-      const List = Component.define({
+      const List = Html.component({
         name: "List",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -3133,12 +3062,12 @@ const makeItems = () => {
       : AsyncResult.isFailure(result)
       ? "failed"
       : "loading"
-  const Item = Component.define({
+  const Item = Html.component({
     name: "Item",
     model: Schema.Struct({}),
     message: Schema.Never,
     props: Schema.Struct({ id: Schema.Number }),
-    elements: Html,
+
     queries: {
       item: { query: GetItem, args: ({ props }) => ({ id: props.id }) }
     }
@@ -3154,11 +3083,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
   it.effect("fetches each key once per request and ships every settled entry, typed Failures included", () =>
     hosted(Effect.gen(function*() {
       const { Item, calls } = makeItems()
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3194,11 +3122,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
     hosted(Effect.gen(function*() {
       const { GetItem, show, calls } = makeItems()
       const Message = UiSchema.TaggedEnum({ Loaded: { ok: Schema.Boolean } })
-      const Pager = Component.define({
+      const Pager = Html.component({
         name: "Pager",
         model: Schema.Struct({ page: Schema.Number }),
         message: Message,
-        elements: Html,
+
         queries: {
           item: {
             query: GetItem,
@@ -3252,11 +3180,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           })
         )
       ) {}
-      const List = Component.define({
+      const List = Html.component({
         name: "List",
         model: Schema.Struct({}),
         message: Schema.Never,
-        elements: Html,
+
         queries: {
           items: {
             queryMany: GetSlowItem,
@@ -3315,11 +3243,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         error: Schema.Never,
         staleTime: "1 minute"
       }, Effect.succeed(() => Effect.succeed("x" as unknown as number))) {}
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
         message: Schema.Never,
-        elements: Html,
         queries: { count: { query: GetCount, args: () => ({}) } }
       }).make({
         init: () => ({}),
@@ -3339,11 +3266,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
       // Built at once on the server, and 10 millis later on the client.
-      const Slow = Component.define({
+      const Slow = Html.component({
         name: "Slow",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3361,11 +3287,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         args: {},
         invalidates: () => [GetItem]
       }, Effect.succeed(() => Effect.succeed(Message.Refreshed()))) {}
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         // init's Command reruns on the client, and its invalidation refetches the hydrated entry while
         // the instance below still holds the window open.
@@ -3400,11 +3325,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       const { GetItem, Item, calls } = makeItems()
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
-      const Slow = Component.define({
+      const Slow = Html.component({
         name: "Slow",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3422,11 +3346,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         args: {},
         invalidates: () => [GetItem]
       }, Effect.succeed(() => Effect.succeed(Message.Refreshed()))) {}
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         // On the client, init navigates, and only then invalidates: the fetch lands after the window closed.
         init: ($) =>
@@ -3463,12 +3386,12 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         error: Schema.Never,
         staleTime: 0
       }, Effect.succeed(({ id }) => Effect.succeed(`Now ${id}`))) {}
-      const Now = Component.define({
+      const Now = Html.component({
         name: "Now",
         props: Schema.Struct({ id: Schema.Number }),
         model: Schema.Struct({}),
         message: Schema.Never,
-        elements: Html,
+
         queries: {
           now: { query: GetNow, args: ({ props }) => ({ id: props.id }) }
         }
@@ -3480,11 +3403,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       // Holds the window open on the client: the instance waits 10 millis for its Layer.
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
-      const Slow = Component.define({
+      const Slow = Html.component({
         name: "Slow",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3498,11 +3420,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         )
       )))
       const Message = UiSchema.TaggedEnum({ Navigated: {} })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         // On the client, init navigates while the instance holds the window open.
         init: ($) =>
@@ -3568,11 +3489,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       ) {}
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
-      const Slow = Component.define({
+      const Slow = Html.component({
         name: "Slow",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3585,11 +3505,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
             : Effect.as(Effect.sleep("10 millis"), "ready")
         )
       )))
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.set({}).run(ReadBack.make()),
         update: ($) => $.model,
@@ -3614,11 +3533,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       const clock = yield* Clock.Clock
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
-      const Panel = Component.define({
+      const Panel = Html.component({
         name: "Panel",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3631,11 +3549,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
             : Effect.as(clock.sleep(Duration.millis(10)), "ready")
         )
       )))
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3649,11 +3566,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
     hosted(Effect.gen(function*() {
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
-      const Panel = Component.define({
+      const Panel = Html.component({
         name: "Panel",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3666,11 +3582,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           )
         ))
       )
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,
@@ -3697,11 +3612,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           Effect.succeed(({ id }) => Effect.as(Effect.yieldNow, `text ${id}`))
         ) {}
         let renders = 0
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Struct({}),
           message: Schema.Never,
-          elements: Html,
+
           queries: {
             first: { query: GetText, args: () => ({ id: 1 }) },
             second: { query: GetText, args: () => ({ id: 2 }) },

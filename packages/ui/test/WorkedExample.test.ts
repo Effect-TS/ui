@@ -2,7 +2,7 @@
  * The experiments of the query spec's worked example (§5.7), run on the app
  * in `fixtures/users.ts`.
  */
-import { Component, Router } from "@effect/ui"
+import { type Component, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -59,11 +59,10 @@ const fetchesOf = (root: Root, read: string) =>
 const count = (text: string, part: string) => text.split(part).length - 1
 
 /** The list page and the detail page side by side. */
-const Both = Component.define({
+const Both = Html.component({
   name: "Both",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
