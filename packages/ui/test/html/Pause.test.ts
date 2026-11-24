@@ -226,7 +226,6 @@ const TallyMessage = UiSchema.TaggedEnum({
 })
 const Tally = Component.define({
   name: "Tally",
-  scoped: false,
   model: Schema.Number,
   message: TallyMessage,
   elements: Html
@@ -240,7 +239,6 @@ const Tally = Component.define({
 })
 const Board = Component.define({
   name: "Board",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
