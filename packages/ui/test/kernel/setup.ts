@@ -8,14 +8,23 @@ import { afterAll, beforeEach, expect } from "vitest"
 import { pending } from "./pending.ts"
 
 // A host `BrowserHost.makeHost` made runs on the kernel's DOM host. One a test wraps keeps the bridge to it.
+// Its `Controllable` holds the kernel host's dialogs and popovers while it's paused.
 domHost.set(
-  (host, container, options) =>
-    browserHosts.made.has(host) && (container as Node).nodeType !== undefined
-      ? KernelDom.makeHost(container as Element, {
-        head: options.head ? KernelDom.syncHead : undefined,
-        step: options.step
-      })
-      : undefined,
+  (host, container, options) => {
+    if (
+      !browserHosts.made.has(host) || (container as Node).nodeType === undefined
+    ) return undefined
+    const made = KernelDom.makeHost(container as Element, {
+      head: options.head ? KernelDom.syncHead : undefined,
+      step: options.step
+    })
+    browserHosts.holds.set(host, {
+      held: browserHosts.holds.get(host)!.held,
+      hold: () => made.pause(true),
+      release: () => made.pause(false)
+    })
+    return made
+  },
   (base, container, path) =>
     (container as Node).nodeType === undefined
       ? { root: undefined, resume: () => undefined }

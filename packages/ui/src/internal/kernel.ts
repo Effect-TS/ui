@@ -49,6 +49,8 @@ export interface Host<N = any> {
   /** Makes what runs the view transitions updates ask for. Without it, they're ignored. */
   readonly transitions?: ((tree: Tree) => Transitions) | undefined
   readonly server?: Server | undefined
+  /** Paints a recorded state: what runs a feature starts nothing. */
+  readonly inert?: boolean | undefined
 }
 
 /** @internal */

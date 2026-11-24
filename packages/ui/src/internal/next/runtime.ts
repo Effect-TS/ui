@@ -21,6 +21,7 @@ import * as View from "../../View.ts"
 import { routed } from "../due.ts"
 import * as Executor from "../executor.ts"
 import * as hydrateRun from "../hydrateRun.ts"
+import type * as keptRun from "../keptRun.ts"
 import * as Kernel from "../kernel.ts"
 import * as messageLog from "../messageLog.ts"
 import * as queryCore from "../queryCore.ts"
@@ -59,7 +60,7 @@ const dispatched = { _tag: "Dispatch" } as const
 
 const noCommands: ReadonlyArray<unknown> = []
 
-const ignored: runtime.Dispatched = { _tag: "Ignored", reason: "closed" }
+const unchanged: runtime.Dispatched = { _tag: "Ignored", reason: "unchanged" }
 
 const neutralFold: View.HeadFold = {
   merge: Head.merge,
@@ -337,7 +338,41 @@ const start = (
     if (draft._tag === "Mounted" && routing?.restored(inst) === true) {
       draft = { ...draft, adopted: true }
     }
-    return recording.record(inst, draft)
+    const seq = recording.record(inst, draft)
+    if (
+      inst === dispatching && outcome === undefined &&
+      (draft._tag === "Update" || draft._tag === "Failed")
+    ) {
+      outcome = {
+        _tag: draft._tag === "Update" ? "Updated" : "Failed",
+        seq: seq ?? -1
+      }
+    }
+    return seq
+  }
+  // A tool's dispatch: the instance it went to, and the first entry its update logged for it.
+  let dispatching: Kernel.Instance | undefined
+  let outcome: runtime.Dispatched | undefined
+  const dispatchTo = (
+    inst: Kernel.Instance,
+    message: unknown
+  ): runtime.Dispatched => {
+    const reason = inst.closed
+      ? "closed"
+      : waiting.has(inst)
+      ? "waiting"
+      : frozen
+      ? "frozen"
+      : undefined
+    if (reason !== undefined) return { _tag: "Ignored", reason }
+    dispatching = inst
+    outcome = undefined
+    try {
+      recording.step(() => Kernel.send(inst, message, dispatched))
+    } finally {
+      dispatching = undefined
+    }
+    return outcome ?? unchanged
   }
   const hooks = Context.getOrUndefined(ctx, services.RootHooks)
   const building = (flush: number) => {
@@ -571,8 +606,16 @@ const start = (
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) =>
       recording.step(() => mounted.send(message, dispatched)),
-    find: () => undefined,
-    dispatch: () => Effect.succeed(ignored),
+    find: (born: number) =>
+      findIn(instance, born, recording.numberOf) as Instance | undefined,
+    dispatch: (inst: Instance, message: unknown) =>
+      Effect.callback<runtime.Dispatched>((resume) => {
+        const target = inst as unknown as Kernel.Instance
+        const go = () => resume(Effect.succeed(dispatchTo(target, message)))
+        // A message that waits for a view transition is dispatched once it starts.
+        if (tree.transitions?.waits(target)) tree.transitions.wait(go)
+        else go()
+      }),
     pending: () => pendingOf(instance),
     loads: () => [],
     get cache() {
@@ -634,6 +677,46 @@ const start = (
       return Effect.andThen(awaitOwned, queries.dispose)
     })
   }
+}
+
+/** The open instance numbered `born`: `inst`, one it shows, or a kept child it holds off the page. */
+const findIn = (
+  inst: Kernel.Instance,
+  born: number,
+  numberOf: (inst: Kernel.Instance) => number | undefined
+): Kernel.Instance | undefined => {
+  if (inst.closed) return undefined
+  if (numberOf(inst) === born) return inst
+  const found = inst.rendered === undefined
+    ? undefined
+    : findInRec(inst.rendered, born, numberOf)
+  if (found !== undefined) return found
+  const kept = inst.kept as keptRun.Table | undefined
+  if (kept !== undefined) {
+    for (const entry of kept.kids.values()) {
+      const found = findIn(entry.inst, born, numberOf)
+      if (found !== undefined) return found
+    }
+  }
+  return undefined
+}
+
+const findInRec = (
+  rec: Kernel.Rec,
+  born: number,
+  numberOf: (inst: Kernel.Instance) => number | undefined
+): Kernel.Instance | undefined => {
+  // A slot that shows its fallback holds its owner, at another Rec.
+  if (rec.v._tag === "Child" && rec.inst.at === rec) {
+    return findIn(rec.inst, born, numberOf)
+  }
+  const kids = rec.kids
+  if (kids === undefined) return undefined
+  for (const kid of kids) {
+    const found = findInRec(kid, born, numberOf)
+    if (found !== undefined) return found
+  }
+  return undefined
 }
 
 type Pending = ReturnType<Root["pending"]>[number]
@@ -743,3 +826,116 @@ export const prerender = (
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))
+
+// Every message waits for a view transition that never starts: the painted tree takes none.
+const unmoved: Kernel.Transitions = {
+  request: () => {},
+  waits: () => true,
+  wait: () => {},
+  hold: () => false,
+  settle: () => {}
+}
+
+const noFacts = <A>(f: () => A): A => f()
+
+/**
+ * Paints the tree at a recorded state: each instance takes its Model, query results and props by path,
+ * and one with none starts from `init`. Nothing it does runs: no Command, Subscription, query or provided
+ * Layer, and no event or message reaches it. It closes with the Scope.
+ *
+ * Only the kernel test project calls it, through its alias for `internal/runtime.ts`.
+ *
+ * @internal
+ */
+// oxlint-disable-next-line effect/no-unused-internal
+export const paint = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  state: (path: string) => runtime.PaintState | undefined
+): Effect.Effect<
+  {
+    readonly fellBack: ReadonlyArray<string>
+    readonly fallbacks: ReadonlyArray<string>
+  },
+  never,
+  Scope.Scope | Renderer.Renderer
+> =>
+  Effect.contextWith(
+    (caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+      const ctx = onScheduler(caller)
+      const executor = Context.get(ctx, Executor.CurrentExecutor)
+      const fellBack: Array<string> = []
+      let broke: { readonly error: unknown } | undefined
+      const painted = Kernel.mount(
+        component as unknown as Kernel.Runnable,
+        rootProps,
+        container,
+        {
+          ...bridge(Context.get(ctx, services.Renderer).host, noFacts, false),
+          setEvents: () => {},
+          transitions: () => unmoved,
+          inert: true
+        },
+        {
+          context: ctx,
+          init: (inst) => {
+            let recorded: runtime.PaintState | undefined
+            try {
+              recorded = state(inst.path)
+            } catch (error) {
+              broke = { error }
+              throw error
+            }
+            if (recorded === undefined) {
+              fellBack.push(inst.path)
+              recorded = inst.component.init(inst.props)
+            } else {
+              if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
+              inst.results = recorded.queries
+            }
+            return {
+              model: recorded!.model,
+              commands: noCommands,
+              events: noCommands
+            }
+          },
+          schedule: (task) => executor.schedule(task),
+          report: (path, where, cause) => {
+            Effect.runForkWith(ctx)(
+              Effect.logError(`${path} failed in ${where}`, cause)
+            )
+          }
+        }
+      )
+      if (broke !== undefined) {
+        painted.close()
+        return Effect.die(broke.error)
+      }
+      const fallbacks = new Set<string>()
+      fallbacksIn(painted.instance, fallbacks)
+      return Effect.as(
+        Scope.addFinalizer(
+          Context.get(ctx, Scope.Scope),
+          Effect.sync(painted.close)
+        ),
+        { fellBack, fallbacks: Array.from(fallbacks) }
+      )
+    }
+  )
+
+/** The paths of the instances whose view shows a feature slot's fallback, in `inst` and what it shows. */
+const fallbacksIn = (inst: Kernel.Instance, out: Set<string>): void => {
+  if (!inst.closed && inst.rendered !== undefined) {
+    fallbacksInRec(inst.rendered, out)
+  }
+}
+
+const fallbacksInRec = (rec: Kernel.Rec, out: Set<string>): void => {
+  if (rec.v._tag === "Child") {
+    if (rec.inst.at === rec) return fallbacksIn(rec.inst, out)
+    out.add(rec.inst.path)
+  }
+  const kids = rec.kids
+  if (kids !== undefined) { for (const kid of kids) fallbacksInRec(kid, out) }
+}

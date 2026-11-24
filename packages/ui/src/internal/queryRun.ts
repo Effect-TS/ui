@@ -214,7 +214,7 @@ const against = (
  */
 // oxlint-disable-next-line effect/no-unused-internal
 export const sync = (inst: Kernel.Instance, next?: Kernel.Next): void => {
-  if (inst.closed) return
+  if (inst.closed || inst.tree.host.inert) return
   const state = stateOf(inst)
   follows(inst, state, next)
   if (next === undefined && state.keyed.size > 0 && !inst.closed) {
@@ -249,6 +249,7 @@ const follows = (
  */
 // oxlint-disable-next-line effect/no-unused-internal
 export const first = (inst: Kernel.Instance): void => {
+  if (inst.tree.host.inert) return
   const state = stateOf(inst)
   state.mounting = true
   for (const fold of watch(inst, state)) fold()

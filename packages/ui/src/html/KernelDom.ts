@@ -163,7 +163,11 @@ export interface HostOptions {
 export const makeHost = (
   container: globalThis.Element,
   options?: HostOptions
-): Kernel.Host<globalThis.Node> & { readonly dispose: () => void } => {
+): Kernel.Host<globalThis.Node> & {
+  readonly dispose: () => void
+  /** @internal */
+  readonly pause: (on: boolean) => void
+} => {
   const document = container.ownerDocument
   const view = document.defaultView
   const listening = new Set<string>()
@@ -291,6 +295,8 @@ export const makeHost = (
   }
 
   const popoversToShow = new Set<HTMLElement>()
+  // While a tool pauses the root, its modal dialogs and auto popovers are closed, and shown again after.
+  let held = false
   const manualPopovers = new Set<HTMLElement>()
   const popoverModes = new WeakMap<globalThis.Node, string | null>()
   const applyPopover = (element: HTMLElement, want: unknown, now?: boolean) => {
@@ -309,7 +315,9 @@ export const makeHost = (
     if (values === undefined) return
     for (const [name, value] of values) {
       if (name === "open" && isDialog(node)) {
-        if (node.isConnected) showDialog(node, value)
+        if (node.isConnected && !(held && value === "modal")) {
+          showDialog(node, value)
+        }
       } else if (name === "popoverOpen") {
         if ((node as globalThis.Element).getAttribute("popover") === "manual") {
           applyPopover(node as HTMLElement, value, true)
@@ -521,6 +529,10 @@ export const makeHost = (
       return onDropTarget(name, event as DragEvent, path)
     }
     const target = path[0] ?? event.target as Node
+    if (
+      held && name === "toggle" &&
+      (modalWanted.has(target as never) || popoversToShow.has(target as never))
+    ) return
     const composed = (event as InputEvent).isComposing === true
     if (isDialog(target)) {
       if (name === "cancel") {
@@ -786,8 +798,8 @@ export const makeHost = (
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
       for (const dialog of inOrder([...modalWanted])) {
-        if (dialog.isConnected) showDialog(dialog, "modal")
-        else modalWanted.delete(dialog)
+        if (!dialog.isConnected) modalWanted.delete(dialog)
+        else if (!held) showDialog(dialog, "modal")
       }
       for (const element of manualPopovers) {
         if (!element.isConnected) manualPopovers.delete(element)
@@ -797,7 +809,29 @@ export const makeHost = (
       }
       const popovers = inOrder([...popoversToShow])
       popoversToShow.clear()
-      for (const element of popovers) applyPopover(element, true, true)
+      for (const element of popovers) {
+        if (held && !manualPopovers.has(element)) popoversToShow.add(element)
+        else applyPopover(element, true, true)
+      }
+    },
+    pause(on) {
+      held = on
+      if (!on) return this.commit!()
+      for (const dialog of [...shown].reverse()) {
+        if (modals.has(dialog)) closeDialog(dialog, true)
+      }
+      for (
+        const element of container.querySelectorAll<HTMLElement>("[popover]")
+      ) {
+        if (
+          !manualPopovers.has(element) &&
+          wanted.get(element)?.get("popoverOpen") === true &&
+          matches(element, ":popover-open")
+        ) {
+          element.hidePopover()
+          popoversToShow.add(element)
+        }
+      }
     },
     head: sync === undefined ? undefined : (head) => sync.sync(head as never),
     transitions: options?.viewTransitions === false

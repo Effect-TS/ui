@@ -544,6 +544,11 @@ const releaseShared = (
  */
 export const boot = (inst: Kernel.Instance): void => {
   const tree = inst.tree
+  // A painted tree never builds it: what reads its services shows its fallback.
+  if (tree.host.inert) {
+    inst.env = envOf(inst.env)
+    return
+  }
   const server = tree.host.server
   if (
     server !== undefined &&

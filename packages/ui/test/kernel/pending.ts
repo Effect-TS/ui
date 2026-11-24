@@ -55,7 +55,9 @@ export const files: ReadonlyArray<string> = [
   "html/HtmlServerHttp.test.ts",
   "QueryHydration.test.ts",
   "html/StateCodec.test.ts",
-  "html/Markdown.test.ts"
+  "html/Markdown.test.ts",
+  "Paint.test.ts",
+  "html/Pause.test.ts"
 ]
 
 export const pending: {

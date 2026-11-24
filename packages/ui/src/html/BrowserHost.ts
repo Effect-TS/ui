@@ -1494,18 +1494,10 @@ export const makeHost = (
       active = undefined
     }
   }
-  holds.set(host, { held: () => held, hold, release })
+  browserHosts.holds.set(host, { held: () => held, hold, release })
   browserHosts.made.add(host)
   return host
 }
-
-interface Holding {
-  readonly held: () => boolean
-  readonly hold: (container: globalThis.Element) => void
-  readonly release: () => void
-}
-
-const holds = new WeakMap<Renderer.Host<globalThis.Node>, Holding>()
 
 /**
  * The element operations behind `HtmlCommand.focus`, `blur`,
@@ -1591,7 +1583,11 @@ export const layer = (options?: {
     const host = makeHost(document)
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
     return Context.add(
-      yield* documentServices.make(document, htmlHost, holds.get(host)!.held),
+      yield* documentServices.make(
+        document,
+        htmlHost,
+        browserHosts.holds.get(host)!.held
+      ),
       Renderer.Renderer,
       { host }
     )
@@ -2039,7 +2035,7 @@ const controllable = (
   const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<
     globalThis.Node
   >
-  const holding = holds.get(host)!
+  const holding = browserHosts.holds.get(host)!
   const style = (container as HTMLElement).style
   let painted:
     | { readonly scope: Scope.Closeable; readonly copy: HTMLElement }
@@ -2116,7 +2112,7 @@ const controllable = (
     instance: (born) => {
       const inst = root.find(born)
       return inst === undefined ? undefined : {
-        instance: inst.born,
+        instance: born,
         path: inst.path,
         component: inst.component.definition.name,
         message: inst.component.definition.message,

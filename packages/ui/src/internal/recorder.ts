@@ -23,6 +23,8 @@ export interface Recording {
   readonly tree: (
     draft: { readonly _tag: string; readonly [field: string]: unknown }
   ) => void
+  /** The number an instance's entries carry, once one was logged. */
+  readonly numberOf: (inst: Kernel.Instance) => number | undefined
 }
 
 interface Starting {
@@ -215,6 +217,7 @@ export const make = (
       log.record(
         { ...draft, ...stamp(cause, number()) } as unknown as MessageLog.Entry
       )
-    }
+    },
+    numberOf: (inst) => numbers.get(inst)
   }
 }

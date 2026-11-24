@@ -44,7 +44,7 @@ const stop = (running: Running): void => {
  * @internal
  */
 export const sync = (inst: Kernel.Instance): void => {
-  if (inst.closed) return
+  if (inst.closed || inst.tree.host.inert) return
   const server = inst.tree.host.server
   if (
     server !== undefined &&
