@@ -38,6 +38,26 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.expect(classed("arch2-node-active")).toBeAbsent()
       }))
 
+    it.effect("lists fewer Foldkit 0.x steps for a sender nearer the root", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(Architecture, {})
+        yield* play.click(HtmlLocator.role("button", { name: "A" }))
+        yield* play.expect(steps("Foldkit 0.x")).toHaveCount(5)
+        yield* play.expect(steps("Effect UI")).toHaveCount(3)
+        yield* play.click(
+          HtmlLocator.role("button", { name: "Root" })
+        )
+        yield* play.expect(steps("Foldkit 0.x")).toHaveCount(3)
+        yield* play.expect(steps("Effect UI")).toHaveCount(3)
+        yield* TestClock.adjust("1800 millis")
+        yield* play.expect(announced("Foldkit 0.x")).toHaveText(
+          "Step 3: The view runs from the root with the new Model."
+        )
+        yield* TestClock.adjust("900 millis")
+        yield* play.expect(Locator.attr("aria-current", "step"))
+          .toBeAbsent()
+      }))
+
     it.effect("plays a Message from A1 on both sides and clears the steps after the last one", () =>
       Effect.gen(function*() {
         const play = yield* HtmlPlay.make(Architecture, {})
@@ -77,7 +97,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.expect(announced("Foldkit 0.x")).toHaveText(
           "Step 8: The view runs from the root with the new Model."
         )
-        yield* play.expect(active("Foldkit 0.x")).toHaveCount(7)
+        yield* play.expect(active("Foldkit 0.x")).toHaveCount(4)
 
         yield* TestClock.adjust("899 millis")
         yield* play.expect(current("Foldkit 0.x")).toHaveCount(1)
@@ -93,30 +113,30 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
     it.effect("selecting a step stops playback and sending another Message restarts it", () =>
       Effect.gen(function*() {
         const play = yield* HtmlPlay.make(Architecture, {})
-        yield* play.click(HtmlLocator.role("button", { name: "B2" }))
+        yield* play.click(HtmlLocator.role("button", { name: "A2" }))
         yield* TestClock.adjust("900 millis")
         yield* play.click(
           Locator.inside(
             panel("Foldkit 0.x"),
             HtmlLocator.role("button", {
-              name: /Root's update passes it to B's update/
+              name: /Root's update passes it to A's update/
             })
           )
         )
         yield* play.expect(announced("Foldkit 0.x")).toHaveText(
-          "Step 4: Root's update passes it to B's update."
+          "Step 4: Root's update passes it to A's update."
         )
-        yield* play.expect(activeName("Foldkit 0.x")).toHaveText("B")
+        yield* play.expect(activeName("Foldkit 0.x")).toHaveText("A")
         yield* play.expect(announced("Effect UI")).toHaveText(
-          "Step 2: The runtime delivers it to B2's update."
+          "Step 2: The runtime delivers it to A2's update."
         )
 
         yield* TestClock.adjust("5 seconds")
         yield* play.expect(announced("Foldkit 0.x")).toHaveText(
-          "Step 4: Root's update passes it to B's update."
+          "Step 4: Root's update passes it to A's update."
         )
         yield* play.expect(announced("Effect UI")).toHaveText(
-          "Step 2: The runtime delivers it to B2's update."
+          "Step 2: The runtime delivers it to A2's update."
         )
 
         yield* play.click(HtmlLocator.role("button", { name: "A1" }))

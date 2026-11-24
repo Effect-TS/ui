@@ -20,12 +20,12 @@
   font-weight: 500;
 }
 
-.arch2-leaves {
+.arch2-senders {
   display: flex;
   gap: 8px;
 }
 
-.arch2-leaf {
+.arch2-sender {
   min-width: 48px;
   padding: 6px 14px;
   border: 1px solid var(--foreground);
@@ -37,12 +37,12 @@
   transition: background-color 0.15s, border-color 0.15s;
 }
 
-.arch2-leaf:hover {
+.arch2-sender:hover {
   border-color: var(--prose-foreground);
   background: var(--prose-foreground);
 }
 
-.arch2-leaf:active {
+.arch2-sender:active {
   transform: translateY(1px);
 }
 
@@ -76,8 +76,7 @@
   color: var(--muted-foreground);
 }
 
-.arch2-tree,
-.arch2-branch {
+.arch2-tree {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -85,6 +84,13 @@
 
 .arch2-tree {
   margin-top: 16px;
+}
+
+.arch2-stem {
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  background: var(--border-strong);
 }
 
 .arch2-children {
@@ -231,7 +237,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .arch2-leaf,
+  .arch2-sender,
   .arch2-node,
   .arch2-role,
   .arch2-step,
