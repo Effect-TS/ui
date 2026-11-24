@@ -36,7 +36,11 @@
  * @stability experimental
  * @since 0.1.0
  */
+import type * as Cause from "effect/Cause"
+import type * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
+import * as services from "./internal/services.ts"
 import * as subscriptionRun from "./internal/subscriptionRun.ts"
 import * as subscriptions from "./internal/subscriptions.ts"
 
@@ -217,3 +221,108 @@ export const make: {
       deps: Array.isArray(depsOrStream) ? depsOrStream : [depsOrStream],
       stream: Stream.suspend(() => build(depsOrStream))
     }
+
+const directState = Symbol.for("@effect/ui/Subscription/directState")
+
+/**
+ * The controls passed to a {@link direct} Subscription's attach callback.
+ *
+ * **Details**
+ *
+ * `enter` renders pending ancestors and calls `f` with the latest state
+ * declared for this Subscription's key, unless the Subscription has stopped.
+ * `emit` dispatches a message synchronously, calling `accepted` right before
+ * dispatch so a host listener can cancel the event's default. `fail` fails
+ * the subscribing instance with `cause`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface DirectControls<State, Msg> {
+  readonly emit: (message: Msg, accepted?: () => void) => void
+  readonly fail: (cause: Cause.Cause<unknown>) => void
+  readonly enter: (f: (latest: State) => void) => void
+}
+
+/**
+ * What a {@link direct} Subscription's attach callback returns: a cleanup
+ * function, an object with cleanup and optional initial work, or `undefined`
+ * to skip attaching.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DirectAttachment<R = never> =
+  | (() => void)
+  | {
+    readonly initial?: Effect.Effect<void, never, R> | undefined
+    readonly close: () => void
+  }
+  | undefined
+
+/**
+ * Declares a keyed Subscription that attaches synchronously to a host event
+ * source instead of running a Stream.
+ *
+ * **When to use**
+ *
+ * Use when building a host package (such as a terminal or native host) where a
+ * global listener must inspect the latest declaration and cancel an event's
+ * default synchronously inside the host callback.
+ *
+ * **Details**
+ *
+ * `state` is updated on every `subscriptions` run for the same key; read the
+ * current value inside `controls.enter((latest) => ...)` so a listener never
+ * closes over stale handlers or Model values.
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const direct = <State, Msg, R = never>(
+  name: string,
+  deps: Deps | undefined,
+  state: State,
+  attach: (
+    context: Context.Context<R>,
+    controls: DirectControls<State, Msg>
+  ) => DirectAttachment<R>
+): Subscription<Msg, R> => {
+  const base = deps === undefined
+    ? make<Msg, R>(name, Stream.never)
+    : make<Deps, Msg, R>(name, deps, () => Stream.never)
+  const connect: NonNullable<services.Direct[typeof services.direct]> = (
+    context,
+    emit,
+    fail,
+    enter
+  ) => {
+    const attached = attach(context as Context.Context<R>, {
+      emit: (message, accepted) => emit(message, accepted ?? noop),
+      fail,
+      enter: (f) =>
+        enter((latest) => {
+          const current = (latest as { readonly [directState]?: State })[
+            directState
+          ]
+          f(current !== undefined ? current : state)
+        })
+    })
+    if (attached === undefined) return undefined
+    return typeof attached === "function"
+      ? { initial: Effect.void, close: attached }
+      : {
+        initial: (attached.initial ?? Effect.void) as Effect.Effect<void>,
+        close: attached.close
+      }
+  }
+  return Object.assign(base, {
+    [directState]: state,
+    [services.direct]: connect
+  })
+}
+
+const noop = () => {}

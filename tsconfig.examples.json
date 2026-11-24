@@ -11,6 +11,7 @@
     { "path": "examples/interrupting-commands" },
     { "path": "examples/routing" },
     { "path": "examples/snake" },
+    { "path": "examples/snake-tui" },
     { "path": "examples/virtual-list" }
   ]
 }

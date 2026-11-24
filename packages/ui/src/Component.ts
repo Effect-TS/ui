@@ -1181,7 +1181,7 @@ export declare namespace Mountable {
     // `SC` not, `SC` isn't inferred, and nothing could check the map's names
     // or requirements, so the call takes no slots.
     <Msg, RF = never, const SC extends object = never>(
-      h: View.Helper<Msg, unknown>,
+      h: View.Helper<Msg, unknown, any>,
       options:
         & View.Child.Options<Props, Events, NoInfer<Msg>>
         & {
@@ -1417,7 +1417,7 @@ export interface Headless<
    * removed: the readers and senders in it have this owner above them.
    */
   <Msg, RV = never, RF = never>(
-    h: View.Helper<Msg, unknown>,
+    h: View.Helper<Msg, unknown, any>,
     options:
       & View.Child.Options<Props, Events, NoInfer<Msg>>
       & {
@@ -2893,8 +2893,7 @@ export type ViewHelper<
   Props,
   Msg,
   L,
-  & View.Helper<Msg, Props>
-  & View.Tags<V, Msg>
+  & View.WithTags<Msg, Props, V>
   & QueryHelpers<L>
   & SlotHelpers<Sl>
   & SharedHelpers<SR>
@@ -2912,13 +2911,17 @@ type WithKeepAlive<Model, Props, Msg, L, H> =
  * @category models
  * @since 0.1.0
  */
-export interface KeepAliveHelpers<Model, Props, Msg, L, H> {
+export interface KeepAliveHelpers<Model, Props, _Msg, L, H> {
   /**
    * A block whose children live as long as the component whose view wrote
    * it. Each is a keep-alive component called with `s`, and its key must be a
    * literal, or left out. Returns what `content` returns, and adds no node.
    */
-  keepAlive<C>(content: (s: H & View.KeepAlive<Msg, false>) => C): C
+  keepAlive<C>(
+    content: (
+      s: H & { readonly "written inside h.keepAlive((s) => ...)": false }
+    ) => C
+  ): C
   /**
    * A block whose children each live while `alive` holds for their key.
    * `alive` is asked on every render of this component, for each child it
@@ -2928,7 +2931,9 @@ export interface KeepAliveHelpers<Model, Props, Msg, L, H> {
    */
   keepAlive<C>(
     alive: ($: Alive<Model, Props, QueryResults<L>>) => boolean,
-    content: (s: H & View.KeepAlive<Msg, true>) => C
+    content: (
+      s: H & { readonly "written inside h.keepAlive((s) => ...)": true }
+    ) => C
   ): C
 }
 
