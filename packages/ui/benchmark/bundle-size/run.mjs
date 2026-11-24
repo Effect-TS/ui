@@ -29,12 +29,13 @@ const effect =
 const target = "es2023"
 const origin = "http://localhost:8080"
 
-async function inWindow(run) {
+async function inWindow(run, settings) {
   const window = new Window({
     url: origin + "/",
     settings: {
       enableJavaScriptEvaluation: true,
-      suppressInsecureJavaScriptEnvironmentWarning: true
+      suppressInsecureJavaScriptEnvironmentWarning: true,
+      ...settings
     }
   })
   try {
@@ -117,16 +118,7 @@ async function checkRouting(chunks, entry) {
         )
       )
     }
-    const window = new Window({
-      url: origin + "/",
-      settings: {
-        enableJavaScriptEvaluation: true,
-        suppressInsecureJavaScriptEnvironmentWarning: true,
-        fetch: { virtualServers: [{ url: origin, directory }] }
-      }
-    })
-    try {
-      const document = window.document
+    await inWindow(async (window, document) => {
       document.body.innerHTML = "<div id=\"root\"></div>"
       const script = document.createElement("script")
       script.type = "module"
@@ -161,9 +153,7 @@ async function checkRouting(chunks, entry) {
         "Nested | Routing",
         "routing did not update the title"
       )
-    } finally {
-      await window.happyDOM.close()
-    }
+    }, { fetch: { virtualServers: [{ url: origin, directory }] } })
   } finally {
     fs.rmSync(directory, { recursive: true, force: true })
   }

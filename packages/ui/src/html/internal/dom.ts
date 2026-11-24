@@ -555,30 +555,24 @@ export const makeHost = (
     }
     if (name === "dragstart") startDrag(event as DragEvent, path)
     const own = ownEvents.has(name)
-    for (let index = 0; index < path.length; index++) {
-      const node = path[index]!
-      if (node === container) break
-      if (
-        dispatch(
-          node,
+    let node: Node
+    const payload = () =>
+      name === "dragend"
+        ? {
+          dropped: droppedHere ||
+            ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !== "none"
+        }
+        : payloadOf(
           name,
-          () =>
-            name === "dragend"
-              ? {
-                dropped: droppedHere ||
-                  ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !==
-                    "none"
-              }
-              : payloadOf(
-                name,
-                event,
-                target,
-                node as globalThis.Element,
-                lastPointer
-              ),
-          event
+          event,
+          target,
+          node as globalThis.Element,
+          lastPointer
         )
-      ) {
+    for (let index = 0; index < path.length; index++) {
+      node = path[index]!
+      if (node === container) break
+      if (dispatch(node, name, payload, event)) {
         if (owned) submit.ownedUnhandled.delete(event)
         break
       }

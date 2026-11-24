@@ -107,8 +107,12 @@ class Runs implements Kernel.Runs {
       run.command.name === name &&
       (groupKey === undefined || run.command.groupKey === groupKey)
     )
-  pending = () =>
-    this.list.map((run) => ({ name: run.command.name, status: run.status }))
+  pending() {
+    return this.list.map((run) => ({
+      name: run.command.name,
+      status: run.status
+    }))
+  }
   remove(run: Run): void {
     run.done = true
     early.get(this.inst.tree)?.delete(run)
