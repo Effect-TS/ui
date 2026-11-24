@@ -66,7 +66,6 @@
  *
  * const Basket = Component.define({
  *   name: "Basket",
- *   scoped: false,
  *   model: Schema.Struct({ fruits: Schema.Array(Schema.String) }),
  *   message: BasketMessage,
  *   elements: Html
@@ -263,7 +262,6 @@ const cycle = (model: CheckboxGroupModel, props: CheckboxGroupProps) => {
  */
 export const CheckboxGroup = Component.define({
   name: "CheckboxGroup",
-  scoped: false,
   props: CheckboxGroupProps,
   model: CheckboxGroupModel,
   message: CheckboxGroupMessage,

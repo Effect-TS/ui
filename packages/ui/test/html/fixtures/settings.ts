@@ -5,7 +5,6 @@ import { Schema } from "effect"
 /** A form whose every event is logged, as `event:detail`. */
 export const Settings = Component.define({
   name: "Settings",
-  scoped: false,
   model: Schema.Struct({
     log: Schema.Array(Schema.String),
     agree: Schema.Boolean,

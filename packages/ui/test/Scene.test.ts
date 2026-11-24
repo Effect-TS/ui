@@ -157,7 +157,6 @@ describe("Scene", () => {
       }) {}
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.String,
         message: Schema.String,
         elements: Html
@@ -193,7 +192,6 @@ describe("Scene", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.String,
         message: Schema.String,
         elements: Html
@@ -235,7 +233,6 @@ describe("Scene", () => {
     const Toggled = UiSchema.TaggedEnum({ Toggled: {} })
     const Disclosure = Component.define({
       name: "Disclosure",
-      scoped: false,
       model: Schema.Boolean,
       message: Toggled,
       elements: Html
@@ -250,7 +247,6 @@ describe("Scene", () => {
     it("givenChild sets the Model of the child it selects, and no other at another path", () => {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -285,7 +281,6 @@ describe("Scene", () => {
     it("Scene.fallback checks a child's paths in the view that declared it", () => {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -307,7 +302,6 @@ describe("Scene", () => {
       // The root of a closure is declared by the closure, not by the view beside it.
       const Root = Component.define({
         name: "Root",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -341,7 +335,6 @@ describe("Scene", () => {
       const page = (name: string, nested: boolean) =>
         Component.define({
           name,
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         }).make({
@@ -380,7 +373,6 @@ describe("Scene", () => {
     )
     const Rows = Component.define({
       name: "Rows",
-      scoped: false,
       props: Schema.Struct({ shown: Schema.Boolean }),
       model: Schema.Array(Schema.String),
       message: Schema.String,
@@ -471,7 +463,6 @@ describe("Scene", () => {
       Effect.gen(function*() {
         const Wrapper = Component.define({
           name: "Wrapper",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -480,7 +471,6 @@ describe("Scene", () => {
           let cached: View.Node<never> | undefined
           return Component.define({
             name: "Root",
-            scoped: false,
             props: Schema.Struct({ childKey: Schema.String }),
             model: Schema.Null,
             message: Schema.Never,
@@ -519,7 +509,6 @@ describe("Scene", () => {
         )
         const Socket = Component.define({
           name: "Socket",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -550,7 +539,6 @@ describe("Scene", () => {
         )
         const Anchor = Component.define({
           name: "Anchor",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Html
@@ -581,7 +569,6 @@ describe("Scene", () => {
         anchor.mounted(Place, 21).expect(Locator.tag("p")).toHaveText("42")
         const Frame = Component.define({
           name: "Frame",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html,
@@ -593,7 +580,6 @@ describe("Scene", () => {
         })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.String,
           message: Schema.String,
           elements: Html

@@ -60,7 +60,6 @@
  *
  * const Settings = Component.define({
  *   name: "Settings",
- *   scoped: false,
  *   model: Schema.Struct({ notify: Schema.Boolean }),
  *   message: SettingsMessage,
  *   elements: Html

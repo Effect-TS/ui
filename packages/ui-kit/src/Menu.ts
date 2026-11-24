@@ -173,7 +173,6 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, share: Schema.Boolean, wrap: Schema.Boolean }),
  *   message: EditorMessage,
  *   elements: Html
@@ -2486,7 +2485,6 @@ export const menuFilter = (
  */
 export const Menu = Component.define({
   name: "Menu",
-  scoped: false,
   props: MenuProps,
   model: MenuModel,
   message: MenuMessage,

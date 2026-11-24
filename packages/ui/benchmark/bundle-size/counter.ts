@@ -6,7 +6,6 @@ const Message = UiSchema.TaggedEnum({ Increment: {}, Decrement: {} })
 
 const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   model: Schema.Number,
   message: Message,
   elements: Html

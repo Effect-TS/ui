@@ -13,7 +13,6 @@ const heightOf = (index: number, grown: ReadonlyArray<number>) =>
 
 export const AbsoluteDemo = Component.define({
   name: "AbsoluteDemo",
-  scoped: false,
   model: Schema.Struct({
     absolute: Schema.Boolean,
     grown: Schema.Array(Schema.Number)

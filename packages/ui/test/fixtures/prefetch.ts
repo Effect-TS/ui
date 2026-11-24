@@ -33,7 +33,6 @@ export class GetNote extends Query.Service<GetNote>()("GetNote", {
 const reader = <const Name extends string>(name: Name) =>
   Component.define({
     name,
-    scoped: false,
     props: Schema.Struct({ id: Schema.Number }),
     model: Schema.Struct({}),
     message: Schema.Never,
@@ -53,7 +52,6 @@ export const Card = reader("Card")
 /** Reads `GetNote`, which the declarer can't see. */
 export const Note = Component.define({
   name: "Note",
-  scoped: false,
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
@@ -67,7 +65,6 @@ export const Note = Component.define({
 /** Places what its parent passes, so a walk reaches the parent's content through it. */
 export const Frame = Component.define({
   name: "Frame",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   slots: ["body"]
@@ -85,7 +82,6 @@ export class Badge
 /** Reads person 1, and shows a card for person 2 in a frame's slot, a feature, and a note with and without a `provide`. */
 export const Walked = Component.define({
   name: "Walked",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   queries: { person: { query: GetPerson, args: () => ({ id: 1 }) } }
@@ -111,7 +107,6 @@ export const Walked = Component.define({
 /** Reads person 3, then its view throws. */
 export const Broken = Component.define({
   name: "Broken",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   queries: { person: { query: GetPerson, args: () => ({ id: 3 }) } }
@@ -128,7 +123,6 @@ class Nothing extends Context.Service<Nothing, string>()("test/Nothing") {}
 /** A page whose provided Layer fails. */
 export const Failing = Component.define({
   name: "Failing",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never
 }).make({
@@ -144,7 +138,6 @@ const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes } })
 
 export const App = Component.define({
   name: "App",
-  scoped: false,
   props: Schema.Struct({ route: Routes }),
   model: Schema.Struct({ route: Routes }),
   message: AppMessage

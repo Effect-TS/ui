@@ -19,7 +19,6 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 const Toolbar = Component.define({
   name: "Toolbar",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: ToolbarMessage,
   elements: Html
@@ -81,7 +80,6 @@ const standIn = {
 
 const Ids = Component.define({
   name: "Ids",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -153,7 +151,6 @@ describe("headless components in a story", () => {
     assert.deepStrictEqual(menu.visible, items)
     const Bare = Component.define({
       name: "Bare",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html
@@ -261,7 +258,6 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const Neutral = Component.define({
         name: "Neutral",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -281,7 +277,6 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const Dual = Component.define({
         name: "Dual",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Literals(["one", "ten"]),
         elements: Html
@@ -312,7 +307,6 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const Guard = Component.define({
         name: "Guard",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -331,7 +325,6 @@ describe("headless components in a story", () => {
       const Clicked = UiSchema.TaggedEnum({ Clicked: {} })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Number,
         message: Clicked,
         elements: Html
@@ -358,7 +351,6 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const Inner = Component.define({
         name: "Inner",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -368,7 +360,6 @@ describe("headless components in a story", () => {
       })
       const Outer = Component.define({
         name: "Outer",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Literals(["one", "ten", "hundred"]),
         elements: Html
@@ -405,7 +396,6 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const Zone = Component.define({
         name: "Zone",
-        scoped: false,
         model: Schema.String,
         message: Schema.String,
         elements: Html

@@ -20,21 +20,21 @@ const imports = [
   `import { Schema } from "effect"`
 ].join("\n")
 
-const scopedField = (scoped) => values.main ? "" : `\n  scoped: ${scoped},`
+const keepAliveField = (keepAlive) => keepAlive ? "\n  keepAlive: true," : ""
 
 const importsOnly = `${imports}
 
 export const used = [Component.define, UiSchema.TaggedEnum, Html, Schema.String]
 `
 
-const leaves = (scoped) => {
+const leaves = (keepAlive) => {
   const out = [imports, ""]
   for (let i = 0; i < 100; i++) {
     out.push(
       `const M${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
 const E${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 export const C${i} = Component.define({
-  name: "C${i}",${scopedField(scoped)}
+  name: "C${i}",${keepAliveField(keepAlive)}
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ draft: Schema.String }),
   message: M${i},
@@ -54,8 +54,8 @@ export const C${i} = Component.define({
 const names = Array.from({ length: 100 }, (_, i) => `C${i}`)
 const onEmit = `onEmit: { Saved: (e) => OwnerMessage.ChildSaved({ id: e.id }) }`
 
-const owner = (scoped) => {
-  const at = scoped ? "s" : "h"
+const owner = (keepAlive) => {
+  const at = keepAlive ? "s" : "h"
   const placed = names.map((name, i) =>
     i % 3 === 0
       ? `${name}(${at}, { key: "c${i}", props: { id: model.selected ?? "c${i}" }, ${onEmit} })`
@@ -63,12 +63,12 @@ const owner = (scoped) => {
       ? `model.selected !== null && ${name}(${at}, { key: "c${i}", props: { id: model.selected }, ${onEmit} })`
       : `model.order.map((id) => ${name}(${at}, { key: id, props: { id: id }, ${onEmit} }))`
   )
-  const view = scoped
+  const view = keepAlive
     ? `h.div(
-      h.scoped((s) => [
+      h.keepAlive((s) => [
         ${placed.filter((_, i) => i % 3 !== 2).join(",\n        ")}
       ]),
-      h.scoped(({ model, key }) => model.order.includes(key), (s) =>
+      h.keepAlive(({ model, key }) => model.order.includes(key), (s) =>
         h.div(
           ${placed.filter((_, i) => i % 3 === 2).join(",\n          ")}
         ))
@@ -78,12 +78,12 @@ const owner = (scoped) => {
     )`
   return `${imports}
 import { ${names.join(", ")} } from "./${
-    scoped ? "scoped" : "inline"
+    keepAlive ? "keepAlive" : "inline"
   }-leaves.ts"
 
 const OwnerMessage = UiSchema.TaggedEnum({ ChildSaved: { id: Schema.String } })
 export const Owner = Component.define({
-  name: "Owner",${scopedField(false)}
+  name: "Owner",
   model: Schema.Struct({ selected: Schema.NullOr(Schema.String), order: Schema.Array(Schema.String) }),
   message: OwnerMessage,
   elements: Html
@@ -96,7 +96,7 @@ export const Owner = Component.define({
 `
 }
 
-const deep = (scoped, depth) => {
+const deep = (keepAlive, depth) => {
   const out = [imports, ""]
   for (let i = depth - 1; i >= 0; i--) {
     const last = i === depth - 1
@@ -105,12 +105,12 @@ const deep = (scoped, depth) => {
       `L${
         i + 1
       }(${at}, { key: "below", props: { id: model.draft }, onEmit: ${onEmit} })`
-    const below = scoped ? `h.scoped((s) => ${child("s")})` : child("h")
+    const below = keepAlive ? `h.keepAlive((s) => ${child("s")})` : child("h")
     out.push(
       `const LM${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Below: { id: Schema.String } })
 const LE${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 export const L${i} = Component.define({
-  name: "L${i}",${scopedField(scoped)}
+  name: "L${i}",${keepAliveField(keepAlive)}
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ draft: Schema.String }),
   message: LM${i},
@@ -142,10 +142,10 @@ const generate = (dir) => {
   }
   if (!values.main) {
     Object.assign(files, {
-      "scoped-leaves.ts": leaves(true),
-      "scoped-owner.ts": owner(true),
-      "scoped-deep8.ts": deep(true, 8),
-      "scoped-deep16.ts": deep(true, 16)
+      "keepAlive-leaves.ts": leaves(true),
+      "keepAlive-owner.ts": owner(true),
+      "keepAlive-deep8.ts": deep(true, 8),
+      "keepAlive-deep16.ts": deep(true, 16)
     })
   }
   for (const [name, text] of Object.entries(files)) {
@@ -224,7 +224,7 @@ const counts = {}
 for (const file of files) counts[path.basename(file, ".ts")] = count(file)
 const n = (name) => counts[name]?.instantiations ?? NaN
 
-const shapes = values.main ? ["inline"] : ["inline", "scoped"]
+const shapes = values.main ? ["inline"] : ["inline", "keepAlive"]
 const measure = (f) =>
   Object.fromEntries(shapes.map((shape) => [shape, f(shape)]))
 const measures = {
@@ -354,26 +354,26 @@ if (values.lsp) {
   const sessions = []
   for (let i = 0; i < Number(values.sessions); i++) {
     const inline = await lsp(path.join(dir, "inline-owner.ts"), "h.")
-    const scoped = values.main
+    const keepAlive = values.main
       ? undefined
-      : await lsp(path.join(dir, "scoped-owner.ts"), "h.")
-    sessions.push({ inline, scoped })
+      : await lsp(path.join(dir, "keepAlive-owner.ts"), "h.")
+    sessions.push({ inline, keepAlive })
   }
   editor = { sessions }
   if (!values.main) {
     const ratio = (key) =>
-      median(sessions.map((s) => s.scoped[key] / s.inline[key]))
+      median(sessions.map((s) => s.keepAlive[key] / s.inline[key]))
     const ofMain = (key) =>
       base?.editor === undefined
         ? undefined
-        : median(sessions.map((s) => s.scoped[key])) /
+        : median(sessions.map((s) => s.keepAlive[key])) /
           median(base.editor.sessions.map((s) => s.inline[key]))
     measures.diagnosticsRatio = {
-      scoped: ratio("diagnosticsMs"),
+      keepAlive: ratio("diagnosticsMs"),
       ofMain: ofMain("diagnosticsMs")
     }
     measures.completionRatio = {
-      scoped: ratio("completionMs"),
+      keepAlive: ratio("completionMs"),
       ofMain: ofMain("completionMs")
     }
   }
@@ -386,38 +386,40 @@ const format = (value) =>
     ? value.toLocaleString("en-US")
     : value.toFixed(2)
 const rows = Object.entries(measures).map(
-  ([name, { inline, scoped, ofMain }]) => {
-    const checked = ofMain ?? scoped
+  ([name, { inline, keepAlive, ofMain }]) => {
+    const checked = ofMain ?? keepAlive
     return {
       name,
       main: format(base?.measures[name]?.inline),
       inline: format(inline),
-      scoped: format(scoped),
+      keepAlive: format(keepAlive),
       ofMain: format(ofMain),
       ceiling: format(ceilings[name]),
       pass: checked === undefined || checked <= ceilings[name]
     }
   }
 )
-console.log("| Measure | main | Inline | Scoped | Scoped / main | Ceiling | |")
+console.log(
+  "| Measure | main | Inline | Keep-alive | Keep-alive / main | Ceiling | |"
+)
 console.log("| --- | ---: | ---: | ---: | ---: | ---: | --- |")
 for (const row of rows) {
   const status = row.pass ? "pass" : "OVER"
   console.log(
-    `| ${row.name} | ${row.main} | ${row.inline} | ${row.scoped} | ${row.ofMain} | ${row.ceiling} | ${status} |`
+    `| ${row.name} | ${row.main} | ${row.inline} | ${row.keepAlive} | ${row.ofMain} | ${row.ceiling} | ${status} |`
   )
 }
 if (editor !== undefined) {
   const ms = (run) =>
     `${Math.round(run.diagnosticsMs)} / ${Math.round(run.completionMs)} ms`
-  for (const [i, { inline, scoped }] of editor.sessions.entries()) {
+  for (const [i, { inline, keepAlive }] of editor.sessions.entries()) {
     console.log(
       `session ${i + 1}: inline ${ms(inline)}${
-        scoped === undefined ? "" : `, scoped ${ms(scoped)}`
+        keepAlive === undefined ? "" : `, keep-alive ${ms(keepAlive)}`
       } ` +
         `(diagnostics / completion), ${
-          (scoped ?? inline).items
-        } completions at h., ${(scoped ?? inline).errors} errors`
+          (keepAlive ?? inline).items
+        } completions at h., ${(keepAlive ?? inline).errors} errors`
     )
   }
 }

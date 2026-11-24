@@ -86,7 +86,6 @@ describe("Component", () => {
     it("covers every update branch", () => {
       const C = Component.define({
         name: "C",
-        scoped: false,
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -105,7 +104,6 @@ describe("Component", () => {
     it("covers every init branch", () => {
       const C = Component.define({
         name: "C",
-        scoped: false,
         props: Schema.Struct({ a: Schema.Boolean }),
         model: Schema.Struct({}),
         message: Message
@@ -121,7 +119,6 @@ describe("Component", () => {
     it("covers every view branch", () => {
       const ChildA = Component.define({
         name: "ChildA",
-        scoped: false,
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -131,7 +128,6 @@ describe("Component", () => {
       })
       const ChildB = Component.define({
         name: "ChildB",
-        scoped: false,
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -141,7 +137,6 @@ describe("Component", () => {
       })
       const Parent = Component.define({
         name: "Parent",
-        scoped: false,
         model: Schema.Struct({ a: Schema.Boolean }),
         message: Schema.Never
       }).make({
@@ -166,7 +161,6 @@ describe("Component", () => {
       >()
       const C = Component.define({
         name: "C",
-        scoped: false,
         model: Schema.Struct({}),
         message: Message
       }).make({
@@ -373,7 +367,6 @@ describe("Component", () => {
     it("surfaces only the feature service in the parent", () => {
       const Parent = Component.define({
         name: "Parent",
-        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never
       }).make({
@@ -401,7 +394,6 @@ describe("Component", () => {
     type ParentMessage = typeof ParentMessage.Type
     const ParentDef = Component.define({
       name: "Parent",
-      scoped: false,
       model: Schema.Null,
       message: ParentMessage
     })
@@ -439,10 +431,10 @@ describe("Component", () => {
       })
     })
 
-    it("keeps a scoped component's call: it takes the s of h.scoped, and not h", () => {
-      const Scoped = Component.define({
-        name: "Scoped",
-        scoped: true,
+    it("keeps a keep-alive component's call: it takes the s of h.keepAlive, and not h", () => {
+      const Kept = Component.define({
+        name: "Kept",
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -451,18 +443,18 @@ describe("Component", () => {
           update: ($) => $.model,
           view: (h) => h.el("p")
         })
-      const LazyScoped = Component.lazy(
-        "LazyScoped",
-        () => Promise.resolve(Scoped)
+      const LazyKeepAlive = Component.lazy(
+        "LazyKeepAlive",
+        () => Promise.resolve(Kept)
       )
-      expect(LazyScoped).type.toBe<Component.Lazy.Scoped<{}, never>>()
-      expect(LazyScoped).type.toBeAssignableTo<Component.Lazy.Any>()
+      expect(LazyKeepAlive).type.toBe<Component.Lazy.KeepAlive<{}, never>>()
+      expect(LazyKeepAlive).type.toBeAssignableTo<Component.Lazy.Any>()
       ParentDef.view((h) => {
-        expect(LazyScoped).type.not.toBeCallableWith(h, { key: "s" })
-        return h.scoped((s) => {
-          expect(LazyScoped(s, { key: "s", fallback: () => h.el("p") })).type
+        expect(LazyKeepAlive).type.not.toBeCallableWith(h, { key: "s" })
+        return h.keepAlive((s) => {
+          expect(LazyKeepAlive(s, { key: "s", fallback: () => h.el("p") })).type
             .toBe<View.Child<ParentMessage, never>>()
-          return LazyScoped(s, { key: "s" })
+          return LazyKeepAlive(s, { key: "s" })
         })
       })
     })
@@ -470,7 +462,6 @@ describe("Component", () => {
     it("takes no headless component", () => {
       const Headless = Component.define({
         name: "Headless",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -489,7 +480,6 @@ describe("Component", () => {
     type ParentMessage = typeof ParentMessage.Type
     const ParentDef = Component.define({
       name: "Parent",
-      scoped: false,
       model: Schema.Null,
       message: ParentMessage
     })

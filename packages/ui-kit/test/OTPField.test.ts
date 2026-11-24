@@ -622,7 +622,6 @@ describe("OTPField", () => {
       const secret = "847291"
       const Page = Component.define({
         name: "VerifyPage",
-        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html

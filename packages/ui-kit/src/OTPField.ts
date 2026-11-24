@@ -122,7 +122,6 @@
  *
  * const Verify = Component.define({
  *   name: "Verify",
- *   scoped: false,
  *   model: Schema.Struct({ code: Schema.Redacted(Schema.String) }),
  *   message: VerifyMessage,
  *   elements: Html
@@ -882,7 +881,6 @@ const checked = (
  */
 export const OTPField = Component.define({
   name: "OTPField",
-  scoped: false,
   props: OTPFieldProps,
   model: OTPFieldModel,
   message: OTPFieldMessage,

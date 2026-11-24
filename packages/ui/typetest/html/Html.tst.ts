@@ -60,7 +60,6 @@ const Measure = Mount.make(
 
 const Ticker = Component.define({
   name: "Ticker",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Number,
   elements: Html
@@ -90,7 +89,6 @@ describe("Html", () => {
     expect(Html).type.toBeAssignableTo<View.Vocabulary<Html.Elements>>()
     Component.define({
       name: "Tags",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -122,7 +120,6 @@ describe("Html", () => {
   it("children returns the builder, so more children and attributes can follow", () => {
     Component.define({
       name: "Order",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -188,7 +185,6 @@ describe("Html", () => {
   it("forward returns the builder's own class, with what it adds in the requirements", () => {
     Component.define({
       name: "Forward",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -259,7 +255,6 @@ describe("Html", () => {
   it("errors point at the offending child", () => {
     Component.define({
       name: "Errors",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -280,7 +275,6 @@ describe("Html", () => {
   it("events carry the tag's payloads", () => {
     Component.define({
       name: "Events",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -370,7 +364,6 @@ describe("Html", () => {
   it("controlled properties exist on the elements that have them", () => {
     Component.define({
       name: "Controlled",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -416,7 +409,6 @@ describe("Html", () => {
     )
     Component.define({
       name: "Refs",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -443,7 +435,6 @@ describe("Html", () => {
   it("requirements from onMount and from children reach the component", () => {
     const Mounted = Component.define({
       name: "Mounted",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -468,7 +459,6 @@ describe("Html", () => {
     >()
     const Shorthand = Component.define({
       name: "Shorthand",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -490,7 +480,6 @@ describe("Html", () => {
     >()
     const Bare = Component.define({
       name: "Bare",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -531,7 +520,6 @@ describe("Html", () => {
     expect(DrawChart).type.not.toBeCallableWith({ points: "none" })
     const Chart = Component.define({
       name: "Chart",
-      scoped: false,
       model: Schema.Array(Schema.Number),
       message: Schema.Never,
       elements: Html
@@ -630,7 +618,6 @@ describe("Html", () => {
   it("View.Input keeps what a child requires", () => {
     const PageDef = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -705,7 +692,6 @@ describe("Html", () => {
   it("ref Commands add nothing to a component's requirements", () => {
     const Form = Component.define({
       name: "Form",
-      scoped: false,
       model: Schema.String,
       message: Msg,
       elements: Html
@@ -758,7 +744,6 @@ describe("HtmlLocator", () => {
 describe("BrowserHost", () => {
   const Counter = Component.define({
     name: "Counter",
-    scoped: false,
     model: Schema.Number,
     message: Msg,
     elements: Html
@@ -787,7 +772,6 @@ describe("BrowserHost", () => {
     })
     const App = Component.define({
       name: "App",
-      scoped: false,
       props: Schema.Struct({ route: AppRoute }),
       model: AppRoute,
       message: Schema.Never,
@@ -824,7 +808,6 @@ describe("BrowserHost", () => {
     const Native: View.Vocabulary<Native> = { name: "native", tags: {} }
     const App = Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Number,
       message: Msg,
       elements: Native

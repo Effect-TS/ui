@@ -179,7 +179,6 @@ describe("HtmlHead", () => {
       })
       const BlogPost = Component.define({
         name: "BlogPost",
-        scoped: false,
         props: Schema.Struct({ post: Post }),
         model: Schema.Null,
         message: Schema.Never,
@@ -196,7 +195,6 @@ describe("HtmlHead", () => {
       })
       const Blog = Component.define({
         name: "Blog",
-        scoped: false,
         props: Schema.Struct({ post: Schema.optional(Post) }),
         model: Schema.Null,
         message: Schema.Never,
@@ -224,7 +222,6 @@ describe("HtmlHead", () => {
       })
       const Site = Component.define({
         name: "Site",
-        scoped: false,
         model: Schema.Struct({ post: Schema.optional(Post) }),
         message: Message,
         elements: Html
@@ -319,7 +316,6 @@ describe("HtmlHead", () => {
 
   const Neutral = Component.define({
     name: "Neutral",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never
   }).make({
@@ -330,7 +326,6 @@ describe("HtmlHead", () => {
   })
   const Page = Component.define({
     name: "Page",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
@@ -345,7 +340,6 @@ describe("HtmlHead", () => {
   })
   const Shell = Component.define({
     name: "Shell",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never
   }).make({

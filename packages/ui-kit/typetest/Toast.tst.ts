@@ -35,7 +35,6 @@ describe("ToastProvider", () => {
   it("each part returns the builder it was given, with the consumer's message type", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -73,7 +72,6 @@ describe("ToastProvider", () => {
   it("the buttons take only a button, and the containers only a div", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -109,7 +107,6 @@ describe("ToastProvider", () => {
   it("a sender posts only the add, update and close messages", () => {
     Component.define({
       name: "Sender",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

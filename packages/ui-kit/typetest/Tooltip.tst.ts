@@ -27,7 +27,6 @@ describe("Tooltip", () => {
   it("each part returns the builder it was given, with the consumer's message type", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -60,7 +59,6 @@ describe("Tooltip", () => {
   it("the trigger takes only a button, and the other parts only a div", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

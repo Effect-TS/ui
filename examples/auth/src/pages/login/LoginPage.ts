@@ -100,7 +100,6 @@ const FormField = <M>(h: View.H<M>, options: {
 
 export const LoginPageNoDeps = Component.define({
   name: "LoginPage",
-  scoped: false,
   model: Schema.Struct({
     form: LoginValidation.State,
     submitting: Schema.Boolean

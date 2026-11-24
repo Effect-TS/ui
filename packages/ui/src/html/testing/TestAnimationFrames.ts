@@ -20,7 +20,6 @@
  *
  * const Clock = Component.define({
  *   name: "Clock",
- *   scoped: false,
  *   model: Schema.Number,
  *   message: Message,
  *   elements: Html

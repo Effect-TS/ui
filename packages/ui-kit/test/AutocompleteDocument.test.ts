@@ -62,7 +62,6 @@ const formUpdate = {
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: FormModel,
   message: Message,
   elements: Html
@@ -118,7 +117,6 @@ const Page = Component.define({
 
 const InPopup = Component.define({
   name: "InPopup",
-  scoped: false,
   model: FormModel,
   message: Message,
   elements: Html
@@ -180,7 +178,6 @@ const NestedMessage = UiSchema.TaggedEnum({
 
 const Nested = Component.define({
   name: "Nested",
-  scoped: false,
   model: Schema.Struct({
     outer: Schema.Boolean,
     inner: Schema.Boolean,

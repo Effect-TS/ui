@@ -78,7 +78,6 @@
  *
  * const Faq = Component.define({
  *   name: "Faq",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Array(Schema.String) }),
  *   message: FaqMessage,
  *   elements: Html
@@ -300,7 +299,6 @@ const numbered = <N extends View.Node<any, any>>(node: N): N => {
  */
 export const Accordion = Component.define({
   name: "Accordion",
-  scoped: false,
   props: AccordionProps,
   model: Schema.Struct({}),
   message: AccordionMessage,
@@ -456,7 +454,6 @@ const headings = ["h1", "h2", "h3", "h4", "h5", "h6"] as const
  */
 export const AccordionItem = Component.define({
   name: "AccordionItem",
-  scoped: false,
   props: AccordionItemProps,
   model: Schema.Struct({}),
   message: AccordionItemMessage,

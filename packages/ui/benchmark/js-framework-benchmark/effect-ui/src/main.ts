@@ -150,7 +150,6 @@ const update = (
 
 const MainDef = Component.define({
   name: "Main",
-  scoped: false,
   model: Model,
   message: Message,
   elements: Html

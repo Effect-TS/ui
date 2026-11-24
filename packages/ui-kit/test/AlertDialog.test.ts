@@ -10,7 +10,6 @@ const Message = UiSchema.TaggedEnum({ RequestedClose: {} })
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({}),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: Message,

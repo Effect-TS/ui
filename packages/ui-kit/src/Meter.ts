@@ -53,7 +53,6 @@
  *
  * const Storage = Component.define({
  *   name: "Storage",
- *   scoped: false,
  *   model: Schema.Struct({ used: Schema.Number, quota: Schema.Number }),
  *   message: Schema.Never,
  *   elements: Html
@@ -162,7 +161,6 @@ export type MeterProps = typeof MeterProps.Type
  */
 export const Meter = Component.define({
   name: "Meter",
-  scoped: false,
   props: MeterProps,
   model: Schema.Struct({}),
   message: Schema.Never,

@@ -24,7 +24,6 @@ const Config = Schema.Struct({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Config,
   model: Schema.Struct({
     clicks: Schema.Number,

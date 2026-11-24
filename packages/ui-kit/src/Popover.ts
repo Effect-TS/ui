@@ -163,7 +163,6 @@
  *
  * const Inbox = Component.define({
  *   name: "Inbox",
- *   scoped: false,
  *   model: Schema.Struct({ notifications: Schema.Boolean }),
  *   message: InboxMessage,
  *   elements: Html
@@ -875,7 +874,6 @@ export const PopoverTrigger = <Msg, R = never>(
  */
 export const Popover = Component.define({
   name: "Popover",
-  scoped: false,
   props: PopoverProps,
   model: PopoverModel,
   message: PopoverMessage,

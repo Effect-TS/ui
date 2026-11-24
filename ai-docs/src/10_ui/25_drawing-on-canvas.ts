@@ -89,7 +89,6 @@ export const sceneOf = (
 // comes back from the background still sends one long frame: cap it.
 export const Sky = Component.define({
   name: "Sky",
-  scoped: false,
   model: Schema.Struct({
     running: Schema.Boolean,
     comets: Schema.Array(Comet)

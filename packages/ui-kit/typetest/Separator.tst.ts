@@ -14,7 +14,6 @@ describe("Separator", () => {
   it("returns a div of the caller's message type, whose chained children keep their requirements", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

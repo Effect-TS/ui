@@ -64,7 +64,6 @@
  *
  * const Header = Component.define({
  *   name: "Header",
- *   scoped: false,
  *   model: Schema.Struct({ path: Schema.String }),
  *   message: Schema.Never,
  *   elements: Html
@@ -220,7 +219,6 @@ const TrackArrowKeys = Mount.makeStream(
  */
 export const NavigationMenu = Component.define({
   name: "NavigationMenu",
-  scoped: false,
   props: NavigationMenuProps,
   model: Schema.Struct({}),
   message: Schema.Never,

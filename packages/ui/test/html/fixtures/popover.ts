@@ -144,7 +144,6 @@ export const MenuMessage = UiSchema.TaggedEnum({
 /** A menu popover. With `follow`, its Model follows the browser's toggles. */
 export const Menu = Component.define({
   name: "Menu",
-  scoped: false,
   props: Schema.Struct({
     mode: Mode,
     open: Schema.Boolean,
@@ -186,7 +185,6 @@ export const Menu = Component.define({
 /** A modal dialog holding an auto popover, both open from the start. */
 export const ModalMenu = Component.define({
   name: "ModalMenu",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -204,7 +202,6 @@ export const ModalMenu = Component.define({
 
 const Popup = Component.define({
   name: "Popup",
-  scoped: false,
   props: Schema.Struct({ label: Schema.String, mode: Mode }),
   model: Schema.Null,
   message: Schema.Never,
@@ -223,7 +220,6 @@ const Popup = Component.define({
  */
 export const Rows = Component.define({
   name: "Rows",
-  scoped: false,
   props: Schema.Struct({ mode: Mode }),
   model: Schema.Boolean,
   message: Schema.Boolean,

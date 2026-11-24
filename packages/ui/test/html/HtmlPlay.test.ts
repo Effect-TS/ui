@@ -10,7 +10,6 @@ import { Settings } from "./fixtures/settings.ts"
 
 const Checkout = Component.define({
   name: "Checkout",
-  scoped: false,
   model: Schema.Struct({
     log: Schema.Array(Schema.String),
     zip: Schema.String
@@ -163,7 +162,6 @@ describe("HtmlPlay", () => {
     Effect.gen(function*() {
       const Toolbar = Component.define({
         name: "Toolbar",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -197,7 +195,6 @@ describe("HtmlPlay", () => {
     Effect.gen(function*() {
       const Keys = Component.define({
         name: "Keys",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Schema.String,
         elements: Html

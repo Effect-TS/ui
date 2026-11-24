@@ -32,7 +32,6 @@ const CardMessage = UiSchema.TaggedEnum({ ClickedLike: {} })
 
 const Card = Component.define({
   name: "Card",
-  scoped: false,
   props: Schema.Struct({ layout: Layout }),
   model: Schema.Struct({ likes: Schema.Number }),
   message: CardMessage,
@@ -46,7 +45,6 @@ const Card = Component.define({
 
 const Gallery = Component.define({
   name: "Gallery",
-  scoped: false,
   props: Schema.Struct({ route: GalleryRoute }),
   model: Schema.Struct({
     route: GalleryRoute,

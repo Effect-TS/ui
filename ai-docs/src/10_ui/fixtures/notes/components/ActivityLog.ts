@@ -5,7 +5,6 @@ import { NoteActivity } from "./NoteActivity.ts"
 // One implementation of the feature. Its props must fit the contract.
 export const ActivityLog = Component.define({
   name: "ActivityLog",
-  scoped: false,
   props: NoteActivity.props,
   model: Schema.Struct({}),
   message: Schema.Never

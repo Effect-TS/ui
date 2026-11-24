@@ -13,7 +13,6 @@ const SceneMessage = UiSchema.TaggedEnum({
 
 const Scene = Component.define({
   name: "Scene",
-  scoped: false,
   model: Schema.Struct({
     count: Schema.Number,
     menu: Schema.Boolean,

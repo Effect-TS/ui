@@ -17,7 +17,6 @@ class Save extends Command.Service<Save>()(
 
 const Saver = Component.define({
   name: "Saver",
-  scoped: false,
   model: Schema.Null,
   message: SaverMessage,
   events: SaverEvents
@@ -34,7 +33,6 @@ const Saver = Component.define({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Literals(["Saved", "Ignored"])
 }).make({

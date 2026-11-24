@@ -19,7 +19,6 @@ let mounts = 0
 const Seen = Mount.make("Seen", { args: {} }, () => Effect.sync(() => mounts++))
 const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   model: Schema.Number,
   message: CounterMessage,
   elements: Html
@@ -88,7 +87,6 @@ class Editor extends Feature.Service<Editor>()("Pause/Editor", {
 }) {}
 const EditorView = Component.define({
   name: "EditorView",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -100,7 +98,6 @@ const EditorView = Component.define({
 
 const Note = Component.define({
   name: "Note",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -113,7 +110,6 @@ const Note = Component.define({
 
 const Pane = Component.define({
   name: "Pane",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -135,7 +131,6 @@ const Pane = Component.define({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -187,7 +182,6 @@ it.effect("a paint that fails removes its copy and leaves the page as it was", (
 const DialogMessage = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
 const Settings = Component.define({
   name: "Settings",
-  scoped: false,
   model: Schema.Boolean,
   message: DialogMessage,
   elements: Html
@@ -232,7 +226,6 @@ const TallyMessage = UiSchema.TaggedEnum({
 })
 const Tally = Component.define({
   name: "Tally",
-  scoped: false,
   model: Schema.Number,
   message: TallyMessage,
   elements: Html
@@ -246,7 +239,6 @@ const Tally = Component.define({
 })
 const Board = Component.define({
   name: "Board",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

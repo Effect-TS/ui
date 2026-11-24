@@ -148,7 +148,6 @@
  *
  * const Cart = Component.define({
  *   name: "Cart",
- *   scoped: false,
  *   model: Schema.Struct({ price: Schema.NullOr(Schema.Number) }),
  *   message: CartMessage,
  *   elements: Html
@@ -1380,7 +1379,6 @@ const stepperDefaults = {
  */
 export const NumberField = Component.define({
   name: "NumberField",
-  scoped: false,
   props: NumberFieldProps,
   model: NumberFieldModel,
   message: NumberFieldMessage,

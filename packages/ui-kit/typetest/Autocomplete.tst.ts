@@ -61,7 +61,6 @@ describe("Autocomplete", () => {
   it("each part returns the builder it was given, and clear can return undefined", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -99,7 +98,6 @@ describe("Autocomplete", () => {
   it("draws its input with a field's control", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -122,7 +120,6 @@ describe("Autocomplete", () => {
   it("requires open, value and items, and has no selection props", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

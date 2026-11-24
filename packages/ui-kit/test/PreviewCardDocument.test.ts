@@ -26,7 +26,6 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Struct({
     open: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),

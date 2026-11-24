@@ -41,7 +41,6 @@ describe("Avatar", () => {
       const Message = UiSchema.TaggedEnum({ Picked: { src: Schema.String } })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.String,
         message: Message,
         elements: Html

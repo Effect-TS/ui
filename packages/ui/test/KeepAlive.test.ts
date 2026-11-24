@@ -59,7 +59,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   )
   return Component.define({
     name: "Profile",
-    scoped: true,
+    keepAlive: true,
     model: FormModel,
     message: FormMsg,
     events: FormEvents
@@ -87,7 +87,7 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
 
 const Billing = Component.define({
   name: "Billing",
-  scoped: true,
+  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -108,7 +108,6 @@ const SettingsModel = Schema.Struct({
 const makeSettings = (Profile: ReturnType<typeof makeForm>) =>
   Component.define({
     name: "Settings",
-    scoped: false,
     model: SettingsModel,
     message: SettingsMsg
   }).make({
@@ -123,14 +122,14 @@ const makeSettings = (Profile: ReturnType<typeof makeForm>) =>
       h.el(
         "main",
         model.tab === "profile"
-          ? h.scoped((s) =>
+          ? h.keepAlive((s) =>
             Profile(s, {
               key: "Form",
               onEmit: (event) =>
                 SettingsMsg.Saved({ text: event.text + "@" + model.tab })
             })
           )
-          : h.scoped((s) => Billing(s, { key: "billing" }))
+          : h.keepAlive((s) => Billing(s, { key: "billing" }))
       )
   })
 
@@ -188,7 +187,7 @@ const numbered = () => {
   }
 }
 
-describe("scoped children", () => {
+describe("keep-alive children", () => {
   it.effect("a hidden tab keeps its draft and its save, gets messages, and emits through the last onEmit", () =>
     provideHost(Effect.gen(function*() {
       const saving = yield* Deferred.make<void>()
@@ -242,7 +241,7 @@ describe("scoped children", () => {
 
 const Row = Component.define({
   name: "Row",
-  scoped: true,
+  keepAlive: true,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Number,
   message: Schema.Literal("inc")
@@ -265,7 +264,6 @@ const ListModel = Schema.Struct({
 
 const List = Component.define({
   name: "List",
-  scoped: false,
   model: ListModel,
   message: ListMsg
 }).make({
@@ -285,7 +283,7 @@ const List = Component.define({
   view: (h, model) =>
     h.el(
       "ul",
-      h.scoped(({ key, model }) => key in model.items, (s) =>
+      h.keepAlive(({ key, model }) => key in model.items, (s) =>
         Object.keys(model.items)
           .filter((id) =>
             model.items[id]!.includes(model.filter)
@@ -306,7 +304,6 @@ const host = <Model, Message>(
 ) =>
   Component.define({
     name: "Host",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never
   }).make({
@@ -316,7 +313,7 @@ const host = <Model, Message>(
       h.el("main", Inner(h, { key: "i", fallback: () => h.el("p", "down") }))
   })
 
-describe("scoped lists", () => {
+describe("keep-alive lists", () => {
   it.effect("ends a row once its item is deleted, and keeps one the view filters out", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(List, {})
@@ -350,7 +347,7 @@ describe("scoped lists", () => {
     })))
 })
 
-describe("scope predicates", () => {
+describe("keepAlive predicates", () => {
   for (
     const [name, alive] of [
       ["reads nothing from its argument", () => true],
@@ -361,7 +358,6 @@ describe("scope predicates", () => {
       provideHost(Effect.gen(function*() {
         const Inner = Component.define({
           name: "Inner",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -369,7 +365,7 @@ describe("scope predicates", () => {
             init: () => null,
             update: ($) => $.model,
             view: (h) =>
-              h.el("div", h.scoped(alive, (s) => Billing(s, { key: "b" })))
+              h.el("div", h.keepAlive(alive, (s) => Billing(s, { key: "b" })))
           })
         const root = yield* TestHost.mount(host(Inner), {})
         yield* TestHost.settle
@@ -386,7 +382,6 @@ describe("scope predicates", () => {
       provideHost(Effect.gen(function*() {
         const Inner = Component.define({
           name: "Inner",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Literal("go")
         })
@@ -397,7 +392,7 @@ describe("scope predicates", () => {
               h.el(
                 "div",
                 h.el("button").on("click", "go").children("go"),
-                h.scoped(({ model }) => {
+                h.keepAlive(({ model }) => {
                   if (model) throw new Error("no model")
                   return true
                 }, (s) => gone && !written ? null : Billing(s, { key: "b" }))
@@ -414,12 +409,11 @@ describe("scope predicates", () => {
   )
 })
 
-describe("scoped paths", () => {
+describe("keep-alive paths", () => {
   it.effect("fails the author that writes one child twice in a render", () =>
     provideHost(Effect.gen(function*() {
       const Inner = Component.define({
         name: "Inner",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -429,8 +423,8 @@ describe("scoped paths", () => {
           view: (h) =>
             h.el(
               "div",
-              h.scoped((s) => Billing(s, { key: "b" })),
-              h.scoped((s) => Billing(s, { key: "b" }))
+              h.keepAlive((s) => Billing(s, { key: "b" })),
+              h.keepAlive((s) => Billing(s, { key: "b" }))
             )
         })
       const root = yield* TestHost.mount(host(Inner), {})
@@ -440,12 +434,11 @@ describe("scoped paths", () => {
     })))
 })
 
-describe("scoped lifetimes", () => {
+describe("keep-alive lifetimes", () => {
   it.effect("ends kept children with their author", () =>
     provideHost(Effect.gen(function*() {
       const Inner = Component.define({
         name: "Inner",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -455,12 +448,11 @@ describe("scoped lifetimes", () => {
           view: (h, shown) =>
             h.el(
               "div",
-              h.scoped((s) => shown ? Billing(s, { key: "b" }) : null)
+              h.keepAlive((s) => shown ? Billing(s, { key: "b" }) : null)
             )
         })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -493,7 +485,7 @@ describe("scoped lifetimes", () => {
       )
       const Fragile = Component.define({
         name: "Fragile",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -504,7 +496,6 @@ describe("scoped lifetimes", () => {
         })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -514,7 +505,7 @@ describe("scoped lifetimes", () => {
           view: (h, shown) =>
             h.el(
               "div",
-              h.scoped((s) =>
+              h.keepAlive((s) =>
                 shown
                   ? Fragile(s, { key: "F", fallback: () => h.el("p", "down") })
                   : null
@@ -538,7 +529,6 @@ describe("scoped lifetimes", () => {
     Effect.gen(function*() {
       const Tabs = Component.define({
         name: "Tabs",
-        scoped: false,
         props: Schema.Struct({ shown: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never
@@ -548,12 +538,11 @@ describe("scoped lifetimes", () => {
         view: (h) =>
           h.el(
             "div",
-            h.scoped((s) => h.props.shown ? Billing(s, { key: "b" }) : null)
+            h.keepAlive((s) => h.props.shown ? Billing(s, { key: "b" }) : null)
           )
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -595,7 +584,7 @@ describe("scoped lifetimes", () => {
         )()
       const Leaf = Component.define({
         name: "Leaf",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -605,7 +594,6 @@ describe("scoped lifetimes", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -613,7 +601,10 @@ describe("scoped lifetimes", () => {
           init: () => true,
           update: (_, shown) => shown,
           view: (h, shown) =>
-            h.el("div", h.scoped((s) => shown ? Leaf(s, { key: "l" }) : null))
+            h.el(
+              "div",
+              h.keepAlive((s) => shown ? Leaf(s, { key: "l" }) : null)
+            )
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -643,7 +634,6 @@ describe("scoped lifetimes", () => {
       )
       const Tabs = Component.define({
         name: "Tabs",
-        scoped: false,
         props: Schema.Boolean,
         model: Schema.Null,
         message: Schema.Never
@@ -654,7 +644,7 @@ describe("scoped lifetimes", () => {
           view: (h) =>
             h.el(
               "div",
-              h.scoped((s) => h.props ? Billing(s, { key: "b" }) : null)
+              h.keepAlive((s) => h.props ? Billing(s, { key: "b" }) : null)
             )
         })
       const State = Schema.Struct({
@@ -664,7 +654,6 @@ describe("scoped lifetimes", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: State,
         message: State
       }).make({
@@ -695,11 +684,11 @@ describe("scoped lifetimes", () => {
       assert.strictEqual(started, 1)
     }).pipe(provideHost))
 
-  it("a Scene counts a mount in a scoped child's slot once its scope's predicate holds", () => {
+  it("a Scene counts a mount in a keep-alive child's slot once its predicate holds", () => {
     const Track = Mount.make("Track", { args: {} }, () => Effect.never)
     const Frame = Component.define({
       name: "Frame",
-      scoped: true,
+      keepAlive: true,
       model: Schema.Null,
       message: Schema.Never,
       slots: ["body"]
@@ -711,7 +700,6 @@ describe("scoped lifetimes", () => {
       })
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Boolean,
       message: Schema.Boolean
     }).make(
@@ -722,7 +710,7 @@ describe("scoped lifetimes", () => {
           h.el(
             "div",
             h.el("button").on("click", true).children("toggle"),
-            h.scoped(({ model }) => model, (s) =>
+            h.keepAlive(({ model }) => model, (s) =>
               Frame(s, {
                 key: "f",
                 slots: { body: h.el("b").onMount(Track()) }
@@ -738,7 +726,7 @@ describe("scoped lifetimes", () => {
     s.click(Locator.text("toggle")).expectMount(Track())
   })
 
-  it.effect("mounts a scoped component as the root, as any other", () =>
+  it.effect("mounts a keep-alive component as the root, as any other", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Row, { label: "root" })
       yield* TestHost.settle
@@ -755,7 +743,7 @@ const withoutContainer = () => {
 
 const Draft = Component.define({
   name: "Draft",
-  scoped: true,
+  keepAlive: true,
   model: Schema.String,
   message: Schema.Literal("type")
 })
@@ -773,7 +761,6 @@ const TabsRoute = Route.union({
 
 const TabsPage = Component.define({
   name: "TabsPage",
-  scoped: false,
   model: Schema.String,
   message: Schema.String
 })
@@ -786,8 +773,8 @@ const TabsPage = Component.define({
         h.el("button").on("click", tab === "profile" ? "billing" : "profile")
           .children("switch"),
         tab === "profile"
-          ? h.scoped((s) => Draft(s, { key: "d" }))
-          : h.scoped((s) => Billing(s, { key: "b" }))
+          ? h.keepAlive((s) => Draft(s, { key: "d" }))
+          : h.keepAlive((s) => Billing(s, { key: "b" }))
       )
   })
 
@@ -798,7 +785,6 @@ const TabsMsg = UiSchema.TaggedEnum({
 })
 const TabsApp = Component.define({
   name: "TabsApp",
-  scoped: false,
   props: Schema.Struct({ route: TabsRoute }),
   model: TabsRoute,
   message: TabsMsg
@@ -835,7 +821,7 @@ const TabsApp = Component.define({
     )
 })
 
-describe("saved state of scoped children", () => {
+describe("saved state of keep-alive children", () => {
   it.effect("a router restore keeps the state of a kept child until it's written again", () => {
     const history = Router.memoryHistory("/tabs")
     return Effect.gen(function*() {
@@ -900,7 +886,6 @@ describe("saved state of scoped children", () => {
 
 const Card = Component.define({
   name: "Card",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   slots: ["body"]
@@ -912,7 +897,6 @@ const Card = Component.define({
 
 const Collapsible = Component.define({
   name: "Collapsible",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Literal("toggle"),
   slots: ["body"]
@@ -927,12 +911,11 @@ const Collapsible = Component.define({
     )
 })
 
-describe("EFF-4038 probes, scoped", () => {
+describe("EFF-4038 probes, keepAlive", () => {
   it.effect("P1: wrapping a child in a slot component keeps it", () =>
     provideHost(Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -940,7 +923,7 @@ describe("EFF-4038 probes, scoped", () => {
           init: () => false,
           update: (_, wide) => wide,
           view: (h, wide) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "main",
                 wide
@@ -969,7 +952,6 @@ describe("EFF-4038 probes, scoped", () => {
     provideHost(Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -977,7 +959,7 @@ describe("EFF-4038 probes, scoped", () => {
           init: () => false,
           update: (_, moved) => moved,
           view: (h, moved) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "main",
                 h.el("aside", moved ? null : Draft(s, { key: "f" })),
@@ -1003,14 +985,13 @@ describe("EFF-4038 probes, scoped", () => {
     provideHost(Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             Collapsible(h, {
               key: "c",
               slots: { body: Draft(s, { key: "f" }) }
@@ -1035,15 +1016,14 @@ describe("EFF-4038 probes, scoped", () => {
     })))
 })
 
-describe("scoped children of a headless child", () => {
-  it.effect("a headless child's closure writes them with its author's scope, and a kept one leaves collects", () =>
+describe("keep-alive children of a headless child", () => {
+  it.effect("a headless child's closure writes them with its author's h.keepAlive, and a kept one leaves collects", () =>
     provideHost(Effect.gen(function*() {
       const GroupMsg = UiSchema.TaggedEnum({
         ChangedOpen: { open: Schema.Boolean }
       })
       const PanelGroup = Component.define({
         name: "PanelGroup",
-        scoped: false,
         model: Schema.Struct({ anyOpen: Schema.Boolean }),
         message: GroupMsg,
         shares: {
@@ -1061,7 +1041,7 @@ describe("scoped children of a headless child", () => {
       })
       const Panel = Component.define({
         name: "Panel",
-        scoped: true,
+        keepAlive: true,
         props: Schema.Struct({ title: Schema.String }),
         model: Schema.Boolean,
         message: Schema.Literal("toggle"),
@@ -1078,7 +1058,6 @@ describe("scoped children of a headless child", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -1086,7 +1065,7 @@ describe("scoped children of a headless child", () => {
           init: () => true,
           update: (_, shown) => shown,
           view: (h, shown) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               PanelGroup(h, {
                 key: "g",
                 view: (parts) =>
@@ -1117,13 +1096,12 @@ describe("scoped children of a headless child", () => {
       ])
     })))
 
-  it.effect("headless owners in a scoped child moved up a level get an event deepest first", () =>
+  it.effect("headless owners in a keep-alive child moved up a level get an event deepest first", () =>
     provideHost(Effect.gen(function*() {
       const HitMsg = UiSchema.TaggedEnum({ Hit: {} })
       const owner = <Name extends string>(name: Name) =>
         Component.define({
           name,
-          scoped: false,
           model: Schema.Null,
           message: HitMsg
         }).make({
@@ -1135,7 +1113,7 @@ describe("scoped children of a headless child", () => {
       const Inner = owner("Inner")
       const Tree = Component.define({
         name: "Tree",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Boolean,
         message: Schema.Literal("nest")
       }).make({
@@ -1160,7 +1138,6 @@ describe("scoped children of a headless child", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -1168,7 +1145,7 @@ describe("scoped children of a headless child", () => {
           init: () => true,
           update: (_, deep) => deep,
           view: (h, deep) =>
-            h.scoped((s) => {
+            h.keepAlive((s) => {
               const tree = Tree(s, { key: "t" })
               return h.el(
                 "main",
@@ -1194,7 +1171,7 @@ describe("scoped children of a headless child", () => {
 const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
 const Counter = Component.define({
   name: "Counter",
-  scoped: true,
+  keepAlive: true,
   model: Schema.Number,
   message: CounterMsg
 }).make({
@@ -1206,7 +1183,7 @@ const Counter = Component.define({
 
 const Box = Component.define({
   name: "Box",
-  scoped: true,
+  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   slots: ["body"]
@@ -1219,7 +1196,6 @@ const Box = Component.define({
 
 const Shut = Component.define({
   name: "Shut",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Literal("toggle"),
   slots: ["body"]
@@ -1234,12 +1210,12 @@ const Shut = Component.define({
     )
 })
 
-describe("scoped children drawn by other children", () => {
+describe("keep-alive children drawn by other children", () => {
   it.effect("are drawn again once their own keyed Layer builds again", () =>
     provideHost(Effect.gen(function*() {
       const Room = Component.define({
         name: "Room",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Literals(["a", "b"]),
         message: Schema.Literal("move")
       }).make({
@@ -1254,13 +1230,12 @@ describe("scoped children drawn by other children", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.scoped((s) => h.el("main", Keyed(s, { key: "r" })))
+        view: (h) => h.keepAlive((s) => h.el("main", Keyed(s, { key: "r" })))
       })
       const root = yield* TestHost.mount(Page, {})
       click(root, "room:a")
@@ -1272,7 +1247,6 @@ describe("scoped children drawn by other children", () => {
     provideHost(Effect.gen(function*() {
       const Frail = Component.define({
         name: "Frail",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Literal("break"),
         slots: ["body"]
@@ -1290,7 +1264,6 @@ describe("scoped children drawn by other children", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -1298,7 +1271,7 @@ describe("scoped children drawn by other children", () => {
           init: () => false,
           update: (_, direct) => direct,
           view: (h, direct) =>
-            h.scoped((s) => {
+            h.keepAlive((s) => {
               const counter = Counter(s, { key: "c" })
               return h.el(
                 "main",
@@ -1327,7 +1300,6 @@ describe("scoped children drawn by other children", () => {
     provideHost(Effect.gen(function*() {
       const Room = Component.define({
         name: "Room",
-        scoped: false,
         model: Schema.Literals(["a", "b"]),
         message: Schema.Literal("move"),
         slots: ["body"]
@@ -1347,14 +1319,13 @@ describe("scoped children drawn by other children", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             h.el(
               "main",
               Keyed(h, { key: "r", slots: { body: Counter(s, { key: "c" }) } })
@@ -1377,7 +1348,7 @@ describe("scoped children drawn by other children", () => {
     provideHost(Effect.gen(function*() {
       const Fragile = Component.define({
         name: "Fragile",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -1391,14 +1362,13 @@ describe("scoped children drawn by other children", () => {
       const Where = Schema.Literals(["slot", "direct", "gone"])
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Where,
         message: Where
       }).make({
         init: () => "slot" as const,
         update: (_, where) => where,
         view: (h, where) =>
-          h.scoped(({ model }) => model !== "gone", (s) => {
+          h.keepAlive(({ model }) => model !== "gone", (s) => {
             const fragile = Fragile(s, {
               key: "f",
               fallback: () => h.el("p", "down")
@@ -1441,7 +1411,7 @@ describe("scoped children drawn by other children", () => {
       ])
     })))
 
-  it.effect("keeps a child drawn in a receiver whose own scope ends", () =>
+  it.effect("keeps a child drawn in a receiver whose own predicate ends it", () =>
     provideHost(Effect.gen(function*() {
       const Shown = Schema.Struct({
         box: Schema.Boolean,
@@ -1449,7 +1419,6 @@ describe("scoped children drawn by other children", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Shown,
         message: Shown
       }).make({
@@ -1458,18 +1427,18 @@ describe("scoped children drawn by other children", () => {
         view: (h, shown) =>
           h.el(
             "main",
-            h.scoped(({ model }) => model.box, (s) =>
+            h.keepAlive(({ model }) => model.box, (s) =>
               shown.box
                 ? Box(s, {
                   key: "x",
                   slots: {
                     body: shown.direct
                       ? null
-                      : h.scoped((t) => Counter(t, { key: "c" }))
+                      : h.keepAlive((t) => Counter(t, { key: "c" }))
                   }
                 })
                 : null),
-            shown.direct ? h.scoped((t) => Counter(t, { key: "c" })) : null
+            shown.direct ? h.keepAlive((t) => Counter(t, { key: "c" })) : null
           )
       })
       const root = yield* TestHost.mount(Page, {})
@@ -1489,7 +1458,7 @@ describe("scoped children drawn by other children", () => {
       const running = new Set<string>()
       const Tracked = Component.define({
         name: "Tracked",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -1508,7 +1477,6 @@ describe("scoped children drawn by other children", () => {
         })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.String,
         message: Schema.String
       })
@@ -1516,7 +1484,7 @@ describe("scoped children drawn by other children", () => {
           init: () => "box",
           update: (_, where) => where,
           view: (h, where) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "main",
                 where === "box"
@@ -1558,7 +1526,7 @@ describe("scoped children drawn by other children", () => {
       const FragileMsg = UiSchema.TaggedEnum({ Break: {} })
       const Fragile = Component.define({
         name: "Fragile",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: FragileMsg
       }).make(
@@ -1571,7 +1539,6 @@ describe("scoped children drawn by other children", () => {
       )
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -1582,7 +1549,7 @@ describe("scoped children drawn by other children", () => {
             h.el(
               "div",
               "before",
-              h.scoped((s) =>
+              h.keepAlive((s) =>
                 Fragile(s, { key: "F", fallback: () => h.el("p", "failed") })
               ),
               "after"
@@ -1596,14 +1563,13 @@ describe("scoped children drawn by other children", () => {
     })))
 })
 
-describe("scoped children that read shared state", () => {
+describe("keep-alive children that read shared state", () => {
   it.effect.each([true, false])(
     "read the owner above where they're drawn (an optional read: %s)",
     (optional) =>
       provideHost(Effect.gen(function*() {
         const Side = Component.define({
           name: "Side",
-          scoped: false,
           props: Schema.Struct({ name: Schema.String }),
           model: Schema.String,
           message: Schema.Never,
@@ -1615,7 +1581,6 @@ describe("scoped children that read shared state", () => {
         })
         const Reader = Component.define({
           name: "Reader",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Literal("changed"),
           shared: {
@@ -1633,7 +1598,6 @@ describe("scoped children that read shared state", () => {
         })
         const Open = Component.define({
           name: "Open",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           slots: ["body"]
@@ -1644,7 +1608,7 @@ describe("scoped children that read shared state", () => {
         })
         const Frame = Component.define({
           name: "Frame",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         }).make(
@@ -1660,7 +1624,6 @@ describe("scoped children that read shared state", () => {
         )
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.String,
           message: Schema.String
         })
@@ -1668,7 +1631,7 @@ describe("scoped children that read shared state", () => {
             init: () => "left",
             update: (_, where) => where,
             view: (h, where) =>
-              h.scoped((s) =>
+              h.keepAlive((s) =>
                 h.el(
                   "main",
                   Side(h, {
@@ -1722,7 +1685,6 @@ describe("scoped children that read shared state", () => {
 
 const Nested = Component.define({
   name: "Nested",
-  scoped: false,
   model: Schema.String,
   message: Schema.Literal("type")
 })
@@ -1734,7 +1696,7 @@ const Nested = Component.define({
   })
 const Holder = Component.define({
   name: "Holder",
-  scoped: true,
+  keepAlive: true,
   props: Schema.Struct({ bare: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never
@@ -1752,7 +1714,6 @@ const Holder = Component.define({
 
 const FormPage = Component.define({
   name: "FormPage",
-  scoped: false,
   props: Schema.Struct({
     hidden: Schema.Boolean,
     ended: Schema.Boolean,
@@ -1766,7 +1727,7 @@ const FormPage = Component.define({
   view: (h) =>
     h.el(
       "section",
-      h.scoped(
+      h.keepAlive(
         ({ props }) => !props.ended,
         (s) =>
           h.props.hidden
@@ -1790,19 +1751,17 @@ const ShellMsg = UiSchema.TaggedEnum({
 })
 const Aside = Component.define({
   name: "Aside",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Boolean
 }).make({
   init: () => false,
   update: (_, hidden) => hidden,
   view: (h, hidden) =>
-    h.el("aside", h.scoped((s) => hidden ? null : Draft(s, { key: "d" })))
+    h.el("aside", h.keepAlive((s) => hidden ? null : Draft(s, { key: "d" })))
 })
 
 const Shell = Component.define({
   name: "Shell",
-  scoped: false,
   props: Schema.Struct({ route: TabsRoute }),
   model: Schema.Struct({
     route: TabsRoute,
@@ -1860,7 +1819,7 @@ const Shell = Component.define({
 
 type History = ReturnType<typeof Router.memoryHistory>
 
-describe("scoped children across a router restore", () => {
+describe("keep-alive children across a router restore", () => {
   const routed = <A, E, R>(
     effect: (history: History) => Effect.Effect<A, E, R>
   ) => {
@@ -2020,7 +1979,6 @@ describe("scoped children across a router restore", () => {
   const twin = (stays: boolean) =>
     Component.define({
       name: "Twin",
-      scoped: false,
       props: Schema.Struct({ route: TabsRoute }),
       model: Schema.Struct({ route: TabsRoute, hidden: Schema.Boolean }),
       message: ShellMsg
@@ -2100,7 +2058,7 @@ describe("scoped children across a router restore", () => {
     ))
 })
 
-describe("scoped children whose state encodes after the push that left them", () => {
+describe("keep-alive children whose state encodes after the push that left them", () => {
   let gate: Promise<void> | undefined = Promise.resolve()
   const Slow = Schema.String.pipe(Schema.decode({
     decode: SchemaGetter.passthrough(),
@@ -2117,7 +2075,7 @@ describe("scoped children whose state encodes after the push that left them", ()
   const note = (name: string, model: Schema.Codec<string, string>) =>
     Component.define({
       name,
-      scoped: true,
+      keepAlive: true,
       props: Schema.Struct({ label: Schema.String }),
       model,
       message: Schema.Null
@@ -2132,7 +2090,6 @@ describe("scoped children whose state encodes after the push that left them", ()
   const Note = note("Note", Schema.String)
   const Notes = Component.define({
     name: "Notes",
-    scoped: false,
     props: Schema.Struct({ hidden: Schema.Boolean, sibling: Schema.Boolean }),
     model: Schema.Null,
     message: Schema.Never
@@ -2142,7 +2099,7 @@ describe("scoped children whose state encodes after the push that left them", ()
     view: (h) =>
       h.el(
         "section",
-        h.scoped((s) => {
+        h.keepAlive((s) => {
           const first = SlowNote(s, { key: "a", props: { label: "a" } })
           const second = SlowNote(s, { key: "b", props: { label: "b" } })
           const sibling = h.props.sibling
@@ -2166,7 +2123,6 @@ describe("scoped children whose state encodes after the push that left them", ()
   const app = (sibling: boolean) =>
     Component.define({
       name: "NotesApp",
-      scoped: false,
       props: Schema.Struct({ route: Routes }),
       model: Schema.Struct({
         route: Routes,
@@ -2335,7 +2291,7 @@ describe("scoped children whose state encodes after the push that left them", ()
   })
 })
 
-describe("scoped children written into closed slots", () => {
+describe("keep-alive children written into closed slots", () => {
   it.effect("run no mounts and report nothing while the slot is closed", () =>
     Effect.gen(function*() {
       const running = new Set<string>()
@@ -2344,7 +2300,6 @@ describe("scoped children written into closed slots", () => {
       })
       const Group = Component.define({
         name: "Group",
-        scoped: false,
         model: Schema.Number,
         message: GroupMsg,
         shares: {
@@ -2361,7 +2316,7 @@ describe("scoped children written into closed slots", () => {
       })
       const Member = Component.define({
         name: "Member",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never,
         shared: { group: { owner: Group, optional: true, report: () => true } }
@@ -2380,14 +2335,13 @@ describe("scoped children written into closed slots", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             Group(h, {
               key: "g",
               view: (parts) =>
@@ -2422,7 +2376,7 @@ describe("scoped children written into closed slots", () => {
       let inits = 0
       const Late = Component.define({
         name: "Late",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Number,
         message: CounterMsg
       }).make({
@@ -2435,7 +2389,6 @@ describe("scoped children written into closed slots", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2443,7 +2396,7 @@ describe("scoped children written into closed slots", () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "main",
                 Billing(s, { key: "b" }),
@@ -2464,7 +2417,7 @@ describe("scoped children written into closed slots", () => {
       const LabelMsg = UiSchema.TaggedEnum({ Tell: {} })
       const Label = Component.define({
         name: "Label",
-        scoped: true,
+        keepAlive: true,
         props: Schema.Struct({ n: Schema.Number }),
         model: Schema.Null,
         message: LabelMsg,
@@ -2482,7 +2435,6 @@ describe("scoped children written into closed slots", () => {
       const Model = Schema.Struct({ n: Schema.Number, told: Schema.String })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Model,
         message: PageMsg
       }).make({
@@ -2493,7 +2445,7 @@ describe("scoped children written into closed slots", () => {
             Told: ({ text }) => ({ ...$.model, told: text })
           }),
         view: (h, { n, told }) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             h.el(
               "main",
               told,
@@ -2543,7 +2495,7 @@ describe("scoped children written into closed slots", () => {
       const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
       const Toggling = Component.define({
         name: "Toggling",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Boolean,
         message: ToggleMsg,
         slots: ["body"]
@@ -2559,14 +2511,13 @@ describe("scoped children written into closed slots", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Literal("move")
       }).make({
         init: () => false,
         update: () => true,
         view: (h, moved) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             h.el(
               "main",
               moved
@@ -2603,7 +2554,7 @@ describe("scoped children written into closed slots", () => {
     provideHost(Effect.gen(function*() {
       const Row = Component.define({
         name: "Row",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Number,
         message: Schema.Literal("inc"),
         elements: Html
@@ -2614,14 +2565,12 @@ describe("scoped children written into closed slots", () => {
       })
       const Writer = Component.define({
         name: "Writer",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
       }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
       const Switch = Component.define({
         name: "Switch",
-        scoped: false,
         model: Schema.Literals(["a", "b"]),
         message: Schema.Literal("flip"),
         elements: Html
@@ -2635,7 +2584,6 @@ describe("scoped children written into closed slots", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -2643,7 +2591,7 @@ describe("scoped children written into closed slots", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             Switch(h, {
               key: "s",
               view: (parts) =>
@@ -2671,7 +2619,7 @@ describe("scoped children written into closed slots", () => {
       let starts = 0
       const Probe = Component.define({
         name: "Probe",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2686,7 +2634,7 @@ describe("scoped children written into closed slots", () => {
       const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
       const Toggling = Component.define({
         name: "Toggling",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Boolean,
         message: ToggleMsg,
         slots: ["body"]
@@ -2702,7 +2650,6 @@ describe("scoped children written into closed slots", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Literals(["box", "page", "ended"]),
         message: Schema.Literals(["page", "end"])
       }).make({
@@ -2711,7 +2658,7 @@ describe("scoped children written into closed slots", () => {
         view: (h, mode) =>
           h.el(
             "main",
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               mode === "box"
                 ? Toggling(s, {
                   key: "B",
@@ -2719,7 +2666,7 @@ describe("scoped children written into closed slots", () => {
                 })
                 : null
             ),
-            h.scoped(({ model }) => model !== "ended", (s) =>
+            h.keepAlive(({ model }) => model !== "ended", (s) =>
               mode === "page" ? Probe(s, { key: "p" }) : null)
           )
       })
@@ -2748,7 +2695,7 @@ describe("scoped children written into closed slots", () => {
       const define = () =>
         Component.define({
           name: "Row",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -2760,7 +2707,6 @@ describe("scoped children written into closed slots", () => {
       const [First, Second] = [define(), define()]
       const Open = Component.define({
         name: "Open",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         slots: ["body"]
@@ -2771,7 +2717,6 @@ describe("scoped children written into closed slots", () => {
       })
       const Inner = Component.define({
         name: "Inner",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2779,7 +2724,7 @@ describe("scoped children written into closed slots", () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "div",
                 h.el("p", First(s, { key: "k" })),
@@ -2801,12 +2746,12 @@ describe("scoped children written into closed slots", () => {
       "the author's view beside its slot"
     ] as const
   )(
-    "an ordinary child and a scoped one of the same name and key, the scoped one in %s",
+    "an ordinary child and a keep-alive one of the same name and key, the keep-alive one in %s",
     (where) =>
       provideHost(Effect.gen(function*() {
         const Kept = Component.define({
           name: "Row",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -2817,7 +2762,6 @@ describe("scoped children written into closed slots", () => {
           })
         const Plain = Component.define({
           name: "Row",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           slots: ["body"]
@@ -2828,14 +2772,12 @@ describe("scoped children written into closed slots", () => {
         })
         const Headless = Component.define({
           name: "Row",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
           .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
         const Inner = Component.define({
           name: "Inner",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -2843,7 +2785,7 @@ describe("scoped children written into closed slots", () => {
             init: () => null,
             update: ($) => $.model,
             view: (h) =>
-              h.scoped((s) => {
+              h.keepAlive((s) => {
                 const kept = Kept(s, { key: "k" })
                 const slot = () => Plain(h, { key: "o", slots: { body: kept } })
                 return where === "its own view"
@@ -2872,11 +2814,11 @@ describe("scoped children written into closed slots", () => {
       }))
   )
 
-  it.effect("a scoped child takes the path of an ordinary one of its name and key that the same render ends", () =>
+  it.effect("a keep-alive child takes the path of an ordinary one of its name and key that the same render ends", () =>
     provideHost(Effect.gen(function*() {
       const Kept = Component.define({
         name: "Row",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2887,7 +2829,6 @@ describe("scoped children written into closed slots", () => {
         })
       const Plain = Component.define({
         name: "Row",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         slots: ["body"]
@@ -2898,14 +2839,13 @@ describe("scoped children written into closed slots", () => {
       })
       const Inner = Component.define({
         name: "Inner",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Literal("swap")
       }).make({
         init: () => false,
         update: () => true,
         view: (h, swapped) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             h.el(
               "div",
               h.el("button").on("click", "swap").children("swap"),
@@ -2927,7 +2867,6 @@ describe("scoped children written into closed slots", () => {
       let cached: View.Child<any, any> | undefined
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Null
       })
@@ -2935,7 +2874,7 @@ describe("scoped children written into closed slots", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h) =>
-            h.scoped((s) => h.el("div", cached ??= Billing(s, { key: "b" })))
+            h.keepAlive((s) => h.el("div", cached ??= Billing(s, { key: "b" })))
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -2948,7 +2887,6 @@ describe("scoped children written into closed slots", () => {
     provideHost(Effect.gen(function*() {
       const Broken = Component.define({
         name: "Broken",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2961,7 +2899,6 @@ describe("scoped children written into closed slots", () => {
         })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2969,7 +2906,7 @@ describe("scoped children written into closed slots", () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "div",
                 h.el("p", "before"),
@@ -2990,7 +2927,7 @@ describe("scoped children written into closed slots", () => {
     const define = () =>
       Component.define({
         name: "Row",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -3002,7 +2939,6 @@ describe("scoped children written into closed slots", () => {
     const [First, Second] = [define(), define()]
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never
     })
@@ -3010,7 +2946,7 @@ describe("scoped children written into closed slots", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.scoped((s) =>
+          h.keepAlive((s) =>
             h.el(
               "div",
               Shut(h, { key: "x", slots: { body: First(s, { key: "k" }) } }),
@@ -3025,7 +2961,7 @@ describe("scoped children written into closed slots", () => {
   })
 })
 
-describe("scoped children that report to shared state", () => {
+describe("keep-alive children that report to shared state", () => {
   it.effect("move their report to the owner above where they're drawn", () =>
     provideHost(Effect.gen(function*() {
       const CountMsg = UiSchema.TaggedEnum({
@@ -3033,7 +2969,6 @@ describe("scoped children that report to shared state", () => {
       })
       const Count = Component.define({
         name: "Count",
-        scoped: false,
         model: Schema.Number,
         message: CountMsg,
         shares: {
@@ -3050,7 +2985,7 @@ describe("scoped children that report to shared state", () => {
       })
       const Member = Component.define({
         name: "Member",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never,
         shared: { count: { owner: Count, optional: true, report: () => true } }
@@ -3061,7 +2996,6 @@ describe("scoped children that report to shared state", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       })
@@ -3069,7 +3003,7 @@ describe("scoped children that report to shared state", () => {
           init: () => true,
           update: (_, left) => left,
           view: (h, left) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.el(
                 "main",
                 Count(h, {

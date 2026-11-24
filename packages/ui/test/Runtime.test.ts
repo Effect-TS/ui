@@ -60,7 +60,6 @@ const RowMessage = UiSchema.TaggedEnum({ Bump: {} })
 const Hold = Command.make("Hold", { args: {} }, () => Effect.never)
 const Row = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Number,
   message: RowMessage
@@ -78,7 +77,6 @@ const ListMessage = UiSchema.TaggedEnum({
 })
 const List = Component.define({
   name: "List",
-  scoped: false,
   props: Schema.Struct({ ids: Schema.Array(Schema.String) }),
   model: Schema.Array(Schema.String),
   message: ListMessage
@@ -103,7 +101,6 @@ describe("Runtime", () => {
         Component.define({
           ...state,
           name: "Provider",
-          scoped: false,
           shares: () => "value"
         }).make({
           ...impl,
@@ -114,13 +111,12 @@ describe("Runtime", () => {
       const Reader = Component.define({
         ...state,
         name: "Reader",
-        scoped: false,
         shared: { value: Expected }
       }).make({
         ...impl,
         view: (h) => h.el("p", h.shared.value)
       })
-      const App = Component.define({ ...state, name: "App", scoped: false })
+      const App = Component.define({ ...state, name: "App" })
         .make({
           ...impl,
           view: (h) =>
@@ -162,7 +158,6 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Outer: {}, Inner: {} })
       const Nested = Component.define({
         name: "Nested",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Msg
       }).make({
@@ -185,7 +180,6 @@ describe("Runtime", () => {
     provideHost(Effect.gen(function*() {
       const Deep = Component.define({
         name: "Deep",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Null
       }).make({
@@ -251,8 +245,7 @@ describe("Runtime", () => {
         const state = { model: Schema.Null, message: Schema.Never }
         const Badge = Component.define({
           ...state,
-          name: "Badge",
-          scoped: false
+          name: "Badge"
         }).make({
           init: () => null,
           update: () => null,
@@ -282,7 +275,7 @@ describe("Runtime", () => {
         const Wrapped = Object.assign(Object.create(Badge) as typeof Badge, {
           view
         })
-        const Rows = Component.define({ ...state, name: "Rows", scoped: false })
+        const Rows = Component.define({ ...state, name: "Rows" })
           .make({
             init: () => null,
             update: () => null,
@@ -329,7 +322,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Wrap = Component.define({
           name: "Wrap",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         })
@@ -377,7 +369,6 @@ describe("Runtime", () => {
     })
     const Rows = Component.define({
       name: "Rows",
-      scoped: false,
       model: Schema.Struct({
         ids: Schema.Array(Schema.String),
         selected: Schema.String
@@ -522,7 +513,6 @@ describe("Runtime", () => {
         const Msg = Schema.Array(Schema.String)
         const Tail = Component.define({
           name: "Tail",
-          scoped: false,
           model: Msg,
           message: Msg
         }).make({
@@ -585,7 +575,6 @@ describe("Runtime", () => {
         const Msg = Schema.Array(Schema.String)
         const Fill = Component.define({
           name: "Fill",
-          scoped: false,
           model: Msg,
           message: Msg
         }).make({
@@ -616,7 +605,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Twice = Component.define({
           name: "Twice",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -631,7 +619,6 @@ describe("Runtime", () => {
           })
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -667,7 +654,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Attrs = Component.define({
           name: "Attrs",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number
         })
@@ -821,7 +807,6 @@ describe("Runtime", () => {
     const BombMessage = UiSchema.TaggedEnum({ Explode: {} })
     const Bomb = Component.define({
       name: "Bomb",
-      scoped: false,
       model: Schema.Number,
       message: BombMessage
     }).make({
@@ -835,7 +820,6 @@ describe("Runtime", () => {
     const PageMessage = UiSchema.TaggedEnum({ BombFailed: {}, Retry: {} })
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Struct({ failures: Schema.Number, attempt: Schema.Number }),
       message: PageMessage
     }).make({
@@ -891,7 +875,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Broken = Component.define({
           name: "Broken",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -903,7 +886,6 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -969,7 +951,6 @@ describe("Runtime", () => {
         )
         const Child = Component.define({
           name: "Child",
-          scoped: false,
           model: Schema.Number,
           message: Schema.String
         }).make({
@@ -979,7 +960,6 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -1001,7 +981,6 @@ describe("Runtime", () => {
   describe("a provided Layer factory and a fallback's child", () => {
     const Leaf = Component.define({
       name: "Leaf",
-      scoped: false,
       model: Schema.Number,
       message: Schema.String
     }).make({
@@ -1018,7 +997,6 @@ describe("Runtime", () => {
         const Child = Component.provide(Leaf, broken)
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -1060,7 +1038,6 @@ describe("Runtime", () => {
         let starts = 0
         const Counted = Component.define({
           name: "Counted",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -1070,7 +1047,6 @@ describe("Runtime", () => {
         })
         const Broken = Component.define({
           name: "Broken",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -1082,7 +1058,6 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number
         }).make({
@@ -1114,7 +1089,6 @@ describe("Runtime", () => {
     )
     const Box = Component.define({
       name: "Box",
-      scoped: false,
       model: Schema.String,
       message: Msg
     }).make({
@@ -1182,7 +1156,6 @@ describe("Runtime", () => {
         )
         const Form = Component.define({
           name: "Form",
-          scoped: false,
           model: Schema.Struct({
             shown: Schema.Boolean,
             found: Schema.optional(Schema.Boolean)
@@ -1217,7 +1190,6 @@ describe("Runtime", () => {
         )
         const Quiet = Component.define({
           name: "Quiet",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           events: Schema.String
@@ -1239,7 +1211,6 @@ describe("Runtime", () => {
         }
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Array(Schema.Unknown),
           message: Schema.Unknown
         })
@@ -1325,7 +1296,6 @@ describe("Runtime", () => {
     })
     const Editor = Component.define({
       name: "Editor",
-      scoped: false,
       model: Schema.Number,
       message: EditorMsg
     }).make({
@@ -1367,7 +1337,6 @@ describe("Runtime", () => {
     ) =>
       Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Struct({
           count: Schema.Number,
           editing: Schema.Boolean,
@@ -1461,7 +1430,6 @@ describe("Runtime", () => {
         ) {}
         const Queue = Component.define({
           name: "Queue",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -1475,7 +1443,6 @@ describe("Runtime", () => {
         const Blocker = Component.provide(
           Component.define({
             name: "Blocker",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -1495,7 +1462,6 @@ describe("Runtime", () => {
         )
         const Branch = Component.define({
           name: "Branch",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -1512,7 +1478,6 @@ describe("Runtime", () => {
         const Parent = Component.provide(
           Component.define({
             name: "Parent",
-            scoped: false,
             model: Schema.Boolean,
             message: Schema.Boolean
           }).make({
@@ -1555,7 +1520,6 @@ describe("Runtime", () => {
         const Child = Component.provide(
           Component.define({
             name: "Child",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Null
           }).make({
@@ -1576,7 +1540,6 @@ describe("Runtime", () => {
         )
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         }).make({
@@ -1622,7 +1585,6 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Close: {}, Stop: {}, Done: {} })
       const Child = Component.define({
         name: "Child",
-        scoped: false,
         model: Schema.Null,
         message: Msg
       }).make({
@@ -1637,7 +1599,6 @@ describe("Runtime", () => {
       // A child whose `Command.make` run ends with it.
       const Holder = Component.define({
         name: "Child",
-        scoped: false,
         model: Schema.Null,
         message: Msg
       }).make({
@@ -1663,7 +1624,6 @@ describe("Runtime", () => {
       ) =>
         Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Boolean,
           message: Msg
         }).make({
@@ -1799,7 +1759,6 @@ describe("Runtime", () => {
         const Child = Component.provide(
           Component.define({
             name: "Child",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -1813,7 +1772,6 @@ describe("Runtime", () => {
         const Parent = Component.provide(
           Component.define({
             name: "Parent",
-            scoped: false,
             model: Schema.Boolean,
             message: Schema.Boolean
           }).make({
@@ -1859,7 +1817,6 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Close: {} })
         const Busy = Component.define({
           name: "Busy",
-          scoped: false,
           model: Schema.Boolean,
           message: Msg
         }).make({
@@ -1872,7 +1829,6 @@ describe("Runtime", () => {
               open ?
                 Component.define({
                   name: "Inner",
-                  scoped: false,
                   model: Schema.Null,
                   message: Schema.Never
                 }).make({
@@ -1916,7 +1872,6 @@ describe("Runtime", () => {
         )
         const Worker = Component.define({
           name: "Worker",
-          scoped: false,
           props: Schema.Struct({ name: Schema.String, listen: Schema.Boolean }),
           model: Schema.Null,
           message: Schema.Null
@@ -1930,7 +1885,6 @@ describe("Runtime", () => {
         const Step = Schema.Literals(["mounted", "listening", "dropped"])
         const App = Component.define({
           name: "App",
-          scoped: false,
           model: Step,
           message: Step
         }).make({
@@ -2016,7 +1970,6 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Go: { n: Schema.Number }, Stop: {} })
       const Jobs = Component.define({
         name: "Jobs",
-        scoped: false,
         model: Schema.Null,
         message: Msg
       }).make({
@@ -2074,7 +2027,6 @@ describe("Runtime", () => {
         )
         const Jobs = Component.define({
           name: "Jobs",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Number
         }).make(
@@ -2151,7 +2103,6 @@ describe("Runtime", () => {
         const Tx_ = Component.provide(
           Component.define({
             name: "Tx",
-            scoped: false,
             model: Schema.Null,
             message: Msg
           }).make({
@@ -2235,7 +2186,6 @@ describe("Runtime", () => {
         })
         const Chat = Component.define({
           name: "Chat",
-          scoped: false,
           model: Schema.Struct({
             room: Schema.String,
             said: Schema.Array(Schema.String)
@@ -2285,7 +2235,6 @@ describe("Runtime", () => {
         const said = Msg.make({ _tag: "Said" })
         const Chat = Component.define({
           name: "Chat",
-          scoped: false,
           model: Schema.Boolean,
           message: Msg
         }).make({
@@ -2382,7 +2331,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Twice = Component.define({
           name: "Twice",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         })
@@ -2423,7 +2371,6 @@ describe("Runtime", () => {
         const feed = yield* Queue.unbounded<string>()
         const Receiver = Component.define({
           name: "Receiver",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: Schema.String,
           props: Schema.Struct({ listen: Schema.Boolean })
@@ -2438,7 +2385,6 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         }).make({
@@ -2475,7 +2421,6 @@ describe("Runtime", () => {
     provideHost(Effect.gen(function*() {
       const Child = Component.define({
         name: "Child",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never,
         events: Schema.String
@@ -2486,7 +2431,6 @@ describe("Runtime", () => {
       })
       const Parent = Component.define({
         name: "Parent",
-        scoped: false,
         model: Schema.Number,
         message: Schema.String
       }).make({
@@ -2513,7 +2457,6 @@ describe("Runtime", () => {
       })
       const Child = Component.define({
         name: "Child",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never,
         events: Events
@@ -2525,7 +2468,6 @@ describe("Runtime", () => {
       })
       const Parent = Component.define({
         name: "Parent",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Schema.String
       }).make({
@@ -2546,7 +2488,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Label = Component.define({
           name: "Label",
-          scoped: false,
           props: Schema.Struct({ text: Schema.String }),
           model: Schema.Number,
           message: Schema.Never
@@ -2558,7 +2499,6 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Rename: { text: Schema.String } })
         const Host = Component.define({
           name: "Host",
-          scoped: false,
           model: Schema.String,
           message: Msg
         }).make({
@@ -2603,7 +2543,6 @@ describe("Runtime", () => {
         })
         const Cell = Component.define({
           name: "Cell",
-          scoped: false,
           props: Schema.Struct({
             row: Row,
             at: Schema.Option(Schema.Number),
@@ -2624,7 +2563,6 @@ describe("Runtime", () => {
         })
         const Table = Component.define({
           name: "Table",
-          scoped: false,
           model: Props,
           message: Props
         }).make({
@@ -2704,7 +2642,6 @@ describe("Runtime", () => {
     ) {}
     const Hello = Component.define({
       name: "Hello",
-      scoped: false,
       model: Schema.String,
       message: Schema.String
     }).make({
@@ -2762,7 +2699,6 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Drop: {} })
         const Two = Component.define({
           name: "Two",
-          scoped: false,
           model: Schema.Number,
           message: Msg
         }).make({
@@ -2793,7 +2729,6 @@ describe("Runtime", () => {
         const Msg = UiSchema.TaggedEnum({ Failed: {} })
         const Status = Component.define({
           name: "Status",
-          scoped: false,
           model: Schema.String,
           message: Msg
         }).make({
@@ -2822,7 +2757,6 @@ describe("Runtime", () => {
       ) {}
       const StoreId = Component.define({
         name: "StoreId",
-        scoped: false,
         model: Schema.String,
         message: Schema.String
       }).make({
@@ -2837,7 +2771,6 @@ describe("Runtime", () => {
       ) =>
         Component.define({
           name: "Siblings",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: DropMsg
         }).make({
@@ -2899,7 +2832,6 @@ describe("Runtime", () => {
           ) {}
           const ProjectId = Component.define({
             name: "ProjectId",
-            scoped: false,
             model: Schema.String,
             message: Schema.String
           }).make({
@@ -2911,7 +2843,6 @@ describe("Runtime", () => {
           const Task = Component.provide(ProjectId, ReadProject.layer)
           const PageView = Component.define({
             name: "PageView",
-            scoped: false,
             props: Schema.Struct({ id: Schema.String }),
             model: Schema.Null,
             message: Schema.Never
@@ -2926,7 +2857,6 @@ describe("Runtime", () => {
           )
           const Split = Component.define({
             name: "Split",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -3094,7 +3024,6 @@ describe("Runtime", () => {
     }) {}
     const BadgeImpl = Component.define({
       name: "BadgeImpl",
-      scoped: false,
       props: Schema.Struct({ label: Schema.String }),
       model: Schema.Number,
       message: Schema.Never,
@@ -3107,7 +3036,6 @@ describe("Runtime", () => {
     const Msg = UiSchema.TaggedEnum({ Heard: { text: Schema.String } })
     const Shell = Component.define({
       name: "Shell",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: Msg
     }).make({
@@ -3175,7 +3103,6 @@ describe("Runtime", () => {
         assert.deepStrictEqual(Story.fromLog(Counter, wire).model, { count: 6 })
         const Changed = Component.define({
           name: "Counter",
-          scoped: false,
           props: Schema.Struct({ initial: Schema.Number }),
           model: Schema.Struct({ count: Schema.Number }),
           message: CounterMessage
@@ -3201,7 +3128,6 @@ describe("Runtime", () => {
         const Message = UiSchema.TaggedEnum({ Break: { why: Schema.String } })
         const Fragile = Component.define({
           name: "Fragile",
-          scoped: false,
           props: Schema.Struct({ id: Schema.String }),
           model: Schema.Null,
           message: Message
@@ -3250,7 +3176,6 @@ describe("Runtime", () => {
         // Its Command can't be interrupted, so its close stays open until `hold` is done.
         const Holder = Component.define({
           name: "Holder",
-          scoped: false,
           model: Schema.Null,
           message: Message
         }).make({
@@ -3266,7 +3191,6 @@ describe("Runtime", () => {
         })
         const Middle = Component.define({
           name: "Middle",
-          scoped: false,
           model: Schema.Number,
           message: Message
         }).make(
@@ -3284,7 +3208,6 @@ describe("Runtime", () => {
         )
         const Top = Component.define({
           name: "Top",
-          scoped: false,
           model: Schema.Boolean,
           message: Message
         }).make({
@@ -3341,7 +3264,6 @@ describe("Runtime", () => {
         )
         const Editor = Component.define({
           name: "Editor",
-          scoped: false,
           model: Schema.Number,
           message: Message
         }).make(
@@ -3524,7 +3446,6 @@ describe("Runtime", () => {
           const Message = UiSchema.TaggedEnum({ Set: { state: State } })
           const Vault = Component.define({
             name: "Vault",
-            scoped: false,
             props: State,
             model: State,
             message: Message
@@ -3614,7 +3535,6 @@ describe("Runtime", () => {
         const done = Command.map(() => Message.Done())
         const Holder = Component.define({
           name: "Holder",
-          scoped: false,
           model: Schema.Null,
           message: Message
         }).make({
@@ -3630,7 +3550,6 @@ describe("Runtime", () => {
         })
         const Middle = Component.define({
           name: "Middle",
-          scoped: false,
           model: Schema.Null,
           message: Message
         }).make({
@@ -3645,7 +3564,6 @@ describe("Runtime", () => {
         })
         const Top = Component.define({
           name: "Top",
-          scoped: false,
           model: Schema.Boolean,
           message: Message
         }).make({
@@ -3682,7 +3600,6 @@ describe("Runtime", () => {
         )
         const Editor = Component.define({
           name: "Editor",
-          scoped: false,
           model: Schema.Number,
           message: Message
         }).make(
@@ -3742,7 +3659,6 @@ describe("Runtime", () => {
         ) {
           const Editor = Component.define({
             name: "Editor",
-            scoped: false,
             model: Schema.Null,
             message: Message
           }).make(
@@ -4290,7 +4206,6 @@ describe("Runtime", () => {
       }) {}
       const Secret = Component.define({
         name: "Secret",
-        scoped: false,
         props: Schema.Struct({ key: Schema.Redacted(Schema.String) }),
         model: Schema.Struct({
           token: Schema.Redacted(Schema.String),
@@ -4386,7 +4301,6 @@ describe("Runtime", () => {
       }
       const Secrets = Component.define({
         name: "Secrets",
-        scoped: false,
         model: Model,
         message: Schema.Never
       }).make({
@@ -4479,7 +4393,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Loose = Component.define({
           name: "Loose",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           elements: Tiny
@@ -4500,7 +4413,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Chained = Component.define({
           name: "Chained",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           elements: Tiny
@@ -4521,7 +4433,6 @@ describe("Runtime", () => {
       Effect.gen(function*() {
         const Inner = Component.define({
           name: "Inner",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never,
           elements: Tiny
@@ -4532,7 +4443,6 @@ describe("Runtime", () => {
         })
         const Outer = Component.define({
           name: "Outer",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -4576,7 +4486,6 @@ describe("Runtime", () => {
         })
         const Form = Component.define({
           name: "Form",
-          scoped: false,
           model: Schema.Struct({
             value: Schema.String,
             touched: Schema.Number
@@ -4625,7 +4534,6 @@ describe("Runtime", () => {
         const token = Redacted.make("secret")
         const Auto = Component.define({
           name: "Auto",
-          scoped: false,
           model: Schema.String,
           message: Msg,
           elements: Tiny
@@ -4707,7 +4615,6 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const Auto = Component.define({
           name: "Auto",
-          scoped: false,
           model: Schema.String,
           message: Schema.String,
           elements: Tiny
@@ -4750,7 +4657,6 @@ describe("Runtime", () => {
         )
         const Box = Component.define({
           name: "Box",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Tiny
@@ -4821,7 +4727,6 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "Chart",
-          scoped: false,
           model: Schema.Struct({
             n: Schema.Number,
             touches: Schema.Number,
@@ -4906,7 +4811,6 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "OutlivedReader",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Tiny
@@ -4948,7 +4852,6 @@ describe("Runtime", () => {
         )
         const Box = Component.define({
           name: "Box",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.String,
           elements: Tiny
@@ -4994,7 +4897,6 @@ describe("Runtime", () => {
         )
         const Late = Component.define({
           name: "Late",
-          scoped: false,
           model: Schema.String,
           message: Schema.String,
           elements: Tiny
@@ -5039,7 +4941,6 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "SlowChart",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Tiny
@@ -5090,7 +4991,6 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "Reread",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Tiny
@@ -5138,7 +5038,6 @@ describe("Runtime", () => {
         )
         const Chart = Component.define({
           name: "StartsReader",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Tiny
@@ -5176,7 +5075,6 @@ describe("Runtime", () => {
         const B = tracked("B")
         const Swap = Component.define({
           name: "Swap",
-          scoped: false,
           model: Schema.String,
           message: Schema.String,
           elements: Tiny
@@ -5231,7 +5129,6 @@ describe("Runtime", () => {
         )
         const Widget = Component.define({
           name: "Widget",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: Schema.String,
           elements: Tiny
@@ -5287,7 +5184,6 @@ describe("Runtime", () => {
       const App = Component.provide(
         Component.define({
           name: "App",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         }).make({
@@ -5332,7 +5228,6 @@ describe("Runtime", () => {
       const App = Component.provide(
         Component.define({
           name: "App",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -5458,7 +5353,6 @@ describe("Runtime", () => {
           const App = Component.provide(
             Component.define({
               name: "App",
-              scoped: false,
               model: Schema.Number,
               message: Schema.Never
             }).make({
@@ -5556,7 +5450,6 @@ describe("Runtime", () => {
       ) {}
       const RoomView = Component.define({
         name: "RoomView",
-        scoped: false,
         props: Schema.Struct({ room: Schema.String }),
         model: Schema.String,
         message: Schema.String
@@ -5571,7 +5464,6 @@ describe("Runtime", () => {
       )
       const Lobby = Component.define({
         name: "Lobby",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -5611,7 +5503,6 @@ describe("Runtime", () => {
     /** Starts in room "a". Its text is its room, then the room each `Show` ran against, in order. */
     const RoomView = Component.define({
       name: "RoomView",
-      scoped: false,
       model: Schema.Struct({
         room: Schema.String,
         shown: Schema.Array(Schema.String)
@@ -5689,7 +5580,6 @@ describe("Runtime", () => {
         )
         const Child = Component.define({
           name: "Child",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Never
         }).make({
@@ -5699,7 +5589,6 @@ describe("Runtime", () => {
         })
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.String,
           message: Schema.String
         }).make({
@@ -5780,7 +5669,6 @@ describe("Runtime", () => {
       })
       const Lobby = Component.define({
         name: "Lobby",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -5862,7 +5750,6 @@ describe("Runtime", () => {
       ) {}
       const Acting = Component.define({
         name: "Acting",
-        scoped: false,
         model: Schema.Struct({ room: Schema.String, done: Schema.String }),
         message: Act
       }).make({
@@ -5913,7 +5800,6 @@ describe("Runtime", () => {
           const started: Array<string> = []
           const Watching = Component.define({
             name: "Watching",
-            scoped: false,
             model: Schema.String,
             message: Schema.String
           }).make({
@@ -5964,7 +5850,6 @@ describe("Runtime", () => {
           AsyncResult.isSuccess(result) ? result.value : "-"
         const Reading = Component.define({
           name: "Reading",
-          scoped: false,
           model: Schema.String,
           message: Schema.String,
           queries: {
@@ -6022,7 +5907,6 @@ describe("Runtime", () => {
         )
         const Holding = Component.define({
           name: "Holding",
-          scoped: false,
           model: Schema.String,
           message: Schema.String
         }).make({
@@ -6066,7 +5950,6 @@ describe("Runtime", () => {
         const events: Array<string> = []
         const Holder = Component.define({
           name: "Holder",
-          scoped: false,
           model: Schema.Struct({
             holding: Schema.Boolean,
             room: Schema.String
@@ -6111,7 +5994,6 @@ describe("Runtime", () => {
         const Child = Component.provide(
           Component.define({
             name: "Child",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -6127,7 +6009,6 @@ describe("Runtime", () => {
         const Parent = Component.provide(
           Component.define({
             name: "Parent",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -6158,7 +6039,6 @@ describe("Runtime", () => {
         const events: Array<string> = []
         const Counter = Component.define({
           name: "Counter",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Null,
           events: Schema.Null
@@ -6186,7 +6066,6 @@ describe("Runtime", () => {
         // The child's update changes its key and tells the parent, which removes it before it renders.
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Null
         })
@@ -6229,7 +6108,6 @@ describe("Runtime", () => {
         )
         const Counter = Component.define({
           name: "Counter",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Null,
           events: Schema.Null
@@ -6248,7 +6126,6 @@ describe("Runtime", () => {
         const Blocker = Component.provide(
           Component.define({
             name: "Blocker",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           }).make({
@@ -6268,7 +6145,6 @@ describe("Runtime", () => {
         )
         const Branch = Component.define({
           name: "Branch",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Null,
           events: Schema.Null
@@ -6286,7 +6162,6 @@ describe("Runtime", () => {
         // The child's update changes its key and tells the parent, which removes its branch before it renders.
         const Parent = Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Null
         })
@@ -6319,7 +6194,6 @@ describe("Runtime", () => {
       const Inner = Component.provide(
         Component.define({
           name: "Inner",
-          scoped: false,
           props: Schema.Struct({ name: Schema.String }),
           model: Schema.Number,
           message: Schema.String
@@ -6340,7 +6214,6 @@ describe("Runtime", () => {
       const Msg = UiSchema.TaggedEnum({ Add: { name: Schema.String } })
       const Shell = Component.define({
         name: "Shell",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Msg
       }).make({
@@ -6388,7 +6261,6 @@ describe("Runtime", () => {
       )
       const Loop = Component.define({
         name: "Loop",
-        scoped: false,
         model: Schema.Number,
         message: Msg
       }).make({
@@ -6407,12 +6279,12 @@ describe("Runtime", () => {
     Effect.gen(function*() {
       const state = { model: Schema.Null, message: Schema.Never }
       const impl = { init: () => null, update: () => null }
-      const Leaf = Component.define({ name: "Leaf", scoped: false, ...state })
+      const Leaf = Component.define({ name: "Leaf", ...state })
         .make({
           ...impl,
           view: (h) => h.text("leaf")
         })
-      const Page = Component.define({ name: "Page", scoped: false, ...state })
+      const Page = Component.define({ name: "Page", ...state })
         .make({
           ...impl,
           view: (h) =>

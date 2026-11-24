@@ -10,7 +10,6 @@ const CounterMessage = UiSchema.TaggedEnum({
 
 const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   model: Schema.Struct({
     moves: Schema.Number,
     count: Schema.Number
@@ -35,7 +34,6 @@ const SideMessage = UiSchema.TaggedEnum({ Toggled: {} })
 
 const Side = Component.define({
   name: "Side",
-  scoped: false,
   model: Schema.Struct({ on: Schema.Boolean }),
   message: SideMessage,
   elements: Html
@@ -51,7 +49,6 @@ const Side = Component.define({
 
 const App = Component.define({
   name: "App",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

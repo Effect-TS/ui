@@ -436,7 +436,7 @@ export interface Unmounted extends InstanceBase {
 }
 
 /**
- * A scoped child that no view writes now, and that its scope keeps, took
+ * A keep-alive child that no view writes now, and that its predicate keeps, took
  * its nodes out of the document. It stays mounted: it takes messages and
  * query results, and its Commands and Subscriptions go on.
  *

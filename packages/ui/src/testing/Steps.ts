@@ -248,7 +248,6 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
- *   scoped: false,
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({

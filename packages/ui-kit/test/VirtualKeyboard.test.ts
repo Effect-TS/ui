@@ -132,7 +132,6 @@ const Message = UiSchema.TaggedEnum({
 
 const Sheet = Component.define({
   name: "Sheet",
-  scoped: false,
   model: Schema.Struct({
     bands: Schema.Array(Schema.NullOr(VirtualKeyboard.Band))
   }),

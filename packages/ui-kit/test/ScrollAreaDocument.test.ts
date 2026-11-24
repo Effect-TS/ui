@@ -32,7 +32,6 @@ const mountArea = Effect.fnUntraced(function*(
 ) {
   const Demo = Component.define({
     name: "Demo",
-    scoped: false,
     model: Schema.Struct({}),
     message: Schema.Never,
     elements: Html

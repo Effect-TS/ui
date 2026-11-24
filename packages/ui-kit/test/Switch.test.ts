@@ -20,7 +20,6 @@ const SettingsMessage = UiSchema.TaggedEnum({
 // the root. The row around it counts the clicks the switch leaves alone.
 const Settings = Component.define({
   name: "Settings",
-  scoped: false,
   props: Schema.Struct({
     disabled: Schema.optional(Schema.Boolean),
     readOnly: Schema.optional(Schema.Boolean),

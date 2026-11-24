@@ -23,7 +23,6 @@ const items = ["a", "b", "c"]
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: PageProps,
   model: Schema.Struct({
     open: Schema.Array(Schema.String),

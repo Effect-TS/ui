@@ -7,7 +7,6 @@ const FixedMessage = UiSchema.TaggedEnum({ ClickedLast: {} })
 
 export const FixedDemo = Component.define({
   name: "FixedDemo",
-  scoped: false,
   model: Schema.Struct({ jump: Schema.Number }),
   message: FixedMessage,
   elements: Html

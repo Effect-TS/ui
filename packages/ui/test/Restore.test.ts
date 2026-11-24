@@ -17,10 +17,10 @@ const AppRoute = Route.union({
 
 const LoginMessage = UiSchema.TaggedEnum({ Filled: {} })
 
-const login = <Scoped extends boolean>(scoped: Scoped) =>
+const login = <KeepAlive extends boolean>(keepAlive: KeepAlive) =>
   Component.define({
     name: "Login",
-    scoped,
+    keepAlive,
     model: Schema.Struct({ email: Schema.String, password: Schema.String }),
     message: LoginMessage,
     restore: (model) => ({ ...model, password: "" })
@@ -33,13 +33,12 @@ const login = <Scoped extends boolean>(scoped: Scoped) =>
       )
   })
 const Login = login(false)
-const ScopedLogin = login(true)
+const KeepAliveLogin = login(true)
 
 const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
 
 const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   model: Schema.Number,
   message: CounterMessage,
   restore: false
@@ -60,7 +59,6 @@ const GroupMessage = UiSchema.TaggedEnum({
 
 const Group = Component.define({
   name: "Group",
-  scoped: false,
   model: Schema.Struct({ on: Schema.Boolean, picks: Schema.Number }),
   message: GroupMessage,
   shares: {
@@ -87,7 +85,6 @@ const ReaderMessage = UiSchema.TaggedEnum({ Toggled: {}, Picked: {} })
 const makeReader = (name: string, restore: false | undefined) =>
   Component.define({
     name,
-    scoped: false,
     model: Schema.Boolean,
     message: ReaderMessage,
     restore,
@@ -120,7 +117,6 @@ const Fresh = makeReader("Fresh", false)
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -144,7 +140,6 @@ const AppMessage = UiSchema.TaggedEnum({
 
 const App = Component.define({
   name: "App",
-  scoped: false,
   props: Schema.Struct({ route: AppRoute }),
   model: AppRoute,
   message: AppMessage
@@ -201,19 +196,18 @@ const collectedAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
 
 const Editor = Component.define({
   name: "Editor",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.scoped((s) => ScopedLogin(s, { key: "login" }))
+  view: (h) => h.keepAlive((s) => KeepAliveLogin(s, { key: "login" }))
 })
 
 const desk = (restore?: false) =>
   Component.define({
     name: "Desk",
-    scoped: true,
+    keepAlive: true,
     model: Schema.Number,
     message: CounterMessage,
     restore
@@ -226,21 +220,20 @@ const desk = (restore?: false) =>
         h.el("button").on("click", CounterMessage.Clicked()).children(
           `desk ${count}`
         ),
-        h.scoped((s) => ScopedLogin(s, { key: "login" }))
+        h.keepAlive((s) => KeepAliveLogin(s, { key: "login" }))
       )
   })
 const Desk = desk()
 const office = (child: typeof Desk) =>
   Component.define({
     name: "Office",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     restore: false
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.scoped((s) => child(s, { key: "desk" }))
+    view: (h) => h.keepAlive((s) => child(s, { key: "desk" }))
   })
 const Office = office(Desk)
 const OptedOffice = office(desk(false))
@@ -249,7 +242,6 @@ const ShellMessage = UiSchema.TaggedEnum({ Counted: {}, Shown: {} })
 
 const Shell = Component.define({
   name: "Shell",
-  scoped: false,
   model: Schema.Struct({ count: Schema.Number, shown: Schema.Boolean }),
   message: ShellMessage,
   restore: (model) => ({ ...model, shown: false })
@@ -410,7 +402,7 @@ describe("restore", () => {
       assert.deepStrictEqual(again, ["login |", "shell 0", "login |"])
     }).pipe(Effect.provide(TestHost.layer())))
 
-  it.effect("a scoped instance with restore: false ignores what an older entry saved of it, and restores its children", () =>
+  it.effect("a keep-alive instance with restore: false ignores what an older entry saved of it, and restores its children", () =>
     Effect.gen(function*() {
       const history = yield* leaveOffice
       const office = yield* shown(TestHost.mount(OptedOffice, {})).pipe(

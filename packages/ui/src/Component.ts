@@ -32,7 +32,6 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
- *   scoped: false,
  *   props: Schema.Struct({ todo: Todo }),
  *   model: Schema.Struct({}),
  *   message: TodoItemMessage,
@@ -686,7 +685,6 @@ export interface Step<
    *
    * export const Gallery = Component.define({
    *   name: "Gallery",
-   *   scoped: false,
    *   model: Schema.Struct({ layout: Layout, filter: Schema.String }),
    *   message: Message,
    *   elements: Html
@@ -1058,7 +1056,7 @@ export type Results = { readonly [name: string]: unknown }
 export declare namespace Mountable {
   /**
    * What every component has, whatever its call takes: `Mountable` without
-   * its call signature, which a scoped component shares too.
+   * its call signature, which a keep-alive component shares too.
    *
    * @category models
    * @since 0.1.0
@@ -1150,7 +1148,7 @@ export declare namespace Mountable {
   }
 
   /**
-   * The call signature of a component that isn't scoped. `Result` is what
+   * The call signature of a component that isn't kept alive. `Result` is what
    * `fallback` is passed: a lazy component's is also passed `Initial`.
    *
    * @category models
@@ -1240,14 +1238,14 @@ export interface Component<
 {}
 
 /**
- * A component defined with `scoped: true`: the same as a `Component`, but
- * written inside `h.scoped`, with the `s` it gives, in place of `h`.
+ * A component defined with `keepAlive: true`: the same as a `Component`, but
+ * written inside `h.keepAlive`, with the `s` it gives, in place of `h`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface ScopedComponent<
+export interface KeepAliveComponent<
   out Name extends string,
   in out Props,
   in out Model,
@@ -1259,12 +1257,12 @@ export interface ScopedComponent<
   in Sl extends string = never
 > extends
   Members<Name, Props, Model, Msg, Events, R, V, L, Sl>,
-  Scoped.Call<Props, Events, R, Sl>
+  KeepAlive.Call<Props, Events, R, Sl>
 {}
 
 /**
- * What a component has, scoped or not: a `Component` or a `ScopedComponent`
- * without its call signature.
+ * What a component has, kept alive or not: a `Component` or a
+ * `KeepAliveComponent` without its call signature.
  *
  * @stability experimental
  * @category models
@@ -1651,7 +1649,6 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *
    * const Dialog = Component.define({
    *   name: "Dialog",
-   *   scoped: false,
    *   model: Schema.Boolean,
    *   message: DialogMessage,
    *   events: DialogEvents
@@ -1673,7 +1670,6 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *
    * const Drawer = Component.define({
    *   name: "Drawer",
-   *   scoped: false,
    *   model: Schema.Number,
    *   message: DrawerMessage
    * }).make({
@@ -1877,33 +1873,33 @@ type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]>
 export type Any = Mountable<any, any, any>
 
 /**
- * What a parent needs from a scoped child: `Mountable`, with the call a
- * scoped component takes.
+ * What a parent needs from a keep-alive child: `Mountable`, with the call a
+ * keep-alive component takes.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Scoped<
+export interface KeepAlive<
   in out Props,
   out Events,
   out R = never,
   in Sl extends string = never
 > extends
   Mountable.Members<Props, Events, R, Sl>,
-  Scoped.Call<Props, Events, R, Sl>
+  KeepAlive.Call<Props, Events, R, Sl>
 {}
 
 /**
- * Helper types for `Scoped`.
+ * Helper types for `KeepAlive`.
  *
  * @stability experimental
  * @since 0.1.0
  */
-export declare namespace Scoped {
+export declare namespace KeepAlive {
   /**
-   * The call signature of a scoped component. It takes the `s` of
-   * `h.scoped`, which says whether the scope has a predicate. Without one,
+   * The call signature of a keep-alive component. It takes the `s` of
+   * `h.keepAlive`, which says whether the block has a predicate. Without one,
    * the child's key must be a literal, or left out. `Result` is what
    * `fallback` is passed: a lazy component's is also passed `Initial`.
    *
@@ -1918,8 +1914,8 @@ export declare namespace Scoped {
     out Result = AsyncResult.Failure<never, unknown>
   > {
     /**
-     * Declares a scoped child in a parent's view, from the `s` of the
-     * parent's `h.scoped`. It lives until the scope's predicate is false
+     * Declares a keep-alive child in a parent's view, from the `s` of the
+     * parent's `h.keepAlive`. It lives until the block's predicate is false
      * for its key, or the parent ends.
      */
     <
@@ -1929,9 +1925,9 @@ export declare namespace Scoped {
       RF = never,
       const SC extends object = never
     >(
-      s: View.Scope<Msg, Ends>,
+      s: View.KeepAlive<Msg, Ends>,
       options:
-        & View.Child.ScopedOptions<Props, Events, NoInfer<Msg>, K, Ends>
+        & View.Child.KeepAliveOptions<Props, Events, NoInfer<Msg>, K, Ends>
         & {
           /**
            * Shown if the child fails, until its key changes, and while a lazy
@@ -1947,23 +1943,23 @@ export declare namespace Scoped {
   }
 
   /**
-   * Any scoped component.
+   * Any keep-alive component.
    *
    * @category models
    * @since 0.1.0
    */
-  export type Any = Scoped<any, any, any>
+  export type Any = KeepAlive<any, any, any>
 }
 
 /**
  * Any component that can be mounted at the root or a route: a component or a
- * scoped one, which has no scope there.
+ * keep-alive one, which has no `h.keepAlive` block there.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export type AnyRoot = Any | Scoped.Any
+export type AnyRoot = Any | KeepAlive.Any
 
 /**
  * The props of a component.
@@ -2277,9 +2273,9 @@ export type OnChange<S, M, Msg> = M extends Query.Query.Any
   : never
 
 /**
- * Returns `true` if `u` is a component. It narrows to `Any` or `Scoped`, which
- * can't be called, even after checking `definition.scoped`: render a component
- * through its own type.
+ * Returns `true` if `u` is a component. It narrows to `Any` or `KeepAlive`,
+ * which can't be called, even after checking `definition.keepAlive`: render a
+ * component through its own type.
  *
  * @stability experimental
  * @category guards
@@ -2327,7 +2323,7 @@ const makeComponent = (
     child.make(
       component as any,
       options,
-      (component as any).definition.scoped ? h["~alive"] : undefined
+      (component as any).definition.keepAlive ? h["~alive"] : undefined
     )
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
@@ -2502,11 +2498,11 @@ export interface Definition<
   SR = {},
   SV = never,
   Rp = never,
-  Sc extends boolean = boolean
+  Ka extends boolean = boolean
 > {
   readonly name: Name
-  /** Whether the component is written inside `h.scoped`, and lives as its scope says. */
-  readonly scoped: Sc
+  /** Whether the component is written inside `h.keepAlive`, and lives as its predicate says. */
+  readonly keepAlive: Ka
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<Model, any>
   readonly message: Schema.Codec<Msg, any>
@@ -2597,9 +2593,9 @@ export interface Definition<
           | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
         /**
          * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
-         * Nor can a scoped one: a headless child lives where its declarer's view writes it.
+         * Nor can a keep-alive one: a headless child lives where its declarer's view writes it.
          */
-        readonly parts: [Sl] extends [never] ? [Sc] extends [false] ? (
+        readonly parts: [Sl] extends [never] ? [Ka] extends [false] ? (
               p:
                 & PartsHelper<Msg, Props, V>
                 & QueryHelpers<L>
@@ -2677,7 +2673,7 @@ export interface Definition<
       & OwnersAreHeadless<SV>
       & SelfShares<SR, SV>
   ): ComponentOf<
-    Sc,
+    Ka,
     Name,
     Props,
     Model,
@@ -2698,7 +2694,7 @@ export interface Definition<
 }
 
 type ComponentOf<
-  Sc extends boolean,
+  Ka extends boolean,
   Name extends string,
   Props,
   Model,
@@ -2708,9 +2704,9 @@ type ComponentOf<
   V extends View.Elements,
   L,
   Sl extends string
-> = [Sc] extends [false] ?
+> = [Ka] extends [false] ?
   Component<Name, Props, Model, Msg, Events, R, V, L, Sl>
-  : ScopedComponent<Name, Props, Model, Msg, Events, R, V, L, Sl>
+  : KeepAliveComponent<Name, Props, Model, Msg, Events, R, V, L, Sl>
 
 /**
  * Types for definitions: what a component keeps of the one it was made from.
@@ -2735,7 +2731,7 @@ export declare namespace Definition {
    */
   export interface Any {
     readonly name: string
-    readonly scoped: boolean
+    readonly keepAlive: boolean
     readonly props: Schema.Codec<any, any>
     readonly model: Schema.Codec<any, any>
     readonly message: Schema.Codec<any, any>
@@ -2787,7 +2783,6 @@ export declare namespace Definition {
  *
  * const NoteListDef = Component.define({
  *   name: "NoteList",
- *   scoped: false,
  *   model: Schema.Struct({ notes: Schema.Array(Note) }),
  *   message: Schema.Never
  * })
@@ -2819,13 +2814,13 @@ export type Helper<D> = D extends Definition<
   infer SR,
   infer _SV,
   infer _Rp,
-  infer _Sc
+  infer _Ka
 > ? ViewHelper<M, P, Msg, V, L, Sl, SR>
   : never
 
 /**
  * `h` in a component's view: the helpers of `View.Helper`, the tags of its
- * vocabulary, its queries, slots and shared state, and `h.scoped`.
+ * vocabulary, its queries, slots and shared state, and `h.keepAlive`.
  *
  * @stability experimental
  * @category utility types
@@ -2839,7 +2834,7 @@ export type ViewHelper<
   L,
   Sl extends string,
   SR
-> = WithScoped<
+> = WithKeepAlive<
   Model,
   Props,
   Msg,
@@ -2851,35 +2846,35 @@ export type ViewHelper<
   & SharedHelpers<SR>
 >
 
-type WithScoped<Model, Props, Msg, L, H> =
+type WithKeepAlive<Model, Props, Msg, L, H> =
   & H
-  & ScopedHelpers<Model, Props, Msg, L, H>
+  & KeepAliveHelpers<Model, Props, Msg, L, H>
 
 /**
- * `h.scoped`, which writes scoped children. `H` is the rest of `h`,
+ * `h.keepAlive`, which writes keep-alive children. `H` is the rest of `h`,
  * which `s` is too.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface ScopedHelpers<Model, Props, Msg, L, H> {
+export interface KeepAliveHelpers<Model, Props, Msg, L, H> {
   /**
-   * A scope whose children live as long as the component whose view wrote
-   * it. Each is a scoped component called with `s`, and its key must be a
+   * A block whose children live as long as the component whose view wrote
+   * it. Each is a keep-alive component called with `s`, and its key must be a
    * literal, or left out. Returns what `content` returns, and adds no node.
    */
-  scoped<C>(content: (s: H & View.Scope<Msg, false>) => C): C
+  keepAlive<C>(content: (s: H & View.KeepAlive<Msg, false>) => C): C
   /**
-   * A scope whose children each live while `alive` holds for their key.
+   * A block whose children each live while `alive` holds for their key.
    * `alive` is asked on every render of this component, for each child it
    * keeps, so it reads the Model from `$`, not from the view's `model`:
    * `({ model, key }) => key in model.notes`. Returns what `content`
    * returns, and adds no node.
    */
-  scoped<C>(
+  keepAlive<C>(
     alive: ($: Alive<Model, Props, QueryResults<L>>) => boolean,
-    content: (s: H & View.Scope<Msg, true>) => C
+    content: (s: H & View.KeepAlive<Msg, true>) => C
   ): C
 }
 
@@ -2899,9 +2894,9 @@ export interface Current<out Model, out Props, out Queries> {
 }
 
 /**
- * What a scope's predicate is asked with: the current Model, props and query
- * results of the component whose view wrote the scope, and the key of the
- * child it is asked about.
+ * What an `h.keepAlive` predicate is asked with: the current Model, props
+ * and query results of the component whose view wrote the block, and the key
+ * of the child it is asked about.
  *
  * @stability experimental
  * @category models
@@ -3026,7 +3021,6 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * const Counter = Component.define({
  *   name: "Counter",
- *   scoped: false,
  *   props: Schema.Struct({ initial: Schema.Number }),
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: CounterMessage
@@ -3071,7 +3065,6 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * const UserPage = Component.define({
  *   name: "UserPage",
- *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -3107,7 +3100,6 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * const NotePageDef = Component.define({
  *   name: "NotePage",
- *   scoped: false,
  *   model: Schema.Struct({ body: Schema.String, edits: Schema.Number, error: Schema.NullOr(Schema.String) }),
  *   message: NotePageMessage
  * })
@@ -3143,7 +3135,6 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * const Card = Component.define({
  *   name: "Card",
- *   scoped: false,
  *   model: Schema.Boolean,
  *   message: Schema.Literal("ClickedToggle"),
  *   slots: ["title", "body"]
@@ -3156,7 +3147,6 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * export const Page = Component.define({
  *   name: "Page",
- *   scoped: false,
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedLike")
  * }).make({
@@ -3200,18 +3190,18 @@ export const define = <
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
-  Sc extends boolean = boolean
+  Ka extends boolean = false
 >(
   options: {
     readonly name: Name
     /**
-     * Whether the component is written inside `h.scoped`, with its `s`.
-     * A scoped child lives until its scope's predicate is false for its key,
-     * or the component whose view wrote it ends, whether or not the view
-     * writes it. One that isn't scoped lives while the view writes it at its
-     * place.
+     * Whether the component is written inside `h.keepAlive`, with its `s`.
+     * A keep-alive child lives until its block's predicate is false for its
+     * key, or the component whose view wrote it ends, whether or not the view
+     * writes it. Any other child lives while the view writes it at its place.
+     * `false` by default.
      */
-    readonly scoped: Sc
+    readonly keepAlive?: Ka | undefined
     readonly props?: Schema.Codec<Props, any> | undefined
     readonly model: Schema.Codec<Model, any>
     readonly message: Schema.Codec<Msg, any>
@@ -3332,7 +3322,9 @@ export const define = <
       | false
       | ((model: Model, props: Props) => NoInfer<Model>)
       | undefined
-  }
+    // A `true` must be present: `enabled ? true : undefined` could be `false` at runtime. It's `boolean`, not
+    // `true`, so a wrapper generic in `K extends boolean` can pass `keepAlive: k`.
+  } & ([Ka] extends [true] ? { readonly keepAlive: boolean } : unknown)
 ): Definition<
   Name,
   Props,
@@ -3349,7 +3341,7 @@ export const define = <
   >,
   SV,
   Rp,
-  Sc
+  NoInfer<Ka>
 > => {
   const shares = options.shares
   const definition: Definition<
@@ -3368,10 +3360,10 @@ export const define = <
     >,
     SV,
     Rp,
-    Sc
+    Ka
   > = {
     name: options.name,
-    scoped: options.scoped,
+    keepAlive: (options.keepAlive ?? false) as Ka,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
     message: options.message,
@@ -3712,7 +3704,7 @@ export type Provided<C, ROut, RIn> = C extends Component<
     L,
     Sl
   >
-  : C extends ScopedComponent<
+  : C extends KeepAliveComponent<
     infer N,
     infer P,
     infer M,
@@ -3722,7 +3714,7 @@ export type Provided<C, ROut, RIn> = C extends Component<
     infer V,
     infer L,
     infer Sl
-  > ? ScopedComponent<
+  > ? KeepAliveComponent<
       N,
       P,
       M,
@@ -3739,7 +3731,7 @@ export type Provided<C, ROut, RIn> = C extends Component<
       Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
       Slots<C>
     >
-  : Scoped<
+  : KeepAlive<
     Props<C>,
     Events<C>,
     Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
@@ -3967,7 +3959,7 @@ const toLayer = (
 // component that is still `Any` once inferred takes no message, as
 // `Message<Any>` says.
 type Erased<C> = [Any] extends [C] ? true
-  : [Scoped.Any] extends [C] ? true
+  : [KeepAlive.Any] extends [C] ? true
   : false
 
 type ProvideMessage<C, M> = Erased<C> extends true ? M : Message<C>
@@ -4086,7 +4078,6 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *
  * const Row = Component.define({
  *   name: "Row",
- *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({}),
  *   message: RowMessage
@@ -4128,7 +4119,6 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *
  * const RoomView = Component.define({
  *   name: "RoomView",
- *   scoped: false,
  *   model: Schema.Struct({ room: Schema.String, joined: Schema.String }),
  *   message: RoomMessage
  * }).make({
@@ -4311,7 +4301,7 @@ export interface Lazy<
  */
 export declare namespace Lazy {
   /**
-   * What every lazy component has, scoped or not.
+   * What every lazy component has, kept alive or not.
    *
    * @category models
    * @since 0.1.0
@@ -4343,22 +4333,22 @@ export declare namespace Lazy {
     | AsyncResult.Failure<never, unknown>
 
   /**
-   * A lazy scoped component: it's written inside `h.scoped`, with the `s`
-   * it gives, as the scoped component is. Once its module has loaded, the
-   * child lives until the scope's predicate is false for its key, or the
+   * A lazy keep-alive component: it's written inside `h.keepAlive`, with the
+   * `s` it gives, as the keep-alive component is. Once its module has loaded,
+   * the child lives until the block's predicate is false for its key, or the
    * parent ends.
    *
    * @category models
    * @since 0.1.0
    */
-  export interface Scoped<
+  export interface KeepAlive<
     in out Props,
     out Events,
     out R = never,
     in Sl extends string = never
   > extends
     Members<Props, Events, R, Sl>,
-    Scoped.Call<Props, Events, R, Sl, Result>
+    KeepAlive.Call<Props, Events, R, Sl, Result>
   {}
 
   /**
@@ -4378,7 +4368,7 @@ export declare namespace Lazy {
   }
 
   /**
-   * Any lazy component, scoped or not.
+   * Any lazy component, kept alive or not.
    *
    * @category models
    * @since 0.1.0
@@ -4426,8 +4416,8 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy
  * starts the load without rendering, and `TestHost.settle` waits for a load
  * in flight.
  *
- * A scoped component loaded lazily is still scoped: write its children
- * inside `h.scoped`, with the `s` it gives.
+ * A keep-alive component loaded lazily is still kept alive: write its children
+ * inside `h.keepAlive`, with the `s` it gives.
  *
  * Provide the services that only the loaded component uses with
  * `Component.provide` inside its module, so their Layers go into its chunk.
@@ -4437,8 +4427,8 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy
  *
  * - `load` must resolve to a component that isn't headless. Any other
  *   value fails the load, as does a `load` that throws.
- * - A lazy scoped child is kept only once its module has loaded. Until then,
- *   a parent that stops writing it drops its fallback, as it would any
+ * - A lazy keep-alive child is kept only once its module has loaded. Until
+ *   then, a parent that stops writing it drops its fallback, as it would any
  *   child's.
  * - The server waits for the load and renders the component. The client
  *   doesn't load the module before it hydrates, so it replaces the server's
@@ -4474,5 +4464,6 @@ export const lazy: <C extends AnyRoot>(
   load: () => Promise<C>
 ) => C extends Mountable.Call<any, any, any, never> ?
   Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>>
-  : Lazy.Scoped<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy
-    .make as any
+  : Lazy.KeepAlive<Props<C>, Events<C>, Requirements<C>, Slots<C>> =
+    internalLazy
+      .make as any

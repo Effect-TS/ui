@@ -131,7 +131,6 @@
  *
  * const Profile = Component.define({
  *   name: "Profile",
- *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: ProfileMessage,
  *   elements: Html
@@ -362,7 +361,6 @@ const blurred = ({ disabled }: Partial<Html.BlurPayload>) =>
  */
 export const Field = Component.define({
   name: "Field",
-  scoped: false,
   props: FieldProps,
   model: FieldModel,
   message: FieldMessage,

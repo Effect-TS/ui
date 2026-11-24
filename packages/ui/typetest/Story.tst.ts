@@ -50,7 +50,6 @@ describe("Story", () => {
     })
     const Setter = Component.define({
       name: "Setter",
-      scoped: false,
       model: Schema.Number,
       message: Message
     }).make({
@@ -140,7 +139,6 @@ describe("Story", () => {
   it("a component with no messages is a story, with its types kept", () => {
     const Static = Component.define({
       name: "Static",
-      scoped: false,
       model: Schema.Number,
       message: Schema.Never
     }).make({

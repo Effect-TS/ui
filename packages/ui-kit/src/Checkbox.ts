@@ -91,7 +91,6 @@
  *
  * const Signup = Component.define({
  *   name: "Signup",
- *   scoped: false,
  *   model: Schema.Struct({ terms: Schema.Boolean }),
  *   message: SignupMessage,
  *   elements: Html
@@ -339,7 +338,6 @@ const state = <B extends Attributed<B>>(
  */
 export const Checkbox = Component.define({
   name: "Checkbox",
-  scoped: false,
   props: CheckboxProps,
   model: Schema.Struct({}),
   message: CheckboxMessage,

@@ -67,7 +67,6 @@ import type * as Renderer from "./Renderer.ts"
  *
  * export const Counter = Component.define({
  *   name: "Counter",
- *   scoped: false,
  *   model: Schema.Number,
  *   message: Schema.Literal("ClickedIncrement")
  * }).make({
@@ -339,13 +338,13 @@ export type MountHint =
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
  * A child dropped from the view unmounts, and its Model goes with it. A
- * component defined with `scoped: true` is kept instead, so the user finds it
- * as they left it: a hidden tab with a half-filled form, a wizard step, a row
- * a filter hides. It's written inside `h.scoped` with the `s` that passes,
- * `h.scoped((s) => Profile(s, { key: "profile" }))`, and it belongs to the
- * component whose view called `h.scoped`, its author. Its path is
- * `Name[key]` under the author wherever the view puts it, so moving it to
- * another element or into another child's slot keeps the instance.
+ * component defined with `keepAlive: true` is kept instead, so the user finds
+ * it as they left it: a hidden tab with a half-filled form, a wizard step, a
+ * row a filter hides. It's written inside `h.keepAlive` with the `s` that
+ * passes, `h.keepAlive((s) => Profile(s, { key: "profile" }))`, and it
+ * belongs to the component whose view called `h.keepAlive`, its author. Its
+ * path is `Name[key]` under the author wherever the view puts it, so moving
+ * it to another element or into another child's slot keeps the instance.
  *
  * While no view writes it, the runtime keeps its nodes out of the document,
  * and the child keeps its Model, its Commands in flight, its Subscriptions
@@ -358,7 +357,7 @@ export type MountHint =
  * child's Model, and the child takes it once it's written again.
  *
  * Without a predicate it lives as long as its author. With one,
- * `h.scoped(({ key, model }) => key in model.rows, (s) => ...)`, the runtime
+ * `h.keepAlive(({ key, model }) => key in model.rows, (s) => ...)`, the runtime
  * asks the predicate about each live child on every render of the author and
  * ends the child once it says no.
  *
@@ -414,8 +413,8 @@ export interface Child<out Msg, out R = never> {
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
   /**
-   * Set when the child is a scoped component written with the `s` of
-   * `h.scoped`: its scope's predicate, or `true` for a scope without one.
+   * Set when the child is a keep-alive component written with the `s` of
+   * `h.keepAlive`: the block's predicate, or `true` for a block without one.
    */
   readonly alive?: ((input: any) => boolean) | true | undefined
   /** The headless instance that declared the child with `p.child`, which takes its events and failures. */
@@ -486,18 +485,18 @@ export declare namespace Child {
     : never
 
   /**
-   * The options of a scoped child: `Options`, with the key checked against
-   * the scope. `K` is the key as written, and `Ends` is `true` in a scope
-   * with a predicate. Without one, the key's type must be a literal, so the
-   * source fixes how many children the scope can keep.
+   * The options of a keep-alive child: `Options`, with the key checked
+   * against the `h.keepAlive` block. `K` is the key as written, and `Ends`
+   * is `true` in a block with a predicate. Without one, the key's type must be
+   * a literal, so the source fixes how many children the block can keep.
    *
    * @category models
    * @since 0.1.0
    */
-  export type ScopedOptions<Props, Events, Msg, K, Ends extends boolean> =
+  export type KeepAliveOptions<Props, Events, Msg, K, Ends extends boolean> =
     & {
-      /** The child's identity among the scoped children of one component. The empty string by default. */
-      readonly key?: ScopedKey<K, Ends> | undefined
+      /** The child's identity among the keep-alive children of one component. The empty string by default. */
+      readonly key?: KeepAliveKey<K, Ends> | undefined
       /**
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
@@ -515,8 +514,8 @@ export declare namespace Child {
       : { readonly props: Props })
 }
 
-type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
-  : true extends WideKey<K> ? ScopedKeyHint
+type KeepAliveKey<K, Ends extends boolean> = [Ends] extends [true] ? K
+  : true extends WideKey<K> ? KeepAliveKeyHint
   : K
 
 type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false
@@ -529,27 +528,27 @@ type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false
  * @category models
  * @since 0.1.0
  */
-export type ScopedKeyHint =
-  "A scoped child whose key isn't a literal needs a predicate that says when it ends: h.scoped(($) => ..., (s) => ...)"
+export type KeepAliveKeyHint =
+  "A keep-alive child whose key isn't a literal needs a predicate that says when it ends: h.keepAlive(($) => ..., (s) => ...)"
 
 /**
- * `s`, what `h.scoped` gives its content: `h`, marked as written in a
- * scope. A scoped component is called with it, and a component that isn't
- * scoped takes it as it takes `h`. `Ends` is `true` in a scope with a
- * predicate. A function that takes `s` types it `Scope<Msg, true>` to
- * write children whose keys aren't literals, `Scope<Msg, false>` for a
- * scope without a predicate, or `Scope<Msg>` for either, where keys must be
- * literals.
+ * `s`, what `h.keepAlive` gives its content: `h`, marked as written in an
+ * `h.keepAlive` block. A keep-alive component is called with it, and any
+ * other component takes it as it takes `h`. `Ends` is `true` in a block
+ * with a predicate. A function that takes `s` types it
+ * `KeepAlive<Msg, true>` to write children whose keys aren't literals,
+ * `KeepAlive<Msg, false>` for a block without a predicate, or
+ * `KeepAlive<Msg>` for either, where keys must be literals.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Scope<Msg, out Ends extends boolean = boolean>
+export interface KeepAlive<Msg, out Ends extends boolean = boolean>
   extends Helper<Msg, unknown>
 {
-  /** Phantom: the brand only `h.scoped` gives. Its name is the error a scoped component called with `h` shows. */
-  readonly "written inside h.scoped((s) => ...)": Ends
+  /** Phantom: the brand only `h.keepAlive` gives. Its name is the error a keep-alive component called with `h` shows. */
+  readonly "written inside h.keepAlive((s) => ...)": Ends
 }
 
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string }
@@ -2213,7 +2212,7 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     lazies.used++
     return node
   }
-  scoped(this: any, alive: any, content?: any): unknown {
+  keepAlive(this: any, alive: any, content?: any): unknown {
     const s = Object.create(this)
     s["~alive"] = content ? alive : true
     return (content ?? alive)(s)

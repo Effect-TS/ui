@@ -22,7 +22,6 @@
  *
  * const TodoList = Component.define({
  *   name: "TodoList",
- *   scoped: false,
  *   props: TodosProps,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -180,7 +179,6 @@ export const isService = (u: unknown): u is Any =>
  *
  * const FakeTodos = Component.define({
  *   name: "FakeTodos",
- *   scoped: false,
  *   props: Todos.props,
  *   model: Schema.Struct({}),
  *   message: Schema.Never

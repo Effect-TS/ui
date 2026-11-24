@@ -13,7 +13,6 @@ const makeApp = () => {
   const ChildMessage = Schema.TaggedUnion({ Read: {} })
   const Child = Component.define({
     name: "Child",
-    scoped: false,
     props: Schema.Struct({ n: Schema.Number }),
     model: Schema.Struct({ seen: Schema.Number }),
     message: ChildMessage
@@ -29,7 +28,6 @@ const makeApp = () => {
   const ParentMessage = Schema.TaggedUnion({ Inc: {}, Hide: {} })
   const Parent = Component.define({
     name: "Parent",
-    scoped: false,
     model: Schema.Struct({ n: Schema.Number, shown: Schema.Boolean }),
     message: ParentMessage
   }).make({
@@ -65,7 +63,6 @@ describe("render timing", () => {
       const ReaderMessage = Schema.TaggedUnion({ Named: {} })
       const Reader = Component.define({
         name: "Reader",
-        scoped: false,
         props: Schema.Struct({ n: Schema.Number }),
         model: Schema.Number,
         message: ReaderMessage,
@@ -83,7 +80,6 @@ describe("render timing", () => {
       })
       const Holder = Component.define({
         name: "Holder",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Null
       })
@@ -128,7 +124,6 @@ describe("render timing", () => {
     )
     const Counter = Component.define({
       name: "Counter",
-      scoped: false,
       model: Schema.Number,
       message: Schema.Literals(["click", "again"]),
       queries: {
@@ -253,7 +248,6 @@ describe("causedBy", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.String,
         message: Message
       }).make({
@@ -355,7 +349,6 @@ describe("TestHost.layer flush", () => {
     )
     const Counter = Component.define({
       name: "Counter",
-      scoped: false,
       model: Schema.Number,
       message: Schema.Literals(["click", "again"])
     }).make({

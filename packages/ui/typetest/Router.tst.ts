@@ -78,7 +78,6 @@ describe("Router.patchSearch", () => {
     })
     const Box = Component.define({
       name: "Box",
-      scoped: false,
       props: Schema.Struct({ route: SearchRoute }),
       model: Schema.Struct({ typed: Schema.Number }),
       message: Message

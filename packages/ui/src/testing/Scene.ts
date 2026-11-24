@@ -33,7 +33,6 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
- *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message

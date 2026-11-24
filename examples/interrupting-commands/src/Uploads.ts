@@ -79,7 +79,6 @@ const ACTION_BUTTON_CLASS =
 
 const UploadsDef = Component.define({
   name: "Uploads",
-  scoped: false,
   model: UploadsModel,
   message: UploadsMessage
 })

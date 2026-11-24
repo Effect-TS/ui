@@ -50,7 +50,6 @@ const FocusBody = Mount.make(
 
 const EditorNoDeps = Component.define({
   name: "Editor",
-  scoped: false,
   props: Schema.Struct({
     noteId: Schema.String,
     token: Schema.Redacted(Schema.String)
@@ -121,7 +120,6 @@ const WorkspaceMessage = UiSchema.TaggedEnum({
 })
 const Workspace = Component.define({
   name: "Workspace",
-  scoped: false,
   model: Schema.Struct({ open: Schema.Array(Schema.String) }),
   message: WorkspaceMessage,
   elements: Html

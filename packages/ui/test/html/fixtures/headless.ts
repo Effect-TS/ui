@@ -64,7 +64,6 @@ const activeIn = (
 
 const MenuDef = Component.define({
   name: "Menu",
-  scoped: false,
   props: Schema.Struct({ items: Schema.Array(Item) }),
   model: Schema.Struct({
     open: Schema.Boolean,
@@ -228,7 +227,6 @@ export const DialogEvents = UiSchema.TaggedEnum({ Closed: {} })
 /** A modal dialog with no markup of its own. Escape and its close part both close it. */
 export const Dialog = Component.define({
   name: "Dialog",
-  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: DialogMessage,

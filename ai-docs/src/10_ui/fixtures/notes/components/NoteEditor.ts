@@ -74,7 +74,6 @@ export class SaveNote extends Command.Service<SaveNote>()(
 // fits in one piece chains the two calls, like `NotePage`.
 const NoteEditorDef = Component.define({
   name: "NoteEditor",
-  scoped: false,
   props: Schema.Struct({ note: Note }),
   model: Schema.Struct({
     draft: Schema.String,

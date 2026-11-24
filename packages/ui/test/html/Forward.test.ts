@@ -47,7 +47,6 @@ const framed = <Msg, R>(
 // A headless part that adds a child of its own, and a second one to stack on it.
 const Checkbox = Component.define({
   name: "Checkbox",
-  scoped: false,
   props: Schema.Struct({ name: Schema.String }),
   model: Schema.Struct({}),
   message: Schema.Never,
@@ -64,7 +63,6 @@ const Checkbox = Component.define({
 })
 const Described = Component.define({
   name: "Described",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -91,7 +89,6 @@ const render = Effect.fnUntraced(function*(
 ) {
   const App = Component.define({
     name: `App${count++}`,
-    scoped: false,
     model: Schema.Null,
     message: Message,
     elements: Html
@@ -300,7 +297,6 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
   )
   const Rows = Component.define({
     name: "Rows",
-    scoped: false,
     model: Schema.Struct({
       ids: Schema.Array(Schema.String),
       log: Schema.Array(Schema.String)

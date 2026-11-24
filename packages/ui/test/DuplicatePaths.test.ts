@@ -9,7 +9,6 @@ const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const Row = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Null,
   message: Schema.Never
@@ -27,7 +26,6 @@ const ListMessage = UiSchema.TaggedEnum({
 const makeList = (layout: "siblings" | "nested") =>
   Component.define({
     name: "List",
-    scoped: false,
     props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
     model: Schema.Array(Schema.String),
     message: ListMessage
@@ -48,7 +46,6 @@ const makePage = (layout: "siblings" | "nested") => {
   const List = makeList(layout)
   return Component.define({
     name: "Page",
-    scoped: false,
     props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
     model: Schema.Null,
     message: Schema.Never
@@ -140,7 +137,6 @@ describe("duplicate child paths", () => {
       provideHost(Effect.gen(function*() {
         const List = Component.define({
           name: "List",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: ListMessage
         }).make({
@@ -172,7 +168,6 @@ describe("duplicate child paths", () => {
       const Group = makeList("siblings")
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -217,7 +212,6 @@ describe("duplicate child paths", () => {
   describe("in a child's fallback", () => {
     const Broken = Component.define({
       name: "Broken",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never
     }).make({
@@ -243,7 +237,6 @@ describe("duplicate child paths", () => {
      */
     const Parent = Component.define({
       name: "Parent",
-      scoped: false,
       props: Props,
       model: Schema.Number,
       message: ParentMessage
@@ -272,7 +265,6 @@ describe("duplicate child paths", () => {
 
     const Root = Component.define({
       name: "Root",
-      scoped: false,
       props: Props,
       model: Schema.Null,
       message: Schema.Never
@@ -355,7 +347,6 @@ describe("duplicate child paths", () => {
       provideHost(Effect.gen(function*() {
         const Faulty = Component.define({
           name: "Faulty",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Null
         })
@@ -368,7 +359,6 @@ describe("duplicate child paths", () => {
           })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         }).make({
@@ -435,7 +425,6 @@ describe("duplicate child paths", () => {
   describe("in a nested fallback", () => {
     const Broken = Component.define({
       name: "Broken",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never
     }).make({
@@ -450,7 +439,6 @@ describe("duplicate child paths", () => {
     /** Named `Row`, so its fallback can show a `Row` at its own path. Fails on a click. */
     const Faulty = Component.define({
       name: "Row",
-      scoped: false,
       model: Schema.Null,
       message: Go
     }).make({
@@ -469,7 +457,6 @@ describe("duplicate child paths", () => {
      */
     const Parent = Component.define({
       name: "Parent",
-      scoped: false,
       props: Props,
       model: Schema.Number,
       message: ParentMessage
@@ -495,7 +482,6 @@ describe("duplicate child paths", () => {
 
     const Root = Component.define({
       name: "Root",
-      scoped: false,
       props: Props,
       model: Schema.Null,
       message: Schema.Never
@@ -556,7 +542,6 @@ describe("a child without a key", () => {
     provideHost(Effect.gen(function*() {
       const Label = Component.define({
         name: "Label",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -566,7 +551,6 @@ describe("a child without a key", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -590,7 +574,6 @@ describe("a child without a key", () => {
     provideHost(Effect.gen(function*() {
       const List = Component.define({
         name: "List",
-        scoped: false,
         props: Schema.Struct({ keys: Schema.Array(Schema.String) }),
         model: Schema.Array(Schema.String),
         message: ListMessage

@@ -261,7 +261,6 @@ const listenFor = (
  *
  * const Snake = Component.define({
  *   name: "Snake",
- *   scoped: false,
  *   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
  *   message: Message,
  *   elements: Html
@@ -330,7 +329,6 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  *
  * const Shortcuts = Component.define({
  *   name: "Shortcuts",
- *   scoped: false,
  *   model: Schema.Boolean,
  *   message: Message,
  *   elements: Html
@@ -428,7 +426,6 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  *
  * const Banner = Component.define({
  *   name: "Banner",
- *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -537,7 +534,6 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  *
  * const Stopwatch = Component.define({
  *   name: "Stopwatch",
- *   scoped: false,
  *   model: Schema.Struct({ running: Schema.Boolean, elapsed: Schema.Number }),
  *   message: Message,
  *   elements: Html

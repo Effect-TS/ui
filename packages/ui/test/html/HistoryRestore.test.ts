@@ -17,7 +17,6 @@ let inits = 0
 const form = (name: string, restore?: false | ((model: string) => string)) =>
   Component.define({
     name,
-    scoped: false,
     model: Schema.String,
     message: Schema.String,
     elements: Html,
@@ -40,7 +39,6 @@ const FilteredSlowForm = form("FilteredSlowForm", () => "filtered").pipe(
 )
 const SlowSide = Component.define({
   name: "SlowSide",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -48,14 +46,14 @@ const SlowSide = Component.define({
   .pipe(Component.provide(slow))
 
 let serving = false
-const secret = <Scoped extends boolean>(
+const secret = <KeepAlive extends boolean>(
   name: string,
-  scoped: Scoped,
+  keepAlive: KeepAlive,
   restore: false | ((model: string) => string)
 ) =>
   Component.define({
     name,
-    scoped,
+    keepAlive,
     model: Schema.String,
     message: Schema.Never,
     elements: Html,
@@ -70,7 +68,6 @@ const vault = (name: string, restore: false | ((model: string) => string)) => {
   const Kept = secret(`${name}Kept`, true, restore)
   return Component.define({
     name,
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
@@ -78,7 +75,7 @@ const vault = (name: string, restore: false | ((model: string) => string)) => {
     init: () => null,
     update: ($) => $.model,
     view: (h) =>
-      h.div(Plain(h, { key: "p" }), h.scoped((s) => Kept(s, { key: "k" })))
+      h.div(Plain(h, { key: "p" }), h.keepAlive((s) => Kept(s, { key: "k" })))
   }).pipe(Component.provide(slow))
 }
 const ExcludedVault = vault("ExcludedVault", false)
@@ -92,7 +89,6 @@ const Late = Schema.String.pipe(Schema.decode({
 }))
 const LateForm = Component.define({
   name: "LateForm",
-  scoped: false,
   model: Late,
   message: Schema.String,
   elements: Html
@@ -101,13 +97,13 @@ const LateForm = Component.define({
   update: (_, text) => text,
   view: (h, text) => h.input.value(text).onInput(({ value }) => value)
 })
-const scopedForm = (
+const keepAliveForm = (
   name: string,
   restore?: false | ((model: string) => string)
 ) =>
   Component.define({
     name,
-    scoped: true,
+    keepAlive: true,
     model: Schema.String,
     message: Schema.String,
     elements: Html,
@@ -117,24 +113,26 @@ const scopedForm = (
     update: (_, text) => text,
     view: (h, text) => h.input.value(text)
   }).pipe(Component.provide(slow))
-const ScopedForm = scopedForm("ScopedForm")
-const ExcludedScopedForm = scopedForm("ExcludedScopedForm", false)
-const FilteredScopedForm = scopedForm("FilteredScopedForm", () => "filtered")
-const holder = (child: typeof ScopedForm) =>
+const KeepAliveForm = keepAliveForm("KeepAliveForm")
+const ExcludedKeepAliveForm = keepAliveForm("ExcludedKeepAliveForm", false)
+const FilteredKeepAliveForm = keepAliveForm(
+  "FilteredKeepAliveForm",
+  () => "filtered"
+)
+const holder = (child: typeof KeepAliveForm) =>
   Component.define({
     name: "Holder",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.scoped((s) => h.div(child(s, { key: "d" })))
+    view: (h) => h.keepAlive((s) => h.div(child(s, { key: "d" })))
   })
-const Holder = holder(ScopedForm)
-const ExcludedHolder = holder(ExcludedScopedForm)
-const FilteredHolder = holder(FilteredScopedForm)
+const Holder = holder(KeepAliveForm)
+const ExcludedHolder = holder(ExcludedKeepAliveForm)
+const FilteredHolder = holder(FilteredKeepAliveForm)
 
 class GetTab extends Query.Service<GetTab>()("GetTab", {
   args: {},
@@ -145,7 +143,7 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
 const draft = (restore?: false) =>
   Component.define({
     name: "Draft",
-    scoped: true,
+    keepAlive: true,
     model: Schema.String,
     message: Schema.Never,
     elements: Html,
@@ -160,7 +158,6 @@ const Draft = draft()
 const lateSettings = (child: typeof Draft) =>
   Component.define({
     name: "LateSettings",
-    scoped: false,
     model: Late,
     message: Schema.String,
     elements: Html,
@@ -172,7 +169,7 @@ const lateSettings = (child: typeof Draft) =>
       h.div(
         h.button.onClick("shown").children("show"),
         shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
-          ? h.scoped(
+          ? h.keepAlive(
             ({ queries }) => !AsyncResult.isFailure(queries.tab),
             (s) => child(s, { key: "d" })
           )
@@ -181,10 +178,10 @@ const lateSettings = (child: typeof Draft) =>
   }).pipe(Component.provide(GetTab.layer))
 const LateSettings = lateSettings(Draft)
 const ExcludedLateSettings = lateSettings(draft(false))
-const lateScoped = (name: string, restore?: (model: string) => string) =>
+const lateKeepAlive = (name: string, restore?: (model: string) => string) =>
   Component.define({
     name,
-    scoped: true,
+    keepAlive: true,
     model: Late,
     message: Schema.Never,
     elements: Html,
@@ -194,25 +191,27 @@ const lateScoped = (name: string, restore?: (model: string) => string) =>
     update: ($) => $.model,
     view: (h, text) => h.input.value(text)
   })
-const LateScoped = lateScoped("LateScoped")
-const FilteredLateScoped = lateScoped("FilteredLateScoped", () => "filtered")
-const lateHolder = (child: typeof LateScoped) =>
+const LateKeepAlive = lateKeepAlive("LateKeepAlive")
+const FilteredLateKeepAlive = lateKeepAlive(
+  "FilteredLateKeepAlive",
+  () => "filtered"
+)
+const lateHolder = (child: typeof LateKeepAlive) =>
   Component.define({
     name: "LateHolder",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.scoped((s) => h.div(child(s, { key: "d" })))
+    view: (h) => h.keepAlive((s) => h.div(child(s, { key: "d" })))
   })
-const LateHolder = lateHolder(LateScoped)
-const FilteredLateHolder = lateHolder(FilteredLateScoped)
+const LateHolder = lateHolder(LateKeepAlive)
+const FilteredLateHolder = lateHolder(FilteredLateKeepAlive)
 const Field = Component.define({
   name: "Field",
-  scoped: true,
+  keepAlive: true,
   model: Schema.String,
   message: Schema.String,
   elements: Html
@@ -223,7 +222,6 @@ const Field = Component.define({
 })
 const Group = Component.define({
   name: "Group",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -231,11 +229,10 @@ const Group = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.div(Form(h, { key: "c" }), h.scoped((s) => Field(s, { key: "e" })))
+    h.div(Form(h, { key: "c" }), h.keepAlive((s) => Field(s, { key: "e" })))
 })
 const LateCard = Component.define({
   name: "LateCard",
-  scoped: false,
   model: Late,
   message: Schema.Never,
   elements: Html
@@ -243,11 +240,11 @@ const LateCard = Component.define({
   init: () => "client",
   update: ($) => $.model,
   view: (h) =>
-    h.div(h.scoped((s) => Field(s, { key: "p" })), Group(h, { key: "g" }))
+    h.div(h.keepAlive((s) => Field(s, { key: "p" })), Group(h, { key: "g" }))
 })
 const Card = Component.define({
   name: "Card",
-  scoped: true,
+  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -258,18 +255,17 @@ const Card = Component.define({
 })
 const CardHolder = Component.define({
   name: "CardHolder",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.scoped((s) => h.div(Card(s, { key: "d" })))
+  view: (h) => h.keepAlive((s) => h.div(Card(s, { key: "d" })))
 })
 const Outer = Component.define({
   name: "Outer",
-  scoped: true,
+  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -277,37 +273,36 @@ const Outer = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.scoped((s) => h.div(Draft(s, { key: "d" })))
+    view: (h) => h.keepAlive((s) => h.div(Draft(s, { key: "d" })))
   })
 const Nesting = Component.define({
   name: "Nesting",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.scoped((s) => h.div(Outer(s, { key: "o" })))
+  view: (h) => h.keepAlive((s) => h.div(Outer(s, { key: "o" })))
 })
 
 type Page =
   | "slow form"
   | "slow side"
   | "excluded slow side"
-  | "excluded scoped form"
+  | "excluded keep-alive form"
   | "excluded slow form"
   | "excluded vault"
   | "filtered vault"
   | "filtered slow form"
-  | "filtered scoped form"
-  | "filtered late scoped"
+  | "filtered keep-alive form"
+  | "filtered late keep-alive"
   | "late form"
-  | "scoped form"
+  | "keep-alive form"
   | "late settings"
   | "excluded late settings"
   | "nested"
-  | "late scoped"
+  | "late keep-alive"
   | "late card"
   | "open card"
   | "open contact"
@@ -326,7 +321,6 @@ const Msg = UiSchema.TaggedEnum({
 const appOf = (page: Page) =>
   Component.define({
     name: "App",
-    scoped: false,
     props: Schema.Struct({ route: Routes }),
     model: Routes,
     message: Msg,
@@ -376,15 +370,15 @@ const appOf = (page: Page) =>
           ? ExcludedSlowForm(h, { key: "f" })
           : page === "filtered slow form"
           ? FilteredSlowForm(h, { key: "f" })
-          : page === "excluded scoped form"
+          : page === "excluded keep-alive form"
           ? ExcludedHolder(h, { key: "f" })
-          : page === "filtered scoped form"
+          : page === "filtered keep-alive form"
           ? FilteredHolder(h, { key: "f" })
-          : page === "filtered late scoped"
+          : page === "filtered late keep-alive"
           ? FilteredLateHolder(h, { key: "f" })
           : page === "late form"
           ? LateForm(h, { key: "f" })
-          : page === "scoped form"
+          : page === "keep-alive form"
           ? Holder(h, { key: "f" })
           : page === "late settings"
           ? LateSettings(h, { key: "f" })
@@ -392,7 +386,7 @@ const appOf = (page: Page) =>
           ? ExcludedLateSettings(h, { key: "f" })
           : page === "nested"
           ? Nesting(h, { key: "f" })
-          : page === "late scoped"
+          : page === "late keep-alive"
           ? LateHolder(h, { key: "f" })
           : page === "late card" || page === "open card"
           ? CardHolder(h, { key: "f" })
@@ -405,7 +399,6 @@ const appOf = (page: Page) =>
 const editor = (name: string) =>
   Component.define({
     name,
-    scoped: false,
     props: Schema.Struct({ open: Schema.Boolean }),
     model: Schema.NullOr(Schema.String),
     message: Schema.NullOr(Schema.String),
@@ -418,14 +411,13 @@ const editor = (name: string) =>
         h.input.value(subject ?? "").onInput(({ value }) =>
           value === "" ? null : value
         ),
-        h.props.open ? h.scoped((s) => Draft(s, { key: "d" })) : null
+        h.props.open ? h.keepAlive((s) => Draft(s, { key: "d" })) : null
       )
   })
 const Editor = editor("Editor")
 const SlowEditor = editor("SlowEditor").pipe(Component.provide(slow))
 const SlowNesting = Component.define({
   name: "SlowNesting",
-  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never,
@@ -435,7 +427,7 @@ const SlowNesting = Component.define({
   update: ($) => $.model,
   view: (h) =>
     h.section(
-      h.scoped(({ props }) => props.open, (s) => Outer(s, { key: "o" }))
+      h.keepAlive(({ props }) => props.open, (s) => Outer(s, { key: "o" }))
     )
 }).pipe(Component.provide(slow))
 const Shown = Schema.Literals(["none", "closed", "open"])
@@ -448,7 +440,6 @@ const DeskMsg = UiSchema.TaggedEnum({
 const deskOf = (waits: boolean, nested: boolean) =>
   Component.define({
     name: "Desk",
-    scoped: false,
     props: Schema.Struct({ route: Routes }),
     model: Schema.Struct({ route: Routes, editor: Shown }),
     message: DeskMsg,
@@ -540,7 +531,6 @@ const sit = Effect.fnUntraced(
 )
 const Panel = Component.define({
   name: "Panel",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Boolean,
   elements: Html
@@ -618,20 +608,20 @@ describe("history restore of a page whose hydration hasn't settled", {
         "filtered"
       ],
       [
-        "excluded scoped form",
-        "/App/Holder[f]/ExcludedScopedForm[d]",
+        "excluded keep-alive form",
+        "/App/Holder[f]/ExcludedKeepAliveForm[d]",
         undefined,
         "client"
       ],
       [
-        "filtered scoped form",
-        "/App/Holder[f]/FilteredScopedForm[d]",
+        "filtered keep-alive form",
+        "/App/Holder[f]/FilteredKeepAliveForm[d]",
         "filtered",
         "filtered"
       ],
       [
-        "filtered late scoped",
-        "/App/LateHolder[f]/FilteredLateScoped[d]",
+        "filtered late keep-alive",
+        "/App/LateHolder[f]/FilteredLateKeepAlive[d]",
         undefined,
         "client"
       ]
@@ -676,10 +666,10 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back restores the server's Model of a scoped child whose state still decodes after that Back", () => {
+  it.effect("Back restores the server's Model of a keep-alive child whose state still decodes after that Back", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
-      const { app, open, root } = yield* visit("late scoped")
+      const { app, open, root } = yield* visit("late keep-alive")
       root.send(Msg.Go())
       yield* tick
       history.go(-1)
@@ -693,7 +683,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back restores a scoped child drawn by a scoped child", () => {
+  it.effect("Back restores a keep-alive child drawn by a keep-alive child", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { app, root } = yield* visit("nested", true)
@@ -709,7 +699,7 @@ describe("history restore of a page whose hydration hasn't settled", {
   })
 
   it.effect.each(
-    ["slow form", "scoped form"] as const
+    ["slow form", "keep-alive form"] as const
   )(
     "Back restores the server's Model of a %s a push closed as it waited for its Layer",
     (page) => {
@@ -730,7 +720,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     }
   )
 
-  it.effect("a scoped child with restore: false the server kept undrawn starts from the server's Model when first drawn", () => {
+  it.effect("a keep-alive child with restore: false the server kept undrawn starts from the server's Model when first drawn", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { app } = yield* visit("excluded late settings", true)
@@ -744,7 +734,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back runs a scoped child the server kept undrawn from init when a push closed its author as its state decoded", () => {
+  it.effect("Back runs a keep-alive child the server kept undrawn from init when a push closed its author as its state decoded", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { app, open, root } = yield* visit("late settings", false)
@@ -763,7 +753,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("a second Back runs a scoped child the server kept undrawn from init, after a push closed its author as it waited", () => {
+  it.effect("a second Back runs a keep-alive child the server kept undrawn from init, after a push closed its author as it waited", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { app, root } = yield* visit("late settings", true)
@@ -932,7 +922,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     }
   )
 
-  it.effect("Back restores none of a scoped child a push closed with its waiting author, when its predicate is false at that Back", () => {
+  it.effect("Back restores none of a keep-alive child a push closed with its waiting author, when its predicate is false at that Back", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { app, open, root } = yield* sit(true, false, true)
@@ -990,7 +980,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back runs a scoped child an author drew as a push closed it waiting from init, drawn again after the Back settles", () => {
+  it.effect("Back runs a keep-alive child an author drew as a push closed it waiting from init, drawn again after the Back settles", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { draft, open, root } = yield* sit(true)
@@ -1009,7 +999,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back restores a scoped child a push closed with its waiting author once: an author made again at its key starts it afresh", () => {
+  it.effect("Back restores a keep-alive child a push closed with its waiting author once: an author made again at its key starts it afresh", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { draft, open, root } = yield* sit(true)
@@ -1031,7 +1021,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back restores a scoped child of an author made before the Back settles", () => {
+  it.effect("Back restores a keep-alive child of an author made before the Back settles", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { draft, root } = yield* sit(false, true)
@@ -1050,7 +1040,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back restores no scoped child of an author made after it settled, in a root that still hydrates", () => {
+  it.effect("Back restores no keep-alive child of an author made after it settled, in a root that still hydrates", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { draft, go, root } = yield* aside("nested")
@@ -1068,7 +1058,7 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect("Back restores a scoped child once, in a root that still hydrates: an author made again at its key starts it afresh", () => {
+  it.effect("Back restores a keep-alive child once, in a root that still hydrates: an author made again at its key starts it afresh", () => {
     const history = Router.memoryHistory("/")
     return Effect.gen(function*() {
       const { draft, go, root } = yield* aside("slow form")

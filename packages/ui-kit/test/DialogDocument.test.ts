@@ -81,7 +81,6 @@ const config = (overrides: Partial<Config>): Config => ({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Config,
   model: Schema.Struct({
     config: Config,

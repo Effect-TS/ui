@@ -66,7 +66,6 @@ describe("HtmlKeyboard.shortcuts", () => {
     Effect.gen(function*() {
       const Panel = Component.define({
         name: "Panel",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Schema.String,
         elements: Html

@@ -11,7 +11,6 @@ const Message = UiSchema.TaggedEnum({ ClickedTurn: {}, PressedRight: {} })
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({ rtl: Schema.Boolean, claimsRight: Schema.Boolean }),
   model: Schema.Struct({ vertical: Schema.Boolean }),
   message: Message,

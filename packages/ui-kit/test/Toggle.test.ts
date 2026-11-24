@@ -14,7 +14,6 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 // handler layer, so both hear the click.
 const Toolbar = Component.define({
   name: "Toolbar",
-  scoped: false,
   model: Schema.Struct({ bold: Schema.Boolean, open: Schema.Boolean }),
   message: ToolbarMessage,
   elements: Html

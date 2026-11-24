@@ -64,7 +64,6 @@ describe("Markdown.islandsFor", () => {
   it("passes the services on to the component that renders the document", () => {
     const Post = Component.define({
       name: "Post",
-      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       elements: Html

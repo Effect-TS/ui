@@ -83,7 +83,6 @@
  *
  * const File = Component.define({
  *   name: "File",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean }),
  *   message: FileMessage,
  *   elements: Html

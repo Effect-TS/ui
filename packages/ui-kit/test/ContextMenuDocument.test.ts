@@ -16,7 +16,6 @@ const PageMessage = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({
     disabled: Schema.Boolean,
     refuseClose: Schema.Boolean
@@ -95,7 +94,6 @@ const HybridMessage = UiSchema.TaggedEnum({
 
 const Hybrid = Component.define({
   name: "Hybrid",
-  scoped: false,
   props: Schema.Struct({}),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: HybridMessage,

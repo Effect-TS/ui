@@ -7,7 +7,6 @@ const RowEvents = UiSchema.TaggedEnum({ Changed: { text: Schema.String } })
 
 const RowDef = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.String,
   message: RowMessage,
@@ -22,7 +21,6 @@ const Row = RowDef.make({
 
 const ListboxDef = Component.define({
   name: "Listbox",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 })

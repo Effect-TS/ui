@@ -44,7 +44,6 @@
  *
  * const Page = Component.define({
  *   name: "Page",
- *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -129,7 +128,6 @@ export type DirectionProviderProps = typeof DirectionProviderProps.Type
  */
 export const DirectionProvider = Component.define({
   name: "DirectionProvider",
-  scoped: false,
   props: DirectionProviderProps,
   model: Schema.Struct({}),
   message: Schema.Never,

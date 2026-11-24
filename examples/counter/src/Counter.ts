@@ -17,7 +17,6 @@ const BUTTON_CLASS =
 
 export const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   model: CounterModel,
   message: CounterMessage
 }).make({

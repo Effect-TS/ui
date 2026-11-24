@@ -66,7 +66,6 @@ export const guides = markdown({
 // by module, so calling it in `view` decodes once.
 export const GuidePageNoDeps = Component.define({
   name: "GuidePage",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html

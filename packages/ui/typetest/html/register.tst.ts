@@ -15,7 +15,6 @@ describe("@effect/ui/html/register", () => {
     }
     Component.define({
       name: "SaveButton",
-      scoped: false,
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Number,
       message: Schema.Literal("Save")
@@ -36,7 +35,6 @@ describe("@effect/ui/html/register", () => {
     }
     Component.define({
       name: "Greeting",
-      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never
     }).make({
@@ -67,7 +65,6 @@ it("shared wrappers preserve unspread options.children requirements across compo
     )
   const Page = Component.define({
     name: "Page",
-    scoped: false,
     model: Schema.Null,
     message: Msg,
     elements: Html
@@ -107,7 +104,6 @@ it("shared wrappers preserve unspread options.children requirements across compo
   expect<Component.Requirements<typeof Page>>().type.toBe<Clock | Logger>()
   const Other = Component.define({
     name: "Other",
-    scoped: false,
     props: Schema.Struct({ title: Schema.String }),
     model: Schema.Null,
     message: Schema.String,

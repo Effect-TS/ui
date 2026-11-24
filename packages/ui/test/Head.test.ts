@@ -75,7 +75,6 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -86,7 +85,6 @@ describe("Head", () => {
       })
       const Layout = Component.define({
         name: "Layout",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -101,7 +99,6 @@ describe("Head", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -135,7 +132,6 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       }).make({
@@ -146,7 +142,6 @@ describe("Head", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       }).make({
@@ -190,7 +185,6 @@ describe("Head", () => {
       const leaf = (name: string, head?: ReadonlyArray<Head.Entry>) =>
         Component.define({
           name,
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Shaped
@@ -209,7 +203,6 @@ describe("Head", () => {
       ) =>
         Component.define({
           name,
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Shaped
@@ -256,7 +249,6 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         props: Schema.Struct({ id: Schema.String }),
         model: Schema.Null,
         message: Schema.Never
@@ -269,7 +261,6 @@ describe("Head", () => {
         })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.String,
         message: Schema.String
       }).make({
@@ -289,7 +280,6 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -300,7 +290,6 @@ describe("Head", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       }).make(
@@ -329,7 +318,6 @@ describe("Head", () => {
     Effect.gen(function*() {
       const Notice = Component.define({
         name: "Notice",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -341,7 +329,6 @@ describe("Head", () => {
         })
       const Broken = Component.define({
         name: "Broken",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -355,7 +342,6 @@ describe("Head", () => {
         })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -380,7 +366,6 @@ describe("Head", () => {
 
   const Titled = Component.define({
     name: "Titled",
-    scoped: false,
     props: Schema.Struct({ title: Schema.String }),
     model: Schema.Null,
     message: Schema.Never
@@ -397,7 +382,6 @@ describe("Head", () => {
     Effect.gen(function*() {
       const App = Component.define({
         name: "App",
-        scoped: false,
         props: Schema.Struct({ swapped: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never

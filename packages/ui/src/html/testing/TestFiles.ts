@@ -22,7 +22,6 @@
  *
  * const Attach = Component.define({
  *   name: "Attach",
- *   scoped: false,
  *   model: Schema.Array(Schema.String),
  *   message: Message,
  *   elements: Html

@@ -38,7 +38,6 @@ const items: ReadonlyArray<Item> = [{ id: "a", label: "Archive" }, {
 
 const WrappedDialog = Component.define({
   name: "WrappedDialog",
-  scoped: false,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Null,
   message: DialogEvents,
@@ -63,7 +62,6 @@ const ComboEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
 
 const Combo = Component.define({
   name: "Combo",
-  scoped: false,
   props: Schema.Struct({ items: Schema.Array(Item) }),
   model: Schema.Array(Schema.String),
   message: ComboMessage,
@@ -103,7 +101,6 @@ const AppMessage = UiSchema.TaggedEnum({
 
 const App = Component.define({
   name: "App",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: AppMessage,
   elements: Html
@@ -138,7 +135,6 @@ const App = Component.define({
 const ChildFailed = UiSchema.TaggedEnum({ Said: {}, Failed: {} })
 const Hello = Component.define({
   name: "Hello",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   events: UiSchema.TaggedEnum({ Said: {} }),
@@ -150,7 +146,6 @@ const Hello = Component.define({
 })
 const Broken = Component.define({
   name: "Broken",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -169,7 +164,6 @@ const owning = (
 ) => {
   const Owner = Component.define({
     name: "Owner",
-    scoped: false,
     model: Schema.Array(Schema.String),
     message: ChildFailed,
     events: UiSchema.TaggedEnum({ Lost: {} }),
@@ -191,7 +185,6 @@ const owning = (
   })
   return Component.define({
     name: "App",
-    scoped: false,
     model: Schema.Array(Schema.String),
     message: Schema.String,
     elements: Html
@@ -329,7 +322,6 @@ describe("p.child in a Scene", () => {
 
     const Twice = Component.define({
       name: "Twice",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html

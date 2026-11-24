@@ -8,7 +8,6 @@ const statuses = ["Paid", "Pending", "Refunded"]
 
 export const TableDemo = Component.define({
   name: "TableDemo",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html

@@ -141,7 +141,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       )
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.String,
         message: Schema.String
       })
@@ -289,7 +288,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Form = Component.define({
       name: "Form",
-      scoped: false,
       model: Schema.Struct({
         text: Schema.String,
         checked: Schema.Boolean,
@@ -364,7 +362,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Resettable = Component.define({
           name: "Resettable",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -434,7 +431,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       })
       const Fields = Component.define({
         name: "Fields",
-        scoped: false,
         model: Schema.Struct({
           upper: Schema.String,
           card: Schema.String,
@@ -626,7 +622,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     // The search is the only copy of the text: the page's Model holds none. Digits are rejected.
     const SearchPage = Component.define({
       name: "SearchPage",
-      scoped: false,
       props: Schema.Struct({ route: SearchRoute.subset(["Search"]) }),
       model: Schema.Struct({}),
       message: SearchMessage,
@@ -656,7 +651,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const SearchApp = Component.define({
       name: "SearchApp",
-      scoped: false,
       props: Schema.Struct({ route: SearchRoute }),
       model: Schema.Struct({ route: SearchRoute }),
       message: AppMessage,
@@ -808,7 +802,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     // A child's nodes are a list of their own, among the parent's other nodes.
     const Shown = Component.define({
       name: "Shown",
-      scoped: false,
       props: Schema.Struct({ rows: Schema.Array(Schema.String) }),
       model: Schema.Null,
       message: Schema.Never,
@@ -821,7 +814,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Lists = Component.define({
       name: "Lists",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: ListMessage,
       elements: Html
@@ -871,7 +863,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         // The rows are the child's tag, its key and its text.
         const Only = Component.define({
           name: "Only",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: ListMessage,
           elements: Html
@@ -921,7 +912,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         }
         const Page = Component.define({
           name: "Classed",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: ListMessage,
           elements: Html
@@ -954,7 +944,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const ItemsDef = Component.define({
       name: "Items",
-      scoped: false,
       model: Schema.Struct({
         items: Schema.Array(Item),
         selected: Schema.Number,
@@ -1063,7 +1052,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           }) {}
           const LeafImpl = Component.define({
             name: "LeafImpl",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never,
             elements: Html
@@ -1076,7 +1064,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           const ready = yield* Deferred.make<void>()
           const FrameDef = Component.define({
             name: "Frame",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never,
             elements: Html
@@ -1122,7 +1109,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const FieldsDef = Component.define({
           name: "Fields",
-          scoped: false,
           model: Schema.Number,
           message: LazyMessage,
           elements: Html
@@ -1219,7 +1205,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Events = Component.define({
       name: "Events",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: Message,
       elements: Html
@@ -1356,7 +1341,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     clicksWhenConnected("x-clicks-on-connect")
     const LogPage = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: Schema.String
     })
@@ -1394,11 +1378,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["start", "inserted", "new"])
       }).pipe(Effect.scoped))
 
-    it.effect("a kept scoped child gets the events it fires as it is drawn again", () =>
+    it.effect("a kept keep-alive child gets the events it fires as it is drawn again", () =>
       Effect.gen(function*() {
         const Counter = Component.define({
           name: "Counter",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Number,
           message: Schema.String
         }).make({
@@ -1412,7 +1396,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const Outer = Component.define({
           name: "Outer",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -1420,11 +1404,10 @@ describe("BrowserHost", { concurrent: false }, () => {
             init: () => null,
             update: ($) => $.model,
             view: (h) =>
-              h.scoped((s) => h.el("section", Counter(s, { key: "c" })))
+              h.keepAlive((s) => h.el("section", Counter(s, { key: "c" })))
           })
         const Shell = Component.define({
           name: "Shell",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean
         })
@@ -1434,7 +1417,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             view: (h, shown) =>
               h.el(
                 "div",
-                h.scoped((s) => shown ? Outer(s, { key: "o" }) : null)
+                h.keepAlive((s) => shown ? Outer(s, { key: "o" }) : null)
               )
           })
         const app = yield* container
@@ -1460,7 +1443,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         const LoginRoute = Route.union({ Login: Route.make("/") })
         const Login = Component.define({
           name: "Login",
-          scoped: false,
           model: Schema.Struct({ email: Schema.String }),
           message: Schema.Never,
           elements: Html
@@ -1562,7 +1544,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         )
         const Rows = Component.define({
           name: "Rows",
-          scoped: false,
           model: Schema.Number,
           message: Schema.String
         })
@@ -1649,7 +1630,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Toggle = Component.define({
           name: "Toggle",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: Message,
           elements: Html
@@ -1725,7 +1705,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const Leaving = Component.define({
           name: "Leaving",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: Left,
           elements: Html
@@ -1784,7 +1763,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const Focusing = Component.define({
           name: "Focusing",
-          scoped: false,
           model: Schema.Array(Schema.Boolean),
           message: Seen,
           elements: Html
@@ -1832,7 +1810,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       const Seen = UiSchema.TaggedEnum({ Saw: { entry: Schema.String } })
       const Typing = Component.define({
         name: "Typing",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Seen,
         elements: Html
@@ -1991,7 +1968,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           ] as const
           const KeyTargets = Component.define({
             name: "KeyTargets",
-            scoped: false,
             model: Schema.Array(Schema.String),
             message: Schema.String,
             elements: Html
@@ -2114,7 +2090,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
           const Upper = Component.define({
             name: "Upper",
-            scoped: false,
             model: Schema.String,
             message: Typed,
             elements: Html
@@ -2236,7 +2211,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(Events, {}, app)
         const Bare = Component.define({
           name: "Bare",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -2257,7 +2231,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         // The tag as the author wrote it isn't what makes it a form.
         const Upper = Component.define({
           name: "Upper",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -2278,7 +2251,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         const seen: Array<string> = []
         const Composer = Component.define({
           name: "Composer",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Literals(["Send", "Menu"]),
           elements: Html
@@ -2331,7 +2303,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         const seen: Array<Html.SubmitPayload> = []
         const Prototype = Component.define({
           name: "Prototype",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -2423,7 +2394,6 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     const Board = Component.define({
       name: "Board",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: Schema.String,
       elements: Html
@@ -2529,7 +2499,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const Uploader = Component.define({
           name: "Uploader",
-          scoped: false,
           model: Schema.Array(Schema.String),
           message: Message,
           elements: Html
@@ -2866,7 +2835,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Message = UiSchema.TaggedEnum({ Cancelled: {} })
         const Upload = Component.define({
           name: "Upload",
-          scoped: false,
           model: Schema.Number,
           message: Message,
           elements: Html
@@ -3067,7 +3035,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         const DrawerMessage = UiSchema.TaggedEnum({ Close: {} })
         const Drawer = Component.define({
           name: "Drawer",
-          scoped: false,
           model: Schema.Boolean,
           message: DrawerMessage,
           elements: Html
@@ -3097,7 +3064,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         calls.length = 0
         const Stack = Component.define({
           name: "Stack",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Html
@@ -3395,7 +3361,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     const refs = (elements: View.Vocabulary<Html.Elements>) =>
       Component.define({
         name: "Refs",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Message,
         elements
@@ -3475,7 +3440,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Entry = Component.define({
       name: "Entry",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: EntryMessage,
       elements: Html
@@ -3560,7 +3524,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     }
     const NativeBox = Component.define({
       name: "NativeBox",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Native
@@ -3571,7 +3534,6 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html
@@ -3648,7 +3610,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           let model: WeakRef<object> | undefined
           const Item = Component.define({
             name: "Item",
-            scoped: false,
             model: Schema.Struct({}),
             message: Schema.Null
           })
@@ -3663,7 +3624,6 @@ describe("BrowserHost", { concurrent: false }, () => {
             })
           const Page = Component.define({
             name: "Page",
-            scoped: false,
             model: Schema.Boolean,
             message: Schema.Null
           })
@@ -3701,7 +3661,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           let props: WeakRef<object> | undefined
           const Item = Component.define({
             name: "Item",
-            scoped: false,
             props: Schema.Struct({}),
             model: Schema.Null,
             message: Schema.Never
@@ -3713,7 +3672,6 @@ describe("BrowserHost", { concurrent: false }, () => {
             })
           const Broken = Component.define({
             name: "Broken",
-            scoped: false,
             model: Schema.Null,
             message: Schema.Never
           })
@@ -3782,7 +3740,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       )
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -3816,7 +3773,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         let renders = 0
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Number,
           message: Message,
           elements: Html
@@ -3859,7 +3815,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           )
           const Page = Component.define({
             name: "StyledPositioner",
-            scoped: false,
             model: Schema.Number,
             message: Schema.Number,
             elements: Html
@@ -3935,7 +3890,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "UntouchedStyle",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -3964,7 +3918,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "HydrateStyle",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html

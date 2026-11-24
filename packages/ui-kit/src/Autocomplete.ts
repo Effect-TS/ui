@@ -161,7 +161,6 @@
  *
  * const Search = Component.define({
  *   name: "Search",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, query: Schema.String }),
  *   message: SearchMessage,
  *   elements: Html
@@ -627,7 +626,6 @@ const engine = Engine.make(
  */
 export const Autocomplete = Component.define({
   name: "Autocomplete",
-  scoped: false,
   props: AutocompleteProps,
   model: Engine.Model,
   message: Engine.Message,

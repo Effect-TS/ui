@@ -48,7 +48,6 @@ const BUTTON_CLASS =
 
 const FilePreviewDef = Component.define({
   name: "FilePreview",
-  scoped: false,
   model: Preview,
   message: PreviewMessage
 })

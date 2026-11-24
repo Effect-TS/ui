@@ -152,7 +152,6 @@ describe("HtmlFiles", { concurrent: false }, () => {
       })
       const Attach = Component.define({
         name: "Attach",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Message,
         elements: Html
@@ -209,7 +208,6 @@ describe("HtmlFiles", { concurrent: false }, () => {
       })
       const Form = Component.define({
         name: "Form",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Message,
         elements: Html

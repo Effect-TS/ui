@@ -55,7 +55,6 @@ const makeApp = () => {
   const touched = NoteMessage.Touched()
   const Note = Component.define({
     name: "Note",
-    scoped: false,
     props: Schema.Struct({ id: Schema.String }),
     model: Schema.Struct({ clicks: Schema.Number, last: Schema.String }),
     message: NoteMessage,
@@ -110,7 +109,6 @@ const makeApp = () => {
   const AppMessage = UiSchema.TaggedEnum({ RouteChanged: { route: AppRoute } })
   const App = Component.define({
     name: "App",
-    scoped: false,
     props: Schema.Struct({ route: AppRoute }),
     model: AppRoute,
     message: AppMessage,
@@ -137,7 +135,6 @@ const makeApp = () => {
   const ShellMessage = UiSchema.TaggedEnum({ SetId: { id: Schema.String } })
   const Shell = Component.define({
     name: "Shell",
-    scoped: false,
     model: Schema.String,
     message: ShellMessage,
     elements: Html

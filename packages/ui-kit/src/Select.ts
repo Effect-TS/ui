@@ -145,7 +145,6 @@
  *
  * const Settings = Component.define({
  *   name: "Settings",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, theme: Schema.String }),
  *   message: SettingsMessage,
  *   elements: Html
@@ -1362,7 +1361,6 @@ const scrolling =
  */
 export const Select = Component.define({
   name: "Select",
-  scoped: false,
   props: SelectProps,
   model: SelectModel,
   message: SelectMessage,

@@ -72,7 +72,6 @@ const makeApp = (options?: {
   })
   const Card = Component.define({
     name: "Card",
-    scoped: false,
     props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
     model: Schema.Struct({ saving: Schema.Boolean }),
     message: CardMessage,
@@ -130,7 +129,6 @@ const makeApp = (options?: {
   })
   const List = Component.define({
     name: "List",
-    scoped: false,
     props: Schema.Struct({ cards: Schema.Array(Schema.String) }),
     model: Schema.Array(Schema.String),
     message: ListMessage
@@ -177,7 +175,6 @@ const makeApp = (options?: {
   const got = (name: string) => ToolsMessage.Got({ name })
   const Tools = Component.define({
     name: "Tools",
-    scoped: false,
     model: Schema.String,
     message: ToolsMessage
   }).make({
@@ -407,7 +404,6 @@ describe("Query results", () => {
     // Two kept sections: the second loses the old card as the first gains a new one on the same entry.
     const Sections = Component.define({
       name: "Sections",
-      scoped: false,
       model: Schema.Boolean,
       message: Schema.Boolean
     }).make({
@@ -478,7 +474,6 @@ describe("Query results", () => {
     // The second section of the two-section test, extracted into a component.
     const Shell = Component.define({
       name: "Shell",
-      scoped: false,
       props: Schema.Struct({ show: Schema.Boolean }),
       model: Schema.Null,
       message: Schema.Never
@@ -495,7 +490,6 @@ describe("Query results", () => {
     })
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Boolean,
       message: Schema.Boolean
     }).make({
@@ -565,7 +559,6 @@ describe("Query results", () => {
     })
     return Component.define({
       name: "Watcher",
-      scoped: false,
       props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
       model: Schema.Struct({}),
       message: WatchMessage,
@@ -598,7 +591,6 @@ describe("Query results", () => {
       const Watcher = makeWatcher(app, messages)
       const Shell = Component.define({
         name: "Shell",
-        scoped: false,
         props: Schema.Struct({ show: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never
@@ -615,7 +607,6 @@ describe("Query results", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean
       }).make({
@@ -710,7 +701,6 @@ describe("Query results", () => {
       const Message = UiSchema.TaggedEnum({ Changed: { state: Schema.String } })
       const Watcher = Component.define({
         name: "Watcher",
-        scoped: false,
         props: Schema.Struct({ tag: Schema.String }),
         model: Schema.Struct({}),
         message: Message,
@@ -736,7 +726,6 @@ describe("Query results", () => {
       })
       const Shell = Component.define({
         name: "Shell",
-        scoped: false,
         props: Schema.Struct({ show: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never
@@ -757,7 +746,6 @@ describe("Query results", () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Struct({
           enabled: Schema.Boolean,
           swapped: Schema.Boolean
@@ -855,7 +843,6 @@ describe("Query results", () => {
     const Watcher = makeWatcher(app, messages)
     const Pair = Component.define({
       name: "Pair",
-      scoped: false,
       model: Schema.Boolean,
       message: Schema.Boolean
     }).make({
@@ -895,7 +882,6 @@ describe("Query results", () => {
     const EmitterMessage = UiSchema.TaggedEnum({ UserChanged: {} })
     const Emitter = Component.define({
       name: "Emitter",
-      scoped: false,
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({}),
       message: EmitterMessage,
@@ -918,7 +904,6 @@ describe("Query results", () => {
     })
     const Parent = Component.define({
       name: "Parent",
-      scoped: false,
       model: Schema.Struct({
         switched: Schema.Boolean,
         labels: Schema.Array(Schema.String)
@@ -973,7 +958,6 @@ describe("Query results", () => {
     const BadMessage = UiSchema.TaggedEnum({ Crash: {} })
     const Bad = Component.define({
       name: "Bad",
-      scoped: false,
       model: Schema.Struct({}),
       message: BadMessage,
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
@@ -986,7 +970,6 @@ describe("Query results", () => {
     })
     const Host = Component.define({
       name: "Host",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never
     }).make({
@@ -1042,7 +1025,6 @@ describe("Query results", () => {
     )
     const Poll = Component.define({
       name: "Poll",
-      scoped: false,
       model: Schema.Struct({ done: Schema.Boolean }),
       message: PollMessage,
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
@@ -1107,7 +1089,6 @@ describe("Query results", () => {
     )
     const Noter = Component.define({
       name: "Noter",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -1134,7 +1115,6 @@ describe("Query results", () => {
     })
     const Host = Component.define({
       name: "Host",
-      scoped: false,
       model: Schema.Boolean,
       message: Schema.Boolean
     }).make({
@@ -1359,7 +1339,6 @@ describe("Query results", () => {
     const make = (queries: unknown) =>
       Component.define({
         name: "Bad",
-        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never,
         queries
@@ -1415,7 +1394,6 @@ describe("Query results", () => {
     const app = makeApp()
     const Cycle = Component.define({
       name: "Cycle",
-      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: {
@@ -1466,7 +1444,6 @@ describe("Query results", () => {
     ) {}
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
       model: Schema.Struct({}),
       message: Schema.Never,
@@ -1552,7 +1529,6 @@ describe("Query results", () => {
     const Message = UiSchema.TaggedEnum({ Break: {} })
     const Breaker = Component.define({
       name: "Breaker",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
@@ -1603,7 +1579,6 @@ describe("Query results", () => {
     )
     const Spinner = Component.define({
       name: "Spinner",
-      scoped: false,
       model: Schema.Number,
       message: Message
     }).make({

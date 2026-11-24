@@ -27,7 +27,6 @@ export const ConfirmDialogEvents = UiSchema.TaggedEnum({
 
 export const ConfirmDialog = Component.define({
   name: "ConfirmDialog",
-  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   // Convention: no copy of `open` in the Model, so the prop is the one source.
   model: Schema.Null,
@@ -67,7 +66,6 @@ const PageMessage = UiSchema.TaggedEnum({
 
 export const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Struct({ confirming: Schema.Boolean, deleted: Schema.Boolean }),
   message: PageMessage,
   elements: Html
@@ -108,7 +106,6 @@ export const WizardEvents = UiSchema.TaggedEnum({ Finished: {}, Cancelled: {} })
 
 export const Wizard = Component.define({
   name: "Wizard",
-  scoped: false,
   // `steps` is the caller's to decide, so it is a prop.
   props: Schema.Struct({ steps: Schema.Number }),
   // Convention: no `step` prop, because nobody outside decides it. The
@@ -151,7 +148,6 @@ const HostMessage = UiSchema.TaggedEnum({
 
 export const Host = Component.define({
   name: "Host",
-  scoped: false,
   model: Schema.Struct({ importing: Schema.Boolean, imported: Schema.Number }),
   message: HostMessage,
   elements: Html
@@ -195,7 +191,6 @@ const ModalProviderMessage = UiSchema.TaggedEnum({
 // so the modal starts closed.
 export const ModalProvider = Component.define({
   name: "ModalProvider",
-  scoped: false,
   model: Schema.Struct({ open: Schema.Boolean }),
   message: ModalProviderMessage,
   shares: {
@@ -223,7 +218,6 @@ const OpenButtonMessage = UiSchema.TaggedEnum({ ClickedOpen: {} })
 // removes.
 export const OpenButton = Component.define({
   name: "OpenButton",
-  scoped: false,
   model: Schema.Null,
   message: OpenButtonMessage,
   elements: Html
@@ -248,7 +242,6 @@ const ModalHostMessage = UiSchema.TaggedEnum({
 // source for `open`, its prop, and knows nothing about the provider.
 export const ModalHost = Component.define({
   name: "ModalHost",
-  scoped: false,
   model: Schema.Null,
   message: ModalHostMessage,
   shared: { provider: ModalProvider },
@@ -275,7 +268,6 @@ export const ModalHost = Component.define({
 
 export const Shell = Component.define({
   name: "Shell",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -295,7 +287,6 @@ export const Shell = Component.define({
 const CounterMessage = UiSchema.TaggedEnum({ ClickedIncrement: {} })
 export const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   props: Schema.Struct({ initialCount: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage,
@@ -322,7 +313,6 @@ export const Counter = Component.define({
 const DualMessage = UiSchema.TaggedEnum({ ClickedOpen: {}, ClickedClose: {} })
 export const Dual = Component.define({
   name: "Dual",
-  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: DualMessage,
@@ -352,7 +342,6 @@ export const Dual = Component.define({
 // provider to close, and the dialog stays open.
 export const Around = Component.define({
   name: "Around",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

@@ -25,7 +25,6 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
- *   scoped: false,
  *   model: Schema.Number,
  *   message: Msg
  * }).make({
@@ -1251,7 +1250,6 @@ export const stub = <Self, Props, Events>(
   })
   const component = Component.define({
     name,
-    scoped: false,
     props: feature.props,
     model: Schema.Number,
     message: Emit,

@@ -101,7 +101,6 @@
  *
  * const Counter = Component.define({
  *   name: "Counter",
- *   scoped: false,
  *   model: Schema.Number,
  *   message: Message,
  *   elements: Html
@@ -2118,7 +2117,6 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  *
  * const App = Component.define({
  *   name: "App",
- *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html

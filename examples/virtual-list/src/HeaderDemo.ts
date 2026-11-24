@@ -10,7 +10,6 @@ const HeaderMessage = UiSchema.TaggedEnum({
 
 export const HeaderDemo = Component.define({
   name: "HeaderDemo",
-  scoped: false,
   model: Schema.Struct({ tall: Schema.Boolean, scroller: Schema.Boolean }),
   message: HeaderMessage,
   elements: Html

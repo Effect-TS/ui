@@ -74,7 +74,6 @@
  *
  * const Shipping = Component.define({
  *   name: "Shipping",
- *   scoped: false,
  *   model: Schema.Struct({ details: Schema.Boolean }),
  *   message: ShippingMessage,
  *   elements: Html
@@ -436,7 +435,6 @@ const TrackPanel = Mount.makeStream(
  */
 export const Collapsible = Component.define({
   name: "Collapsible",
-  scoped: false,
   props: CollapsibleProps,
   model: CollapsibleModel,
   message: CollapsibleMessage,

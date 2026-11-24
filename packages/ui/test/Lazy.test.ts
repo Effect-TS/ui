@@ -9,7 +9,6 @@ const PageEvents = UiSchema.TaggedEnum({ Saved: { title: Schema.String } })
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.Null,
   message: Schema.Never,
@@ -30,7 +29,6 @@ const makeApp = (
 ) =>
   Component.define({
     name: "App",
-    scoped: false,
     model: Schema.Struct({ open: Schema.Boolean, saved: Schema.String }),
     message: AppMessage
   }).make({
@@ -130,13 +128,13 @@ describe("Component.lazy", () => {
       assert.deepStrictEqual(root.pending(), [])
     })))
 
-  it.effect("keeps a lazy scoped child once loaded, and closes its scope when the predicate ends it", () =>
+  it.effect("keeps a lazy keep-alive child once loaded, and closes its Scope when the predicate ends it", () =>
     provideHost(Effect.gen(function*() {
       let closed = 0
       const DraftMessage = UiSchema.TaggedEnum({ Typed: {} })
       const Draft = Component.define({
         name: "Draft",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Number,
         message: DraftMessage
       }).make(
@@ -159,7 +157,6 @@ describe("Component.lazy", () => {
       const HostMessage = UiSchema.TaggedEnum({ Toggled: {}, Ended: {} })
       const Host = Component.define({
         name: "Host",
-        scoped: false,
         model: Schema.Struct({ open: Schema.Boolean, alive: Schema.Boolean }),
         message: HostMessage
       }).make({
@@ -172,7 +169,7 @@ describe("Component.lazy", () => {
         view: (h, model) =>
           h.el(
             "main",
-            h.scoped(({ model }) => model.alive, (s) =>
+            h.keepAlive(({ model }) => model.alive, (s) =>
               model.open
                 ? LazyDraft(s, {
                   key: "d",

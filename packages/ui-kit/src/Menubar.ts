@@ -92,7 +92,6 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
  *   message: EditorMessage,
  *   elements: Html
@@ -321,7 +320,6 @@ const TrackMenubar = Mount.makeStream(
  */
 export const Menubar = Component.define({
   name: "Menubar",
-  scoped: false,
   props: MenubarProps,
   model: MenubarModel,
   message: MenubarMessage,

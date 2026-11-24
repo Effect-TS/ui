@@ -58,7 +58,6 @@
  *
  * const App = Component.define({
  *   name: "App",
- *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: Schema.Struct({ route: AppRoute }),
  *   message: Message
@@ -628,7 +627,6 @@ export const currentRoute = <U extends Routes>(
  *
  * const App = Component.define({
  *   name: "App",
- *   scoped: false,
  *   props: Schema.Struct({ route: AppRoute }),
  *   model: AppRoute,
  *   message: Schema.Never
@@ -967,7 +965,6 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * const Person = Component.define({
  *   name: "Person",
- *   scoped: false,
  *   props: Schema.Struct({ id: Schema.Number }),
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
@@ -1365,7 +1362,7 @@ const commandLayers = Layer.mergeAll(
  * built, since only a built component's `restore` option is known. One built
  * but still waiting for its Layer or for its state to decode has the server's
  * state saved through its `restore` option. One not built yet, such as a
- * component below a waiting one, or a scoped child the server kept but the
+ * component below a waiting one, or a keep-alive child the server kept but the
  * client hasn't drawn, has none of its server state saved, even after
  * hydration has settled: after Back or forward it starts from `init`.
  *

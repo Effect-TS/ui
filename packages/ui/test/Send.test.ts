@@ -10,7 +10,6 @@ const LogMessage = UiSchema.TaggedEnum({ Add: { id: Schema.String } })
 
 const Log = Component.define({
   name: "Log",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: LogMessage,
   shares: { value: (ids) => ids, receives: ["Add"] }
@@ -26,7 +25,6 @@ const ItemMessage = UiSchema.TaggedEnum({
 
 const ItemDef = Component.define({
   name: "Item",
-  scoped: false,
   model: Schema.Number,
   message: ItemMessage,
   shared: { log: Log }
@@ -49,7 +47,6 @@ const Item = ItemDef.make({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 }).make({

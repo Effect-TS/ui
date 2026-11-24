@@ -19,7 +19,6 @@ const SenderMessage = UiSchema.TaggedEnum({ Clicked: {} })
 
 const Sender = Component.define({
   name: "Sender",
-  scoped: false,
   model: Schema.Struct({}),
   message: SenderMessage,
   shared: { group: { owner: CheckboxGroup } },
@@ -38,7 +37,6 @@ const Sender = Component.define({
 
 const Basket = Component.define({
   name: "Basket",
-  scoped: false,
   model: Schema.Struct({
     fruits: Schema.Array(Schema.String),
     pearToggled: Schema.NullOr(Schema.Boolean),

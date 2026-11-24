@@ -74,7 +74,6 @@
  *
  * const Picker = Component.define({
  *   name: "Picker",
- *   scoped: false,
  *   model: Schema.Struct({ storage: Schema.NullOr(Schema.String) }),
  *   message: PickerMessage,
  *   elements: Html
@@ -434,7 +433,6 @@ type KeyedButton = View.PartTarget<"button"> & {
  */
 export const RadioGroup = Component.define({
   name: "RadioGroup",
-  scoped: false,
   props: RadioGroupProps,
   model: RadioGroupModel,
   message: RadioGroupMessage,

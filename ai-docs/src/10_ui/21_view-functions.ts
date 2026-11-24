@@ -37,7 +37,6 @@ const Framed = <M>(h: View.H<M>) =>
 // retains the union of the children's requirements for the enclosing component.
 export const Form = Component.define({
   name: "Form",
-  scoped: false,
   model: Schema.String,
   message: Schema.String
 }).make({

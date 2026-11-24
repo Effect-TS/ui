@@ -22,7 +22,6 @@ export const AppMessage = UiSchema.TaggedEnum({
 // what it uses. Only the Router is left, so there is no `AppNoDeps`.
 export const App = Component.define({
   name: "App",
-  scoped: false,
   // The root holds the route. The first one arrives through props and every
   // later change arrives as a message, which puts navigation in the message
   // log. That includes every search change a page writes, and `init` stays
