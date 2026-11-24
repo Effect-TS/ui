@@ -120,13 +120,15 @@
  */
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
-import type * as Scope from "effect/Scope"
+import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as queryCore from "../internal/queryCore.ts"
+import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
@@ -744,6 +746,19 @@ export const makeHost = (
     shown.add(dialog)
   }
 
+  let held = false
+  const showModals = () => {
+    const dialogs: Array<HTMLDialogElement> = []
+    for (const dialog of modalWanted) {
+      // A dialog that left the tree for good is forgotten. One that's back is shown again.
+      if (!dialog.isConnected) modalWanted.delete(dialog)
+      else dialogs.push(dialog)
+    }
+    // Document order: a dialog opens before one nested in it or after it, which then stacks on top.
+    dialogs.sort((a, b) => (a.compareDocumentPosition(b) & 4) !== 0 ? -1 : 1)
+    for (const dialog of dialogs) showDialog(dialog, "modal")
+  }
+
   // -- popovers ----------------------------------------------------------------
   // A popover's `popoverOpen` is separate from `open`. A manual popover is applied at every commit and put
   // back after any other change; an auto popover is applied only when the Model's value or the mode
@@ -799,9 +814,53 @@ export const makeHost = (
     for (const element of popovers) {
       // One that left the document is forgotten; a render that brings it back queues it again.
       if (!element.isConnected || !element.hasAttribute("popover")) continue
+      if (held && isAuto(element)) {
+        popoversToShow.add(element)
+        continue
+      }
       if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
       keepingScroll(() => element.showPopover())
     }
+  }
+
+  const heldDialogs = new Set<globalThis.Node>()
+  const heldPopovers = new Set<globalThis.Node>()
+  const reported = new WeakMap<globalThis.Node, { state: string | undefined }>()
+  const holdNode = (nodes: Set<globalThis.Node>, node: globalThis.Node) => {
+    nodes.add(node)
+    if (listening.has("toggle") && !reported.has(node)) reported.set(node, { state: undefined })
+  }
+  const releaseNode = (nodes: Set<globalThis.Node>, node: globalThis.Node) => {
+    if (!nodes.delete(node)) return
+    const entry = reported.get(node)
+    if (entry !== undefined) entry.state = "closed"
+  }
+  const isAuto = (element: globalThis.Element) =>
+    element.hasAttribute("popover") && element.getAttribute("popover") !== "manual"
+  const hold = (container: globalThis.Element) => {
+    held = true
+    const popovers = Array.from(container.querySelectorAll<HTMLElement>("[popover]")).filter((element) =>
+      wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)
+    )
+    for (const dialog of Array.from(shown).reverse()) {
+      if (!modals.has(dialog)) continue
+      closeDialog(dialog, true)
+      holdNode(heldDialogs, dialog)
+    }
+    for (const element of popovers.reverse()) {
+      if (popoverShowing(element)) element.hidePopover()
+      holdNode(heldPopovers, element)
+    }
+  }
+  const release = () => {
+    held = false
+    showModals()
+    heldDialogs.clear()
+    for (const element of heldPopovers) {
+      if (wanted.get(element)?.get("popoverOpen") === true) popoversToShow.add(element as HTMLElement)
+    }
+    showPopovers()
+    heldPopovers.clear()
   }
 
   const restoreNode = (node: globalThis.Node) => {
@@ -812,7 +871,7 @@ export const makeHost = (
       if (name === "value" && composing.has(node)) continue
       if (name === "open" && isDialog(node)) {
         // A dialog that left the document can't be shown; a later commit shows it if it comes back.
-        if (node.isConnected) showDialog(node, value as boolean | "modal")
+        if (node.isConnected && !(held && value === "modal")) showDialog(node, value as boolean | "modal")
       } else if (name === "popoverOpen") {
         // Only a manual popover is put back. An auto popover's changes are the browser's, for the Model
         // to follow.
@@ -1099,6 +1158,14 @@ export const makeHost = (
   }
 
   const listener = (name: string) => (event: Event) => {
+    const entry = name === "toggle" && event.target !== null ? reported.get(event.target as globalThis.Node) : undefined
+    if (entry !== undefined) {
+      const target = event.target as globalThis.Node
+      entry.state ??= (event as ToggleEvent).oldState
+      if (heldDialogs.has(target) || heldPopovers.has(target)) return
+      reported.delete(target)
+      if ((event as ToggleEvent).newState === entry.state) return
+    }
     if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
     if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
       const dialog = event.target as HTMLDialogElement
@@ -1282,6 +1349,7 @@ export const makeHost = (
         else manualPopovers.delete(node as HTMLElement)
         // Edge-triggered: an auto popover the browser closed stays closed until the Model's value changes.
         if (mode === "auto" && !modeChanged && previous === want) return
+        releaseNode(heldPopovers, node)
         applyPopover(node as HTMLElement, want)
         return
       }
@@ -1292,6 +1360,7 @@ export const makeHost = (
           values = new Map()
           wanted.set(node, values)
         }
+        if (values.get(name) !== want) releaseNode(heldDialogs, node)
         values.set(name, want)
         if (want === "modal") {
           // Shown at the commit, once it's connected, outer dialogs first.
@@ -1386,16 +1455,7 @@ export const makeHost = (
       for (const dialog of shown) {
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
-      if (modalWanted.size === 0) return showPopovers()
-      const dialogs: Array<HTMLDialogElement> = []
-      for (const dialog of modalWanted) {
-        // A dialog that left the tree for good is forgotten. One that's back is shown again.
-        if (!dialog.isConnected) modalWanted.delete(dialog)
-        else dialogs.push(dialog)
-      }
-      // Document order: a dialog opens before one nested in it or after it, which then stacks on top.
-      dialogs.sort((a, b) => (a.compareDocumentPosition(b) & 4) !== 0 ? -1 : 1)
-      for (const dialog of dialogs) showDialog(dialog, "modal")
+      if (modalWanted.size > 0 && !held) showModals()
       showPopovers()
     },
     viewTransition(update, types) {
@@ -1433,8 +1493,17 @@ export const makeHost = (
       active = undefined
     }
   }
+  holds.set(host, { held: () => held, hold, release })
   return host
 }
+
+interface Holding {
+  readonly held: () => boolean
+  readonly hold: (container: globalThis.Element) => void
+  readonly release: () => void
+}
+
+const holds = new WeakMap<Renderer.Host<globalThis.Node>, Holding>()
 
 /**
  * The element operations behind `HtmlCommand.focus`, `blur`,
@@ -1516,12 +1585,13 @@ const signals = (document: Document) => {
 
 // `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
+const globalEventsOf = (document: Document, held: () => boolean): HtmlSubscription.GlobalEvents => ({
   listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
+    const view = document.defaultView
     const f = (event: Event) =>
-      listener(
+      view !== null && held() && isInput(event, view) ? undefined : listener(
         {
           ...(custom === true
             ? { detail: (event as CustomEvent).detail ?? null }
@@ -1534,6 +1604,11 @@ const globalEventsOf = (document: Document): HtmlSubscription.GlobalEvents => ({
     return () => on.removeEventListener(name, f, { capture })
   }
 })
+
+const isInput = (event: Event, view: Window & typeof globalThis): boolean =>
+  event.isTrusted &&
+  (event instanceof view.MouseEvent || event instanceof view.KeyboardEvent ||
+    (typeof view.TouchEvent === "function" && event instanceof view.TouchEvent))
 
 const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   const view = document.defaultView
@@ -1622,7 +1697,7 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document, holds.get(host)!.held)),
       Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
       Context.add(HtmlImages.Images, imagesOf(document)),
       Context.add(HtmlFiles.Files, filesOf(document))
@@ -1805,8 +1880,226 @@ export const mountEffect = <
 ): Effect.Effect<Renderer.Root<Model, Msg>, never, Exclude<R | RF | RP, Html.Host> | Scope.Scope> =>
   Effect.gen(function*() {
     const context = yield* Layer.build(layer({ document: container.ownerDocument }))
-    const scheduled = Context.getOrUndefined(yield* Effect.context<never>(), Scheduler.Scheduler) === undefined
+    const outer = yield* Effect.context<Scope.Scope>()
+    const scheduled = Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
       ? Context.add(context, Scheduler.Scheduler, defaultScheduler ??= HtmlScheduler.make())
       : context
-    return yield* Effect.provideContext(Renderer.mount(component, props, container, options), scheduled)
+    const root = (yield* Effect.provideContext(
+      Renderer.mount(component, props, container, options),
+      scheduled
+    )) as unknown as runtime.Root
+    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled))
+    const unregister = Context.get(outer, Pausables).register(paused)
+    yield* Effect.addFinalizer(() => Effect.andThen(Effect.sync(unregister), paused.resume))
+    return root
   }) as any
+
+/**
+ * An instance's state as a tool recorded it from the `MessageLog`: the
+ * Model of a `Mounted` or `Update` entry, for a component with queries
+ * its query results, and the props of its `Mounted` or latest
+ * `PropsChanged` entry.
+ *
+ * **Details**
+ *
+ * Without `props`, the instance takes the props its parent's view passes it,
+ * and the root the props it was mounted with. With them, it takes those, so
+ * a child shows the props it had at that entry, even when its parent's
+ * Model at that entry would pass it newer ones or its parent wasn't
+ * recorded.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Recorded {
+  readonly model: unknown
+  readonly queries?: Component.Results | undefined
+  readonly props?: unknown
+}
+
+/**
+ * A root mounted with `mount` or `mountEffect`, offered to `Pausables` so
+ * a tool such as DevTools can show the page as it was at an earlier state.
+ *
+ * **Details**
+ *
+ * `pause` hides the root's container and paints a frozen copy of the tree
+ * next to it, in a copy of the container without its children and with the
+ * HTML `inert` attribute. Each instance of the copy adopts the state that
+ * `state` returns for its path, and one it returns nothing for starts from
+ * `init`. See `Painted` for what it returns.
+ *
+ * The frozen copy runs nothing: no Command, `init`'s included, no
+ * Subscription, query watch or fetch, element mount or provided Layer, and
+ * loads no lazy component, so a feature slot whose service comes from a
+ * provided Layer, and a lazy component that hasn't loaded, show their
+ * `fallback`. It logs no entries, leaves the document head alone, isn't seen
+ * by the Router and takes no events. A modal dialog in the copy is shown as
+ * a manual popover, and an auto popover as a manual one, so the copy never
+ * makes the rest of the page inert, a tool's own UI included, and never
+ * closes the live tree's popovers.
+ *
+ * The live root keeps running while it's hidden: its Commands,
+ * Subscriptions and updates go on, and it renders into its hidden
+ * container. While it's paused, its modal dialogs and auto popovers are
+ * closed, without a `toggle` or `close` reaching the Model, and its document
+ * and window listeners don't hear the user's mouse, pointer, touch and key
+ * input. So a click on the copy, which `inert` passes to the element under
+ * it, doesn't reach the live tree or light-dismiss its popovers, and nothing
+ * it shows blocks the rest of the page. Events that aren't the user's input,
+ * and ones code dispatches, still reach it. Pausing again replaces the
+ * painted copy. `resume` removes the copy, shows the container again, with
+ * whatever happened meanwhile, and shows the modal dialogs and popovers its
+ * Model has open. When
+ * a paint fails, `pause` removes its copy and leaves the page as it was.
+ *
+ * **Gotchas**
+ *
+ * DOM state that isn't in a Model, such as what was typed into an
+ * uncontrolled input, scroll positions, focus and media, isn't painted. An
+ * element mount of the live root that measures reads zero while it's
+ * hidden. Elements of the copy have the same ids as the live ones.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Pausable {
+  /** The session the root's `MessageLog` entries carry. */
+  readonly session: string
+  /** The root instance's path, `/<name>`. */
+  readonly path: string
+  readonly pause: (state: (path: string) => Recorded | undefined) => Effect.Effect<Painted>
+  readonly resume: Effect.Effect<void>
+}
+
+/**
+ * What `Pausable.pause` painted that differs from the page at that state.
+ *
+ * **Details**
+ *
+ * `fellBack` has the paths of the instances `state` returned nothing for,
+ * which started from `init`. `fallbacks` has the path of each instance
+ * whose view shows a feature slot's `fallback`, because the copy doesn't
+ * build the provided Layer the feature's service comes from. Both may show
+ * something the page never showed at that state.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Painted {
+  readonly fellBack: ReadonlyArray<string>
+  readonly fallbacks: ReadonlyArray<string>
+}
+
+/**
+ * Where `mount` and `mountEffect` offer their roots to be paused.
+ *
+ * **Details**
+ *
+ * `register` is called with each root as it mounts, and the function it
+ * returns when the root unmounts. The default ignores every root, so a tool
+ * that pauses roots provides its own.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export interface Pausables {
+  readonly register: (root: Pausable) => () => void
+}
+
+const unregistered = () => {}
+
+/**
+ * The `Pausables` service, read by `mount` and `mountEffect`.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export const Pausables: Context.Reference<Pausables> = Context.Reference<Pausables>(
+  "@effect/ui/html/BrowserHost/Pausables",
+  { defaultValue: () => ({ register: () => unregistered }) }
+)
+
+// `showModal()` makes everything outside the dialog inert, DevTools included, while the copy's own `inert`
+// leaves the dialog unusable, and an auto popover shown in the copy would close the live page's. Both are
+// shown as manual popovers: in the top layer, with no effect on the rest of the page.
+const paintHost = (host: Renderer.Host<globalThis.Node>): Renderer.Host<globalThis.Node> => ({
+  ...host,
+  runsMounts: false,
+  setAttr: (node, name, value, previous) =>
+    host.setAttr(node, name, name === "popover" && value !== undefined ? "manual" : value, previous),
+  setProp: (node, name, value) => {
+    if (name !== "open" || value !== "modal") return host.setProp(node, name, value)
+    host.setAttr(node, "popover", "manual")
+    host.setProp(node, "popoverOpen", true)
+  }
+})
+
+const pausable = (
+  component: Component.Any,
+  root: runtime.Root,
+  container: globalThis.Element,
+  context: Context.Context<Scope.Scope | Renderer.Renderer>
+): Pausable => {
+  const owner = Context.get(context, Scope.Scope)
+  const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<globalThis.Node>
+  const holding = holds.get(host)!
+  const style = (container as HTMLElement).style
+  let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
+  let shown: readonly [value: string, priority: string] | undefined
+  const unpaint = (was: typeof painted): Effect.Effect<void> =>
+    was === undefined
+      ? Effect.void
+      : Effect.andThen(Scope.close(was.scope, Exit.void), Effect.sync(() => was.copy.remove()))
+  const show = (target: CSSStyleDeclaration, [value, priority]: readonly [string, string]) => {
+    if (value === "") target.removeProperty("display")
+    else target.setProperty("display", value, priority)
+  }
+  const hide = (): readonly [string, string] => {
+    if (shown !== undefined) return shown
+    shown = [style.getPropertyValue("display"), style.getPropertyPriority("display")]
+    holding.hold(container)
+    style.setProperty("display", "none", "important")
+    return shown
+  }
+  const reveal = Effect.sync(() => {
+    if (shown === undefined) return
+    show(style, shown)
+    shown = undefined
+    holding.release()
+  })
+  const resume = Effect.suspend(() => {
+    const was = painted
+    painted = undefined
+    return Effect.andThen(unpaint(was), reveal)
+  })
+  return {
+    session: root.session,
+    path: root.path,
+    pause: (state) =>
+      Effect.uninterruptible(Effect.gen(function*() {
+        const scope = yield* Scope.fork(owner, "sequential")
+        const copy = container.cloneNode(false) as HTMLElement
+        show(copy.style, hide())
+        copy.setAttribute("inert", "")
+        ;(painted?.copy ?? container).after(copy)
+        const result = yield* runtime.paint(component, root.instance.props, copy, state).pipe(
+          Effect.provideContext(context.pipe(
+            Context.add(Renderer.Renderer, { host: paintHost(host) }),
+            Context.add(Scope.Scope, scope)
+          )),
+          Effect.onError(() => Effect.andThen(unpaint({ scope, copy }), painted === undefined ? reveal : Effect.void))
+        )
+        const was = painted
+        painted = { scope, copy }
+        yield* unpaint(was)
+        return result
+      })),
+    resume
+  }
+}

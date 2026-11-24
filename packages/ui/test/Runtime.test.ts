@@ -3323,6 +3323,27 @@ describe("Runtime", () => {
       assert.deepStrictEqual(other.entries().map((entry) => entry.seq), [1, 2, 3])
       assert.isFalse(MessageLog.fanoutAll([MessageLog.noop]).enabled)
     })
+
+    it.effect("fanout keeps the other services its Layers provide", () =>
+      Effect.gen(function*() {
+        class Extra extends Context.Service<Extra, string>()("test/Extra") {}
+        const memory = MessageLog.makeMemory()
+        const services = yield* Layer.build(MessageLog.fanout([
+          Layer.succeedContext(Context.make(MessageLog.MessageLog, memory).pipe(Context.add(Extra, "kept"))),
+          Layer.succeed(MessageLog.MessageLog, MessageLog.makeMemory())
+        ]))
+        assert.strictEqual(Context.get(services, Extra as any), "kept")
+        Context.get(services, MessageLog.MessageLog).record({
+          _tag: "Unmounted",
+          seq: 1,
+          at: 0,
+          session: "s",
+          path: "/x",
+          instance: 1,
+          component: Counter
+        })
+        assert.strictEqual(memory.entries().length, 1)
+      }).pipe(Effect.scoped))
   })
 
   describe("vocabularies", () => {

@@ -735,6 +735,20 @@ interface Options {
   readonly head?: boolean | undefined
   /** Hydration: keeps the head of the adopted state for `Root.adoptionHead`, as `Ssr` asks, to compare it. */
   readonly adoptionHead?: boolean | undefined
+  readonly inert?: Inert | undefined
+}
+
+/** @internal */
+export interface PaintState {
+  readonly model: unknown
+  readonly queries?: componentQueries.Results | undefined
+  readonly props?: unknown
+}
+
+interface Inert {
+  readonly state: (path: string) => PaintState | undefined
+  readonly fellBack: Array<string>
+  readonly fallbacks: Set<string>
 }
 
 interface ServerOptions {
@@ -956,6 +970,34 @@ export const mount = (
         (cell) => start(component, props, container, ctx, cell, startOptions)
       )
     }))
+
+/** @internal */
+export const paint = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  state: (path: string) => PaintState | undefined
+): Effect.Effect<
+  { readonly fellBack: ReadonlyArray<string>; readonly fallbacks: ReadonlyArray<string> },
+  never,
+  Scope.Scope | Renderer.Renderer
+> =>
+  Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+    const ctx = onScheduler(caller.pipe(
+      Context.omit(services.RootHooks),
+      Context.add(messageLog.MessageLog, messageLog.noop)
+    ))
+    const inert: Inert = { state, fellBack: [], fallbacks: new Set() }
+    const options: Options = { head: false, inert }
+    return Effect.flatMap(
+      makeQueryCache(ctx, options),
+      (cell) =>
+        Effect.map(
+          start(component, rootProps, container, ctx, cell, options),
+          () => ({ fellBack: inert.fellBack, fallbacks: Array.from(inert.fallbacks) })
+        )
+    )
+  })
 
 /**
  * Renders a tree on the server: on a host that only keeps the node tree,
@@ -1286,7 +1328,7 @@ const makeQueryCache = (
     idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
     // The server's per-request cache: one fetch per key per request, and none with a budget of 0.
     settleOnce: server !== undefined,
-    fetches: server === undefined || server.fetches
+    fetches: (server === undefined || server.fetches) && options?.inert === undefined
   }
   let dispose: Effect.Effect<void> | undefined
   let closed = false
@@ -1367,6 +1409,7 @@ const setup = (
   options: Options | undefined
 ): Root & Renderer.Root<any, any> => {
   const server = options?.server
+  const inert = options?.inert
   const host: Renderer.Host<any> = server !== undefined ? server.host : Context.get(ctx, services.Renderer).host
   const log = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
@@ -1390,7 +1433,7 @@ const setup = (
 
   // -- server ---------------------------------------------------------------
   // Set by `finish`: the tree is serialised, and nothing it does from now on counts.
-  let frozen = false
+  let frozen = inert !== undefined
   const idleWaiters: Array<() => void> = []
 
   // A host that reads its elements' events from the tree, through `eventsAlong`, instead of storing them.
@@ -3216,6 +3259,17 @@ const setup = (
       recorded.add(inst)
     }
 
+    if (inert !== undefined) {
+      const recorded = inert.state(inst.path)
+      if (recorded === undefined) {
+        inert.fellBack.push(inst.path)
+      } else {
+        if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
+        restoredState.set(inst, { model: recorded.model, results: recorded.queries })
+      }
+      startInstance(inst, parentEnv, range, Option.none(), Option.none())
+      return inst
+    }
     // Hydration: the Model and query results the server rendered this path with, unless it deferred the path.
     const from = supply
     const own = supply = from === hydrating?.state ? undefined : from
@@ -3312,7 +3366,7 @@ const setup = (
     // A provided Layer builds in the background. The instance renders at once; its Commands,
     // Subscriptions and mounts, and its descendants', wait for it.
     if (component.layer !== undefined) {
-      if (server !== undefined && (!component.layerOnServer || parentEnv.never)) {
+      if (inert !== undefined || (server !== undefined && (!component.layerOnServer || parentEnv.never))) {
         // Kept off the server: never built, and the budget doesn't wait for it. The client builds it fresh.
         inst.env = buildingEnv(parentEnv, true)
         inst.deferred = true
@@ -3477,7 +3531,7 @@ const setup = (
     readonly adopted: Adopted
   }
   /** Runs `init`, once the host is known to show the component's elements. */
-  const initOf = (inst: Instance): Component.Next<any, any, any, any> => {
+  const initOf = (inst: Instance, recorded?: Decoded): Component.Next<any, any, any, any> => {
     const component = inst.component
     const elements = component.elements()
     if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
@@ -3488,20 +3542,25 @@ const setup = (
       )
     }
     findOwners(inst)
-    return component.init(inst.props)
+    return recorded === undefined ? component.init(inst.props) : { model: recorded.model, commands: none, events: none }
   }
   /**
    * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
    * history restore instead of `init`'s.
    */
   const startFrom = (inst: Instance, serverModel: Adopted): Start => {
-    const first = guard(inst, "init", initOf)
-    let adopted = serverModel
     const restored = restoredState.get(inst)
+    const first = inert === undefined || restored === undefined
+      ? guard(inst, "init", initOf)
+      : guard(inst, "init", (inst) => initOf(inst, restored))
+    let adopted = serverModel
     if (restored !== undefined) {
       restoredState.delete(inst)
       if (first !== undefined) {
-        adopted = Option.some({ model: restored.model, results: restoreQueries(inst.component, restored.results) })
+        adopted = Option.some({
+          model: restored.model,
+          results: inert === undefined ? restoreQueries(inst.component, restored.results) : restored.results
+        })
       }
     }
     return { first, adopted }
@@ -4033,7 +4092,7 @@ const setup = (
     initIndex: number | undefined
   ) => {
     // A patch that threw on an earlier Command of the same step failed the instance.
-    if (inst.closed) return
+    if (inst.closed || inert !== undefined) return
     if (server !== undefined) {
       // No Command runs on the server. `init`'s are dropped silently, since the client reruns them when
       // it adopts. One from `update`, an interrupt included, is logged and reported.
@@ -4495,7 +4554,9 @@ const setup = (
     const subscriptions = inst.component.subscriptions
     const bound = queryCore.boundOf(inst.component)
     // A waiting instance has no Model yet.
-    if (inst.closed || inst.waiting || (subscriptions === undefined && bound === undefined)) return
+    if (inst.closed || inst.waiting || inert !== undefined || (subscriptions === undefined && bound === undefined)) {
+      return
+    }
     // A keyed provide's read is due: nothing starts against services that may be about to go. The read
     // syncs. Before the first view the watches follow the Model at once, and the read restarts them.
     const due = inst.mounting === undefined ? dueSelection(inst) : undefined
@@ -5869,6 +5930,7 @@ const setup = (
         }
         whenReady(env, rerender, rerender)
       }
+      inert?.fallbacks.add(inst.path)
       return fallbackSlot(inst, view, status, false, env, range)
     }
     let component: Component.Any
@@ -5881,7 +5943,11 @@ const setup = (
       childEnv = readyEnv(Context.merge(env.ctx!, found.value.context), env)
     } else if (lazyOf.TypeId in target) {
       const state = lazyOf.stateOf(target)
-      if (state._tag !== "Loaded") return loadingSlot(inst, view, env, range)
+      if (state._tag !== "Loaded") {
+        return inert === undefined
+          ? loadingSlot(inst, view, env, range)
+          : fallbackSlot(inst, view, lazyStatus(target), false, env, range)
+      }
       component = state.component
     } else {
       component = target
@@ -7438,7 +7504,9 @@ const setup = (
       }
     })
   )
-  if (hostEvents !== undefined) addFinalizer(rootScope, Effect.sync(hostEvents.connect(eventsAlong)))
+  if (hostEvents !== undefined && inert === undefined) {
+    addFinalizer(rootScope, Effect.sync(hostEvents.connect(eventsAlong)))
+  }
   // Hydration: the root's range among the container's nodes, which may hold more than the app.
   const rootPath = `/${component.definition.name}`
   let rootRange: Range | undefined

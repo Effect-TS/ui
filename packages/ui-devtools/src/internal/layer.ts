@@ -1,11 +1,13 @@
 import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as MessageLog from "@effect/ui/MessageLog"
+import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
-import { type Feed, Overlay } from "./overlay.ts"
+import * as History from "./history.ts"
+import { type Feed, Overlay, Pages, Paint } from "./overlay.ts"
 import { styles } from "./styles.ts"
 
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
@@ -19,20 +21,75 @@ const corners: { readonly [P in Position]: string } = {
   BottomRight: "bottom:12px;right:12px"
 }
 
+// A painted copy's dialogs and popovers sit in the top layer, above any z-index. While paused the frame
+// joins the top layer after them, so the copy never covers the panel.
+const raise = (frame: HTMLIFrameElement) => {
+  if (typeof frame.showPopover !== "function") return
+  frame.setAttribute("popover", "manual")
+  if (frame.matches(":popover-open")) frame.hidePopover()
+  frame.showPopover()
+}
+
+const lower = (frame: HTMLIFrameElement) => {
+  if (!frame.hasAttribute("popover")) return
+  if (frame.matches(":popover-open")) frame.hidePopover()
+  frame.removeAttribute("popover")
+}
+
 export const make = (options: {
   readonly position?: Position | undefined
   readonly buffer?: number | undefined
 }): Layer.Layer<never> =>
-  Layer.effect(
-    MessageLog.MessageLog,
+  Layer.effectContext(
     Effect.gen(function*() {
-      const inspector = Inspector.make({ size: options.buffer })
+      const size = Math.max(1, options.buffer ?? 1_000)
+      const inspector = Inspector.make({ size })
+      const history = History.make(size)
+      const roots = new Map<string, BrowserHost.Pausable>()
+      let paused: BrowserHost.Pausable | undefined
       const origins = new Map<string, number>()
       const changes = yield* PubSub.sliding<void>(1)
       const feed: Feed = {
         inspector,
         origin: (session) => origins.get(session),
-        changes: Stream.fromPubSub(changes)
+        changes: Stream.fromPubSub(changes),
+        paintable: (session, seq) => roots.has(session) && history.holds(session, seq),
+        pausing: () => paused !== undefined
+      }
+      const resume: Effect.Effect<void> = Effect.suspend(() => {
+        const root = paused
+        paused = undefined
+        return root === undefined ? Effect.void : Effect.andThen(root.resume, Effect.sync(() => lower(frame)))
+      })
+      const pages = Pages.of({
+        paint: (session, seq) =>
+          Effect.suspend(() => {
+            const root = roots.get(session)
+            const state = history.at(session, seq)
+            if (root === undefined || state === undefined) return Effect.undefined
+            const previous = paused
+            paused = root
+            return (previous === undefined || previous === root ? Effect.void : previous.resume).pipe(
+              Effect.andThen(root.pause(state)),
+              Effect.map((painted) => {
+                raise(frame)
+                return painted
+              })
+            )
+          }),
+        resume
+      })
+      const pausables: BrowserHost.Pausables = {
+        register: (root) => {
+          roots.set(root.session, root)
+          return () => {
+            if (roots.get(root.session) === root) roots.delete(root.session)
+            if (paused !== root) return
+            paused = undefined
+            lower(frame)
+            PubSub.publishUnsafe(changes, undefined)
+          }
+        }
       }
 
       const position = options.position ?? "BottomRight"
@@ -41,7 +98,7 @@ export const make = (options: {
       frame.title = "Effect UI inspector"
       frame.setAttribute(
         "style",
-        "position:fixed;" + corners[position] +
+        "position:fixed;inset:auto;" + corners[position] +
           ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
           "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
           "box-shadow:0 8px 28px rgb(0 0 0 / .14)"
@@ -120,10 +177,11 @@ export const make = (options: {
       }
 
       yield* BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
-        Effect.provideService(MessageLog.MessageLog, MessageLog.noop)
+        Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
+        Effect.provide(Paint.layer.pipe(Layer.provide(Layer.succeed(Pages, pages))))
       )
 
-      return yield* MessageLog.makeEncoded((batch) =>
+      const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {
           for (const entry of batch) {
             if (!origins.has(entry.session)) origins.set(entry.session, entry.at)
@@ -132,5 +190,7 @@ export const make = (options: {
           return PubSub.publish(changes, undefined)
         })
       )
+      const log = MessageLog.fanoutAll([{ enabled: true, record: history.record }, encoded])
+      return Context.make(MessageLog.MessageLog, log).pipe(Context.add(BrowserHost.Pausables, pausables))
     })
   )

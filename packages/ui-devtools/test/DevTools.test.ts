@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
+import { Command, Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import * as DevToolsLayer from "@effect/ui-devtools/internal/layer"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -27,7 +27,7 @@ const mount = Effect.fnUntraced(function*(capture: Capture, buffer?: number) {
   )
   const app = yield* play(capture).pipe(Effect.provide(services))
   yield* settle
-  return { app, memory, root: overlay() }
+  return { app, memory, root: overlay(), services }
 })
 
 const sized = (root: HTMLElement) => {
@@ -128,7 +128,141 @@ const commonChecks = Effect.fnUntraced(function*(root: HTMLElement) {
 const lifecycle = (root: HTMLElement, kind: string) =>
   Array.from(root.querySelectorAll(`.life tr[data-kind=${kind}] > *`)).map((cell) => text(cell))
 
+const PairMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })
+
+class Slot extends Feature.Service<Slot>()("test/Slot", { props: Schema.Struct({}) }) {}
+
+const SlotView = Component.define({
+  name: "SlotView",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.strong("ready") })
+
+const Shown = Component.define({
+  name: "Shown",
+  scoped: false,
+  props: Schema.Struct({ n: Schema.Number }),
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.span.children(String(h.props.n)) })
+
+const Pair = Component.define({
+  name: "Pair",
+  scoped: false,
+  model: Schema.Struct({ n: Schema.Number }),
+  message: PairMessage,
+  elements: Html
+}).make({
+  init: () => ({ n: 0 }),
+  update: { ClickedAdd: ($) => $.evolve({ n: $.model.n + 1 }) },
+  view: (h, model) =>
+    h.div(
+      h.button.onClick(PairMessage.ClickedAdd()).children("Add"),
+      Slot.render(h, { key: "s", props: {}, fallback: () => h.em("fallback") }),
+      Shown(h, { key: "a", props: { n: model.n } }),
+      Shown(h, { key: "b", props: { n: model.n } })
+    )
+}).pipe(Component.provide(Slot.toLayer(SlotView)))
+
 describe("DevTools overlay", { concurrent: false }, () => {
+  it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>
+    Effect.gen(function*() {
+      const { app, root } = yield* mount("closed")
+      yield* open(root)
+      const copy = () => app.nextElementSibling?.hasAttribute("inert") === true ? app.nextElementSibling : null
+      const show = () => HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+
+      yield* selectClickedSave(root)
+      yield* click(show())
+      assert.strictEqual(show().getAttribute("aria-pressed"), "true")
+      assert.match(text(root.querySelector(".paused-label")), /^Paused at #\d+$/)
+      assert.strictEqual(app.style.getPropertyValue("display"), "none")
+      assert.strictEqual(
+        Array.from(copy()!.querySelectorAll("p")).map((status) => status.textContent).join(),
+        "Saving,Saving"
+      )
+      assert.lengthOf(HtmlLocator.queryAllByRole(copy() as HTMLElement, "button", { name: "Close n2" }), 1)
+      assert.lengthOf(HtmlLocator.queryAllByRole(app, "button", { name: "Close n2" }), 0)
+      assert.isNull(root.querySelector(".pause-note"))
+
+      yield* click(oldest(root, /Update UpdatedDraft$/))
+      assert.strictEqual(document.querySelectorAll("[inert]").length, 1)
+      assert.strictEqual(
+        Array.from(copy()!.querySelectorAll("p")).map((status) => status.textContent).join(),
+        "Saving,Dirty"
+      )
+
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+      assert.isNull(copy())
+      assert.isNull(root.querySelector(".paused"))
+      assert.strictEqual(app.style.getPropertyValue("display"), "")
+    }))
+
+  it.live("moves the pause to the root shown, and drops it when the paused root unmounts", () =>
+    Effect.gen(function*() {
+      const { app, root, services } = yield* mount("closed")
+      yield* open(root)
+      const inert = () => document.querySelectorAll("[inert]").length
+      yield* selectClickedSave(root)
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+      assert.strictEqual(app.style.getPropertyValue("display"), "none")
+
+      const scope = yield* Scope.make()
+      const other = yield* play("closed").pipe(Effect.provide(services), Scope.provide(scope))
+      yield* settle
+      yield* click(oldest(root, /Update UpdatedDraft$/))
+      assert.strictEqual(app.style.getPropertyValue("display"), "")
+      assert.strictEqual(other.style.getPropertyValue("display"), "none")
+      assert.strictEqual(inert(), 1)
+
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+      assert.strictEqual(other.style.getPropertyValue("display"), "")
+      assert.strictEqual(inert(), 0)
+
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+      assert.strictEqual(inert(), 1)
+      yield* Scope.close(scope, Exit.void)
+      yield* settle
+      assert.strictEqual(inert(), 0)
+      assert.isNull(root.querySelector(".paused"))
+    }))
+
+  it.live("paints each instance's props past the buffer and notes feature slot fallbacks", () =>
+    Effect.gen(function*() {
+      const memory = MessageLog.makeMemory({ size: 500 })
+      const services = yield* Layer.build(
+        MessageLog.fanout([DevToolsLayer.make({ buffer: 2 }), Layer.succeed(MessageLog.MessageLog, memory)])
+      )
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* BrowserHost.mountEffect(Pair, {}, app).pipe(Effect.provide(services))
+      yield* settle
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
+      const changed = memory.entries().filter((entry) => entry._tag === "PropsChanged")
+      assert.deepStrictEqual(changed.map((entry) => entry.path), ["/Pair/Shown[a]", "/Pair/Shown[b]"])
+      assert.strictEqual(memory.entries().at(-1), changed[1])
+
+      const root = overlay()
+      sized(root)
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Open the Effect UI inspector" }))
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Everything" }))
+      yield* click(entry(root, new RegExp("^#" + changed[0].seq + " "))[0]!)
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+      const copy = app.nextElementSibling!
+      assert.isTrue(copy.hasAttribute("inert"))
+      assert.strictEqual(Array.from(copy.querySelectorAll("span"), (node) => node.textContent).join(), "1,0")
+      assert.strictEqual(Array.from(app.querySelectorAll("span"), (node) => node.textContent).join(), "1,1")
+      assert.strictEqual(copy.querySelector("em")?.textContent, "fallback")
+      assert.strictEqual(app.querySelector("strong")?.textContent, "ready")
+      const notes = Array.from(root.querySelectorAll(".pause-note"), (node) => text(node))
+      assert.strictEqual(notes.length, 1)
+      assert.include(notes[0], "fallback")
+      assert.isTrue(notes[0].endsWith(": /Pair"))
+    }))
+
   it.live("finds Editor[n2]'s Save, follows it to its interruption and back", () =>
     Effect.gen(function*() {
       const { memory, root } = yield* mount("interrupted")

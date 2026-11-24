@@ -4,10 +4,12 @@
   "type": "module",
   "version": "0.0.0",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "check-devtools": "node check-devtools.mjs"
   },
   "dependencies": {
     "@effect/ui": "workspace:*",
+    "@effect/ui-devtools": "workspace:*",
     "effect": "^4.1.4"
   },
   "devDependencies": {
