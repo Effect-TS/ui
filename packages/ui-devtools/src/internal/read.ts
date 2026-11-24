@@ -80,11 +80,14 @@ export const tagOf = (value: unknown): string | undefined =>
     ? value._tag
     : undefined
 
-export const nameOf = (path: string): string =>
-  path.slice(path.lastIndexOf("/") + 1) || path
-
-export const depthOf = (path: string): number =>
-  Math.max(0, path.split("/").length - 2)
+export const nameOf = (path: string): string => {
+  const boundary = path.lastIndexOf("]/")
+  if (boundary !== -1) return path.slice(boundary + 2)
+  const bracket = path.indexOf("[")
+  return bracket === -1
+    ? path.slice(1)
+    : path.slice(path.lastIndexOf("/", bracket) + 1)
+}
 
 export interface Label {
   readonly text: string
@@ -169,36 +172,82 @@ export interface Status {
 }
 
 export const statusesOf = (
-  session: Inspector.Session,
-  instance: Inspector.Instance
+  summary: Inspector.Summary
 ): ReadonlyArray<Status> => {
-  const ended = new Map<Inspector.Reason, number>()
-  let running = 0
-  let waiting = 0
-  for (const record of session.records(instance.instance)) {
-    if (record.kind !== "command") continue
-    if (record.end === undefined) {
-      if (record.start === undefined) waiting++
-      else running++
-      continue
-    }
-    const reason = record.reason ?? "ended"
-    ended.set(reason, (ended.get(reason) ?? 0) + 1)
-  }
   const statuses: Array<Status> = []
-  for (const [reason, count] of ended) {
+  for (const { count, reason } of summary.ended) {
     statuses.push({
       text: count + " " + reasonText[reason],
       tone: reasonTone[reason] === "bad" ? "bad" : undefined
     })
   }
-  if (running > 0) statuses.push({ text: running + " running", tone: "open" })
-  if (waiting > 0) statuses.push({ text: waiting + " waiting", tone: "open" })
-  if (instance.unmounted !== undefined) {
+  if (summary.running > 0) {
+    statuses.push({ text: summary.running + " running", tone: "open" })
+  }
+  if (summary.waiting > 0) {
+    statuses.push({ text: summary.waiting + " waiting", tone: "open" })
+  }
+  if (summary.unmounted !== undefined) {
     statuses.push({ text: "unmounted", tone: "bad" })
   }
   return statuses
 }
+
+export const toneOf = (summary: Inspector.Summary): Tone | undefined =>
+  summary.ended.some(({ reason }) => reasonTone[reason] === "bad")
+    ? "bad"
+    : summary.running + summary.waiting > 0
+    ? "open"
+    : undefined
+
+export const duration = (ms: number): string =>
+  ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s"
+
+export const position = (ms: number): string => {
+  if (ms < 1000) return duration(ms)
+  const total = Math.round(ms)
+  const minutes = Math.floor(total / 60_000)
+  const seconds = Math.floor(total / 1000) % 60
+  return minutes + ":" + String(seconds).padStart(2, "0") + "." +
+    String(total % 1000).padStart(3, "0")
+}
+
+export type Mark =
+  | "message"
+  | "issue"
+  | "start"
+  | "end"
+  | "bad"
+  | "mount"
+  | "unmount"
+  | "ring"
+
+export const markOf = (entry: Entry | Inspector.Outside): Mark => {
+  if (entry._tag !== "Outside" && isFailure(entry)) return "bad"
+  switch (entry._tag) {
+    case "Update":
+      return "message"
+    case "CommandStarted":
+    case "CommandAwaiting":
+      return "start"
+    case "CommandEnded":
+      return "end"
+    case "CommandInterrupted":
+    case "CommandDropped":
+    case "SendDropped":
+      return "bad"
+    case "Mounted":
+      return "mount"
+    case "Unmounted":
+      return "unmount"
+    default:
+      return "ring"
+  }
+}
+
+export const isFailure = (entry: MessageLog.Entry | Entry): boolean =>
+  entry._tag === "Failed" || entry._tag === "LayerFailed" ||
+  entry._tag === "MountEnded" && entry.reason === "failed"
 
 export interface Ref {
   readonly seq: number
@@ -421,6 +470,12 @@ export const chainOf = (
   if (named.length > 0) steps.push({ _tag: "Names", links: named })
   return steps
 }
+
+export const inRun = (step: Step): boolean =>
+  step._tag === "Command"
+    ? step.command._tag !== "Interrupt"
+    : step._tag === "Started" || step._tag === "NotStarted" ||
+      step._tag === "Result"
 
 export const chainSeqs = (steps: ReadonlyArray<Step>): ReadonlySet<number> => {
   const seqs = new Set<number>()

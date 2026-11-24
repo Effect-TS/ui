@@ -7,7 +7,9 @@
  * and answers by `seq`: the entry behind a number, the entries an entry
  * names and the ones that name it, the Command run an `update` issued, the
  * Layer builds, Subscriptions, mounts and Command runs of an instance, and
- * the entry an instance's Model is compared with.
+ * the entry an instance's Model is compared with. It also keeps a `Summary`
+ * of each instance as entries arrive and leave, so a view can list the
+ * instances that have something to report without reading every record.
  *
  * It reads Wire frames only, so a `Schema.Redacted` value reaches it as the
  * encoder's placeholder and never in clear. It states what the entries say
@@ -164,6 +166,48 @@ export interface Instance {
 }
 
 /**
+ * What an instance's Command runs and entries come to, kept as entries
+ * arrive and leave the buffer.
+ *
+ * **Details**
+ *
+ * - `waiting`, `running` and `ended` count the instance's `"command"`
+ *   records: open without a `start`, open with one, and ended, by reason in
+ *   the order each reason first ended. An ended run leaves the counts when
+ *   the entry that ended it leaves the buffer.
+ * - `latest` is the `seq` of the instance's latest `Update`, `Failed`,
+ *   `CommandStarted`, `CommandAwaiting`, `CommandEnded`,
+ *   `CommandInterrupted` or `CommandDropped` that `entries` holds, absent
+ *   when it holds none. An excluded `Update` doesn't count.
+ * - `parent` is the `instance` this one is under: the closest whose
+ *   `path` this one's is under, and of those at that path the latest that
+ *   came before it. So an instance that mounts again at a path gets its own
+ *   children. It's absent for a root and for an instance whose parent the
+ *   session never held, and a parent stays while it has children.
+ * - `below` counts the instances under this one, at any depth: all of
+ *   them, the ones with an ended run whose reason isn't `"ended"` (it
+ *   failed, was interrupted or was dropped), and the ones with a run going.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Summary extends Instance {
+  readonly parent?: number
+  readonly waiting: number
+  readonly running: number
+  readonly ended: ReadonlyArray<
+    { readonly reason: Reason; readonly count: number }
+  >
+  readonly latest?: number
+  readonly below: {
+    readonly instances: number
+    readonly failing: number
+    readonly running: number
+  }
+}
+
+/**
  * One entry naming another.
  *
  * **Details**
@@ -268,6 +312,16 @@ export interface Session {
   readonly resolve: (seq: number) => MessageLog.WireEntry | Outside
   /** The instances, in the order they were first seen. */
   readonly instances: () => ReadonlyArray<Instance>
+  /** How many instances the session has. */
+  readonly instanceCount: () => number
+  /** The summary of one instance, by its `instance` number. */
+  readonly summary: (instance: number) => Summary | undefined
+  /** The instances with a Command record or a `latest` entry, latest first, and those with no `latest` last. */
+  readonly active: () => ReadonlyArray<Summary>
+  /** The instances whose `parent` is `instance`, in the order they were first seen. With no `instance`, those with no `parent`. */
+  readonly children: (instance?: number) => ReadonlyArray<Summary>
+  /** The instances whose name, the last segment of their `path`, or `component` holds `text`, ignoring case, in the order they were first seen. */
+  readonly find: (text: string) => ReadonlyArray<Summary>
   /** The records of one instance, or of every instance, oldest first within an instance. */
   readonly records: (instance?: number) => ReadonlyArray<Record>
   /** The record of the Command run an entry issued at this index. */

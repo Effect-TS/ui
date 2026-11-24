@@ -1,30 +1,4 @@
-import { fileURLToPath } from "node:url"
-import { chromium } from "playwright"
-import { createServer } from "vite"
-
-const at = process.argv.indexOf("--executable")
-const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM
-
-const server = await createServer({
-  root: import.meta.dirname,
-  configFile: false,
-  logLevel: "silent",
-  resolve: {
-    alias: {
-      "@effect/ui-devtools": fileURLToPath(
-        new URL("../../src/index.ts", import.meta.url)
-      )
-    }
-  },
-  server: { port: 0, strictPort: false }
-})
-await server.listen()
-const url = server.resolvedUrls.local[0]
-const browser = await chromium.launch({ executablePath })
-const failures = []
-const expect = (ok, what, detail) => {
-  if (!ok) failures.push(what + " " + JSON.stringify(detail))
-}
+import { run } from "./run.mts"
 
 const scene = (page) =>
   page.evaluate(() => {
@@ -63,9 +37,9 @@ const scene = (page) =>
     }
   })
 
-const page = await browser.newPage({ viewport: { width: 1200, height: 800 } })
-page.on("pageerror", (error) => failures.push("page error " + String(error)))
-try {
+await run("pause", async ({ browser, expect, failures, url }) => {
+  const page = await browser.newPage({ viewport: { width: 1200, height: 800 } })
+  page.on("pageerror", (error) => failures.push("page error " + String(error)))
   await page.goto(url + "pause.html")
   await page.waitForSelector("body[data-ready]", { state: "attached" })
 
@@ -172,14 +146,4 @@ try {
     "the live dialog opens as a modal again",
     live
   )
-} catch (error) {
-  failures.push(String(error).split("\n")[0])
-} finally {
-  await browser.close()
-  await server.close()
-}
-for (const failure of failures) console.log(failure)
-console.log(
-  failures.length === 0 ? "pause: ok" : "pause: " + failures.length + " failed"
-)
-process.exitCode = failures.length === 0 ? 0 : 1
+})

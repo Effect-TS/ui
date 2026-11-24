@@ -70,6 +70,7 @@
     "check-panel": "node test/browser/check-panel.mjs",
     "check-parity": "node test/browser/check-parity.mjs",
     "check-pause": "node test/browser/check-pause.mjs",
+    "check-scale": "node test/browser/check-scale.mjs",
     "build": "tsc -b tsconfig.json && pnpm babel",
     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
     "check": "tsc -b tsconfig.json"

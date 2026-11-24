@@ -1,7 +1,7 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
-import { tagOf } from "./read.ts"
+import { isRun, nameOf, reasonTone, tagOf } from "./read.ts"
 
 type Entry = MessageLog.WireEntry
 type InstanceEntry = Exclude<
@@ -26,7 +26,20 @@ interface InstanceState {
   latest: Baseline | undefined
   baseline: Baseline | undefined
   buffered: number
+  readonly search: string
+  waiting: number
+  running: number
+  readonly ended: Map<Inspector.Reason, number>
+  lastActive: number | undefined
+  failing: boolean
+  going: boolean
+  readonly parent: InstanceState | undefined
+  readonly children: Set<InstanceState>
+  readonly below: Mutable<Inspector.Summary["below"]>
 }
+
+const isActivity = (entry: Entry) =>
+  entry._tag === "Update" || entry._tag === "Failed" || isRun(entry)
 
 type Emit = (
   kind: Inspector.Change["kind"],
@@ -142,6 +155,9 @@ const makeSession = (
   const forward = new Map<number, Array<Inspector.Link>>()
   const previous = new Map<number, Inspector.Previous>()
   const ended = new Map<number, Array<Mutable<Inspector.Record>>>()
+  const roots = new Set<InstanceState>()
+  const byPath = new Map<string, Array<InstanceState>>()
+  const active = new Set<InstanceState>()
   let app: string | undefined
   let last = -Infinity
 
@@ -159,8 +175,98 @@ const makeSession = (
     )
   }
 
+  const parentFor = (path: string, instance: number) => {
+    for (
+      let end = path.lastIndexOf("/");
+      end > 0;
+      end = path.lastIndexOf("/", end - 1)
+    ) {
+      const there = byPath.get(path.slice(0, end))
+      if (there === undefined) continue
+      for (let index = there.length - 1; index >= 0; index--) {
+        if (there[index].info.instance < instance) return there[index]
+      }
+    }
+    return undefined
+  }
+
+  const ancestors = (
+    inst: InstanceState,
+    f: (below: InstanceState["below"]) => void
+  ) => {
+    for (let at = inst.parent; at !== undefined; at = at.parent) f(at.below)
+  }
+
+  const tally = (record: Inspector.Record, by: 1 | -1) => {
+    if (record.kind !== "command") return
+    const inst = instances.get(record.instance)!
+    if (record.end === undefined) {
+      if (record.start === undefined) inst.waiting += by
+      else inst.running += by
+      return
+    }
+    const count = (inst.ended.get(record.reason!) ?? 0) + by
+    if (count === 0) inst.ended.delete(record.reason!)
+    else inst.ended.set(record.reason!, count)
+  }
+
+  const refresh = (inst: InstanceState) => {
+    let failing = false
+    for (const reason of inst.ended.keys()) {
+      if (reasonTone[reason] === "bad") failing = true
+    }
+    const going = inst.running > 0
+    if (failing !== inst.failing) {
+      inst.failing = failing
+      ancestors(inst, (below) => below.failing += failing ? 1 : -1)
+    }
+    if (going !== inst.going) {
+      inst.going = going
+      ancestors(inst, (below) => below.running += going ? 1 : -1)
+    }
+    if (
+      inst.waiting + inst.running + inst.ended.size > 0 ||
+      inst.lastActive !== undefined
+    ) active.add(inst)
+    else active.delete(inst)
+  }
+
+  const add = (inst: InstanceState) => {
+    instances.set(inst.info.instance, inst)
+    push(byPath, inst.info.path, inst)
+    ;(inst.parent?.children ?? roots).add(inst)
+    ancestors(inst, (below) => below.instances++)
+  }
+
+  const droppable = (inst: InstanceState) =>
+    inst.buffered === 0 && inst.records.length === 0 &&
+    inst.children.size === 0 &&
+    (inst.info.unmounted !== undefined || inst.info.mounted === undefined)
+
+  const drop = (inst: InstanceState) => {
+    const path = inst.info.path
+    instances.delete(inst.info.instance)
+    const same = byPath.get(path)!
+    if (same.length === 1) byPath.delete(path)
+    else same.splice(same.indexOf(inst), 1)
+    ;(inst.parent?.children ?? roots).delete(inst)
+    ancestors(inst, (below) => below.instances--)
+    if (inst.parent !== undefined && droppable(inst.parent)) drop(inst.parent)
+  }
+
+  const amend = (
+    record: Mutable<Inspector.Record>,
+    patch: Partial<Inspector.Record>
+  ) => {
+    tally(record, -1)
+    Object.assign(record, patch)
+    tally(record, 1)
+    refresh(instances.get(record.instance)!)
+  }
+
   const open = (inst: InstanceState, record: Mutable<Inspector.Record>) => {
     inst.records.push(record)
+    tally(record, 1)
     return record
   }
 
@@ -169,8 +275,7 @@ const makeSession = (
     seq: number,
     reason: Inspector.Reason
   ) => {
-    record.end = seq
-    record.reason = reason
+    amend(record, { end: seq, reason })
     push(ended, seq, record)
   }
 
@@ -217,11 +322,29 @@ const makeSession = (
         state: undefined,
         latest: undefined,
         baseline: undefined,
-        buffered: 0
+        buffered: 0,
+        search: (nameOf(entry.path) + "\n" + entry.component).toLowerCase(),
+        waiting: 0,
+        running: 0,
+        ended: new Map(),
+        lastActive: undefined,
+        failing: false,
+        going: false,
+        parent: parentFor(entry.path, entry.instance),
+        children: new Set(),
+        below: { instances: 0, failing: 0, running: 0 }
       }
-      instances.set(entry.instance, inst)
+      add(inst)
     }
     inst.buffered++
+    if (isActivity(entry) && !hidden.has(entry.seq)) {
+      inst.lastActive = entry.seq
+    }
+    change(inst, entry)
+    refresh(inst)
+  }
+
+  const change = (inst: InstanceState, entry: InstanceEntry) => {
     const { instance, seq } = entry
     switch (entry._tag) {
       case "Waiting":
@@ -348,7 +471,7 @@ const makeSession = (
           })
           runs.set(key, run)
         }
-        run.start = seq
+        amend(run, { start: seq })
         return
       }
       case "CommandAwaiting":
@@ -379,19 +502,36 @@ const makeSession = (
     }
     back.delete(seq)
     for (const record of ended.get(seq) ?? []) {
-      const records = instances.get(record.instance)!.records
-      records.splice(records.indexOf(record), 1)
+      const owner = instances.get(record.instance)!
+      owner.records.splice(owner.records.indexOf(record), 1)
       if (record.issued !== undefined) runs.delete(runKey(record.issued))
+      tally(record, -1)
+      refresh(owner)
     }
     ended.delete(seq)
     if (entry._tag === "SessionStarted" || entry._tag === "FetchStarted") return
     const inst = instances.get(entry.instance)!
     inst.buffered--
-    if (
-      prune && inst.buffered === 0 && inst.records.length === 0 &&
-      (inst.info.unmounted !== undefined || inst.info.mounted === undefined)
-    ) instances.delete(entry.instance)
+    if (seq === inst.lastActive) {
+      inst.lastActive = undefined
+      refresh(inst)
+    }
+    if (prune && droppable(inst)) drop(inst)
   }
+
+  const summarize = (inst: InstanceState): Inspector.Summary => ({
+    ...inst.info,
+    ...(inst.parent === undefined
+      ? undefined
+      : { parent: inst.parent.info.instance }),
+    waiting: inst.waiting,
+    running: inst.running,
+    ended: Array.from(inst.ended, ([reason, count]) => ({ reason, count })),
+    ...(inst.lastActive === undefined
+      ? undefined
+      : { latest: inst.lastActive }),
+    below: { ...inst.below }
+  })
 
   const session: Inspector.Session = {
     id,
@@ -407,6 +547,30 @@ const makeSession = (
     resolve: (seq) => entries.get(seq) ?? { _tag: "Outside", seq },
     instances: () =>
       Array.from(instances.values(), (inst) => ({ ...inst.info })),
+    instanceCount: () => instances.size,
+    summary: (instance) => {
+      const inst = instances.get(instance)
+      return inst === undefined ? undefined : summarize(inst)
+    },
+    active: () =>
+      Array.from(active, summarize).sort((a, b) =>
+        (b.latest ?? -1) - (a.latest ?? -1)
+      ),
+    children: (instance) =>
+      Array.from(
+        instance === undefined
+          ? roots
+          : instances.get(instance)?.children ?? [],
+        summarize
+      ),
+    find: (text) => {
+      const needle = text.toLowerCase()
+      const found: Array<Inspector.Summary> = []
+      for (const inst of instances.values()) {
+        if (inst.search.includes(needle)) found.push(summarize(inst))
+      }
+      return found
+    },
     records: (instance) =>
       (instance === undefined
         ? Array.from(instances.values()).flatMap((inst) => inst.records)

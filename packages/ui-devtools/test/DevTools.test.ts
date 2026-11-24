@@ -75,6 +75,17 @@ const click = Effect.fnUntraced(function*(element: Element) {
 const instance = (root: HTMLElement, name: string) =>
   root.querySelector(`[data-instance="${name}"]`)!
 
+const status = (root: HTMLElement, name: string) =>
+  text(instance(root, name).querySelector(".status")!)
+
+const find = Effect.fnUntraced(function*(root: HTMLElement, value: string) {
+  HtmlLocator.type(
+    HtmlLocator.getByRole(root, "searchbox", { name: "Find an instance" }),
+    value
+  )
+  yield* settle
+})
+
 const entry = (root: HTMLElement, name: RegExp) => {
   const found = HtmlLocator.queryAllByRole(root, "button", { name }).filter((
     node
@@ -369,8 +380,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
         yield* click(commitB)
         yield* click(HtmlLocator.getByRole(root, "button", { name: "Clear" }))
         assert.strictEqual(root.querySelectorAll(".row").length, 0)
+        yield* find(root, "peer")
         assert.isNotNull(instance(root, "Peer[a]"))
         assert.isNotNull(instance(root, "Peer[b]"))
+        yield* find(root, "")
         yield* click(commitA)
         const changed = root.querySelectorAll(".tree .tl[data-change=changed]")
         assert.strictEqual(changed.length, 1)
@@ -558,14 +571,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const { memory, root } = yield* mount("interrupted")
       yield* open(root)
 
-      assert.strictEqual(
-        text(instance(root, "Editor[n1]")),
-        "Editor[n1]1 ended"
-      )
-      assert.strictEqual(
-        text(instance(root, "Editor[n2]")),
-        "Editor[n2]1 interrupted, unmounted"
-      )
+      assert.strictEqual(status(root, "Editor[n1]"), "1 ended")
+      assert.strictEqual(status(root, "Editor[n2]"), "1 interrupted, unmounted")
       assert.isNotNull(
         instance(root, "Editor[n2]").querySelector(".status .tone-bad")
       )
@@ -605,9 +612,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isTrue(instance(root, "Editor[n2]").classList.contains("on"))
 
       assert.strictEqual(headline(root), "ClickedSave")
-      assert.match(
-        subtitle(root),
-        /^Update #\d+ on Editor\[n2\], \d+ ms after start$/
+      assert.match(subtitle(root), /^Update #\d+, \d+ ms after start$/)
+      assert.strictEqual(
+        text(root.querySelector(".crumbs")),
+        "Workspace/Editor[n2]"
       )
       const chain = steps(root)
       assert.deepStrictEqual(chain.map((step) => step.kind), [
@@ -635,7 +643,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
 
       yield* follow(root, "End", ".cause button.ref")
       assert.strictEqual(headline(root), "PressedEscape")
-      assert.include(subtitle(root), "on Editor[n2]")
+      assert.strictEqual(
+        text(root.querySelector(".crumbs")),
+        "Workspace/Editor[n2]"
+      )
       assert.match(
         step(root, "Command 0").what,
         /^Interrupt notes\/SaveNote \{"noteId":"n2"\}, stopped #\d+$/
@@ -647,7 +658,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
       yield* click(source.step.querySelector("button.ref")!)
       assert.include(headline(root), "SubscriptionStarted")
-      assert.include(subtitle(root), "on Editor[n2]")
+      assert.strictEqual(
+        text(root.querySelector(".crumbs")),
+        "Workspace/Editor[n2]"
+      )
 
       yield* click(instance(root, "Editor[n2]"))
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Commands" }))
@@ -693,8 +707,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
         const { root } = yield* mount("closed")
         yield* open(root)
         assert.strictEqual(
-          text(instance(root, "Editor[n2]")),
-          "Editor[n2]1 interrupted (unmount), unmounted"
+          status(root, "Editor[n2]"),
+          "1 interrupted (unmount), unmounted"
         )
         yield* selectClickedSave(root)
         assert.match(
@@ -708,8 +722,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
         const { root } = yield* mount("switched")
         yield* open(root)
         assert.strictEqual(
-          text(instance(root, "Editor[n2]")),
-          "Editor[n2]1 interrupted (switch), 1 running"
+          status(root, "Editor[n2]"),
+          "1 interrupted (switch), 1 running"
         )
         assert.isNotNull(
           instance(root, "Editor[n2]").querySelector(".status .tone-open")
@@ -725,19 +739,17 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("open")
         yield* open(root)
-        assert.strictEqual(
-          text(instance(root, "Editor[n1]")),
-          "Editor[n1]1 ended"
-        )
-        assert.strictEqual(
-          text(instance(root, "Editor[n2]")),
-          "Editor[n2]1 running"
-        )
+        assert.strictEqual(status(root, "Editor[n1]"), "1 ended")
+        assert.strictEqual(status(root, "Editor[n2]"), "1 running")
         const running = Array.from(root.querySelectorAll(".row")).filter((
           row
         ) => text(row.querySelector(".label")) === "notes/SaveNote running")
         assert.strictEqual(running.length, 1)
-        assert.strictEqual(text(running[0].querySelector(".mark")), "◌")
+        assert.isTrue(
+          running[0].querySelector(".mark")!.matches(
+            "[data-mark=start].tone-open"
+          )
+        )
         yield* selectClickedSave(root)
         assert.match(step(root, "Started").what, /^Started #\d+$/)
         const end = step(root, "Running")
@@ -748,6 +760,101 @@ describe("DevTools overlay", { concurrent: false }, () => {
         yield* tab(root, /Lifecycle/)
         assert.strictEqual(lifecycle(root, "command")[3], "running")
         assert.notInclude(text(root.querySelector(".life")), "interrupt")
+      }))
+    }))
+
+  it.live("keeps a remounted instance apart from the one it replaced", () =>
+    Effect.gen(function*() {
+      const LeafMessage = UiSchema.TaggedEnum({ Pinged: {} })
+      const Leaf = Component.define({
+        name: "Leaf",
+        scoped: false,
+        model: Schema.Null,
+        message: LeafMessage,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: { Pinged: ($) => $.model },
+        view: (h) => h.button.onClick(LeafMessage.Pinged()).children("Ping")
+      })
+      const Pane = Component.define({
+        name: "Pane",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.div(Leaf(h, { key: "l" }))
+      })
+      const HostMessage = UiSchema.TaggedEnum({ Toggled: {} })
+      const Host = Component.define({
+        name: "Host",
+        scoped: false,
+        model: Schema.Boolean,
+        message: HostMessage,
+        elements: Html
+      }).make({
+        init: () => true,
+        update: { Toggled: ($) => !$.model },
+        view: (h, on) =>
+          h.main(
+            h.button.onClick(HostMessage.Toggled()).children("Toggle"),
+            on ? Pane(h, { key: "p" }) : null
+          )
+      })
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        yield* Layer.build(DevTools.layer()).pipe(
+          Effect.flatMap((services) =>
+            BrowserHost.mountEffect(Host, {}, app).pipe(
+              Effect.provide(services)
+            )
+          )
+        )
+        yield* settle
+        const root = overlay()
+        yield* open(root)
+        const ping = () =>
+          HtmlLocator.getByRole(app, "button", { name: "Ping" })
+        const toggle = HtmlLocator.getByRole(app, "button", { name: "Toggle" })
+        yield* click(ping())
+        yield* click(toggle)
+        yield* click(toggle)
+        yield* click(ping())
+        yield* click(entry(root, /Pinged/)[0])
+
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: /^Browse all/ })
+        )
+        const rows = () =>
+          Array.from(root.querySelectorAll(".iitem"), (item) =>
+            [
+              item.querySelector(".irow")!.getAttribute("data-instance"),
+              item.querySelector(".chev")?.getAttribute("aria-expanded") ??
+                "-",
+              text(item.querySelector(".status"))
+            ].filter(Boolean).join(" "))
+        assert.deepStrictEqual(rows(), [
+          "Host true",
+          "Pane[p] false",
+          "Pane[p] true",
+          "Leaf[l] -"
+        ])
+        yield* click(root.querySelectorAll(".iitem .chev")[1]!)
+        assert.deepStrictEqual(rows().slice(-4), [
+          "Pane[p] true",
+          "Leaf[l] - unmounted",
+          "Pane[p] true",
+          "Leaf[l] -"
+        ])
+
+        yield* click(root.querySelector(".crumbs .crumb")!)
+        assert.strictEqual(entry(root, /Pinged/).length, 2)
+        yield* click(Array.from(root.querySelectorAll(".iitem .irow")).at(-1)!)
+        assert.strictEqual(entry(root, /Pinged/).length, 1)
       }))
     }))
 
@@ -891,12 +998,21 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
       yield* wait(30)
       const root = overlay()
+      assert.strictEqual(
+        text(root.querySelector(".launch .alert")),
+        "1 failure"
+      )
       yield* open(root)
 
       assert.strictEqual(
-        text(instance(root, "Uploader[uploader]")),
-        "Uploader[uploader]1 failed, unmounted"
+        status(root, "Uploader[uploader]"),
+        "1 failed, unmounted"
       )
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Close the inspector" })
+      )
+      assert.isNull(root.querySelector(".launch .alert"))
+      yield* open(root)
       yield* click(instance(root, "Uploader[uploader]"))
       yield* click(oldest(root, /Update ClickedUpload$/))
       const end = step(root, "End")

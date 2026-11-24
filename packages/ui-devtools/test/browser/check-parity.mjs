@@ -1,34 +1,8 @@
-import { fileURLToPath } from "node:url"
-import { chromium } from "playwright"
-import { createServer } from "vite"
+import { run } from "./run.mts"
 
-const at = process.argv.indexOf("--executable")
-const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM
-
-const server = await createServer({
-  root: import.meta.dirname,
-  configFile: false,
-  logLevel: "silent",
-  resolve: {
-    alias: {
-      "@effect/ui-devtools": fileURLToPath(
-        new URL("../../src/index.ts", import.meta.url)
-      )
-    }
-  },
-  server: { port: 0, strictPort: false }
-})
-await server.listen()
-const url = server.resolvedUrls.local[0]
-const browser = await chromium.launch({ executablePath })
-const failures = []
-const expect = (ok, what, detail) => {
-  if (!ok) failures.push(what + " " + JSON.stringify(detail))
-}
-
-const page = await browser.newPage({ viewport: { width: 1200, height: 800 } })
-page.on("pageerror", (error) => failures.push("page error " + String(error)))
-try {
+await run("parity", async ({ browser, expect, failures, url }) => {
+  const page = await browser.newPage({ viewport: { width: 1200, height: 800 } })
+  page.on("pageerror", (error) => failures.push("page error " + String(error)))
   await page.goto(url + "parity.html")
   await page.waitForSelector("body[data-ready]", { state: "attached" })
 
@@ -108,11 +82,18 @@ try {
     "Clear empties the timeline",
     afterClear
   )
+  const find = frame.getByRole("searchbox", { name: "Find an instance" })
+  const found = []
+  for (const name of ["counter", "side"]) {
+    await find.fill(name)
+    await page.waitForTimeout(100)
+    found.push(...(await snapshot()).instances)
+  }
+  await find.fill("")
   expect(
-    afterClear.instances.includes("Counter[counter]") &&
-      afterClear.instances.includes("Side[side]"),
-    "Clear keeps mounted instances in the instance list",
-    afterClear.instances
+    found.includes("Counter[counter]") && found.includes("Side[side]"),
+    "Clear keeps mounted instances, so Find still reaches them",
+    { listed: afterClear.instances, found }
   )
 
   await page.getByRole("button", { name: "Count" }).click()
@@ -163,16 +144,4 @@ try {
     "reloading the page with the panel open shows it open",
     {}
   )
-} catch (error) {
-  failures.push(String(error).split("\n")[0])
-} finally {
-  await browser.close()
-  await server.close()
-}
-for (const failure of failures) console.log(failure)
-console.log(
-  failures.length === 0
-    ? "parity: ok"
-    : "parity: " + failures.length + " failed"
-)
-process.exitCode = failures.length === 0 ? 0 : 1
+})

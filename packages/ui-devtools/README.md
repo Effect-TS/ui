@@ -23,10 +23,11 @@ const Main = BrowserHost.mount(App, {}, document.getElementById("app")!).pipe(
 Effect.runFork(Layer.launch(Main))
 ```
 
-The overlay starts as a button. Opened, it shows:
+The overlay starts as a button, with a count of the failures logged since the panel was last closed. Opened, it shows:
 
-- the timeline, newest first, filtered by kind or by instance, with a rail marking the selected entry's chain
-- the instances, each with how its Command runs ended: ended, interrupted with a reason, failed, running, or unmounted
+- the timeline, newest first, filtered by kind or by instance and everything under it, with a rail marking the selected entry's chain
+- the instances that have something to report, failed and interrupted first, then running, then the ones that took a message, each with how its Command runs ended: ended, interrupted with a reason, failed, running, or unmounted. A find field searches every instance by name or component, and **Browse all** opens the whole tree with a count of what failed or is running under each branch
+- the path of the selected entry's instance, each segment a button that scopes the timeline to it
 - the causal chain of the selected entry, from what sent the message to where each Command it issued stopped and what stopped it, every `#n` a link to that entry
 - the entry's Model with what changed since that instance's previous entry, marked with `~`, a struck-out old value and a CHANGED badge, so it reads without colour; its message, Commands, events and raw frame
 - the lifecycle of the instance: its Layer build, Subscriptions, mounts and Command runs, open or with how they ended
