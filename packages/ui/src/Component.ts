@@ -70,6 +70,7 @@ import type * as Types from "effect/Types"
 import * as Command from "./Command.ts"
 import * as child from "./internal/child.ts"
 import * as heads from "./internal/heads.ts"
+import { keeper } from "./internal/keptRun.ts"
 import * as layerRun from "./internal/layerRun.ts"
 import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
@@ -2317,7 +2318,8 @@ const Proto = Object.assign(Object.create(Function.prototype), {
       queryCore.loaded!.run.first(inst as never)
     }
     if (this.head !== undefined) heads.loaded?.(inst as never)
-  }
+  },
+  "~kept": keeper
 })
 
 const sharing = ({ definition }: Any): boolean =>
@@ -2337,6 +2339,7 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   pipe: Proto.pipe,
   "~sync": Proto["~sync"],
   "~first": Proto["~first"],
+  "~kept": keeper,
   // The kernel's view of a headless instance: the closure its declarer wrote, given its parts.
   "~content"(
     this: Headless.Any,

@@ -39,6 +39,8 @@ export interface Hydration {
     first: Kernel.Next
   ) => Kernel.Next | undefined
   readonly adopts: (inst: Kernel.Instance) => boolean
+  /** Whether it's in a kept child off the page: adoption doesn't wait for it. */
+  readonly parked: (inst: Kernel.Instance) => boolean
   readonly held: () => ReadonlyArray<string>
   readonly end: () => void
   readonly settled: () => boolean
@@ -74,6 +76,8 @@ const decode = (
 
 const noEvents: ReadonlyArray<unknown> = []
 
+type Saved = Record<string, any>
+
 /** @internal */
 export const make = (
   state: Renderer.State,
@@ -89,6 +93,25 @@ export const make = (
   const held = new Map<Kernel.Rec, string>()
   // Owners that adopted what their reports sent on the server, compared once nothing below waits to adopt.
   const owners: Array<Kernel.Instance> = []
+  // The state each instance that started from the server's without its nodes gives its children: a kept
+  // child the client writes after the pass, or in its notes, and what's under it. Each kept path once.
+  const supplies = new WeakMap<Kernel.Instance, Saved>()
+  const claimed = new Set<string>()
+  const parked = new Set<Kernel.Instance>()
+  const supplyOf = (inst: Kernel.Instance): Saved | undefined => {
+    const parent = inst.parent!
+    const from = supplies.get(parent)
+    const path = inst.path
+    if ((inst.at!.v as View.Child<any, any>).alive === undefined) return from
+    if (claimed.has(path)) return undefined
+    claimed.add(path)
+    const base = from ?? (adopting.has(parent) ? state as Saved : undefined)
+    const byChild = base?.["~kept"]?.[parent.path]
+    const notes = byChild?.[path]
+    if (notes !== undefined) return notes
+    return base === state && deferred.has(path) ? undefined : base
+  }
+  let hooked = false
   let active = adoption?.root
   let pass = true
   let resuming = false
@@ -175,8 +198,43 @@ export const make = (
   return {
     init(inst, first) {
       const path = inst.path
-      if (!serves(inst.parent, path)) return undefined
+      const tree = inst.tree
+      if (!hooked) {
+        hooked = true
+        const ended = tree.ended
+        tree.ended = (author, at) => {
+          ended?.(author, at)
+          claimed.add(at)
+        }
+        const drawn = tree.drawn
+        tree.drawn = (kept, on) => {
+          drawn?.(kept, on)
+          if (on) parked.delete(kept)
+          else parked.add(kept)
+          settled()
+        }
+      }
       let got: Decoded | undefined
+      if (!serves(inst.parent, path)) {
+        const from = inst.parent === undefined ? undefined : supplyOf(inst)
+        if (from?.[path] === undefined) return undefined
+        const exit = decode(inst.component, from[path])
+        if (!Exit.isExit(exit) || Exit.isFailure(exit)) return undefined
+        supplies.set(inst, from)
+        inst.results = exit.value.results
+        return {
+          model: exit.value.model,
+          commands: first.commands,
+          events: noEvents,
+          lists: first.lists,
+          sends: first.sends
+        }
+      }
+      if (
+        (inst.at?.v as View.Child<any, any> | undefined)?.alive !== undefined
+      ) {
+        claimed.add(path)
+      }
       if (decoded.has(path)) {
         got = decoded.get(path)
         decoded.delete(path)
@@ -205,6 +263,17 @@ export const make = (
       }
     },
     adopts: (inst) => adopting.has(inst),
+    parked(inst) {
+      // Where it's drawn: a kept child's path is under its author, and the slot it's in under the receiver.
+      const paths = [inst.path + "/"]
+      for (let at: Kernel.Instance | undefined = inst; at; at = at.parent) {
+        if (at.under !== undefined) paths.push(at.under + "/")
+      }
+      for (const kept of parked) {
+        if (paths.some((path) => path.startsWith(kept.path + "/"))) return true
+      }
+      return false
+    },
     held: () => [...held.values()],
     end() {
       pass = false

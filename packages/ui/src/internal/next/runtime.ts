@@ -117,6 +117,9 @@ const bridge = (
   insert: (parent, node, before) =>
     host.insertBefore(parent, node, before ?? undefined),
   remove: (_parent, node) => host.remove(node),
+  createContainer: host.createContainer === undefined
+    ? undefined
+    : () => host.createContainer!(),
   parentOf: (node) => host.parentOf(node),
   nextOf: (node) => host.nextOf(node) ?? null,
   commit: host.commit === undefined ? undefined : () => host.commit!(),
@@ -255,9 +258,12 @@ const start = (
   const state = options?.state
   const fromStatic = state?.["~static"] === true
   const waiting = new Map<Kernel.Instance, Parameters<Kernel.Recorder>[1]>()
-  const mountWaiting = (inst: Kernel.Instance) => {
+  const mountWaiting = (inst: Kernel.Instance): void => {
     const draft = waiting.get(inst)
     if (draft === undefined) return
+    // The parent that provides the env it waited on mounted first.
+    const parent = inst.parent
+    if (parent?.env.ctx !== undefined) mountWaiting(parent)
     waiting.delete(inst)
     if (!inst.closed) recording.record(inst, { ...draft, model: inst.model })
     checkAdopted()
@@ -275,7 +281,12 @@ const start = (
           (inst.component as unknown as Component.Any).layer !== undefined &&
           (state!["~status"] as Record<string, unknown> | undefined)
               ?.[inst.path] === undefined
-        if (layered || (env.ctx === undefined && env.cause === undefined)) {
+        // A child adopts after the parent that waits to: its Model is reported first.
+        const behind = inst.parent !== undefined && waiting.has(inst.parent)
+        if (
+          layered || behind ||
+          (env.ctx === undefined && env.cause === undefined)
+        ) {
           waiting.set(inst, draft)
           const bound = queryCore.boundOf(
             inst.component as unknown as Component.Any
@@ -288,10 +299,11 @@ const start = (
               ? undefined
               : { queries: inst.results ?? bound.empty })
           })
-          if (!layered) env.waiting.push(() => mountWaiting(inst))
+          if (!layered && !behind) env.waiting.push(() => mountWaiting(inst))
           return seq
         }
       } else if (draft._tag === "LayerPending" && waiting.has(inst)) {
+        // Before the children that wait on the env it provides: it mounted before them.
         inst.env.waiting.push(() => mountWaiting(inst))
       } else if (draft._tag === "Unmounted" && waiting.delete(inst)) {
         const seq = recording.record(inst, draft)
@@ -397,10 +409,8 @@ const start = (
     queries.made()?.closeWindow()
   }
   const checkAdopted = () => {
-    if (
-      adoptedDone || !started || waiting.size > 0 ||
-      hydration?.settled() === false
-    ) return
+    if (adoptedDone || !started || hydration?.settled() === false) return
+    for (const inst of waiting.keys()) if (!hydration?.parked(inst)) return
     adoptedDone = true
     if (firstHeld > 0 || adoptionHead === undefined) adoptionHead = root.head()
     closeWindow()

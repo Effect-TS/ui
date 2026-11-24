@@ -36,6 +36,8 @@ export interface Host<N = any> {
   readonly insert: (parent: N, node: N, before: N | null) => void
   readonly remove: (parent: N, node: N) => void
   readonly clear?: ((parent: N) => void) | undefined
+  /** Makes a node that holds a kept child's nodes out of the document. Without it, keeping one fails its author. */
+  readonly createContainer?: (() => N) | undefined
   readonly parentOf: (node: N) => N
   readonly nextOf: (node: N) => N | null
   readonly commit?: (() => void) | undefined
@@ -108,6 +110,26 @@ export interface Runnable {
   readonly "~first"?: ((inst: Instance) => void) | undefined
   /** Called before each view after the first. */
   readonly "~render"?: ((inst: Instance) => void) | undefined
+  /** What runs the component's children written inside `h.keepAlive`, when it's a keep-alive component. */
+  readonly "~kept"?: Keeper | undefined
+}
+
+/**
+ * Runs the keep-alive children of a tree, carried by a keep-alive component so the kernel never imports
+ * it. `mount` makes or takes the child a Rec writes, with the path of the slot it's drawn in, `patch` returns the Rec a kept one is patched to,
+ * or `undefined` to patch it as any child, and `release` returns whether it kept or dropped the Rec's
+ * child itself.
+ *
+ * @internal
+ */
+export interface Keeper {
+  readonly mount: (author: Instance, rec: Rec, slot: string | undefined) => void
+  readonly patch: (
+    inst: Instance,
+    old: Rec,
+    view: View.Child<any, any>
+  ) => Rec | undefined
+  readonly release: (owner: Instance, rec: Rec) => boolean
 }
 
 /** @internal */
@@ -208,6 +230,16 @@ export interface Ops {
   readonly renderAbove: typeof renderAbove
   readonly clear: typeof clear
   readonly flush: typeof flush
+  readonly mountChild: typeof mountChild
+  readonly patchChild: typeof patchChild
+  readonly replace: typeof replace
+  readonly create: typeof create
+  readonly place: typeof place
+  readonly unplace: typeof unplace
+  readonly release: typeof release
+  readonly close: typeof close
+  readonly nodeOf: typeof nodeOf
+  readonly stand: typeof stand
 }
 
 /** @internal */
@@ -245,6 +277,10 @@ export interface Tree {
   watched?:
     | ((inst: Instance, query: string, argsKey: string) => void)
     | undefined
+  /** Told of each kept child as it's kept off the page, and as it's drawn again, wherever that is. */
+  drawn?: ((inst: Instance, drawn: boolean) => void) | undefined
+  /** Told of each kept child an `h.keepAlive` predicate ends, by its author and its path. */
+  ended?: ((author: Instance, path: string) => void) | undefined
   /**
    * A feature's work in a flush, called before each render pass, and with `idle` once nothing is left to
    * render. Returns whether it did something, which may have more to render.
@@ -289,7 +325,8 @@ export class Instance {
   readonly component: Runnable
   readonly parent: Instance | undefined
   readonly at: Rec | undefined
-  readonly under: string | undefined
+  /** The path of the slot or headless view it's drawn in, if any: a kept child's changes as it's drawn again. */
+  under: string | undefined
   readonly depth: number
   props: unknown
   env: Env
@@ -315,6 +352,10 @@ export class Instance {
   declare look: ((owner: any, optional?: boolean) => unknown) | undefined
   declare owning: unknown
   declare reading: unknown
+  /** The keep-alive children the instance's views wrote, once they wrote one: told once each view is patched. */
+  declare kept: { readonly done: () => void } | undefined
+  /** How many of the views it authors are being made or patched now. */
+  writing = 0
   named: string | undefined = undefined
   constructor(
     tree: Tree,
@@ -340,7 +381,9 @@ export class Instance {
       return this.named = "/" + this.component.definition.name
     }
     const view = at.v as View.Child<any, any>
-    return this.named = (this.under ?? this.parent!.path) + "/" +
+    // A keep-alive child's path is under its author, wherever it's drawn.
+    return this.named =
+      (view.alive === undefined && this.under || this.parent!.path) + "/" +
       segmentOf(view.component, view.key)
   }
   fire(
@@ -774,18 +817,22 @@ const start = (inst: Instance): Rec | undefined => {
     const tree = viewOf(inst)
     if (tree === undefined) return undefined
     let rendered: Rec
+    by.writing++
     try {
       rendered = create(by, tree)
       if (dev && shown !== fallbacks) checkShown(inst.path, [rendered])
     } catch (error) {
       fail(inst, "view", Cause.die(error), undefined, from)
       return undefined
+    } finally {
+      by.writing--
     }
     if (inst.closed) {
       release(inst, rendered)
       return undefined
     }
     inst.rendered = rendered
+    inst.kept?.done()
     applied(inst, first, seq)
     return rendered
   } finally {
@@ -803,16 +850,19 @@ const render = (inst: Instance): void => {
   const by = authorOf(inst)
   slot = by === inst ? undefined : inst.path
   busy++
+  by.writing++
   try {
     inst.component["~render"]?.(inst)
     const tree = viewOf(inst)
     if (tree === undefined) return
     inst.rendered = patch(by, inst.rendered!, tree)
+    inst.kept?.done()
     if (dev && shown !== fallbacks) checkShown(inst.path, [inst.rendered])
   } catch (error) {
     fail(inst, "view", Cause.die(error), undefined, from)
   } finally {
     busy--
+    by.writing--
     born.length = from
     slot = outer
   }
@@ -846,6 +896,7 @@ const release = (owner: Instance, rec: Rec): void => {
   const view = rec.v
   const kids = rec.kids
   if (view._tag === "Child") {
+    if (keeperOf(view)?.release(owner, rec)) return
     if (kids === undefined) return close(rec.inst)
     if (rec.inst === owner) {
       owner.live--
@@ -913,16 +964,24 @@ const unplace = (host: Host, parent: unknown, rec: Rec): void => {
     }}
 }
 
-const mountChild = (owner: Instance, rec: Rec): void => {
+const keeperOf = (view: View.Child<any, any>): Keeper | undefined =>
+  view.alive === undefined
+    ? undefined
+    : (view.component as Partial<Runnable>)["~kept"]
+
+const mountChild = (owner: Instance, rec: Rec, fresh?: boolean): void => {
   const view = rec.v as View.Child<any, any>
   let component = view.component as any
+  if (!fresh) {
+    const keeper = keeperOf(view)
+    if (keeper !== undefined) return keeper.mount(owner, rec, slot)
+  }
   let env = owner.env
   if (owner === fallen) {
     while (env.ctx === undefined && env.parent !== undefined) {
       env = env.parent
     }
   }
-  if (view.alive !== undefined) notPorted("kept children")
   if (view.owner !== undefined) notPorted("headless components")
   const at = slot
   let held: Rec | undefined
@@ -1203,16 +1262,7 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
     }
     return old
   }
-  if (!pairs(prev, view)) {
-    const host = inst.tree.host
-    const at = nodeOf(old)
-    const parent = host.parentOf(at)
-    const next = create(inst, view)
-    place(host, parent, next, at)
-    unplace(host, parent, old)
-    release(inst, old)
-    return next
-  }
+  if (!pairs(prev, view)) return replace(inst, old, view)
   switch (view._tag) {
     case "Text":
       if ((prev as View.Text).text !== view.text) {
@@ -1223,42 +1273,9 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
     case "Element":
       patchElement(inst, old, prev as View.Element<any, any>, view)
       return old
-    case "Child": {
-      const child = old.inst
-      old.v = view
-      const shown = old.kids
-      if (shown !== undefined) {
-        shown[0] = child === inst
-          ? inFallback(
-            inst,
-            () => patch(inst, shown[0]!, fallbackOf(inst, view, inst.env.cause))
-          )
-          : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
-        return old
-      }
-      if (child.closed) return old
-      const changed = !propsEqual(child.props, view.props)
-      if (changed) {
-        child.props = view.props
-        const log = inst.tree.log
-        if (log !== undefined) {
-          log(child, { _tag: "PropsChanged", props: view.props })
-        }
-        child.component["~sync"]?.(child)
-        if (child.closed) return old
-      }
-      if (changed || view.view !== undefined) {
-        if (child === receiving) markDirty(child)
-        else render(child)
-      }
-      const placed = child.placed
-      if (placed !== undefined && !child.closed) {
-        for (const entry of placed.values()) {
-          refresh(child, entry)
-        }
-      }
-      return old
-    }
+    case "Child":
+      return keeperOf(view)?.patch(inst, old, view) ??
+        patchChild(inst, old, view)
     case "Outlet": {
       const placed = inst.placed!.get(view.name)
       if (placed?.rec !== old) return old
@@ -1270,6 +1287,58 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
       return old
     }
   }
+}
+
+const patchChild = (
+  inst: Instance,
+  old: Rec,
+  view: View.Child<any, any>
+): Rec => {
+  const child = old.inst
+  old.v = view
+  const shown = old.kids
+  if (shown !== undefined) {
+    shown[0] = child === inst
+      ? inFallback(
+        inst,
+        () => patch(inst, shown[0]!, fallbackOf(inst, view, inst.env.cause))
+      )
+      : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
+    return old
+  }
+  if (child.closed) return old
+  const changed = !propsEqual(child.props, view.props)
+  if (changed) {
+    child.props = view.props
+    const log = inst.tree.log
+    if (log !== undefined) {
+      log(child, { _tag: "PropsChanged", props: view.props })
+    }
+    child.component["~sync"]?.(child)
+    if (child.closed) return old
+  }
+  if (changed || view.view !== undefined) {
+    if (child === receiving) markDirty(child)
+    else render(child)
+  }
+  const placed = child.placed
+  if (placed !== undefined && !child.closed) {
+    for (const entry of placed.values()) {
+      refresh(child, entry)
+    }
+  }
+  return old
+}
+
+const replace = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
+  const host = inst.tree.host
+  const at = nodeOf(old)
+  const parent = host.parentOf(at)
+  const next = create(inst, view)
+  place(host, parent, next, at)
+  unplace(host, parent, old)
+  release(inst, old)
+  return next
 }
 
 const refreshed = {}
@@ -1553,6 +1622,25 @@ export interface Options {
   readonly follow?: Tree["follow"] | undefined
 }
 
+const ops: Ops = {
+  send,
+  fail,
+  markDirty,
+  renderAbove,
+  clear,
+  flush,
+  mountChild,
+  patchChild,
+  replace,
+  create,
+  place,
+  unplace,
+  release,
+  close,
+  nodeOf,
+  stand
+}
+
 const initOf = (inst: Instance): Next => inst.component.init(inst.props)
 
 /** @internal */
@@ -1572,7 +1660,7 @@ export const mount = (
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
     schedule: options.schedule ?? ((task) => queueMicrotask(task)),
     follow: options.follow,
-    ops: { send, fail, markDirty, renderAbove, clear, flush },
+    ops,
     dirty: [],
     scheduled: true,
     flushing: true,

@@ -778,6 +778,7 @@ export const makeHost = (
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,
+    createContainer: () => document.createDocumentFragment(),
     controlled,
     runsMounts: true,
     commit() {

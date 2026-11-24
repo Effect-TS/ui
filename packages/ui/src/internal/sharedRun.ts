@@ -27,6 +27,9 @@ interface Reading {
 
 interface Shared {
   readonly owners: Set<Inst>
+  readonly readers: Set<Inst>
+  /** The readers in kept children off the page: they report nothing. */
+  readonly hidden: WeakSet<Inst>
   readonly rounds: Array<Inst>
   readonly due: Set<Inst>
   readonly passes: Map<Inst, number>
@@ -40,6 +43,8 @@ const sharedOf = (tree: Kernel.Tree): Shared => {
   if (shared === undefined) {
     const made: Shared = shared = {
       owners: new Set(),
+      readers: new Set(),
+      hidden: new WeakSet(),
       rounds: [],
       due: new Set(),
       passes: new Map(),
@@ -48,6 +53,16 @@ const sharedOf = (tree: Kernel.Tree): Shared => {
     tree.shared = made
     const work = tree.work
     tree.work = (idle) => work?.(idle) === true || run(made, idle)
+    const told = tree.drawn
+    tree.drawn = (kept, drawn) => {
+      told?.(kept, drawn)
+      for (const reader of made.readers) {
+        if (reader.failure !== undefined || !within(reader, kept)) continue
+        if (drawn) made.hidden.delete(reader)
+        else made.hidden.add(reader)
+        if (!drawn || bindAll(reader)) report(reader)
+      }
+    }
   }
   return shared
 }
@@ -81,15 +96,29 @@ const fail = (
 const definitionOf = (inst: Inst): Component.Definition.Any =>
   (inst.component as unknown as Component.Any).definition
 
+const within = (inst: Inst, top: Inst): boolean => {
+  for (let at: Inst | undefined = inst; at !== undefined; at = at.parent) {
+    if (at === top) return true
+  }
+  return false
+}
+
+/** The nearest owner above where `inst` is drawn: a kept child's path is under its author, not there. */
 const above = (
   inst: Inst,
   test: (owner: Inst) => boolean
 ): Inst | undefined => {
   let found: Inst | undefined
-  const path = inst.path
+  const paths = [inst.path]
+  for (let at = inst.parent; at !== undefined; at = at.parent) {
+    if (at.under !== undefined) paths.push(at.under + "/")
+  }
+  if (inst.under !== undefined) paths.push(inst.under + "/")
   for (const owner of sharedOf(inst.tree).owners) {
+    const prefix = owner.path + "/"
     if (
-      !owner.closed && path.startsWith(owner.path + "/") && test(owner) &&
+      !owner.closed && paths.some((path) => path.startsWith(prefix)) &&
+      test(owner) &&
       (found === undefined || owner.path.length > found.path.length)
     ) found = owner
   }
@@ -110,33 +139,53 @@ const absent = (inst: Inst, definition: Component.Definition.Any): string => {
       other.path
 }
 
+/**
+ * Binds each read of a reader to the nearest owner above where it's drawn, as it mounts and as a kept
+ * child it's in is drawn again. A read that moves takes the owner's value as seen, and moves its report.
+ */
+const bindAll = (inst: Inst): boolean => {
+  const reading = inst.reading as Reading
+  for (const read of readsOf(definitionOf(inst))) {
+    const owned = read.owner.definition
+    const was = reading.owners.get(owned)
+    const owner = nearest(inst, owned)
+    if (owner === was && (owner !== undefined || read.optional)) continue
+    inst.tree.ops.markDirty(inst)
+    if (was !== undefined) {
+      reading.owners.delete(owned)
+      reading.seen.delete(was)
+      ;(was.owning as Owning).readers.delete(inst)
+      if (read.report !== undefined) due(was)
+    }
+    if (owner === undefined) {
+      if (read.optional) continue
+      fail(
+        inst,
+        "shared",
+        new Error(
+          inst.path + " reads the shared state of " + owned.name + ", " +
+            absent(inst, owned)
+        )
+      )
+      return false
+    }
+    const owning = owner.owning as Owning
+    reading.owners.set(owned, owner)
+    owning.readers.add(inst)
+    if (read.onChange !== undefined) reading.seen.set(owner, owning.value)
+  }
+  return true
+}
+
 /** @internal */
 export const first = (inst: Inst): void => {
   const definition = definitionOf(inst)
   const reads = readsOf(definition)
   if (reads.length > 0) {
     const reading: Reading = { owners: new Map(), seen: new Map() }
-    for (const read of reads) {
-      const owned = read.owner.definition
-      const owner = nearest(inst, owned)
-      if (owner === undefined) {
-        if (read.optional) continue
-        return fail(
-          inst,
-          "shared",
-          new Error(
-            inst.path + " reads the shared state of " + owned.name + ", " +
-              absent(inst, owned)
-          )
-        )
-      }
-      reading.owners.set(owned, owner)
-      ;(owner.owning as Owning).readers.add(inst)
-      if (read.onChange !== undefined) {
-        reading.seen.set(owner, (owner.owning as Owning).value)
-      }
-    }
     inst.reading = reading
+    if (!bindAll(inst)) return
+    sharedOf(inst.tree).readers.add(inst)
     inst.look = (owner) =>
       (reading.owners.get(owner.definition)?.owning as Owning | undefined)
         ?.value
@@ -191,7 +240,9 @@ const leave = (inst: Inst): void => {
       ;(owner.owning as Owning).readers.delete(inst)
     }
   }
-  if (inst.owning !== undefined) sharedOf(inst.tree).owners.delete(inst)
+  const shared = sharedOf(inst.tree)
+  shared.readers.delete(inst)
+  if (inst.owning !== undefined) shared.owners.delete(inst)
 }
 
 /** @internal */
@@ -310,8 +361,9 @@ const collect = (owner: Inst): void => {
   const owning = owner.owning as Owning
   if (collects === undefined || owner.closed || owning.held) return
   const reports: Array<unknown> = []
+  const hidden = sharedOf(owner.tree).hidden
   for (const reader of owning.readers) {
-    if (reader.closed) continue
+    if (reader.closed || hidden.has(reader)) continue
     const reading = reader.reading as Reading
     for (const read of readsOf(definitionOf(reader))) {
       if (

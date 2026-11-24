@@ -10,6 +10,7 @@ import * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../../Component.ts"
 import type * as Renderer from "../../Renderer.ts"
 import type * as View from "../../View.ts"
+import type * as keptRun from "../keptRun.ts"
 import type * as Kernel from "../kernel.ts"
 import { segment, slotSegment } from "../paths.ts"
 import type * as services from "../services.ts"
@@ -41,6 +42,8 @@ type Snap =
     readonly status: Status
     readonly bare: boolean
     readonly kids: ReadonlyArray<Snap>
+    /** Its kept children off the page: their state goes in its `~kept` notes, with no nodes. */
+    readonly kept: ReadonlyArray<Snap>
   }
   | {
     readonly _tag: "Range"
@@ -84,6 +87,15 @@ export const snapshot = (
     const component = inst.component as unknown as Component.Any
     const shipped = inst.failure === undefined && !deferred.has(inst)
     const rendered = inst.rendered
+    const kept: Array<Snap> = []
+    for (
+      const entry of (inst.kept as keptRun.Table | undefined)?.kids.values() ??
+        []
+    ) {
+      if (entry.rec === undefined && !entry.inst.closed) {
+        kept.push(instance(entry.inst))
+      }
+    }
     return {
       _tag: "Instance",
       inst,
@@ -95,7 +107,8 @@ export const snapshot = (
         rendered?.v._tag === "Element",
       kids: inst.failure === undefined && rendered !== undefined
         ? [rec(inst, rendered, inst.path)]
-        : []
+        : [],
+      kept
     }
   }
   const rec = (owner: Kernel.Instance, at: Kernel.Rec, base: string): Snap => {
@@ -146,6 +159,7 @@ const awaitEncoded = (snap: Snap): Effect.Effect<void> => {
       !Exit.isExit(snap.encoded)
     ) late.push(snap.encoded)
     for (const kid of snap.kids) visit(kid)
+    if (snap._tag === "Instance") { for (const kid of snap.kept) visit(kid) }
   }
   visit(snap)
   if (late.length === 0) return Effect.void
@@ -213,16 +227,29 @@ const warnUnencoded = (
   )
 }
 
+const ignore = () => {}
+const mute: services.ServerSink = {
+  text: ignore,
+  open: ignore,
+  close: ignore,
+  enter: ignore,
+  leave: ignore
+}
+
 /** @internal */
 export const write = (
   snap: Snap,
   query: unknown,
   ctx: Context.Context<any>,
   isStatic: boolean,
-  sink: services.ServerSink
+  to: services.ServerSink
 ): Effect.Effect<Renderer.State> =>
   Effect.map(awaitEncoded(snap), () => {
     const state: Record<string, unknown> = {}
+    const kept: Record<string, unknown> = {}
+    // Where states go: `state`, or the notes of a kept child off the page, whose nodes go nowhere.
+    let into = state
+    let sink = to
     const deferredPaths: Array<string> = []
     const statuses: Record<string, string> = {}
     const collected: Record<string, unknown> = {}
@@ -266,10 +293,10 @@ export const write = (
               warnUnencoded(inst, ctx, exit.cause)
             }
             if (exit === undefined || Exit.isFailure(exit)) {
-              deferredPaths.push(path)
+              if (into === state) deferredPaths.push(path)
               inner = true
             } else {
-              state[path] = exit.value.state
+              into[path] = exit.value.state
               if (exit.value.reported !== undefined) {
                 collected[path] = exit.value.reported
               }
@@ -282,6 +309,19 @@ export const write = (
           }
           for (const kid of snap.kids) visit(kid, inner)
           if (!bare) sink.leave(path)
+          if (snap.kept.length === 0) return
+          const was = into
+          const byChild: Record<string, unknown> = {}
+          ;(was === state
+            ? kept
+            : (was["~kept"] ??= {}) as Record<string, unknown>)[path] = byChild
+          sink = mute
+          for (const kid of snap.kept) {
+            into = byChild[(kid as typeof snap).inst.path] = {}
+            visit(kid, inner)
+          }
+          into = was
+          if (was === state) sink = to
         }
       }
     }
@@ -297,6 +337,7 @@ export const write = (
     if (Object.keys(statuses).length > 0) add("~status", statuses)
     add("~query", query)
     if (Object.keys(collected).length > 0) add("~reported", collected)
+    if (Object.keys(kept).length > 0) add("~kept", kept)
     if (isStatic) add("~static", true)
     return state
   })
