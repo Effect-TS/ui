@@ -414,8 +414,13 @@ const between = (
       }
       const data = node.data
       if (data !== text) {
-        if (data.startsWith(text)) node.splitText(text.length)
-        else node.data = text
+        if (!data.startsWith(text)) {
+          drop(node)
+          const fresh = base.createText(text)
+          ours.add(fresh)
+          return fresh
+        }
+        node.splitText(text.length)
       }
       at = node.nextSibling
       return node
@@ -462,6 +467,7 @@ const between = (
       const previous = last.get(into)
       let ref = previous === undefined ? into.firstChild : previous.nextSibling
       while (ref !== null && ref !== end && ref.nodeType === COMMENT) {
+        if (!kept.has(ref)) passed.push(ref)
         ref = ref.nextSibling
       }
       if (ref !== node) into.insertBefore(node, ref)

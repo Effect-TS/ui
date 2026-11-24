@@ -98,20 +98,8 @@ export const pending: {
   "html/BrowserHost.test.ts": {},
   "html/Composed.test.ts": {},
   "html/Forward.test.ts": {},
-  "html/Slots.test.ts": {
-    "slots on the server > writes a marker pair per outlet, and the client adopts the content":
-      "hydration (step 7, unfinished): the client doesn't adopt an outlet's marker pair, so its markers stay in the document",
-    "slots on the server > builds content fresh when it doesn't match the server's, and adopts the rest":
-      "hydration (step 7, unfinished): the client doesn't adopt an outlet's marker pair, so its markers stay in the document",
-    "slots on the server > ssr() names the slot whose content the client rebuilt":
-      "hydration (step 7, unfinished): the client doesn't adopt an outlet's marker pair, so ssr() reports the markers, not the rebuilt slot"
-  },
-  "html/SlotStatus.test.ts": {
-    "slot status after SSR > a slot whose Layer failed on the server ships Failed, and the client adopts its failure branch, cause included":
-      "hydration (step 7, unfinished): a receiver whose Layer failed on the server isn't adopted in its failure branch; the client rebuilds the slot",
-    "slot status after SSR > a slot the server rendered whose client Layer isn't ready reports that it awaits the client's Layer":
-      "hydration (step 7, unfinished): a server-rendered receiver waiting for its client Layer reports Pending, where today's reports Awaiting"
-  },
+  "html/Slots.test.ts": {},
+  "html/SlotStatus.test.ts": {},
   "html/HtmlServer.test.ts": {},
   "html/ViewTransition.test.ts": {
     "view transitions > a mid-flush route transition commits once across callback, freeze, and close":

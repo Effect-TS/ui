@@ -316,6 +316,11 @@ export const make = (
       const tree = inst.tree
       if (!hooked) {
         hooked = true
+        tree.served = (inst) =>
+          adopting.has(inst)
+            ? (state["~status"] as Record<string, string> | undefined)
+              ?.[inst.path] ?? "Ready"
+            : undefined
         const ended = tree.ended
         tree.ended = (author, at) => {
           ended?.(author, at)

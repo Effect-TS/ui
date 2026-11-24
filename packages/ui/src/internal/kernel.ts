@@ -306,6 +306,8 @@ export interface Tree {
   watched?:
     | ((inst: Instance, query: string, argsKey: string) => void)
     | undefined
+  /** What the server shipped for an instance that adopts its state: its Layer's status there, or `Ready`. */
+  served?: ((inst: Instance) => string | undefined) | undefined
   /** Told of each kept child as it's kept off the page, and as it's drawn again, wherever that is. */
   drawn?: ((inst: Instance, drawn: boolean) => void) | undefined
   /** Told of each kept child an `h.keepAlive` predicate ends, by its author and its path. */

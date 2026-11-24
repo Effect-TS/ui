@@ -287,7 +287,7 @@ class Provide {
   /** Starts building into `own`, which the instance has just taken. `unsettled`: its last entry wasn't `LayerReady`. */
   start(
     own: Kernel.Env,
-    status: "Pending" | "Rebuilding",
+    status: "Pending" | "Awaiting" | "Rebuilding",
     unsettled: boolean
   ): void {
     const inst = this.inst
@@ -361,9 +361,8 @@ class Provide {
         )}
       return
     }
-    if (own.cause === undefined) {
-      settle(own, undefined, server ? serverFailure() : cause)
-    }
+    if (server) own.cause = serverFailure()
+    if (own.cause === undefined) settle(own, undefined, cause)
     tree.schedule(() => {
       if (inst.env === own) {
         inst.fire(handle, AsyncResult.failure(cause), dispatched, "onFailure")
@@ -568,12 +567,19 @@ export const boot = (inst: Kernel.Instance): void => {
     provides.set(inst, provide)
     inst.hold = (go) => provide.hold(go)
   }
+  const served = tree.served?.(inst)
   const sharedLayer = component.sharedLayer
-  if (sharedLayer !== undefined) {
+  if (served === "Failed") {
+    const cause = serverFailure()
+    provide.log({ _tag: "LayerFailed", cause, redacted: true })
+    settle(inst.env = envOf(provide.parent), undefined, cause)
+  } else if (sharedLayer !== undefined) {
     provide.shared = acquireShared(tree, provide.parent, sharedLayer)
     inst.env = provide.shared.env
   } else inst.env = envOf(provide.parent)
-  provide.start(inst.env, "Pending", false)
+  if (served !== "Failed") {
+    provide.start(inst.env, served === "Ready" ? "Awaiting" : "Pending", false)
+  }
   provide.booting = false
   if (provide.failedEarly !== undefined) {
     tree.ops.fail(inst, "layer", provide.failedEarly)
