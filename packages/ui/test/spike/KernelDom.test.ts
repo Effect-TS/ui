@@ -3,7 +3,7 @@ import { Component, Head, Mount, UiSchema } from "@effect/ui"
 import { Html, HtmlCommand, HtmlHead } from "@effect/ui/html"
 import * as KernelDom from "@effect/ui/html/KernelDom"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 const frame = Effect.promise(() =>
   new Promise<void>((resolve) =>

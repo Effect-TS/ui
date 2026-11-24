@@ -1,9 +1,9 @@
+import * as browserHosts from "@effect/ui/html/internal/browserHosts"
+import * as KernelDom from "@effect/ui/html/KernelDom"
+import * as domHost from "@effect/ui/internal/next/domHost"
 import * as path from "node:path"
 import type { RunnerTask, RunnerTestFile, RunnerTestSuite } from "vitest"
 import { afterAll, beforeEach, expect } from "vitest"
-import * as browserHosts from "../../src/html/internal/browserHosts.ts"
-import * as KernelDom from "../../src/html/KernelDom.ts"
-import * as domHost from "../../src/internal/next/domHost.ts"
 import { pending } from "./pending.ts"
 
 // A host `BrowserHost.makeHost` made runs on the kernel's DOM host. One a test wraps keeps the bridge to it.
