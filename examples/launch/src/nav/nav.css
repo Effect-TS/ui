@@ -25,7 +25,6 @@
 .nav-link[aria-current] {
   border-color: var(--foreground);
   color: var(--foreground);
-  font-weight: 600;
 }
 
 @media (width < 1200px) {
