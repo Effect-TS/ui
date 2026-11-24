@@ -17,23 +17,19 @@ const AppRoute = Route.union({
 
 const LoginMessage = UiSchema.TaggedEnum({ Filled: {} })
 
-const login = <KeepAlive extends boolean>(keepAlive: KeepAlive) =>
-  Component.define({
-    name: "Login",
-    keepAlive,
-    model: Schema.Struct({ email: Schema.String, password: Schema.String }),
-    message: LoginMessage,
-    restore: (model) => ({ ...model, password: "" })
-  }).make({
-    init: () => ({ email: "", password: "" }),
-    update: () => ({ email: "ada@example.com", password: "hunter2" }),
-    view: (h, model) =>
-      h.el("button").on("click", LoginMessage.Filled()).children(
-        `login ${model.email}|${model.password}`
-      )
-  })
-const Login = login(false)
-const KeepAliveLogin = login(true)
+const Login = Component.define({
+  name: "Login",
+  model: Schema.Struct({ email: Schema.String, password: Schema.String }),
+  message: LoginMessage,
+  restore: (model) => ({ ...model, password: "" })
+}).make({
+  init: () => ({ email: "", password: "" }),
+  update: () => ({ email: "ada@example.com", password: "hunter2" }),
+  view: (h, model) =>
+    h.el("button").on("click", LoginMessage.Filled()).children(
+      `login ${model.email}|${model.password}`
+    )
+})
 
 const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
 
@@ -201,13 +197,12 @@ const Editor = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.keepAlive((s) => KeepAliveLogin(s, { key: "login" }))
+  view: (h) => h.keepAlive((s) => Login(s, { key: "login" }))
 })
 
 const desk = (restore?: false) =>
   Component.define({
     name: "Desk",
-    keepAlive: true,
     model: Schema.Number,
     message: CounterMessage,
     restore
@@ -220,7 +215,7 @@ const desk = (restore?: false) =>
         h.el("button").on("click", CounterMessage.Clicked()).children(
           `desk ${count}`
         ),
-        h.keepAlive((s) => KeepAliveLogin(s, { key: "login" }))
+        h.keepAlive((s) => Login(s, { key: "login" }))
       )
   })
 const Desk = desk()

@@ -1,8 +1,8 @@
-import { Component, UiSchema } from "@effect/ui"
+import { Component, type MessageLog, UiSchema } from "@effect/ui"
 import { HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Cause, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
 const PageEvents = UiSchema.TaggedEnum({ Saved: { title: Schema.String } })
@@ -52,6 +52,16 @@ const makeApp = (
           : ""
       )
   })
+
+const lifecycle = (
+  root: { readonly log: () => ReadonlyArray<MessageLog.Entry> },
+  path: string
+) =>
+  root.log().flatMap((entry) =>
+    "path" in entry && entry.path === path && entry._tag !== "Update"
+      ? [entry._tag]
+      : []
+  )
 
 const later = <A>(value: A) =>
   new Promise<A>((resolve) => setTimeout(() => resolve(value), 10))
@@ -128,13 +138,12 @@ describe("Component.lazy", () => {
       assert.deepStrictEqual(root.pending(), [])
     })))
 
-  it.effect("keeps a lazy keep-alive child once loaded, and closes its Scope when the predicate ends it", () =>
+  it.effect("keeps a lazy child written with s, and closes its Scope when the predicate ends it", () =>
     provideHost(Effect.gen(function*() {
       let closed = 0
       const DraftMessage = UiSchema.TaggedEnum({ Typed: {} })
       const Draft = Component.define({
         name: "Draft",
-        keepAlive: true,
         model: Schema.Number,
         message: DraftMessage
       }).make(
@@ -194,6 +203,197 @@ describe("Component.lazy", () => {
       yield* TestHost.settle
       assert.strictEqual(closed, 1)
     })))
+
+  it.effect.each(
+    [
+      "placed directly",
+      "in a slot its receiver opens and closes"
+    ] as const
+  )(
+    "keeps a lazy child written with s from its first placement, with its fallback, while its module loads: %s",
+    (placement) =>
+      provideHost(Effect.gen(function*() {
+        let spun = 0
+        const Spinner = Component.define({
+          name: "Spinner",
+          model: Schema.Number,
+          message: Schema.Never
+        }).make({
+          init: () => ++spun,
+          update: ($) => $.model,
+          view: (h, n) => h.text(`loading${n}`)
+        })
+        let load!: () => void
+        const LazyPage = Component.lazy(
+          "LazyPage",
+          () =>
+            new Promise<typeof Page>((resolve) => load = () => resolve(Page))
+        )
+        const Panel = Component.define({
+          name: "Panel",
+          model: Schema.Boolean,
+          message: Schema.Literal("toggle"),
+          slots: ["body"]
+        }).make({
+          init: () => false,
+          update: ($) => !$.model,
+          view: (h, open) =>
+            h.el(
+              "section",
+              h.el("button").on("click", "toggle").children("toggle"),
+              open ? h.slots.body : null
+            )
+        })
+        const Host = Component.define({
+          name: "Host",
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
+          init: () => true,
+          update: (_, open) => open,
+          view: (h, open) =>
+            h.keepAlive((s) => {
+              const page = LazyPage(s, {
+                key: "p",
+                props: { title: "a" },
+                fallback: () => Spinner(h, {})
+              })
+              return placement === "placed directly"
+                ? h.el("main", open ? page : null)
+                : Panel(h, { slots: { body: page } })
+            })
+        })
+        const drain = TestHost.TestHost.useSync((host) =>
+          host.drain(host.budget)
+        )
+        const root = yield* TestHost.mount(Host, {})
+        const direct = placement === "placed directly"
+        const shown = direct ? "" : "toggle"
+        const setOpen = (open: boolean) =>
+          direct
+            ? Effect.sync(() => root.send(open))
+            : Effect.sync(() =>
+              Locator.fire(root.get(Locator.text("toggle")), "click")
+            )
+        if (!direct) {
+          assert.strictEqual(root.text(), shown)
+          yield* setOpen(true)
+          yield* drain
+        }
+        assert.strictEqual(root.text(), `${shown}loading1`)
+        yield* setOpen(false)
+        yield* drain
+        assert.strictEqual(root.text(), shown)
+        assert.lengthOf(root.pending(), 1)
+        yield* setOpen(true)
+        yield* drain
+        assert.strictEqual(root.text(), `${shown}loading1`)
+        yield* setOpen(false)
+        yield* drain
+        load()
+        yield* TestHost.settle
+        yield* setOpen(true)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), `${shown}page:a`)
+        assert.deepStrictEqual(lifecycle(root, "/Host/LazyPage[p]"), [
+          "Mounted"
+        ])
+      }))
+  )
+
+  it.effect.each(
+    [
+      "first shown by its receiver",
+      "shown again by its receiver",
+      "patched by its author"
+    ] as const
+  )(
+    "fails the author when a kept lazy child's fallback, %s, renders a child at a path the author's own child holds",
+    (when) =>
+      provideHost(Effect.gen(function*() {
+        let clash = when === "first shown by its receiver"
+        const Spinner = Component.define({
+          name: "Spinner",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.text("loading")
+        })
+        const LazyPage = Component.lazy(
+          "LazyPage",
+          () => new Promise<typeof Page>(() => {})
+        )
+        const Panel = Component.define({
+          name: "Panel",
+          model: Schema.Boolean,
+          message: Schema.Literal("toggle"),
+          slots: ["body"]
+        }).make({
+          init: () => when !== "first shown by its receiver",
+          update: ($) => !$.model,
+          view: (h, open) =>
+            h.el(
+              "section",
+              h.el("button").on("click", "toggle").children("toggle"),
+              open ? h.slots.body : null
+            )
+        })
+        const Host = Component.define({
+          name: "Host",
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
+          init: () => false,
+          update: (_, bumped) => bumped,
+          view: (h) =>
+            h.keepAlive((s) =>
+              h.el(
+                "main",
+                Panel(h, {
+                  slots: {
+                    body: LazyPage(s, {
+                      key: "p",
+                      props: { title: "a" },
+                      fallback: () =>
+                        clash
+                          ? Spinner(h, {})
+                          : Spinner(h, { key: "initial" })
+                    })
+                  }
+                }),
+                Spinner(h, {})
+              )
+            )
+        })
+        const drain = TestHost.TestHost.useSync((host) =>
+          host.drain(host.budget)
+        )
+        const root = yield* TestHost.mount(Host, {})
+        const toggle = Effect.sync(() =>
+          Locator.fire(root.get(Locator.text("toggle")), "click")
+        )
+        if (when === "patched by its author") {
+          clash = true
+          root.send(true)
+        } else if (when === "shown again by its receiver") {
+          yield* toggle
+          yield* drain
+          clash = true
+        }
+        if (when !== "patched by its author") yield* toggle
+        yield* drain
+        const failed = root.log().filter((entry): entry is MessageLog.Failed =>
+          entry._tag === "Failed" && entry.path === "/Host"
+        )
+        assert.lengthOf(failed, 1)
+        assert.include(
+          Cause.pretty(failed[0].cause),
+          "/Host renders two children at Spinner[], in the fallback of LazyPage[p]"
+        )
+      }))
+  )
 
   it.effect("preload loads the module before a child renders", () =>
     provideHost(Effect.gen(function*() {

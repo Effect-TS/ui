@@ -818,7 +818,7 @@ const PageTypeId = "~@effect/ui/Router/Page" as const
  */
 export interface Page<out R = never> {
   readonly [PageTypeId]: { readonly _R: Types.Covariant<R> }
-  readonly component: Component.AnyRoot
+  readonly component: Component.Any
   readonly props: unknown
 }
 
@@ -867,7 +867,7 @@ interface ErasedPage {
  * @category subscriptions
  * @since 0.1.0
  */
-export const page = <C extends Component.AnyRoot>(
+export const page = <C extends Component.Any>(
   component: C & PageInput<C>,
   ...props: {} extends Component.Props<C> ? [props?: Component.Props<C>]
     : [props: Component.Props<C>]

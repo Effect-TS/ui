@@ -20,21 +20,19 @@ const imports = [
   `import { Schema } from "effect"`
 ].join("\n")
 
-const keepAliveField = (keepAlive) => keepAlive ? "\n  keepAlive: true," : ""
-
 const importsOnly = `${imports}
 
 export const used = [Component.define, UiSchema.TaggedEnum, Html, Schema.String]
 `
 
-const leaves = (keepAlive) => {
+const leaves = () => {
   const out = [imports, ""]
   for (let i = 0; i < 100; i++) {
     out.push(
       `const M${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
 const E${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 export const C${i} = Component.define({
-  name: "C${i}",${keepAliveField(keepAlive)}
+  name: "C${i}",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ draft: Schema.String }),
   message: M${i},
@@ -77,9 +75,7 @@ const owner = (keepAlive) => {
       ${placed.join(",\n      ")}
     )`
   return `${imports}
-import { ${names.join(", ")} } from "./${
-    keepAlive ? "keepAlive" : "inline"
-  }-leaves.ts"
+import { ${names.join(", ")} } from "./leaves.ts"
 
 const OwnerMessage = UiSchema.TaggedEnum({ ChildSaved: { id: Schema.String } })
 export const Owner = Component.define({
@@ -110,7 +106,7 @@ const deep = (keepAlive, depth) => {
       `const LM${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Below: { id: Schema.String } })
 const LE${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 export const L${i} = Component.define({
-  name: "L${i}",${keepAliveField(keepAlive)}
+  name: "L${i}",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ draft: Schema.String }),
   message: LM${i},
@@ -135,14 +131,13 @@ const generate = (dir) => {
   fs.mkdirSync(dir, { recursive: true })
   const files = {
     "imports.ts": importsOnly,
-    "inline-leaves.ts": leaves(false),
+    "leaves.ts": leaves(),
     "inline-owner.ts": owner(false),
     "inline-deep8.ts": deep(false, 8),
     "inline-deep16.ts": deep(false, 16)
   }
   if (!values.main) {
     Object.assign(files, {
-      "keepAlive-leaves.ts": leaves(true),
       "keepAlive-owner.ts": owner(true),
       "keepAlive-deep8.ts": deep(true, 8),
       "keepAlive-deep16.ts": deep(true, 16)
@@ -228,8 +223,8 @@ const shapes = values.main ? ["inline"] : ["inline", "keepAlive"]
 const measure = (f) =>
   Object.fromEntries(shapes.map((shape) => [shape, f(shape)]))
 const measures = {
-  leaves: measure((shape) => n(`${shape}-leaves`)),
-  owner: measure((shape) => n(`${shape}-owner`) - n(`${shape}-leaves`)),
+  leaves: measure(() => n("leaves")),
+  owner: measure((shape) => n(`${shape}-owner`) - n("leaves")),
   deep8: measure((shape) => n(`${shape}-deep8`) - n("imports")),
   deepRatio: measure((shape) =>
     (n(`${shape}-deep16`) - n("imports")) / (n(`${shape}-deep8`) - n("imports"))

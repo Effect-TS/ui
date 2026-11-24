@@ -1,7 +1,6 @@
-import { Component, Feature, Router, UiSchema, type View } from "@effect/ui"
+import { Component, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Scene } from "@effect/ui/testing"
-import { Layer, Schema } from "effect"
+import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 const NoteId = Schema.String.pipe(Schema.brand("NoteId"))
@@ -15,7 +14,6 @@ const EditorEvents = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 
 const NoteEditor = Component.define({
   name: "NoteEditor",
-  keepAlive: true,
   props: Schema.Struct({ noteId: Schema.String }),
   model: Schema.String,
   message: EditorMessage,
@@ -29,19 +27,6 @@ const NoteEditor = Component.define({
 
 const ProfileForm = Component.define({
   name: "ProfileForm",
-  keepAlive: true,
-  model: Schema.String,
-  message: Schema.Never
-})
-  .make({
-    init: () => "",
-    update: ($) => $.model,
-    view: (h, text) => h.el("p", text)
-  })
-
-const BillingForm = Component.define({
-  name: "BillingForm",
-  keepAlive: true,
   model: Schema.String,
   message: Schema.Never
 })
@@ -83,50 +68,6 @@ declare const id: string
 declare const condition: boolean
 
 describe("keepAlive", () => {
-  it("defines a KeepAliveComponent with keepAlive: true and a Component without it", () => {
-    expect(NoteEditor).type.toBeAssignableTo<
-      Component.KeepAlive<{ readonly noteId: string }, typeof EditorEvents.Type>
-    >()
-    expect(Tooltip).type.toBeAssignableTo<Component.Any>()
-    expect(NoteEditor).type.not.toBeAssignableTo<Component.Any>()
-    expect(NoteEditor).type.toBeAssignableTo<Component.KeepAlive.Any>()
-    expect<Component.Props<typeof NoteEditor>>().type.toBe<
-      { readonly noteId: string }
-    >()
-    expect<Component.Model<typeof NoteEditor>>().type.toBe<string>()
-  })
-
-  it("keeps a provided component kept alive or not", () => {
-    const erasedKeepAlive: Component.KeepAlive.Any = ProfileForm
-    const erased: Component.Any = Tooltip
-    expect(Component.provide(erasedKeepAlive, Layer.empty)).type.toBe<
-      Component.KeepAlive.Any
-    >()
-    expect(Component.provide(erased, Layer.empty)).type.toBe<Component.Any>()
-    expect(Component.provide(ProfileForm, Layer.empty)).type.toBe<
-      typeof ProfileForm
-    >()
-  })
-
-  it("defaults keepAlive to false and rejects a maybe-absent true", () => {
-    const options = { model: Schema.Null, message: Schema.Never }
-    expect(
-      Component.define({ name: "Off", keepAlive: false, ...options }).keepAlive
-    ).type.toBe<false>()
-    // @ts-expect-error is not assignable to type '{ readonly keepAlive: true; }'
-    const kept: { readonly keepAlive: true } = Component.define({
-      name: "Kept",
-      ...options
-    })
-    void kept
-    Component.define({
-      name: "Maybe",
-      // @ts-expect-error Type 'undefined' is not assignable to type 'true'
-      keepAlive: condition ? true : undefined,
-      ...options
-    })
-  })
-
   it("writes keep-alive children inside h.keepAlive, and returns what the content returns", () => {
     expect(h.keepAlive((s) => ProfileForm(s, {}))).type.toBe<
       View.Child<Message, never>
@@ -177,9 +118,10 @@ describe("keepAlive", () => {
     h.keepAlive(({ model }) => model.nope, (s) => ProfileForm(s, {}))
   })
 
-  it("rejects a keep-alive component called with h", () => {
-    // @ts-expect-error "written inside h.keepAlive((s) => ...)"
-    ProfileForm(h, {})
+  it("calls any component with h, whose key isn't checked", () => {
+    expect(ProfileForm(h, {})).type.toBe<View.Child<Message, never>>()
+    expect(NoteEditor(h, { key: id, props: { noteId: id } })).type.not
+      .toRaiseError()
   })
 
   it("needs a predicate for a key that isn't a literal", () => {
@@ -243,65 +185,20 @@ describe("keepAlive", () => {
     h.keepAlive((s) => expect(s).type.not.toHaveProperty("keepAlive"))
   })
 
-  it("calls a union of keep-alive components", () => {
-    const either = condition ? ProfileForm : BillingForm
+  it("calls a union of components", () => {
+    const either = condition ? ProfileForm : Tooltip
     expect(h.keepAlive((s) => either(s, {}))).type.toBe<
       View.Child<Message, never>
     >()
   })
 
-  it("mounts a keep-alive component as a root, in a Scene or as a route's page", () => {
-    expect(Scene.start(ProfileForm, {})).type.not.toRaiseError()
-    expect(Router.page(NoteEditor, { noteId: "a" })).type.not.toRaiseError()
-  })
-
-  it("types a component whose keepAlive isn't known to be false as keep-alive", () => {
-    const options = {
-      name: "Wide" as const,
-      keepAlive: true,
-      model: Schema.Null,
-      message: Schema.Never
-    }
-    const Wide = Component.define(options).make({
-      init: () => null,
-      update: ($) => $.model,
-      view: (h) => h.el("p")
-    })
-    // @ts-expect-error "written inside h.keepAlive((s) => ...)"
-    Wide(h, {})
-    expect(h.keepAlive((s) => Wide(s, {}))).type.not.toRaiseError()
-    class Notes
-      extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) })
-    {}
-    // @ts-expect-error "written inside h.keepAlive((s) => ...)"
-    Notes.toLayer(Wide)
-    const found: unknown = Wide
-    if (Component.isComponent(found)) {
-      // @ts-expect-error This expression is not callable
-      found(h, {})
-      if (!found.definition.keepAlive) {
-        // @ts-expect-error This expression is not callable
-        found(h, {})
-      }
-    }
-  })
-
-  it("rejects keepAlive: true on a headless component", () => {
-    const Def = Component.define({
+  it("calls a headless component with s as with h", () => {
+    const Headless = Component.define({
       name: "Headless",
-      keepAlive: true,
       model: Schema.Null,
       message: Schema.Never
-    })
-    // @ts-expect-error No overload matches this call
-    Def.make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
-  })
-
-  it("rejects a keep-alive implementation of a feature", () => {
-    class Notes
-      extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) })
-    {}
-    // @ts-expect-error "written inside h.keepAlive((s) => ...)"
-    Notes.toLayer(ProfileForm)
+    }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
+    expect(h.keepAlive((s) => Headless(s, { view: () => s.el("p") }))).type.not
+      .toRaiseError()
   })
 })

@@ -431,10 +431,9 @@ describe("Component", () => {
       })
     })
 
-    it("keeps a keep-alive component's call: it takes the s of h.keepAlive, and not h", () => {
-      const Kept = Component.define({
-        name: "Kept",
-        keepAlive: true,
+    it("takes h, or the s of h.keepAlive with the key it checks", () => {
+      const Plain = Component.define({
+        name: "Plain",
         model: Schema.Null,
         message: Schema.Never
       })
@@ -443,20 +442,24 @@ describe("Component", () => {
           update: ($) => $.model,
           view: (h) => h.el("p")
         })
-      const LazyKeepAlive = Component.lazy(
-        "LazyKeepAlive",
-        () => Promise.resolve(Kept)
+      const LazyPlain = Component.lazy(
+        "LazyPlain",
+        () => Promise.resolve(Plain)
       )
-      expect(LazyKeepAlive).type.toBe<Component.Lazy.KeepAlive<{}, never>>()
-      expect(LazyKeepAlive).type.toBeAssignableTo<Component.Lazy.Any>()
-      ParentDef.view((h) => {
-        expect(LazyKeepAlive).type.not.toBeCallableWith(h, { key: "s" })
-        return h.keepAlive((s) => {
-          expect(LazyKeepAlive(s, { key: "s", fallback: () => h.el("p") })).type
-            .toBe<View.Child<ParentMessage, never>>()
-          return LazyKeepAlive(s, { key: "s" })
-        })
-      })
+      expect(LazyPlain).type.toBe<Component.Lazy<{}, never>>()
+      ParentDef.view((h) =>
+        h.el(
+          "div",
+          LazyPlain(h, { key: String(1) }),
+          h.keepAlive((s) => {
+            expect(LazyPlain(s, { key: "s", fallback: () => h.el("p") })).type
+              .toBe<View.Child<ParentMessage, never>>()
+            // @ts-expect-error A keep-alive child whose key isn't a literal needs a predicate
+            LazyPlain(s, { key: String(1) })
+            return LazyPlain(s, { key: "s" })
+          })
+        )
+      )
     })
 
     it("takes no headless component", () => {
