@@ -85,7 +85,7 @@ export const pending: {
   "html/HtmlFiles.test.ts": {},
   "Scoped.test.ts": {
     "scoped children > a hidden tab keeps its draft and its save, gets messages, and emits through the last onEmit":
-      "kept children (step 4, blocked on a seam), head (step 6)",
+      "kept children (step 4, blocked on a seam)",
     "scoped children > an event on a node of a kept child reaches the child":
       "kept children (step 4, blocked on a seam)",
     "scoped lists > ends a row once its item is deleted, and keeps one the view filters out":
