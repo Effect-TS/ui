@@ -3489,7 +3489,7 @@ export const define = <
       ? shares.collects
       : undefined,
     restore: options.restore,
-    // What it returns is the function given, or a record as one, with `$` bound to the message it's called with.
+    // A slice is the function given, with `$` bound to the message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
       const update = toUpdateFn(args[args.length - 1])
       return ($: Update<any, any, any, any>, msg: unknown) =>
