@@ -162,19 +162,19 @@ describe("Combobox", () => {
       init: () => null,
       update: ($) => $.model,
       view: (h) => {
-        // @ts-expect-error Property 'inputValue' is missing
         Combobox(h, {
           key: "c",
+          // @ts-expect-error Property 'inputValue' is missing
           props: { open: false, items },
           view: (combobox) => combobox.input(h.input)
         })
         Combobox(h, {
           key: "d",
-          // @ts-expect-error Type '(item: string) => boolean' is not assignable
           props: {
             open: false,
             inputValue: "",
             items,
+            // @ts-expect-error Type '(item: string) => boolean' is not assignable
             filter: (item: string) => item !== ""
           },
           view: (combobox) => combobox.input(h.input)

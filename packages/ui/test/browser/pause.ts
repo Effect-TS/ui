@@ -95,13 +95,13 @@ const Scene = Component.define({
 
 Effect.runFork(
   Effect.gen(function*() {
-    const roots: Array<BrowserHost.Pausable> = []
+    const roots: Array<BrowserHost.Controllable> = []
     const root = yield* BrowserHost.mountEffect(
       Scene,
       {},
       document.getElementById("root")!
     ).pipe(
-      Effect.provideService(BrowserHost.Pausables, {
+      Effect.provideService(BrowserHost.Controllables, {
         register: (root) => (roots.push(root), () => {})
       })
     )

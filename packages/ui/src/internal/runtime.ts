@@ -738,6 +738,11 @@ export interface Root {
   readonly emitted: ReadonlyArray<unknown>
   readonly model: () => unknown
   readonly send: (message: unknown) => void
+  readonly find: (born: number) => Instance | undefined
+  readonly dispatch: (
+    inst: Instance,
+    message: unknown
+  ) => Effect.Effect<Dispatched>
   /** The Commands still running, queued, awaiting or stopping anywhere in the tree. */
   readonly pending: () => ReadonlyArray<Pending>
   readonly loads: () => ReadonlyArray<Load>
@@ -770,6 +775,14 @@ export interface Root {
   /** On the server: settles what's left synchronously and stops the tree. Returns its cache, if it made one. */
   readonly freeze: () => queryCore.Cache | undefined
 }
+
+export type Dispatched =
+  | { readonly _tag: "Updated"; readonly seq: number }
+  | { readonly _tag: "Failed"; readonly seq: number }
+  | {
+    readonly _tag: "Ignored"
+    readonly reason: "closed" | "waiting" | "frozen" | "unchanged"
+  }
 
 /** The options `start` takes. */
 interface Options {
@@ -2694,8 +2707,8 @@ const setup = (
     name?: string,
     update?: MessageLog.Failed["update"],
     issued?: MessageLog.Issued
-  ) => {
-    if (inst.closed) return
+  ): number | undefined => {
+    if (inst.closed) return undefined
     const failedSeq = record(inst, {
       _tag: "Failed",
       props: inst.props,
@@ -2722,7 +2735,7 @@ const setup = (
     const parent = inst.parent ?? keptAuthor(inst)
     if (parent === undefined) {
       showRootFallback(inst, cause)
-      return
+      return failedSeq
     }
     const onFailure = inst.onFailure
     if (onFailure !== undefined) {
@@ -2744,6 +2757,7 @@ const setup = (
       })
     }
     markDirty(parent)
+    return failedSeq
   }
 
   let rootFallbackNodes: Array<unknown> = []
@@ -3289,10 +3303,20 @@ const setup = (
   const dispatchTo = (
     inst: Instance,
     message: unknown,
-    source: MessageLog.Source
+    source: MessageLog.Source,
+    report?: (outcome: Dispatched) => void
   ) =>
     receive(inst, () => {
-      if (inst.closed || inst.waiting || frozen) return
+      const ignored = inst.closed
+        ? "closed"
+        : inst.waiting
+        ? "waiting"
+        : frozen
+        ? "frozen"
+        : undefined
+      if (ignored !== undefined) {
+        return report?.({ _tag: "Ignored", reason: ignored })
+      }
       const component = inst.component
       let next: ReturnType<typeof component.update>
       let shared: Component.SharedRecord | undefined
@@ -3308,14 +3332,17 @@ const setup = (
         )
       } catch (error) {
         // No `Update` is logged for it, so the failure carries the message.
-        return failInstance(inst, Cause.die(error), "update", undefined, {
+        const seq = failInstance(inst, Cause.die(error), "update", undefined, {
           message,
           source
         })
+        return report?.({ _tag: "Failed", seq: seq ?? -1 })
       } finally {
         busy--
       }
-      if (next === undefined) return
+      if (next === undefined) {
+        return report?.({ _tag: "Ignored", reason: "unchanged" })
+      }
       const bound = queryCore.boundOf(component)
       const entrySeq = record(inst, {
         _tag: "Update",
@@ -3337,6 +3364,7 @@ const setup = (
         ...(shared === undefined ? undefined : { shared })
       })
       apply(inst, next, entrySeq, false)
+      report?.({ _tag: "Updated", seq: entrySeq })
     })
 
   /**
@@ -3911,7 +3939,8 @@ const setup = (
     if (layer.failedEarly !== undefined) {
       layer.constructing = false
       layer.logEarly()
-      return failInstance(inst, layer.failedEarly, "layer")
+      failInstance(inst, layer.failedEarly, "layer")
+      return
     }
 
     // Hydration: an instance the server rendered with its services, whose provided Layer is still
@@ -9263,6 +9292,34 @@ const setup = (
     emitted: rootEmitted,
     model: () => root.failure === undefined ? root.model : undefined,
     send: (message) => root.dispatch(message, { _tag: "Dispatch" }),
+    find: (born) => {
+      const visit = (inst: Instance): Instance | undefined => {
+        if (inst.closed || inst.left) return undefined
+        if (inst.born === born) {
+          return inst.component === outletComponent
+            ? undefined
+            : inst
+        }
+        for (const child of inst.children) {
+          const found = visit(child)
+          if (found !== undefined) return found
+        }
+        const table = keptLive > 0 ? keptTables.get(inst) : undefined
+        if (table === undefined) return undefined
+        for (const entry of table.children.values()) {
+          if (entry.inner._tag !== "Child" || entry.at !== undefined) continue
+          const found = visit(entry.inner.inst)
+          if (found !== undefined) return found
+        }
+        return undefined
+      }
+      return visit(root)
+    },
+    dispatch: (inst, message) =>
+      Effect.callback<Dispatched>((resume) => {
+        dispatchTo(inst, message, { _tag: "Dispatch" }, (outcome) =>
+          resume(Effect.succeed(outcome)))
+      }),
     pending: () => pendingOf(root),
     loads,
     get cache() {

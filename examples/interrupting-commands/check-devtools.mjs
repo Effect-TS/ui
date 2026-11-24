@@ -1,3 +1,6 @@
+import { Effect } from "effect"
+import { McpClient, McpProtocol } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
 import { chromium } from "playwright"
 import { createServer } from "vite"
 
@@ -13,9 +16,107 @@ await server.listen()
 const url = server.resolvedUrls.local[0]
 const browser = await chromium.launch({ executablePath })
 const failures = []
+let checks = 0
 const expect = (ok, what, detail) => {
+  checks++
   if (!ok) failures.push(what + " " + JSON.stringify(detail))
 }
+
+const checkMcp = (frame, scene) =>
+  Effect.runPromise(
+    Effect.gen(function*() {
+      const transport = yield* McpClient.http({
+        url: "http://127.0.0.1:4774/mcp",
+        protocol: McpProtocol.v2025_11_25
+      }).pipe(Effect.provide(FetchHttpClient.layer))
+      const client = yield* McpClient.make({
+        name: "check-devtools",
+        version: "0"
+      }).pipe(Effect.provideService(McpClient.Transport, transport))
+      const tools = new Map(
+        (yield* client.listTools()).map((tool) => [tool.name, tool])
+      )
+      const call = (name, args) =>
+        client.callTool({ tool: tools.get(name), arguments: args }).pipe(
+          Effect.map((result) => {
+            if (result.isError) {
+              throw new Error(name + ": " + result.content?.[0]?.text)
+            }
+            return result.structuredContent.result
+          })
+        )
+
+      const sessions = yield* call("list_sessions")
+      const live = sessions.filter((session) => session.connected)
+      expect(
+        live.length === 1 && live[0].app === "Uploads" && live[0].controllable,
+        "list_sessions has the page as one connected, controllable session",
+        sessions
+      )
+      const [root] = yield* call("list_instances")
+
+      const starts = yield* call("list_entries", { tag: "ClickedStartUpload" })
+      const first = starts.rows[0].seq
+      const shown = yield* call("show_entry", { seq: first })
+      yield* Effect.promise(() =>
+        frame.locator(".paused-label", { hasText: "Paused at #" + first })
+          .waitFor({ timeout: 5_000 })
+      )
+      const painted = yield* Effect.promise(() => scene())
+      expect(
+        shown.paused === first && !painted.liveShown &&
+          painted.copy?.length === 1,
+        "show_entry paints the page at the entry and the panel shows it as paused",
+        { shown, painted }
+      )
+      yield* Effect.promise(() =>
+        frame.getByRole("button", { name: "Resume the live page" }).click({
+          timeout: 5_000
+        })
+      )
+      yield* Effect.sleep("200 millis")
+      const afterHuman = (yield* call("list_sessions")).find((session) =>
+        session.connected
+      )
+      expect(
+        afterHuman.paused === undefined,
+        "a person's Resume ends an agent's pause",
+        afterHuman
+      )
+
+      const cancelled = yield* call("dispatch", {
+        instance: root.instance,
+        messages: [{ _tag: "ClickedCancelUpload", uploadId: 1 }]
+      })
+      const cancel = yield* call("get_entry", {
+        seq: cancelled.outcomes[0]?.seq,
+        path: ["message"]
+      })
+      yield* Effect.promise(() =>
+        page.getByRole("button", { name: "Restart upload 1" }).waitFor({
+          timeout: 5_000
+        })
+      )
+      expect(
+        cancelled.applied === 1 && cancel._tag === "ClickedCancelUpload",
+        "dispatch cancels the upload and returns the seq of its Update",
+        { cancelled, cancel }
+      )
+
+      const started = yield* call("dispatch", {
+        instance: root.instance,
+        messages: [{ _tag: "ClickedStartUpload" }]
+      })
+      const since = started.outcomes[0].seq - 1
+      const waited = yield* call("wait", { since, timeout: 10_000 })
+      const state = yield* call("get_state", { instance: root.instance })
+      expect(
+        waited.settled && state.model.uploads.at(-1)?.status === "Done",
+        "wait returns once the dispatched upload's Command has ended",
+        { waited, uploads: state.model.uploads }
+      )
+    }).pipe(Effect.scoped)
+  )
 
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } })
 page.on("pageerror", (error) => failures.push("page error " + String(error)))
@@ -118,6 +219,8 @@ try {
   await page.getByRole("button", { name: "Cancel upload 1" }).waitFor({
     timeout: 5_000
   })
+
+  await checkMcp(frame, scene)
 } catch (error) {
   failures.push(String(error).split("\n")[0])
 } finally {
@@ -127,7 +230,7 @@ try {
 for (const failure of failures) console.log(failure)
 console.log(
   failures.length === 0
-    ? "devtools: ok"
+    ? "devtools: " + checks + " checks ok"
     : "devtools: " + failures.length + " failed"
 )
 process.exitCode = failures.length === 0 ? 0 : 1

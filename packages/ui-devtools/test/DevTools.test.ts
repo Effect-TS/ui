@@ -450,7 +450,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(app.style.getPropertyValue("display"), "")
     }))
 
-  it.live("moves the pause to the root shown, and drops it when the paused root unmounts", () =>
+  it.live("keeps the panel on the paused root, and drops the pause when that root unmounts", () =>
     Effect.gen(function*() {
       const { app, root, services } = yield* mount("closed")
       yield* open(root)
@@ -468,19 +468,22 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
       yield* settle
       yield* click(oldest(root, /Update UpdatedDraft$/))
-      assert.strictEqual(app.style.getPropertyValue("display"), "")
-      assert.strictEqual(other.style.getPropertyValue("display"), "none")
+      assert.strictEqual(app.style.getPropertyValue("display"), "none")
+      assert.strictEqual(other.style.getPropertyValue("display"), "")
       assert.strictEqual(inert(), 1)
 
       yield* click(
         HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
       )
-      assert.strictEqual(other.style.getPropertyValue("display"), "")
+      assert.strictEqual(app.style.getPropertyValue("display"), "")
       assert.strictEqual(inert(), 0)
 
+      yield* click(oldest(root, /Update UpdatedDraft$/))
       yield* click(
         HtmlLocator.getByRole(root, "button", { name: "Time travel" })
       )
+      assert.strictEqual(other.style.getPropertyValue("display"), "none")
+      assert.strictEqual(app.style.getPropertyValue("display"), "")
       assert.strictEqual(inert(), 1)
       yield* Scope.close(scope, Exit.void)
       yield* settle

@@ -89,8 +89,8 @@ describe("Validation.make", () => {
       name: { value: "string" }
     })
     // A rule can't read a field the form doesn't have.
-    // @ts-expect-error Property 'missing' does not exist
     Validation.make({
+      // @ts-expect-error Property 'missing' does not exist
       name: { rules: [[(_, values) => values.missing === "", "x"]] }
     })
   })

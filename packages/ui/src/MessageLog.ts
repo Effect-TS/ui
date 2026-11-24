@@ -1002,7 +1002,7 @@ export const fanoutAll = (logs: ReadonlyArray<MessageLog>): MessageLog => {
  * **Details**
  *
  * The other services the Layers provide are kept, such as the
- * `BrowserHost.Pausables` that `DevTools.layer` provides. When two Layers
+ * `BrowserHost.Controllables` that `DevTools.layer` provides. When two Layers
  * provide the same one, the later Layer's wins.
  *
  * @stability experimental

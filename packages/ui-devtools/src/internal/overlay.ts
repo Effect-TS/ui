@@ -19,6 +19,7 @@ import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
+import { Paused } from "./control.ts"
 import * as Read from "./read.ts"
 
 export interface Feed {
@@ -26,7 +27,7 @@ export interface Feed {
   readonly origin: (session: string) => number | undefined
   readonly changes: Stream.Stream<void>
   readonly paintable: (session: string, seq: number) => boolean
-  readonly pausing: () => boolean
+  readonly paused: () => typeof Paused.Type | undefined
   readonly open: boolean
 }
 
@@ -50,13 +51,6 @@ const Filter = Schema.Literals(["messages", "commands", "all"])
 const Pane = Schema.Literals(["timeline", "entry"])
 
 const OverlayProps = Schema.Struct({ feed: FeedSchema })
-
-const Paused = Schema.Struct({
-  session: Schema.String,
-  seq: Schema.Number,
-  fellBack: Schema.Array(Schema.String),
-  fallbacks: Schema.Array(Schema.String)
-})
 
 type OverlayProps = typeof OverlayProps.Type
 
@@ -257,9 +251,12 @@ const Placeholder = (h: H, value: MessageLog.Placeholder) =>
       "unserialisable " + value["~unserialisable"]
     )
 
-const sessionOf = (feed: Feed): Session | undefined => {
+const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
   const sessions = feed.inspector.sessions()
-  return sessions[sessions.length - 1]
+  const paused = model.paused?.session
+  return (paused === undefined
+    ? undefined
+    : sessions.find((session) => session.id === paused)) ?? sessions.at(-1)
 }
 
 const shows = (model: OverlayModel, session: string, seq: number) =>
@@ -1254,7 +1251,7 @@ const Inspected = (
 
 const Panel = (h: H, model: OverlayModel) => {
   const feed = h.props.feed
-  const session = sessionOf(feed)
+  const session = sessionOf(feed, model)
   if (session === undefined) {
     return h.div.class("panel", "empty").attr("role", "dialog").attr(
       "aria-label",
@@ -1341,10 +1338,18 @@ const Panel = (h: H, model: OverlayModel) => {
   )
 }
 
+const synced = (model: OverlayModel, feed: Feed) => {
+  const paused = feed.paused() ?? null
+  return paused?.session === model.paused?.session &&
+      paused?.seq === model.paused?.seq
+    ? {}
+    : { paused }
+}
+
 const resumePage = () => Paint.make({ session: "", seq: null })
 
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
-  const session = sessionOf(feed)
+  const session = sessionOf(feed, model)
   return model.paused !== null && session !== undefined &&
       feed.paintable(session.id, seq)
     ? [Paint.make({ session: session.id, seq })]
@@ -1382,9 +1387,7 @@ export const Overlay = Component.define({
         ...($.model.reveal === null
           ? {}
           : { reveal: null, pinned: $.model.atStart, pins: increment }),
-        ...($.model.paused === null || $.props.feed.pausing()
-          ? {}
-          : { paused: null })
+        ...synced($.model, $.props.feed)
       }),
     ClickedOpen: ($) =>
       $.evolve({ open: true, atStart: true, ...following }).run(
@@ -1443,16 +1446,21 @@ export const Overlay = Component.define({
         : $.run(Paint.make({ session, seq })),
     ScrubbedPage: ($, { seq }) =>
       $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment })
-        .run(Paint.make({ session: sessionOf($.props.feed)?.id ?? "", seq })),
+        .run(
+          Paint.make({
+            session: sessionOf($.props.feed, $.model)?.id ?? "",
+            seq
+          })
+        ),
     ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
     ClickedClear: ($) => {
-      const session = sessionOf($.props.feed)
+      const session = sessionOf($.props.feed, $.model)
       return $.model.paused !== null || session === undefined
         ? $.model
         : $.run(Clear.make({ session: session.id }))
     },
     Cleared: ($) => {
-      const session = sessionOf($.props.feed)
+      const session = sessionOf($.props.feed, $.model)
       const hasInstance = $.model.instance !== null &&
         session?.instances().some((instance) =>
             instance.instance === $.model.instance
@@ -1486,7 +1494,7 @@ export const Overlay = Component.define({
           ).children(
             "Effect UI",
             h.span.class("launcher-count").children(
-              String(sessionOf(h.props.feed)?.entries().length ?? 0)
+              String(sessionOf(h.props.feed, model)?.entries().length ?? 0)
             )
           ),
           model.paused === null ? null : PausedBadge(h, model.paused.seq)

@@ -228,8 +228,8 @@ describe("Component queries", () => {
       queries: {
         user: {
           query: GetUser,
-          // @ts-expect-error Property 'user' does not exist
           args: ({ queries }) =>
+            // @ts-expect-error Property 'user' does not exist
             AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
         },
         team: {
@@ -274,10 +274,10 @@ describe("Component queries", () => {
       model: Schema.Struct({}),
       message: Message,
       queries: {
-        // @ts-expect-error not assignable
         user: {
           query: GetUser,
           args: () => ({ id: "1" }),
+          // @ts-expect-error not assignable
           onChange: () => "not a message"
         }
       }
@@ -307,10 +307,10 @@ describe("debounce", () => {
             return props.id === "" ? undefined : { id: props.id }
           }
         },
-        // @ts-expect-error Type 'number' is not assignable to type 'string'
         team: {
           queryMany: GetTeam,
           debounce: "300 millis",
+          // @ts-expect-error Type 'number' is not assignable to type 'string'
           args: () => [{ id: 1 }]
         }
       }
@@ -498,8 +498,8 @@ describe("Keyed queries", () => {
       queries: {
         users: {
           queryMany: GetUser,
-          // @ts-expect-error Property 'users' does not exist
           args: ({ queries }) =>
+            // @ts-expect-error Property 'users' does not exist
             queries.users === undefined ? [] : [{ id: "1" }]
         },
         team: {
@@ -524,10 +524,10 @@ describe("Keyed queries", () => {
     const base = { name: "Keyed", scoped: false, model, message: ListMessage }
     Component.define({
       ...base,
-      // @ts-expect-error is missing the following properties from type 'readonly { readonly id: string; }[]'
       queries: {
         users: {
           queryMany: GetUser,
+          // @ts-expect-error is missing the following properties from type 'readonly { readonly id: string; }[]'
           args: ({ model }) => ({ id: model.ids[0] })
         }
       }
@@ -593,8 +593,8 @@ describe("Keyed queries", () => {
       ])
       // @ts-expect-error not assignable
       .loaded("users", { id: "1", name: "Ann", teamId: "t" })
-      // @ts-expect-error not assignable
       .loadedMany("users", [{
+        // @ts-expect-error not assignable
         args: { id: 1 },
         value: { id: "1", name: "Ann", teamId: "t" }
       }])
