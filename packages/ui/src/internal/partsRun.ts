@@ -1,5 +1,5 @@
 import { checkLayers, dev } from "#dev"
-import type * as View from "../View.ts"
+import * as View from "../View.ts"
 import * as Kernel from "./kernel.ts"
 
 interface Layer {
@@ -86,32 +86,36 @@ export const layer = (
   view: View.Element<any, any>
 ): View.Element<any, any> => {
   const owned = view.owned ?? []
-  const mount = new Mounts(view.mount as any, owned) as unknown as View.Mount<
-    any
-  >
+  const mount = view.mount !== undefined ||
+      owned.some((layer) => layer.mount !== undefined)
+    ? new Mounts(view.mount as any, owned) as unknown as View.Mount<any>
+    : undefined
   if (owned.length === 0) {
-    return { ...view, mount }
+    return mount === view.mount ? view : { ...view, mount }
   }
-  const layers = [
-    ...owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length),
-    view
-  ]
+  const layers = owned.length > 1
+    ? [
+      ...owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length),
+      view
+    ]
+    : [owned[0]!, view]
   if (dev) checkLayers(inst, layers)
-  const handlers: Record<string, Layered> = {}
-  const options: Record<string, Record<string, unknown>> = {}
+  let handlers: Record<string, Layered> | undefined
+  let options: Record<string, Record<string, unknown>> | undefined
   for (const layer of layers) {
     const target = layer === view
       ? inst
       : (layer as View.Owned).owner as Kernel.Instance
     for (const event in layer.handlers) {
-      ;(handlers[event] ??= new Layered()).layers.push({
+      ;(handlers ??= {})[event] ??= new Layered()
+      handlers[event]!.layers.push({
         inst: target,
         handler: layer.handlers[event],
         prevents: layer.eventOptions[event]?.preventDefault === true
       })
     }
     for (const event in layer.eventOptions) {
-      const merged = options[event] ??= {}
+      const merged = (options ??= {})[event] ??= {}
       const option = layer.eventOptions[event] as Record<string, unknown>
       for (const key in option) {
         const value = option[key]
@@ -123,7 +127,12 @@ export const layer = (
       }
     }
   }
-  return { ...view, handlers: handlers as any, eventOptions: options, mount }
+  return {
+    ...view,
+    handlers: (handlers ?? View.noFields) as any,
+    eventOptions: options ?? View.noFields,
+    mount
+  }
 }
 
 /** @internal */

@@ -16,14 +16,19 @@ export const propsEqual = (a: unknown, b: unknown): boolean => {
   if (
     typeof a !== "object" || typeof b !== "object" || a === null || b === null
   ) return Equal.equals(a, b)
-  const keys = Object.keys(a)
-  if (keys.length !== Object.keys(b).length) return false
-  for (const key of keys) {
+  let count = 0
+  for (const key in a) {
+    if (!Object.hasOwn(a, key)) continue
+    if (!Object.hasOwn(b, key)) return false
     const x = (a as any)[key]
     const y = (b as any)[key]
     if (x !== y && (differsPlainly(x, y) || !Equal.equals(x, y))) return false
+    count++
   }
-  return true
+  for (const key in b) {
+    if (Object.hasOwn(b, key)) count--
+  }
+  return count === 0
 }
 
 const isPrimitive = (u: unknown): boolean =>

@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
-import type * as View from "../../View.ts"
+import * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
 import { attributeName, svgTags } from "./elements.ts"
@@ -588,6 +588,14 @@ export const makeHost = (
     if (listening.has(name)) return
     listening.add(name)
     container.addEventListener(name, listener, true)
+    if (name === "click") listen("pointerdown")
+    else if (name === "drop") {
+      for (const targetEvent of dropTargetEvents) listen(targetEvent)
+      listen("dragstart")
+      listen("dragend")
+    } else if (name === "dragend") {
+      listen("dragstart")
+    }
   }
 
   const form = (node: globalThis.Node) => {
@@ -627,7 +635,7 @@ export const makeHost = (
     createElement(tag) {
       if (svgTags.has(tag)) return document.createElementNS(SVG, tag)
       const element = document.createElement(tag)
-      if (tag.length === 4 && element.localName === "form") form(element)
+      if (tag.length === 4 && tag.toLowerCase() === "form") form(element)
       return element
     },
     form,
@@ -647,7 +655,10 @@ export const makeHost = (
     },
     setAttr(node, name, value, previous) {
       const element = node as HTMLElement
-      const normalized = attributeName(name, element.namespaceURI === SVG)
+      let normalized = attributeName(name, false)
+      if (normalized !== name) {
+        normalized = attributeName(name, element.namespaceURI === SVG)
+      }
       if (normalized === undefined) return
       if (
         normalized !== "style" || element.style === undefined ||
@@ -739,18 +750,11 @@ export const makeHost = (
       if (first) (node as Node).$r = record
       const { eventOptions, handlers } = record.v as View.Element<any, any>
       for (const name in handlers) listen(name)
-      if (handlers.drop !== undefined) {
-        for (const name of dropTargetEvents) listen(name)
-      }
       if (
-        handlers.drop !== undefined || handlers.dragend !== undefined ||
-        eventOptions.dragstart !== undefined
+        eventOptions !== View.noFields && eventOptions.dragstart !== undefined
       ) {
         listen("dragstart")
         listen("dragend")
-      }
-      if (listening.has("click") || listening.has("pointerdown")) {
-        listen("pointerdown")
       }
     },
     insert(parent, node, before) {
@@ -773,9 +777,11 @@ export const makeHost = (
       for (const dialog of shown) {
         if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
       }
-      for (const dialog of inOrder([...modalWanted])) {
-        if (!dialog.isConnected) modalWanted.delete(dialog)
-        else if (!held) showDialog(dialog, "modal")
+      if (modalWanted.size > 0) {
+        for (const dialog of inOrder([...modalWanted])) {
+          if (!dialog.isConnected) modalWanted.delete(dialog)
+          else if (!held) showDialog(dialog, "modal")
+        }
       }
       for (const element of manualPopovers) {
         if (!element.isConnected) manualPopovers.delete(element)
@@ -783,11 +789,13 @@ export const makeHost = (
           popoversToShow.add(element)
         } else applyPopover(element, false)
       }
-      const popovers = inOrder([...popoversToShow])
-      popoversToShow.clear()
-      for (const element of popovers) {
-        if (held && !manualPopovers.has(element)) popoversToShow.add(element)
-        else applyPopover(element, true, true)
+      if (popoversToShow.size > 0) {
+        const popovers = inOrder([...popoversToShow])
+        popoversToShow.clear()
+        for (const element of popovers) {
+          if (held && !manualPopovers.has(element)) popoversToShow.add(element)
+          else applyPopover(element, true, true)
+        }
       }
     },
     pause(on) {

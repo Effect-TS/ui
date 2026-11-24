@@ -961,7 +961,6 @@ const UpdateProto = {
   }
 }
 
-// `$` holds the message being handled, for `combine`.
 const makeUpdate = (
   model: unknown,
   props: unknown,
@@ -972,10 +971,10 @@ const makeUpdate = (
 ): Update<any, any, any, any> =>
   Object.assign(Object.create(UpdateProto), {
     model,
-    commands: [],
-    emitted: [],
-    lists: [],
-    sends: [],
+    commands: noEffects,
+    emitted: noEffects,
+    lists: noEffects,
+    sends: noEffects,
     viewTransitionTypes: undefined,
     props,
     queries,
@@ -985,7 +984,12 @@ const makeUpdate = (
   })
 
 const initSet = (model: unknown) =>
-  makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
+  makeStep(model, noEffects, noEffects, noEffects, noEffects, undefined) as Step<
+    any,
+    any,
+    any,
+    never
+  >
 const makeInit = (props: unknown): Init<any, any, any, any> => ({
   props,
   set: initSet

@@ -165,7 +165,7 @@ class HtmlScheduler
     if (!fresh && count < this.sampledAt + this.stride) return false
     const time = now()
     if (time >= this.deadline) {
-      if (count !== 1 || this.active !== undefined || this.pending.size > 0) {
+      if (!fresh || this.active !== undefined || this.pending.size > 0) {
         return this.yieldInLane(fiber)
       }
       this.deadline = time + this.budget

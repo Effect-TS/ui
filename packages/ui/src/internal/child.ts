@@ -29,6 +29,8 @@ export interface ComposeOptions extends Options {
   readonly parts: (parts: any) => unknown
 }
 
+const noProps: Readonly<Record<string, never>> = Object.freeze({})
+
 /** @internal */
 export const make = (
   component:
@@ -45,7 +47,7 @@ export const make = (
     _tag: "Child",
     component: component as Component.Any,
     key: options.key ?? "",
-    props: options.props ?? {},
+    props: options.props ?? noProps,
     onEmit: typeof onEmit === "object"
       ? (event) => onEmit[event._tag](event)
       : onEmit ?? ignore,

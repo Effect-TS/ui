@@ -41,13 +41,6 @@ const closeOf = (open: Node, path: string): Node | null => {
   return null
 }
 
-const isText = (node: Node): boolean => node.nodeType === 3
-
-let wantedTag = ""
-
-const isWanted = (node: Node): boolean =>
-  (node as Element).localName === wantedTag
-
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
 /** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
@@ -199,8 +192,9 @@ interface Held {
 
 interface Building {
   readonly node: Node
-  readonly names: Array<string>
+  names: Array<string> | undefined
   last: Node | undefined
+  readonly rangeDepth: number
 }
 
 const between = (
@@ -224,8 +218,9 @@ const between = (
   ) span.push(node)
   const stack: Array<Building> = [{
     node: container,
-    names: [],
-    last: edges[0]
+    names: undefined,
+    last: edges[0],
+    rangeDepth: 0
   }]
   const fresh = new WeakSet<Node>()
   const taken = new WeakSet<Node>()
@@ -278,7 +273,7 @@ const between = (
 
   const resync = (
     first: Node,
-    matches: (node: Node) => boolean
+    tag: string | null
   ): Node | null => {
     const list = first.parentNode!
     let from = first
@@ -297,7 +292,11 @@ const between = (
         candidate = candidate.nextSibling
       }
       if (candidate === null || candidate === end) return null
-      if (matches(candidate)) {
+      if (
+        tag === null
+          ? candidate.nodeType === 3
+          : (candidate as Element).localName === tag
+      ) {
         let resume: Node | null = null
         for (let node: Node = first; node !== candidate;) {
           const following = node.nextSibling!
@@ -318,22 +317,25 @@ const between = (
     node.parentNode!.removeChild(node)
   }
 
-  const take = (matches: (node: Node) => boolean): Node | null => {
+  const take = (tag: string | null): Node | null => {
     if (freshDepth > 0) return null
     let node = next()
     if (node === null) return null
+    const matched = tag === null
+      ? node.nodeType === 3
+      : (node as Element).localName === tag
     if (node === bare) {
       bare = undefined
-      if (!matches(node)) {
+      if (!matched) {
         drop(node)
         return null
       }
       if (parent === container) taken.add(node)
       return node
     }
-    if ((missing && missed.has(scopeOf(node))) || !matches(node)) {
+    if ((missing && missed.has(scopeOf(node))) || !matched) {
       const scope = scopeOf(node)
-      node = resync(node, matches)
+      node = resync(node, tag)
       if (node === null) {
         missed.add(scope)
         missing = true
@@ -354,7 +356,7 @@ const between = (
 
   const complete = (
     into: Node,
-    { node, names, last: previous }: Building
+    { node, names, last: previous, rangeDepth }: Building
   ): void => {
     const element = node as Element
     const inside = parent === element || element.contains(parent)
@@ -368,18 +370,23 @@ const between = (
       element.removeChild(node)
       node = following
     }
-    if (names.length > 0 || propped === element || element.hasAttributes()) {
+    if (names !== undefined || propped === element || element.hasAttributes()) {
       const served = element.getAttributeNames()
-      if (propped === element || served.length !== names.length) {
+      if (propped === element || served.length !== (names?.length ?? 0)) {
         for (const name of served) {
-          if (!names.includes(name)) element.removeAttribute(name)
+          if (names === undefined || !names.includes(name)) {
+            element.removeAttribute(name)
+          }
         }
       }
     }
     if (inside) {
-      while (
-        ranges.length > 0 && element.contains(ranges[ranges.length - 1]!.open)
-      ) ranges.pop()
+      if (ranges.length > rangeDepth) {
+        while (
+          ranges.length > rangeDepth &&
+          element.contains(ranges[ranges.length - 1]!.open)
+        ) ranges.pop()
+      }
       at = element.nextSibling
       parent = into
     }
@@ -388,8 +395,7 @@ const between = (
   const host: Kernel.Host<Node> = {
     ...base,
     createElement(tag) {
-      wantedTag = tag
-      const node = take(isWanted)
+      const node = take(tag)
       if (node === null) {
         const element = tag === "form"
           ? container.ownerDocument!.createElement(tag)
@@ -400,7 +406,12 @@ const between = (
         freshDepth++
         return element
       }
-      stack.push({ node, names: [], last: undefined })
+      stack.push({
+        node,
+        names: undefined,
+        last: undefined,
+        rangeDepth: ranges.length
+      })
       edits.take(node, tag)
       parent = node
       at = node.firstChild
@@ -417,7 +428,7 @@ const between = (
       }
       if (bare !== undefined && next() === bare) drop(bare)
       bare = undefined
-      const node = text === "" ? null : take(isText) as Text | null
+      const node = text === "" ? null : take(null) as Text | null
       if (node === null) {
         const fresh = base.createText(text)
         ours.add(fresh)
@@ -439,12 +450,15 @@ const between = (
       return node
     },
     setAttr(node, name, value) {
-      const names = building(node)?.names
-      if (names !== undefined) {
+      const entry = building(node)
+      if (entry !== undefined) {
         const element = node as Element
-        const normalized = attributeName(name, element.namespaceURI === SVG)
+        let normalized = attributeName(name, false)
+        if (normalized !== name) {
+          normalized = attributeName(name, element.namespaceURI === SVG)
+        }
         if (normalized === undefined) return
-        if (value !== undefined) names.push(normalized)
+        if (value !== undefined) (entry.names ??= []).push(normalized)
         const served = element.getAttribute(normalized)
         if (value === undefined ? served === null : served === value) return
         return base.setAttr(node, name, value, served ?? undefined)
@@ -452,16 +466,16 @@ const between = (
       base.setAttr(node, name, value)
     },
     setProp(node, name, value) {
-      const names = building(node)?.names
-      if (names !== undefined) {
-        names.push(name.toLowerCase())
+      const entry = building(node)
+      if (entry !== undefined) {
+        ;(entry.names ??= []).push(name.toLowerCase())
         propped = node
       }
       if (edits.keeps(node, name, value)) {
         return keeping(node, name, value, () => base.setProp(node, name, value))
       }
       if (
-        names !== undefined && (node as any)[name] === value &&
+        entry !== undefined && (node as any)[name] === value &&
         base.controlled?.has(name) !== true
       ) return
       base.setProp(node, name, value)

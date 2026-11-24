@@ -557,14 +557,13 @@ export const mountRoot = (
       { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
-    const scheduled =
+    const scheduler =
       Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
-        ? Context.add(
-          context,
-          Scheduler.Scheduler,
-          defaultScheduler ??= HtmlScheduler.makeDefault()
-        )
-        : context
+        ? (defaultScheduler ??= HtmlScheduler.makeDefault())
+        : undefined
+    const scheduled = scheduler === undefined
+      ? context
+      : Context.add(context, Scheduler.Scheduler, scheduler)
     const root = yield* Effect.provideContext(
       runtime.mountDom(
         component,
@@ -572,9 +571,11 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        hydrate === undefined ? options : { ...options, hydrate }
+        hydrate === undefined && scheduler === undefined
+          ? options
+          : { ...options, hydrate, scheduler }
       ),
-      scheduled
+      context
     )
     const controlled = controllable(
       component,

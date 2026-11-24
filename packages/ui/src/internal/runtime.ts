@@ -288,6 +288,7 @@ interface Options {
   readonly query?: Renderer.QueryOptions | undefined
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
+  readonly scheduler?: Scheduler.Scheduler | undefined
 }
 
 const makeCell = (
@@ -484,7 +485,11 @@ const start = (
   server?: Server,
   decodedRoot?: readonly [string, Exit.Exit<Decoded, unknown>]
 ) => {
-  const ctx = onScheduler(caller)
+  const ctx = onScheduler(
+    options?.scheduler === undefined
+      ? caller
+      : Context.add(caller, Scheduler.Scheduler, options.scheduler)
+  )
   const logService = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
@@ -905,7 +910,6 @@ export const prerender = (
       Effect.fnUntraced(function*(scope) {
         const budget = Duration.fromInputUnsafe(options.budget)
         const started = !Duration.isZero(budget)
-        const host = serverHost.make(options.elements)
         const ctx = Context.add(
           yield* Effect.context<never>(),
           Scope.Scope,
@@ -914,13 +918,13 @@ export const prerender = (
         const made = start(
           component,
           props,
-          host.createElement("#root"),
+          serverHost.node(),
           ctx,
           undefined,
           {
-            elements: host.elements,
-            make: (_container, ownsHead, step) => ({
-              base: bridge(host, step, ownsHead),
+            elements: options.elements,
+            make: () => ({
+              base: serverHost.makeKernel(),
               dom: undefined
             })
           },

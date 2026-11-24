@@ -3,6 +3,7 @@
  * as escaped strings.
  */
 import type { ServerSink } from "../../internal/services.ts"
+import * as View from "../../View.ts"
 import * as Head from "../HtmlHead.ts"
 import * as elements from "./elements.ts"
 import * as headAttributes from "./headAttributes.ts"
@@ -139,13 +140,19 @@ const plainAttributes = (
   attrs: Readonly<Record<string, string>>,
   props: Readonly<Record<string, unknown>>
 ): string | undefined => {
-  for (const _ in props) return undefined
+  if (props !== View.noFields) {
+    for (const _ in props) return undefined
+  }
   if (tag === "option") return undefined
-  const svg = elements.svgTags.has(tag)
+  if (attrs === View.noFields) return ""
   let out = ""
   for (const name in attrs) {
-    const normalized = elements.attributeName(name, svg)
-    if (normalized !== name) return undefined
+    if (elements.attributeName(name, false) !== name) {
+      if (
+        !elements.svgTags.has(tag) ||
+        elements.attributeName(name, true) !== name
+      ) return undefined
+    }
     const value = attrs[name]!
     out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
   }
