@@ -25,7 +25,7 @@ export interface JsonCodec {
 }
 const jsonCodecs = new WeakMap<object, JsonCodec>()
 /** @internal */
-export const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
+const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
   let found = jsonCodecs.get(schema)
   if (found === undefined) {
     const codec = Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
@@ -68,7 +68,7 @@ export const redactedIssue = new SchemaIssue.Forbidden({
   message: "the Schema holds a Schema.Redacted"
 })
 /** @internal */
-export const failRedacted = Effect.fail(redactedIssue)
+const failRedacted = Effect.fail(redactedIssue)
 const redactedState: StateCodec = {
   redacted: true,
   encode: () => failRedacted,

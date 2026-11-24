@@ -51,7 +51,7 @@ export const fieldsOf = (
 }
 
 /** The payload of `input` and `change` from `source`, the control that changed. */
-export const controlPayload = (
+const controlPayload = (
   source: globalThis.Element,
   event: Event | undefined
 ): unknown => {

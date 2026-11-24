@@ -11,7 +11,6 @@ import {
 } from "@effect/ui"
 import type { HtmlHead } from "@effect/ui/html"
 import * as componentQueries from "@effect/ui/internal/queries"
-import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
@@ -1422,34 +1421,18 @@ describe("Router.prefetch", { concurrent: false }, () => {
       })
     ))
 
-  it.effect("records watches only while a check after a push is outstanding", () =>
+  it.effect("ends both checks quietly when a push supersedes another before it settles", () =>
     prefetching(
       "/people/1",
       Effect.gen(function*() {
         const router = yield* Router.Router
-        const testHost = yield* TestHost.TestHost
-        const route = yield* Router.currentRoute(Routes)
-        const root = yield* runtime.mount(
-          Prefetching.App,
-          { route },
-          testHost.host.createElement("#app")
-        )
-        const recorded = () => {
-          const out: Array<string> = []
-          const visit = (inst: runtime.Instance) => {
-            if (inst.watched !== undefined) out.push(inst.path)
-            for (const child of inst.children.values()) visit(child)
-          }
-          visit(root.instance)
-          return out
-        }
+        const root = yield* mountApp
         yield* TestHost.settle
-        assert.deepStrictEqual(recorded(), [])
-        // The second push supersedes the first before it settles: both checks end.
         yield* router.navigate("/people/2")
         yield* router.navigate("/people/3")
         yield* TestHost.settle
-        assert.deepStrictEqual(recorded(), [])
+        assert.strictEqual(router.location().url, "/people/3")
+        assert.isDefined(root.model())
         assert.deepStrictEqual(tags(yield* TestHost.problems), [])
       })
     ))

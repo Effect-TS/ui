@@ -59,6 +59,7 @@ import * as Fiber from "effect/Fiber"
 import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
+import * as domHost from "../../internal/domHost.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Query from "../../Query.ts"
@@ -522,21 +523,28 @@ export const ssr = <
         return false
       })
     }
-    const recording: Renderer.Host<globalThis.Node> = {
-      ...host,
-      commit: () => {
-        host.commit?.()
-        judge()
-        frame()
+    const dom = domHost.doms.get(host)!
+    domHost.doms.set(host, {
+      ...dom,
+      make: (target, options) => {
+        const made = dom.make(target, options)
+        return made && {
+          ...made,
+          commit: () => {
+            made.commit?.()
+            judge()
+            frame()
+          }
+        }
       }
-    }
+    })
     const mounted = yield* runtime.mount(component as any, props, container, {
       state,
       query: options?.query,
       adoptionHead: true
     }).pipe(
       Effect.provideContext(
-        Context.make(Renderer.Renderer, { host: recording }).pipe(
+        Context.make(Renderer.Renderer, { host }).pipe(
           Context.add(Html.Host, BrowserHost.htmlHost),
           Context.add(MessageLog.MessageLog, clientLog),
           Context.add(Clock.Clock, tracking),

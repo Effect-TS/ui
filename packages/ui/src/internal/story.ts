@@ -1316,7 +1316,7 @@ export const pruneKeyed = (
  *
  * @internal
  */
-export const runningOf =
+const runningOf =
   (pending: ReadonlyArray<Pending<any>>) =>
   (name: string, groupKey: string | undefined): boolean =>
     pending.some((entry) =>

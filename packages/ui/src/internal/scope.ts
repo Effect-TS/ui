@@ -34,23 +34,3 @@ export const scopeAddFinalizerUnsafe = (
     }
   }
 }
-
-/**
- * Removes the finalizer `key` registered, as `effect` does when a forked
- * Scope closes before its parent.
- *
- * @internal
- */
-export const scopeRemoveFinalizerUnsafe = (
-  scope: Scope.Scope,
-  key: {}
-): void => {
-  if (scope.state._tag !== "Open") return
-  const state = scope.state
-  if (state.finalizerKey === key) {
-    scope.state = { _tag: "Empty" }
-  } else if (state.finalizers !== undefined) {
-    state.finalizers.delete(key)
-    if (state.finalizers.size === 0) scope.state = { _tag: "Empty" }
-  }
-}

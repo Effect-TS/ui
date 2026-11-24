@@ -730,12 +730,27 @@ const markDirty = (inst: Instance): void => {
 const byDepth = (a: Instance, b: Instance): number => a.depth - b.depth
 
 const renderAbove = (inst: Instance): void => {
-  if (busy > 0 || inst.tree.dirty.length === 0) return
+  const dirty = inst.tree.dirty
+  if (busy > 0 || dirty.length === 0) return
   const above: Array<Instance> = []
   let top = -1
+  let drawn = inst.under !== undefined
   for (let at = inst.parent; at !== undefined; at = at.parent) {
     if (at.dirty) top = above.length
     above.push(at)
+    if (at.under !== undefined) drawn = true
+  }
+  if (drawn) {
+    // Drawn in a slot or a headless view: what draws it is above it too, and its path holds theirs.
+    const path = inst.path
+    above.length = 0
+    for (let index = 0; index < dirty.length; index++) {
+      const at = dirty[index]!
+      if (at.dirty && path.startsWith(at.path + "/")) above.push(at)
+    }
+    // Nearest first, as the walk up the parents lists them.
+    above.sort(byPathLength)
+    top = above.length - 1
   }
   if (top < 0) return
   const outer = receiving
@@ -750,6 +765,9 @@ const renderAbove = (inst: Instance): void => {
     receiving = outer
   }
 }
+
+const byPathLength = (a: Instance, b: Instance): number =>
+  b.path.length - a.path.length
 
 const renderDirty = (inst: Instance): void => {
   const log = inst.tree.log
@@ -1494,17 +1512,6 @@ const patchElement = (
       prev.handlers === View.noFields && prev.eventOptions === View.noFields
     )
   }
-  const mount = view.mount as unknown as Attachable | undefined
-  const was = prev.mount as unknown as Attachable | undefined
-  if (mount !== was) {
-    if (mount === undefined) {
-      inst.live--
-      was!["~detach"](rec)
-    } else {
-      if (was === undefined) inst.live++
-      mount["~attach"](rec)
-    }
-  }
   const views = view.children
   const olds = rec.kids
   if (dev && views.length > 1) checkKeys(inst.path, views)
@@ -1538,6 +1545,18 @@ const patchElement = (
     (host.controlled !== undefined && view.props !== View.noFields)
   ) {
     patchProps(host, node, prev.props, view.props)
+  }
+  // After the children too, so a mount given new args finds the elements this patch made below it.
+  const mount = view.mount as unknown as Attachable | undefined
+  const was = prev.mount as unknown as Attachable | undefined
+  if (mount !== was) {
+    if (mount === undefined) {
+      inst.live--
+      was!["~detach"](rec)
+    } else {
+      if (was === undefined) inst.live++
+      mount["~attach"](rec)
+    }
   }
 }
 

@@ -49,7 +49,7 @@ const pendingAlive = new WeakMap<
 >()
 
 /** @internal */
-export const keepAliveOnceLoaded = (
+const keepAliveOnceLoaded = (
   view: View.Child<any, any>
 ): View.Child<any, any> => {
   if (view.alive !== undefined) return view
