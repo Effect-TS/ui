@@ -552,14 +552,18 @@ export const mountRoot = (
   hydrate: hydrateRun.Hydrating | undefined
 ): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
-    let held = 0
-    let live: ReturnType<typeof dom.makeHost> | undefined
-    // oxlint-disable-next-line no-console
-    const warn = (message: string) => console.warn(message)
-    const context = yield* documentServices.make(
-      container.ownerDocument,
-      htmlHost,
-      () => held > 0
+    const host = makeHost(container.ownerDocument)
+    yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
+    const holds = browserHosts.holds.get(host)!
+    const domMake = domHost.doms.get(host)!.make
+    const context = Context.add(
+      yield* documentServices.make(
+        container.ownerDocument,
+        htmlHost,
+        holds.held
+      ),
+      Renderer.Renderer,
+      { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
     const scheduled =
@@ -570,21 +574,10 @@ export const mountRoot = (
           defaultScheduler ??= HtmlScheduler.makeDefault()
         )
         : context
-    const makeDom: runtime.MakeDom = (target, domOptions) => {
-      const made = dom.makeHost(target as globalThis.Element, {
-        head: domOptions.head ? dom.syncHead : undefined,
-        warn,
-        step: domOptions.step
-      })
-      live = made
-      return {
-        ...made,
-        dispose: () => {
-          if (live === made) live = undefined
-          made.dispose()
-        }
-      }
-    }
+    // oxlint-disable-next-line no-console
+    const warn = (message: string) => console.warn(message)
+    const makeDom: runtime.MakeDom = (target, domOptions) =>
+      domMake(target, domOptions)!
     const makePaintDom: runtime.MakeDom = (target, domOptions) =>
       painting(
         dom.makeHost(target as globalThis.Element, {
@@ -610,14 +603,8 @@ export const mountRoot = (
       container,
       Context.merge(outer, scheduled),
       makePaintDom,
-      () => {
-        held++
-        live?.pause(true)
-      },
-      () => {
-        held--
-        live?.pause(false)
-      }
+      () => holds.hold(container),
+      () => holds.release(container)
     )
     const unregister = Context.get(outer, Controllables).register(controlled)
     yield* Effect.addFinalizer(() =>

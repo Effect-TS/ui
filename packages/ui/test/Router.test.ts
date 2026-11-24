@@ -14,8 +14,10 @@ import * as componentQueries from "@effect/ui/internal/queries"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
+  Deferred,
   Effect,
   Exit,
+  Fiber,
   type Layer,
   Option,
   Schema,
@@ -1790,4 +1792,50 @@ describe("Router throttle", { concurrent: false }, () => {
       assert.deepStrictEqual(history.entries(), ["/search?q=abc"])
     }).pipe(Effect.provide(Router.memory({ routes: Routes, history })))
   })
+
+  it.effect("changes subscribers see nested navigations in order", () =>
+    Effect.gen(function*() {
+      const router = yield* Router.Router
+      const firstReady = yield* Deferred.make<void>()
+      const secondReady = yield* Deferred.make<void>()
+      const firstSeqs: Array<number> = []
+      const secondSeqs: Array<number> = []
+      const first = yield* router.changes.pipe(
+        Stream.take(3),
+        Stream.runForEach((location) =>
+          Effect.gen(function*() {
+            firstSeqs.push(location.seq)
+            if (location.seq === 0) yield* Deferred.succeed(firstReady, void 0)
+            if (location.seq === 1) {
+              yield* router.navigate("/search?q=c")
+            }
+          })
+        ),
+        Effect.forkChild
+      )
+      const second = yield* router.changes.pipe(
+        Stream.take(3),
+        Stream.runForEach((location) =>
+          Effect.gen(function*() {
+            secondSeqs.push(location.seq)
+            if (location.seq === 0) yield* Deferred.succeed(secondReady, void 0)
+          })
+        ),
+        Effect.forkChild
+      )
+      yield* Deferred.await(firstReady)
+      yield* Deferred.await(secondReady)
+      yield* router.navigate("/search?q=b")
+      yield* Fiber.join(first)
+      yield* Fiber.join(second)
+      assert.deepStrictEqual(firstSeqs, [0, 1, 2])
+      assert.deepStrictEqual(secondSeqs, [0, 1, 2])
+    }).pipe(
+      Effect.provide(
+        Router.memory({
+          routes: Routes,
+          history: Router.memoryHistory("/search")
+        })
+      )
+    ))
 })

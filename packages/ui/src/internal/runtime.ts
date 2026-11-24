@@ -2,7 +2,7 @@
  * @internal
  */
 import * as Cause from "effect/Cause"
-import type * as Clock from "effect/Clock"
+import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
@@ -22,7 +22,6 @@ import type * as hydrateRun from "./hydrateRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
-import * as log from "./log.ts"
 import * as messageLog from "./messageLog.ts"
 import type * as partsRun from "./partsRun.ts"
 import { childName, segment } from "./paths.ts"
@@ -488,18 +487,16 @@ const start = (
   const ctx = onScheduler(caller)
   const logService = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
-  // Read Clock via `mapUnsafe` so mounts without a custom Clock don't bundle `ClockImpl`.
-  const clock = ctx.mapUnsafe.get("effect/Clock") as Clock.Clock | undefined
-  const nowMs = clock === undefined
-    ? Date.now
-    : () => clock.currentTimeMillisUnsafe()
-  const session = `${nowMs().toString(36)}-k${(sessions++).toString(36)}`
+  const clock = Context.get(ctx, Clock.Clock)
+  const session = `${clock.currentTimeMillisUnsafe().toString(36)}-k${
+    (sessions++).toString(36)
+  }`
   const emitted: Array<unknown> = []
   let flushes = 0
   let inFlush = true
   const recording = messageLog.recorder === undefined
     ? messageLog.silent
-    : messageLog.recorder(logService, nowMs, session, component.definition.name)
+    : messageLog.recorder(logService, clock, session, component.definition.name)
   let initCommands: ReadonlyArray<unknown> | undefined
   const hydrate = options?.hydrate
   const record: Kernel.Recorder = (inst, draft) => {
@@ -599,7 +596,7 @@ const start = (
     base,
     dom: dom !== undefined,
     record: recording.record,
-    at: nowMs(),
+    at: clock.currentTimeMillisUnsafe(),
     decodedRoot,
     heldFor: routing?.heldFor,
     cache: () => queries.made()
@@ -680,7 +677,9 @@ const start = (
         },
         follow: recording.follow,
         report: (path, where, cause) => {
-          log.error(ctx, `${path} failed in ${where}`, cause)
+          Effect.runForkWith(ctx)(
+            Effect.logError(`${path} failed in ${where}`, cause)
+          )
         },
         fallback: fallback === undefined ?
           undefined :
@@ -1027,7 +1026,9 @@ const paintCore = (
         },
         schedule: (task) => executor.schedule(task),
         report: (path, where, cause) => {
-          log.error(ctx, `${path} failed in ${where}`, cause)
+          Effect.runForkWith(ctx)(
+            Effect.logError(`${path} failed in ${where}`, cause)
+          )
         }
       }
     )

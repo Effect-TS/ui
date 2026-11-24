@@ -24,10 +24,8 @@ import * as Subscription from "../Subscription.ts"
 import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
 import * as HtmlKeyboard from "./HtmlKeyboard.ts"
-import * as documentServices from "./internal/documentServices.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
-import { payloadOf } from "./internal/payload.ts"
 
 /**
  * The events `onDocument` listens for, with their payloads: the same ones
@@ -184,13 +182,7 @@ const listenFor = (
     fail,
     enter
   ) => {
-    const source = Context.getOrUndefined(context, GlobalEvents) ??
-      (() => {
-        const env = Context.get(context, documentServices.Env)
-        return env === undefined
-          ? Context.get(context, GlobalEvents)
-          : globalEventsOf(env.document, env.held)
-      })()
+    const source = Context.get(context, GlobalEvents)
     return {
       initial: Effect.void,
       close: source.listen(
@@ -574,13 +566,7 @@ const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (
   fail,
   enter
 ) => {
-  const source = Context.getOrUndefined(context, AnimationFrames) ??
-    (() => {
-      const env = Context.get(context, documentServices.Env)
-      return env === undefined
-        ? Context.get(context, AnimationFrames)
-        : framesOf(env.document)
-    })()
+  const source = Context.get(context, AnimationFrames)
   let last = source.now()
   return {
     initial: Effect.void,
@@ -600,65 +586,3 @@ const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (
 }
 
 const noop = () => {}
-
-const isInput = (event: Event, view: Window & typeof globalThis): boolean =>
-  event.isTrusted &&
-  (event instanceof view.MouseEvent || event instanceof view.KeyboardEvent ||
-    (typeof view.TouchEvent === "function" && event instanceof view.TouchEvent))
-
-const globalEventsOf = (
-  document: Document,
-  held: () => boolean
-): GlobalEvents => ({
-  listen: (target, name, { capture, custom }, listener) => {
-    const on = target === "document" ? document : document.defaultView
-    if (on === null) return () => {}
-    const view = document.defaultView
-    const f = (event: Event) =>
-      view !== null && held() && isInput(event, view) ? undefined : listener(
-        {
-          ...(custom === true
-            ? { detail: (event as CustomEvent).detail ?? null }
-            : payloadOf(
-              name,
-              event,
-              event.target,
-              document.documentElement,
-              undefined
-            ) as object),
-          defaultPrevented: event.defaultPrevented
-        },
-        () => event.preventDefault()
-      )
-    on.addEventListener(name, f, { capture })
-    return () => on.removeEventListener(name, f, { capture })
-  }
-})
-
-const framesOf = (document: Document): AnimationFrames => {
-  const view = document.defaultView
-  return {
-    now: () => view?.performance.now() ?? 0,
-    listen: (listener) => {
-      if (view === null || typeof view.requestAnimationFrame !== "function") {
-        return () => {}
-      }
-      const frame = (time: number) => {
-        id = view.requestAnimationFrame(frame)
-        listener(time)
-      }
-      let id = view.requestAnimationFrame(frame)
-      return () => view.cancelAnimationFrame(id)
-    }
-  }
-}
-
-documentServices.register((context, env) =>
-  context.pipe(
-    Context.add(
-      globalEvents.GlobalEvents,
-      globalEventsOf(env.document, env.held)
-    ),
-    Context.add(frames.AnimationFrames, framesOf(env.document))
-  )
-)

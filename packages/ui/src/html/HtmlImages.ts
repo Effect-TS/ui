@@ -55,33 +55,36 @@ export const Images: Context.Reference<Images> = Context.Reference<Images>(
   { defaultValue: () => pending }
 )
 
-const pending: Images = { load: () => Effect.never }
-
-const imagesOf = (document: Document): Images => ({
-  load: (source) =>
-    Effect.callback((resume) => {
-      const image = document.createElement("img")
-      const settle = (status: "loaded" | "error") =>
-        resume(Effect.succeed(status))
-      if (source.referrerPolicy !== undefined) {
-        image.referrerPolicy = source.referrerPolicy
-      }
-      image.crossOrigin = source.crossOrigin ?? null
-      if (source.sizes !== undefined) image.sizes = source.sizes
-      if (source.srcSet !== undefined) image.srcset = source.srcSet
-      if (source.src !== undefined) image.src = source.src
-      if (image.complete) {
-        return settle(image.naturalWidth > 0 ? "loaded" : "error")
-      }
-      image.onload = () => settle("loaded")
-      image.onerror = () => settle("error")
-      return Effect.sync(() => {
-        image.onload = null
-        image.onerror = null
-      })
+const loadIn = (
+  document: Document,
+  source: ImageSource
+): Effect.Effect<"loaded" | "error"> =>
+  Effect.callback((resume) => {
+    const image = document.createElement("img")
+    const settle = (status: "loaded" | "error") =>
+      resume(Effect.succeed(status))
+    if (source.referrerPolicy !== undefined) {
+      image.referrerPolicy = source.referrerPolicy
+    }
+    image.crossOrigin = source.crossOrigin ?? null
+    if (source.sizes !== undefined) image.sizes = source.sizes
+    if (source.srcSet !== undefined) image.srcset = source.srcSet
+    if (source.src !== undefined) image.src = source.src
+    if (image.complete) {
+      return settle(image.naturalWidth > 0 ? "loaded" : "error")
+    }
+    image.onload = () => settle("loaded")
+    image.onerror = () => settle("error")
+    return Effect.sync(() => {
+      image.onload = null
+      image.onerror = null
     })
-})
+  })
 
-documentServices.register((context, env) =>
-  Context.add(context, Images, imagesOf(env.document))
-)
+const pending: Images = {
+  load: (source) =>
+    Effect.contextWith((context: Context.Context<never>) => {
+      const env = Context.get(context, documentServices.Env)
+      return env === undefined ? Effect.never : loadIn(env.document, source)
+    })
+}

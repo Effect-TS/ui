@@ -2,25 +2,16 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as queryCore from "../../internal/queryCore.ts"
 import * as Html from "../Html.ts"
+import type * as HtmlSubscription from "../HtmlSubscription.ts"
+import * as frames from "./frames.ts"
+import * as globalEvents from "./globalEvents.ts"
+import { payloadOf } from "./payload.ts"
 
 /** @internal */
 export interface DocumentEnv {
   readonly document: Document
   readonly htmlHost: Context.Service.Shape<typeof Html.Host>
   readonly held: () => boolean
-}
-
-/** @internal */
-export type Provider = (
-  context: Context.Context<any>,
-  env: DocumentEnv
-) => Context.Context<any>
-
-const providers: Array<Provider> = []
-
-/** @internal */
-export const register = (provider: Provider): void => {
-  providers.push(provider)
 }
 
 /** @internal */
@@ -52,6 +43,58 @@ const signals = (document: Document) => {
   }
 }
 
+const isInput = (event: Event, view: Window & typeof globalThis): boolean =>
+  event.isTrusted &&
+  (event instanceof view.MouseEvent || event instanceof view.KeyboardEvent ||
+    (typeof view.TouchEvent === "function" && event instanceof view.TouchEvent))
+
+const globalEventsOf = (
+  document: Document,
+  held: () => boolean
+): HtmlSubscription.GlobalEvents => ({
+  listen: (target, name, { capture, custom }, listener) => {
+    const on = target === "document" ? document : document.defaultView
+    if (on === null) return () => {}
+    const view = document.defaultView
+    const f = (event: Event) =>
+      view !== null && held() && isInput(event, view) ? undefined : listener(
+        {
+          ...(custom === true
+            ? { detail: (event as CustomEvent).detail ?? null }
+            : payloadOf(
+              name,
+              event,
+              event.target,
+              document.documentElement,
+              undefined
+            ) as object),
+          defaultPrevented: event.defaultPrevented
+        },
+        () => event.preventDefault()
+      )
+    on.addEventListener(name, f, { capture })
+    return () => on.removeEventListener(name, f, { capture })
+  }
+})
+
+const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
+  const view = document.defaultView
+  return {
+    now: () => view?.performance.now() ?? 0,
+    listen: (listener) => {
+      if (view === null || typeof view.requestAnimationFrame !== "function") {
+        return () => {}
+      }
+      const frame = (time: number) => {
+        id = view.requestAnimationFrame(frame)
+        listener(time)
+      }
+      let id = view.requestAnimationFrame(frame)
+      return () => view.cancelAnimationFrame(id)
+    }
+  }
+}
+
 const never = () => false
 
 /** @internal */
@@ -63,12 +106,13 @@ export const make = (
   Effect.suspend(() => {
     const signal = signals(document)
     const env: DocumentEnv = { document, htmlHost, held }
-    let context: Context.Context<any> = Context.make(Html.Host, htmlHost).pipe(
+    const context: Context.Context<any> = Context.make(Html.Host, htmlHost).pipe(
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
+      Context.add(globalEvents.GlobalEvents, globalEventsOf(document, held)),
+      Context.add(frames.AnimationFrames, framesOf(document)),
       Context.add(Env, env)
     )
-    for (const provide of providers) context = provide(context, env)
     return Effect.as(
       Effect.addFinalizer(() => Effect.sync(signal.dispose)),
       context

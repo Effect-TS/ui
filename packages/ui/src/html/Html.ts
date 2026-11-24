@@ -1265,14 +1265,22 @@ for (
       .split(" ")
 ) {
   const [name, event] = pair.split(":")
+  const method = "on" + name
   const type = event ?? name!.toLowerCase()
-  ;(VoidElement.prototype as any)["on" + name] = function(
+  const fn = function(
     this: VoidElement<any>,
     handler: any,
     options?: View.EventOptions
   ) {
     return this.on(type, handler, options)
   }
+  Object.defineProperty(fn, "name", { value: method, configurable: true })
+  Object.defineProperty(VoidElement.prototype, method, {
+    value: fn,
+    writable: true,
+    enumerable: false,
+    configurable: true
+  })
 }
 
 /**

@@ -516,67 +516,80 @@ const queryClass = (
     static changes(args: unknown) {
       return Stream.fromChannel(
         Channel.fromTransform((_, scope) =>
-          withCache((cache, context) =>
-            Effect.suspend(() => {
-              type Item = AsyncResult.AsyncResult<any, any>
-              const pending: Array<Item> = []
-              let failed: Cause.Cause<any> | undefined
-              let resume:
-                | ((
-                  effect: Effect.Effect<readonly [Item, ...Array<Item>], any>
-                ) => void)
-                | undefined
-              let last: Item | undefined
-              const wake = () => {
-                if (resume === undefined) return
-                const r = resume
-                if (pending.length > 0) {
-                  resume = undefined
-                  r(Effect.succeed(pending.splice(0) as [Item, ...Array<Item>]))
-                } else if (failed !== undefined) {
-                  resume = undefined
-                  r(Effect.failCause(failed))
+          Effect.uninterruptible(
+            withCache((cache, context) =>
+              Effect.suspend(() => {
+                type Item = AsyncResult.AsyncResult<any, any>
+                const pending: Array<Item> = []
+                let failed: Cause.Cause<any> | undefined
+                let resume:
+                  | ((
+                    effect: Effect.Effect<readonly [Item, ...Array<Item>], any>
+                  ) => void)
+                  | undefined
+                let last: Item | undefined
+                const wake = () => {
+                  if (resume === undefined) return
+                  const r = resume
+                  if (pending.length > 0) {
+                    resume = undefined
+                    r(
+                      Effect.succeed(
+                        pending.splice(0) as [Item, ...Array<Item>]
+                      )
+                    )
+                  } else if (failed !== undefined) {
+                    resume = undefined
+                    r(Effect.failCause(failed))
+                  }
                 }
-              }
-              const offer = (result: Item): void => {
-                if (last !== undefined && Equal.equals(result, last)) return
-                last = result
-                pending.push(result)
-                wake()
-              }
-              const handle = cache.watch(
-                def,
-                args,
-                fetcherOf(context, Base),
-                offer,
-                (cause) => {
-                  failed = cause
+                const offer = (result: Item): void => {
+                  if (failed !== undefined) return
+                  if (last !== undefined && Equal.equals(result, last)) return
+                  last = result
+                  pending.push(result)
                   wake()
                 }
-              )
-              const current = handle.current()
-              if (current._tag !== "Initial") offer(current)
-              const pull = Effect.suspend(() => {
-                if (pending.length > 0) {
-                  return Effect.succeed(
-                    pending.splice(0) as [Item, ...Array<Item>]
-                  )
-                }
-                if (failed !== undefined) return Effect.failCause(failed)
-                return Effect.callback<readonly [Item, ...Array<Item>], any>(
-                  (r) => {
-                    resume = r
-                    return Effect.sync(() => {
-                      if (resume === r) resume = undefined
-                    })
+                const handle = cache.watch(
+                  def,
+                  args,
+                  fetcherOf(context, Base),
+                  offer,
+                  (cause) => {
+                    if (failed !== undefined) return
+                    failed = cause
+                    wake()
                   }
                 )
+                const current = handle.current()
+                if (current._tag !== "Initial") offer(current)
+                const pull = Effect.callback<
+                  readonly [Item, ...Array<Item>],
+                  any
+                >((r) => {
+                  if (pending.length > 0) {
+                    r(
+                      Effect.succeed(
+                        pending.splice(0) as [Item, ...Array<Item>]
+                      )
+                    )
+                    return
+                  }
+                  if (failed !== undefined) {
+                    r(Effect.failCause(failed))
+                    return
+                  }
+                  resume = r
+                  return Effect.sync(() => {
+                    if (resume === r) resume = undefined
+                  })
+                })
+                return Effect.as(
+                  Scope.addFinalizer(scope, Effect.sync(handle.unregister)),
+                  pull
+                )
               })
-              return Effect.as(
-                Scope.addFinalizer(scope, Effect.sync(handle.unregister)),
-                pull
-              )
-            })
+            )
           )
         )
       )

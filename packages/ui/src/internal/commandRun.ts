@@ -14,7 +14,6 @@ import { going, heldBy, hold } from "./closing.ts"
 import { defer, routed } from "./due.ts"
 import { follow, fork, servicesOf } from "./fork.ts"
 import type * as Kernel from "./kernel.ts"
-import * as log from "./log.ts"
 import { isNoop } from "./noop.ts"
 import * as queryCore from "./queryCore.ts"
 import { refsOf } from "./refs.ts"
@@ -329,8 +328,7 @@ class Runs implements Kernel.Runs {
           fork(
             inst.tree,
             inst.env.ctx!,
-            log.errorEffect(
-              inst.env.ctx!,
+            Effect.logError(
               `${inst.path} is gone, and its Command ${command.name} failed`,
               exit.cause
             )

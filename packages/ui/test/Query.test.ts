@@ -1499,4 +1499,50 @@ describe("Query", () => {
       ])
     })
   })
+
+  it.effect("changes does not emit after a terminal defect for a slow consumer", () => {
+    let calls = 0
+    class Flaky extends Query.Service<Flaky>()(
+      "test/FlakyChanges",
+      {
+        args: { id: Schema.String },
+        success: Schema.Number,
+        error: Schema.Never,
+        staleTime: 0
+      },
+      Effect.succeed(() =>
+        ++calls === 1 ? Effect.succeed(1) : Effect.die("boom")
+      )
+    ) {}
+    return Effect.gen(function*() {
+      const gate = yield* Latch.make(false)
+      const waiting: Array<boolean> = []
+      const consumer = yield* Flaky.changes({ id: "1" }).pipe(
+        Stream.runForEach((result) =>
+          Effect.gen(function*() {
+            waiting.push(result.waiting)
+            if (waiting.length === 1) yield* gate.await
+          })
+        ),
+        Effect.exit,
+        Effect.forkChild
+      )
+      yield* flush
+      yield* Flaky.invalidate({ id: "1" })
+      yield* flush
+      gate.openUnsafe()
+      const exit = yield* Fiber.join(consumer)
+      assert.strictEqual(
+        Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined,
+        "boom"
+      )
+      assert.deepStrictEqual(waiting, [false, true])
+      const cache = yield* Query.Cache
+      assert.strictEqual(
+        Query.internals(cache).inspect(Query.defOf(Flaky), { id: "1" })
+          ?.watchers,
+        0
+      )
+    }).pipe(Effect.provide(Layer.merge(Flaky.layer, Query.layer())))
+  })
 })

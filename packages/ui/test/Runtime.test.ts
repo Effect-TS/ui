@@ -17,6 +17,7 @@ import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
+  Console,
   Context,
   Deferred,
   Effect,
@@ -33,7 +34,8 @@ import {
   Schema,
   SchemaTransformation,
   Scope,
-  Stream
+  Stream,
+  Tracer
 } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
@@ -6458,4 +6460,66 @@ describe("Runtime", () => {
         }]
       }])
     }))
+
+  it.effect("default logging formats annotations and records span events on a throwing view", () =>
+    Effect.gen(function*() {
+      const logs: Array<ReadonlyArray<unknown>> = []
+      const errors: Array<ReadonlyArray<unknown>> = []
+      const spanEvents: Array<string> = []
+      const currentConsole = yield* Console.Console
+      const fakeConsole: Console.Console = {
+        ...currentConsole,
+        log: (...args) => {
+          logs.push(args)
+        },
+        error: (...args) => {
+          errors.push(args)
+        }
+      }
+      const Broken = Component.define({
+        name: "BrokenLog",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: () => {
+          throw new Error("boom")
+        }
+      })
+      const parentTracer = yield* Effect.tracer
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = parentTracer.span(options)
+          const orig = span.event.bind(span)
+          span.event = (name, startTime, attributes) => {
+            spanEvents.push(name)
+            return orig(name, startTime, attributes)
+          }
+          return span
+        }
+      })
+      yield* TestHost.mount(Broken, {}).pipe(
+        Effect.annotateLogs({ area: "view-test" }),
+        Effect.withSpan("mount-span"),
+        Effect.provideService(Console.Console, fakeConsole),
+        Effect.provideService(Tracer.Tracer, tracer)
+      )
+      yield* Effect.yieldNow
+      assert.strictEqual(errors.length, 0)
+      assert.isTrue(
+        logs.some((args) =>
+          args.some((arg) =>
+            typeof arg === "string" && arg.includes("/BrokenLog failed in view")
+          ) &&
+          args.some((arg) =>
+            typeof arg === "object" && arg !== null &&
+            (arg as { readonly area?: unknown }).area === "view-test"
+          )
+        )
+      )
+      assert.isTrue(
+        spanEvents.some((name) => name.includes("/BrokenLog failed in view"))
+      )
+    }).pipe(Effect.scoped, provideHost))
 })

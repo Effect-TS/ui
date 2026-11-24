@@ -1,3 +1,4 @@
+import type * as Clock from "effect/Clock"
 import type * as MessageLog from "../MessageLog.ts"
 import * as Kernel from "./kernel.ts"
 import { boundOf } from "./queryCore.ts"
@@ -24,7 +25,7 @@ const dispatched: MessageLog.Source = { _tag: "Dispatch" }
 /** @internal */
 export const make = (
   log: MessageLog.MessageLog,
-  nowMs: () => number,
+  clock: Clock.Clock,
   session: string,
   app: string
 ): Recording => {
@@ -71,7 +72,7 @@ export const make = (
   const stamp = (cause: number | undefined, next: number) => ({
     seq: next,
     ...(cause === undefined ? undefined : { causedBy: cause }),
-    at: nowMs(),
+    at: clock.currentTimeMillisUnsafe(),
     session
   })
   const sourceOf = (source: unknown): MessageLog.Source =>

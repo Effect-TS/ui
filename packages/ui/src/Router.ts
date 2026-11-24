@@ -1603,53 +1603,78 @@ const build = (
       for (const check of pending.checks) check.dropped()
     }
     const listeners = new Set<(location: Location) => void>()
+    const wakes: Array<() => void> = []
+    const publishQueue: Array<Location> = []
+    let publishing = false
     const publish = (next: Location) => {
-      for (const listener of Array.from(listeners)) listener(next)
+      publishQueue.push(next)
+      if (publishing) return
+      publishing = true
+      try {
+        while (publishQueue.length > 0) {
+          const loc = publishQueue.shift()!
+          for (const listener of Array.from(listeners)) listener(loc)
+          while (wakes.length > 0) {
+            const batch = wakes.splice(0)
+            for (const wake of batch) wake()
+          }
+        }
+      } finally {
+        publishing = false
+      }
     }
     const changes: Stream.Stream<Location> = Stream.fromChannel(
       Channel.fromTransform((_, scope) =>
-        Effect.suspend(() => {
-          const pending: Array<Location> = [current]
-          let resume:
-            | ((
-              effect: Effect.Effect<readonly [Location, ...Array<Location>]>
-            ) => void)
-            | undefined
-          const listener = (next: Location) => {
-            pending.push(next)
-            if (resume !== undefined) {
+        Effect.uninterruptible(
+          Effect.suspend(() => {
+            const pending: Array<Location> = [current]
+            let resume:
+              | ((
+                effect: Effect.Effect<readonly [Location, ...Array<Location>]>
+              ) => void)
+              | undefined
+            const wake = () => {
+              if (resume === undefined || pending.length === 0) return
               const r = resume
               resume = undefined
-              r(Effect.succeed(
-                pending.splice(0) as [Location, ...Array<Location>]
-              ))
+              r(
+                Effect.succeed(
+                  pending.splice(0) as [Location, ...Array<Location>]
+                )
+              )
             }
-          }
-          listeners.add(listener)
-          const pull = Effect.suspend(() =>
-            pending.length > 0
-              ? Effect.succeed(
-                pending.splice(0) as [Location, ...Array<Location>]
-              )
-              : Effect.callback<readonly [Location, ...Array<Location>]>(
-                (r) => {
-                  resume = r
-                  return Effect.sync(() => {
-                    if (resume === r) resume = undefined
-                  })
-                }
-              )
-          )
-          return Effect.as(
-            Scope.addFinalizer(
-              scope,
-              Effect.sync(() => {
-                listeners.delete(listener)
+            const listener = (next: Location) => {
+              pending.push(next)
+              if (resume !== undefined) wakes.push(wake)
+            }
+            listeners.add(listener)
+            const pull = Effect.callback<
+              readonly [Location, ...Array<Location>]
+            >((r) => {
+              if (pending.length > 0) {
+                r(
+                  Effect.succeed(
+                    pending.splice(0) as [Location, ...Array<Location>]
+                  )
+                )
+                return
+              }
+              resume = r
+              return Effect.sync(() => {
+                if (resume === r) resume = undefined
               })
-            ),
-            pull
-          )
-        })
+            })
+            return Effect.as(
+              Scope.addFinalizer(
+                scope,
+                Effect.sync(() => {
+                  listeners.delete(listener)
+                })
+              ),
+              pull
+            )
+          })
+        )
       )
     )
     /** Whether a route at `url` is on the current page: the same tag and pathname. */

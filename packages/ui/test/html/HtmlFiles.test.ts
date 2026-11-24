@@ -253,4 +253,41 @@ describe("HtmlFiles", { concurrent: false }, () => {
       ])
       expect(fileClicks).toBe(1)
     }).pipe(Effect.scoped))
+
+  it.effect("direct Files reads resolve the browser document in BrowserHost.mountEffect and honor overrides", () =>
+    Effect.gen(function*() {
+      const picker = yield* pickers
+      picker.refuse = true
+      const Page = Component.define({
+        name: "FilesPage",
+        props: Schema.Struct({ opened: Schema.Boolean }),
+        model: Schema.Boolean,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: ($) => $.props.opened,
+        update: ($) => $.model,
+        view: (h, opened) => h.p(String(opened))
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      const readPicked = Effect.gen(function*() {
+        const files = yield* HtmlFiles.Files
+        const picked = yield* files.pick({})
+        return { opened: picked.opened }
+      })
+      const root = yield* BrowserHost.mountEffect(Page, readPicked, app)
+      assert.strictEqual(root.model(), false)
+
+      const custom = yield* BrowserHost.mountEffect(
+        Page,
+        readPicked.pipe(
+          Effect.provideService(HtmlFiles.Files, {
+            pick: () => Effect.succeed({ opened: true, files: [] })
+          })
+        ),
+        app
+      )
+      assert.strictEqual(custom.model(), true)
+    }).pipe(Effect.scoped))
 })

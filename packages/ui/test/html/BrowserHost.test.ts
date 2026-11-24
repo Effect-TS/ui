@@ -4044,4 +4044,53 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(box.style.getPropertyValue("font-weight")).toBe("")
       }).pipe(Effect.scoped))
   })
+
+  it.effect("mountEffect provides its browser Renderer and direct GlobalEvents/AnimationFrames to app effects", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "DirectContext",
+        props: Schema.Struct({
+          hasBrowserRenderer: Schema.Boolean,
+          heard: Schema.Boolean
+        }),
+        model: Schema.Struct({
+          hasBrowserRenderer: Schema.Boolean,
+          heard: Schema.Boolean
+        }),
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: ($) => $.props,
+        update: ($) => $.model,
+        view: (h) => h.div()
+      })
+      const outer = TestHost.makeHost()
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(
+        Page,
+        Effect.gen(function*() {
+          const renderer = yield* Effect.serviceOption(Renderer.Renderer)
+          const events = yield* HtmlSubscription.GlobalEvents
+          let heard = false
+          const off = events.listen(
+            "document",
+            "click",
+            { capture: false },
+            () => {
+              heard = true
+            }
+          )
+          app.ownerDocument.dispatchEvent(new MouseEvent("click"))
+          off()
+          return {
+            hasBrowserRenderer: Option.isSome(renderer) &&
+              renderer.value.host !== outer &&
+              renderer.value.host.elements.includes(Html.name),
+            heard
+          }
+        }),
+        app
+      ).pipe(Effect.provideService(Renderer.Renderer, { host: outer }))
+      expect(root.model()).toEqual({ hasBrowserRenderer: true, heard: true })
+    }).pipe(Effect.scoped))
 })
