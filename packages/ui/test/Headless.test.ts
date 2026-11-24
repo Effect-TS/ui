@@ -71,10 +71,10 @@ const Picker = Component.define({
       props: { label: "Confirm" },
       onEmit: () => PickerMessage.Closed(),
       view: (dialog) =>
-        h.div(
-          dialog.trigger(h.button).children("Open"),
-          dialog.popup(h.dialog).children(
-            dialog.title(h.h2).children("Pick one"),
+        h.div([
+          dialog.trigger(h.button).children(["Open"]),
+          dialog.popup(h.dialog).children([
+            dialog.title(h.h2).children(["Pick one"]),
             Menu(h, {
               key: "actions",
               props: { items },
@@ -83,12 +83,12 @@ const Picker = Component.define({
                 h.ul.children(menu.visible.map((item) =>
                   dialog.close(menu.item(h.li.key(item.id), item))
                     .onClick(PickerMessage.Clicked({ id: item.id }))
-                    .children(item.label)
+                    .children([item.label])
                 ))
             })
-          ),
-          h.output(log.join(", "))
-        )
+          ]),
+          h.output([log.join(", ")])
+        ])
     })
 })
 
@@ -108,16 +108,16 @@ const Bell = Component.define({
   init: () => 0,
   update: ($, message) =>
     BellMessage.match(message, {
-      Ring: () => $.set($.model + 1).emit("rang"),
+      Ring: () => $.set($.model + 1).emit(["rang"]),
       Break: () => {
         throw new Error("the bell broke")
       }
     }),
   view: (h, count) =>
-    h.span(
-      h.button.onClick(BellMessage.Ring()).children("ring " + count),
-      h.button.onClick(BellMessage.Break()).children("break")
-    )
+    h.span([
+      h.button.onClick(BellMessage.Ring()).children(["ring " + count]),
+      h.button.onClick(BellMessage.Break()).children(["break"])
+    ])
 })
 
 const BoardMessage = UiSchema.TaggedEnum({ Rang: {}, Failed: {} })
@@ -136,18 +136,18 @@ const Board = Component.define({
       key: "actions",
       props: { items },
       view: (menu) =>
-        menu.popup(h.div).children(
+        menu.popup(h.div).children([
           Bell(h, {
             key: "bell",
             onEmit: () => BoardMessage.Rang(),
             onFailure: () => BoardMessage.Failed(),
             fallback: () => {
               if (h.props.fallbackThrows) throw new Error("no fallback")
-              return h.span("bell down")
+              return h.span(["bell down"])
             }
           }),
-          h.output(log.join(", "))
-        )
+          h.output([log.join(", ")])
+        ])
     })
 })
 
@@ -166,7 +166,7 @@ const BadgeImpl = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.el("span", "badge")
+    view: (h) => h.el("span", ["badge"])
   })
 const Bare = Component.define({
   name: "Bare",
@@ -189,19 +189,21 @@ const Consumer = Component.define({
   view: (h, broken) =>
     h.el(
       "div",
-      h.el("button").on("click", ConsumerMessage.Break()).children("break"),
-      Bare(h, {
-        key: "h",
-        fallback: () => h.text("headless down"),
-        view: () =>
-          Badge.render(h, {
-            key: "b",
-            fallback: () => {
-              if (broken) throw new Error("the fallback threw")
-              return h.text("loading")
-            }
-          })
-      })
+      [
+        h.el("button").on("click", ConsumerMessage.Break()).children(["break"]),
+        Bare(h, {
+          key: "h",
+          fallback: () => h.text("headless down"),
+          view: () =>
+            Badge.render(h, {
+              key: "b",
+              fallback: () => {
+                if (broken) throw new Error("the fallback threw")
+                return h.text("loading")
+              }
+            })
+        })
+      ]
     )
 })
 const Provided = Component.provide(
@@ -240,7 +242,10 @@ const Field = Component.define({
     input: p.part(
       "input",
       (b) =>
-        b.class(undefined).class("field").attr("aria-describedby", undefined)
+        b.class([undefined]).class(["field"]).attr(
+          "aria-describedby",
+          undefined
+        )
           .attr("aria-describedby", "hint")
     )
   })
@@ -261,7 +266,7 @@ const Form = Component.define({
       {
         key: "f",
         view: (field) =>
-          field.input(h.input.class("wide field")).attr(
+          field.input(h.input.class(["wide field"])).attr(
             "aria-describedby",
             "note"
           )
@@ -282,7 +287,7 @@ const Shell = Component.define({
     Board(h, {
       key: "board",
       props: h.props,
-      fallback: () => h.p("board down")
+      fallback: () => h.p(["board down"])
     })
 })
 
@@ -298,9 +303,9 @@ const Probe = Component.define({
   init: (): ReadonlyArray<number> => [],
   update: ($) => [...$.model, $.props.count],
   view: (h, read) =>
-    h.button.onClick(ProbeMessage.Read()).children(
+    h.button.onClick(ProbeMessage.Read()).children([
       "read [" + read.join(",") + "]"
-    )
+    ])
 })
 
 const Counted = Component.define({
@@ -316,11 +321,11 @@ const Counted = Component.define({
       key: "m",
       props: { items },
       view: (menu) =>
-        h.div(
-          menu.trigger(h.button).children("toggle"),
-          h.button.onClick("bump").children("bump"),
+        h.div([
+          menu.trigger(h.button).children(["toggle"]),
+          h.button.onClick("bump").children(["bump"]),
           Probe(h, { key: "p", props: { count } })
-        )
+        ])
     })
 })
 
@@ -415,7 +420,7 @@ describe("headless components", () => {
               .attr("data-checked", p.props.active ? "" : undefined)
               .attr("title", undefined).attr("title", "part")
               .attr("data-removed", "part").attr("data-removed", undefined)
-              .class("part"))
+              .class(["part"]))
         })
       })
       const Consumer = Component.define({
@@ -427,8 +432,8 @@ describe("headless components", () => {
         init: () => false,
         update: ($) => !$.model,
         view: (h, active) =>
-          h.div(
-            h.button.onClick("toggle").children("toggle"),
+          h.div([
+            h.button.onClick("toggle").children(["toggle"]),
             Control(h, {
               key: "control",
               props: { active },
@@ -440,10 +445,10 @@ describe("headless components", () => {
                     "data-removed": "consumer",
                     title: "consumer",
                     "aria-label": "Keep me"
-                  }).class("consumer")
-                ).children("control")
+                  }).class(["consumer"])
+                ).children(["control"])
             })
-          )
+          ])
       })
       const root = yield* TestHost.mount(Consumer, {})
       const attrs = () =>

@@ -18,19 +18,19 @@ it.effect("a range slider in a field is named by the legend, described, and focu
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Field(h, {
               props: { invalid: true, described: true },
               view: (field) =>
-                field.root(h.div.class("field")).children(
-                  field.legend(h.div).children("Price"),
+                field.root(h.div.class(["field"])).children([
+                  field.legend(h.div).children(["Price"]),
                   Slider(h, {
                     props: { value: [20, 80], disabled: field.disabled },
                     view: (slider) =>
-                      slider.root(field.group(h.div)).children(
-                        slider.control(h.div).children(
+                      slider.root(field.group(h.div)).children([
+                        slider.control(h.div).children([
                           slider.track(h.div).children(
-                            ...["Minimum", "Maximum"].map((name, index) =>
+                            ["Minimum", "Maximum"].map((name, index) =>
                               slider.thumb({
                                 element: h.div,
                                 index,
@@ -41,15 +41,15 @@ it.effect("a range slider in a field is named by the legend, described, and focu
                               })
                             )
                           )
-                        )
-                      )
+                        ])
+                      ])
                   }),
-                  field.description(h.p).children("In dollars"),
-                  field.error(h.span)?.children("Enter a range")
-                )
+                  field.description(h.p).children(["In dollars"]),
+                  field.error(h.span)?.children(["Enter a range"])
+                ])
             }),
-            h.button("After")
-          )
+            h.button(["After"])
+          ])
       })
     const app = yield* container
     yield* BrowserHost.mountEffect(Price, {}, app)

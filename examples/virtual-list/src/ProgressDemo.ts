@@ -62,29 +62,29 @@ export const ProgressDemo = Component.define({
     const progress = model.length > model.height
       ? model.offset / (model.length - model.height)
       : 0
-    return h.div.children(
-      h.div.class("toolbar fixed").children(
+    return h.div.children([
+      h.div.class(["toolbar fixed"]).children([
         h.button.attr("id", "toggle-tracking").onClick(
           ProgressMessage.ToggledTracking()
-        ).children(
+        ).children([
           model.track ? "Stop tracking" : "Track the scroll"
-        ),
+        ]),
         h.span.attr("id", "status").attrs({
           "data-offset": String(model.offset),
           "data-scrolled": String(model.scrolled),
           "data-moves": String(model.moves),
           "data-scrolling": String(model.scrolling),
           "data-stops": String(model.stops)
-        }).children(
+        }).children([
           `${Math.round(progress * 100)}% read, ${model.stops} scrolls finished`
-        ),
-        h.div.class("progress").children(
-          h.div.class("progress-bar").attr(
+        ]),
+        h.div.class(["progress"]).children([
+          h.div.class(["progress-bar"]).attr(
             "style",
             `width:${(progress * 100).toFixed(2)}%`
           )
-        )
-      ),
+        ])
+      ]),
       VirtualList(h, {
         props: { count: 2000, itemSize: 72, trackScroll: model.track },
         onEmit: {
@@ -92,23 +92,23 @@ export const ProgressDemo = Component.define({
         },
         view: (virtualList) =>
           virtualList.list(
-            h.div.class("article").attr(
+            h.div.class(["article"]).attr(
               "data-scrolling",
               String(virtualList.scrolling)
             )
           ).children(
             virtualList.items.map((index) =>
               virtualList.item({
-                element: h.div.class("paragraph").key(String(index)),
+                element: h.div.class(["paragraph"]).key(String(index)),
                 index
-              }).children(
-                h.p.children(
+              }).children([
+                h.p.children([
                   index + 1 + ". " + textOf(index) + " " + textOf(index + 1)
-                )
-              )
+                ])
+              ])
             )
           )
       })
-    )
+    ])
   }
 })

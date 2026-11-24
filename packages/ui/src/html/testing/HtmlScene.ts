@@ -40,19 +40,19 @@
  *   update: ($, message) =>
  *     Message.match(message, {
  *       UpdatedZip: ({ zip }) => $.evolve({ zip }),
- *       SubmittedForm: ({ zip }) => $.run(FetchWeather.make({ zip })),
+ *       SubmittedForm: ({ zip }) => $.run([FetchWeather.make({ zip })]),
  *       CompletedFetchWeather: ({ forecast }) => $.evolve({ forecast })
  *     }),
  *   view: (h, model) =>
- *     h.div(
- *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
- *         h.label.attr("for", "zip").children("Zip code"),
+ *     h.div([
+ *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children([
+ *         h.label.attr("for", "zip").children(["Zip code"]),
  *         h.input.attrs({ id: "zip", name: "zip" }).value(model.zip)
  *           .onInput(({ value }) => Message.UpdatedZip({ zip: value })),
- *         h.button.children("Get Weather")
- *       ),
- *       h.p.attr("role", "status").children(model.forecast)
- *     )
+ *         h.button.children(["Get Weather"])
+ *       ]),
+ *       h.p.attr("role", "status").children([model.forecast])
+ *     ])
  * })
  *
  * Effect.gen(function*() {
@@ -60,7 +60,7 @@
  *   s.type(HtmlLocator.label("Zip code"), "90210")
  *     // A submit button submits its form, with the fields read from the view.
  *     .click(HtmlLocator.role("button", { name: "Get Weather" }))
- *     .expectExact(FetchWeather.make({ zip: "90210" }))
+ *     .expectExact([FetchWeather.make({ zip: "90210" })])
  *     .resolve(FetchWeather, Message.CompletedFetchWeather({ forecast: "sun" }))
  *     .expect(HtmlLocator.role("status")).toHaveText("sun")
  * }).pipe(Effect.scoped, Effect.runSync)

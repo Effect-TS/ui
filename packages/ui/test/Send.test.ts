@@ -32,7 +32,7 @@ const ItemDef = Component.define({
 
 const itemView = ItemDef.view((h) =>
   h.el("button").on("click", ItemMessage.Adds({ ids: ["b", "a", "b"] }))
-    .children(`log:${h.shared.log.join(",")}`)
+    .children([`log:${h.shared.log.join(",")}`])
 )
 
 const Item = ItemDef.make({

@@ -24,7 +24,7 @@ describe("Separator", () => {
         })
         .onClick(Msg.Clicked())
     })
-      .class("rule")
+      .class(["rule"])
       .attrs({
         "aria-label": "Section divider",
         role: "none",

@@ -45,14 +45,14 @@ const Poster = Component.define({
         $.send(ToastProvider, { _tag: "RequestedClose", id: "t" + $.model })
     },
     view: (h) =>
-      h.div(
+      h.div([
         h.button.attr("id", "post").onClick(PosterMessage.ClickedPost())
-          .children("Post"),
+          .children(["Post"]),
         h.button.attr("id", "complete").onClick(PosterMessage.CompletedUpload())
-          .children("Complete"),
+          .children(["Complete"]),
         h.button.attr("id", "drop").onClick(PosterMessage.ClickedDrop())
-          .children("Drop")
-      )
+          .children(["Drop"])
+      ])
   })
 
 const PageMessage = UiSchema.TaggedEnum({ Dismissed: { id: Schema.String } })
@@ -73,22 +73,22 @@ const Page = Component.define({
       props: { timeout: h.props.timeout, limit: 2 },
       onEmit: { Dismissed: ({ id }) => PageMessage.Dismissed({ id }) },
       view: (toastProvider) =>
-        h.div(
+        h.div([
           Poster(h, {}),
-          h.output(dismissed),
+          h.output([dismissed]),
           toastProvider.viewport(h.div).children(
-            ...toastProvider.toasts.map((toast) =>
+            toastProvider.toasts.map((toast) =>
               toastProvider.root({ element: h.div.attr("id", toast.id), toast })
-                .children(
+                .children([
                   toast.title,
                   toastProvider.close({
                     element: h.button.attr("id", "close-" + toast.id),
                     toast
-                  }).children("Close")
-                )
+                  }).children(["Close"])
+                ])
             )
           )
-        )
+        ])
     })
 })
 
@@ -291,17 +291,17 @@ const Above = Component.define({
   view: (h, open) =>
     ToastProvider(h, {
       view: (toastProvider) =>
-        h.div(
-          h.button.attr("id", "open").onClick(AboveMessage.Opened()).children(
+        h.div([
+          h.button.attr("id", "open").onClick(AboveMessage.Opened()).children([
             "Open"
-          ),
+          ]),
           toastProvider.viewport(h.div.attr("id", "toasts")),
           Dialog(h, {
             props: { open },
             view: (dialog) =>
-              h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
+              h.div([dialog.portal(h.dialog)?.children([dialog.popup(h.div)])])
           })
-        )
+        ])
     })
 })
 

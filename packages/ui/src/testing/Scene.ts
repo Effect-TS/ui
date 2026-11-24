@@ -40,21 +40,21 @@
  *   init: () => ({ saved: false }),
  *   update: ($, message) =>
  *     Message.match(message, {
- *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
+ *       ClickedSave: () => $.run([SaveTodo.make({ id: $.props.id })]),
  *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
  *   // In a scene, `h.isRunning` is derived from the pending Commands.
  *   view: (h, model) =>
- *     h.el("button").on("click", Message.ClickedSave()).children(
+ *     h.el("button").on("click", Message.ClickedSave()).children([
  *       model.saved ? "saved" : h.isRunning(SaveTodo) ? "saving" : "save"
- *     )
+ *     ])
  * })
  *
  * Effect.gen(function*() {
  *   const s = yield* Scene.make(TodoItem, { id: "t1" })
  *   s.click("save")
  *     .expect(Locator.text("saving")).toExist()
- *     .expectExact(SaveTodo.make({ id: "t1" }))
+ *     .expectExact([SaveTodo.make({ id: "t1" })])
  *     .resolve(SaveTodo, Message.CompletedSaveTodo())
  *     .expect(Locator.tag("button")).toHaveText("saved")
  * }).pipe(Effect.scoped, Effect.runSync)

@@ -48,7 +48,7 @@ describe("Markdown.islandsFor", () => {
 
   it("needs no services when no view does", () => {
     const islands = Markdown.islandsFor(definitions, {
-      Clock: (h, { zone }) => h.span.children(zone),
+      Clock: (h, { zone }) => h.span.children([zone]),
       Note: (h) => h.hr
     })
 

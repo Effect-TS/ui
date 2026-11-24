@@ -74,16 +74,16 @@ const Recorder = Component.define({
     ]
     switch (message._tag) {
       case "Fire":
-        return $.set(next).run(commands[message.command]())
+        return $.set(next).run([commands[message.command]()])
       case "Queue":
-        return $.set(next).run(
+        return $.set(next).run([
           Queued.make({ n: message.n, silent: message.silent })
-        )
+        ])
       case "Got":
         return next
     }
   },
-  view: (h, model) => h.el("p", model.join(","))
+  view: (h, model) => h.el("p", [model.join(",")])
 })
 
 const run = <A, E>(effect: Effect.Effect<A, E, any>) =>
@@ -226,9 +226,9 @@ describe("Component.noop", () => {
         message: Schema.Never
       })
         .make({
-          init: ($) => $.set(0).run(Quiet.make()),
+          init: ($) => $.set(0).run([Quiet.make()]),
           update: ($) => $.model,
-          view: (h, model) => h.el("p", String(model))
+          view: (h, model) => h.el("p", [String(model)])
         })
       const s = yield* Story.make(Silent, {})
       s.resolve(Quiet, Component.noop).expectNone()
@@ -248,12 +248,12 @@ describe("Component.noop", () => {
         message: Schema.Never
       }).make({
         init: ($) =>
-          $.set(null).run(
+          $.set(null).run([
             Slow.make({}).pipe(Command.map(() => {
               mapped++
               return Component.noop
             }))
-          ),
+          ]),
         update: ($) => $.model,
         view: (h) => h.text("child")
       })

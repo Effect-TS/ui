@@ -14,8 +14,8 @@
  * | `root` | any element, usually a `<div>` |
  *
  * The root takes the consumer's builder and returns it, so the consumer goes
- * on chaining and adds the checkboxes with `.children(...)`:
- * `checkboxGroup.root(h.div).children(...)`. It adds no markup.
+ * on chaining and adds the checkboxes with `.children([...])`:
+ * `checkboxGroup.root(h.div).children([...])`. It adds no markup.
  *
  * A `Checkbox` with a `value` prop inside the group is a member: it is
  * ticked while the group's `value` holds its value, and a click adds or
@@ -79,18 +79,18 @@
  *       props: { value: model.fruits, allValues: fruits, name: "fruit" },
  *       onEmit: { Updated: ({ value }) => BasketMessage.UpdatedFruits({ value }) },
  *       view: (checkboxGroup) =>
- *         checkboxGroup.root(h.div.class("fruits").attr("aria-label", "Fruit")).children(
- *           h.label.children(
+ *         checkboxGroup.root(h.div.class(["fruits"]).attr("aria-label", "Fruit")).children([
+ *           h.label.children([
  *             Checkbox(h, { key: "all", props: { parent: true }, view: (checkbox) => checkbox.root(h.button) }),
  *             "All fruit"
- *           ),
+ *           ]),
  *           ...fruits.map((fruit) =>
- *             h.label.children(
+ *             h.label.children([
  *               Checkbox(h, { key: fruit, props: { value: fruit }, view: (checkbox) => checkbox.root(h.button) }),
  *               fruit
- *             )
+ *             ])
  *           )
- *         )
+ *         ])
  *     })
  * })
  *
@@ -292,18 +292,18 @@ export const CheckboxGroup = Component.define({
     ToggledItem: ($, { value }) => {
       if ($.props.disabled === true) return $.model
       const next = toggled($.props.value, value)
-      return $.evolve({ remembered: next }).emit(
+      return $.evolve({ remembered: next }).emit([
         CheckboxGroupEvents.Updated({ value: next })
-      )
+      ])
     },
     ToggledParent: ($) => {
       if ($.props.disabled === true) return $.model
       const next = cycle($.model, $.props)
       return next === undefined
         ? $.model
-        : $.evolve({ remembered: next.remembered }).emit(
+        : $.evolve({ remembered: next.remembered }).emit([
           CheckboxGroupEvents.Updated({ value: next.value })
-        )
+        ])
     },
     ChangedItems: ($, { items }) => $.evolve({ items })
   },

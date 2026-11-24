@@ -39,7 +39,7 @@ export const App = Component.define({
       // and with no no-op variant in `AppMessage`. It also hides a
       // navigation a guard blocked, which this one has no use for.
       ClickedBackToNotes: () =>
-        $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
+        $.run([Router.push(AppRoute, indexRoute).pipe(Command.asNoop)])
     }),
   subscriptions: ({ model }) => [
     Router.subscription(
@@ -56,12 +56,12 @@ export const App = Component.define({
     HtmlHead.lang("en")
   ],
   view: (h, { route }) =>
-    h.div(
-      h.header(
-        h.a.attr("href", AppRoute.print(indexRoute)).children("Notes"),
-        h.a.attr("href", AppRoute.print(searchRoute)).children("Search")
-      ),
-      h.main(
+    h.div([
+      h.header([
+        h.a.attr("href", AppRoute.print(indexRoute)).children(["Notes"]),
+        h.a.attr("href", AppRoute.print(searchRoute)).children(["Search"])
+      ]),
+      h.main([
         // `match` is exhaustive. Key each page by its path with `printPath`,
         // so a new path mounts a fresh page instead of reusing the old state.
         // `printPath` leaves out the search, so a search change updates the
@@ -83,13 +83,13 @@ export const App = Component.define({
               props: { id: route.params.id }
             }),
           NotFound: () =>
-            h.section(
-              h.h1("Page not found"),
-              h.button.onClick(AppMessage.ClickedBackToNotes()).children(
+            h.section([
+              h.h1(["Page not found"]),
+              h.button.onClick(AppMessage.ClickedBackToNotes()).children([
                 "Back to all notes"
-              )
-            )
+              ])
+            ])
         })
-      )
-    )
+      ])
+    ])
 })

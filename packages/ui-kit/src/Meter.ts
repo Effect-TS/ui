@@ -18,7 +18,7 @@
  * | `indicator` | `<div>` inside the track |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`. `root`
+ * goes on chaining and adds children with `.children([...])`. `root`
  * appends a visually hidden `<span role="presentation">` after all its
  * children, which makes NVDA read the label. `value` fills in the value
  * text when the consumer gives it no children. The other parts add no
@@ -63,11 +63,11 @@
  *     Meter(h, {
  *       props: { value: model.used, max: model.quota, valueText: `${model.used} of ${model.quota} GB` },
  *       view: (meter) =>
- *         meter.root(h.div.class("meter")).children(
- *           meter.label(h.span).children("Storage"),
+ *         meter.root(h.div.class(["meter"])).children([
+ *           meter.label(h.span).children(["Storage"]),
  *           meter.value(h.span),
- *           meter.track(h.div.class("track")).children(meter.indicator(h.div.class("fill")))
- *         )
+ *           meter.track(h.div.class(["track"])).children([meter.indicator(h.div.class(["fill"]))])
+ *         ])
  *     })
  * })
  *
@@ -188,7 +188,7 @@ export const Meter = Component.define({
           "aria-labelledby": labelId
         })
           // After every child, including the ones chained after the part.
-          .forward((node) => node.children(nvdaLabel))),
+          .forward((node) => node.children([nvdaLabel]))),
       label: p.part(
         "span",
         (b) => b.attrs({ id: labelId, role: "presentation" })

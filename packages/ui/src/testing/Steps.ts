@@ -253,7 +253,7 @@ type AnyComponent =
  * }).make({
  *   init: () => ({ count: 0 }),
  *   update: ($) => ({ count: $.model.count + 1 }),
- *   view: (h, model) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
+ *   view: (h, model) => h.el("button").on("click", Message.ClickedIncrement()).children([`+ ${model.count}`])
  * })
  *
  * const quiet = <S extends Steps.Steps.Any>(s: S): S =>
@@ -517,7 +517,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * `events` Schema.
    */
   emitted(
-    ...events: readonly [Component.Events<C>, ...Array<Component.Events<C>>]
+    events: readonly [Component.Events<C>, ...Array<Component.Events<C>>]
   ): this
   /**
    * Acknowledges the oldest `$.send` no step acknowledged yet, after
@@ -545,7 +545,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   check(f: (current: this["current"]) => void): this
 
   /** Asserts that exactly these Commands are pending, in order. */
-  expectExact(...targets: ReadonlyArray<Target>): this
+  expectExact(targets: ReadonlyArray<Target>): this
   /** Asserts that a Command matching `target` is pending. */
   expectHas(target: Target): this
   /** Asserts that nothing is pending. */

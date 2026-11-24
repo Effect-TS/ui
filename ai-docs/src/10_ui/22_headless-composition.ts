@@ -49,12 +49,12 @@ export const TagPicker = Component.define({
     return TagPickerMessage.match(message, {
       PickedTag: ({ id }) =>
         $.set({ announced: `Added ${label(id)}` })
-          .emit(TagPickerEvents.Updated({ tags: [...$.props.tags, id] })),
+          .emit([TagPickerEvents.Updated({ tags: [...$.props.tags, id] })]),
       ClickedRemove: ({ id }) =>
         $.set({ announced: `Removed ${label(id)}` })
-          .emit(TagPickerEvents.Updated({
+          .emit([TagPickerEvents.Updated({
             tags: $.props.tags.filter((tag) => tag !== id)
-          }))
+          })])
     })
   },
   // `p.child(Listbox, ...)` declares a Listbox that this component owns. It
@@ -127,32 +127,32 @@ export const NoteTags = Component.define({
       props: { options, tags: model.tags },
       onEmit: { Updated: ({ tags }) => NoteTagsMessage.UpdatedTags({ tags }) },
       view: (tagPicker) =>
-        h.div.class("note-tags").children(
+        h.div.class(["note-tags"]).children([
           h.ul.attr("aria-label", "Tags").children(
             tagPicker.tags.map((tag) =>
-              h.li.key(tag.id).children(
+              h.li.key(tag.id).children([
                 tag.label,
-                tagPicker.remove(h.button, tag).children("×")
-              )
+                tagPicker.remove(h.button, tag).children(["×"])
+              ])
             )
           ),
-          tagPicker.trigger(h.button).children("Add a tag"),
-          tagPicker.popup(h.div.attr("aria-label", "Add a tag")).children(
+          tagPicker.trigger(h.button).children(["Add a tag"]),
+          tagPicker.popup(h.div.attr("aria-label", "Add a tag")).children([
             tagPicker.input(h.input.attr("aria-label", "Filter tags")),
             tagPicker.list(h.ul.attr("aria-label", "Tags to add")).children(
               tagPicker.shown.map((option) =>
                 tagPicker.option(
-                  h.li.key(option.id).class(
+                  h.li.key(option.id).class([
                     tagPicker.active === option.id && "active"
-                  ),
+                  ]),
                   option
                 )
-                  .children(option.label)
+                  .children([option.label])
               )
             )
-          ),
-          tagPicker.status(h.div).children(tagPicker.announced)
-        )
+          ]),
+          tagPicker.status(h.div).children([tagPicker.announced])
+        ])
     })
 })
 
@@ -171,19 +171,19 @@ export const pickedAndRemoved = Effect.gen(function*() {
     elements: Html,
     // The stand-in view draws only what the steps look at.
     view: (tagPicker, h) =>
-      h.div(
+      h.div([
         tagPicker.tags.map((tag) =>
-          tagPicker.remove(h.button.key(tag.id), tag).children("×")
+          tagPicker.remove(h.button.key(tag.id), tag).children(["×"])
         ),
-        tagPicker.status(h.div).children(tagPicker.announced)
-      )
+        tagPicker.status(h.div).children([tagPicker.announced])
+      ])
   })
   s.childEmit(Listbox, { _tag: "Picked", id: "work" })
-    .emitted(TagPickerEvents.Updated({ tags: ["work"] }))
+    .emitted([TagPickerEvents.Updated({ tags: ["work"] })])
     .expect(Locator.text("Added Work")).toExist()
     // The consumer owns the tags: it passes the new list back as props.
     .props({ options, tags: ["work"] })
     .click(HtmlLocator.role("button", { name: "Remove Work" }))
-    .emitted(TagPickerEvents.Updated({ tags: [] }))
+    .emitted([TagPickerEvents.Updated({ tags: [] })])
     .expect(Locator.text("Removed Work")).toExist()
 })

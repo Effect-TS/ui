@@ -50,7 +50,7 @@ export class TinyElement<
     return (super.onMount as any)(mount)
   }
   children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
-    ...inputs: C
+    inputs: C
   ): View.Element<Msg, R | View.Requirements<C[number]>> {
     return View.build(this, inputs)
   }

@@ -187,7 +187,7 @@ const SlotView = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.strong("ready")
+  view: (h) => h.strong(["ready"])
 })
 
 const Shown = Component.define({
@@ -199,7 +199,7 @@ const Shown = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.span.children(String(h.props.n))
+  view: (h) => h.span.children([String(h.props.n)])
 })
 
 const Pair = Component.define({
@@ -211,12 +211,16 @@ const Pair = Component.define({
   init: () => ({ n: 0 }),
   update: { ClickedAdd: ($) => $.evolve({ n: $.model.n + 1 }) },
   view: (h, model) =>
-    h.div(
-      h.button.onClick(PairMessage.ClickedAdd()).children("Add"),
-      Slot.render(h, { key: "s", props: {}, fallback: () => h.em("fallback") }),
+    h.div([
+      h.button.onClick(PairMessage.ClickedAdd()).children(["Add"]),
+      Slot.render(h, {
+        key: "s",
+        props: {},
+        fallback: () => h.em(["fallback"])
+      }),
       Shown(h, { key: "a", props: { n: model.n } }),
       Shown(h, { key: "b", props: { n: model.n } })
-    )
+    ])
 }).pipe(Component.provide(Slot.toLayer(SlotView)))
 
 describe("DevTools overlay", { concurrent: false }, () => {
@@ -246,11 +250,11 @@ describe("DevTools overlay", { concurrent: false }, () => {
           Commit: ($) => $.evolve({ c: $.model.c + 1 })
         },
         view: (h, model) =>
-          h.div(
-            h.output.children(`${model.x}:${model.c}`),
-            h.button.onClick({ _tag: "Move" }).children("Move"),
-            h.button.onClick({ _tag: "Commit" }).children("Commit")
-          )
+          h.div([
+            h.output.children([`${model.x}:${model.c}`]),
+            h.button.onClick({ _tag: "Move" }).children(["Move"]),
+            h.button.onClick({ _tag: "Commit" }).children(["Commit"])
+          ])
       })
       yield* Effect.scoped(Effect.gen(function*() {
         const app = document.body.appendChild(document.createElement("div"))
@@ -313,15 +317,17 @@ describe("DevTools overlay", { concurrent: false }, () => {
           Commit: ($) => $.evolve({ v: $.model.v + 10 })
         },
         view: (h, model) =>
-          h.div(
-            h.output.attr("data-peer", h.props.label).children(String(model.v)),
-            h.button.onClick(PairMoveMessage.Move()).children(
+          h.div([
+            h.output.attr("data-peer", h.props.label).children([
+              String(model.v)
+            ]),
+            h.button.onClick(PairMoveMessage.Move()).children([
               "Move " + h.props.label
-            ),
-            h.button.onClick(PairMoveMessage.Commit()).children(
+            ]),
+            h.button.onClick(PairMoveMessage.Commit()).children([
               "Commit " + h.props.label
-            )
-          )
+            ])
+          ])
       })
       const Two = Component.define({
         name: "Two",
@@ -332,10 +338,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.main(
+          h.main([
             Peer(h, { key: "a", props: { label: "A" } }),
             Peer(h, { key: "b", props: { label: "B" } })
-          )
+          ])
       })
       yield* Effect.scoped(Effect.gen(function*() {
         const app = document.body.appendChild(document.createElement("div"))
@@ -768,7 +774,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: { Pinged: ($) => $.model },
-        view: (h) => h.button.onClick(LeafMessage.Pinged()).children("Ping")
+        view: (h) => h.button.onClick(LeafMessage.Pinged()).children(["Ping"])
       })
       const Pane = Component.define({
         name: "Pane",
@@ -778,7 +784,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.div(Leaf(h, { key: "l" }))
+        view: (h) => h.div([Leaf(h, { key: "l" })])
       })
       const HostMessage = UiSchema.TaggedEnum({ Toggled: {} })
       const Host = Component.define({
@@ -790,10 +796,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
         init: () => true,
         update: { Toggled: ($) => !$.model },
         view: (h, on) =>
-          h.main(
-            h.button.onClick(HostMessage.Toggled()).children("Toggle"),
+          h.main([
+            h.button.onClick(HostMessage.Toggled()).children(["Toggle"]),
             on ? Pane(h, { key: "p" }) : null
-          )
+          ])
       })
       yield* Effect.scoped(Effect.gen(function*() {
         const app = document.body.appendChild(document.createElement("div"))
@@ -869,10 +875,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
           Replaced: ($) => $.set({ ...$.model, lists: { fresh: [2, 3] } })
         },
         view: (h) =>
-          h.div.children(
-            h.button.onClick(Message.Typed()).children("Type"),
-            h.button.onClick(Message.Replaced()).children("Replace")
-          )
+          h.div.children([
+            h.button.onClick(Message.Typed()).children(["Type"]),
+            h.button.onClick(Message.Replaced()).children(["Replace"])
+          ])
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
@@ -959,9 +965,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: { ClickedUpload: ($) => $.run(Upload.make()) },
+        update: { ClickedUpload: ($) => $.run([Upload.make()]) },
         view: (h) =>
-          h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
+          h.button.onClick(UploaderMessage.ClickedUpload()).children(["Upload"])
       })
       const Page = Component.define({
         name: "Page",
@@ -971,7 +977,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.main(Uploader(h, { key: "uploader", props: {} }))
+        view: (h) => h.main([Uploader(h, { key: "uploader", props: {} })])
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
@@ -1040,15 +1046,15 @@ describe("DevTools overlay", { concurrent: false }, () => {
         message: Message,
         elements: Html
       }).make({
-        init: ($) => $.set(null).run(save("a")).run(save("b")),
+        init: ($) => $.set(null).run([save("a")]).run([save("b")]),
         update: {
           Escaped: ($) =>
-            $.set($.model).run(Command.interrupt(Save, { id: "b" })).run(
+            $.set($.model).run([Command.interrupt(Save, { id: "b" })]).run([
               Command.interrupt(Save, { id: "a" })
-            ),
+            ]),
           Saved: ($) => $.model
         },
-        view: (h) => h.button.onClick(Message.Escaped()).children("Escape")
+        view: (h) => h.button.onClick(Message.Escaped()).children(["Escape"])
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))

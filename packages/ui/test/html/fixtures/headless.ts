@@ -94,7 +94,7 @@ export const Menu = MenuDef.make({
           open,
           query: open ? $.model.query : "",
           active: open ? $.model.active : null
-        }).run(
+        }).run([
           open
             ? HtmlCommand.focus(
               Input,
@@ -104,7 +104,7 @@ export const Menu = MenuDef.make({
               Trigger,
               ({ found }) => MenuMessage.Focused({ found })
             )
-        ),
+        ]),
       Query: ({ value }) => ({
         ...$.model,
         query: value,
@@ -123,9 +123,9 @@ export const Menu = MenuDef.make({
           case "Enter":
             return active === null
               ? $.model
-              : $.set({ ...$.model, open: false }).emit(
+              : $.set({ ...$.model, open: false }).emit([
                 MenuEvents.Picked({ id: active })
-              )
+              ])
           default: {
             // Typeahead: a printable key on the trigger moves to the first label that starts with what was typed.
             // A key that no label continues with starts over from that key, so the buffer is never longer than a label.
@@ -146,7 +146,7 @@ export const Menu = MenuDef.make({
         }
       },
       Pick: ({ id }) =>
-        $.set({ ...$.model, open: false }).emit(MenuEvents.Picked({ id })),
+        $.set({ ...$.model, open: false }).emit([MenuEvents.Picked({ id })]),
       Focused: ({ found }) => ({
         ...$.model,
         focused: [
@@ -237,7 +237,7 @@ export const Dialog = Component.define({
   update: ($, message) =>
     DialogMessage.match(message, {
       Open: () => $.set({ open: true }),
-      Close: () => $.set({ open: false }).emit(DialogEvents.Closed())
+      Close: () => $.set({ open: false }).emit([DialogEvents.Closed()])
     }),
   parts: (p, model) => ({
     open: model.open,

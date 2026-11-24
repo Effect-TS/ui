@@ -210,27 +210,27 @@
  *             Settled: () => undefined
  *           },
  *           view: (combobox) =>
- *             field.root(h.div).children(
- *               field.label(h.label).children("Fruit"),
- *               combobox.inputGroup(h.div).children(
+ *             field.root(h.div).children([
+ *               field.label(h.label).children(["Fruit"]),
+ *               combobox.inputGroup(h.div).children([
  *                 combobox.input(field.control(h.input)),
- *                 combobox.clear({ element: h.button })?.children("×"),
- *                 combobox.trigger(h.button).children(combobox.icon(h.span).children("▾"))
- *               ),
- *               combobox.positioner(h.div).children(
- *                 combobox.popup(h.div).children(
- *                   combobox.empty(h.div).children("No fruit found"),
+ *                 combobox.clear({ element: h.button })?.children(["×"]),
+ *                 combobox.trigger(h.button).children([combobox.icon(h.span).children(["▾"])])
+ *               ]),
+ *               combobox.positioner(h.div).children([
+ *                 combobox.popup(h.div).children([
+ *                   combobox.empty(h.div).children(["No fruit found"]),
  *                   combobox.list(h.div).children(
- *                     ...combobox.items.map(({ label, value }) =>
- *                       combobox.item({ element: h.div, value }).children(
+ *                     combobox.items.map(({ label, value }) =>
+ *                       combobox.item({ element: h.div, value }).children([
  *                         label,
- *                         combobox.itemIndicator({ element: h.span, value })?.children("✓")
- *                       )
+ *                         combobox.itemIndicator({ element: h.span, value })?.children(["✓"])
+ *                       ])
  *                     )
  *                   )
- *                 )
- *               )
- *             )
+ *                 ])
+ *               ])
+ *             ])
  *         })
  *     })
  * })

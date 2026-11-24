@@ -66,7 +66,7 @@ const Ticker = Component.define({
 }).make({
   init: () => 0,
   update: (_, now) => now,
-  view: (h, now) => h.time.onMount(Tick()).children(String(now))
+  view: (h, now) => h.time.onMount(Tick()).children([String(now)])
 })
 
 interface NativeTags<Msg> {
@@ -96,10 +96,10 @@ describe("Html", () => {
       init: () => "",
       update: ($) => $.model,
       view: (h) => {
-        expect(h.div(h.span("text"), "more")).type.toBe<
+        expect(h.div([h.span(["text"]), "more"])).type.toBe<
           Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
         >()
-        expect(h.div.class("box")).type.toBe<
+        expect(h.div.class(["box"])).type.toBe<
           Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
         >()
         expect(h.input).type.toBe<
@@ -112,7 +112,7 @@ describe("Html", () => {
           >
         >()
         expect(h).type.not.toHaveProperty("script")
-        return h.div()
+        return h.div([])
       }
     })
   })
@@ -127,14 +127,14 @@ describe("Html", () => {
       init: () => "",
       update: ($) => $.model,
       view: (h, draft) => {
-        const form = h.form.onSubmit(Msg.Sent({ title: draft })).children(
+        const form = h.form.onSubmit(Msg.Sent({ title: draft })).children([
           h.input.ref(Field).value(draft).onInput(({ value }) =>
             Msg.Typed({ value })
           ),
-          h.button.attr("type", "submit").children("Add"),
-          h.span(draft),
+          h.button.attr("type", "submit").children(["Add"]),
+          h.span([draft]),
           h.br
-        )
+        ])
         expect(form).type.toBe<
           Html.Element<
             Msg,
@@ -146,38 +146,38 @@ describe("Html", () => {
         >()
         // The shorthand and `children` both return the builder, with the children's requirements.
         const needsClock = {} as View.Node<Msg, Clock>
-        expect(h.div("a").class("box").children(needsClock)).type.toBe<
+        expect(h.div(["a"]).class(["box"]).children([needsClock])).type.toBe<
           Html.Element<Msg, Clock, Html.EventsOf<"div">, HTMLDivElement, "div">
         >()
         // It is content, not a node: nothing reads its children off it.
-        expect(h.div.children("a")).type.toBeAssignableTo<
+        expect(h.div.children(["a"])).type.toBeAssignableTo<
           View.Content<Msg, never>
         >()
-        expect(h.div.children("a")).type.not.toHaveProperty("_tag")
+        expect(h.div.children(["a"])).type.not.toHaveProperty("_tag")
         // A chained builder isn't callable: only the root is shorthand.
-        expect(h.div).type.toBeCallableWith("a")
-        expect(h.div("a")).type.not.toBeAssignableTo<
+        expect(h.div).type.toBeCallableWith(["a"])
+        expect(h.div(["a"])).type.not.toBeAssignableTo<
           (...args: never) => unknown
         >()
-        expect(h.div.class("box")).type.not.toBeAssignableTo<
+        expect(h.div.class(["box"])).type.not.toBeAssignableTo<
           (...args: never) => unknown
         >()
-        expect(h.div.class("box").children).type.toBeCallableWith(
+        expect(h.div.class(["box"]).children).type.toBeCallableWith([
           "a",
           h.br,
-          [h.span("b")],
+          [h.span(["b"])],
           false,
           null,
           undefined
-        )
+        ])
         // Void tags take no children and aren't callable.
         expect(h.input).type.not.toHaveProperty("children")
         expect(h.input.value(draft)).type.not.toHaveProperty("children")
         expect(h.br).type.not.toBeAssignableTo<(...args: never) => unknown>()
         expect(h.input).type.not.toBeAssignableTo<(...args: never) => unknown>()
         // A builder is a valid child and a valid view without a terminal call.
-        expect(h.ul.children).type.toBeCallableWith(h.li, h.li.key("a"))
-        return h.div.class("root")
+        expect(h.ul.children).type.toBeCallableWith([h.li, h.li.key("a")])
+        return h.div.class(["root"])
       }
     })
   })
@@ -203,7 +203,7 @@ describe("Html", () => {
               "button"
             >
           >()
-          return h.div.class("frame").children(node, needsClock)
+          return h.div.class(["frame"]).children([node, needsClock])
         })
         expect(framed).type.toBe<
           Html.Element<
@@ -218,7 +218,7 @@ describe("Html", () => {
           framed.attr("title", "Go").attrs({
             id: "go",
             "aria-label": undefined
-          }).children("Go")
+          }).children(["Go"])
         ).type.toBe<
           Html.Element<
             Msg,
@@ -230,7 +230,7 @@ describe("Html", () => {
         >()
         // A void element keeps its class, and still takes no children.
         const input = h.input.forward((node) =>
-          h.label.children("Amount", node)
+          h.label.children(["Amount", node])
         )
         expect(input.value("1")).type.toBe<
           Html.VoidElement<
@@ -262,12 +262,12 @@ describe("Html", () => {
       init: () => "",
       update: ($) => $.model,
       view: (h) => {
-        expect(h.div).type.not.toBeCallableWith(h.span("ok"), 1)
-        expect(h.div.class("x").children).type.not.toBeCallableWith(
-          h.span("ok"),
+        expect(h.div).type.not.toBeCallableWith([h.span(["ok"]), 1])
+        expect(h.div.class(["x"]).children).type.not.toBeCallableWith([
+          h.span(["ok"]),
           { _tag: "Element" }
-        )
-        return h.div()
+        ])
+        return h.div([])
       }
     })
   })
@@ -356,7 +356,7 @@ describe("Html", () => {
           Msg.Mounted()
         )
         expect(h.button.onClick).type.not.toBeCallableWith("not a message")
-        return h.div()
+        return h.div([])
       }
     })
   })
@@ -392,7 +392,7 @@ describe("Html", () => {
           ({ newState, oldState, open }: Html.PopoverTogglePayload) =>
             Msg.Typed({ value: `${oldState}${newState}${open}` })
         )
-        return h.div()
+        return h.div([])
       }
     })
   })
@@ -443,8 +443,8 @@ describe("Html", () => {
       update: ($) => $.model,
       view: (h) =>
         h.div.onMount(LogUp())
-          .class("box")
-          .children(Ticker(h, { key: "ticker" }))
+          .class(["box"])
+          .children([Ticker(h, { key: "ticker" })])
     })
     expect(Mounted).type.toBe<
       Component.Component<
@@ -465,7 +465,7 @@ describe("Html", () => {
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.section(h.p("clock"), [Ticker(h, { key: "ticker" })])
+      view: (h) => h.section([h.p(["clock"]), [Ticker(h, { key: "ticker" })]])
     })
     expect(Shorthand).type.toBe<
       Component.Component<
@@ -527,7 +527,9 @@ describe("Html", () => {
       init: (): ReadonlyArray<number> => [],
       update: ($) => $.model,
       view: (h, points) =>
-        h.div.onMount(Hello()).children(h.canvas.onMount(DrawChart({ points })))
+        h.div.onMount(Hello()).children([
+          h.canvas.onMount(DrawChart({ points }))
+        ])
     })
     expect(Chart).type.toBe<
       Component.Component<
@@ -623,17 +625,17 @@ describe("Html", () => {
       elements: Html
     })
     const ticker = {} as View.Node<Msg, Clock>
-    const plain = (..._children: ReadonlyArray<View.Input<Msg>>) => {}
-    expect(plain).type.toBeCallableWith("text", null)
-    expect(plain).type.not.toBeCallableWith(ticker)
+    const plain = (_children: ReadonlyArray<View.Input<Msg>>) => {}
+    expect(plain).type.toBeCallableWith(["text", null])
+    expect(plain).type.not.toBeCallableWith([ticker])
     const card = <const C extends ReadonlyArray<View.Input<Msg, any>>>(
       h: Component.Helper<typeof PageDef>,
-      ...children: C
-    ) => h.section(...children)
+      children: C
+    ) => h.section(children)
     const Page = PageDef.make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => card(h, h.h1("Title"), ticker)
+      view: (h) => card(h, [h.h1(["Title"]), ticker])
     })
     expect(Page).type.toBe<
       Component.Component<"Page", {}, null, Msg, never, Clock, Html.Elements>
@@ -676,15 +678,15 @@ describe("Html", () => {
     const button = new Html.Element<Msg>("button")
     const saving = false as boolean
     const count = 0 as number
-    expect(button.class("rounded", saving && "opacity-50", null, undefined))
+    expect(button.class(["rounded", saving && "opacity-50", null, undefined]))
       .type.toBe<Html.Element<Msg>>()
-    expect(button.class).type.not.toBeCallableWith("rounded", true)
-    expect(button.class).type.not.toBeCallableWith("rounded", 1)
-    expect(button.class).type.not.toBeCallableWith(saving || "opacity-50")
-    expect(button.class).type.not.toBeCallableWith(count && "badge")
-    expect(Html.classNames).type.not.toBeCallableWith("rounded", true)
-    expect(Html.classNames).type.not.toBeCallableWith("rounded", 1)
-    expect(Html.classNames("rounded", saving && "opacity-50")).type.toBe<
+    expect(button.class).type.not.toBeCallableWith(["rounded", true])
+    expect(button.class).type.not.toBeCallableWith(["rounded", 1])
+    expect(button.class).type.not.toBeCallableWith([saving || "opacity-50"])
+    expect(button.class).type.not.toBeCallableWith([count && "badge"])
+    expect(Html.classNames).type.not.toBeCallableWith(["rounded", true])
+    expect(Html.classNames).type.not.toBeCallableWith(["rounded", 1])
+    expect(Html.classNames(["rounded", saving && "opacity-50"])).type.toBe<
       string
     >()
   })
@@ -698,7 +700,9 @@ describe("Html", () => {
     }).make({
       init: () => "",
       update: ($) =>
-        $.run(HtmlCommand.focus(Field, ({ found }) => Msg.Focused({ found }))),
+        $.run([
+          HtmlCommand.focus(Field, ({ found }) => Msg.Focused({ found }))
+        ]),
       view: (h) => h.input.ref(Field)
     })
     expect(Form).type.toBe<
@@ -750,7 +754,8 @@ describe("BrowserHost", () => {
   }).make({
     init: () => 0,
     update: ($) => $.model + 1,
-    view: (h, count) => h.button.onClick(Msg.Mounted()).children(String(count))
+    view: (h, count) =>
+      h.button.onClick(Msg.Mounted()).children([String(count)])
   })
 
   it("mountEffect needs only a Scope for an HTML root", () => {
@@ -779,7 +784,7 @@ describe("BrowserHost", () => {
     }).make({
       init: ($) => $.props.route,
       update: ($) => $.model,
-      view: (h, route) => h.h1(route._tag)
+      view: (h, route) => h.h1([route._tag])
     })
     expect(BrowserHost.mount(App, Router.props(AppRoute), document.body)).type
       .toBe<

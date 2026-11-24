@@ -84,15 +84,15 @@ export const Tooltip = Component.define({
       : $.send(TooltipProvider, message),
   view: (h) => {
     const id = h.id("tip")
-    return h.span(
+    return h.span([
       h.button
         .onFocus(TooltipMessage.FocusedTooltip({ id }))
         .onBlur(TooltipMessage.BlurredTooltip({ id }))
         .attr("aria-describedby", id)
-        .children(h.props.label),
+        .children([h.props.label]),
       h.shared.provider.open === id &&
-        h.span.id(id).attr("role", "tooltip").children(h.props.tip)
-    )
+      h.span.id(id).attr("role", "tooltip").children([h.props.tip])
+    ])
   }
 })
 
@@ -127,10 +127,10 @@ export const Toolbar = Component.define({
       key: "tips",
       props: {},
       view: () =>
-        h.div(
+        h.div([
           Tooltip(h, { key: "bold", props: { label: "B", tip: "Bold" } }),
           Tooltip(h, { key: "italic", props: { label: "I", tip: "Italic" } })
-        )
+        ])
     })
 })
 
@@ -246,11 +246,11 @@ export const Panel = Component.define({
         anyOpen ? $.evolve({ groupOpened: (times) => times + 1 }) : $.model
     }),
   view: (h, model) =>
-    h.section(
-      h.button.onClick(PanelMessage.Toggled()).children(h.props.title),
+    h.section([
+      h.button.onClick(PanelMessage.Toggled()).children([h.props.title]),
       model.open &&
-        h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
-    )
+      h.p.children([h.shared.group === undefined ? "On its own" : "In a group"])
+    ])
 })
 
 // A test of each side. Neither runs the other: `shared` gives the Panel its
@@ -272,7 +272,7 @@ export const panels = Effect.gen(function*() {
   const group = yield* Scene.make(PanelGroup, {}, {
     elements: Html,
     view: (panelGroup, h) =>
-      h.p.children(panelGroup.anyOpen ? "open" : "closed")
+      h.p.children([panelGroup.anyOpen ? "open" : "closed"])
   })
   // The same message as for no reports: nothing is sent.
   group.collected([false, false])
@@ -333,7 +333,7 @@ export const Menu = Component.define({
       // dropped and logged as `SendDropped`, so that one emits instead.
       PickedItem: ({ item }) =>
         $.shared.parent === undefined
-          ? $.emit(MenuEvents.Picked({ item }))
+          ? $.emit([MenuEvents.Picked({ item })])
           : $.send("self", MenuMessage.PickedItem({ item }))
     }),
   parts: (p, below) => ({
@@ -352,14 +352,14 @@ export const nestedMenu = Effect.gen(function*() {
   const menu = yield* Scene.make(Menu, { open: true }, {
     elements: Html,
     view: (menu, h) =>
-      h.div(
-        h.p.children(menu.nested ? "nested" : "outermost"),
-        menu.item(h.button("Copy"), "copy")
-      )
+      h.div([
+        h.p.children([menu.nested ? "nested" : "outermost"]),
+        menu.item(h.button(["Copy"]), "copy")
+      ])
   })
   menu.expect(Locator.text("outermost")).toExist()
   // The outermost menu tells its consumer.
-  menu.click("Copy").emitted(MenuEvents.Picked({ item: "copy" }))
+  menu.click("Copy").emitted([MenuEvents.Picked({ item: "copy" })])
   menu.shared(Menu, { open: true })
     .expect(Locator.text("nested")).toExist()
   // A nested one sends the pick up.

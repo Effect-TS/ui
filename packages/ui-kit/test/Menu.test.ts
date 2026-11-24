@@ -50,78 +50,81 @@ const standIn = {
   view: (menu: Parts, h: H) => {
     const filtering = h.props.query !== undefined
     const entries = [
-      menu.group({ element: h.div.class("group"), group: "edit" }).children(
-        menu.groupLabel({ element: h.div.class("group-label"), group: "edit" })
-          .children("Edit"),
-        menu.item({ element: entry(h, "undo"), value: "undo" }).children(
+      menu.group({ element: h.div.class(["group"]), group: "edit" }).children([
+        menu.groupLabel({
+          element: h.div.class(["group-label"]),
+          group: "edit"
+        })
+          .children(["Edit"]),
+        menu.item({ element: entry(h, "undo"), value: "undo" }).children([
           "Undo"
-        ),
-        menu.item({ element: entry(h, "copy"), value: "copy" }).children(
+        ]),
+        menu.item({ element: entry(h, "copy"), value: "copy" }).children([
           "Copy"
-        ),
+        ]),
         menu.item({
           element: entry(h, "cut"),
           value: "cut",
           closeOnClick: false
-        }).children("Cut"),
-        menu.item({ element: entry(h, "paste"), value: "paste" }).children(
+        }).children(["Cut"]),
+        menu.item({ element: entry(h, "paste"), value: "paste" }).children([
           "Paste"
-        )
-      ),
-      menu.separator(h.div.class("separator")),
+        ])
+      ]),
+      menu.separator(h.div.class(["separator"])),
       menu.checkboxItem({
         element: entry(h, "wrap").attr("aria-checked", "false"),
         value: "wrap",
         checked: true,
         closeOnClick: true
-      }).children(
+      }).children([
         menu.checkboxItemIndicator({
-          element: h.span.class("tick"),
+          element: h.span.class(["tick"]),
           value: "wrap"
-        })?.children("✓"),
+        })?.children(["✓"]),
         "Wrap lines"
-      ),
+      ]),
       menu.checkboxItem({
         element: entry(h, "minimap"),
         value: "minimap",
         checked: false
-      }).children("Minimap"),
-      menu.radioGroup({ element: h.div.class("sizes"), value: "small" })
-        .children(
+      }).children(["Minimap"]),
+      menu.radioGroup({ element: h.div.class(["sizes"]), value: "small" })
+        .children([
           menu.radioItem({
             element: entry(h, "small").attr("data-checked", "x"),
             value: "small"
-          }).children("Small"),
+          }).children(["Small"]),
           menu.radioItem({ element: entry(h, "large"), value: "large" })
-            .children("Large")
-        ),
+            .children(["Large"])
+        ]),
       menu.linkItem({
         element: h.a.attrs({ "data-testid": "docs", href: "/docs" }),
         value: "docs"
-      }).children("Docs"),
-      menu.item({ element: entry(h, "delete"), value: "delete" }).children(
+      }).children(["Docs"]),
+      menu.item({ element: entry(h, "delete"), value: "delete" }).children([
         "Delete"
-      )
+      ])
     ]
-    return h.div(
-      menu.trigger({ element: h.button.class("trigger").attr("id", "edit") })
-        .children("Edit"),
-      menu.positioner(h.div.class("positioner")).children(
-        menu.popup(h.div.class("popup")).children(
-          filtering ? menu.input(h.input.class("input")) : null,
+    return h.div([
+      menu.trigger({ element: h.button.class(["trigger"]).attr("id", "edit") })
+        .children(["Edit"]),
+      menu.positioner(h.div.class(["positioner"])).children([
+        menu.popup(h.div.class(["popup"])).children([
+          filtering ? menu.input(h.input.class(["input"])) : null,
           filtering
-            ? menu.clear(h.button.class("clear"))?.children("Clear")
+            ? menu.clear(h.button.class(["clear"]))?.children(["Clear"])
             : null,
           filtering
-            ? menu.list(h.div.class("list")).children(...entries)
-            : h.div(...entries),
+            ? menu.list(h.div.class(["list"])).children(entries)
+            : h.div(entries),
           filtering
-            ? menu.empty(h.div.class("empty"))?.children("No matches")
+            ? menu.empty(h.div.class(["empty"]))?.children(["No matches"])
             : null,
-          menu.arrow(h.div.class("arrow"))
-        )
-      )
-    )
+          menu.arrow(h.div.class(["arrow"]))
+        ])
+      ])
+    ])
   }
 }
 
@@ -214,9 +217,9 @@ const open = Effect.fnUntraced(function*(props: Partial<MenuProps> = {}) {
     { open: false, items, ...props },
     standIn
   )
-  s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+  s.fire(trigger, "mousedown", pointer("mouse")).emitted([
     opened("trigger-press")
-  )
+  ])
   s.props({ open: true, items, ...props }).mounted(
     tracked(s),
     sent("ShowedPopup")
@@ -247,11 +250,11 @@ const Page = Component.define({
     ChangedRoute: ($, { route }) => $.evolve({ route }),
     RequestedOpen: ($) => $.evolve({ open: true }),
     Left: ($) =>
-      $.run(
+      $.run([
         Router.push(PageRoute, PageRoute.Away()).pipe(
           Command.map(() => PageMessage.Navigated())
         )
-      ),
+      ]),
     Navigated: ($) => $.model
   },
   subscriptions: ({ model }) => [
@@ -262,8 +265,8 @@ const Page = Component.define({
     )
   ],
   view: (h, model) =>
-    h.div(
-      h.a.onClick(PageMessage.Left()).children("Away"),
+    h.div([
+      h.a.onClick(PageMessage.Left()).children(["Away"]),
       model.route._tag === "Edit"
         ? Menu(h, {
           key: "menu",
@@ -273,12 +276,12 @@ const Page = Component.define({
               ? PageMessage.RequestedOpen()
               : undefined,
           view: (menu) =>
-            menu.trigger({ element: h.button.class("trigger") }).children(
+            menu.trigger({ element: h.button.class(["trigger"]) }).children([
               "Edit"
-            )
+            ])
         })
         : null
-    )
+    ])
 })
 
 describe("Menu", () => {
@@ -332,9 +335,9 @@ describe("Menu", () => {
         nothingMatches: false
       })
 
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted([
         opened("trigger-press")
-      )
+      ])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       const popupId = s.get(popup).attrs?.id
       assert.isString(popupId)
@@ -429,7 +432,9 @@ describe("Menu", () => {
       assert.isNull(partsOf(s).transitionStatus)
       assert.isUndefined(s.get(popup).attrs?.["data-starting-style"])
       s.mounted(tracked(s), sent("FinishedTransition", { open: true })).emitted(
-        { _tag: "Settled", open: true }
+        [
+          { _tag: "Settled", open: true }
+        ]
       )
       s.mounted(
         tracked(s),
@@ -467,7 +472,7 @@ describe("Menu", () => {
         openMethod: null
       })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
+        .emitted([{ _tag: "Settled", open: false }])
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       assert.isFalse(partsOf(s).mounted)
     }))
@@ -477,10 +482,10 @@ describe("Menu", () => {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       s.fire(trigger, "keydown", key("Enter")).expectIgnored()
       s.fire(trigger, "click", pointer("mouse")).expectIgnored()
-      s.fire(trigger, "click", pointer("")).emitted(
+      s.fire(trigger, "click", pointer("")).emitted([
         highlighted("copy", "none"),
         opened("trigger-press")
-      )
+      ])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepInclude(partsOf(s), {
         highlighted: "copy",
@@ -492,32 +497,32 @@ describe("Menu", () => {
       })
       assert.deepInclude(s.get(positioner).attrs, { "data-instant": "click" })
       assert.deepInclude(s.get(popup).attrs, { "data-instant": "click" })
-      s.fire(popup, "keydown", key("Escape")).expectDefaultPrevented().emitted(
+      s.fire(popup, "keydown", key("Escape")).expectDefaultPrevented().emitted([
         dismissed("escape-key")
-      )
+      ])
       s.props({ open: false, items })
       assert.deepInclude(s.get(positioner).attrs, { "data-instant": "dismiss" })
       assert.deepInclude(s.get(popup).attrs, { "data-instant": "dismiss" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           { _tag: "Settled", open: false },
           highlighted(null, "none")
-        )
+        ])
       s.fire(trigger, "keydown", key("ArrowDown"))
         .expectDefaultPrevented()
-        .emitted(highlighted("copy", "none"), opened("list-navigation"))
+        .emitted([highlighted("copy", "none"), opened("list-navigation")])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(popup, "keydown", key("Escape")).emitted(dismissed("escape-key"))
+      s.fire(popup, "keydown", key("Escape")).emitted([dismissed("escape-key")])
       s.props({ open: false, items })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           { _tag: "Settled", open: false },
           highlighted(null, "none")
-        )
-      s.fire(trigger, "keydown", key("ArrowUp")).emitted(
+        ])
+      s.fire(trigger, "keydown", key("ArrowUp")).emitted([
         highlighted("docs", "none"),
         opened("list-navigation")
-      )
+      ])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.strictEqual(partsOf(s).highlighted, "docs")
     }))
@@ -528,7 +533,7 @@ describe("Menu", () => {
       const step = (k: string, expected: string) => {
         const before = partsOf(s).highlighted
         s.fire(popup, "keydown", key(k)).expectDefaultPrevented()
-        if (before !== expected) s.emitted(highlighted(expected, "keyboard"))
+        if (before !== expected) s.emitted([highlighted(expected, "keyboard")])
         assert.strictEqual(partsOf(s).highlighted, expected)
       }
       step("ArrowDown", "undo")
@@ -556,14 +561,16 @@ describe("Menu", () => {
   it.effect("the pointer highlights the item it's over, unless highlightItemOnHover is false", () =>
     Effect.gen(function*() {
       const s = yield* open()
-      s.fire(item("paste"), "mouseenter").emitted(
+      s.fire(item("paste"), "mouseenter").emitted([
         highlighted("paste", "pointer")
-      )
+      ])
       assert.deepInclude(s.get(item("paste")).attrs, {
         tabindex: "0",
         "data-highlighted": ""
       })
-      s.fire(item("paste"), "mouseleave").emitted(highlighted(null, "pointer"))
+      s.fire(item("paste"), "mouseleave").emitted([
+        highlighted(null, "pointer")
+      ])
       s.props({ open: true, items, highlightItemOnHover: false })
       s.fire(item("paste"), "mouseenter").expectIgnored()
       assert.isNull(partsOf(s).highlighted)
@@ -572,29 +579,29 @@ describe("Menu", () => {
   it.effect("picking an item reports it, a checkbox's new state and a radio's, and closes unless told not to", () =>
     Effect.gen(function*() {
       const s = yield* open()
-      s.fire(item("cut"), "mouseenter").emitted(highlighted("cut", "pointer"))
-      s.fire(item("cut"), "click", pointer("mouse")).emitted(picked("cut"))
-      s.fire(item("minimap"), "click", pointer("mouse")).emitted(
+      s.fire(item("cut"), "mouseenter").emitted([highlighted("cut", "pointer")])
+      s.fire(item("cut"), "click", pointer("mouse")).emitted([picked("cut")])
+      s.fire(item("minimap"), "click", pointer("mouse")).emitted([
         highlighted("minimap", "none"),
         picked("minimap", true)
-      )
-      s.fire(item("large"), "click", pointer("mouse")).emitted(
+      ])
+      s.fire(item("large"), "click", pointer("mouse")).emitted([
         highlighted("large", "none"),
         picked("large", true)
-      )
+      ])
       s.fire(item("docs"), "click", pointer("mouse"))
         .expectDefaultPrevented(false)
-        .emitted(highlighted("docs", "none"), picked("docs"))
+        .emitted([highlighted("docs", "none"), picked("docs")])
       s.fire(item("undo"), "click", pointer("mouse"))
-      s.fire(item("wrap"), "click", pointer("mouse")).emitted(
+      s.fire(item("wrap"), "click", pointer("mouse")).emitted([
         picked("wrap", false),
         dismissed("item-press")
-      )
+      ])
       s.props({ open: true, items })
-      s.fire(item("copy"), "keydown", key("Enter")).emitted(
+      s.fire(item("copy"), "keydown", key("Enter")).emitted([
         picked("copy"),
         dismissed("item-press")
-      )
+      ])
     }))
 
   it.effect("disabled ignores presses on the trigger, the items and the filter, and a link doesn't navigate", () =>
@@ -631,7 +638,7 @@ describe("Menu", () => {
       const type = (k: string, expected: string) => {
         const before = partsOf(s).highlighted
         s.fire(popup, "keydown", key(k))
-        if (before !== expected) s.emitted(highlighted(expected, "keyboard"))
+        if (before !== expected) s.emitted([highlighted(expected, "keyboard")])
         assert.strictEqual(partsOf(s).highlighted, expected)
       }
       type("c", "copy")
@@ -664,7 +671,7 @@ describe("Menu", () => {
       s.fire(trigger, "mouseleave").expectNone()
       s.fire(trigger, "mouseenter")
       yield* elapse(s, "WaitBeforeHoverOpen", 200)
-      s.emitted(opened("trigger-hover"))
+      s.emitted([opened("trigger-hover")])
       s.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(
         tracked(s),
         sent("ShowedPopup")
@@ -676,23 +683,23 @@ describe("Menu", () => {
       })
       s.fire(trigger, "mousedown", pointer("mouse"))
       assert.isTrue(partsOf(s).open)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted([
         dismissed("trigger-press")
-      )
+      ])
       s.props({ open: false, items, openOnHover: true, delay: 200 })
         .mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
+        .emitted([{ _tag: "Settled", open: false }])
       s.fire(trigger, "mouseenter")
       yield* elapse(s, "WaitBeforeHoverOpen", 200)
-      s.emitted(opened("trigger-hover"))
+      s.emitted([opened("trigger-hover")])
       s.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(
         tracked(s),
         sent("ShowedPopup")
       )
       yield* elapse(s, "WaitBeforeStickExpires", 500)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted([
         dismissed("trigger-press")
-      )
+      ])
     }))
 
   it.effect("with a query, an input filters the items, empty and clear show only when they apply, and menuFilter respects options", () =>
@@ -713,10 +720,10 @@ describe("Menu", () => {
       assert.isUndefined(s.get(input).attrs?.["aria-activedescendant"])
       assert.isUndefined(s.query(clear))
       assert.isUndefined(s.query(empty))
-      s.fire(input, "input", { value: "co", checked: false }).emitted(
+      s.fire(input, "input", { value: "co", checked: false }).emitted([
         highlighted("copy", "none"),
         { _tag: "RequestedQuery", query: "co", reason: "input-change" }
-      )
+      ])
       s.props({ open: true, items, query: "co", autoHighlight: true })
       assert.strictEqual(
         s.get(input).attrs?.["aria-activedescendant"],
@@ -726,11 +733,11 @@ describe("Menu", () => {
       assert.deepInclude(s.get(item("cut")).attrs, { hidden: "" })
       assert.isUndefined(s.query(empty))
       assert.isFalse(partsOf(s).nothingMatches)
-      s.click(clear).emitted(highlighted(null, "none"), {
+      s.click(clear).emitted([highlighted(null, "none"), {
         _tag: "RequestedQuery",
         query: "",
         reason: "clear-press"
-      })
+      }])
       s.props({ open: true, items, query: "zzz", autoHighlight: true })
       assert.isTrue(partsOf(s).nothingMatches)
       assert.deepInclude(s.get(empty).attrs, { role: "status" })
@@ -754,7 +761,7 @@ describe("Menu", () => {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, {
         elements: Html,
         view: (menu, h) =>
-          menu.trigger(new Off(h.button.class("trigger"))).children("Edit")
+          menu.trigger(new Off(h.button.class(["trigger"]))).children(["Edit"])
       })
       assert.strictEqual(s.get(trigger).attrs?.disabled, "")
       assert.strictEqual(s.get(trigger).attrs?.["data-disabled"], "")
@@ -786,20 +793,20 @@ describe("Menu", () => {
       }, {
         elements: Html,
         view: (menu, h) =>
-          h.div(
+          h.div([
             menu.trigger({
-              element: h.button.class("trigger").attr("aria-disabled", "true")
-            }).children("Edit"),
-            menu.input(h.input.class("input").attr("aria-disabled", "true")),
-            menu.clear(h.button.class("clear").attr("aria-disabled", "true")),
+              element: h.button.class(["trigger"]).attr("aria-disabled", "true")
+            }).children(["Edit"]),
+            menu.input(h.input.class(["input"]).attr("aria-disabled", "true")),
+            menu.clear(h.button.class(["clear"]).attr("aria-disabled", "true")),
             menu.group({
-              element: h.div.class("group").attr("hidden", ""),
+              element: h.div.class(["group"]).attr("hidden", ""),
               group: "g"
-            }).children(
-              menu.item({ element: h.div.class("item"), value: "copy" })
-                .children("Copy")
-            )
-          )
+            }).children([
+              menu.item({ element: h.div.class(["item"]), value: "copy" })
+                .children(["Copy"])
+            ])
+          ])
       })
       for (const loc of [trigger, input, clear]) {
         assert.strictEqual(s.get(loc).attrs?.disabled, "")
@@ -822,18 +829,18 @@ describe("Menu", () => {
         (menu: Parts, h: H) => View.Content<never>
       > = [
         (menu, h) =>
-          h.div(
+          h.div([
             menu.checkboxItemIndicator({
               element: h.div as never,
               value: "wrap"
             })
-          ),
+          ]),
         (menu, h) =>
-          h.div(
+          h.div([
             menu.radioItemIndicator({ element: h.div as never, value: "small" })
-          ),
-        (menu, h) => h.div(menu.clear(h.div as never)),
-        (menu, h) => h.div(menu.empty(h.span as never))
+          ]),
+        (menu, h) => h.div([menu.clear(h.div as never)]),
+        (menu, h) => h.div([menu.empty(h.span as never)])
       ]
       for (const render of hiddenTagCases) {
         const exit = yield* Effect.exit(

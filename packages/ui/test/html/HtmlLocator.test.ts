@@ -10,7 +10,7 @@ import { TodoApp, TodoAppMessage, TodoItem } from "./fixtures/todos.ts"
 const el = (
   tag: string,
   attrs: Record<string, string> = {},
-  ...children: ReadonlyArray<Locator.Node>
+  children: ReadonlyArray<Locator.Node> = []
 ): Locator.Node => ({ tag, attrs, children })
 const text = (text: string): Locator.Node => ({ text })
 
@@ -20,18 +20,20 @@ describe("HtmlLocator", () => {
       const tree = el(
         "div",
         {},
-        el("a", { href: "/" }, text("Home")),
-        el("a", {}, text("Not a link")),
-        el("input", {}),
-        el("input", { type: "checkbox" }),
-        el("input", { type: "submit" }),
-        el("input", { type: "hidden" }),
-        el("input", { type: "search", list: "options" }),
-        el("select", {}),
-        el("select", { multiple: "" }),
-        el("img", { alt: "" }),
-        el("div", { role: "alert  status" }),
-        el("ul", {}, el("li", {}))
+        [
+          el("a", { href: "/" }, [text("Home")]),
+          el("a", {}, [text("Not a link")]),
+          el("input", {}),
+          el("input", { type: "checkbox" }),
+          el("input", { type: "submit" }),
+          el("input", { type: "hidden" }),
+          el("input", { type: "search", list: "options" }),
+          el("select", {}),
+          el("select", { multiple: "" }),
+          el("img", { alt: "" }),
+          el("div", { role: "alert  status" }),
+          el("ul", {}, [el("li", {})])
+        ]
       )
       const roles = Locator.elements(tree).map((node) =>
         HtmlLocator.roleOf(tree, node)
@@ -58,9 +60,11 @@ describe("HtmlLocator", () => {
       const tree = el(
         "div",
         {},
-        el("header", {}),
-        el("article", {}, el("header", {}), el("footer", {})),
-        el("footer")
+        [
+          el("header", {}),
+          el("article", {}, [el("header", {}), el("footer", {})]),
+          el("footer")
+        ]
       )
       expect(HtmlLocator.queryAllByRole(tree, "banner")).toHaveLength(1)
       expect(HtmlLocator.queryAllByRole(tree, "contentinfo")).toHaveLength(1)
@@ -70,9 +74,11 @@ describe("HtmlLocator", () => {
       const tree = el(
         "div",
         {},
-        el("button", { hidden: "" }, text("A")),
-        el("div", { "aria-hidden": "true" }, el("button", {}, text("B"))),
-        el("button", {}, text("C"))
+        [
+          el("button", { hidden: "" }, [text("A")]),
+          el("div", { "aria-hidden": "true" }, [el("button", {}, [text("B")])]),
+          el("button", {}, [text("C")])
+        ]
       )
       expect(
         HtmlLocator.queryAllByRole(tree, "button").map((node) =>
@@ -130,15 +136,21 @@ describe("HtmlLocator", () => {
       const tree = el(
         "div",
         {},
-        dialog({ popover: "manual" }, { popoverOpen: true }, "As popover"),
-        dialog({ popover: "manual" }, { popoverOpen: false }, "Popover closed"),
-        dialog({}, { open: false }, "Closed"),
-        dialog({}, { open: "modal" }, "Modal"),
-        dialog(
-          { popover: "manual", hidden: "" },
-          { popoverOpen: true },
-          "Hidden"
-        )
+        [
+          dialog({ popover: "manual" }, { popoverOpen: true }, "As popover"),
+          dialog(
+            { popover: "manual" },
+            { popoverOpen: false },
+            "Popover closed"
+          ),
+          dialog({}, { open: false }, "Closed"),
+          dialog({}, { open: "modal" }, "Modal"),
+          dialog(
+            { popover: "manual", hidden: "" },
+            { popoverOpen: true },
+            "Hidden"
+          )
+        ]
       )
       const names = (role: string) =>
         HtmlLocator.queryAllByRole(tree, role).map((node) =>
@@ -193,28 +205,29 @@ describe("HtmlLocator", () => {
       const tree = el(
         "form",
         {},
-        el("span", { id: "first" }, text("First")),
-        el("span", { id: "last" }, text("name")),
-        el("input", {
-          "aria-labelledby": "first last",
-          "aria-label": "ignored"
-        }),
-        el("input", { "aria-label": "  Search   site " }),
-        el("label", { for: "email" }, text("Email")),
-        el("input", { id: "email", title: "ignored" }),
-        el(
-          "label",
-          {},
-          el("input", { type: "checkbox" }),
-          text(" Remember me")
-        ),
-        el("input", { type: "submit" }),
-        el("input", { type: "button", value: "Go" }),
-        el("button", {}, el("img", { alt: "Close" })),
-        el("button", { title: "Menu" }),
-        el("input", { placeholder: "Notes" }),
-        el("fieldset", {}, el("legend", {}, text("Address"))),
-        el("h2", {}, text("Section "), el("em", {}, text("two")))
+        [
+          el("span", { id: "first" }, [text("First")]),
+          el("span", { id: "last" }, [text("name")]),
+          el("input", {
+            "aria-labelledby": "first last",
+            "aria-label": "ignored"
+          }),
+          el("input", { "aria-label": "  Search   site " }),
+          el("label", { for: "email" }, [text("Email")]),
+          el("input", { id: "email", title: "ignored" }),
+          el(
+            "label",
+            {},
+            [el("input", { type: "checkbox" }), text(" Remember me")]
+          ),
+          el("input", { type: "submit" }),
+          el("input", { type: "button", value: "Go" }),
+          el("button", {}, [el("img", { alt: "Close" })]),
+          el("button", { title: "Menu" }),
+          el("input", { placeholder: "Notes" }),
+          el("fieldset", {}, [el("legend", {}, [text("Address")])]),
+          el("h2", {}, [text("Section "), el("em", {}, [text("two")])])
+        ]
       )
       const names = HtmlLocator.queryAllByRole(tree, "textbox").map((node) =>
         HtmlLocator.nameOf(tree, node)
@@ -256,15 +269,17 @@ describe("HtmlLocator", () => {
       const tree = el(
         "div",
         {},
-        el("button", {}, text("Save")),
-        el("a", { href: "/" }, text("Home"))
+        [
+          el("button", {}, [text("Save")]),
+          el("a", { href: "/" }, [text("Home")])
+        ]
       )
       expect(() => HtmlLocator.getByRole(tree, "button", { name: "Cancel" }))
         .toThrow(
           "HtmlLocator: nothing has role \"button\", name \"Cancel\". Roles here:\n  button \"Save\"\n  link \"Home\""
         )
       expect(() =>
-        HtmlLocator.getByRole(el("div", {}, el("p"), el("p")), "paragraph")
+        HtmlLocator.getByRole(el("div", {}, [el("p"), el("p")]), "paragraph")
       ).toThrow("2 elements")
     })
   })
@@ -336,7 +351,7 @@ describe("HtmlLocator", () => {
       const fragment = document.createDocumentFragment()
       fragment.append(document.createElement("button"))
       const wrapper: Locator.Node = {
-        children: [el("button", {}, text("Two"))]
+        children: [el("button", {}, [text("Two")])]
       }
       expect(
         HtmlLocator.queryAllByRole(doc, "button").map((node) =>

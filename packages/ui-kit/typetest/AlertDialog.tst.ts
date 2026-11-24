@@ -46,7 +46,7 @@ it("wraps portal as an optional dialog builder and preserves its requirements", 
       const portal = alertDialog.portal(h.dialog.onMount(NeedsClock()))
       expect(portal).type.toBe<DialogElement<Clock> | undefined>()
       expect(alertDialog.portal).type.not.toBeCallableWith(h.div)
-      return h.div(portal)
+      return h.div([portal])
     }
   })
   expect<View.Requirements<typeof child>>().type.toBe<Clock>()

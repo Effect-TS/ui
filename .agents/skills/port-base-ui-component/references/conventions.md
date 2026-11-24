@@ -20,10 +20,10 @@ the components that already follow it.
     props: { checked: model.notify },
     onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
     view: (parts) =>
-      h.label(
-        parts.root(h.button).children(parts.thumb(h.span.class("thumb"))),
+      h.label([
+        parts.root(h.button).children([parts.thumb(h.span.class(["thumb"]))]),
         "Notify"
-      )
+      ])
   })
   ```
 
@@ -171,14 +171,14 @@ returns it (see "Parts").
 Button(h, {
   props: { disabled: model.saving },
   onPress: SettingsMessage.PressedSave()
-}).class("save").children("Save")
+}).class(["save"]).children(["Save"])
 
 // Several elements: the consumer arranges them in `view`.
 Switch(h, {
   props: { checked: model.notify },
   onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
   view: (parts) =>
-    parts.root(h.button).children(parts.thumb(h.span.class("thumb")))
+    parts.root(h.button).children([parts.thumb(h.span.class(["thumb"]))])
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
@@ -186,7 +186,7 @@ Checkbox(h, {
   props: { checked: model.terms },
   onEmit: ({ checked }) => SettingsMessage.ToggledTerms({ checked }),
   view: (checkbox) =>
-    checkbox.root(h.button).children(checkbox.indicator(h.span))
+    checkbox.root(h.button).children([checkbox.indicator(h.span)])
 })
 ```
 
@@ -195,7 +195,7 @@ Checkbox(h, {
   records and a replay reads back, and the runtime compares them on every
   render. Leave it optional when every prop is.
 - A one-element view function returns its builder. Chain classes, attributes,
-  handlers and `.children(...)` on the result; there is no `children` option.
+  handlers and `.children([...])` on the result; there is no `children` option.
 - Pass `element` when you already have a builder, for example from another
   part. A fixed tag defaults to `h.<tag>`; when the consumer chooses the
   tag, `element` is required.
@@ -287,12 +287,12 @@ model.advanced
   the consumer can skip the part.
 - **Call shape.** A part takes the consumer's builder as its one argument
   and returns it, with the part applied. The consumer goes on chaining,
-  and adds children with `.children(...)`:
+  and adds children with `.children([...])`:
 
   ```ts
-  checkbox.root(h.button.class("checkbox")).children(
-    checkbox.indicator(h.span.class("tick"))
-  )
+  checkbox.root(h.button.class(["checkbox"])).children([
+    checkbox.indicator(h.span.class(["tick"]))
+  ])
   ```
 
   A part takes an options object only when it has more than one argument,
@@ -300,14 +300,14 @@ model.advanced
   never a field of it:
 
   ```ts
-  tabs.tab({ element: h.button, value: "a" }).children("Account")
+  tabs.tab({ element: h.button, value: "a" }).children(["Account"])
   ```
 
   Each part has one form, with no overloads. A part whose extra arguments
   are all optional takes the object every time, as
   `menu.trigger({ element: h.button })` does. A part that may not show
   returns `undefined`, and the consumer writes
-  `avatar.fallback(h.span)?.children("AL")`. Apply the part before deciding, so
+  `avatar.fallback(h.span)?.children(["AL"])`. Apply the part before deciding, so
   a wrong tag throws in every state.
 
   Use the same field names across components: `element` for the
@@ -328,7 +328,7 @@ model.advanced
   Button(h, {
     element: tooltip.trigger(h.button),
     onPress: EditorMessage.PressedBold()
-  }).class("tool").children("B")
+  }).class(["tool"]).children(["B"])
   ```
 - **The kit's attributes win** over the consumer's. A part or view
   function writes every attribute it owns in every state, with `undefined`
@@ -399,12 +399,12 @@ model.advanced
   (`type: "button"`, `disabled`).
 - **Markup the component needs to work**, such as a form field, must not be
   a part the consumer can forget to draw. The part it belongs to adds it
-  with `.children(...)` and returns the builder, so it comes before the
+  with `.children([...])` and returns the builder, so it comes before the
   consumer's children, as `Switch`'s root does with its hidden input. A
   headless part does the same inside `p.part`:
 
   ```ts
-  root: p.part("button", (b) => b.attr("role", "checkbox").children(hidden))
+  root: p.part("button", (b) => b.attr("role", "checkbox").children([hidden]))
   ```
 
   A part has no `h`, so it builds the markup from Html's element classes,
@@ -413,9 +413,9 @@ model.advanced
   the content model allows it: a hidden input may sit in a `<button>`, a
   checkbox may not.
   - Markup that has to come after the consumer's children is added in
-    `forward`: `element.forward((node) => node.children(extra))`.
+    `forward`: `element.forward((node) => node.children([extra]))`.
   - Markup that has to go around the consumer's element is returned from
-    `forward`: `element.forward((node) => frame.children(node, extra))`.
+    `forward`: `element.forward((node) => frame.children([node, extra]))`.
     The consumer's chain and children still land on their element, and a
     key moves to the frame. Prefer markup inside: a wrapper is an element
     the consumer can't style through the chain. When a wrapper is needed
@@ -426,7 +426,10 @@ model.advanced
   what it is, and decorates and places it:
 
   ```ts
-  slider.thumb({ element: h.div.class("thumb"), input: field.control(h.input) })
+  slider.thumb({
+    element: h.div.class(["thumb"]),
+    input: field.control(h.input)
+  })
   ```
 
   The consumer must name that element and reach it with other kit calls,

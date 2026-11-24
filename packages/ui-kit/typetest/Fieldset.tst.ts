@@ -38,14 +38,14 @@ describe("Fieldset", () => {
               Element<"div">
             >()
             expect(fieldset.legend(h.legend)).type.toBe<Element<"legend">>()
-            const root = fieldset.root(h.fieldset.class("billing")).children(
+            const root = fieldset.root(h.fieldset.class(["billing"])).children([
               fieldset.legend(h.div),
               Field(h, {
                 view: (field) =>
-                  field.root(h.div).children(field.control(h.input))
+                  field.root(h.div).children([field.control(h.input)])
               }),
               needsClock
-            )
+            ])
             expect(root).type.toBe<Element<"fieldset", Clock>>()
             return root
           }

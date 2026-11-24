@@ -39,11 +39,11 @@ describe("NavigationMenu", () => {
           active: true
         })
         expect(link).type.toBe<A<Clock>>()
-        return navigationMenu.root(h.nav).children(
-          navigationMenu.list(h.ul).children(
-            navigationMenu.item(h.li).children(link)
-          )
-        )
+        return navigationMenu.root(h.nav).children([
+          navigationMenu.list(h.ul).children([
+            navigationMenu.item(h.li).children([link])
+          ])
+        ])
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()

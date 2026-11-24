@@ -29,13 +29,13 @@ const Card = Component.define({
     ClickedCard: () => ({ clicked: "card" })
   },
   view: (h, model) =>
-    h.div.onClick(CardMessage.ClickedCard()).children(
+    h.div.onClick(CardMessage.ClickedCard()).children([
       Button(h, {
         props: h.props.button,
         onPress: h.props.press ? CardMessage.PressedSave() : undefined
-      }).children("Save"),
-      h.output(model.clicked)
-    )
+      }).children(["Save"]),
+      h.output([model.clicked])
+    ])
 })
 
 const button = Locator.tag("button")
@@ -85,14 +85,14 @@ describe("Button", () => {
       props: { disabled: true },
       element: h.button.attr("aria-disabled", "true")
     })
-      .class("save")
+      .class(["save"])
       .attrs({
         "aria-label": "Save note",
         type: "submit",
         "data-disabled": "x"
       })
       .disabled(false)
-      .children("Save")
+      .children(["Save"])
     const node = View.build(styled, [])
     assert.deepStrictEqual(node.attrs, {
       class: "save",

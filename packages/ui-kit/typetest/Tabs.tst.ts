@@ -75,7 +75,7 @@ describe("Tabs", () => {
         }
       },
       view: (tabs) => {
-        expect(tabs.root(h.div.children(needsClock))).type.toBe<Div<Clock>>()
+        expect(tabs.root(h.div.children([needsClock]))).type.toBe<Div<Clock>>()
         expect(tabs.list(h.div)).type.toBe<Div<never>>()
         expect(tabs.tab({ element: h.button, value: "a" })).type.toBe<
           Button<never>
@@ -89,11 +89,11 @@ describe("Tabs", () => {
         expect(tabs.value).type.toBe<string | null>()
         expect(tabs.orientation).type.toBe<"horizontal" | "vertical">()
         expect(tabs.activationDirection).type.toBe<TabsActivationDirection>()
-        return tabs.root(h.div).children(
-          tabs.list(h.div).children(
+        return tabs.root(h.div).children([
+          tabs.list(h.div).children([
             tabs.tab({ element: h.button.onMount(NeedsClock()), value: "a" })
-          )
-        )
+          ])
+        ])
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()

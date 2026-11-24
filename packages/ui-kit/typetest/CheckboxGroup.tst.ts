@@ -44,7 +44,7 @@ describe("CheckboxGroup", () => {
               Element<"fieldset">
             >()
             const root = checkboxGroup.root(h.div.onClick(Msg.Clicked()))
-              .children(
+              .children([
                 Checkbox(h, {
                   props: { parent: true },
                   view: (checkbox) => checkbox.root(h.button)
@@ -55,7 +55,7 @@ describe("CheckboxGroup", () => {
                   view: (checkbox) => checkbox.root(h.button)
                 }),
                 needsClock
-              )
+              ])
             expect(root).type.toBe<Element<"div", Clock>>()
             return root
           }

@@ -101,35 +101,35 @@ const Page = Component.define({
         Settled: ({ open }) => Message.Settled({ open })
       },
       view: (drawer) =>
-        h.div(
+        h.div([
           props.area
             ? drawer.swipeArea({ element: h.div.attr("id", "area") })
             : undefined,
-          drawer.portal(h.dialog)?.children(
+          drawer.portal(h.dialog)?.children([
             drawer.backdrop(h.div.attr("id", "backdrop")),
-            drawer.viewport(h.div.attr("id", "viewport")).children(
-              drawer.popup(h.div.attr("id", "popup")).children(
-                h.p.attr("id", "handle").children("Handle"),
-                drawer.content(h.div.attr("id", "content")).children("Text"),
-                h.button.attr("id", "button").children("Go"),
+            drawer.viewport(h.div.attr("id", "viewport")).children([
+              drawer.popup(h.div.attr("id", "popup")).children([
+                h.p.attr("id", "handle").children(["Handle"]),
+                drawer.content(h.div.attr("id", "content")).children(["Text"]),
+                h.button.attr("id", "button").children(["Go"]),
                 h.input.attr("id", "field"),
                 props.scroll
                   ? h.div.attrs({ id: "scroller", style: "overflow-y:auto" })
-                    .children("Long")
+                    .children(["Long"])
                   : undefined
-              )
-            )
-          )
-        )
+              ])
+            ])
+          ])
+        ])
     })
     return props.provider
       ? DrawerProvider(h, {
         view: (provider) =>
-          h.div(
+          h.div([
             provider.indentBackground(h.div),
             provider.indent(h.div.attr("id", "indent")),
             drawer
-          )
+          ])
       })
       : drawer
   }

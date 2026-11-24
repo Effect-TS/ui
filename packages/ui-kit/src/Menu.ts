@@ -201,15 +201,15 @@
  *         RequestedClose: () => EditorMessage.RequestedCloseMenu()
  *       },
  *       view: (editMenu) =>
- *         h.div(
- *           editMenu.trigger({ element: h.button }).children("Edit"),
- *           editMenu.positioner(h.div).children(
- *             editMenu.popup(h.div).children(
- *               editMenu.item({ element: h.div, value: "copy" }).children("Copy"),
- *               editMenu.checkboxItem({ element: h.div, value: "wrap", checked: model.wrap }).children(
- *                 editMenu.checkboxItemIndicator({ element: h.span, value: "wrap" })?.children("✓"),
+ *         h.div([
+ *           editMenu.trigger({ element: h.button }).children(["Edit"]),
+ *           editMenu.positioner(h.div).children([
+ *             editMenu.popup(h.div).children([
+ *               editMenu.item({ element: h.div, value: "copy" }).children(["Copy"]),
+ *               editMenu.checkboxItem({ element: h.div, value: "wrap", checked: model.wrap }).children([
+ *                 editMenu.checkboxItemIndicator({ element: h.span, value: "wrap" })?.children(["✓"]),
  *                 "Wrap lines"
- *               ),
+ *               ]),
  *               editMenu.separator(h.div),
  *               Menu(h, {
  *                 props: { open: model.share, items: targets, parentItem: "share" },
@@ -219,18 +219,18 @@
  *                   RequestedClose: () => EditorMessage.RequestedCloseShare()
  *                 },
  *                 view: (shareMenu) =>
- *                   h.div(
- *                     editMenu.item({ element: shareMenu.submenuTrigger(h.div), value: "share" }).children("Share"),
- *                     shareMenu.positioner(h.div).children(
- *                       shareMenu.popup(h.div).children(
- *                         shareMenu.item({ element: h.div, value: "email" }).children("Email")
- *                       )
- *                     )
- *                   )
+ *                   h.div([
+ *                     editMenu.item({ element: shareMenu.submenuTrigger(h.div), value: "share" }).children(["Share"]),
+ *                     shareMenu.positioner(h.div).children([
+ *                       shareMenu.popup(h.div).children([
+ *                         shareMenu.item({ element: h.div, value: "email" }).children(["Email"])
+ *                       ])
+ *                     ])
+ *                   ])
  *               })
- *             )
- *           )
- *         )
+ *             ])
+ *           ])
+ *         ])
  *     })
  *   }
  * })
@@ -923,9 +923,9 @@ const commit = (
 ) =>
   before.active === after.active
     ? base.set(after)
-    : base.set(after).emit(
+    : base.set(after).emit([
       MenuEvents.Highlighted({ value: after.active, reason })
-    )
+    ])
 
 const open = (
   model: MenuModel,
@@ -980,11 +980,11 @@ const open = (
     releaseArmed: context?.release ?? false,
     longPress: null
   })
-  const opened = commit($, model, next, "none").emit(
+  const opened = commit($, model, next, "none").emit([
     MenuEvents.RequestedOpen({ reason, triggerId })
-  )
+  ])
   return sticks
-    ? opened.run(WaitBeforeStickExpires.make({ delay: 500 }))
+    ? opened.run([WaitBeforeStickExpires.make({ delay: 500 })])
     : opened
 }
 
@@ -1014,7 +1014,7 @@ const dismiss = (
     hovering: false,
     stick: false,
     instant
-  }).emit(MenuEvents.RequestedClose({ reason }))
+  }).emit([MenuEvents.RequestedClose({ reason })])
 }
 
 const closeTree = (
@@ -1033,7 +1033,7 @@ const closeTree = (
     reason,
     method,
     false,
-    first === undefined ? base : base.emit(first)
+    first === undefined ? base : base.emit([first])
   )
 }
 
@@ -1068,7 +1068,7 @@ const activate = (
       model,
       UiStruct.evolve(next, { active: action.value }),
       "none"
-    ).emit(picked)
+    ).emit([picked])
   }
   return closeTree(
     UiStruct.evolve(next, { pressing: false }),
@@ -1117,9 +1117,9 @@ const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
     model,
     UiStruct.evolve(model, { ...next, ...moved }),
     "keyboard"
-  ).run(
+  ).run([
     WaitBeforeResetTyping.make({ delay: 500 })
-  )
+  ])
 }
 
 const keys = (orientation: Orientation, rtl: boolean) => {
@@ -1239,12 +1239,12 @@ const enterTrigger = (
   })
   if (disabledOf($)) return $.set(next)
   if (!props.open) {
-    return $.set(next).run(WaitBeforeHoverOpen.make({ delay: message.delay }))
+    return $.set(next).run([WaitBeforeHoverOpen.make({ delay: message.delay })])
   }
   const stay = Command.interrupt(WaitBeforeHoverClose)
   return opensFor($.model, props, message.key, message.triggerId)
-    ? $.set(next).run(stay)
-    : hoverOpen(next, $).run(stay)
+    ? $.set(next).run([stay])
+    : hoverOpen(next, $).run([stay])
 }
 
 const hoverOpen = (model: MenuModel, $: MenuUpdate) =>
@@ -1272,7 +1272,7 @@ const pressTrigger = (
         stick: false,
         hovering: false
       })
-        .run(Command.interrupt(WaitBeforeHoverClose))
+        .run([Command.interrupt(WaitBeforeHoverClose)])
     }
     return dismiss($.model, $, "trigger-press", method)
   }
@@ -1293,7 +1293,7 @@ const openAt = (
   return open($.model, $, "trigger-press", method, key, triggerId, {
     context: { point, release }
   })
-    .run(WaitBeforeContextGrace.make({ delay: LongPressDelay }))
+    .run([WaitBeforeContextGrace.make({ delay: LongPressDelay })])
 }
 
 const contextPoint = (
@@ -2582,15 +2582,15 @@ export const Menu = Component.define({
     TouchedContextTrigger: ($, { key, triggerId, x, y }) =>
       disabledOf($)
         ? $.model
-        : $.evolve({ longPress: { key, triggerId, x, y } }).run(
+        : $.evolve({ longPress: { key, triggerId, x, y } }).run([
           WaitBeforeLongPress.make({ delay: LongPressDelay })
-        ),
+        ]),
     CancelledLongPress: ($) =>
       $.model.longPress === null
         ? $.model
-        : $.evolve({ longPress: null }).run(
+        : $.evolve({ longPress: null }).run([
           Command.interrupt(WaitBeforeLongPress)
-        ),
+        ]),
     CompletedWaitBeforeLongPress: ($) => {
       const press = $.model.longPress
       if (press === null) return $.model
@@ -2613,21 +2613,23 @@ export const Menu = Component.define({
         }),
     EnteredTrigger: ($, message) => enterTrigger($, message),
     LeftTrigger: ($) =>
-      $.evolve($.props.open ? {} : { hovering: false }).run(
+      $.evolve($.props.open ? {} : { hovering: false }).run([
         Command.interrupt(WaitBeforeHoverOpen)
-      ),
+      ]),
     CompletedWaitBeforeHoverOpen: ($) =>
       $.props.open || !$.model.hovering || disabledOf($)
         ? $.model
         : hoverOpen($.model, $),
     LeftHoverArea: ($) =>
       $.props.open && hoverOpened($.model.reason, $)
-        ? $.evolve({ hovering: false }).run(
+        ? $.evolve({ hovering: false }).run([
           WaitBeforeHoverClose.make({ delay: $.model.closeDelay })
-        )
+        ])
         : $.model,
     ReturnedToHoverArea: ($) =>
-      $.evolve({ hovering: true }).run(Command.interrupt(WaitBeforeHoverClose)),
+      $.evolve({ hovering: true }).run([
+        Command.interrupt(WaitBeforeHoverClose)
+      ]),
     CompletedWaitBeforeHoverClose: ($) =>
       $.props.open && hoverOpened($.model.reason, $) && !$.model.hovering &&
         !$.model.submenus.some((submenu) => submenu.open)
@@ -2702,7 +2704,7 @@ export const Menu = Component.define({
       $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.emit(MenuEvents.Settled({ open }))
+      if (open) return $.emit([MenuEvents.Settled({ open })])
       if (!$.model.mounted || $.props.holdExit === true) return $.model
       const closed = $.evolve({
         mounted: false,
@@ -2712,14 +2714,14 @@ export const Menu = Component.define({
         transitioning: false,
         direction: null,
         instant: $.model.instant === "trigger-change" ? null : $.model.instant
-      }).emit(MenuEvents.Settled({ open }))
+      }).emit([MenuEvents.Settled({ open })])
       const highlighted = $.model.active === null
         ? closed
-        : closed.emit(MenuEvents.Highlighted({ value: null, reason: "none" }))
+        : closed.emit([MenuEvents.Highlighted({ value: null, reason: "none" })])
       return $.props.query !== undefined && $.props.query !== ""
-        ? highlighted.emit(
+        ? highlighted.emit([
           MenuEvents.RequestedQuery({ query: "", reason: "none" })
-        )
+        ])
         : highlighted
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
@@ -2771,9 +2773,9 @@ export const Menu = Component.define({
         active: autoHighlighted(props, value),
         activeByKey: false
       })
-      return commit($, $.model, next, "none").emit(
+      return commit($, $.model, next, "none").emit([
         MenuEvents.RequestedQuery({ query: value, reason })
-      )
+      ])
     },
     PressedInputKey: ($, { key, modified }) => {
       const props = $.props
@@ -2809,9 +2811,9 @@ export const Menu = Component.define({
         active: autoHighlighted(props, ""),
         activeByKey: false
       })
-      return commit($, $.model, next, "none").emit(
+      return commit($, $.model, next, "none").emit([
         MenuEvents.RequestedQuery({ query: "", reason: "clear-press" })
-      )
+      ])
     },
     PressedBarKey: ($, { key, trigger }) =>
       disabledOf($)
@@ -3188,7 +3190,7 @@ export const Menu = Component.define({
           )
         )
       // The layer stays inert until the mount has cut the trigger out of it, as a frame can be painted in between.
-      const layered = modal ? decorated.children(blocker.closed) : decorated
+      const layered = modal ? decorated.children([blocker.closed]) : decorated
       if (!shown) return layered
       return layered.onMount(
         TrackMenu({

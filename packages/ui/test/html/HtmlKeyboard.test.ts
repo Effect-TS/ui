@@ -73,14 +73,14 @@ describe("HtmlKeyboard.shortcuts", () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, entry) => [...$.model, entry],
         view: (h, log) =>
-          h.div(
+          h.div([
             h.button.onKeyDown(
               HtmlKeyboard.shortcuts([{ key: "j", message: "el:j" }]),
               { preventDefault: true }
             )
-              .children("Row"),
-            h.output(log.join(","))
-          ),
+              .children(["Row"]),
+            h.output([log.join(",")])
+          ]),
         subscriptions: () => [
           HtmlSubscription.onDocument(
             "keydown",

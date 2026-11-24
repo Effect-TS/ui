@@ -24,12 +24,12 @@ export const Settings = Component.define({
     zip: message.startsWith("zip:") ? message.slice(4) : $.model.zip
   }),
   view: (h, model) =>
-    h.div(
+    h.div([
       h.form.onSubmit(({ entries }) =>
         `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
       )
-        .children(
-          h.label.attr("for", "zip").children("Zip code"),
+        .children([
+          h.label.attr("for", "zip").children(["Zip code"]),
           h.input.attrs({ id: "zip", name: "zip", placeholder: "90210" }).value(
             model.zip
           )
@@ -37,22 +37,22 @@ export const Settings = Component.define({
             .onKeyDown(({ key, shift }) =>
               `key:${key}${shift ? "+shift" : ""}`
             ),
-          h.label(
+          h.label([
             h.input.attrs({ type: "checkbox", name: "agree" }).checked(
               model.agree
             )
               .onChange(({ checked }) => `agree:${checked}`),
             "Agree"
-          ),
+          ]),
           h.input.attrs({ type: "checkbox", name: "off", "aria-label": "Off" })
             .disabled(true),
-          h.button.attrs({ name: "via", value: "go" }).children("Go"),
-          h.button.attr("type", "button").disabled(true).children("Later")
-        ),
-      h.button.attr("popovertarget", "menu").children("Menu"),
+          h.button.attrs({ name: "via", value: "go" }).children(["Go"]),
+          h.button.attr("type", "button").disabled(true).children(["Later"])
+        ]),
+      h.button.attr("popovertarget", "menu").children(["Menu"]),
       h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) =>
         `toggle:${newState}`
-      ).children("Items"),
-      h.output(model.log.join("|"))
-    )
+      ).children(["Items"]),
+      h.output([model.log.join("|")])
+    ])
 })

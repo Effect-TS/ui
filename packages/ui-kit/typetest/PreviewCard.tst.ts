@@ -51,14 +51,14 @@ describe("PreviewCard", () => {
             expect(previewCard.instant).type.toBe<
               PreviewCardInstant | undefined
             >()
-            return h.p(
-              trigger.children("Typography"),
-              previewCard.portal(h.div)?.children(
-                previewCard.positioner(h.div).children(
-                  previewCard.popup(h.div).children("Preview")
-                )
-              )
-            )
+            return h.p([
+              trigger.children(["Typography"]),
+              previewCard.portal(h.div)?.children([
+                previewCard.positioner(h.div).children([
+                  previewCard.popup(h.div).children(["Preview"])
+                ])
+              ])
+            ])
           }
         })
     })

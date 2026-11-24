@@ -315,7 +315,8 @@ A mapped Command takes its own value in `s.resolve`, or its typed error in
 `$.evolve` changes some fields of the Model and keeps the rest, so a
 handler doesn't spread `...model`. Each field takes its new value, or a
 function from its old value to the new one. It returns a step, so `.run`,
-`.emit` and another `.evolve` chain after it:
+`.emit` and another `.evolve` chain after it. `.run` and `.emit` each take
+an array, of Commands or events:
 
 ```ts
 const submittedOrder = CheckoutDef.update(
@@ -329,7 +330,7 @@ const submittedOrder = CheckoutDef.update(
         attempts: (n) => n + 1,
         notice: null
       })
-        .run(placeOrder($.model.form.values))
+        .run([placeOrder($.model.form.values)])
 )
 ```
 
@@ -429,7 +430,7 @@ view functions. No separate HTML helper type is needed. A view function
 published in a library types `h` by what it needs instead, so its callers
 need not register a vocabulary: `@effect/ui-kit`'s `Input` takes
 `{ readonly input: ... }`. When the root is the hole, return its builder
-and let the caller add children: `Card(h).children(...)`.
+and let the caller add children: `Card(h).children([...])`.
 This needs no children generic. `children` returns the builder and a second
 call adds after the first, so the function can add children of its own and
 still return the builder. For a nested hole, use an options object
@@ -439,16 +440,16 @@ and keep its children inferred through `C`:
 import "@effect/ui/html/register"
 import type { View } from "@effect/ui"
 
-const Card = <M>(h: View.H<M>) => h.section.class("card")
+const Card = <M>(h: View.H<M>) => h.section.class(["card"])
 
 const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
   readonly label: string
   readonly children: C
 }) =>
-  h.label.children(
+  h.label.children([
     options.label,
-    h.div.class("control").children(options.children)
-  )
+    h.div.class(["control"]).children(options.children)
+  ])
 ```
 
 Pass `children: [child, otherChild]`. The unspread array retains the union
@@ -462,12 +463,12 @@ inner builder, and `forward` says what goes around it when it is built.
 
 ```ts
 const Framed = <M>(h: View.H<M>) =>
-  h.div.class("control").forward((control) =>
-    h.div.class("frame").children(control)
+  h.div.class(["control"]).forward((control) =>
+    h.div.class(["frame"]).children([control])
   )
 
 // The class and the children land on the control, inside the frame.
-Framed(h).class("wide").children(h.input)
+Framed(h).class(["wide"]).children([h.input])
 ```
 
 ### Loading data
@@ -526,7 +527,7 @@ the content when it declares the child, written with its own `h`:
 Collapsible(h, {
   key: "note",
   slots: {
-    summary: h.h2(note.title),
+    summary: h.h2([note.title]),
     body: NoteEditor(h, {
       key: note.id,
       props: { note },
@@ -557,7 +558,7 @@ A component finished with `parts` instead of `view` is headless: it keeps
 its own Model, `update` and Commands, and owns behaviour such as keyboard
 handling, ids and ARIA, but no markup. A consumer calls it with `h`
 and a `view` closure that applies each part to a builder of its own:
-`listbox.trigger(h.button).children("Open")`. The closure is the consumer's code,
+`listbox.trigger(h.button).children(["Open"])`. The closure is the consumer's code,
 so children declared in it report to the consumer. Pass rows as Schema data in
 props, and keep richer row content in the closure, looked up by id. The
 closure runs whenever the consumer renders, so wrap a headless child in a
@@ -1017,7 +1018,7 @@ SearchPage(h, {
   key: AppRoute.printPath(route),
   props: { route },
   fallback: (result) =>
-    h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
+    h.p([result._tag === "Failure" ? "Couldn't load this page." : "Loading…"])
 })
 ```
 

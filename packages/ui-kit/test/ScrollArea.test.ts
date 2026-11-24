@@ -32,7 +32,7 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
   view: (scrollArea: Parts, h: H) => {
     snapshot(scrollArea)
     return scrollArea.root(
-      h.div.class("root")
+      h.div.class(["root"])
         .attrs({
           role: "region",
           "data-scrolling": "x",
@@ -40,22 +40,22 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
           "data-custom": "kept",
           style: "color:red"
         })
-    ).children(
+    ).children([
       scrollArea.viewport(
-        h.div.class("viewport")
+        h.div.class(["viewport"])
           .attrs({
             tabindex: "5",
             "data-overflow-y-end": "x",
             style: "height:100px"
           })
-      ).children(
+      ).children([
         scrollArea.content(
-          h.div.class("content")
+          h.div.class(["content"])
             .attrs({ role: "main", "data-scrolling": "x" })
-        ).children("Body")
-      ),
+        ).children(["Body"])
+      ]),
       scrollArea.scrollbar({
-        element: h.div.class("bar-y")
+        element: h.div.class(["bar-y"])
           .attrs({
             "aria-hidden": "false",
             "data-orientation": "horizontal",
@@ -64,7 +64,7 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
             "data-scroll-area-scrollbar-x": "stale",
             style: "width:8px"
           }),
-        thumb: h.div.class("thumb-y")
+        thumb: h.div.class(["thumb-y"])
           .attrs({
             "data-orientation": "horizontal",
             "data-scrolling": "x",
@@ -72,19 +72,22 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
           })
       }),
       scrollArea.scrollbar({
-        element: h.div.class("bar-x").attr(
+        element: h.div.class(["bar-x"]).attr(
           "data-scroll-area-scrollbar-y",
           "stale"
         ),
-        thumb: h.div.class("thumb-x").attr("data-scroll-area-thumb-y", "stale"),
+        thumb: h.div.class(["thumb-x"]).attr(
+          "data-scroll-area-thumb-y",
+          "stale"
+        ),
         orientation: "horizontal",
         keepMounted: true
       }),
       scrollArea.corner(
-        h.div.class("corner")
+        h.div.class(["corner"])
           .attrs({ "aria-hidden": "false", style: "background:gray" })
       )
-    )
+    ])
   }
 })
 
@@ -265,19 +268,23 @@ describe("ScrollArea", () => {
       > = [
         (scrollArea, h) => scrollArea.root(h.span as never),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(scrollArea.viewport(h.span as never)),
+          scrollArea.root(h.div).children([
+            scrollArea.viewport(h.span as never)
+          ]),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(scrollArea.content(h.span as never)),
+          scrollArea.root(h.div).children([
+            scrollArea.content(h.span as never)
+          ]),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(
+          scrollArea.root(h.div).children([
             scrollArea.scrollbar({ element: h.span as never, thumb: h.div })
-          ),
+          ]),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(
+          scrollArea.root(h.div).children([
             scrollArea.scrollbar({ element: h.div, thumb: h.span as never })
-          ),
+          ]),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(scrollArea.corner(h.span as never))
+          scrollArea.root(h.div).children([scrollArea.corner(h.span as never)])
       ]
       for (const render of cases) {
         const exit = yield* Effect.exit(

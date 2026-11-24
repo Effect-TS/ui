@@ -31,9 +31,11 @@ export const Counter = Component.define({
   view: (h, model) =>
     h.el(
       "div",
-      h.el("button").on("click", CounterMessage.Decrement()).children("-"),
-      h.el("span", String(model.count)),
-      h.el("button").on("click", CounterMessage.Increment()).children("+")
+      [
+        h.el("button").on("click", CounterMessage.Decrement()).children(["-"]),
+        h.el("span", [String(model.count)]),
+        h.el("button").on("click", CounterMessage.Increment()).children(["+"])
+      ]
     )
 })
 
@@ -88,21 +90,23 @@ export const TodoItem = Component.define({
   update: ($, message) =>
     TodoItemMessage.match(message, {
       Toggle: () =>
-        $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
-      Save: () => $.set({ saving: true }).run(SaveTodo.make($.props.todo)),
+        $.emit([TodoItemEvents.Toggled({ done: !$.props.todo.done })]),
+      Save: () => $.set({ saving: true }).run([SaveTodo.make($.props.todo)]),
       Saved: () => ({ saving: false }),
       SaveFailed: () => ({ saving: false })
     }),
   view: (h, model) =>
     h.el(
       "li",
-      h.el("button").on("click", TodoItemMessage.Toggle()).children(
-        h.props.todo.done ? "[x]" : "[ ]"
-      ),
-      h.el("span", h.props.todo.title),
-      h.el("button").on("click", TodoItemMessage.Save()).children(
-        model.saving ? "saving" : "save"
-      )
+      [
+        h.el("button").on("click", TodoItemMessage.Toggle()).children([
+          h.props.todo.done ? "[x]" : "[ ]"
+        ]),
+        h.el("span", [h.props.todo.title]),
+        h.el("button").on("click", TodoItemMessage.Save()).children([
+          model.saving ? "saving" : "save"
+        ])
+      ]
     )
 })
 
@@ -139,18 +143,20 @@ export const TodoList = Component.define({
   view: (h, model) =>
     h.el(
       "ul",
-      model.todos.map((todo) =>
-        TodoItem(h, {
-          key: todo.id,
-          props: { todo },
-          onEmit: (events) =>
-            TodoListMessage.SetDone({ id: todo.id, done: events.done }),
-          onFailure: () => TodoListMessage.RowFailed({ id: todo.id }),
-          fallback: () => h.el("li", `${todo.title} failed`)
-        })
-      ),
-      model.failed.length > 0 &&
-        h.el("li", `rows failed: ${model.failed.join(",")}`)
+      [
+        model.todos.map((todo) =>
+          TodoItem(h, {
+            key: todo.id,
+            props: { todo },
+            onEmit: (events) =>
+              TodoListMessage.SetDone({ id: todo.id, done: events.done }),
+            onFailure: () => TodoListMessage.RowFailed({ id: todo.id }),
+            fallback: () => h.el("li", [`${todo.title} failed`])
+          })
+        ),
+        model.failed.length > 0 &&
+        h.el("li", [`rows failed: ${model.failed.join(",")}`])
+      ]
     )
 })
 
@@ -199,14 +205,14 @@ export const SearchBox = Component.define({
   update: ($, message) =>
     SearchMessage.match(message, {
       Query: ({ text }) =>
-        $.set({ ...$.model, text }).run(Search.make({ text })),
+        $.set({ ...$.model, text }).run([Search.make({ text })]),
       Results: ({ items }) => ({ ...$.model, items }),
-      Start: () => $.run(Upload.make({ name: "photo.png" })),
-      Cancel: () => $.run(Command.interrupt(Upload, { name: "photo.png" })),
+      Start: () => $.run([Upload.make({ name: "photo.png" })]),
+      Cancel: () => $.run([Command.interrupt(Upload, { name: "photo.png" })]),
       Progress: ({ percent }) => ({ ...$.model, percent }),
       Tick: () => ({ ...$.model, ticks: $.model.ticks + 1 })
     }),
-  view: (h, model) => h.el("div", model.text),
+  view: (h, model) => h.el("div", [model.text]),
   subscriptions: ({ model }) => [
     model.percent > 0 && model.percent < 100 &&
     Subscription.make("tick", Stream.make(SearchMessage.Tick())),

@@ -16,9 +16,9 @@
  * | `link` | `<a>` inside an item    |
  *
  * `root`, `list` and `item` each take the consumer's builder and return it,
- * so the consumer goes on chaining and adds children with `.children(...)`.
+ * so the consumer goes on chaining and adds children with `.children([...])`.
  * `link` takes `{ element, active }` and returns `element`:
- * `navigationMenu.link({ element: h.a.attr("href", "/"), active: true }).children("Home")`.
+ * `navigationMenu.link({ element: h.a.attr("href", "/"), active: true }).children(["Home"])`.
  * The `href` is the consumer's to set. No part adds markup.
  *
  * Naming the landmark is the consumer's job. On a page with more than one
@@ -73,18 +73,18 @@
  *   view: (h, model) =>
  *     NavigationMenu(h, {
  *       view: (navigationMenu) =>
- *         navigationMenu.root(h.nav.attr("aria-label", "Main")).children(
- *           navigationMenu.list(h.ul.class("menu")).children(
+ *         navigationMenu.root(h.nav.attr("aria-label", "Main")).children([
+ *           navigationMenu.list(h.ul.class(["menu"])).children(
  *             pages.map((page) =>
- *               navigationMenu.item(h.li.key(page.path)).children(
+ *               navigationMenu.item(h.li.key(page.path)).children([
  *                 navigationMenu.link({
- *                   element: h.a.class("link").attr("href", page.path),
+ *                   element: h.a.class(["link"]).attr("href", page.path),
  *                   active: page.path === model.path
- *                 }).children(page.label)
- *               )
+ *                 }).children([page.label])
+ *               ])
  *             )
  *           )
- *         )
+ *         ])
  *     })
  * })
  *

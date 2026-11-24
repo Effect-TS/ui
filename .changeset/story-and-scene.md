@@ -13,10 +13,10 @@ it.effect("saves the draft and tells its parent", () =>
     story.send(NoteEditorMessage.Edited({ body: edited.body }))
     assert.strictEqual(story.model.draft, edited.body)
     story.send(NoteEditorMessage.Save())
-    story.expectExact(SaveNote)
+    story.expectExact([SaveNote])
     story.resolve(SaveNote, edited)
     assert.strictEqual(story.model.saved, edited.body)
-    story.emitted(NoteEditorEvents.Saved({ note: edited }))
+    story.emitted([NoteEditorEvents.Saved({ note: edited })])
   }))
 ```
 

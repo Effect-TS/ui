@@ -21,12 +21,12 @@ type H = View.Helper<never, FieldProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (field: Parts, h: H) =>
-    field.root(h.div).children(
-      field.label(h.label).children("Name"),
+    field.root(h.div).children([
+      field.label(h.label).children(["Name"]),
       field.control(h.input.attr("aria-describedby", "hint")),
-      field.description(h.p).children("Visible on your profile"),
-      field.error(h.span)?.children("Enter your name")
-    )
+      field.description(h.p).children(["Visible on your profile"]),
+      field.error(h.span)?.children(["Enter your name"])
+    ])
 }
 
 const label = Locator.tag("label")
@@ -118,9 +118,9 @@ describe("Field", () => {
       const s = yield* Scene.make(Field, { disabled: true }, {
         elements: Html,
         view: (field: Parts, h: H) =>
-          field.root(h.div).children(
-            field.focusWithin(h.section).children(field.member(h.button))
-          )
+          field.root(h.div).children([
+            field.focusWithin(h.section).children([field.member(h.button)])
+          ])
       })
       const state = () => [
         s.get(wrapper).attrs?.["data-focused"],
@@ -145,7 +145,7 @@ describe("Field", () => {
   it("field state overrides stale attributes without replacing consumer attributes", () => {
     const field = parts({ invalid: false, dirty: true, filled: true })
     assert.deepStrictEqual(
-      attrsOf(field.root(h.div.class("mine").attr("data-invalid", "stale"))),
+      attrsOf(field.root(h.div.class(["mine"]).attr("data-invalid", "stale"))),
       {
         class: "mine",
         "data-valid": "",
@@ -186,7 +186,7 @@ describe("Field", () => {
           ) =>
             Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
           const props = { checked: true, name: "terms" }
-          return h.form(
+          return h.form([
             formField(
               "name",
               (field) =>
@@ -203,13 +203,13 @@ describe("Field", () => {
                 Checkbox(h, {
                   props,
                   view: (checkbox) =>
-                    checkbox.root(field.control(h.button)).children(
+                    checkbox.root(field.control(h.button)).children([
                       h.input.attrs({
                         type: "hidden",
                         name: "extra",
                         value: "kept"
                       })
-                    )
+                    ])
                 })
             ),
             formField(
@@ -218,16 +218,16 @@ describe("Field", () => {
                 Switch(h, {
                   props: { ...props, name: "news" },
                   view: (parts) =>
-                    parts.root(field.control(h.button)).children(
+                    parts.root(field.control(h.button)).children([
                       h.input.attrs({
                         type: "hidden",
                         name: "other",
                         value: "also-kept"
                       })
-                    )
+                    ])
                 })
             )
-          )
+          ])
         }
       })
       const submitted = (disabled: boolean) =>

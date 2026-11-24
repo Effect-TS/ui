@@ -49,7 +49,7 @@ describe("Dialog", () => {
       props: { open: false },
       view: (dialog) => {
         const trigger = dialog.trigger(
-          h.button.class("open").onClick(Msg.Clicked())
+          h.button.class(["open"]).onClick(Msg.Clicked())
         )
         expect(trigger).type.toBe<Button>()
         expect(dialog.portal(h.dialog)).type.toBe<DialogElement | undefined>()
@@ -76,10 +76,10 @@ describe("Dialog", () => {
         expect(dialog.title).type.not.toBeCallableWith(h.p)
         expect(dialog.description).type.not.toBeCallableWith(h.div)
         expect(dialog.close).type.not.toBeCallableWith(h.a)
-        return h.div(
-          trigger.children("Open"),
-          dialog.portal(h.dialog)?.children(dialog.popup(h.div))
-        )
+        return h.div([
+          trigger.children(["Open"]),
+          dialog.portal(h.dialog)?.children([dialog.popup(h.div)])
+        ])
       }
     })
   })

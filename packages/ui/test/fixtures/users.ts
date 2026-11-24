@@ -193,29 +193,29 @@ export const UserCard = Component.define({
   update: ($, message) =>
     UserCardMessage.match(message, {
       Like: () =>
-        $.run(
+        $.run([
           LikeUser.make({ id: $.props.id }).pipe(Command.match({
             onSuccess: () => UserCardMessage.Liked(),
             onFailure: () => UserCardMessage.Liked()
           }))
-        ),
+        ]),
       Liked: () => $.model
     }),
   view: (h) =>
     AsyncResult.match(h.queries.user, {
-      onInitial: () => h.p("Loading user…"),
-      onFailure: () => h.p("This user doesn't exist."),
+      onInitial: () => h.p(["Loading user…"]),
+      onFailure: () => h.p(["This user doesn't exist."]),
       onSuccess: ({ value: user, waiting }) =>
-        h.article(
-          h.h2(user.name),
-          h.p(user.email),
+        h.article([
+          h.h2([user.name]),
+          h.p([user.email]),
           h.button.attr("aria-label", "Like").onClick(UserCardMessage.Like())
-            .children(
+            .children([
               `♥ ${user.likes}`
-            ),
+            ]),
           // waiting is only "a fetch is in flight". An optimistic patch alone doesn't set it.
-          waiting && h.small("Updating…")
-        )
+          waiting && h.small(["Updating…"])
+        ])
     })
 })
 
@@ -262,13 +262,13 @@ export const RenameForm = Component.define({
             // No saving flag in the Model. The run ends with the form, so if it unmounts neither
             // message below arrives, and a flag set here would come back stuck from history.state.
             $.set({ ...$.model, draft: Option.none(), error: Option.none() })
-              .run(
+              .run([
                 RenameUser.make({ id: $.props.id, name }).pipe(Command.match({
                   onSuccess: () => RenameFormMessage.Saved(),
                   onFailure: (error) =>
                     RenameFormMessage.SaveFailed({ name, reason: error.reason })
                 }))
-              )
+              ])
         }),
       Saved: () => $.model,
       SaveFailed: ({ name, reason }) => ({
@@ -279,25 +279,25 @@ export const RenameForm = Component.define({
     }),
   view: (h, model) =>
     AsyncResult.match(h.queries.user, {
-      onInitial: () => h.p("Loading…"),
-      onFailure: () => h.p("There is nothing to rename."),
+      onInitial: () => h.p(["Loading…"]),
+      onFailure: () => h.p(["There is nothing to rename."]),
       onSuccess: ({ value: user }) =>
-        h.form.onSubmit(RenameFormMessage.Save()).children(
+        h.form.onSubmit(RenameFormMessage.Save()).children([
           h.input.attr("aria-label", "Name").value(
             Option.getOrElse(model.draft, () => user.name)
           )
             .onInput(({ value }) => RenameFormMessage.Edit({ name: value })),
           h.button.attr("type", "submit").disabled(Option.isNone(model.draft))
-            .children("Save"),
+            .children(["Save"]),
           h.button.attr("type", "button").disabled(Option.isNone(model.draft))
-            .onClick(RenameFormMessage.Cancel()).children("Cancel"),
+            .onClick(RenameFormMessage.Cancel()).children(["Cancel"]),
           // This instance has a save of this user queued or running.
-          h.isRunning(RenameUser, { id: h.props.id }) && h.small("Saving…"),
+          h.isRunning(RenameUser, { id: h.props.id }) && h.small(["Saving…"]),
           Option.match(model.error, {
             onNone: () => null,
-            onSome: (reason) => h.p.attr("role", "alert").children(reason)
+            onSome: (reason) => h.p.attr("role", "alert").children([reason])
           })
-        )
+        ])
     })
 })
 
@@ -315,14 +315,14 @@ export const DetailPage = Component.define({
   init: () => ({ renaming: false }),
   update: ($) => ({ renaming: !$.model.renaming }),
   view: (h, model) =>
-    h.section(
+    h.section([
       UserCard(h, { key: "card", props: { id: h.props.id } }),
-      h.button.onClick(DetailPageMessage.ToggleRename()).children(
+      h.button.onClick(DetailPageMessage.ToggleRename()).children([
         model.renaming ? "Close" : "Rename"
-      ),
+      ]),
       model.renaming &&
-        RenameForm(h, { key: "rename", props: { id: h.props.id } })
-    )
+      RenameForm(h, { key: "rename", props: { id: h.props.id } })
+    ])
 })
 
 // ListPage: a paged list that keeps the previous page on screen while the next one loads
@@ -348,36 +348,40 @@ export const ListPage = Component.define({
   view: (h, model) => {
     const current = h.queries.users
     if (AsyncResult.isFailure(current)) {
-      return h.p("The users couldn't be loaded.")
+      return h.p(["The users couldn't be loaded."])
     }
     // The requested page once it is here. Until then the page the query still holds, if any.
     const shown = AsyncResult.isSuccess(current)
       ? Option.some(current.value)
       : h.previous.users
     return Option.match(shown, {
-      onNone: () => h.p("Loading users…"),
+      onNone: () => h.p(["Loading users…"]),
       onSome: ({ page, pages, users }) =>
-        h.section(
+        h.section([
           h.ul(
             users.map((user) =>
-              h.li.key(user.id).children(
-                h.a.attr("href", detailUrl(user.id)).children(user.name)
-              )
+              h.li.key(user.id).children([
+                h.a.attr("href", detailUrl(user.id)).children([user.name])
+              ])
             )
           ),
-          h.nav(
+          h.nav([
             h.button.disabled(model.page === 0)
               .onClick(ListPageMessage.GoTo({ page: model.page - 1 })).children(
-                "Previous"
+                [
+                  "Previous"
+                ]
               ),
-            h.span(`Page ${page + 1} of ${pages}`),
+            h.span([`Page ${page + 1} of ${pages}`]),
             h.button.disabled(model.page >= pages - 1)
               .onClick(ListPageMessage.GoTo({ page: model.page + 1 })).children(
-                "Next"
+                [
+                  "Next"
+                ]
               ),
-            model.page !== page && h.small(`Loading page ${model.page + 1}…`)
-          )
-        )
+            model.page !== page && h.small([`Loading page ${model.page + 1}…`])
+          ])
+        ])
     })
   }
 })
@@ -407,11 +411,11 @@ export const App = Component.define({
     )
   ],
   view: (h, route) =>
-    h.div(
-      h.header(
-        h.a.attr("href", AppRoute.print(AppRoute.List())).children("Users")
-      ),
-      h.main(
+    h.div([
+      h.header([
+        h.a.attr("href", AppRoute.print(AppRoute.List())).children(["Users"])
+      ]),
+      h.main([
         AppRoute.match(route, {
           List: () => ListPage(h, { key: "list" }),
           Detail: ({ params }) =>
@@ -419,8 +423,8 @@ export const App = Component.define({
               key: `user-${params.id}`,
               props: { id: params.id }
             }),
-          NotFound: () => h.h1("Not found")
+          NotFound: () => h.h1(["Not found"])
         })
-      )
-    )
+      ])
+    ])
 })

@@ -28,10 +28,10 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `tooltip.positioner(h.div).children(tooltip.popup(h.div).children("Bold"))`.
+ * `tooltip.positioner(h.div).children([tooltip.popup(h.div).children(["Bold"])])`.
  * A part's result is a builder, so it can also be another kit call's
  * `element`. That puts a tooltip on a ui-kit Button:
- * `Button(h, { element: tooltip.trigger(h.button) }).class("tool").children("B")`.
+ * `Button(h, { element: tooltip.trigger(h.button) }).class(["tool"]).children(["B"])`.
  *
  * The positioner is a manual popover, so it renders in the top layer and
  * needs no portal. While it shows, the tooltip measures the trigger and
@@ -101,7 +101,7 @@
  * has been open, hovering another opens it at once, until `timeout` after
  * the last one closed. One tooltip of the group shows at a time: when another is
  * shown, the previous one asks to close. Wrap the group, with nothing to add to each
- * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div(Tooltip(h, ...), Tooltip(h, ...)) })`.
+ * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div([Tooltip(h, ...), Tooltip(h, ...)]) })`.
  *
  * Set `closeDelay` to give the pointer time to reach the popup when its
  * path takes it outside both the trigger and the positioner.
@@ -135,12 +135,12 @@
  *         RequestedClose: () => ToolbarMessage.RequestedCloseBoldTip()
  *       },
  *       view: (tooltip) =>
- *         h.div(
- *           tooltip.trigger(h.button.class("tool").attr("aria-label", "Bold")).children("B"),
- *           tooltip.positioner(h.div.class("tip-positioner")).children(
- *             tooltip.popup(h.div.class("tip")).children(tooltip.arrow(h.div.class("tip-arrow")), "Bold")
- *           )
- *         )
+ *         h.div([
+ *           tooltip.trigger(h.button.class(["tool"]).attr("aria-label", "Bold")).children(["B"]),
+ *           tooltip.positioner(h.div.class(["tip-positioner"])).children([
+ *             tooltip.popup(h.div.class(["tip"])).children([tooltip.arrow(h.div.class(["tip-arrow"])), "Bold"])
+ *           ])
+ *         ])
  *     })
  * })
  *
@@ -396,9 +396,9 @@ type TooltipUpdate = Component.Update<
 // The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
 const dismiss = ($: TooltipUpdate, instant = $.model.instant) =>
   shownBy($.props)
-    ? $.evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(
+    ? $.evolve({ instant }).run([Command.interrupt(WaitBeforeClosing)]).emit([
       requestedClose
-    )
+    ])
     : $.model
 
 // The pointer left the trigger or the positioner: a pending open stops, and
@@ -406,12 +406,12 @@ const dismiss = ($: TooltipUpdate, instant = $.model.instant) =>
 const left = ($: TooltipUpdate) => {
   const released = $.evolve({ hovered: false, pressed: false })
   if (!shownBy($.props)) {
-    return released.run(Command.interrupt(WaitBeforeOpening))
+    return released.run([Command.interrupt(WaitBeforeOpening)])
   }
   if ($.model.focused) return released
-  return released.run(
+  return released.run([
     WaitBeforeClosing.make({ delay: $.props.closeDelay ?? 0 })
-  )
+  ])
 }
 
 /**
@@ -554,15 +554,15 @@ export const TooltipProvider = Component.define({
         next: Math.max($.model.next, ...turns.map((turn) => turn + 1))
       })
       if (open) {
-        return shown.evolve({ instant: true }).run(
+        return shown.evolve({ instant: true }).run([
           Command.interrupt(WaitBeforeCooling)
-        )
+        ])
       }
       // The last one closed: the window starts.
       if ($.model.open) {
-        return shown.evolve({ instant: true }).run(
+        return shown.evolve({ instant: true }).run([
           WaitBeforeCooling.make({ timeout: $.props.timeout ?? 400 })
-        )
+        ])
       }
       return shown
     },
@@ -643,35 +643,35 @@ export const Tooltip = Component.define({
       const entered = $.evolve({ hovered: true })
       if ($.props.disabled === true) return entered
       if (shownBy($.props)) {
-        return entered.run(Command.interrupt(WaitBeforeClosing))
+        return entered.run([Command.interrupt(WaitBeforeClosing)])
       }
       // A provider's group is open, or closed less than `timeout` ago.
       if ($.shared.provider?.instant === true) {
-        return entered.evolve({ instant: "delay" }).run(
+        return entered.evolve({ instant: "delay" }).run([
           Command.interrupt(WaitBeforeOpening)
-        ).emit(requestedOpen)
+        ]).emit([requestedOpen])
       }
-      return entered.run(
+      return entered.run([
         WaitBeforeOpening.make({ delay: $.props.delay ?? 600 })
-      )
+      ])
     },
     LeftTrigger: left,
     EnteredPositioner: ($) =>
-      $.evolve({ hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
+      $.evolve({ hovered: true }).run([Command.interrupt(WaitBeforeClosing)]),
     LeftPositioner: left,
     FocusedTrigger: ($) => {
       const focused = $.evolve({ focused: !$.model.pressed, pressed: false })
       if ($.model.pressed || $.props.disabled === true || shownBy($.props)) {
         return focused
       }
-      return focused.evolve({ instant: "focus" }).run(
+      return focused.evolve({ instant: "focus" }).run([
         Command.interrupt(WaitBeforeOpening)
-      ).emit(requestedOpen)
+      ]).emit([requestedOpen])
     },
     BlurredTrigger: ($) => {
       const blurred = $.evolve({ focused: false, pressed: false })
       return shownBy($.props) && !$.model.hovered
-        ? blurred.emit(requestedClose)
+        ? blurred.emit([requestedClose])
         : blurred
     },
     // A mouse press only marks the focus that follows it, and stops a
@@ -680,7 +680,7 @@ export const Tooltip = Component.define({
     PressedTrigger: ($) => {
       const pressed = $.evolve({ pressed: true })
       return $.props.closeOnClick !== false
-        ? pressed.run(Command.interrupt(WaitBeforeOpening))
+        ? pressed.run([Command.interrupt(WaitBeforeOpening)])
         : pressed
     },
     ClickedTrigger: ($) =>
@@ -691,11 +691,11 @@ export const Tooltip = Component.define({
     PressedDocument: ($) => $.model.hovered ? $.model : dismiss($),
     CompletedWaitBeforeOpening: ($) =>
       $.props.disabled !== true && !$.props.open && $.model.hovered
-        ? $.evolve({ instant: null }).emit(requestedOpen)
+        ? $.evolve({ instant: null }).emit([requestedOpen])
         : $.model,
     CompletedWaitBeforeClosing: ($) =>
       shownBy($.props) && !$.model.hovered && !$.model.focused
-        ? $.evolve({ instant: null }).emit(requestedClose)
+        ? $.evolve({ instant: null }).emit([requestedClose])
         : $.model,
     // The shown tooltips of the group changed. Its turn follows whether it
     // is shown, as the consumer decided, not whether it asked: a closed
@@ -707,9 +707,9 @@ export const Tooltip = Component.define({
       if ($.model.turn === 0) return $.evolve({ turn: next, yieldedTo: null })
       return newest !== null && newest !== $.model.turn &&
           newest !== $.model.yieldedTo
-        ? $.evolve({ yieldedTo: newest }).run(
+        ? $.evolve({ yieldedTo: newest }).run([
           Command.interrupt(WaitBeforeClosing)
-        ).emit(requestedClose)
+        ]).emit([requestedClose])
         : $.model
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement })

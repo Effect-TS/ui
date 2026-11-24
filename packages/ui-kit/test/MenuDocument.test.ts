@@ -164,11 +164,11 @@ const Page = Component.define({
         Settled: () => undefined
       },
       view: (menu) =>
-        h.div(
-          h.button.attrs({ id: "before", type: "button" }).children("Before"),
-          menu.trigger({ element: h.button.attr("id", "trigger") }).children(
+        h.div([
+          h.button.attrs({ id: "before", type: "button" }).children(["Before"]),
+          menu.trigger({ element: h.button.attr("id", "trigger") }).children([
             "Edit"
-          ),
+          ]),
           h.props.viewport
             ? menu.trigger({
               element: h.button.attr("id", "trigger-2"),
@@ -176,20 +176,20 @@ const Page = Component.define({
               delay: 0,
               closeDelay: 300
             })
-              .children("View")
+              .children(["View"])
             : null,
           h.props.viewport
             ? menu.trigger({
               element: h.button.attr("id", "trigger-3"),
               disabled: true
-            }).children("Off")
+            }).children(["Off"])
             : null,
-          menu.positioner(h.div.attr("id", "positioner")).children(
-            menu.popup(h.div).children(
+          menu.positioner(h.div.attr("id", "positioner")).children([
+            menu.popup(h.div).children([
               h.props.viewport
-                ? menu.viewport(h.div.attr("id", "viewport")).children(
-                  h.span.children("Content")
-                )
+                ? menu.viewport(h.div.attr("id", "viewport")).children([
+                  h.span.children(["Content"])
+                ])
                 : null,
               h.props.filter
                 ? menu.input(h.input.attr("data-testid", "input"))
@@ -197,15 +197,15 @@ const Page = Component.define({
               menu.item({
                 element: h.div.attr("data-testid", "copy"),
                 value: "copy"
-              }).children("Copy"),
+              }).children(["Copy"]),
               menu.item({
                 element: h.div.attr("data-testid", "cut"),
                 value: "cut"
-              }).children("Cut"),
+              }).children(["Cut"]),
               menu.item({
                 element: h.div.attr("data-testid", "paste"),
                 value: "paste"
-              }).children("Paste"),
+              }).children(["Paste"]),
               Menu(h, {
                 props: {
                   open: model.share,
@@ -230,38 +230,38 @@ const Page = Component.define({
                   Settled: () => undefined
                 },
                 view: (share) =>
-                  h.div(
+                  h.div([
                     menu.item({
                       element: share.submenuTrigger(
                         h.div.attr("data-testid", "share")
                       ),
                       value: "share"
                     })
-                      .children("Share"),
+                      .children(["Share"]),
                     share.positioner(h.div.attr("id", "share-positioner"))
-                      .children(
-                        share.popup(h.div).children(
+                      .children([
+                        share.popup(h.div).children([
                           share.item({
                             element: h.div.attr("data-testid", "email"),
                             value: "email"
-                          }).children("Email"),
+                          }).children(["Email"]),
                           share.item({
                             element: h.div.attr("data-testid", "link"),
                             value: "link"
-                          }).children("Copy link")
-                        )
-                      )
-                  )
+                          }).children(["Copy link"])
+                        ])
+                      ])
+                  ])
               }),
               h.props.filter
-                ? menu.empty(h.div.attr("data-testid", "empty"))?.children(
+                ? menu.empty(h.div.attr("data-testid", "empty"))?.children([
                   "No matches"
-                )
+                ])
                 : null
-            )
-          ),
-          h.button.attrs({ id: "after", type: "button" }).children("After")
-        )
+            ])
+          ]),
+          h.button.attrs({ id: "after", type: "button" }).children(["After"])
+        ])
     })
 })
 

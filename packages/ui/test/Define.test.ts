@@ -24,31 +24,31 @@ const CounterDef = Component.define({
 const bump = CounterDef.update(($, msg) => {
   const n = $.model.n + $.props.by
   return $.set({ n, seen: [...$.model.seen, msg._tag] })
-    .run(Log.make({ n }))
-    .emit(Events.Stepped({ n }))
+    .run([Log.make({ n })])
+    .emit([Events.Stepped({ n })])
 })
 
 const Counter = CounterDef.make({
   init: () => ({ n: 0, seen: [] }),
   update: {
-    Step: ($) => $.combine(bump, bump),
+    Step: ($) => $.combine([bump, bump]),
     Logged: ($, msg) => ({
       ...$.model,
       seen: [...$.model.seen, `logged ${msg.n}`]
     })
   },
-  view: (h, model) => h.el("p", String(model.n))
+  view: (h, model) => h.el("p", [String(model.n)])
 })
 
 // `$.combine` in a slice runs `bump` with the message the slice was given.
-const onLogged = CounterDef.update("Logged", ($) => $.combine(bump))
+const onLogged = CounterDef.update("Logged", ($) => $.combine([bump]))
 
 // Calls the slice by hand with a message other than the one it received.
 const ByHand = CounterDef.make({
   init: () => ({ n: 0, seen: [] }),
   update: ($, msg) =>
     msg._tag === "Step" ? onLogged($, { _tag: "Logged", n: 0 }) : $.model,
-  view: (h, model) => h.el("p", String(model.n))
+  view: (h, model) => h.el("p", [String(model.n)])
 })
 
 describe("Component.define", () => {
@@ -57,8 +57,8 @@ describe("Component.define", () => {
       const s = yield* Story.make(Counter, { by: 2 })
       s.send(Message.Step())
       assert.deepStrictEqual(s.model, { n: 4, seen: ["Step", "Step"] })
-      s.expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
-        .emitted(Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 }))
+      s.expectExact([Log.make({ n: 2 }), Log.make({ n: 4 })])
+        .emitted([Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 })])
         .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
         .resolve(Log.make({ n: 4 }), Message.Logged({ n: 4 }))
     }))
@@ -67,7 +67,7 @@ describe("Component.define", () => {
     Effect.gen(function*() {
       const s = yield* Story.make(Counter, { by: 1 })
       s.send(Message.Step())
-        .emitted(Events.Stepped({ n: 1 }), Events.Stepped({ n: 2 }))
+        .emitted([Events.Stepped({ n: 1 }), Events.Stepped({ n: 2 })])
         .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
         .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
       assert.deepStrictEqual(s.model.seen, [
@@ -83,7 +83,7 @@ describe("Component.define", () => {
       const s = yield* Story.make(ByHand, { by: 1 })
       s.send(Message.Step())
       assert.deepStrictEqual(s.model.seen, ["Logged"])
-      s.emitted(Events.Stepped({ n: 1 }))
+      s.emitted([Events.Stepped({ n: 1 })])
         .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
     }))
 })

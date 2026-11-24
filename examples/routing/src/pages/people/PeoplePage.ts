@@ -49,30 +49,34 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
 
   update: {
     ChangedSearchInput: ($, { value }) =>
-      $.emit(PeoplePageEvents.ChangedSearchInput({ value })),
+      $.emit([PeoplePageEvents.ChangedSearchInput({ value })]),
 
     SubmittedSearch: ($) =>
-      $.run(
+      $.run([
         Router.patchSearch(AppRoute, $.props.route, {
           searchText: $.props.searchInput
         }, { history: "push" }).pipe(
           Command.asNoop
         )
-      )
+      ])
   },
 
   view: (h) => {
     const people = h.queries.people
     const { searchText } = h.props.route.search
-    return h.div.children(
-      h.h1.class("text-4xl font-bold text-gray-800 mb-6").children("People"),
-      h.search.class("mb-6").children(
-        h.form.onSubmit(PeoplePageMessage.SubmittedSearch()).class("flex gap-2")
-          .children(
-            h.div.class("flex-1").children(
-              h.label.attr("for", "people-search").class("sr-only").children(
+    return h.div.children([
+      h.h1.class(["text-4xl font-bold text-gray-800 mb-6"]).children([
+        "People"
+      ]),
+      h.search.class(["mb-6"]).children([
+        h.form.onSubmit(PeoplePageMessage.SubmittedSearch()).class([
+          "flex gap-2"
+        ])
+          .children([
+            h.div.class(["flex-1"]).children([
+              h.label.attr("for", "people-search").class(["sr-only"]).children([
                 "Search people"
-              ),
+              ]),
               Input(h, {
                 props: { value: h.props.searchInput },
                 onUpdate: ({ value }) =>
@@ -82,58 +86,60 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
                 .attr("type", "search")
                 .attr("placeholder", "Search by name or role...")
                 .attr("autocomplete", "off")
-                .class(
+                .class([
                   "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                )
-            ),
+                ])
+            ]),
             Button(h, { props: { type: "submit" } })
-              .class(
+              .class([
                 "px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer"
-              )
-              .children("Search")
-          )
-      ),
+              ])
+              .children(["Search"])
+          ])
+      ]),
       h.props.searchHistory.length > 0 &&
-        h.div.class("mb-6 text-sm text-gray-600 flex flex-wrap gap-2").children(
-          h.span.class("font-medium").children("Recent searches:"),
+      h.div.class(["mb-6 text-sm text-gray-600 flex flex-wrap gap-2"]).children(
+        [
+          h.span.class(["font-medium"]).children(["Recent searches:"]),
           h.props.searchHistory.map((term) =>
-            h.span.key(term).class(
+            h.span.key(term).class([
               "px-2 py-1 bg-gray-200 rounded font-mono text-gray-800"
-            ).children(term)
+            ]).children([term])
           )
-        ),
-      h.p.key("status").attr("aria-live", "polite").class(
+        ]
+      ),
+      h.p.key("status").attr("aria-live", "polite").class([
         "text-lg text-gray-600 mb-6"
-      ).children(
+      ]).children([
         AsyncResult.isSuccess(people)
           ? statusText(searchText, people.value)
           : "Searching…"
-      ),
+      ]),
       AsyncResult.isSuccess(people) &&
-        h.ul.class("space-y-3").children(
-          people.value.map((person) =>
-            h.li.key(String(person.id)).class(
-              "border border-gray-200 rounded-lg hover:bg-gray-50"
-            ).children(
-              h.a.attr(
-                "href",
-                AppRoute.print(
-                  AppRoute.Person({ params: { personId: person.id } })
-                )
+      h.ul.class(["space-y-3"]).children(
+        people.value.map((person) =>
+          h.li.key(String(person.id)).class([
+            "border border-gray-200 rounded-lg hover:bg-gray-50"
+          ]).children([
+            h.a.attr(
+              "href",
+              AppRoute.print(
+                AppRoute.Person({ params: { personId: person.id } })
               )
-                .class("block p-4")
-                .children(
-                  h.div.class("flex justify-between items-center").children(
-                    h.h2.class("text-xl font-semibold text-gray-800").children(
-                      person.name
-                    ),
-                    h.p.class("text-gray-600").children(person.role)
-                  )
-                )
             )
-          )
+              .class(["block p-4"])
+              .children([
+                h.div.class(["flex justify-between items-center"]).children([
+                  h.h2.class(["text-xl font-semibold text-gray-800"]).children([
+                    person.name
+                  ]),
+                  h.p.class(["text-gray-600"]).children([person.role])
+                ])
+              ])
+          ])
         )
-    )
+      )
+    ])
   }
 })
 

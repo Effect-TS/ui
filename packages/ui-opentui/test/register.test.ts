@@ -26,7 +26,7 @@ describe("@effect/ui-opentui/register", () => {
       }).make({
         init: () => undefined,
         update: () => undefined,
-        view: (h) => h.box.style({ border: true }).children(h.text("hello"))
+        view: (h) => h.box.style({ border: true }).children([h.text(["hello"])])
       })
 
       const root = yield* TestHost.mount(Hello, {})

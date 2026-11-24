@@ -23,8 +23,8 @@
  * | `error`       | any element, usually a `<div>`                      |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`:
- * `field.root(h.div).children(field.label(h.label).children("Name"), field.control(h.input))`.
+ * goes on chaining and adds children with `.children([...])`:
+ * `field.root(h.div).children([field.label(h.label).children(["Name"]), field.control(h.input)])`.
  * No part adds markup.
  *
  * `control`'s result is still a builder, so it is another kit call's
@@ -48,7 +48,7 @@
  *   draw the trigger with `field.member`
  *
  * `error` returns `undefined` unless the field is invalid and enabled, so
- * write `field.error(h.div)?.children(message)`. The message is the consumer's:
+ * write `field.error(h.div)?.children([message])`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
  * error's children.
  *
@@ -143,16 +143,16 @@
  *     Field(h, {
  *       props: { invalid: model.name === "", filled: model.name !== "", described: true },
  *       view: (field) =>
- *         field.root(h.div.class("field")).children(
- *           field.label(h.label).children("Name"),
+ *         field.root(h.div.class(["field"])).children([
+ *           field.label(h.label).children(["Name"]),
  *           Input(h, {
  *             element: field.control(h.input),
  *             props: { value: model.name },
  *             onUpdate: ({ value }) => ProfileMessage.UpdatedName({ value })
  *           }).attr("name", "name"),
- *           field.description(h.p).children("Visible on your profile"),
- *           field.error(h.div)?.children("Enter your name")
- *         )
+ *           field.description(h.p).children(["Visible on your profile"]),
+ *           field.error(h.div)?.children(["Enter your name"])
+ *         ])
  *     })
  * })
  *

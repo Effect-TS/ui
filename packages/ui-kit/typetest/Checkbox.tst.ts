@@ -42,10 +42,10 @@ describe("Checkbox", () => {
           view: (checkbox) => {
             expect(checkbox.root(h.button)).type.toBe<Button<never>>()
             expect(
-              checkbox.indicator(h.span.class("tick")).children(needsClock)
+              checkbox.indicator(h.span.class(["tick"])).children([needsClock])
             ).type.toBe<Span<Clock>>()
             const root = checkbox.root(h.button.onClick(Msg.Clicked()))
-              .children(checkbox.indicator(h.span), needsClock)
+              .children([checkbox.indicator(h.span), needsClock])
             expect(root).type.toBe<Button<Clock>>()
             return root
           }

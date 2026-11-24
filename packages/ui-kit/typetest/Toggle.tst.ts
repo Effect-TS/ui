@@ -28,7 +28,7 @@ describe("Toggle", () => {
           ToggleElement<typeof Msg.Type>
         >()
         expect(
-          Toggle(h, { props: { pressed: false } }).children("B", needsClock)
+          Toggle(h, { props: { pressed: false } }).children(["B", needsClock])
         ).type.toBe<
           ToggleElement<typeof Msg.Type, Clock>
         >()
@@ -42,7 +42,9 @@ describe("Toggle", () => {
         })
         expect(Toggle).type.not.toBeCallableWith(h, { onToggle })
         expect(Toggle).type.not.toBeCallableWith(h, { props: {} })
-        return Toggle(h, { props: { pressed: false }, onToggle }).children("B")
+        return Toggle(h, { props: { pressed: false }, onToggle }).children([
+          "B"
+        ])
       }
     })
   })

@@ -59,7 +59,7 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
   }).make({
     init: () => ({}),
     update: ($) => $.model,
-    view: (h) => h.div("safe")
+    view: (h) => h.div(["safe"])
   })
   return Effect.gen(function*() {
     const rendered = yield* ssr(App, {})
@@ -118,7 +118,7 @@ const hydrationCase = <A>(
     }).make({
       init: () => ({ value }),
       update: ($) => $.model,
-      view: (h) => h.div("safe")
+      view: (h) => h.div(["safe"])
     })
     return Effect.gen(function*() {
       const rendered = yield* ssr(App, {})

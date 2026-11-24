@@ -749,7 +749,7 @@ export const hydrateEffect = <
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
- *   view: (h) => h.h1("Hello")
+ *   view: (h) => h.h1(["Hello"])
  * })
  *
  * // The page embeds the state `HtmlServer.renderToHtml` returned.

@@ -32,14 +32,14 @@ export const AbsoluteDemo = Component.define({
       })
   },
   view: (h, model) =>
-    h.div.class("page").children(
-      h.div.class("toolbar").children(
+    h.div.class(["page"]).children([
+      h.div.class(["toolbar"]).children([
         h.button.attr("id", "toggle-layout").onClick(
           AbsoluteMessage.ToggledLayout()
-        ).children(
+        ).children([
           model.absolute ? "Use the flow layout" : "Use the absolute layout"
-        )
-      ),
+        ])
+      ]),
       VirtualList(h, {
         props: {
           count: 10_000,
@@ -49,25 +49,25 @@ export const AbsoluteDemo = Component.define({
           layout: model.absolute ? "absolute" : "flow"
         },
         view: (virtualList) =>
-          virtualList.viewport(h.div.class("scroller")).children(
-            virtualList.list(h.div.class("rows")).children(
+          virtualList.viewport(h.div.class(["scroller"])).children([
+            virtualList.list(h.div.class(["rows"])).children(
               virtualList.items.map((index) =>
                 virtualList.item({
-                  element: h.div.class(model.absolute ? "row moving" : "row")
+                  element: h.div.class([model.absolute ? "row moving" : "row"])
                     .key(String(index)),
                   index
                 })
                   .attr("style", `height:${heightOf(index, model.grown)}px`)
-                  .children(
-                    h.button.class("row-button").onClick(
+                  .children([
+                    h.button.class(["row-button"]).onClick(
                       AbsoluteMessage.ToggledRow({ index })
-                    ).children(
+                    ).children([
                       "Row " + index
-                    )
-                  )
+                    ])
+                  ])
               )
             )
-          )
+          ])
       })
-    )
+    ])
 })

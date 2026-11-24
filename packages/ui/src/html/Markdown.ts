@@ -21,9 +21,9 @@
  * const Post = <Msg>(h: View.H<Msg>) =>
  *   Markdown.view(h, post, {
  *     views: {
- *       Link: (h, link, content) => h.a.attr("href", link.url).class("underline").children(content)
+ *       Link: (h, link, content) => h.a.attr("href", link.url).class(["underline"]).children(content)
  *     }
- *   }).class("prose")
+ *   }).class(["prose"])
  * ```
  *
  * @stability experimental
@@ -758,7 +758,7 @@ const textAlign = {
  */
 export const defaultViews: DefaultViews = {
   Text: (_h, { value }) => value,
-  InlineCode: (h, { value }) => h.code.children(value),
+  InlineCode: (h, { value }) => h.code.children([value]),
   HardBreak: (h) => h.br,
   Emphasis: (h, _emphasis, content) => h.em.children(content),
   Strong: (h, _strong, content) => h.strong.children(content),
@@ -775,7 +775,7 @@ export const defaultViews: DefaultViews = {
   Heading: (h, { level }, content) =>
     h[headingTags[level - 1]].children(content),
   Paragraph: (h, _paragraph, content) => h.p.children(content),
-  CodeBlock: (h, { value }) => h.pre.children(h.code.children(value)),
+  CodeBlock: (h, { value }) => h.pre.children([h.code.children([value])]),
   List: (h, { isOrdered, startNumber }, items) =>
     isOrdered
       ? h.ol.attr(
@@ -787,7 +787,10 @@ export const defaultViews: DefaultViews = {
   Blockquote: (h, _blockquote, blocks) => h.blockquote.children(blocks),
   ThematicBreak: (h) => h.hr,
   Table: (h, _table, headerRow, bodyRows) =>
-    h.table.children(h.thead.children(headerRow), h.tbody.children(bodyRows)),
+    h.table.children([
+      h.thead.children([headerRow]),
+      h.tbody.children(bodyRows)
+    ]),
   TableRow: (h, _tableRow, cells) => h.tr.children(cells),
   TableCell: (h, _tableCell, content, alignment, isHeader) =>
     (isHeader ? h.th : h.td).style({ textAlign: textAlign[alignment] })

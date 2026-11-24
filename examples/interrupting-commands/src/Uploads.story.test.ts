@@ -49,7 +49,7 @@ describe("Uploads", () => {
         }
       ])
       assert.strictEqual(s.model.uploadId, 1)
-      s.expectExact(firstUploadCommand).resolve(
+      s.expectExact([firstUploadCommand]).resolve(
         firstUploadCommand,
         completedFirst
       )
@@ -88,7 +88,7 @@ describe("Uploads", () => {
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [
         firstUploadCommand.args
       ])
-      s.expectExact(secondUploadCommand).resolve(
+      s.expectExact([secondUploadCommand]).resolve(
         secondUploadCommand,
         completedSecond
       )
@@ -104,7 +104,7 @@ describe("Uploads", () => {
       assert.deepStrictEqual(s.interrupted.map((command) => command.args), [
         firstUploadCommand.args
       ])
-      s.expectExact(secondUploadCommand).resolve(
+      s.expectExact([secondUploadCommand]).resolve(
         secondUploadCommand,
         completedSecond
       )
@@ -118,7 +118,7 @@ describe("Uploads", () => {
         .send(clickedCancelFirstUpload)
         .send(UploadsMessage.ClickedRestartUpload({ uploadId: 0 }))
       assert.deepStrictEqual(statuses(s.model), ["Uploading"])
-      s.expectExact(firstUploadCommand).resolve(
+      s.expectExact([firstUploadCommand]).resolve(
         firstUploadCommand,
         completedFirst
       )

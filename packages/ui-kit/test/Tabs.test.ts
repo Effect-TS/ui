@@ -53,55 +53,55 @@ const ownedPanel = {
 const standIn = {
   elements: Html,
   view: (tabs: Parts, h: H) =>
-    tabs.root(consumer(h.div.class("root"), {})).children(
+    tabs.root(consumer(h.div.class(["root"]), {})).children([
       tabs.list(
-        consumer(h.div.class("list"), {
+        consumer(h.div.class(["list"]), {
           role: "group",
           "aria-orientation": "vertical"
         })
-      ).children(
+      ).children([
         tabs.tab({
-          element: consumer(h.button.class("tab-a"), {
+          element: consumer(h.button.class(["tab-a"]), {
             ...ownedTab,
             type: "submit"
           }),
           value: "a"
         })
-          .children("A"),
+          .children(["A"]),
         tabs.tab({
-          element: consumer(h.button.class("tab-b"), ownedTab),
+          element: consumer(h.button.class(["tab-b"]), ownedTab),
           value: "b"
-        }).children("B"),
+        }).children(["B"]),
         tabs.tab({
-          element: consumer(h.a.class("tab-c"), {
+          element: consumer(h.a.class(["tab-c"]), {
             ...ownedTab,
             href: "#c",
             type: "text/html"
           }),
           value: "c"
         })
-          .children("C"),
+          .children(["C"]),
         tabs.tab({
-          element: consumer(h.a.class("tab-d"), { ...ownedTab, href: "/d" }),
+          element: consumer(h.a.class(["tab-d"]), { ...ownedTab, href: "/d" }),
           value: "d"
-        }).children("D"),
+        }).children(["D"]),
         tabs.indicator(
-          consumer(h.span.class("indicator"), { role: "img", hidden: "" })
+          consumer(h.span.class(["indicator"]), { role: "img", hidden: "" })
         )
-      ),
+      ]),
       tabs.panel({
-        element: consumer(h.div.class("panel-a"), ownedPanel),
+        element: consumer(h.div.class(["panel-a"]), ownedPanel),
         value: "a"
-      })?.children("Panel A"),
+      })?.children(["Panel A"]),
       tabs.panel({
-        element: consumer(h.div.class("panel-b"), ownedPanel),
+        element: consumer(h.div.class(["panel-b"]), ownedPanel),
         value: "b"
-      })?.children("Panel B"),
+      })?.children(["Panel B"]),
       tabs.panel({
-        element: consumer(h.section.class("panel-c"), ownedPanel),
+        element: consumer(h.section.class(["panel-c"]), ownedPanel),
         value: "c"
-      })?.children("Panel C")
-    )
+      })?.children(["Panel C"])
+    ])
 }
 
 const loc = (name: string) => Locator.attr("class", name)
@@ -341,7 +341,7 @@ describe("Tabs", () => {
   it.effect("a click selects an enabled tab, and a disabled tab never activates", () =>
     Effect.gen(function*() {
       const s = yield* scene(props())
-      s.click(tabLoc("c")).emitted(selected("c", "right"))
+      s.click(tabLoc("c")).emitted([selected("c", "right")])
         .expectDefaultPrevented(false)
       s.click(tabLoc("a")).expectHandled()
       assert.deepStrictEqual(s.current.emitted, [])
@@ -352,11 +352,11 @@ describe("Tabs", () => {
         DirectionProvider,
         { direction: "rtl" }
       )
-      rtl.click(tabLoc("a")).emitted(selected("a", "right"))
+      rtl.click(tabLoc("a")).emitted([selected("a", "right")])
       const vertical = yield* scene(
         props({ value: "c", orientation: "vertical" })
       )
-      vertical.click(tabLoc("a")).emitted(selected("a", "up"))
+      vertical.click(tabLoc("a")).emitted([selected("a", "up")])
     }))
 
   it.effect("a new value moves the activation direction and plays the panels' transitions", () =>

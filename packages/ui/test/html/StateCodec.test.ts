@@ -46,14 +46,14 @@ const Upload = Component.define({
   }),
   update: ($) => ({ ...$.model, count: $.model.count + 1 }),
   view: (h, model) =>
-    h.el("button").on("click", Bumped.Bumped()).children(
+    h.el("button").on("click", Bumped.Bumped()).children([
       `${model.label} ${
         Option.match(model.file, {
           onNone: () => "nothing",
           onSome: (file) => file.name
         })
       } ${model.count}`
-    )
+    ])
 })
 
 const warnings = () => {
@@ -121,11 +121,11 @@ describe("state codecs", () => {
         Message.match(message, {
           ChangedRoute: (changed) => changed.route,
           Go: () =>
-            $.run(
+            $.run([
               Router.push(Routes, Routes.Other()).pipe(
                 Command.map(() => Message.Went())
               )
-            ),
+            ]),
           Went: () => $.model
         }),
       subscriptions: (
@@ -140,10 +140,12 @@ describe("state codecs", () => {
       view: (h, route) =>
         h.el(
           "div",
-          h.el("a").on("click", Message.Go()).children("Other"),
-          route._tag === "Upload"
-            ? Upload(h, { key: "upload" })
-            : h.text("Other page")
+          [
+            h.el("a").on("click", Message.Go()).children(["Other"]),
+            route._tag === "Upload"
+              ? Upload(h, { key: "upload" })
+              : h.text("Other page")
+          ]
         )
     })
     const history = Router.memoryHistory("/")

@@ -11,7 +11,7 @@ describe("@effect/ui/html/register", () => {
     const Button = <Msg>(h: View.H<Msg>, message: Msg) => {
       expect(h.props).type.toBe<unknown>()
       expect(h.button).type.toBe<Html.Tags<Msg>["button"]>()
-      return h.button.onClick(message).children("Save")
+      return h.button.onClick(message).children(["Save"])
     }
     Component.define({
       name: "SaveButton",
@@ -31,7 +31,7 @@ describe("@effect/ui/html/register", () => {
   it("gives a component without `elements` the HTML tags", () => {
     const Label = (h: View.H<never>, text: string) => {
       expect(h.span).type.toBe<Html.Tags<never>["span"]>()
-      return h.span(text)
+      return h.span([text])
     }
     Component.define({
       name: "Greeting",
@@ -42,7 +42,7 @@ describe("@effect/ui/html/register", () => {
       update: ($) => $.model,
       view: (h) => {
         expect(h.p).type.toBe<Html.Tags<never>["p"]>()
-        return h.p(Label(h, "Hello"))
+        return h.p([Label(h, "Hello")])
       }
     })
   })
@@ -54,15 +54,15 @@ class Clock extends Context.Service<Clock, {}>()("Clock") {}
 class Logger extends Context.Service<Logger, {}>()("Logger") {}
 
 it("shared wrappers preserve unspread options.children requirements across components", () => {
-  const Card = <M>(h: View.H<M>) => h.section.class("card")
+  const Card = <M>(h: View.H<M>) => h.section.class(["card"])
   const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
     readonly label: string
     readonly children: C
   }) =>
-    h.label.children(
+    h.label.children([
       options.label,
-      h.div.class("control").children(options.children)
-    )
+      h.div.class(["control"]).children(options.children)
+    ])
   const Page = Component.define({
     name: "Page",
     model: Schema.Null,
@@ -95,9 +95,9 @@ it("shared wrappers preserve unspread options.children requirements across compo
         expect(Field(h, { label: "Services", children })).type.toBe<
           Label<Clock | Logger>
         >()
-        return Card(h).children(
+        return Card(h).children([
           Field(h, { label: "Services", children: [clock, logger] })
-        )
+        ])
       }
     }
   )

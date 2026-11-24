@@ -395,7 +395,7 @@ export abstract class Cursor {
     )
   }
 
-  emitted(...events: ReadonlyArray<unknown>): this {
+  emitted(events: ReadonlyArray<unknown>): this {
     return this.replace(
       engine.acknowledgeEmitted(this.state, events, this.name("emitted"))
     )
@@ -415,7 +415,7 @@ export abstract class Cursor {
     return this
   }
 
-  expectExact(...targets: ReadonlyArray<Steps.Target>): this {
+  expectExact(targets: ReadonlyArray<Steps.Target>): this {
     const pending = this.state.pending
     if (
       pending.length !== targets.length ||

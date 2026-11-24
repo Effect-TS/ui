@@ -23,11 +23,11 @@ const Checkout = Component.define({
     zip: message === "fill" ? "new" : $.model.zip
   }),
   view: (h, model) =>
-    h.div(
+    h.div([
       h.form.onFocus("form focus").onSubmit(({ entries }) =>
         `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
       )
-        .children(
+        .children([
           h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip)
             .onInput(() => undefined),
           h.input.attr("name", "note").attr("aria-label", "Note").onInput((
@@ -41,11 +41,13 @@ const Checkout = Component.define({
           h.input.attr("type", "radio").attr("name", "size").attr("value", "m")
             .attr("aria-label", "M")
             .onChange(({ value }) => `size:${value}`),
-          h.button.onClick("fill").children("Fill"),
-          h.button.onClick("stopped", { preventDefault: true }).children("Stop")
-        ),
-      h.output(model.log.join("|"))
-    )
+          h.button.onClick("fill").children(["Fill"]),
+          h.button.onClick("stopped", { preventDefault: true }).children([
+            "Stop"
+          ])
+        ]),
+      h.output([model.log.join("|")])
+    ])
 })
 
 const log = Locator.tag("output")
@@ -173,10 +175,10 @@ describe("HtmlPlay", () => {
             Menu(h, {
               props: { items: [] },
               view: (menu) =>
-                h.div(
-                  menu.trigger(h.button).children("Actions"),
-                  h.p(menu.open ? "open" : "closed")
-                )
+                h.div([
+                  menu.trigger(h.button).children(["Actions"]),
+                  h.p([menu.open ? "open" : "closed"])
+                ])
             })
         })
       const toolbar = yield* HtmlPlay.make(Toolbar, {})
@@ -204,12 +206,12 @@ describe("HtmlPlay", () => {
         view: (h, entries) =>
           h.div.onKeyDown(({ editable, key, repeat }) =>
             `${key}:${editable}:${repeat}`
-          ).children(
-            h.div.prop("contentEditable", "true").children(
-              h.span.attr("id", "play-ce-child").children("Edit")
-            ),
-            h.output(entries.join(","))
-          )
+          ).children([
+            h.div.prop("contentEditable", "true").children([
+              h.span.attr("id", "play-ce-child").children(["Edit"])
+            ]),
+            h.output([entries.join(",")])
+          ])
       })
       const p = yield* HtmlPlay.make(Keys, {})
       yield* p.keydown(Locator.attr("id", "play-ce-child"), "g")

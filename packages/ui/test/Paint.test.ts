@@ -50,7 +50,7 @@ const makeApp = () => {
   }).make({
     init: ($) => {
       ran.inits++
-      return $.set(0).run(Ping.make({}))
+      return $.set(0).run([Ping.make({})])
     },
     update: ($, message) =>
       RowMessage.match(message, {
@@ -58,11 +58,11 @@ const makeApp = () => {
         Ticked: () => $.model
       }),
     view: (h, count) =>
-      h.el("button").on("click", RowMessage.Clicked()).children(
+      h.el("button").on("click", RowMessage.Clicked()).children([
         `${h.props.id}:${
           AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : "?"
         }=${count};`
-      ),
+      ]),
     subscriptions: () => [
       Subscription.make(
         "tick",
@@ -244,7 +244,7 @@ describe("paint", () => {
           view: (h) =>
             h.el(
               "p",
-              LazyPage(h, { props: {}, fallback: () => h.text("loading") })
+              [LazyPage(h, { props: {}, fallback: () => h.text("loading") })]
             )
         })
       const testHost = yield* TestHost.TestHost

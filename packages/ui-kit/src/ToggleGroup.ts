@@ -15,7 +15,7 @@
  * | `item` | `<button>`, one for each item |
  *
  * `root` takes the consumer's builder and returns it, so the consumer goes
- * on chaining and adds the items with `.children(...)`. `item` takes
+ * on chaining and adds the items with `.children([...])`. `item` takes
  * `{ element, value }`, the item's `<button>` and the `value` of one entry
  * in the `items` prop, and returns the builder. A `value` that isn't in
  * `items` fails the render. Neither part adds markup.
@@ -88,9 +88,9 @@
  *       props: { value: model.align, items: alignments.map((value) => ({ value })) },
  *       onEmit: ({ value }) => EditorMessage.ToggledAlign({ value }),
  *       view: (toggleGroup) =>
- *         toggleGroup.root(h.div.class("alignment").attr("aria-label", "Text alignment")).children(
+ *         toggleGroup.root(h.div.class(["alignment"]).attr("aria-label", "Text alignment")).children(
  *           alignments.map((value) =>
- *             toggleGroup.item({ element: h.button.class("tool").attr("aria-label", "Align " + value), value })
+ *             toggleGroup.item({ element: h.button.class(["tool"]).attr("aria-label", "Align " + value), value })
  *           )
  *         )
  *     })
@@ -344,7 +344,9 @@ export const ToggleGroup = Component.define({
   update: {
     ClickedItem: ($, { value }) =>
       enabled($.props, $.shared.toolbar, value)
-        ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) }))
+        ? $.emit([
+          ToggleGroupEvents.Toggled({ value: toggled($.props, value) })
+        ])
         : $.model,
     FocusedItem: ($, { value }) => $.evolve({ active: value }),
     PressedKey: ($, { key, value }) => {
@@ -367,11 +369,11 @@ export const ToggleGroup = Component.define({
           )
       ]
       if (target === undefined || target.value === value) return $.model
-      return $.evolve({ active: target.value }).run(
+      return $.evolve({ active: target.value }).run([
         HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(
           Command.asNoop
         )
-      )
+      ])
     }
   },
   parts: (p, model) => {

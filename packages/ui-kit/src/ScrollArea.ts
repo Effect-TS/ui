@@ -89,16 +89,16 @@
  *   view: (h) =>
  *     ScrollArea(h, {
  *       view: (scrollArea) =>
- *         scrollArea.root(h.div.class("area")).children(
- *           scrollArea.viewport(h.div.class("viewport")).children(
- *             scrollArea.content(h.div.class("content")).children(h.p("Long text"))
- *           ),
+ *         scrollArea.root(h.div.class(["area"])).children([
+ *           scrollArea.viewport(h.div.class(["viewport"])).children([
+ *             scrollArea.content(h.div.class(["content"])).children([h.p(["Long text"])])
+ *           ]),
  *           scrollArea.scrollbar({
- *             element: h.div.class("bar"),
- *             thumb: h.div.class("thumb"),
+ *             element: h.div.class(["bar"]),
+ *             thumb: h.div.class(["thumb"]),
  *             keepMounted: true
  *           })
- *         )
+ *         ])
  *     })
  * })
  *
@@ -1048,7 +1048,7 @@ export const ScrollArea = Component.define({
                 ? `top:0;bottom:var(${cornerHeightVar},0px);inset-inline-end:0`
                 : `inset-inline-start:0;inset-inline-end:var(${cornerWidthVar},0px);bottom:0`)
           ))
-          .children(thumb as never)
+          .children([thumb as never])
     )
 
     const cornerPart = p.part("div", (b) =>

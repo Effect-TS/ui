@@ -15,7 +15,7 @@ const Row = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.el("li", h.props.label)
+  view: (h) => h.el("li", [h.props.label])
 })
 
 const ListMessage = UiSchema.TaggedEnum({
@@ -37,7 +37,9 @@ const makeList = (layout: "siblings" | "nested") =>
         ? h.el("ul", keys.map((key) => Row(h, { key, props: { label: key } })))
         : h.el(
           "div",
-          keys.map((key) => h.el("ul", Row(h, { key, props: { label: key } })))
+          keys.map((key) =>
+            h.el("ul", [Row(h, { key, props: { label: key } })])
+          )
         )
   })
 
@@ -55,14 +57,14 @@ const makePage = (layout: "siblings" | "nested") => {
     view: (h) =>
       h.el(
         "main",
-        List(
+        [List(
           h,
           {
             key: "l",
             props: { keys: h.props.keys },
             fallback: () => h.text("failed")
           }
-        )
+        )]
       )
   })
 }
@@ -127,10 +129,10 @@ describe("duplicate child paths", () => {
     const [what, row, keys] of [
       [
         "holds a child",
-        (h: any) => h.el("li", Row(h, { key: "a", props: { label: "a" } })),
+        (h: any) => h.el("li", [Row(h, { key: "a", props: { label: "a" } })]),
         ["a"]
       ],
-      ["holds none", (h: any) => h.el("li", "x"), ["a", "a"]]
+      ["holds none", (h: any) => h.el("li", ["x"]), ["a", "a"]]
     ] as const
   ) {
     it.effect(`fail the parent on a re-render beside a row h.lazy gives again that ${what}`, () =>
@@ -145,8 +147,10 @@ describe("duplicate child paths", () => {
           view: (h, keys) =>
             h.el(
               "ul",
-              h.lazy(row),
-              keys.map((key) => Row(h, { key, props: { label: key } }))
+              [
+                h.lazy(row),
+                keys.map((key) => Row(h, { key, props: { label: key } }))
+              ]
             )
         })
         const root = yield* TestHost.mount(List, {}, {
@@ -176,8 +180,10 @@ describe("duplicate child paths", () => {
         view: (h) =>
           h.el(
             "main",
-            Group(h, { key: "a", props: { keys: ["b"] } }),
-            Group(h, { key: "a]/Row[b", props: { keys: [] } })
+            [
+              Group(h, { key: "a", props: { keys: ["b"] } }),
+              Group(h, { key: "a]/Row[b", props: { keys: [] } })
+            ]
           )
       })
       const root = yield* TestHost.mount(Page, {})
@@ -249,16 +255,18 @@ describe("duplicate child paths", () => {
             h.el(
               "div",
               keys.map((key) =>
-                h.el("p", Row(h, { key, props: { label: key } }))
+                h.el("p", [Row(h, { key, props: { label: key } })])
               )
             )
           return h.el(
             "div",
-            h.props.siblings.map((key) =>
-              Row(h, { key, props: { label: key } })
-            ),
-            Broken(h, { key: "b", fallback: () => rows(h.props.first) }),
-            Broken(h, { key: "c", fallback: () => rows(h.props.second) })
+            [
+              h.props.siblings.map((key) =>
+                Row(h, { key, props: { label: key } })
+              ),
+              Broken(h, { key: "b", fallback: () => rows(h.props.first) }),
+              Broken(h, { key: "c", fallback: () => rows(h.props.second) })
+            ]
           )
         }
       })
@@ -355,7 +363,7 @@ describe("duplicate child paths", () => {
             update: () => {
               throw new Error("faulty")
             },
-            view: (h) => h.el("button").on("click", null).children("faulty")
+            view: (h) => h.el("button").on("click", null).children(["faulty"])
           })
         const Page = Component.define({
           name: "Page",
@@ -367,11 +375,13 @@ describe("duplicate child paths", () => {
           view: (h) =>
             h.el(
               "div",
-              Row(h, { key: "a", props: { label: "a" } }),
-              Faulty(h, {
-                key: "f",
-                fallback: () => Row(h, { key: "a", props: { label: "a" } })
-              })
+              [
+                Row(h, { key: "a", props: { label: "a" } }),
+                Faulty(h, {
+                  key: "f",
+                  fallback: () => Row(h, { key: "a", props: { label: "a" } })
+                })
+              ]
             )
         })
         const root = yield* TestHost.mount(Page, {}, {
@@ -446,7 +456,7 @@ describe("duplicate child paths", () => {
       update: () => {
         throw new Error("faulty")
       },
-      view: (h) => h.el("button").on("click", Go.Go()).children("faulty")
+      view: (h) => h.el("button").on("click", Go.Go()).children(["faulty"])
     })
     const Props = Schema.Struct({ nested: Schema.Array(Schema.String) })
     const ParentMessage = UiSchema.TaggedEnum({ Bump: {} })
@@ -547,7 +557,7 @@ describe("a child without a key", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("span", "label")
+        view: (h) => h.el("span", ["label"])
       })
       const Page = Component.define({
         name: "Page",
@@ -557,7 +567,7 @@ describe("a child without a key", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
+          h.el("main", [Row(h, { props: { label: "row" } }), Label(h, {})])
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle

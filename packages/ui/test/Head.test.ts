@@ -6,23 +6,25 @@ import { Tiny } from "./fixtures/vocabulary.ts"
 
 const node = (
   entries: ReadonlyArray<Head.Entry>,
-  ...children: ReadonlyArray<Head.Tree>
+  children: ReadonlyArray<Head.Tree> = []
 ): Head.Tree => ({ entries, children })
 
 describe("Head", () => {
   it("chains title templates outward, never on the instance's own title", () => {
     const app = (layout: Head.Tree) =>
-      node([Head.titleTemplate((t) => `${t} · App`), Head.title("App")], layout)
-    const people = (...children: ReadonlyArray<Head.Tree>) =>
+      node([Head.titleTemplate((t) => `${t} · App`), Head.title("App")], [
+        layout
+      ])
+    const people = (children: ReadonlyArray<Head.Tree>) =>
       node(
         [Head.titleTemplate((t) => `${t} · People`), Head.title("People")],
-        ...children
+        children
       )
     assert.strictEqual(
-      Head.merge(app(people(node([Head.title("Ada")])))).title,
+      Head.merge(app(people([node([Head.title("Ada")])]))).title,
       "Ada · People · App"
     )
-    assert.strictEqual(Head.merge(app(people())).title, "People · App")
+    assert.strictEqual(Head.merge(app(people([]))).title, "People · App")
     assert.strictEqual(
       Head.merge(node([Head.titleTemplate((t) => `${t}!`), Head.title("Root")]))
         .title,
@@ -62,11 +64,11 @@ describe("Head", () => {
       const message = first === undefined
         ? /two siblings have no path/
         : /two siblings share the path \/App\/Page/
-      assert.throws(() => Head.merge(node([], a, b)), message)
-      assert.throws(() => Head.merge(node([], b, a)), message)
+      assert.throws(() => Head.merge(node([], [a, b])), message)
+      assert.throws(() => Head.merge(node([], [b, a])), message)
     }
     assert.strictEqual(
-      Head.merge(node([], at(undefined, "A"), node([]))).title,
+      Head.merge(node([], [at(undefined, "A"), node([])])).title,
       "A"
     )
   })
@@ -108,11 +110,11 @@ describe("Head", () => {
         view: (h) =>
           h.el(
             "main",
-            Layout(h, {
+            [Layout(h, {
               key: "layout",
               props: {},
               fallback: () => h.text("down")
-            })
+            })]
           )
       })
       const root = yield* TestHost.mount(App, {})
@@ -192,14 +194,14 @@ describe("Head", () => {
           init: () => null,
           update: ($) => $.model,
           head: head === undefined ? undefined : () => head,
-          view: (h) => h.label(name)
+          view: (h) => h.label([name])
         })
       const Page = leaf("Page", [Head.title("Page")])
       const Aside = leaf("Aside")
       const Note = leaf("Note")
       const holding = (
         name: string,
-        ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>
+        children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>
       ) =>
         Component.define({
           name,
@@ -211,13 +213,13 @@ describe("Head", () => {
           update: ($) => $.model,
           view: (h) =>
             h.box(
-              ...children.map(([key, child]) => child(h, { key, props: {} }))
+              children.map(([key, child]) => child(h, { key, props: {} }))
             )
         })
       // One with a child that has a head, and one with nothing that has a head anywhere below it.
-      const Layout = holding("Layout", ["page", Page], ["aside", Aside])
-      const Footer = holding("Footer", ["note", Note])
-      const App = holding("App", ["layout", Layout], ["footer", Footer])
+      const Layout = holding("Layout", [["page", Page], ["aside", Aside]])
+      const Footer = holding("Footer", [["note", Note]])
+      const App = holding("App", [["layout", Layout], ["footer", Footer]])
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       const leafAt = (
@@ -297,7 +299,7 @@ describe("Head", () => {
           init: () => false,
           update: (_, shown) => shown,
           view: (h, shown) =>
-            h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
+            h.el("main", [shown ? Page(h, { key: "page", props: {} }) : "none"])
         }
       )
       const root = yield* TestHost.mount(App, {})
@@ -351,11 +353,11 @@ describe("Head", () => {
         view: (h) =>
           h.el(
             "main",
-            Broken(h, {
+            [Broken(h, {
               key: "b",
               props: {},
               fallback: () => Notice(h, { key: "n", props: {} })
-            })
+            })]
           )
       })
       const root = yield* TestHost.mount(App, {})
@@ -392,7 +394,7 @@ describe("Head", () => {
         view: (h) =>
           h.el(
             "main",
-            ...ordered(
+            ordered(
               h.props.swapped,
               Titled(h, { key: "first", props: { title: "First" } }),
               Titled(h, { key: "second", props: { title: "Second" } })

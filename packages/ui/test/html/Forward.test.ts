@@ -38,10 +38,10 @@ const framed = <Msg, R>(
   name: string
 ): Button<Msg, R> =>
   element.forward((node) =>
-    new Html.Element<Msg>("div").class("frame").children(
+    new Html.Element<Msg>("div").class(["frame"]).children([
       node.attr("type", "button"),
       hidden(name)
-    )
+    ])
   )
 
 // A headless part that adds a child of its own, and a second one to stack on it.
@@ -57,7 +57,7 @@ const Checkbox = Component.define({
   parts: (p) => ({
     root: p.part(
       "button",
-      (b) => b.attr("role", "checkbox").children(hidden(p.props.name))
+      (b) => b.attr("role", "checkbox").children([hidden(p.props.name)])
     )
   })
 })
@@ -73,9 +73,9 @@ const Described = Component.define({
     control: p.part(
       "button",
       (b) =>
-        b.attr("aria-describedby", "why").children(
-          new Html.Element<never>("i").children("why")
-        )
+        b.attr("aria-describedby", "why").children([
+          new Html.Element<never>("i").children(["why"])
+        ])
     )
   })
 })
@@ -108,9 +108,9 @@ const texts = (builder: View.ElementBuilder<Message, any, any, any>) =>
 
 describe("children", () => {
   it("a second call adds after the first, attributes can follow, and branches of one builder don't share children", () => {
-    const base = h.ul.children(h.li("shared")).class("list")
-    const left = base.children(h.li("left"), h.li("more"))
-    const right = base.children(h.li("right"))
+    const base = h.ul.children([h.li(["shared"])]).class(["list"])
+    const left = base.children([h.li(["left"]), h.li(["more"])])
+    const right = base.children([h.li(["right"])])
     assert.deepStrictEqual(texts(left), [
       View.text("shared"),
       View.text("left"),
@@ -124,7 +124,7 @@ describe("children", () => {
     assert.deepStrictEqual(View.build(left, []).attrs, { class: "list" })
     // Text on either side of a call joins, as adjacent text always does.
     assert.deepStrictEqual(
-      View.build(h.p("Hello").children(", ", "world"), []).children,
+      View.build(h.p(["Hello"]).children([", ", "world"]), []).children,
       [View.text("Hello, world")]
     )
   })
@@ -139,9 +139,9 @@ describe("children", () => {
                 props: { name: "terms" },
                 view: (checkbox) =>
                   (order === "checkbox inside"
-                    ? described.control(checkbox.root(h.button.class("box")))
+                    ? described.control(checkbox.root(h.button.class(["box"])))
                     : checkbox.root(described.control(h.button)))
-                    .children("Terms")
+                    .children(["Terms"])
               })
           })
         )
@@ -161,8 +161,8 @@ describe("forward", () => {
     Effect.gen(function*() {
       assert.strictEqual(
         yield* render((h) =>
-          framed(h.button.class("pick"), "amount").attr("title", "Pick")
-            .children("Pick ", h.b("one"))
+          framed(h.button.class(["pick"]), "amount").attr("title", "Pick")
+            .children(["Pick ", h.b(["one"])])
         ),
         `<div class="frame"><button class="pick" title="Pick" type="button">Pick <b>one</b></button>` +
           `<input type="hidden" name="amount" value="on"></div>`
@@ -170,12 +170,12 @@ describe("forward", () => {
       // Without children of its own, as a child, and on a void element.
       assert.strictEqual(
         yield* render((h) =>
-          h.p.children(
+          h.p.children([
             framed(h.button, "a"),
-            h.input.forward((node) => h.label.children("Amount", node)).value(
+            h.input.forward((node) => h.label.children(["Amount", node])).value(
               "1"
             )
-          )
+          ])
         ),
         `<p><div class="frame"><button type="button"></button><input type="hidden" name="a" value="on"></div>` +
           `<label>Amount<input value="1"></label></p>`
@@ -186,7 +186,7 @@ describe("forward", () => {
           Checkbox(h, {
             props: { name: "terms" },
             view: (checkbox) =>
-              checkbox.root(framed(h.button, "amount")).children("Terms")
+              checkbox.root(framed(h.button, "amount")).children(["Terms"])
           })
         ),
         `<div class="frame"><button role="checkbox" type="button"><input type="hidden" name="terms" value="on">Terms</button>` +
@@ -222,10 +222,10 @@ describe("forward", () => {
       /already handles click/
     )
 
-    const both = h.b.forward((node) => h.i.children(node)).forward((node) =>
-      h.u.children(node)
+    const both = h.b.forward((node) => h.i.children([node])).forward((node) =>
+      h.u.children([node])
     )
-    const outer = View.build(both.children("x"), [])
+    const outer = View.build(both.children(["x"]), [])
     const middle = outer.children[0]
     assert.deepStrictEqual([
       outer.tag,
@@ -310,9 +310,9 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
         Clicked: () => $.model,
         Reversed: () => ({ ...$.model, ids: [...$.model.ids].reverse() }),
         Focus: () =>
-          $.run(
+          $.run([
             HtmlCommand.focus(First, ({ found }) => Message.Found({ found }))
-          ),
+          ]),
         Found: ({ found }) => ({
           ...$.model,
           log: [...$.model.log, `found ${found}`]
@@ -329,7 +329,7 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
           .onMount(
             ReadTag().pipe(Mount.map((tag) => Message.Mounted({ id, tag })))
           )
-        return (id === "a" ? row.ref(First) : row).children(id)
+        return (id === "a" ? row.ref(First) : row).children([id])
       }))
   })
 

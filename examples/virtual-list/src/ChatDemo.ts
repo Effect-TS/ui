@@ -41,9 +41,9 @@ const ChatDemoNoDeps = Component.define({
     ApproachedStart: ($) =>
       $.model.loading || $.model.start === 0
         ? $.model
-        : $.evolve({ loading: true }).run(
+        : $.evolve({ loading: true }).run([
           LoadOlder.make({ before: $.model.start })
-        ),
+        ]),
     LoadedOlder: ($, { before }) =>
       before === $.model.start
         ? $.evolve({ start: Math.max(0, before - page), loading: false })
@@ -55,21 +55,23 @@ const ChatDemoNoDeps = Component.define({
       { length: total - model.start + model.sent },
       (_, i) => "m" + (model.start + i)
     )
-    return h.div.class("page").children(
-      h.div.class("toolbar").children(
+    return h.div.class(["page"]).children([
+      h.div.class(["toolbar"]).children([
         h.button.attr("id", "send").onClick(ChatMessage.ClickedSend()).children(
-          "Send a message"
+          [
+            "Send a message"
+          ]
         ),
         h.span.attr("id", "status").attr("data-start", String(model.start))
           .attr(
             "data-loading",
             String(model.loading)
-          ).children(
+          ).children([
             model.start === 0
               ? "All messages loaded"
               : `Loaded from message ${model.start}`
-          )
-      ),
+          ])
+      ]),
       VirtualList(h, {
         props: {
           itemSize: 48,
@@ -85,27 +87,27 @@ const ChatDemoNoDeps = Component.define({
         },
         view: (virtualList) =>
           virtualList.viewport(
-            h.div.class("scroller chat").attr(
+            h.div.class(["scroller chat"]).attr(
               "data-at-start",
               String(virtualList.atStart)
             )
           )
-            .children(
-              virtualList.list(h.ol.class("messages")).children(
+            .children([
+              virtualList.list(h.ol.class(["messages"])).children(
                 virtualList.items.map((index) => {
                   const number = model.start + index
                   return virtualList.item({
-                    element: h.li.class("message").key(ids[index]!),
+                    element: h.li.class(["message"]).key(ids[index]!),
                     index
-                  }).children(
-                    h.strong.children("Message " + number),
-                    h.p.children(textOf(number))
-                  )
+                  }).children([
+                    h.strong.children(["Message " + number]),
+                    h.p.children([textOf(number)])
+                  ])
                 })
               )
-            )
+            ])
       })
-    )
+    ])
   }
 })
 

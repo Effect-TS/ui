@@ -44,7 +44,7 @@ describe("BrowserHost document services", { concurrent: false }, () => {
       }).make({
         init: ($) => $.props.summary,
         update: ($) => $.model,
-        view: (h, summary) => h.p(summary)
+        view: (h, summary) => h.p([summary])
       })
 
       const app = document.body.appendChild(document.createElement("div"))

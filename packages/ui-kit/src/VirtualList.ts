@@ -150,13 +150,13 @@
  *     VirtualList(h, {
  *       props: { count: rows.length, itemSize: 32, initialCount: 20 },
  *       view: (virtualList) =>
- *         virtualList.viewport(h.div.class("scroller")).children(
- *           virtualList.list(h.ul.class("rows")).children(
+ *         virtualList.viewport(h.div.class(["scroller"])).children([
+ *           virtualList.list(h.ul.class(["rows"])).children(
  *             virtualList.items.map((index) =>
- *               virtualList.item({ element: h.li.key(rows[index]!.id), index }).children(rows[index]!.label)
+ *               virtualList.item({ element: h.li.key(rows[index]!.id), index }).children([rows[index]!.label])
  *             )
  *           )
- *         )
+ *         ])
  *     })
  * })
  *
@@ -1475,9 +1475,9 @@ const announce = (
   return next.announced !== null &&
       sameAnnounced(next.announced, announced, $.props.trackScroll === true)
     ? $.set(next)
-    : $.set(next).evolve({ announced }).emit(
+    : $.set(next).evolve({ announced }).emit([
       VirtualListEvents.Scrolled(announced)
-    )
+    ])
 }
 
 type ItemOf<B extends View.PartTarget<"div" | "li" | "tr">> = ReturnType<

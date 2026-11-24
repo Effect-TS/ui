@@ -28,7 +28,7 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `popover.portal(h.dialog)?.children(popover.positioner(h.div).children(popover.popup(h.div).children("Saved")))`.
+ * `popover.portal(h.dialog)?.children([popover.positioner(h.div).children([popover.popup(h.div).children(["Saved"])])])`.
  * The trigger takes an options object, `popover.trigger({ element: h.button })`,
  * since each trigger has its own hover options. The portal returns `undefined`
  * while the popover is closed, unless `keepMounted`. `backdrop`, `viewport`
@@ -181,19 +181,19 @@
  *         Settled: () => undefined
  *       },
  *       view: (popover) =>
- *         h.div(
- *           popover.trigger({ element: h.button }).children("Notifications"),
- *           popover.portal(h.dialog)?.children(
- *             popover.positioner(h.div).children(
- *               popover.popup(h.div).children(
+ *         h.div([
+ *           popover.trigger({ element: h.button }).children(["Notifications"]),
+ *           popover.portal(h.dialog)?.children([
+ *             popover.positioner(h.div).children([
+ *               popover.popup(h.div).children([
  *                 popover.arrow(h.div),
- *                 popover.title(h.h2).children("Notifications"),
- *                 popover.description(h.p).children("You are all caught up."),
- *                 popover.close(h.button).children("Close")
- *               )
- *             )
- *           )
- *         )
+ *                 popover.title(h.h2).children(["Notifications"]),
+ *                 popover.description(h.p).children(["You are all caught up."]),
+ *                 popover.close(h.button).children(["Close"])
+ *               ])
+ *             ])
+ *           ])
+ *         ])
  *     })
  * })
  *
@@ -585,19 +585,19 @@ const openFor = (
     switched: $.props.open && model.switched &&
       triggerId === activeOf(model, $.props),
     transition: $.props.open ? model.transition : null
-  }).run(
+  }).run([
     Command.interrupt(WaitBeforeOpening),
     Command.interrupt(WaitBeforeClosing),
     reason === "trigger-hover"
       ? WaitBeforeClosingOnPress.make({})
       : Command.interrupt(WaitBeforeClosingOnPress)
-  ).emit(PopoverEvents.RequestedOpen({ triggerId, reason }))
+  ]).emit([PopoverEvents.RequestedOpen({ triggerId, reason })])
 
 const dismiss = ($: PopoverUpdate, reason: PopoverDismissReason) =>
-  $.evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing))
-    .emit(
+  $.evolve({ closeReason: reason }).run([Command.interrupt(WaitBeforeClosing)])
+    .emit([
       PopoverEvents.RequestedClose({ reason })
-    )
+    ])
 
 const pressed = ($: PopoverUpdate) =>
   $.model.patient
@@ -614,10 +614,10 @@ const left = (next: PopoverModel, $: PopoverUpdate) => {
   if (!$.props.open) {
     return next.onTrigger
       ? next
-      : $.set(next).run(Command.interrupt(WaitBeforeOpening))
+      : $.set(next).run([Command.interrupt(WaitBeforeOpening)])
   }
   return hoverOpened(next, true) && !next.onTrigger && !next.onPositioner
-    ? $.set(next).run(WaitBeforeClosing.make({ delay: next.closeDelay }))
+    ? $.set(next).run([WaitBeforeClosing.make({ delay: next.closeDelay })])
     : next
 }
 
@@ -908,9 +908,9 @@ export const Popover = Component.define({
       return dismiss($, reason)
     },
     SettledDialog: ($, { open }) =>
-      $.evolve(open ? {} : { switched: false, transition: null }).emit(
+      $.evolve(open ? {} : { switched: false, transition: null }).emit([
         PopoverEvents.Settled({ open })
-      ),
+      ]),
     EnteredTrigger: ($, { at, closeDelay, delay, drawn, triggerId }) => {
       // A layer drawn over the trigger takes the pointer off it, and gives it back where it was once
       // it is gone. The pointer didn't move, so that is no hover.
@@ -926,13 +926,13 @@ export const Popover = Component.define({
       if (!$.props.open) {
         return uncovered
           ? next
-          : $.set(next).run(
+          : $.set(next).run([
             WaitBeforeOpening.make({ delay, drawn: drawn ? triggerId : null })
-          )
+          ])
       }
       const active = activeOf($.model, $.props)
       return uncovered || active === null || active === triggerId
-        ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
+        ? $.set(next).run([Command.interrupt(WaitBeforeClosing)])
         : openFor(next, $, triggerId, "trigger-hover")
     },
     LeftTrigger: ($, { at, triggerId }) =>
@@ -962,9 +962,9 @@ export const Popover = Component.define({
         : openFor($.model, $, triggerId, "trigger-press", methodOf(pointerType))
     },
     EnteredPositioner: ($) =>
-      $.evolve({ onPositioner: true }).run(
+      $.evolve({ onPositioner: true }).run([
         Command.interrupt(WaitBeforeClosing)
-      ),
+      ]),
     LeftPositioner: ($) =>
       left(UiStruct.evolve($.model, { onPositioner: false }), $),
     CompletedWaitBeforeOpening: ($) =>

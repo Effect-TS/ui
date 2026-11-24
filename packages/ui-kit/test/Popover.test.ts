@@ -19,7 +19,7 @@ type H = View.Helper<never, PopoverProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (popover: Parts, h: H) =>
-    h.div(
+    h.div([
       popover.trigger({
         element: h.button.attrs({
           id: "press",
@@ -27,30 +27,35 @@ const standIn = {
           "aria-disabled": "true"
         })
       })
-        .children("Press"),
+        .children(["Press"]),
       popover.trigger({
         element: h.button.attr("id", "hover"),
         openOnHover: true,
         closeDelay: 50
-      }).children("Hover"),
+      }).children(["Hover"]),
       popover.trigger({
         element: h.button.attrs({ id: "off", "aria-disabled": "true" }),
         openOnHover: true,
         disabled: true
-      }).children("Off"),
-      popover.portal(h.dialog.attr("style", "z-index:2"))?.children(
-        popover.backdrop(h.div.class("backdrop")),
+      }).children(["Off"]),
+      popover.portal(h.dialog.attr("style", "z-index:2"))?.children([
+        popover.backdrop(h.div.class(["backdrop"])),
         popover.positioner(
-          h.div.class("positioner").attrs({ role: "none", style: "color:red" })
-        ).children(
-          popover.popup(h.div.class("popup").attr("data-side", "x")).children(
-            popover.arrow(h.div.class("arrow")),
-            popover.title(h.h2).children("Notifications"),
-            popover.close(h.button).children("Close")
+          h.div.class(["positioner"]).attrs({
+            role: "none",
+            style: "color:red"
+          })
+        ).children([
+          popover.popup(h.div.class(["popup"]).attr("data-side", "x")).children(
+            [
+              popover.arrow(h.div.class(["arrow"])),
+              popover.title(h.h2).children(["Notifications"]),
+              popover.close(h.button).children(["Close"])
+            ]
           )
-        )
-      )
-    )
+        ])
+      ])
+    ])
 }
 
 const press = Locator.text("Press", { exact: true })
@@ -109,7 +114,7 @@ describe("Popover", () => {
       assert.isUndefined(s.get(press).attrs?.disabled)
       assert.isUndefined(s.get(press).attrs?.["aria-disabled"])
       s.childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "press" })
-        .emitted(opened("press", "trigger-press"))
+        .emitted([opened("press", "trigger-press")])
       s.props({ open: true, sideOffset: 8 })
       assert.deepInclude(s.get(press).attrs, {
         "aria-expanded": "true",
@@ -146,9 +151,9 @@ describe("Popover", () => {
         "data-side": "top",
         "data-uncentered": ""
       })
-      running(s).childEmit(Dialog, pressedTrigger).emitted(
+      running(s).childEmit(Dialog, pressedTrigger).emitted([
         dismissed("trigger-press")
-      )
+      ])
       s.props({ open: true, positionMethod: "fixed" })
       assert.notInclude(s.get(portal).attrs?.style, "position:absolute")
       assert.include(s.get(positioner).attrs?.style, "position:fixed")
@@ -169,7 +174,7 @@ describe("Popover", () => {
         drawn: "hover"
       })
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
-        .emitted(opened("hover", "trigger-hover"))
+        .emitted([opened("hover", "trigger-hover")])
       s.props({ open: true, modal: true })
       assert.isUndefined(s.get(hover).attrs?.["data-pressed"])
       assert.include(s.get(backdrop).attrs?.style, "pointer-events:none")
@@ -187,7 +192,7 @@ describe("Popover", () => {
       )
       assert.deepStrictEqual(closing?.command.args, { delay: 50 })
       s.resolve(closing!.command, completed("CompletedWaitBeforeClosing"))
-        .emitted(dismissed("trigger-hover"))
+        .emitted([dismissed("trigger-hover")])
       const patience = s.current.pending.find((entry) =>
         entry.command.name === "WaitBeforeClosingOnPress"
       )
@@ -228,11 +233,11 @@ describe("Popover", () => {
         s.current.pending[0]!.command,
         completed("CompletedWaitBeforeOpening")
       )
-        .emitted(opened("hover", "trigger-hover"))
+        .emitted([opened("hover", "trigger-hover")])
       s.props({ open: true, modal: true })
-      running(s).childEmit(Dialog, pressedTrigger).emitted(
+      running(s).childEmit(Dialog, pressedTrigger).emitted([
         opened("hover", "trigger-press")
-      )
+      ])
       assert.strictEqual(s.get(hover).attrs?.["data-pressed"], "")
       s.fire(hover, "mouseleave")
       assert.isUndefined(
@@ -240,7 +245,7 @@ describe("Popover", () => {
           entry.command.name === "WaitBeforeClosing"
         )
       )
-      s.childEmit(Dialog, pressedTrigger).emitted(dismissed("trigger-press"))
+      s.childEmit(Dialog, pressedTrigger).emitted([dismissed("trigger-press")])
 
       s.props({ open: false, modal: true })
       s.fire(hover, "mouseenter")
@@ -248,7 +253,7 @@ describe("Popover", () => {
         s.current.pending[0]!.command,
         completed("CompletedWaitBeforeOpening")
       )
-        .emitted(opened("hover", "trigger-hover"))
+        .emitted([opened("hover", "trigger-hover")])
       s.props({ open: true, modal: true })
       const patience = s.current.pending.find((entry) =>
         entry.command.name === "WaitBeforeClosingOnPress"
@@ -257,7 +262,7 @@ describe("Popover", () => {
         patience!.command,
         completed("CompletedWaitBeforeClosingOnPress")
       )
-      s.childEmit(Dialog, pressedTrigger).emitted(dismissed("trigger-press"))
+      s.childEmit(Dialog, pressedTrigger).emitted([dismissed("trigger-press")])
     }))
 
   it.effect("moves to another trigger that asks for it, and passes on what its dialog emits", () =>
@@ -266,25 +271,25 @@ describe("Popover", () => {
         open: true,
         triggerId: "press"
       }, standIn)
-      running(s).fire(hover, "mouseenter").emitted(
+      running(s).fire(hover, "mouseenter").emitted([
         opened("hover", "trigger-hover")
-      )
+      ])
       s.props({ open: true, triggerId: "hover" })
       assert.strictEqual(s.get(hover).attrs?.["aria-expanded"], "true")
       running(s).childEmit(Dialog, {
         _tag: "RequestedOpen",
         triggerId: "press"
-      }).emitted(
+      }).emitted([
         opened("press", "trigger-press")
-      )
+      ])
       s.childEmit(Dialog, { _tag: "RequestedClose", reason: "escape-key" })
-        .emitted(dismissed("escape-key"))
+        .emitted([dismissed("escape-key")])
       s.props({ open: false, keepMounted: true })
       assert.strictEqual(s.get(popup).attrs?.["data-instant"], "dismiss")
-      s.childEmit(Dialog, { _tag: "Settled", open: false }).emitted({
+      s.childEmit(Dialog, { _tag: "Settled", open: false }).emitted([{
         _tag: "Settled",
         open: false
-      })
+      }])
     }))
 
   it("PopoverTrigger clears contradictory consumer aria-disabled", () => {

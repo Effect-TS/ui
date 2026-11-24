@@ -106,8 +106,8 @@
  *     Menubar(h, {
  *       props: {},
  *       view: (menubar) =>
- *         menubar.root(h.div.class("menubar")).children(
- *           ...menus.map(({ items, name }) =>
+ *         menubar.root(h.div.class(["menubar"])).children(
+ *           menus.map(({ items, name }) =>
  *             Menu(h, {
  *               key: name,
  *               props: { open: model.open === name, items },
@@ -120,14 +120,14 @@
  *                 Settled: () => undefined
  *               },
  *               view: (menu) =>
- *                 h.div(
- *                   menu.trigger({ element: h.button }).children(name),
- *                   menu.positioner(h.div).children(
+ *                 h.div([
+ *                   menu.trigger({ element: h.button }).children([name]),
+ *                   menu.positioner(h.div).children([
  *                     menu.popup(h.div).children(
- *                       ...items.map((item) => menu.item({ element: h.div, value: item.value }).children(item.label))
+ *                       items.map((item) => menu.item({ element: h.div, value: item.value }).children([item.label]))
  *                     )
- *                   )
- *                 )
+ *                   ])
+ *                 ])
  *             })
  *           )
  *         )

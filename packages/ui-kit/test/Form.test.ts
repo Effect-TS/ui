@@ -11,10 +11,10 @@ const standIn = {
     form: Component.Headless.Parts<typeof Form>,
     h: View.Helper<never, {}> & View.Tags<Html.Elements, never>
   ) =>
-    form.root(h.form).children(
+    form.root(h.form).children([
       h.input.attr("name", "email"),
-      h.button.attr("type", "submit").children("Sign up")
-    )
+      h.button.attr("type", "submit").children(["Sign up"])
+    ])
 }
 
 const root = Locator.tag("form")
@@ -34,10 +34,10 @@ describe("Form", () => {
         entries: [["email", "ada@example.com"]] as const
       }
 
-      s.fire(root, "submit", submission).emitted({
+      s.fire(root, "submit", submission).emitted([{
         _tag: "Submitted",
         ...submission
-      })
+      }])
       settle()
     }))
 
@@ -45,7 +45,7 @@ describe("Form", () => {
     const form = Story.parts(Form, { model: {}, props: {} })
     assert.deepStrictEqual(
       View.build(
-        form.root(h.form.class("signup").attr("novalidate", "stale")),
+        form.root(h.form.class(["signup"]).attr("novalidate", "stale")),
         []
       ).attrs,
       { class: "signup", novalidate: "" }

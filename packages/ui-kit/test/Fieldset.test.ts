@@ -30,37 +30,38 @@ const Billing = Component.define({
         key: name,
         props: { invalid: true },
         view: (field) =>
-          field.root(h.div.class(name)).children(
-            field.label(h.label).children(name),
+          field.root(h.div.class([name])).children([
+            field.label(h.label).children([name]),
             field.control(h.input).attrs({ name, value: name }),
-            field.error(h.span)?.children("Required")
-          )
+            field.error(h.span)?.children(["Required"])
+          ])
       })
-    return h.form(
+    return h.form([
       Fieldset(h, {
         key: "billing",
         props: { disabled: model.locked },
         view: (outerFieldset) =>
-          outerFieldset.root(h.fieldset.class("billing")).children(
-            outerFieldset.legend(h.div).children("Billing details"),
+          outerFieldset.root(h.fieldset.class(["billing"])).children([
+            outerFieldset.legend(h.div).children(["Billing details"]),
             formField("company"),
             Fieldset(h, {
               key: "address",
               props: { disabled: outerFieldset.disabled },
               view: (innerFieldset) =>
-                innerFieldset.root(h.fieldset.class("address")).children(
-                  innerFieldset.legend(h.div.class("address-legend")).children(
-                    "Address"
-                  ),
+                innerFieldset.root(h.fieldset.class(["address"])).children([
+                  innerFieldset.legend(h.div.class(["address-legend"]))
+                    .children([
+                      "Address"
+                    ]),
                   formField("city")
-                )
+                ])
             })
-          )
+          ])
       }),
-      h.button.class("lock").attr("type", "button").onClick(
+      h.button.class(["lock"]).attr("type", "button").onClick(
         Message.ToggledLock()
-      ).children("Lock")
-    )
+      ).children(["Lock"])
+    ])
   }
 })
 
@@ -94,7 +95,7 @@ describe("Fieldset", { concurrent: false }, () => {
     assert.deepStrictEqual(
       attrsOf(
         enabled.root(
-          h.fieldset.class("mine").attrs({
+          h.fieldset.class(["mine"]).attrs({
             "aria-labelledby": "heading",
             "aria-disabled": "true",
             "data-disabled": "stale"

@@ -18,25 +18,25 @@ const items = [
 const standIn = {
   elements: Html,
   view: (menu: Parts, h: H) =>
-    h.div(
-      menu.trigger({ element: h.button.class("button").attr("id", "more") })
-        .children("More"),
-      menu.contextTrigger(h.div.class("area").attr("id", "row")).children(
+    h.div([
+      menu.trigger({ element: h.button.class(["button"]).attr("id", "more") })
+        .children(["More"]),
+      menu.contextTrigger(h.div.class(["area"]).attr("id", "row")).children([
         "Row"
-      ),
-      menu.positioner(h.div.class("positioner")).children(
-        menu.popup(h.div.class("popup")).children(
+      ]),
+      menu.positioner(h.div.class(["positioner"])).children([
+        menu.popup(h.div.class(["popup"])).children([
           menu.item({
             element: h.div.attr("data-testid", "copy"),
             value: "copy"
-          }).children("Copy"),
+          }).children(["Copy"]),
           menu.item({
             element: h.div.attr("data-testid", "paste"),
             value: "paste"
-          }).children("Paste")
-        )
-      )
-    )
+          }).children(["Paste"])
+        ])
+      ])
+    ])
 }
 
 const area = Locator.attr("class", "area")
@@ -106,7 +106,7 @@ describe("Menu contextTrigger", () => {
       assert.include(s.get(area).attrs?.style, "-webkit-touch-callout:none")
       assert.isUndefined(s.get(area).attrs?.["aria-haspopup"])
       s.fire(area, "contextmenu", rightClick(100, 50)).expectDefaultPrevented()
-        .emitted(opened("row"))
+        .emitted([opened("row")])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepInclude(s.get(area).attrs, {
         "data-popup-open": "",
@@ -135,7 +135,7 @@ describe("Menu contextTrigger", () => {
         x: 0,
         y: 0,
         pointerType: "mouse"
-      }).emitted(opened("more"))
+      }).emitted([opened("more")])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.isUndefined(s.get(area).attrs?.["data-popup-open"])
       assert.deepInclude(trackedArgs(s), { context: false, release: false })
@@ -155,20 +155,20 @@ describe("Menu contextTrigger", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       s.expectMount(longPress(s))
-      s.fire(area, "contextmenu", rightClick(0, 0, "")).emitted(
+      s.fire(area, "contextmenu", rightClick(0, 0, "")).emitted([
         { _tag: "Highlighted", value: "copy", reason: "none" },
         opened("row")
-      )
+      ])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.isNull(trackedArgs(s).position.anchorRect)
       assert.deepInclude(trackedArgs(s).position.options, {
         sideOffset: 0,
         alignOffset: 0
       })
-      s.fire(area, "contextmenu", rightClick(200, 80)).emitted(
+      s.fire(area, "contextmenu", rightClick(200, 80)).emitted([
         { _tag: "Highlighted", value: null, reason: "none" },
         opened("row")
-      )
+      ])
       assert.deepStrictEqual(trackedArgs(s).position.anchorRect, {
         x: 200,
         y: 80,
@@ -193,7 +193,7 @@ describe("Menu contextTrigger", () => {
       assert.isEmpty(s.current.emitted)
       s.mounted(longPress(s), touch("Started", { x: 30, y: 40 }))
       yield* elapse(s, "WaitBeforeLongPress", 500)
-      s.emitted(opened("row"))
+      s.emitted([opened("row")])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepInclude(trackedArgs(s), { touch: true, release: false })
       assert.deepStrictEqual(trackedArgs(s).position.anchorRect, {
@@ -205,23 +205,23 @@ describe("Menu contextTrigger", () => {
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "touch" }))
       yield* elapse(s, "WaitBeforeContextGrace", 500)
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "touch" }))
-        .emitted(dismissed("outside-press"))
+        .emitted([dismissed("outside-press")])
     }))
 
   it.effect("the first release after a right click closes it with cancel-open only away from the popup and after 500ms", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       s.expectMount(longPress(s))
-      s.fire(area, "contextmenu", rightClick(100, 50)).emitted(opened("row"))
+      s.fire(area, "contextmenu", rightClick(100, 50)).emitted([opened("row")])
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       s.mounted(tracked(s), sent("ReleasedContextPointer", { outside: true }))
       assert.isFalse(trackedArgs(s).release)
-      s.fire(area, "contextmenu", rightClick(100, 50)).emitted(opened("row"))
+      s.fire(area, "contextmenu", rightClick(100, 50)).emitted([opened("row")])
       yield* elapse(s, "WaitBeforeContextGrace", 500)
       s.mounted(tracked(s), sent("ReleasedContextPointer", { outside: false }))
-      s.fire(area, "contextmenu", rightClick(100, 50)).emitted(opened("row"))
+      s.fire(area, "contextmenu", rightClick(100, 50)).emitted([opened("row")])
       yield* elapse(s, "WaitBeforeContextGrace", 500)
       s.mounted(tracked(s), sent("ReleasedContextPointer", { outside: true }))
-        .emitted(dismissed("cancel-open"))
+        .emitted([dismissed("cancel-open")])
     }))
 })

@@ -23,10 +23,10 @@ export const LoggedOut = Component.define({
 }).make({
   init: () => null,
 
-  update: ($, { session }) => $.emit(LoggedOutEvents.SignedIn({ session })),
+  update: ($, { session }) => $.emit([LoggedOutEvents.SignedIn({ session })]),
 
   view: (h) =>
-    h.div.class("py-8").children(
+    h.div.class(["py-8"]).children([
       LoggedOutRoute.match(h.props.route, {
         Home: () => HomePage(h),
         Login: () =>
@@ -43,5 +43,5 @@ export const LoggedOut = Component.define({
             backText: "Go Home"
           })
       })
-    )
+    ])
 })

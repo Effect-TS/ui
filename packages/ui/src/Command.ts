@@ -1104,7 +1104,7 @@ export const groupKeyOf = (
  * const RollDie = Command.make("RollDie", { args: { sides: Schema.Number } }, ({ sides }) =>
  *   Random.nextIntBetween(1, sides).pipe(Effect.map((n) => DieMessage.CompletedRollDie({ n }))))
  *
- * // In a component: `$.run(RollDie.make({ sides: 6 }))`, pending in a story as { name: "RollDie", args: { sides: 6 } }
+ * // In a component: `$.run([RollDie.make({ sides: 6 })])`, pending in a story as { name: "RollDie", args: { sides: 6 } }
  * ```
  *
  * @stability experimental
@@ -1647,7 +1647,7 @@ export const afterRefetch: {
  *   group: ["name"]
  * }, ({ name }) => Effect.succeed(`https://cdn/${name}`))
  *
- * // In `update`: `$.run(Command.interrupt(UploadFile, { name: "photo.png" }))`
+ * // In `update`: `$.run([Command.interrupt(UploadFile, { name: "photo.png" })])`
  * const cancel = Command.interrupt(UploadFile, { name: "photo.png" })
  * ```
  *

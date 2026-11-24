@@ -26,7 +26,7 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(dialog.title(h.h2).children("Settings")))`.
+ * `dialog.portal(h.dialog)?.children([dialog.popup(h.div).children([dialog.title(h.h2).children(["Settings"])])])`.
  * The portal returns `undefined` while the dialog is closed, unless
  * `keepMounted`, and the backdrop returns `undefined` in a nested dialog, unless
  * `forceRenderBackdrop`. `backdrop` and `viewport` are optional. A part's result
@@ -180,17 +180,17 @@
  *         Settled: () => undefined
  *       },
  *       view: (dialog) =>
- *         h.div(
- *           dialog.trigger(h.button.class("button")).children("Settings"),
- *           dialog.portal(h.dialog)?.children(
- *             dialog.viewport(h.div.class("viewport")).children(
- *               dialog.popup(h.div.class("popup")).children(
- *                 dialog.title(h.h2).children("Settings"),
- *                 dialog.close(h.button.class("button")).children("Close")
- *               )
- *             )
- *           )
- *         )
+ *         h.div([
+ *           dialog.trigger(h.button.class(["button"])).children(["Settings"]),
+ *           dialog.portal(h.dialog)?.children([
+ *             dialog.viewport(h.div.class(["viewport"])).children([
+ *               dialog.popup(h.div.class(["popup"])).children([
+ *                 dialog.title(h.h2).children(["Settings"]),
+ *                 dialog.close(h.button.class(["button"])).children(["Close"])
+ *               ])
+ *             ])
+ *           ])
+ *         ])
  *     })
  * })
  *
@@ -458,9 +458,9 @@ const dismiss = (
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
 ) =>
-  $.evolve({ reason, closeMethod }).emit(
+  $.evolve({ reason, closeMethod }).emit([
     DialogEvents.RequestedClose({ reason })
-  )
+  ])
 
 const blocker = new Html.Element<never>("div").attrs({
   role: "presentation",
@@ -1290,9 +1290,9 @@ export const Dialog = Component.define({
       if ($.props.open && (active === null || active === key)) {
         return dismiss($, "trigger-press", method)
       }
-      return $.evolve({ trigger: key, reason: null, openMethod: method }).emit(
+      return $.evolve({ trigger: key, reason: null, openMethod: method }).emit([
         DialogEvents.RequestedOpen({ triggerId })
-      )
+      ])
     },
     ClickedClose: ($, { pointerType }) =>
       $.props.open ? dismiss($, "close-press", methodOf(pointerType)) : $.model,
@@ -1322,11 +1322,11 @@ export const Dialog = Component.define({
       $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.emit(DialogEvents.Settled({ open }))
+      if (open) return $.emit([DialogEvents.Settled({ open })])
       return $.model.mounted && $.props.holdExit !== true
-        ? $.evolve({ mounted: false, started: false, openMethod: null }).emit(
+        ? $.evolve({ mounted: false, started: false, openMethod: null }).emit([
           DialogEvents.Settled({ open })
-        )
+        ])
         : $.model
     },
     ChangedNested: ($, { count }) => $.evolve({ nestedOpen: count })
@@ -1407,7 +1407,7 @@ export const Dialog = Component.define({
               )
             })
         )
-        .children(modal === true && (open ? layer : inertLayer))
+        .children([modal === true && (open ? layer : inertLayer)])
       if (!shown) return dialog
       return dialog.onMount(
         TrackDialog({

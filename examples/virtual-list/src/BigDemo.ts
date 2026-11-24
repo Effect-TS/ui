@@ -19,15 +19,15 @@ export const BigDemo = Component.define({
     ClickedJump: ($, { index }) => ({ index, jump: $.model.jump + 1 })
   },
   view: (h, model) =>
-    h.div.class("page").children(
-      h.div.class("toolbar").children(
+    h.div.class(["page"]).children([
+      h.div.class(["toolbar"]).children([
         h.button.attr("id", "middle").onClick(
           BigMessage.ClickedJump({ index: 50_000 })
-        ).children("Jump to 50,000"),
+        ).children(["Jump to 50,000"]),
         h.button.attr("id", "end").onClick(
           BigMessage.ClickedJump({ index: 99_999 })
-        ).children("Jump to the end")
-      ),
+        ).children(["Jump to the end"])
+      ]),
       VirtualList(h, {
         props: {
           count: 100_000,
@@ -40,19 +40,19 @@ export const BigDemo = Component.define({
             }
         },
         view: (virtualList) =>
-          virtualList.viewport(h.div.class("scroller")).children(
-            virtualList.list(h.ul.class("rows")).children(
+          virtualList.viewport(h.div.class(["scroller"])).children([
+            virtualList.list(h.ul.class(["rows"])).children(
               virtualList.items.map((index) =>
                 virtualList.item({
-                  element: h.li.class("row loose").key(String(index)),
+                  element: h.li.class(["row loose"]).key(String(index)),
                   index
-                }).children(
-                  h.strong.children("Row " + index),
-                  index % 3 === 0 ? null : h.p.children(textOf(index))
-                )
+                }).children([
+                  h.strong.children(["Row " + index]),
+                  index % 3 === 0 ? null : h.p.children([textOf(index)])
+                ])
               )
             )
-          )
+          ])
       })
-    )
+    ])
 })

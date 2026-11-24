@@ -107,7 +107,7 @@
  * }).make({
  *   init: () => 0,
  *   update: ($) => $.model + 1,
- *   view: (h, count) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
+ *   view: (h, count) => h.button.onClick(Message.ClickedIncrement()).children([String(count)])
  * })
  *
  * // The tree is mounted for as long as the Layer is built.
@@ -463,7 +463,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
- *   view: (h) => h.h1("Hello")
+ *   view: (h) => h.h1(["Hello"])
  * })
  *
  * // In the browser entry module.

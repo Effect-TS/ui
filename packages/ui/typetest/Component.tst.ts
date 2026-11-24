@@ -92,8 +92,8 @@ describe("Component", () => {
         init: () => ({}),
         update: ($, message) =>
           Message.match(message, {
-            X: () => $.run(CA.make()),
-            Y: () => $.run(CB.make()),
+            X: () => $.run([CA.make()]),
+            Y: () => $.run([CB.make()]),
             Done: () => $.model
           }),
         view: (h) => h.el("div")
@@ -109,7 +109,7 @@ describe("Component", () => {
         message: Message
       }).make({
         init: ($) =>
-          $.props.a ? $.set({}).run(CA.make()) : $.set({}).run(CB.make()),
+          $.props.a ? $.set({}).run([CA.make()]) : $.set({}).run([CB.make()]),
         update: ($) => $.model,
         view: (h) => h.el("div")
       })
@@ -123,7 +123,7 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: ($) => $.run(CA.make()),
+        update: ($) => $.run([CA.make()]),
         view: (h) => h.el("div")
       })
       const ChildB = Component.define({
@@ -132,7 +132,7 @@ describe("Component", () => {
         message: Message
       }).make({
         init: () => ({}),
-        update: ($) => $.run(CB.make()),
+        update: ($) => $.run([CB.make()]),
         view: (h) => h.el("div")
       })
       const Parent = Component.define({
@@ -164,7 +164,7 @@ describe("Component", () => {
         model: Schema.Struct({}),
         message: Message
       }).make({
-        init: ($) => $.set({}).run(UsesScope.make()),
+        init: ($) => $.set({}).run([UsesScope.make()]),
         update: ($) => $.model,
         view: (h) => h.el("div")
       })
@@ -226,11 +226,11 @@ describe("Component", () => {
         never,
         {}
       >
-      expect($.run).type.toBeCallableWith(CA.make())
-      expect($.run).type.not.toBeCallableWith(
+      expect($.run).type.toBeCallableWith([CA.make()])
+      expect($.run).type.not.toBeCallableWith([
         SaveTodo.make({ id: "", title: "", done: false })
-      )
-      expect($.run).type.toBeCallableWith(Command.interrupt(CA))
+      ])
+      expect($.run).type.toBeCallableWith([Command.interrupt(CA)])
     })
   })
 
@@ -375,12 +375,14 @@ describe("Component", () => {
         view: (h) =>
           h.el(
             "div",
-            Todos.render(h, {
-              key: "main",
-              props: { todo: { id: "", title: "", done: false } },
-              fallback: () => h.el("p", "loading")
-            }),
-            Counter(h, { key: "count", props: { initial: 0 } })
+            [
+              Todos.render(h, {
+                key: "main",
+                props: { todo: { id: "", title: "", done: false } },
+                fallback: () => h.el("p", ["loading"])
+              }),
+              Counter(h, { key: "count", props: { initial: 0 } })
+            ]
           )
       })
       expect<Component.Requirements<typeof Parent>>().type.toBe<Todos>()
@@ -450,14 +452,16 @@ describe("Component", () => {
       ParentDef.view((h) =>
         h.el(
           "div",
-          LazyPlain(h, { key: String(1) }),
-          h.keepAlive((s) => {
-            expect(LazyPlain(s, { key: "s", fallback: () => h.el("p") })).type
-              .toBe<View.Child<ParentMessage, never>>()
-            // @ts-expect-error A keep-alive child whose key isn't a literal needs a predicate
-            LazyPlain(s, { key: String(1) })
-            return LazyPlain(s, { key: "s" })
-          })
+          [
+            LazyPlain(h, { key: String(1) }),
+            h.keepAlive((s) => {
+              expect(LazyPlain(s, { key: "s", fallback: () => h.el("p") })).type
+                .toBe<View.Child<ParentMessage, never>>()
+              // @ts-expect-error A keep-alive child whose key isn't a literal needs a predicate
+              LazyPlain(s, { key: String(1) })
+              return LazyPlain(s, { key: "s" })
+            })
+          ]
         )
       )
     })

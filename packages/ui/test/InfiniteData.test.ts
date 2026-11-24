@@ -82,8 +82,8 @@ const makeApp = () => {
         Refresh: () => $.reset("messages")
       }),
     view: (h) =>
-      h.el("div").children(
-        h.el("p").on("click", ChatMessage.More()).children(
+      h.el("div").children([
+        h.el("p").on("click", ChatMessage.More()).children([
           AsyncResult.match(h.queries.messages, {
             onInitial: () => "loading",
             onFailure: () => "failed",
@@ -91,13 +91,13 @@ const makeApp = () => {
               items.map((message) => message.text).join(",") + " /" +
               pages.length + " " + more._tag
           })
-        ),
+        ]),
         // No text, so the view's text stays the list's.
         h.el("button").attr("data-testid", "refresh").on(
           "click",
           ChatMessage.Refresh()
         )
-      )
+      ])
   })
   return { db, ListMessages, ChatMessage, Chat, layer: ListMessages.layer }
 }
@@ -221,7 +221,7 @@ describe("Infinite queries", () => {
             return more._tag === "Failed" ? "failed " + more.error : more._tag
           }
         }),
-      view: (h, model) => h.p(model)
+      view: (h, model) => h.p([model])
     })
     const warnings: Array<string> = []
     const encoder = MessageLog.makeEncoder({
@@ -520,11 +520,11 @@ describe("Infinite queries", () => {
         ShellMessage.match(message, {
           ChangedRoute: ({ route }) => route,
           Go: () =>
-            $.run(
+            $.run([
               Router.push(ShellRoute, ShellRoute.Home()).pipe(
                 Command.map(() => ShellMessage.Navigated())
               )
-            ),
+            ]),
           Navigated: () => $.model
         }),
       subscriptions: ({ model }) => [
@@ -537,7 +537,7 @@ describe("Infinite queries", () => {
       view: (h, model) =>
         model._tag === "Chat"
           ? app.Chat(h, { key: "chat", props: { room: "r" } })
-          : h.el("p", "home")
+          : h.el("p", ["home"])
     })
     const history = Router.memoryHistory("/chat")
     const hosted = (effect: Effect.Effect<void, unknown, any>) =>

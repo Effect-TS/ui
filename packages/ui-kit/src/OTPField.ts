@@ -16,7 +16,7 @@
  * | `input` | `<input>`, one for each slot   |
  *
  * `root` takes the consumer's builder and returns it, so the consumer goes
- * on chaining and adds the slots with `.children(...)`. `input` takes
+ * on chaining and adds the slots with `.children([...])`. `input` takes
  * `{ element, index }`, the slot's `<input>` and its place in the code from
  * 0, and returns the builder. An index outside the field's `length`, or
  * drawn twice, fails the render.
@@ -137,10 +137,10 @@
  *         Rejected: () => undefined
  *       },
  *       view: (otpField) =>
- *         otpField.root(h.div.class("otp").attr("aria-label", "Verification code")).children(
+ *         otpField.root(h.div.class(["otp"]).attr("aria-label", "Verification code")).children(
  *           Array.from({ length: otpField.length }, (_, index) =>
  *             otpField.input({
- *               element: h.input.class("slot").attr("aria-label", "Digit " + (index + 1) + " of 6"),
+ *               element: h.input.class(["slot"]).attr("aria-label", "Digit " + (index + 1) + " of 6"),
  *               index
  *             }))
  *         )
@@ -575,10 +575,10 @@ const aim = (model: OTPFieldModel, index: number): OTPFieldModel =>
   UiStruct.evolve(model, { target: index, moving: (moving) => moving + 1 })
 
 const moveTo = (model: OTPFieldModel, $: OTPFieldUpdate, index: number) =>
-  $.set(aim(model, index)).run(...focusSlot(index))
+  $.set(aim(model, index)).run(focusSlot(index))
 
 const reselect = (model: OTPFieldModel, $: OTPFieldUpdate, index: number) =>
-  $.set(aim(model, index)).run(selectSlot(index))
+  $.set(aim(model, index)).run([selectSlot(index)])
 
 const aimedAt = (model: OTPFieldModel, s: Settings, index: number): number =>
   model.target === null || model.target === index
@@ -659,13 +659,13 @@ const setValue = (
         },
       edits: unchanged ? model.edits : model.edits + 1
     })
-    .run(
+    .run([
       ...(focus === undefined ? [] : focusSlot(focus)),
       ...((earlier !== null || again) && $.props.autoSubmit === true
         ? [submit]
         : [])
-    )
-    .emit(
+    ])
+    .emit([
       ...(earlier === null
         ? []
         : [
@@ -686,7 +686,7 @@ const setValue = (
           })
         ]
         : [])
-    )
+    ])
 }
 
 const enter = (
@@ -709,7 +709,7 @@ const enter = (
     ? [OTPFieldEvents.Rejected({ value: Redacted.make(text), reason })]
     : []
   if (entered.length === 0) {
-    if (reason === "input-paste") return $.set(model).emit(...events)
+    if (reason === "input-paste") return $.set(model).emit(events)
     if (text === "") {
       return setValue(
         model,
@@ -720,7 +720,7 @@ const enter = (
         { events }
       )
     }
-    return reselect(model, $, index).emit(...events)
+    return reselect(model, $, index).emit(events)
   }
   const merged = [
     ...s.characters.slice(0, index),
@@ -1003,14 +1003,14 @@ export const OTPField = Component.define({
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next
       return $.set(next)
         .run(
-          ...($.props.autoSubmit === true && !locked($.props) ? [submit] : [])
+          $.props.autoSubmit === true && !locked($.props) ? [submit] : []
         )
-        .emit(
+        .emit([
           OTPFieldEvents.Completed({
             value: Redacted.make(s.stored),
             reason: complete
           })
-        )
+        ])
     },
     DisabledWhileFocused: ($) =>
       $.evolve({

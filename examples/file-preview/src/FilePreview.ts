@@ -55,35 +55,39 @@ const FilePreviewDef = Component.define({
 const Status = FilePreviewDef.fragment((h, preview: Preview) =>
   Preview.match(preview, {
     NoFile: () =>
-      h.p.class("text-center text-gray-500").children(
+      h.p.class(["text-center text-gray-500"]).children([
         "Choose a text file to preview it."
-      ),
+      ]),
     Reading: ({ name }) =>
-      h.div.class(
+      h.div.class([
         "flex items-center justify-between gap-3 p-4 bg-white rounded-lg shadow"
-      ).children(
-        h.span.class("text-gray-700").children(`Reading ${name}…`),
+      ]).children([
+        h.span.class(["text-gray-700"]).children([`Reading ${name}…`]),
         h.button.onClick(PreviewMessage.ClickedCancel())
-          .class(
+          .class([
             BUTTON_CLASS,
             "border border-red-300 text-red-600 hover:bg-red-50"
-          )
-          .children("Cancel")
-      ),
+          ])
+          .children(["Cancel"])
+      ]),
     Read: ({ head, lines, name }) =>
-      h.section.class("flex flex-col gap-2 p-4 bg-white rounded-lg shadow")
-        .children(
-          h.h2.class("font-medium text-gray-800").children(
+      h.section.class(["flex flex-col gap-2 p-4 bg-white rounded-lg shadow"])
+        .children([
+          h.h2.class(["font-medium text-gray-800"]).children([
             `${name}: ${lines} lines`
-          ),
-          h.pre.class("text-sm text-gray-600 overflow-x-auto").children(head)
-        ),
+          ]),
+          h.pre.class(["text-sm text-gray-600 overflow-x-auto"]).children([
+            head
+          ])
+        ]),
     Cancelled: ({ name }) =>
-      h.p.class("text-center text-gray-500").children(
+      h.p.class(["text-center text-gray-500"]).children([
         `Cancelled reading ${name}.`
-      ),
+      ]),
     Failed: ({ name }) =>
-      h.p.class("text-center text-red-600").children(`Couldn't read ${name}.`)
+      h.p.class(["text-center text-red-600"]).children([
+        `Couldn't read ${name}.`
+      ])
   })
 )
 
@@ -93,14 +97,14 @@ export const FilePreview = FilePreviewDef.make({
     ChoseFiles: ($, { files: [file] }) =>
       file === undefined
         ? $.model
-        : $.set(Preview.Reading({ name: file.name })).run(
+        : $.set(Preview.Reading({ name: file.name })).run([
           ReadFile.make({ file })
-        ),
+        ]),
     ClickedCancel: ($) =>
       $.model._tag === "Reading"
-        ? $.set(Preview.Cancelled({ name: $.model.name })).run(
+        ? $.set(Preview.Cancelled({ name: $.model.name })).run([
           Command.interrupt(ReadFile)
-        )
+        ])
         : $.model,
     CompletedReadFile: (_, { head, lines, name }) =>
       Preview.Read({ name, lines, head }),
@@ -108,20 +112,20 @@ export const FilePreview = FilePreviewDef.make({
   },
   head: () => [Head.title("Effect UI File Preview Example")],
   view: (h, preview) =>
-    h.div.class("min-h-screen bg-gray-100 py-8").children(
-      h.div.class("max-w-lg mx-auto flex flex-col gap-6 px-4").children(
-        h.h1.class("text-3xl font-bold text-gray-800 text-center").children(
+    h.div.class(["min-h-screen bg-gray-100 py-8"]).children([
+      h.div.class(["max-w-lg mx-auto flex flex-col gap-6 px-4"]).children([
+        h.h1.class(["text-3xl font-bold text-gray-800 text-center"]).children([
           "File Preview"
-        ),
-        h.label.class(
+        ]),
+        h.label.class([
           BUTTON_CLASS,
           "self-center bg-blue-500 text-white hover:bg-blue-600"
-        ).children(
+        ]).children([
           "Choose a file",
-          h.input.attr("type", "file").class("sr-only").value("")
+          h.input.attr("type", "file").class(["sr-only"]).value("")
             .onChange(({ files }) => PreviewMessage.ChoseFiles({ files }))
-        ),
+        ]),
         Status(h, preview)
-      )
-    )
+      ])
+    ])
 })

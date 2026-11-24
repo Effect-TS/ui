@@ -71,16 +71,16 @@ describe("Popover", () => {
         expect(popover.triggerId).type.toBe<string | null>()
         expect(popover.openReason).type.toBe<PopoverOpenReason | null>()
         expect(popover.instant).type.toBe<PopoverInstant | undefined>()
-        return h.span(
-          trigger.children("Open"),
-          portal?.children(
-            popover.positioner(h.div).children(
-              popover.popup(h.div).children(
-                popover.title(h.h2).children("Title")
-              )
-            )
-          )
-        )
+        return h.span([
+          trigger.children(["Open"]),
+          portal?.children([
+            popover.positioner(h.div).children([
+              popover.popup(h.div).children([
+                popover.title(h.h2).children(["Title"])
+              ])
+            ])
+          ])
+        ])
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()

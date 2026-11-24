@@ -30,7 +30,7 @@
  * }).make({
  *   init: () => 0,
  *   update: ($) => $.model + 1,
- *   view: (h, count) => h.el("button").on("click", Msg.ClickedIncrement()).children(String(count))
+ *   view: (h, count) => h.el("button").on("click", Msg.ClickedIncrement()).children([String(count)])
  * })
  *
  * const program = Effect.gen(function*() {
@@ -1259,7 +1259,7 @@ export const stub = <Self, Props, Events>(
     events: feature.events
   }).make({
     init: () => 0,
-    update: ($, message) => $.set($.model + 1).emit(message.events),
+    update: ($, message) => $.set($.model + 1).emit([message.events]),
     view: (h) => {
       if (seen.length === 0 || seen[seen.length - 1] !== h.props) {
         seen.push(h.props)

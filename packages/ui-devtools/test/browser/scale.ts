@@ -28,18 +28,18 @@ const Row = Component.define({
   init: () => ({ count: 0 }),
   update: {
     ClickedRow: ($) => $.evolve({ count: $.model.count + 1 }),
-    ClickedFail: ($) => $.run(Fail.make()),
-    ClickedHold: ($) => $.run(Hold.make())
+    ClickedFail: ($) => $.run([Fail.make()]),
+    ClickedHold: ($) => $.run([Hold.make()])
   },
   view: (h, model) =>
-    h.span(
+    h.span([
       h.button.attr("data-row", h.props.id).onClick(RowMessage.ClickedRow())
-        .children(h.props.id + " " + model.count),
+        .children([h.props.id + " " + model.count]),
       h.button.attr("data-fail", h.props.id).onClick(RowMessage.ClickedFail())
-        .children("!"),
+        .children(["!"]),
       h.button.attr("data-hold", h.props.id).onClick(RowMessage.ClickedHold())
-        .children("~")
-    )
+        .children(["~"])
+    ])
 })
 
 const Shelf = Component.define({
@@ -70,7 +70,7 @@ const Section = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.section(Shelf(h, { key: "shelf", props: h.props }))
+  view: (h) => h.section([Shelf(h, { key: "shelf", props: h.props })])
 })
 
 const AppMessage = UiSchema.TaggedEnum({ ClickedDrop: {} })
@@ -83,13 +83,18 @@ const App = Component.define({
   init: () => ({ drop: false }),
   update: { ClickedDrop: ($) => $.evolve({ drop: true }) },
   view: (h, model) =>
-    h.main(
+    h.main([
       h.button.attr("data-drop", "").onClick(AppMessage.ClickedDrop()).children(
-        "Drop"
+        [
+          "Drop"
+        ]
       ),
-      Array.from({ length: sections }, (_, i) =>
-        Section(h, { key: "s" + i, props: { id: "s" + i, drop: model.drop } }))
-    )
+      Array.from(
+        { length: sections },
+        (_, i) =>
+          Section(h, { key: "s" + i, props: { id: "s" + i, drop: model.drop } })
+      )
+    ])
 })
 
 const Main = BrowserHost.mount(App, {}, document.getElementById("root")!).pipe(

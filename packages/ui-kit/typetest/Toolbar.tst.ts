@@ -61,7 +61,7 @@ describe("Toolbar", () => {
               toolbar.button({
                 element: h.button.onClick(Msg.Clicked()),
                 value: "bold"
-              }).children(needsClock)
+              }).children([needsClock])
             )
               .type.toBe<Button<Clock>>()
             expect(toolbar.link({ element: h.a, value: "help" })).type.toBe<
@@ -72,12 +72,12 @@ describe("Toolbar", () => {
             expect(toolbar.separator(h.div)).type.toBe<Div<never>>()
             expect(toolbar.isDisabled("bold")).type.toBe<boolean>()
             expect(toolbar.orientation).type.toBe<"horizontal" | "vertical">()
-            const root = toolbar.root(h.div.class("toolbar")).children(
-              toolbar.group({ element: h.div, value: "format" }).children(
+            const root = toolbar.root(h.div.class(["toolbar"])).children([
+              toolbar.group({ element: h.div, value: "format" }).children([
                 toolbar.button({ element: h.button, value: "bold" }),
                 needsClock
-              )
-            )
+              ])
+            ])
             expect(root).type.toBe<Div<Clock>>()
             return root
           }

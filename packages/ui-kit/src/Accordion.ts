@@ -20,7 +20,7 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `item.panel(h.div)?.children("Content")`. The panel returns `undefined` once
+ * `item.panel(h.div)?.children(["Content"])`. The panel returns `undefined` once
  * it has closed, unless `keepMounted` or `hiddenUntilFound` is set. A part's
  * result is a builder, so it can also be another kit call's `element`.
  *
@@ -91,16 +91,16 @@
  *       props: { value: model.open },
  *       onEmit: { Toggled: ({ value }) => FaqMessage.ToggledQuestions({ open: value }) },
  *       view: (accordion) =>
- *         accordion.root(h.div.class("faq")).children(
+ *         accordion.root(h.div.class(["faq"])).children(
  *           questions.map((entry, index) =>
  *             AccordionItem(h, {
  *               key: entry.id,
  *               props: { value: entry.id, index },
  *               view: (item) =>
- *                 item.root(h.div).children(
- *                   item.header(h.h3).children(item.trigger(h.button).children(entry.question)),
- *                   item.panel(h.div.class("answer"))?.children(entry.answer)
- *                 )
+ *                 item.root(h.div).children([
+ *                   item.header(h.h3).children([item.trigger(h.button).children([entry.question])]),
+ *                   item.panel(h.div.class(["answer"]))?.children([entry.answer])
+ *                 ])
  *             })
  *           )
  *         )
@@ -315,12 +315,12 @@ export const Accordion = Component.define({
     ToggledItem: ($, { item, open, reason }) =>
       $.props.disabled === true
         ? $.model
-        : $.emit(
+        : $.emit([
           AccordionEvents.Toggled({
             value: toggled($.props, item, open),
             reason
           })
-        )
+        ])
   },
   parts: (p) => {
     const { disabled, orientation, value } = resolved(p.props)
@@ -471,11 +471,11 @@ export const AccordionItem = Component.define({
           item: $.props.value,
           open,
           reason
-        }).emit(
+        }).emit([
           AccordionItemEvents.Toggled({ open, reason })
-        ),
+        ]),
     SettledCollapsible: ($, { open }) =>
-      $.emit(AccordionItemEvents.Settled({ open }))
+      $.emit([AccordionItemEvents.Settled({ open })])
   },
   parts: (p) => {
     const props = p.props

@@ -40,7 +40,7 @@ export const fillValue = <Msg, R, Handlers, HostNode, Tag extends string>(
 ): View.ContainerBuilder<Msg, R, Handlers, HostNode, Tag> =>
   text === undefined || (node.content !== undefined && node.content.length > 0)
     ? node
-    : node.children(text)
+    : node.children([text])
 
 // The markup that makes NVDA read the label of a bar: without content of
 // its own after the label, it reads the value alone. The root appends it
@@ -49,5 +49,5 @@ export const nvdaLabel = View.toNode(
   new Html.Element<never>("span").attrs({
     role: "presentation",
     style: visuallyHidden
-  }).children("x")
+  }).children(["x"])
 )

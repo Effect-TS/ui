@@ -39,7 +39,8 @@ describe("Switch", () => {
             >
             // Each part returns the builder it was given, for children or another call's `element`.
             expect(parts.root(h.button)).type.toBe<Button<never>>()
-            expect(parts.thumb(h.span.class("thumb")).children(needsClock)).type
+            expect(parts.thumb(h.span.class(["thumb"])).children([needsClock]))
+              .type
               .toBe<
                 Html.Element<
                   Msg,
@@ -50,7 +51,7 @@ describe("Switch", () => {
                 >
               >()
             return parts.root(h.button.on("focus", Msg.Clicked()))
-              .children(parts.thumb(h.span.class("thumb")), needsClock)
+              .children([parts.thumb(h.span.class(["thumb"])), needsClock])
           }
         })
         expect(root).type.toBe<

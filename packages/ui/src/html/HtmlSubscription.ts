@@ -264,7 +264,7 @@ const listenFor = (
  * }).make({
  *   init: () => ({ running: true, heading: "ArrowRight" as const }),
  *   update: { PressedArrow: ($, { key }) => $.evolve({ heading: key }) },
- *   view: (h, model) => h.p(model.heading),
+ *   view: (h, model) => h.p([model.heading]),
  *   subscriptions: ({ model }) => [
  *     model.running && HtmlSubscription.onDocument(
  *       "keydown",
@@ -332,7 +332,7 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  * }).make({
  *   init: () => false,
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
- *   view: (h, open) => h.p(open ? "help open" : "help closed"),
+ *   view: (h, open) => h.p([open ? "help open" : "help closed"]),
  *   subscriptions: () => [
  *     HtmlSubscription.shortcuts([
  *       { key: "?", message: Message.OpenedHelp() },
@@ -429,7 +429,7 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  * }).make({
  *   init: () => "",
  *   update: { Received: (_, { text }) => text },
- *   view: (h, text) => h.p(text),
+ *   view: (h, text) => h.p([text]),
  *   subscriptions: () => [
  *     HtmlSubscription.onCustomEvent("app:notice", ({ detail }) =>
  *       typeof detail === "string" ? Message.Received({ text: detail }) : undefined
@@ -535,7 +535,7 @@ export const AnimationFrames: Context.Reference<AnimationFrames> =
  *     // A tab that comes back from the background sends one long frame.
  *     TickedFrame: ($, { delta }) => $.evolve({ elapsed: $.model.elapsed + Math.min(delta, 100) })
  *   },
- *   view: (h, model) => h.p(`${Math.round(model.elapsed)} ms`),
+ *   view: (h, model) => h.p([`${Math.round(model.elapsed)} ms`]),
  *   subscriptions: ({ model }) => [
  *     model.running && HtmlSubscription.onAnimationFrame((delta) => Message.TickedFrame({ delta }))
  *   ]

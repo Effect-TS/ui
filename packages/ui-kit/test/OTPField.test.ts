@@ -20,7 +20,7 @@ type H = View.Helper<never, OTPFieldProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (otpField: Parts, h: H) =>
-    otpField.root(h.div.class("otp")).children(
+    otpField.root(h.div.class(["otp"])).children(
       Array.from({ length: otpField.length }, (_, index) =>
         otpField.input({
           element: h.input.attr("aria-label", "Digit " + (index + 1)),
@@ -212,28 +212,28 @@ describe("OTPField", () => {
   it.effect("typing reports the code and moves focus on, and the stored code completes it", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: "", length: 4 })
-      s.type(slot(0), "1").emitted(updated("1"))
+      s.type(slot(0), "1").emitted([updated("1")])
       assert.deepStrictEqual(commands(s), focusOn(1))
       assert.deepStrictEqual(commands(store(s, "1")), [])
       s.type(slot(0), "1")
       quiet(s)
       assert.deepStrictEqual(commands(s), focusOn(1))
-      s.type(slot(1), "x").emitted(rejected("x"))
+      s.type(slot(1), "x").emitted([rejected("x")])
       assert.deepStrictEqual(commands(s), [
         "HtmlCommand.select OTPFieldSlot[1]"
       ])
-      s.type(slot(1), "23").emitted(updated("123"))
+      s.type(slot(1), "23").emitted([updated("123")])
       assert.deepStrictEqual(commands(s), focusOn(3))
       store(s, "123")
-      s.type(slot(3), "45678").emitted(rejected("45678"), updated("1234"))
+      s.type(slot(3), "45678").emitted([rejected("45678"), updated("1234")])
       assert.deepStrictEqual(commands(s), focusOn(3))
       quiet(s)
-      store(s, "1234").emitted(completed("1234"))
-      s.type(slot(3), "5").emitted(updated("1235"))
+      store(s, "1234").emitted([completed("1234")])
+      s.type(slot(3), "5").emitted([updated("1235")])
       commands(s)
       store(s, "1235")
       quiet(s)
-      s.type(slot(1), "").emitted(updated("135", "input-clear"))
+      s.type(slot(1), "").emitted([updated("135", "input-clear")])
       assert.deepStrictEqual(commands(s), [])
     }))
 
@@ -242,22 +242,22 @@ describe("OTPField", () => {
       const s = yield* scene({ value: "", length: 4 })
       s.focus(slot(0))
       commands(s)
-      inFlight(s.type(slot(0), "1").emitted(updated("1")))
+      inFlight(s.type(slot(0), "1").emitted([updated("1")]))
       store(s, "1")
       // Focus is still on the first slot, which shows its own character and then the one typed.
-      inFlight(s.type(slot(0), "12").emitted(updated("12")))
+      inFlight(s.type(slot(0), "12").emitted([updated("12")]))
       inFlight(
-        s.keydown(slot(0), "Backspace").emitted(updated("1", "keyboard"))
+        s.keydown(slot(0), "Backspace").emitted([updated("1", "keyboard")])
       )
-      inFlight(s.type(slot(0), "13").emitted(updated("13")))
+      inFlight(s.type(slot(0), "13").emitted([updated("13")]))
       inFlight(
-        s.fire(slot(0), "paste", { text: "45" }).emitted(
+        s.fire(slot(0), "paste", { text: "45" }).emitted([
           updated("1345", "input-paste")
-        )
+        ])
       )
-      store(s, "1345").emitted(completed("1345", "input-paste"))
+      store(s, "1345").emitted([completed("1345", "input-paste")])
       assert.deepStrictEqual(commands(s), [1, 2, 1, 2, 3].flatMap(focusOn))
-      s.type(slot(0), "56").emitted(updated("5645"))
+      s.type(slot(0), "56").emitted([updated("5645")])
       assert.deepStrictEqual(commands(s), focusOn(2))
     }))
 
@@ -265,9 +265,9 @@ describe("OTPField", () => {
     Effect.gen(function*() {
       const s = yield* scene({ value: "", length: 4, autoSubmit: true })
       inFlight(
-        s.fire(slot(0), "paste", { text: "1234" }).emitted(
+        s.fire(slot(0), "paste", { text: "1234" }).emitted([
           updated("1234", "input-paste")
-        )
+        ])
       )
       assert.deepStrictEqual(commands(settle(s)), [
         ...focusOn(3),
@@ -282,11 +282,11 @@ describe("OTPField", () => {
         length: 2,
         validationType: "none"
       })
-      upper.type(slot(0), "ß").emitted(updated("ß"))
+      upper.type(slot(0), "ß").emitted([updated("ß")])
       commands(upper)
-      store(upper, "SS").emitted(completed("SS"))
+      store(upper, "SS").emitted([completed("SS")])
       store(upper, "S")
-      upper.type(slot(1), "-").emitted(updated("S-"))
+      upper.type(slot(1), "-").emitted([updated("S-")])
       commands(upper)
       store(upper, "")
       quiet(upper)
@@ -316,22 +316,22 @@ describe("OTPField", () => {
       s.keydown(slot(0), "Tab").expectIgnored().expectDefaultPrevented(false)
       s.keydown(slot(0), "7").expectIgnored().expectDefaultPrevented(false)
 
-      s.keydown(slot(1), "Backspace").expectDefaultPrevented().emitted(
+      s.keydown(slot(1), "Backspace").expectDefaultPrevented().emitted([
         updated("13", "keyboard")
-      )
+      ])
       assert.deepStrictEqual(commands(s), focusOn(0))
       store(s, "13")
-      s.keydown(slot(2), "Backspace").emitted(updated("1", "keyboard"))
+      s.keydown(slot(2), "Backspace").emitted([updated("1", "keyboard")])
       assert.deepStrictEqual(commands(s), focusOn(1))
       store(s, "123")
-      s.keydown(slot(0), "Delete").expectDefaultPrevented().emitted(
+      s.keydown(slot(0), "Delete").expectDefaultPrevented().emitted([
         updated("23", "keyboard")
-      )
+      ])
       assert.deepStrictEqual(commands(s), focusOn(0))
       store(s, "23")
-      s.keydown(slot(1), "Backspace", { ctrl: true }).emitted(
+      s.keydown(slot(1), "Backspace", { ctrl: true }).emitted([
         updated("", "keyboard")
-      )
+      ])
       assert.deepStrictEqual(commands(s), focusOn(0))
       store(s, "")
       assert.deepStrictEqual(
@@ -349,27 +349,29 @@ describe("OTPField", () => {
     Effect.gen(function*() {
       const s = yield* scene({ value: "12", length: 4, autoSubmit: true })
       s.fire(slot(2), "paste", { text: " 3-4 9" }).expectDefaultPrevented()
-        .emitted(
+        .emitted([
           rejected(" 3-4 9", "input-paste"),
           updated("1234", "input-paste")
-        )
+        ])
       assert.deepStrictEqual(commands(s), focusOn(3))
-      store(s, "1234").emitted(completed("1234", "input-paste"))
+      store(s, "1234").emitted([completed("1234", "input-paste")])
       assert.deepStrictEqual(commands(s), [submitted])
-      s.fire(slot(0), "paste", { text: "1234" }).emitted(
+      s.fire(slot(0), "paste", { text: "1234" }).emitted([
         completed("1234", "input-paste")
-      )
+      ])
       assert.deepStrictEqual(commands(s), [...focusOn(3), submitted])
       s.fire(slot(0), "paste", { text: "ab" }).expectDefaultPrevented().emitted(
-        rejected("ab", "input-paste")
+        [
+          rejected("ab", "input-paste")
+        ]
       )
       assert.deepStrictEqual(commands(s), [])
 
       store(s, "12")
-      s.type(hidden, "98 76x").emitted(rejected("98 76x"), updated("9876"))
+      s.type(hidden, "98 76x").emitted([rejected("98 76x"), updated("9876")])
       assert.deepStrictEqual(commands(s), focusOn(3))
       assert.deepStrictEqual(
-        commands(store(s, "9876").emitted(completed("9876"))),
+        commands(store(s, "9876").emitted([completed("9876")])),
         [submitted]
       )
 
@@ -387,7 +389,7 @@ describe("OTPField", () => {
             readOnly: false
           }))
         )
-        s.type(hidden, "5555").emitted(updated("5555"))
+        s.type(hidden, "5555").emitted([updated("5555")])
         commands(s)
         settle(
           s.props((props) => ({
@@ -395,7 +397,7 @@ describe("OTPField", () => {
             value: Redacted.make("5555"),
             ...lock
           }))
-        ).emitted(completed("5555"))
+        ).emitted([completed("5555")])
         assert.deepStrictEqual(commands(s), [])
       }
     }))
@@ -411,13 +413,15 @@ describe("OTPField", () => {
         false
       )
       composing("か")
-      s.fire(slot(0), "compositionend", { value: "か" }).emitted(updated("か"))
+      s.fire(slot(0), "compositionend", { value: "か" }).emitted([
+        updated("か")
+      ])
       assert.deepStrictEqual(commands(s), focusOn(1))
       // Some browsers send the last `input` after the composition ended.
       s.type(slot(0), "か")
       quiet(s)
       assert.deepStrictEqual(commands(store(s, "か")), [])
-      s.type(slot(0), "き").emitted(updated("き"))
+      s.type(slot(0), "き").emitted([updated("き")])
       commands(s)
 
       // An Android keyboard composes all the time, so each `input` is entered as it comes.
@@ -426,7 +430,7 @@ describe("OTPField", () => {
         value: "1",
         checked: false,
         composing: true
-      }).emitted(updated("1"))
+      }).emitted([updated("1")])
       commands(android)
       android.fire(slot(0), "compositionend", { value: "1" })
       quiet(android)
@@ -513,7 +517,7 @@ describe("OTPField", () => {
     }))
 
   it("a slot keeps the consumer's class, name and type, but the field's own attributes win, present or absent", () => {
-    const element = h.input.class("slot").attrs({
+    const element = h.input.class(["slot"]).attrs({
       "aria-label": "Second",
       type: "tel",
       "data-filled": "yes",
@@ -574,7 +578,7 @@ describe("OTPField", () => {
 
     const group = View.build(
       parts({ value: "", length: 2 }).root(
-        h.div.class("otp").attrs({
+        h.div.class(["otp"]).attrs({
           role: "list",
           "data-focused": "yes",
           "data-filled": "yes"
@@ -595,10 +599,10 @@ describe("OTPField", () => {
       () => otpField.input({ element: h.input, index: 0.5 }),
       /no slot at index 0.5/
     )
-    const twice = otpField.root(h.div).children(
+    const twice = otpField.root(h.div).children([
       otpField.input({ element: h.input, index: 1 }),
-      h.div(otpField.input({ element: h.input, index: 1 }))
-    )
+      h.div([otpField.input({ element: h.input, index: 1 })])
+    ])
     assert.throws(
       () => View.build(twice, []),
       /the slot at index 1 was drawn twice/
@@ -633,7 +637,7 @@ describe("OTPField", () => {
             key: "otp",
             props: { value: Redacted.make(secret), length: 6, name: "code" },
             view: (otpField) =>
-              otpField.root(h.div.class("otp")).children(
+              otpField.root(h.div.class(["otp"])).children(
                 Array.from(
                   { length: otpField.length },
                   (_, index) => otpField.input({ element: h.input, index })

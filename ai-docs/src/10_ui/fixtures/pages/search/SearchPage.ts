@@ -53,54 +53,54 @@ export const SearchPageNoDeps = Component.define({
       // default, so a new search starts on page 1. The new route comes back
       // as props, through the root, so the Command sends nothing.
       UpdatedSearch: ({ text }) =>
-        $.run(
+        $.run([
           Router.patchSearch(AppRoute, $.props.route, {
             q: text || undefined,
             page: undefined
           }).pipe(Command.asNoop)
-        ),
+        ]),
       SelectedOrder: ({ sort }) =>
-        $.run(
+        $.run([
           Router.patchSearch(AppRoute, $.props.route, { sort, page: undefined })
             .pipe(Command.asNoop)
-        ),
+        ]),
       // A page change is worth a history entry, so it pushes, and it
       // scrolls to the top like a new page would. Unlike a link to
       // `?page=2`, it isn't announced and focus stays on the button.
       ClickedPage: ({ page }) =>
-        $.run(
+        $.run([
           Router.patchSearch(AppRoute, $.props.route, { page }, {
             history: "push",
             scroll: true
           }).pipe(Command.asNoop)
-        )
+        ])
     }),
   head: () => [Head.title("Search notes")],
   view: (h) => {
     const { page, q, sort } = h.props.route.search
 
     const resultsView = (results: NoteResults) =>
-      h.div(
+      h.div([
         h.ul(
           results.notes.map((note) =>
-            h.li.key(note.id).children(
-              h.a.attr("href", noteUrl(note.id)).children(note.title)
-            )
+            h.li.key(note.id).children([
+              h.a.attr("href", noteUrl(note.id)).children([note.title])
+            ])
           )
         ),
-        h.nav.attr("aria-label", "Pages").children(
+        h.nav.attr("aria-label", "Pages").children([
           h.button.attr("type", "button").disabled(page <= 1)
             .onClick(SearchPageMessage.ClickedPage({ page: page - 1 }))
-            .children("Previous"),
-          h.span(`Page ${page} of ${results.pages}`),
+            .children(["Previous"]),
+          h.span([`Page ${page} of ${results.pages}`]),
           h.button.attr("type", "button").disabled(page >= results.pages)
             .onClick(SearchPageMessage.ClickedPage({ page: page + 1 }))
-            .children("Next")
-        )
-      )
+            .children(["Next"])
+        ])
+      ])
 
-    return h.section(
-      h.h1("Search notes"),
+    return h.section([
+      h.h1(["Search notes"]),
       // The field's value is read from the search. The route changes in the
       // same render as the keystroke, so the field keeps what the user typed
       // and where the caret is. The browser Router writes the address bar at
@@ -116,22 +116,22 @@ export const SearchPageNoDeps = Component.define({
             sort: value === "desc" ? "desc" : "asc"
           })
         )
-        .children(
-          h.option.attr("value", "asc").children("A to Z"),
-          h.option.attr("value", "desc").children("Z to A")
-        ),
+        .children([
+          h.option.attr("value", "asc").children(["A to Z"]),
+          h.option.attr("value", "desc").children(["Z to A"])
+        ]),
       AsyncResult.match(h.queries.results, {
         // While a fetch waits or runs, `h.previous` holds the last results,
         // so the list stays on screen instead of flashing a loading state.
         onInitial: () =>
           Option.match(h.previous.results, {
-            onNone: () => h.p("Searching…"),
+            onNone: () => h.p(["Searching…"]),
             onSome: resultsView
           }),
-        onFailure: () => h.p("The search failed."),
+        onFailure: () => h.p(["The search failed."]),
         onSuccess: ({ value }) => resultsView(value)
       })
-    )
+    ])
   }
 })
 

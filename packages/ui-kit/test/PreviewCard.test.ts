@@ -16,38 +16,40 @@ type H = View.Helper<never, PreviewCardProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (previewCard: Parts, h: H) =>
-    h.div(
+    h.div([
       previewCard.trigger({
         element: h.a.attr("id", "typography").attr("href", "/typography").attr(
           "data-popup-open",
           "x"
         )
-      }).children("Typography"),
+      }).children(["Typography"]),
       " and ",
       previewCard.trigger({
         element: h.a.attr("href", "/kerning"),
         delay: 100,
         closeDelay: 50
-      }).children("Kerning"),
-      previewCard.portal(h.div.class("portal").attr("style", "z-index:2"))
-        ?.children(
-          previewCard.backdrop(h.div.class("backdrop")),
-          previewCard.positioner(h.div.class("positioner").attr("role", "none"))
-            .children(
+      }).children(["Kerning"]),
+      previewCard.portal(h.div.class(["portal"]).attr("style", "z-index:2"))
+        ?.children([
+          previewCard.backdrop(h.div.class(["backdrop"])),
+          previewCard.positioner(
+            h.div.class(["positioner"]).attr("role", "none")
+          )
+            .children([
               previewCard.popup(
-                h.div.class("popup").attr("tabindex", "0").attr(
+                h.div.class(["popup"]).attr("tabindex", "0").attr(
                   "data-side",
                   "x"
                 )
-              ).children(
-                previewCard.arrow(h.div.class("arrow")),
-                previewCard.viewport(h.div.class("viewport")).children(
+              ).children([
+                previewCard.arrow(h.div.class(["arrow"])),
+                previewCard.viewport(h.div.class(["viewport"])).children([
                   "Preview"
-                )
-              )
-            )
-        )
-    )
+                ])
+              ])
+            ])
+        ])
+    ])
 }
 
 const typography = Locator.text("Typography", { exact: true })
@@ -106,7 +108,7 @@ const hovered = Effect.fnUntraced(
     const s = yield* scene({ open: false, ...props })
     s.fire(typography, "mouseenter", { x: 10, y: 5 })
     s.resolve(s.current.pending[0]!.command, sent("CompletedWaitBeforeOpening"))
-      .emitted(opened("typography", "trigger-hover"))
+      .emitted([opened("typography", "trigger-hover")])
     running(s.props({ ...props, open: true, triggerId: "typography" }))
     s.mounted(mountOn(s, portal), sent("ShowedPortal"))
     return s
@@ -135,9 +137,9 @@ describe("PreviewCard", () => {
       s.fire(typography, "mouseenter", { x: 10, y: 5 })
       const [opening] = s.current.pending
       assert.deepStrictEqual(opening?.command.args, { delay: 600 })
-      s.resolve(opening!.command, sent("CompletedWaitBeforeOpening")).emitted(
+      s.resolve(opening!.command, sent("CompletedWaitBeforeOpening")).emitted([
         opened("typography", "trigger-hover")
-      )
+      ])
       running(s.props({ open: true, triggerId: "typography", sideOffset: 8 }))
 
       const cardId = s.get(portal).attrs?.id
@@ -211,7 +213,7 @@ describe("PreviewCard", () => {
       s.resolve(
         s.current.pending[0]!.command,
         sent("CompletedWaitBeforeClosing")
-      ).emitted(dismissed("trigger-hover"))
+      ).emitted([dismissed("trigger-hover")])
     }))
 
   it.effect("keyboard focus opens after the delay without a transition, and holds the card while it stays", () =>
@@ -223,7 +225,7 @@ describe("PreviewCard", () => {
         s.current.pending[0]!.command,
         sent("CompletedWaitBeforeOpening")
       )
-        .emitted(opened("typography", "trigger-focus"))
+        .emitted([opened("typography", "trigger-focus")])
       running(s.props({ open: true, triggerId: "typography" }))
       for (const part of [positioner, popup, viewport]) {
         assert.strictEqual(s.get(part).attrs?.["data-instant"], "focus")
@@ -236,7 +238,7 @@ describe("PreviewCard", () => {
       assert.deepStrictEqual(s.current.pending, [])
       s.mounted(mountOn(s, positioner), sent("BlurredPopup"))
         .mounted(mountOn(s, positioner), sent("FocusedOutside"))
-        .emitted(dismissed("trigger-focus"))
+        .emitted([dismissed("trigger-focus")])
     }))
 
   it.effect("a touch during the hover delay cancels opening", () =>
@@ -274,15 +276,15 @@ describe("PreviewCard", () => {
         s.current.pending[0]!.command,
         sent("CompletedWaitBeforeOpening")
       )
-        .emitted(opened("typography", "trigger-hover"))
+        .emitted([opened("typography", "trigger-hover")])
     }))
 
   it.effect("Escape asks to close and marks the exit as an instant dismiss", () =>
     Effect.gen(function*() {
       const s = yield* hovered()
-      s.fireDocument("keydown", { key: "Escape" }).emitted(
+      s.fireDocument("keydown", { key: "Escape" }).emitted([
         dismissed("escape-key")
-      )
+      ])
       s.props({ open: false, triggerId: "typography" })
       assert.deepInclude(s.get(positioner).attrs, {
         "data-closed": "",
@@ -305,7 +307,7 @@ describe("PreviewCard", () => {
         "mouseenter",
         { x: 50, y: 5 }
       )
-        .emitted(opened(other, "trigger-hover"))
+        .emitted([opened(other, "trigger-hover")])
       s.props({ open: true, triggerId: other })
       assert.strictEqual(s.get(kerning).attrs?.["data-popup-open"], "")
       assert.isUndefined(s.get(typography).attrs?.["data-popup-open"])
@@ -317,7 +319,7 @@ describe("PreviewCard", () => {
       s.resolve(
         s.current.pending[0]!.command,
         sent("CompletedWaitBeforeClosing")
-      ).emitted(dismissed("trigger-hover"))
+      ).emitted([dismissed("trigger-hover")])
     }))
 
   it.effect("shows the starting style for one frame, reports Settled, and stays drawn through its exit", () =>
@@ -328,17 +330,17 @@ describe("PreviewCard", () => {
       s.mounted(mountOn(s, portal), sent("RenderedFirstFrame"))
       assert.isUndefined(s.get(popup).attrs?.["data-starting-style"])
       s.mounted(mountOn(s, portal), sent("FinishedTransition", { open: true }))
-        .emitted({ _tag: "Settled", open: true })
+        .emitted([{ _tag: "Settled", open: true }])
       s.props({ open: false, keepMounted: true, holdExit: true })
       assert.strictEqual(partsOf(s).transitionStatus, "ending")
       s.mounted(mountOn(s, portal), sent("FinishedTransition", { open: false }))
       assert.isTrue(s.get(portal).props?.popoverOpen)
       s.props({ open: false, keepMounted: true })
       s.mounted(mountOn(s, portal), sent("FinishedTransition", { open: false }))
-        .emitted({
+        .emitted([{
           _tag: "Settled",
           open: false
-        })
+        }])
       assert.isFalse(s.get(portal).props?.popoverOpen)
       assert.strictEqual(s.get(popup).attrs?.["data-closed"], "")
     }))

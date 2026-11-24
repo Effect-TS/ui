@@ -229,7 +229,8 @@ export const SignupForm = Component.define({
           form: (form) => SignupValidation.change(form, name, value)
         }),
     // A tried submit shows every field. `value` is `Some` only when every
-    // field passes, so it gates the Command.
+    // field passes, so it gates the Command. `run` and `emit` take an array,
+    // so one call starts several Commands or sends several events in order.
     SubmittedForm: ($) => {
       const form = SignupValidation.submit($.model.form)
       return Option.match(validateSignup(form, $.queries.usernameTaken).value, {
@@ -237,13 +238,15 @@ export const SignupForm = Component.define({
         onSome: ({ confirm: _, ...account }) =>
           $.model.submitting
             ? $.model
-            : $.set({ form, submitting: true }).run(CreateAccount.make(account))
+            : $.set({ form, submitting: true }).run([
+              CreateAccount.make(account)
+            ])
       })
     },
     SucceededCreateAccount: ($) =>
-      $.evolve({ submitting: false }).emit(
+      $.evolve({ submitting: false }).emit([
         SignupFormEvents.SignedUp({ username: $.model.form.values.username })
-      ),
+      ]),
     // The server's error sits on its field until that field changes.
     FailedCreateAccount: ($, { field, message }) => ({
       submitting: false,
@@ -266,8 +269,8 @@ export const SignupForm = Component.define({
       value: string,
       onInput: (value: string) => typeof SignupFormMessage.Type
     ) =>
-      h.div.children(
-        h.label.children(
+      h.div.children([
+        h.label.children([
           label,
           h.input.attrs({
             type,
@@ -277,14 +280,14 @@ export const SignupForm = Component.define({
             .value(value)
             .disabled(model.submitting)
             .onInput(({ value }) => onInput(value))
-        ),
-        field._tag === "Validating" ? h.span.children("Checking…") : null,
+        ]),
+        field._tag === "Validating" ? h.span.children(["Checking…"]) : null,
         field._tag === "Invalid"
           ? h.ul.attr("role", "alert").children(
-            ...field.errors.map((error) => h.li.children(error))
+            field.errors.map((error) => h.li.children([error]))
           )
           : null
-      )
+      ])
 
     const text = (
       name: typeof TextFieldName.Type,
@@ -315,14 +318,14 @@ export const SignupForm = Component.define({
     // the only ones, and they run the same in a test and on the server.
     return h.form.attr("novalidate", "").onSubmit(
       SignupFormMessage.SubmittedForm()
-    ).children(
+    ).children([
       text("username", "Username", "text"),
       text("email", "Email", "email"),
       secret("password", "Password"),
       secret("confirm", "Confirm password"),
       h.button.attr("type", "submit").disabled(model.submitting)
-        .children(model.submitting ? "Creating account…" : "Create account")
-    )
+        .children([model.submitting ? "Creating account…" : "Create account"])
+    ])
   }
 })
 
@@ -380,7 +383,7 @@ export const rejectedEmail = Effect.gen(function*() {
       })
     )
     .send(SignupFormMessage.SubmittedForm())
-    .expectExact(CreateAccount)
+    .expectExact([CreateAccount])
     // An edit that arrives while the account is being created is dropped.
     .keepPending(CreateAccount)
     .send(

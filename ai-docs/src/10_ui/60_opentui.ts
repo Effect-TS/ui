@@ -68,7 +68,7 @@ export const TaskBoard = Component.define({
       $.evolve({ focus: (f) => (f === "input" ? "list" : "input") }),
     // `OpenTuiCommand.quit()` destroys the CliRenderer cleanly, which ends
     // `OpenTuiHost.run(...)` and closes the application Scope.
-    RequestedQuit: ($) => $.run(OpenTuiCommand.quit())
+    RequestedQuit: ($) => $.run([OpenTuiCommand.quit()])
   },
   // `OpenTuiSubscription.shortcuts` attaches synchronously via
   // `Subscription.direct` with `preventDefault: true`, so matched shortcuts
@@ -89,7 +89,7 @@ export const TaskBoard = Component.define({
       padding: 1,
       gap: 1,
       width: 50
-    }).title("Tasks").children(
+    }).title("Tasks").children([
       // `.focused(bool)` is controlled and applied in `commit()` (blurs before
       // focuses) so the Model owns the terminal focus ring cleanly.
       h.input.style({ width: 44 }).placeholder("New task...").value(model.draft)
@@ -104,15 +104,15 @@ export const TaskBoard = Component.define({
         .onSelectionChanged(({ index }) =>
           TaskMessage.ChangedSelection({ index })
         ),
-      h.text.style({ fg: "#9ca3af" }).children(
-        h.b("Tab"),
+      h.text.style({ fg: "#9ca3af" }).children([
+        h.b(["Tab"]),
         ": switch focus  ",
-        h.b("Enter"),
+        h.b(["Enter"]),
         ": add  ",
-        h.b("q"),
+        h.b(["q"]),
         ": quit"
-      )
-    )
+      ])
+    ])
 })
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@
  *
  * Place the image and fallback inside the root. Each part takes an element
  * builder and returns it, or `undefined` if the part is hidden. Use
- * `fallback(h.span)?.children(...)` to supply the fallback content.
+ * `fallback(h.span)?.children([...])` to supply the fallback content.
  * Give the image an `alt` and the fallback text or a label for its icon.
  *
  * **Loading behavior**
@@ -58,10 +58,10 @@
  *     Avatar(h, {
  *       props: { src: "/ada.png" },
  *       view: (avatar) =>
- *         avatar.root(h.span.class("avatar")).children(
+ *         avatar.root(h.span.class(["avatar"])).children([
  *           avatar.image(h.img.attr("alt", "Ada Lovelace")),
- *           avatar.fallback(h.span.class("initials"))?.children("AL")
- *         )
+ *           avatar.fallback(h.span.class(["initials"]))?.children(["AL"])
+ *         ])
  *     })
  * })
  *
@@ -246,7 +246,7 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<
 /**
  * A headless avatar. Call it with the consumer's `h` and a `view` closure
  * that draws the root with `avatar.root(h.span)`, with the image,
- * `avatar.image(h.img)`, and the fallback, `avatar.fallback(h.span)?.children(...)`,
+ * `avatar.image(h.img)`, and the fallback, `avatar.fallback(h.span)?.children([...])`,
  * as its children.
  *
  * **Details**

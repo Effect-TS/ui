@@ -68,18 +68,20 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
     update: ($, message) =>
       FormMsg.match(message, {
         Typed: () => ({ ...$.model, draft: $.model.draft + "a" }),
-        Save: () => $.run(Save.make({ text: $.model.draft })),
+        Save: () => $.run([Save.make({ text: $.model.draft })]),
         Saved: ({ text }) =>
-          $.set({ ...$.model, saved: text }).emit(FormEvents.Saved({ text }))
+          $.set({ ...$.model, saved: text }).emit([FormEvents.Saved({ text })])
       }),
     view: (h, model) =>
       h.el(
         "form",
-        h.el("button").on("click", FormMsg.Typed()).children(
-          "draft:" + model.draft
-        ),
-        h.el("button").on("click", FormMsg.Save()).children("save"),
-        h.el("p", "saved:" + model.saved)
+        [
+          h.el("button").on("click", FormMsg.Typed()).children([
+            "draft:" + model.draft
+          ]),
+          h.el("button").on("click", FormMsg.Save()).children(["save"]),
+          h.el("p", ["saved:" + model.saved])
+        ]
       )
   })
 }
@@ -91,7 +93,7 @@ const Billing = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.el("p", "billing")
+  view: (h) => h.el("p", ["billing"])
 })
 
 const SettingsMsg = UiSchema.TaggedEnum({
@@ -119,15 +121,17 @@ const makeSettings = (Profile: ReturnType<typeof makeForm>) =>
     view: (h, model) =>
       h.el(
         "main",
-        model.tab === "profile"
-          ? h.keepAlive((s) =>
-            Profile(s, {
-              key: "Form",
-              onEmit: (event) =>
-                SettingsMsg.Saved({ text: event.text + "@" + model.tab })
-            })
-          )
-          : h.keepAlive((s) => Billing(s, { key: "billing" }))
+        [
+          model.tab === "profile"
+            ? h.keepAlive((s) =>
+              Profile(s, {
+                key: "Form",
+                onEmit: (event) =>
+                  SettingsMsg.Saved({ text: event.text + "@" + model.tab })
+              })
+            )
+            : h.keepAlive((s) => Billing(s, { key: "billing" }))
+        ]
       )
   })
 
@@ -246,7 +250,7 @@ const Row = Component.define({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, count) =>
-    h.el("li").on("click", "inc").children(`${h.props.label}:${count}`)
+    h.el("li").on("click", "inc").children([`${h.props.label}:${count}`])
 })
 
 const ListMsg = UiSchema.TaggedEnum({
@@ -307,7 +311,9 @@ const host = <Model, Message>(
     init: () => null,
     update: ($) => $.model,
     view: (h) =>
-      h.el("main", Inner(h, { key: "i", fallback: () => h.el("p", "down") }))
+      h.el("main", [
+        Inner(h, { key: "i", fallback: () => h.el("p", ["down"]) })
+      ])
   })
 
 describe("keep-alive lists", () => {
@@ -362,7 +368,7 @@ describe("keepAlive predicates", () => {
             init: () => null,
             update: ($) => $.model,
             view: (h) =>
-              h.el("div", h.keepAlive(alive, (s) => Billing(s, { key: "b" })))
+              h.el("div", [h.keepAlive(alive, (s) => Billing(s, { key: "b" }))])
           })
         const root = yield* TestHost.mount(host(Inner), {})
         yield* TestHost.settle
@@ -388,11 +394,13 @@ describe("keepAlive predicates", () => {
             view: (h, gone) =>
               h.el(
                 "div",
-                h.el("button").on("click", "go").children("go"),
-                h.keepAlive(({ model }) => {
-                  if (model) throw new Error("no model")
-                  return true
-                }, (s) => gone && !written ? null : Billing(s, { key: "b" }))
+                [
+                  h.el("button").on("click", "go").children(["go"]),
+                  h.keepAlive(({ model }) => {
+                    if (model) throw new Error("no model")
+                    return true
+                  }, (s) => gone && !written ? null : Billing(s, { key: "b" }))
+                ]
               )
           })
         const root = yield* TestHost.mount(host(Inner), {})
@@ -420,8 +428,10 @@ describe("keep-alive paths", () => {
           view: (h) =>
             h.el(
               "div",
-              h.keepAlive((s) => Billing(s, { key: "b" })),
-              h.keepAlive((s) => Billing(s, { key: "b" }))
+              [
+                h.keepAlive((s) => Billing(s, { key: "b" })),
+                h.keepAlive((s) => Billing(s, { key: "b" }))
+              ]
             )
         })
       const root = yield* TestHost.mount(host(Inner), {})
@@ -445,7 +455,7 @@ describe("keep-alive lifetimes", () => {
           view: (h, shown) =>
             h.el(
               "div",
-              h.keepAlive((s) => shown ? Billing(s, { key: "b" }) : null)
+              [h.keepAlive((s) => shown ? Billing(s, { key: "b" }) : null)]
             )
         })
       const Page = Component.define({
@@ -457,7 +467,7 @@ describe("keep-alive lifetimes", () => {
           init: () => true,
           update: (_, shown) => shown,
           view: (h, shown) =>
-            h.el("main", shown ? Inner(h, { key: "i" }) : null)
+            h.el("main", [shown ? Inner(h, { key: "i" }) : null])
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -486,9 +496,9 @@ describe("keep-alive lifetimes", () => {
         message: Schema.Never
       })
         .make({
-          init: ($) => $.set(null).run(Boom.make()),
+          init: ($) => $.set(null).run([Boom.make()]),
           update: ($) => $.model,
-          view: (h) => h.el("p", "fine")
+          view: (h) => h.el("p", ["fine"])
         })
       const Page = Component.define({
         name: "Page",
@@ -501,11 +511,14 @@ describe("keep-alive lifetimes", () => {
           view: (h, shown) =>
             h.el(
               "div",
-              h.keepAlive((s) =>
+              [h.keepAlive((s) =>
                 shown
-                  ? Fragile(s, { key: "F", fallback: () => h.el("p", "down") })
+                  ? Fragile(s, {
+                    key: "F",
+                    fallback: () => h.el("p", ["down"])
+                  })
                   : null
-              )
+              )]
             )
         })
       const root = yield* TestHost.mount(Page, {})
@@ -534,7 +547,9 @@ describe("keep-alive lifetimes", () => {
         view: (h) =>
           h.el(
             "div",
-            h.keepAlive((s) => h.props.shown ? Billing(s, { key: "b" }) : null)
+            [h.keepAlive((s) =>
+              h.props.shown ? Billing(s, { key: "b" }) : null
+            )]
           )
       })
       const Page = Component.define({
@@ -549,7 +564,7 @@ describe("keep-alive lifetimes", () => {
             Tabs(h, {
               key: "t",
               props: { shown },
-              fallback: () => h.el("p", "down")
+              fallback: () => h.el("p", ["down"])
             })
         })
       const root = yield* TestHost.mount(Page, {})
@@ -598,7 +613,7 @@ describe("keep-alive lifetimes", () => {
           view: (h, shown) =>
             h.el(
               "div",
-              h.keepAlive((s) => shown ? Leaf(s, { key: "l" }) : null)
+              [h.keepAlive((s) => shown ? Leaf(s, { key: "l" }) : null)]
             )
         })
       const root = yield* TestHost.mount(Page, {})
@@ -639,7 +654,7 @@ describe("keep-alive lifetimes", () => {
           view: (h) =>
             h.el(
               "div",
-              h.keepAlive((s) => h.props ? Billing(s, { key: "b" }) : null)
+              [h.keepAlive((s) => h.props ? Billing(s, { key: "b" }) : null)]
             )
         })
       const State = Schema.Struct({
@@ -657,8 +672,10 @@ describe("keep-alive lifetimes", () => {
         view: (h, state) =>
           h.el(
             "main",
-            Tabs(h, { key: state.key, props: state.shown }),
-            state.tracked ? h.el("b").onMount(Track()) : null
+            [
+              Tabs(h, { key: state.key, props: state.shown }),
+              state.tracked ? h.el("b").onMount(Track()) : null
+            ]
           )
       })
       const root = yield* Renderer.mount(Page, {}, container).pipe(
@@ -690,7 +707,7 @@ describe("keep-alive lifetimes", () => {
       .make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("article", h.slots.body)
+        view: (h) => h.el("article", [h.slots.body])
       })
     const Page = Component.define({
       name: "Page",
@@ -703,12 +720,14 @@ describe("keep-alive lifetimes", () => {
         view: (h) =>
           h.el(
             "div",
-            h.el("button").on("click", true).children("toggle"),
-            h.keepAlive(({ model }) => model, (s) =>
-              Frame(s, {
-                key: "f",
-                slots: { body: h.el("b").onMount(Track()) }
-              }))
+            [
+              h.el("button").on("click", true).children(["toggle"]),
+              h.keepAlive(({ model }) => model, (s) =>
+                Frame(s, {
+                  key: "f",
+                  slots: { body: h.el("b").onMount(Track()) }
+                }))
+            ]
           )
       }
     )
@@ -735,7 +754,7 @@ const Draft = Component.define({
     init: () => "",
     update: ($) => $.model + "a",
     view: (h, draft) =>
-      h.el("button").on("click", "type").children("draft:" + draft)
+      h.el("button").on("click", "type").children(["draft:" + draft])
   })
 
 const TabsRoute = Route.union({
@@ -754,11 +773,13 @@ const TabsPage = Component.define({
     view: (h, tab) =>
       h.el(
         "section",
-        h.el("button").on("click", tab === "profile" ? "billing" : "profile")
-          .children("switch"),
-        tab === "profile"
-          ? h.keepAlive((s) => Draft(s, { key: "d" }))
-          : h.keepAlive((s) => Billing(s, { key: "b" }))
+        [
+          h.el("button").on("click", tab === "profile" ? "billing" : "profile")
+            .children(["switch"]),
+          tab === "profile"
+            ? h.keepAlive((s) => Draft(s, { key: "d" }))
+            : h.keepAlive((s) => Billing(s, { key: "b" }))
+        ]
       )
   })
 
@@ -778,11 +799,11 @@ const TabsApp = Component.define({
     TabsMsg.match(message, {
       Changed: (changed) => changed.route,
       Go: (go) =>
-        $.run(
+        $.run([
           Router.push(TabsRoute, go.route).pipe(
             Command.map(() => TabsMsg.Done())
           )
-        ),
+        ]),
       Done: () => $.model
     }),
   subscriptions: (
@@ -797,11 +818,15 @@ const TabsApp = Component.define({
   view: (h, route) =>
     h.el(
       "div",
-      h.el("button").on(
-        "click",
-        TabsMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })
-      ).children("Home"),
-      route._tag === "Tabs" ? TabsPage(h, { key: "/tabs" }) : h.el("p", "home")
+      [
+        h.el("button").on(
+          "click",
+          TabsMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })
+        ).children(["Home"]),
+        route._tag === "Tabs"
+          ? TabsPage(h, { key: "/tabs" })
+          : h.el("p", ["home"])
+      ]
     )
 })
 
@@ -876,7 +901,7 @@ const Card = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.el("section", h.slots.body)
+  view: (h) => h.el("section", [h.slots.body])
 })
 
 const Collapsible = Component.define({
@@ -890,8 +915,10 @@ const Collapsible = Component.define({
   view: (h, open) =>
     h.el(
       "section",
-      h.el("button").on("click", "toggle").children("toggle"),
-      open ? h.slots.body : null
+      [
+        h.el("button").on("click", "toggle").children(["toggle"]),
+        open ? h.slots.body : null
+      ]
     )
 })
 
@@ -910,12 +937,14 @@ describe("EFF-4038 probes, keepAlive", () => {
             h.keepAlive((s) =>
               h.el(
                 "main",
-                wide
-                  ? Card(h, {
-                    key: "card",
-                    slots: { body: Draft(s, { key: "f" }) }
-                  })
-                  : Draft(s, { key: "f" })
+                [
+                  wide
+                    ? Card(h, {
+                      key: "card",
+                      slots: { body: Draft(s, { key: "f" }) }
+                    })
+                    : Draft(s, { key: "f" })
+                ]
               )
             )
         })
@@ -946,8 +975,10 @@ describe("EFF-4038 probes, keepAlive", () => {
             h.keepAlive((s) =>
               h.el(
                 "main",
-                h.el("aside", moved ? null : Draft(s, { key: "f" })),
-                h.el("article", moved ? Draft(s, { key: "f" }) : null)
+                [
+                  h.el("aside", [moved ? null : Draft(s, { key: "f" })]),
+                  h.el("article", [moved ? Draft(s, { key: "f" }) : null])
+                ]
               )
             )
         })
@@ -1035,9 +1066,9 @@ describe("keep-alive children of a headless child", () => {
         init: () => false,
         update: ($) => !$.model,
         view: (h, open) =>
-          h.el("button").on("click", "toggle").children(
+          h.el("button").on("click", "toggle").children([
             h.props.title + (open ? "+" : "-")
-          )
+          ])
       })
       const App = Component.define({
         name: "App",
@@ -1054,9 +1085,13 @@ describe("keep-alive children of a headless child", () => {
                 view: (parts) =>
                   h.el(
                     "div",
-                    h.el("p", parts.anyOpen ? "[any open]" : "[none open]"),
-                    Panel(s, { key: "a", props: { title: "A" } }),
-                    shown ? Panel(s, { key: "b", props: { title: "B" } }) : null
+                    [
+                      h.el("p", [parts.anyOpen ? "[any open]" : "[none open]"]),
+                      Panel(s, { key: "a", props: { title: "A" } }),
+                      shown
+                        ? Panel(s, { key: "b", props: { title: "B" } })
+                        : null
+                    ]
                   )
               })
             )
@@ -1104,18 +1139,20 @@ describe("keep-alive children of a headless child", () => {
         view: (h, nested) =>
           h.el(
             "div",
-            h.el("button").on("click", "nest").children("nest"),
-            Outer(h, {
-              key: "o",
-              view: (outer) =>
-                nested
-                  ? Inner(h, {
-                    key: "i",
-                    view: (inner) =>
-                      inner.hit(outer.hit(h.el("button"))).children("go")
-                  })
-                  : outer.hit(h.el("button")).children("go")
-            })
+            [
+              h.el("button").on("click", "nest").children(["nest"]),
+              Outer(h, {
+                key: "o",
+                view: (outer) =>
+                  nested
+                    ? Inner(h, {
+                      key: "i",
+                      view: (inner) =>
+                        inner.hit(outer.hit(h.el("button"))).children(["go"])
+                    })
+                    : outer.hit(h.el("button")).children(["go"])
+              })
+            ]
           )
       })
       const Page = Component.define({
@@ -1131,7 +1168,7 @@ describe("keep-alive children of a headless child", () => {
               const tree = Tree(s, { key: "t" })
               return h.el(
                 "main",
-                deep ? Box(s, { key: "b", slots: { body: tree } }) : tree
+                [deep ? Box(s, { key: "b", slots: { body: tree } }) : tree]
               )
             })
         })
@@ -1159,7 +1196,7 @@ const Counter = Component.define({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, count) =>
-    h.el("button").on("click", CounterMsg.Inc()).children("count:" + count)
+    h.el("button").on("click", CounterMsg.Inc()).children(["count:" + count])
 })
 
 const Box = Component.define({
@@ -1171,7 +1208,7 @@ const Box = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.el("section", h.slots.body)
+    view: (h) => h.el("section", [h.slots.body])
   })
 
 const Shut = Component.define({
@@ -1185,8 +1222,10 @@ const Shut = Component.define({
   view: (h, open) =>
     h.el(
       "section",
-      h.el("button").on("click", "toggle").children("toggle"),
-      open ? h.slots.body : null
+      [
+        h.el("button").on("click", "toggle").children(["toggle"]),
+        open ? h.slots.body : null
+      ]
     )
 })
 
@@ -1201,7 +1240,7 @@ describe("keep-alive children drawn by other children", () => {
         init: () => "a" as const,
         update: () => "b" as const,
         view: (h, room) =>
-          h.el("button").on("click", "move").children("room:" + room)
+          h.el("button").on("click", "move").children(["room:" + room])
       })
       const Keyed = Component.provide(Room, {
         key: (_, room) => room,
@@ -1214,7 +1253,7 @@ describe("keep-alive children drawn by other children", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.keepAlive((s) => h.el("main", Keyed(s, { key: "r" })))
+        view: (h) => h.keepAlive((s) => h.el("main", [Keyed(s, { key: "r" })]))
       })
       const root = yield* TestHost.mount(Page, {})
       click(root, "room:a")
@@ -1237,8 +1276,10 @@ describe("keep-alive children drawn by other children", () => {
         view: (h) =>
           h.el(
             "section",
-            h.el("button").on("click", "break").children("break"),
-            h.slots.body
+            [
+              h.el("button").on("click", "break").children(["break"]),
+              h.slots.body
+            ]
           )
       })
       const Page = Component.define({
@@ -1254,13 +1295,15 @@ describe("keep-alive children drawn by other children", () => {
               const counter = Counter(s, { key: "c" })
               return h.el(
                 "main",
-                direct
-                  ? counter
-                  : Frail(h, {
-                    key: "f",
-                    slots: { body: counter },
-                    fallback: () => h.el("p", "down")
-                  })
+                [
+                  direct
+                    ? counter
+                    : Frail(h, {
+                      key: "f",
+                      slots: { body: counter },
+                      fallback: () => h.el("p", ["down"])
+                    })
+                ]
               )
             })
         })
@@ -1288,8 +1331,10 @@ describe("keep-alive children drawn by other children", () => {
         view: (h, room) =>
           h.el(
             "section",
-            h.el("button").on("click", "move").children("move"),
-            room === "a" ? h.slots.body : null
+            [
+              h.el("button").on("click", "move").children(["move"]),
+              room === "a" ? h.slots.body : null
+            ]
           )
       })
       const Keyed = Component.provide(Room, {
@@ -1307,7 +1352,10 @@ describe("keep-alive children drawn by other children", () => {
           h.keepAlive((s) =>
             h.el(
               "main",
-              Keyed(h, { key: "r", slots: { body: Counter(s, { key: "c" }) } })
+              [Keyed(h, {
+                key: "r",
+                slots: { body: Counter(s, { key: "c" }) }
+              })]
             )
           )
       })
@@ -1335,7 +1383,7 @@ describe("keep-alive children drawn by other children", () => {
             throw new Error("boom")
           },
           update: ($) => $.model,
-          view: (h) => h.el("p", "fine")
+          view: (h) => h.el("p", ["fine"])
         })
       const Where = Schema.Literals(["slot", "direct", "gone"])
       const Page = Component.define({
@@ -1349,14 +1397,16 @@ describe("keep-alive children drawn by other children", () => {
           h.keepAlive(({ model }) => model !== "gone", (s) => {
             const fragile = Fragile(s, {
               key: "f",
-              fallback: () => h.el("p", "down")
+              fallback: () => h.el("p", ["down"])
             })
             return h.el(
               "main",
-              where === "direct" ? fragile : null,
-              where === "direct"
-                ? null
-                : Shut(h, { key: "o", slots: { body: fragile } })
+              [
+                where === "direct" ? fragile : null,
+                where === "direct"
+                  ? null
+                  : Shut(h, { key: "o", slots: { body: fragile } })
+              ]
             )
           })
       })
@@ -1405,18 +1455,22 @@ describe("keep-alive children drawn by other children", () => {
         view: (h, shown) =>
           h.el(
             "main",
-            h.keepAlive(({ model }) => model.box, (s) =>
-              shown.box
-                ? Box(s, {
-                  key: "x",
-                  slots: {
-                    body: shown.direct
-                      ? null
-                      : h.keepAlive((t) => Counter(t, { key: "c" }))
-                  }
-                })
-                : null),
-            shown.direct ? h.keepAlive((t) => Counter(t, { key: "c" })) : null
+            [
+              h.keepAlive(({ model }) => model.box, (s) =>
+                shown.box
+                  ? Box(s, {
+                    key: "x",
+                    slots: {
+                      body: shown.direct
+                        ? null
+                        : h.keepAlive((t) => Counter(t, { key: "c" }))
+                    }
+                  })
+                  : null),
+              shown.direct
+                ? h.keepAlive((t) => Counter(t, { key: "c" }))
+                : null
+            ]
           )
       })
       const root = yield* TestHost.mount(Page, {})
@@ -1464,17 +1518,22 @@ describe("keep-alive children drawn by other children", () => {
             h.keepAlive((s) =>
               h.el(
                 "main",
-                where === "box"
-                  ? Box(s, {
-                    key: "b",
-                    slots: {
-                      body: [Counter(s, { key: "c" }), Tracked(s, { key: "t" })]
-                    }
-                  })
-                  : null,
-                where === "page"
-                  ? [Tracked(s, { key: "t" }), Counter(s, { key: "c" })]
-                  : null
+                [
+                  where === "box"
+                    ? Box(s, {
+                      key: "b",
+                      slots: {
+                        body: [
+                          Counter(s, { key: "c" }),
+                          Tracked(s, { key: "t" })
+                        ]
+                      }
+                    })
+                    : null,
+                  where === "page"
+                    ? [Tracked(s, { key: "t" }), Counter(s, { key: "c" })]
+                    : null
+                ]
               )
             )
         })
@@ -1508,9 +1567,9 @@ describe("keep-alive children drawn by other children", () => {
       }).make(
         {
           init: () => null,
-          update: ($) => $.run(Boom.make()),
+          update: ($) => $.run([Boom.make()]),
           view: (h) =>
-            h.el("button").on("click", FragileMsg.Break()).children("fine")
+            h.el("button").on("click", FragileMsg.Break()).children(["fine"])
         }
       )
       const Page = Component.define({
@@ -1524,11 +1583,16 @@ describe("keep-alive children drawn by other children", () => {
           view: (h) =>
             h.el(
               "div",
-              "before",
-              h.keepAlive((s) =>
-                Fragile(s, { key: "F", fallback: () => h.el("p", "failed") })
-              ),
-              "after"
+              [
+                "before",
+                h.keepAlive((s) =>
+                  Fragile(s, {
+                    key: "F",
+                    fallback: () => h.el("p", ["failed"])
+                  })
+                ),
+                "after"
+              ]
             )
         })
       const root = yield* TestHost.mount(Page, {})
@@ -1570,7 +1634,7 @@ describe("keep-alive children that read shared state", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h, changes) =>
-            h.el("p", (h.shared.side?.name ?? "none") + ":" + changes)
+            h.el("p", [(h.shared.side?.name ?? "none") + ":" + changes])
         })
         const Open = Component.define({
           name: "Open",
@@ -1580,7 +1644,7 @@ describe("keep-alive children that read shared state", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("article", h.slots.body)
+          view: (h) => h.el("article", [h.slots.body])
         })
         const Frame = Component.define({
           name: "Frame",
@@ -1593,7 +1657,7 @@ describe("keep-alive children that read shared state", () => {
             view: (h) =>
               h.el(
                 "section",
-                Reader(h, { key: "r", fallback: () => h.el("p", "absent") })
+                [Reader(h, { key: "r", fallback: () => h.el("p", ["absent"]) })]
               )
           }
         )
@@ -1609,33 +1673,37 @@ describe("keep-alive children that read shared state", () => {
               h.keepAlive((s) =>
                 h.el(
                   "main",
-                  Side(h, {
-                    key: "l",
-                    props: { name: "left" },
-                    view: () =>
-                      h.el(
-                        "div",
-                        Open(h, {
-                          key: "o",
-                          slots: {
-                            body: where === "inner"
-                              ? Frame(s, { key: "f" })
-                              : null
-                          }
-                        }),
-                        where === "left" ? Frame(s, { key: "f" }) : null
-                      )
-                  }),
-                  Side(h, {
-                    key: "r",
-                    props: { name: "right" },
-                    view: () =>
-                      h.el(
-                        "div",
-                        where === "right" ? Frame(s, { key: "f" }) : null
-                      )
-                  }),
-                  where === "none" ? Frame(s, { key: "f" }) : null
+                  [
+                    Side(h, {
+                      key: "l",
+                      props: { name: "left" },
+                      view: () =>
+                        h.el(
+                          "div",
+                          [
+                            Open(h, {
+                              key: "o",
+                              slots: {
+                                body: where === "inner"
+                                  ? Frame(s, { key: "f" })
+                                  : null
+                              }
+                            }),
+                            where === "left" ? Frame(s, { key: "f" }) : null
+                          ]
+                        )
+                    }),
+                    Side(h, {
+                      key: "r",
+                      props: { name: "right" },
+                      view: () =>
+                        h.el(
+                          "div",
+                          [where === "right" ? Frame(s, { key: "f" }) : null]
+                        )
+                    }),
+                    where === "none" ? Frame(s, { key: "f" }) : null
+                  ]
                 )
               )
           })
@@ -1667,7 +1735,7 @@ const Nested = Component.define({
     init: () => "",
     update: ($) => $.model + "a",
     view: (h, draft) =>
-      h.el("button").on("click", "type").children("nested:" + draft)
+      h.el("button").on("click", "type").children(["nested:" + draft])
   })
 const Holder = Component.define({
   name: "Holder",
@@ -1680,9 +1748,11 @@ const Holder = Component.define({
   view: (h) =>
     h.el(
       "div",
-      h.props.bare
-        ? null
-        : Nested(h, { key: "n", fallback: () => h.el("p", "down") })
+      [
+        h.props.bare
+          ? null
+          : Nested(h, { key: "n", fallback: () => h.el("p", ["down"]) })
+      ]
     )
 })
 
@@ -1701,7 +1771,7 @@ const FormPage = Component.define({
   view: (h) =>
     h.el(
       "section",
-      h.keepAlive(
+      [h.keepAlive(
         ({ props }) => !props.ended,
         (s) =>
           h.props.hidden
@@ -1710,7 +1780,7 @@ const FormPage = Component.define({
               Draft(s, { key: "d" }),
               Holder(s, { key: "h", props: { bare: h.props.bare } })
             ]
-      )
+      )]
     )
 })
 
@@ -1731,7 +1801,7 @@ const Aside = Component.define({
   init: () => false,
   update: (_, hidden) => hidden,
   view: (h, hidden) =>
-    h.el("aside", h.keepAlive((s) => hidden ? null : Draft(s, { key: "d" })))
+    h.el("aside", [h.keepAlive((s) => hidden ? null : Draft(s, { key: "d" }))])
 })
 
 const Shell = Component.define({
@@ -1757,9 +1827,9 @@ const Shell = Component.define({
     ShellMsg.match(message, {
       Changed: ({ route }) => ({ ...$.model, route }),
       Go: ({ route }) =>
-        $.run(
+        $.run([
           Router.push(TabsRoute, route).pipe(Command.map(() => ShellMsg.Done()))
-        ),
+        ]),
       Done: () => $.model,
       Hide: ({ hidden }) => ({ ...$.model, hidden }),
       End: ({ ended }) => ({ ...$.model, ended }),
@@ -1776,18 +1846,24 @@ const Shell = Component.define({
   view: (h, model) =>
     h.el(
       "div",
-      h.el("button").on(
-        "click",
-        ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })
-      ).children("Home"),
-      model.route._tag !== "Tabs"
-        ? h.el("p", "home")
-        : model.omitted
-        ? model.hidden ? Aside(h, { key: "a" }) : null
-        : FormPage(h, {
-          key: "/tabs",
-          props: { hidden: model.hidden, ended: model.ended, bare: model.bare }
-        })
+      [
+        h.el("button").on(
+          "click",
+          ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })
+        ).children(["Home"]),
+        model.route._tag !== "Tabs"
+          ? h.el("p", ["home"])
+          : model.omitted
+          ? model.hidden ? Aside(h, { key: "a" }) : null
+          : FormPage(h, {
+            key: "/tabs",
+            props: {
+              hidden: model.hidden,
+              ended: model.ended,
+              bare: model.bare
+            }
+          })
+      ]
     )
 })
 
@@ -1962,11 +2038,11 @@ describe("keep-alive children across a router restore", () => {
         ShellMsg.match(message, {
           Changed: ({ route }) => ({ ...$.model, route }),
           Go: ({ route }) =>
-            $.run(
+            $.run([
               Router.push(TabsRoute, route).pipe(
                 Command.map(() => ShellMsg.Done())
               )
-            ),
+            ]),
           Hide: ({ hidden }) => ({ ...$.model, hidden }),
           Done: () => $.model,
           End: () => $.model,
@@ -1985,15 +2061,17 @@ describe("keep-alive children across a router restore", () => {
           })
         return h.el(
           "div",
-          h.el("button").on(
-            "click",
-            ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })
-          ).children("Home"),
-          stays
-            ? model.hidden ? null : page(false)
-            : model.route._tag === "Tabs"
-            ? page(model.hidden)
-            : h.el("aside", page(false))
+          [
+            h.el("button").on(
+              "click",
+              ShellMsg.Go({ route: TabsRoute.make({ _tag: "Home" }) })
+            ).children(["Home"]),
+            stays
+              ? model.hidden ? null : page(false)
+              : model.route._tag === "Tabs"
+              ? page(model.hidden)
+              : h.el("aside", [page(false)])
+          ]
         )
       }
     })
@@ -2057,7 +2135,9 @@ describe("keep-alive children whose state encodes after the push that left them"
         init: () => "new",
         update: ($) => $.model + "!",
         view: (h, text) =>
-          h.el("button").on("click", null).children(`${h.props.label}:${text} `)
+          h.el("button").on("click", null).children([
+            `${h.props.label}:${text} `
+          ])
       })
   const SlowNote = note("SlowNote", Slow)
   const Note = note("Note", Schema.String)
@@ -2109,17 +2189,17 @@ describe("keep-alive children whose state encodes after the push that left them"
         Message.match(message, {
           Changed: ({ route }) => ({ ...$.model, route }),
           Go: () =>
-            $.run(
+            $.run([
               Router.push(Routes, Routes.Away()).pipe(
                 Command.map(() => Message.Done())
               )
-            ),
+            ]),
           Query: () =>
-            $.run(
+            $.run([
               Router.push(Routes, Routes.Notes({ search: { q: "q" } })).pipe(
                 Command.map(() => Message.Done())
               )
-            ),
+            ]),
           Done: () => $.model,
           Show: ({ bare, hidden }) => ({ ...$.model, bare, hidden })
         }),
@@ -2130,13 +2210,15 @@ describe("keep-alive children whose state encodes after the push that left them"
       view: (h, model) =>
         h.el(
           "div",
-          h.el("a").on("click", Message.Go()).children("Away "),
-          model.route._tag !== "Notes" || model.bare
-            ? null
-            : Notes(h, {
-              key: "notes",
-              props: { hidden: model.hidden, sibling }
-            })
+          [
+            h.el("a").on("click", Message.Go()).children(["Away "]),
+            model.route._tag !== "Notes" || model.bare
+              ? null
+              : Notes(h, {
+                key: "notes",
+                props: { hidden: model.hidden, sibling }
+              })
+          ]
         )
     })
   const visits = (sibling: boolean) => {
@@ -2319,11 +2401,13 @@ describe("keep-alive children written into closed slots", () => {
               view: (parts) =>
                 h.el(
                   "div",
-                  h.el("p", "n" + parts.count),
-                  Shut(h, {
-                    key: "c",
-                    slots: { body: Member(s, { key: "m" }) }
-                  })
+                  [
+                    h.el("p", ["n" + parts.count]),
+                    Shut(h, {
+                      key: "c",
+                      slots: { body: Member(s, { key: "m" }) }
+                    })
+                  ]
                 )
             })
           )
@@ -2356,7 +2440,7 @@ describe("keep-alive children written into closed slots", () => {
           return 0
         },
         update: ($) => $.model + 1,
-        view: (h, count) => h.el("b", "count:" + count)
+        view: (h, count) => h.el("b", ["count:" + count])
       })
       const Page = Component.define({
         name: "Page",
@@ -2370,8 +2454,10 @@ describe("keep-alive children written into closed slots", () => {
             h.keepAlive((s) =>
               h.el(
                 "main",
-                Billing(s, { key: "b" }),
-                Shut(h, { key: "c", slots: { body: Late(s, { key: "L" }) } })
+                [
+                  Billing(s, { key: "b" }),
+                  Shut(h, { key: "c", slots: { body: Late(s, { key: "L" }) } })
+                ]
               )
             )
         })
@@ -2394,9 +2480,11 @@ describe("keep-alive children written into closed slots", () => {
         events: Schema.Number
       }).make({
         init: () => null,
-        update: ($) => $.emit($.props.n),
+        update: ($) => $.emit([$.props.n]),
         view: (h) =>
-          h.el("button").on("click", LabelMsg.Tell()).children("n:" + h.props.n)
+          h.el("button").on("click", LabelMsg.Tell()).children([
+            "n:" + h.props.n
+          ])
       })
       const PageMsg = UiSchema.TaggedEnum({
         Inc: {},
@@ -2418,17 +2506,19 @@ describe("keep-alive children written into closed slots", () => {
           h.keepAlive((s) =>
             h.el(
               "main",
-              told,
-              Shut(h, {
-                key: "c",
-                slots: {
-                  body: Label(s, {
-                    key: "L",
-                    props: { n },
-                    onEmit: (from) => PageMsg.Told({ text: from + "@" + n })
-                  })
-                }
-              })
+              [
+                told,
+                Shut(h, {
+                  key: "c",
+                  slots: {
+                    body: Label(s, {
+                      key: "L",
+                      props: { n },
+                      onEmit: (from) => PageMsg.Told({ text: from + "@" + n })
+                    })
+                  }
+                })
+              ]
             )
           )
       })
@@ -2474,8 +2564,10 @@ describe("keep-alive children written into closed slots", () => {
         view: (h, open) =>
           h.el(
             "section",
-            h.el("button").on("click", ToggleMsg.Toggle()).children("flip"),
-            open ? h.slots.body : null
+            [
+              h.el("button").on("click", ToggleMsg.Toggle()).children(["flip"]),
+              open ? h.slots.body : null
+            ]
           )
       })
       const Page = Component.define({
@@ -2489,13 +2581,15 @@ describe("keep-alive children written into closed slots", () => {
           h.keepAlive((s) =>
             h.el(
               "main",
-              moved
-                ? null
-                : Toggling(s, {
-                  key: "B",
-                  slots: { body: Counter(s, { key: "c" }) }
-                }),
-              moved ? Counter(s, { key: "c" }) : null
+              [
+                moved
+                  ? null
+                  : Toggling(s, {
+                    key: "B",
+                    slots: { body: Counter(s, { key: "c" }) }
+                  }),
+                moved ? Counter(s, { key: "c" }) : null
+              ]
             )
           )
       })
@@ -2529,7 +2623,7 @@ describe("keep-alive children written into closed slots", () => {
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
-        view: (h, count) => h.button.onClick("inc").children("count:" + count)
+        view: (h, count) => h.button.onClick("inc").children(["count:" + count])
       })
       const Writer = Component.define({
         name: "Writer",
@@ -2563,13 +2657,13 @@ describe("keep-alive children written into closed slots", () => {
             Switch(h, {
               key: "s",
               view: (parts) =>
-                h.div(
-                  parts.flip(h.button.children("flip")),
+                h.div([
+                  parts.flip(h.button.children(["flip"])),
                   Writer(h, {
                     key: parts.which,
                     view: () => Row(s, { key: "r" })
                   })
-                )
+                ])
             })
           )
       })
@@ -2596,7 +2690,7 @@ describe("keep-alive children written into closed slots", () => {
             return null
           },
           update: ($) => $.model,
-          view: (h) => h.el("i", "probe")
+          view: (h) => h.el("i", ["probe"])
         })
       const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
       const Toggling = Component.define({
@@ -2610,8 +2704,10 @@ describe("keep-alive children written into closed slots", () => {
         view: (h, open) =>
           h.el(
             "section",
-            h.el("button").on("click", ToggleMsg.Toggle()).children("flip"),
-            open ? h.slots.body : null
+            [
+              h.el("button").on("click", ToggleMsg.Toggle()).children(["flip"]),
+              open ? h.slots.body : null
+            ]
           )
       })
       const Page = Component.define({
@@ -2624,16 +2720,20 @@ describe("keep-alive children written into closed slots", () => {
         view: (h, mode) =>
           h.el(
             "main",
-            h.keepAlive((s) =>
-              mode === "box"
-                ? Toggling(s, {
-                  key: "B",
-                  slots: { body: Probe(s, { key: "p" }) }
-                })
-                : null
-            ),
-            h.keepAlive(({ model }) => model !== "ended", (s) =>
-              mode === "page" ? Probe(s, { key: "p" }) : null)
+            [
+              h.keepAlive((s) =>
+                mode === "box"
+                  ? Toggling(s, {
+                    key: "B",
+                    slots: { body: Probe(s, { key: "p" }) }
+                  })
+                  : null
+              ),
+              h.keepAlive(
+                ({ model }) => model !== "ended",
+                (s) => mode === "page" ? Probe(s, { key: "p" }) : null
+              )
+            ]
           )
       })
       const root = yield* TestHost.mount(Page, {})
@@ -2667,7 +2767,7 @@ describe("keep-alive children written into closed slots", () => {
           .make({
             init: () => null,
             update: ($) => $.model,
-            view: (h) => h.el("p", "row")
+            view: (h) => h.el("p", ["row"])
           })
       const [First, Second] = [define(), define()]
       const Open = Component.define({
@@ -2678,7 +2778,7 @@ describe("keep-alive children written into closed slots", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("article", h.slots.body)
+        view: (h) => h.el("article", [h.slots.body])
       })
       const Inner = Component.define({
         name: "Inner",
@@ -2692,8 +2792,13 @@ describe("keep-alive children written into closed slots", () => {
             h.keepAlive((s) =>
               h.el(
                 "div",
-                h.el("p", First(s, { key: "k" })),
-                Open(h, { key: "o", slots: { body: Second(s, { key: "k" }) } })
+                [
+                  h.el("p", [First(s, { key: "k" })]),
+                  Open(h, {
+                    key: "o",
+                    slots: { body: Second(s, { key: "k" }) }
+                  })
+                ]
               )
             )
         })
@@ -2723,7 +2828,7 @@ describe("keep-alive children written into closed slots", () => {
           .make({
             init: () => null,
             update: ($) => $.model,
-            view: (h) => h.el("p", "kept")
+            view: (h) => h.el("p", ["kept"])
           })
         const Plain = Component.define({
           name: "Row",
@@ -2733,7 +2838,7 @@ describe("keep-alive children written into closed slots", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", "plain", h.slots.body)
+          view: (h) => h.el("p", ["plain", h.slots.body])
         })
         const Headless = Component.define({
           name: "Row",
@@ -2756,18 +2861,23 @@ describe("keep-alive children written into closed slots", () => {
                 return where === "its own view"
                   ? Headless(h, { key: "k", view: () => kept })
                   : where === "the same view"
-                  ? h.el("div", Plain(h, { key: "k" }), Plain(s, { key: "k" }))
+                  ? h.el("div", [
+                    Plain(h, { key: "k" }),
+                    Plain(s, { key: "k" })
+                  ])
                   : where === "a slot after it"
-                  ? h.el("div", Plain(h, { key: "k" }), slot())
+                  ? h.el("div", [Plain(h, { key: "k" }), slot()])
                   : where === "a slot before it"
-                  ? h.el("div", slot(), Plain(h, { key: "k" }))
+                  ? h.el("div", [slot(), Plain(h, { key: "k" })])
                   : h.el(
                     "div",
-                    Plain(h, {
-                      key: "o",
-                      slots: { body: Plain(h, { key: "k" }) }
-                    }),
-                    kept
+                    [
+                      Plain(h, {
+                        key: "o",
+                        slots: { body: Plain(h, { key: "k" }) }
+                      }),
+                      kept
+                    ]
                   )
               })
           })
@@ -2791,7 +2901,7 @@ describe("keep-alive children written into closed slots", () => {
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", "row")
+          view: (h) => h.el("p", ["row"])
         })
       const Box = Component.define({
         name: "Box",
@@ -2811,10 +2921,12 @@ describe("keep-alive children written into closed slots", () => {
             h.keepAlive((s) =>
               h.el(
                 "div",
-                shown && [
-                  Row(s, { key: "s" }),
-                  Row(h, { key: "h" }),
-                  Box(s, { key: "b", view: () => h.el("p", "box") })
+                [
+                  shown && [
+                    Row(s, { key: "s" }),
+                    Row(h, { key: "h" }),
+                    Box(s, { key: "b", view: () => h.el("p", ["box"]) })
+                  ]
                 ]
               )
             )
@@ -2847,7 +2959,7 @@ describe("keep-alive children written into closed slots", () => {
         .make({
           init: () => ++made,
           update: ($) => $.model,
-          view: (h, n) => h.el("p", `row${n}`)
+          view: (h, n) => h.el("p", [`row${n}`])
         })
       const Msg = UiSchema.TaggedEnum({
         Kept: { kept: Schema.Boolean },
@@ -2865,11 +2977,13 @@ describe("keep-alive children written into closed slots", () => {
             h.keepAlive((s) =>
               h.el(
                 "div",
-                !shown
-                  ? null
-                  : kept
-                  ? Row(s, { key: "r" })
-                  : Row(h, { key: "r" })
+                [
+                  !shown
+                    ? null
+                    : kept
+                    ? Row(s, { key: "r" })
+                    : Row(h, { key: "r" })
+                ]
               )
             )
         })
@@ -2899,7 +3013,7 @@ describe("keep-alive children written into closed slots", () => {
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", "kept")
+          view: (h) => h.el("p", ["kept"])
         })
       const Plain = Component.define({
         name: "Row",
@@ -2909,7 +3023,7 @@ describe("keep-alive children written into closed slots", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("p", "plain", h.slots.body)
+        view: (h) => h.el("p", ["plain", h.slots.body])
       })
       const Inner = Component.define({
         name: "Inner",
@@ -2922,11 +3036,16 @@ describe("keep-alive children written into closed slots", () => {
           h.keepAlive((s) =>
             h.el(
               "div",
-              h.el("button").on("click", "swap").children("swap"),
-              swapped
-                ? Plain(h, { key: "o", slots: { body: Kept(s, { key: "k" }) } })
-                : null,
-              swapped ? null : Plain(h, { key: "k" })
+              [
+                h.el("button").on("click", "swap").children(["swap"]),
+                swapped
+                  ? Plain(h, {
+                    key: "o",
+                    slots: { body: Kept(s, { key: "k" }) }
+                  })
+                  : null,
+                swapped ? null : Plain(h, { key: "k" })
+              ]
             )
           )
       })
@@ -2948,7 +3067,9 @@ describe("keep-alive children written into closed slots", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h) =>
-            h.keepAlive((s) => h.el("div", cached ??= Billing(s, { key: "b" })))
+            h.keepAlive((s) =>
+              h.el("div", [cached ??= Billing(s, { key: "b" })])
+            )
         })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
@@ -2983,12 +3104,14 @@ describe("keep-alive children written into closed slots", () => {
             h.keepAlive((s) =>
               h.el(
                 "div",
-                h.el("p", "before"),
-                Broken(h, {
-                  key: "x",
-                  fallback: () => Billing(s, { key: "b" })
-                }),
-                h.el("p", "after")
+                [
+                  h.el("p", ["before"]),
+                  Broken(h, {
+                    key: "x",
+                    fallback: () => Billing(s, { key: "b" })
+                  }),
+                  h.el("p", ["after"])
+                ]
               )
             )
         })
@@ -3007,7 +3130,7 @@ describe("keep-alive children written into closed slots", () => {
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", "row")
+          view: (h) => h.el("p", ["row"])
         })
     const [First, Second] = [define(), define()]
     const Page = Component.define({
@@ -3022,8 +3145,10 @@ describe("keep-alive children written into closed slots", () => {
           h.keepAlive((s) =>
             h.el(
               "div",
-              Shut(h, { key: "x", slots: { body: First(s, { key: "k" }) } }),
-              Shut(h, { key: "y", slots: { body: Second(s, { key: "k" }) } })
+              [
+                Shut(h, { key: "x", slots: { body: First(s, { key: "k" }) } }),
+                Shut(h, { key: "y", slots: { body: Second(s, { key: "k" }) } })
+              ]
             )
           )
       })
@@ -3078,24 +3203,30 @@ describe("keep-alive children that report to shared state", () => {
             h.keepAlive((s) =>
               h.el(
                 "main",
-                Count(h, {
-                  key: "l",
-                  view: (parts) =>
-                    h.el(
-                      "p",
-                      "L" + parts.count,
-                      left ? Member(s, { key: "m" }) : null
-                    )
-                }),
-                Count(h, {
-                  key: "r",
-                  view: (parts) =>
-                    h.el(
-                      "p",
-                      "R" + parts.count,
-                      left ? null : Member(s, { key: "m" })
-                    )
-                })
+                [
+                  Count(h, {
+                    key: "l",
+                    view: (parts) =>
+                      h.el(
+                        "p",
+                        [
+                          "L" + parts.count,
+                          left ? Member(s, { key: "m" }) : null
+                        ]
+                      )
+                  }),
+                  Count(h, {
+                    key: "r",
+                    view: (parts) =>
+                      h.el(
+                        "p",
+                        [
+                          "R" + parts.count,
+                          left ? null : Member(s, { key: "m" })
+                        ]
+                      )
+                  })
+                ]
               )
             )
         })

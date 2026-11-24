@@ -46,10 +46,10 @@
  *   init: () => false,
  *   update: ($, message) =>
  *     Message.match(message, {
- *       ClickedSave: () => $.run(Save.make({})),
+ *       ClickedSave: () => $.run([Save.make({})]),
  *       CompletedSave: () => true
  *     }),
- *   view: (h, saved) => h.el("button").on("click", Message.ClickedSave()).children(saved ? "saved" : "save")
+ *   view: (h, saved) => h.el("button").on("click", Message.ClickedSave()).children([saved ? "saved" : "save"])
  * }).pipe(Component.provide(Save.layer))
  *
  * Effect.gen(function*() {

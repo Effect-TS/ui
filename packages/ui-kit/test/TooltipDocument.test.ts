@@ -197,21 +197,21 @@ const Page = Component.define({
         anchor: h.props.anchor
       },
       view: (tooltip) =>
-        h.div.attr("id", "clip").children(
-          h.div.attr("id", "layer").children(
-            tooltip.trigger(h.button.attr("id", "trigger")).children("B")
-          ),
+        h.div.attr("id", "clip").children([
+          h.div.attr("id", "layer").children([
+            tooltip.trigger(h.button.attr("id", "trigger")).children(["B"])
+          ]),
           tooltip.positioner(
             h.div.attr("id", "positioner").style(
               model.tinted ? { zIndex: "10" } : {}
             )
-          ).children(
-            tooltip.popup(h.div.attr("id", "popup")).children(
+          ).children([
+            tooltip.popup(h.div.attr("id", "popup")).children([
               tooltip.arrow(h.div),
               "Bold"
-            )
-          )
-        )
+            ])
+          ])
+        ])
     })
 })
 

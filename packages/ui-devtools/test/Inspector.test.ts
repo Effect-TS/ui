@@ -275,7 +275,7 @@ describe("Inspector", () => {
         model: Schema.Null,
         message: Message
       }).make({
-        init: ($) => $.set(null).run(save("a")).run(save("b")),
+        init: ($) => $.set(null).run([save("a")]).run([save("b")]),
         update: ($) => $.model,
         view: (h) => h.text("editor")
       })

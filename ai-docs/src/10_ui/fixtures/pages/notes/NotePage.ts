@@ -47,10 +47,10 @@ export const NotePageNoDeps = Component.define({
   view: (h, model) =>
     // `h.queries.note` is the query's result as an `AsyncResult`.
     AsyncResult.match(h.queries.note, {
-      onInitial: () => h.p("Loading note…"),
-      onFailure: () => h.p("This note doesn't exist."),
+      onInitial: () => h.p(["Loading note…"]),
+      onFailure: () => h.p(["This note doesn't exist."]),
       onSuccess: ({ value: note }) =>
-        h.article(
+        h.article([
           // The Collapsible draws the frame and opens and closes the body.
           // Each slot's content is this page's: written with this `h`, so
           // the editor's events and failure map to this page's messages, and
@@ -62,7 +62,7 @@ export const NotePageNoDeps = Component.define({
           Collapsible(h, {
             key: "note",
             slots: {
-              summary: h.h2(note.title),
+              summary: h.h2([note.title]),
               body: [
                 NoteEditor(h, {
                   key: note.id,
@@ -73,24 +73,24 @@ export const NotePageNoDeps = Component.define({
                   // Every child is a failure boundary. A failed child shows
                   // `fallback` and stays down until its key changes.
                   onFailure: () => NotePageMessage.FailedEditor(),
-                  fallback: () => h.p("The editor is unavailable.")
+                  fallback: () => h.p(["The editor is unavailable."])
                 }),
                 NoteActivity.render(h, {
                   key: "activity",
                   props: { noteId: note.id },
                   fallback: (result) =>
-                    h.p(
+                    h.p([
                       AsyncResult.isInitial(result)
                         ? "Loading activity…"
                         : "No activity."
-                    )
+                    ])
                 })
               ]
             }
           }),
           model.notice !== "" &&
-            h.p.attr("role", "status").children(model.notice)
-        )
+          h.p.attr("role", "status").children([model.notice])
+        ])
     })
 })
 

@@ -27,7 +27,7 @@ const Avatar = Component.define({
 }).make({
   init: () => "avatar from the " + side(inits.avatar++),
   update: ($) => $.model,
-  view: (h, text) => h.i(text)
+  view: (h, text) => h.i([text])
 })
 
 const Badge = Component.define({
@@ -38,7 +38,7 @@ const Badge = Component.define({
 }).make({
   init: () => "badge from the " + side(inits.badge++),
   update: ($) => $.model,
-  view: (h, text) => h.b(text)
+  view: (h, text) => h.b([text])
 })
 
 const Broken = Component.define({
@@ -60,7 +60,7 @@ const Pin = Component.define({
   message: Schema.Never,
   elements: Html
 })
-  .make({ init: () => null, update: ($) => $.model, view: (h) => h.u("pin") })
+  .make({ init: () => null, update: ($) => $.model, view: (h) => h.u(["pin"]) })
 
 const Profile = Component.define({
   name: "Profile",
@@ -72,12 +72,12 @@ const Profile = Component.define({
     init: () => "draft from the " + side(inits.profile++),
     update: ($) => $.model,
     view: (h, draft) =>
-      h.form(
-        h.p(draft),
+      h.form([
+        h.p([draft]),
         Avatar(h, { key: "a" }),
         h.keepAlive((s) => Badge(s, { key: "b" })),
-        Broken(h, { key: "x", fallback: () => h.s("down") })
-      )
+        Broken(h, { key: "x", fallback: () => h.s(["down"]) })
+      ])
   })
 
 class GetTab extends Query.Service<GetTab>()("GetTab", {
@@ -99,11 +99,11 @@ const Settings = Component.define({
   view: (h, shown) => {
     const billing = AsyncResult.isSuccess(h.queries.tab) &&
       h.queries.tab.value === "billing"
-    return h.main(
-      h.h1(billing ? "billing" : "profile"),
+    return h.main([
+      h.h1([billing ? "billing" : "profile"]),
       h.keepAlive((s) => Pin(s, {})),
       shown || !billing ? h.keepAlive((s) => Profile(s, { key: "p" })) : null
-    )
+    ])
   }
 }).pipe(Component.provide(GetTab.layer))
 
@@ -115,7 +115,7 @@ const Sketch = Component.define({
 }).make({
   init: () => () => "sketch",
   update: ($) => $.model,
-  view: (h, text) => h.em(text())
+  view: (h, text) => h.em([text()])
 })
 
 const Board = Component.define({
@@ -128,12 +128,12 @@ const Board = Component.define({
   init: () => false,
   update: (_, shown) => shown,
   view: (h, shown) =>
-    h.main(
+    h.main([
       h.keepAlive((s) => Sketch(s, { key: "drawn" })),
       shown || !AsyncResult.isSuccess(h.queries.tab)
         ? h.keepAlive((s) => Sketch(s, { key: "kept" }))
         : null
-    )
+    ])
 }).pipe(Component.provide(GetTab.layer))
 
 describe("keep-alive children on the server", () => {
@@ -191,7 +191,7 @@ const Note = Component.define({
   .make({
     init: () => noteInits++ === 0 ? "server-note" : "client-note",
     update: ($) => $.model,
-    view: (h, note) => h.i(note)
+    view: (h, note) => h.i([note])
   })
 const Leaf = Component.define({
   name: "Leaf",
@@ -202,7 +202,7 @@ const Leaf = Component.define({
   .make({
     init: () => leafInits++ === 0 ? "server-draft" : "client-initial",
     update: ($) => $.model,
-    view: (h, draft) => h.div(h.p(draft), Note(h, { key: "n" }))
+    view: (h, draft) => h.div([h.p([draft]), Note(h, { key: "n" })])
   })
 
 const Frame = Component.define({
@@ -214,7 +214,7 @@ const Frame = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.section(h.slots.body)
+  view: (h) => h.section([h.slots.body])
 })
 
 const Page = Component.define({
@@ -229,14 +229,14 @@ const Page = Component.define({
   view: (h, moved) => {
     const where = moved ?? h.props.where
     return h.keepAlive((s) =>
-      h.main(
+      h.main([
         where === "a"
           ? Frame(h, { key: "a", slots: { body: Leaf(s, { key: "l" }) } })
           : null,
         where === "b"
           ? Frame(h, { key: "b", slots: { body: Leaf(s, { key: "l" }) } })
           : null
-      )
+      ])
     )
   }
 })
@@ -297,7 +297,7 @@ const SlowFrame = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.section(h.slots.body)
+  view: (h) => h.section([h.slots.body])
 })
   .pipe(
     Component.provide(
@@ -315,9 +315,9 @@ const SlowPage = Component.define({
     update: ($) => $.model,
     view: (h) =>
       h.keepAlive((s) =>
-        h.main(
+        h.main([
           SlowFrame(h, { key: "f", slots: { body: Leaf(s, { key: "l" }) } })
-        )
+        ])
       )
   })
 
@@ -360,7 +360,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.section(h.slots.body)
+    view: (h) => h.section([h.slots.body])
   })
     .pipe(
       Component.provide(Layer.effect(
@@ -431,11 +431,11 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             const body = placed === "bare"
               ? field
               : placed === "in an element"
-              ? h.div(field)
+              ? h.div([field])
               : placed === "by a forwarded builder"
-              ? h.label.forward((label) => h.div(label, field))
-              : Box(h, { key: "box", view: () => h.div(field) })
-            return h.main(Gated(h, { key: "f", slots: { body } }))
+              ? h.label.forward((label) => h.div([label, field]))
+              : Box(h, { key: "box", view: () => h.div([field]) })
+            return h.main([Gated(h, { key: "f", slots: { body } })])
           })
       })
 
@@ -496,7 +496,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   }).make({
     init: () => "",
     update: ($) => $.model,
-    view: (h, row) => h.p(row)
+    view: (h, row) => h.p([row])
   })
   let drafts = 0
   let start: "slot" | "aside" = "slot"
@@ -534,17 +534,17 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           h.keepAlive(({ model }) => model !== "ended", (s) => {
             const written = Draft(s, { key: "d" })
             const body = where === "slot" || where === "ended" ? written : null
-            return h.main(
+            return h.main([
               Gated(h, {
                 key: "g",
                 slots: {
                   body: headless
-                    ? Box(h, { key: "box", view: () => h.div(body) })
+                    ? Box(h, { key: "box", view: () => h.div([body]) })
                     : body
                 }
               }),
-              h.aside(where === "aside" ? written : null)
-            )
+              h.aside([where === "aside" ? written : null])
+            ])
           })
       })
   const Moving = moving(false)
@@ -559,10 +559,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     view: (h, where) =>
       h.keepAlive((s) => {
         const written = SlowDraft(s, { key: "d" })
-        return h.main(
-          h.p(where === "slot" ? written : null),
-          h.aside(where === "aside" ? written : null)
-        )
+        return h.main([
+          h.p([where === "slot" ? written : null]),
+          h.aside([where === "aside" ? written : null])
+        ])
       })
   })
 
@@ -670,13 +670,13 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         view: (h, moved) =>
           h.keepAlive((s) => {
             const row = Row(s, { key: "r" })
-            return h.main(
+            return h.main([
               Bare(h, {
                 key: "g",
                 slots: { body: [moved ? null : row, Note(s, {})] }
               }),
-              moved ? h.article(row) : null
-            )
+              moved ? h.article([row]) : null
+            ])
           })
       })
       const { app, open, state } = yield* serve(
@@ -707,17 +707,17 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         view: (h, text) =>
           h.keepAlive((s) => {
             const row = Row(s, { key: "r" })
-            return h.main(
+            return h.main([
               Bare(h, {
                 key: "g",
                 slots: { body: h.props.moved ? null : row }
               }),
-              h.article(
+              h.article([
                 h.props.moved ? row : null,
                 h.input.value(text).onInput(({ value }) => value)
-              ),
-              h.em(text)
-            )
+              ]),
+              h.em([text])
+            ])
           })
       })
       const { app, open, state } = yield* serve(
@@ -748,7 +748,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.b(String(h.props.n))
+    view: (h) => h.b([String(h.props.n)])
   })
 
   it.effect("keep the server's nodes of a receiver they draw, when taken out of the document and drawn again while it waits", () =>
@@ -762,7 +762,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          Bare(h, { key: "g", slots: { body: [h.p("a"), h.p("b")] } })
+          Bare(h, { key: "g", slots: { body: [h.p(["a"]), h.p(["b"])] } })
       })
       const Cards = Component.define({
         name: "Cards",
@@ -775,7 +775,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         view: (h, shown) =>
           h.keepAlive((s) => {
             const card = Card(s, { key: "c" })
-            return h.main(shown ? card : null)
+            return h.main([shown ? card : null])
           })
       })
       const { app, open, state } = yield* serve(
@@ -808,7 +808,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.aside("stuck")
+          view: (h) => h.aside(["stuck"])
         })
           .pipe(
             Component.provide(Layer.effect(
@@ -831,10 +831,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             h.keepAlive((s) => {
               const slots = { body: Item(s, { key: "i", props: { n: 0 } }) }
               passed.push(new WeakRef(slots))
-              return h.main(
+              return h.main([
                 shown ? Gated(h, { key: "a", slots }) : null,
                 Stuck(h, { key: "b" })
-              )
+              ])
             })
         })
         const { app, open, state } = yield* serve(
@@ -865,7 +865,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.b("waits")
+          view: (h) => h.b(["waits"])
         })
           .pipe(Component.provide(Layer.effect(
             Slow,
@@ -880,7 +880,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.div(h.slots.inner)
+          view: (h) => h.div([h.slots.inner])
         })
         const Page = Component.define({
           name: "Page",
@@ -894,9 +894,9 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             const body = h.keepAlive((s) =>
               Shell(s, { key: "s", slots: { inner: Waits(s, { key: "w" }) } })
             )
-            return h.main(
+            return h.main([
               shown ? Frame(h, { key: "f", slots: { body } }) : null
-            )
+            ])
           }
         })
         const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
@@ -928,7 +928,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
               changed ? ({ model }) => model : ({ model }) => !model,
               (s) => Leaf(s, { key: "l" })
             )
-            return h.main(Gated(h, { key: "f", slots: { body } }))
+            return h.main([Gated(h, { key: "f", slots: { body } })])
           }
         })
         leafInits = 0
@@ -998,7 +998,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => side(tips++),
           update: ($) => $.model,
-          view: (h, tip) => h.i(tip)
+          view: (h, tip) => h.i([tip])
         })
         const Dot = Component.define({
           name: "Dot",
@@ -1008,7 +1008,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => side(dots++),
           update: ($) => $.model,
-          view: (h, dot) => h.u(dot)
+          view: (h, dot) => h.u([dot])
         })
         const Mid = Component.define({
           name: "Mid",
@@ -1019,10 +1019,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           init: () => "mid",
           update: ($) => $.model,
           view: (h) =>
-            h.div(
+            h.div([
               Tip(h, { key: "t" }),
               h.keepAlive((s) => Dot(s, { key: "d" }))
-            )
+            ])
         })
         const Card = Component.define({
           name: "Card",
@@ -1032,7 +1032,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => "card",
           update: ($) => $.model,
-          view: (h) => h.article(Mid(h, { key: "m" }))
+          view: (h) => h.article([Mid(h, { key: "m" })])
         })
         const Page = Component.define({
           name: "Page",
@@ -1043,7 +1043,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           init: () => 0,
           update: (_, step) => step,
           view: (h, step) =>
-            h.main(
+            h.main([
               step === 0
                 ? Gated(h, {
                   key: "f",
@@ -1052,7 +1052,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
                 : step === 2
                 ? h.keepAlive((s) => Card(s, { key: "c" }))
                 : null
-            )
+            ])
         })
         const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
         const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
@@ -1089,7 +1089,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       }).make({
         init: () => "slowly",
         update: ($) => $.model,
-        view: (h, text) => h.b(text)
+        view: (h, text) => h.b([text])
       })
       const Page = Component.define({
         name: "Page",
@@ -1100,7 +1100,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         init: () => true,
         update: (_, shown) => shown,
         view: (h, shown) =>
-          h.main(shown ? h.keepAlive((s) => Slowly(s, { key: "s" })) : null)
+          h.main([shown ? h.keepAlive((s) => Slowly(s, { key: "s" })) : null])
       })
       const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
       const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
@@ -1129,9 +1129,9 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           update: ($) => $.model,
           view: (h) => {
             passed.push(new WeakRef(h.props))
-            return h.article(
+            return h.article([
               h.props.drawn ? h.keepAlive((s) => Leaf(s, { key: "l" })) : null
-            )
+            ])
           }
         })
         const Page = Component.define({
@@ -1144,15 +1144,15 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           init: () => 0,
           update: (_, step) => step,
           view: (h, step) =>
-            h.main(
+            h.main([
               step === 1
                 ? null
                 : Author(h, {
                   key: "a",
                   props: { drawn: step === 2 || h.props.drawn }
                 }),
-              Gated(h, { key: "g", slots: { body: h.i() } })
-            )
+              Gated(h, { key: "g", slots: { body: h.i([]) } })
+            ])
         })
         leafInits = 0
         noteInits = 0
@@ -1199,7 +1199,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       return $.props.label
     },
     update: ($) => $.model,
-    view: (h, label) => h.b(label)
+    view: (h, label) => h.b([label])
   })
 
   it.effect.each(
@@ -1234,7 +1234,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
                   })
                 )
             )
-            return h.main(Gated(h, { key: "f", slots: { body } }))
+            return h.main([Gated(h, { key: "f", slots: { body } })])
           }
         })
         const { app, open, state } = yield* serve(
@@ -1274,7 +1274,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.section(h.props.open ? h.slots.body : null)
+          view: (h) => h.section([h.props.open ? h.slots.body : null])
         })
           .pipe(Component.provide(Layer.effect(
             Slow,
@@ -1295,7 +1295,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             const body = out === "a headless child's view"
               ? Box(h, {
                 key: "box",
-                view: () => h.div(moved ? null : written)
+                view: () => h.div([moved ? null : written])
               })
               : moved
               ? null
@@ -1303,13 +1303,13 @@ describe("keep-alive children in a receiver that waits for its Layer", {
             const unplaced = moved && out === "a slot nobody places"
               ? written
               : null
-            return h.main(
+            return h.main([
               Two(h, {
                 key: "f",
                 props: { open: true },
                 slots: { body, unplaced }
               })
-            )
+            ])
           }
         })
         const { app, open, state } = yield* serve(
@@ -1380,13 +1380,13 @@ describe("keep-alive children in a receiver that waits for its Layer", {
               a: fields(changed ? left : ["x"]),
               b: fields(["z"])
             }
-            return h.main(
+            return h.main([
               Sides(h, {
                 key: "f",
                 props: { shows: changed ? after : before },
                 slots
               })
-            )
+            ])
           }
         })
         const { app, open, state } = yield* serve(
@@ -1429,13 +1429,13 @@ describe("keep-alive children in a receiver that waits for its Layer", {
                 props: { label: side(step) }
               })
           )
-          return h.main(
+          return h.main([
             Sides(h, {
               key: "f",
               props: { shows: step === 1 ? [] : ["a"] },
               slots: { a, b: null }
             })
-          )
+          ])
         }
       })
       const { app, open, state } = yield* serve(
@@ -1473,7 +1473,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       }).make({
         init: () => side(inits++),
         update: ($) => $.model,
-        view: (h, text) => h.b(text)
+        view: (h, text) => h.b([text])
       })
       const Page = Component.define({
         name: "Page",
@@ -1486,12 +1486,14 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         update: (_, drawn) => drawn,
         view: (h) => {
           const field = h.keepAlive((s) => Late(s, { key: "l" }))
-          return h.main(
+          return h.main([
             Gated(h, {
               key: "f",
-              slots: { body: h.props.compact ? h.nav(field) : h.header(field) }
+              slots: {
+                body: h.props.compact ? h.nav([field]) : h.header([field])
+              }
             })
-          )
+          ])
         }
       })
       const { app, open, state } = yield* serve(
@@ -1527,10 +1529,10 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h) =>
-            h.div(
-              h.button.onClick(null).children("again"),
+            h.div([
+              h.button.onClick(null).children(["again"]),
               Gated(h, { key: "f", slots: { body: h.slots.passed } })
-            )
+            ])
         })
         const Page = Component.define({
           name: "Page",
@@ -1542,7 +1544,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.main(
+            h.main([
               Middle(h, {
                 key: "m",
                 slots: {
@@ -1552,7 +1554,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
                   )
                 }
               })
-            )
+            ])
         })
         leafInits = 0
         noteInits = 0
@@ -1591,7 +1593,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.article(h.keepAlive((s) => Leaf(s, { key: "l" })))
+          view: (h) => h.article([h.keepAlive((s) => Leaf(s, { key: "l" }))])
         }).pipe(slow)
         const Outer = Component.define({
           name: "Outer",
@@ -1601,7 +1603,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.article(h.keepAlive((s) => Leaf(s, { key: "l" })))
+          view: (h) => h.article([h.keepAlive((s) => Leaf(s, { key: "l" }))])
         }).pipe(slow)
         const Page = Component.define({
           name: "Page",
@@ -1612,7 +1614,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           init: () => 0,
           update: (_, step) => step,
           view: (h, step) =>
-            h.main(
+            h.main([
               removed === "Outer"
                 ? Frame(h, {
                   key: "at" + step,
@@ -1621,8 +1623,8 @@ describe("keep-alive children in a receiver that waits for its Layer", {
                 : step === 1
                 ? null
                 : Author(h, { key: "a" }),
-              Gated(h, { key: "g", slots: { body: h.i() } })
-            )
+              Gated(h, { key: "g", slots: { body: h.i([]) } })
+            ])
         })
         leafInits = 0
         noteInits = 0
@@ -1652,7 +1654,7 @@ describe("keep-alive children of a headless child", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.p("editor")
+          view: (h) => h.p(["editor"])
         })
         const Pane = Component.define({
           name: "Pane",
@@ -1670,14 +1672,15 @@ describe("keep-alive children of a headless child", () => {
           update: (_, shown) => shown,
           view: (h, shown) =>
             h.keepAlive((s) =>
-              h.main(
+              h.main([
                 shown
                   ? Pane(h, {
                     key: "p",
-                    view: () => h.div(h.button("pane"), Editor(s, { key: "e" }))
+                    view: () =>
+                      h.div([h.button(["pane"]), Editor(s, { key: "e" })])
                   })
                   : null
-              )
+              ])
             )
         })
         const app = yield* Effect.acquireRelease(
@@ -1713,7 +1716,7 @@ describe("keep-alive children of a headless child", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.section(h.slots.body)
+          view: (h) => h.section([h.slots.body])
         })
           .pipe(
             Component.provide(Layer.effect(
@@ -1732,7 +1735,7 @@ describe("keep-alive children of a headless child", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.b(String(h.props.n))
+          view: (h) => h.b([String(h.props.n)])
         })
         const Rows = Component.define({
           name: "Rows",
@@ -1746,12 +1749,12 @@ describe("keep-alive children of a headless child", () => {
             const props = { n }
             made.push(new WeakRef(props))
             return h.keepAlive((s) =>
-              h.main(
+              h.main([
                 Stuck(h, {
                   key: "f",
                   slots: { body: Item(s, { key: "i", props }) }
                 })
-              )
+              ])
             )
           }
         })
@@ -1817,10 +1820,10 @@ const LateKeeper = Component.define({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, count) =>
-    h.div(
-      h.button.onClick("bump").children(String(count)),
+    h.div([
+      h.button.onClick("bump").children([String(count)]),
       h.keepAlive((s) => LateDraft(s, { key: "d" }))
-    )
+    ])
 })
 
 describe("keep-alive children whose state decodes asynchronously", () => {

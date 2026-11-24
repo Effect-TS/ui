@@ -30,7 +30,7 @@ const Sender = Component.define({
       $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" })
   },
   view: (h) =>
-    h.button.class("sender").attr("type", "button").onClick(
+    h.button.class(["sender"]).attr("type", "button").onClick(
       SenderMessage.Clicked()
     )
 })
@@ -62,12 +62,12 @@ const Basket = Component.define({
     h.form.attr(
       "data-pear-toggled",
       model.pearToggled === null ? undefined : String(model.pearToggled)
-    ).children(
+    ).children([
       Field(h, {
         props: { disabled: model.locked },
         view: (field) =>
-          field.root(h.div).children(
-            field.legend(h.div.class("legend")).children("Fruit"),
+          field.root(h.div).children([
+            field.legend(h.div.class(["legend"])).children(["Fruit"]),
             CheckboxGroup(h, {
               props: {
                 value: model.fruits,
@@ -81,20 +81,20 @@ const Basket = Component.define({
               view: (checkboxGroup) =>
                 checkboxGroup.root(
                   field.group(
-                    h.div.class("group").attrs({
+                    h.div.class(["group"]).attrs({
                       role: "list",
                       "data-disabled": ""
                     })
                   )
                 )
-                  .children(
-                    h.label.children(
+                  .children([
+                    h.label.children([
                       Checkbox(h, {
                         props: { parent: true, name: "all" },
                         view: (checkbox) =>
                           checkbox.root(
                             field.member(
-                              h.button.class("parent").attrs({
+                              h.button.class(["parent"]).attrs({
                                 id: "all-fruit",
                                 "aria-controls": "panel"
                               })
@@ -102,19 +102,19 @@ const Basket = Component.define({
                           )
                       }),
                       "All"
-                    ),
-                    h.label.children(
+                    ]),
+                    h.label.children([
                       Checkbox(h, {
                         key: "extra",
                         props: { name: "extra", uncheckedValue: "no" },
                         view: (checkbox) =>
-                          checkbox.root(h.button.class("extra"))
+                          checkbox.root(h.button.class(["extra"]))
                       }),
                       "Extra"
-                    ),
+                    ]),
                     Sender(h, { key: "sender" }),
                     ...fruits.map((fruit) =>
-                      h.label.children(
+                      h.label.children([
                         Checkbox(h, {
                           key: fruit,
                           props: {
@@ -133,24 +133,27 @@ const Basket = Component.define({
                           view: (checkbox) =>
                             checkbox.root(field.member(
                               fruit === "pear"
-                                ? h.button.class(fruit).attr("data-parent", "")
-                                : h.button.class(fruit)
+                                ? h.button.class([fruit]).attr(
+                                  "data-parent",
+                                  ""
+                                )
+                                : h.button.class([fruit])
                             ))
                         }),
                         fruit
-                      )
+                      ])
                     )
-                  )
+                  ])
             })
-          )
+          ])
       }),
-      h.button.class("lock").attr("type", "button").onClick(
+      h.button.class(["lock"]).attr("type", "button").onClick(
         BasketMessage.ToggledLock()
-      ).children("Lock"),
-      h.button.class("freeze").attr("type", "button").onClick(
+      ).children(["Lock"]),
+      h.button.class(["freeze"]).attr("type", "button").onClick(
         BasketMessage.ToggledFreeze()
-      ).children("Freeze plum")
-    )
+      ).children(["Freeze plum"])
+    ])
 })
 
 const mount = Effect.gen(function*() {

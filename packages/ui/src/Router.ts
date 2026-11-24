@@ -67,10 +67,10 @@
  *     Message.match(message, {
  *       ChangedRoute: ({ route }) => ({ route }),
  *       // The new route comes back through the subscription: the push itself sends nothing.
- *       ClickedLink: ({ route }) => $.run(Router.push(AppRoute, route).pipe(Command.asNoop))
+ *       ClickedLink: ({ route }) => $.run([Router.push(AppRoute, route).pipe(Command.asNoop)])
  *     }),
  *   subscriptions: ({ model }) => [Router.subscription(AppRoute, model.route, (route) => Message.ChangedRoute({ route }))],
- *   view: (h, model) => h.el("p", model.route._tag)
+ *   view: (h, model) => h.el("p", [model.route._tag])
  * })
  *
  * // The initial route comes from the Router, here at "/about".
@@ -634,7 +634,7 @@ export const currentRoute = <U extends Routes>(
  * }).make({
  *   init: ($) => $.props.route,
  *   update: ($) => $.model,
- *   view: (h, route) => h.el("p", route._tag)
+ *   view: (h, route) => h.el("p", [route._tag])
  * })
  *
  * // Requires the Router: the initial route comes from its URL.
@@ -973,7 +973,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
- *   view: (h) => h.el("p", "Person")
+ *   view: (h) => h.el("p", ["Person"])
  * })
  *
  * const subscriptions = () => [

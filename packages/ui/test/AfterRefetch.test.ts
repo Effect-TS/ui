@@ -129,19 +129,19 @@ const makeApp = (options?: {
       )
       return CardMessage.match(message, {
         UserChanged: () => $.model,
-        Rename: ({ name }) => $.run(rename($.props.id, name)),
+        Rename: ({ name }) => $.run([rename($.props.id, name)]),
         Renamed: ({ name }) => {
           const next = { ...$.model, done: [...$.model.done, name] }
           const chain = options?.chain
           return chain !== undefined && $.model.done.length === 0
-            ? $.set(next).run(rename($.props.id, chain))
+            ? $.set(next).run([rename($.props.id, chain)])
             : next
         },
         Failed: ({ name }) => ({
           ...$.model,
           done: [...$.model.done, "failed " + name]
         }),
-        Stop: () => $.run(Command.interrupt(RenameUser))
+        Stop: () => $.run([Command.interrupt(RenameUser)])
       })
     },
     view: (h, model) => {
@@ -157,7 +157,7 @@ const makeApp = (options?: {
       }${model.done.length === 0 ? "" : " [" + model.done.join(",") + "]"};`
       order.push(`view ${shown}`)
       return h.el("p").on("click", CardMessage.Rename({ name: "Bob" }))
-        .children(shown)
+        .children([shown])
     }
   })
 
@@ -477,7 +477,7 @@ describe("Command.afterRefetch", () => {
         return BoardMessage.match(message, {
           Changed: () => $.model,
           Rename: () =>
-            $.run(
+            $.run([
               app.RenameUser.make({ id: "1", name: "Bob" }).pipe(
                 Command.match({
                   onSuccess: () => BoardMessage.Renamed(),
@@ -485,7 +485,7 @@ describe("Command.afterRefetch", () => {
                 }),
                 Command.afterRefetch("Infinity")
               )
-            ),
+            ]),
           Renamed: () => ({ ...$.model, renamed: true })
         })
       },
@@ -500,7 +500,7 @@ describe("Command.afterRefetch", () => {
           })
         ).join(",") + (model.renamed ? " renamed" : "")
         order.push(`view ${text}`)
-        return h.el("p", text)
+        return h.el("p", [text])
       }
     })
     return run(
@@ -928,23 +928,25 @@ describe("Command.afterRefetch", () => {
         ItemsMessage.match(message, {
           More: () => $.loadMore("items"),
           Touch: () =>
-            $.set({ ...$.model, touched: false }).run(
+            $.set({ ...$.model, touched: false }).run([
               Touch.make().pipe(
                 Command.map(() => ItemsMessage.Touched()),
                 Command.afterRefetch("Infinity")
               )
-            ),
+            ]),
           Touched: () => ({ ...$.model, touched: true })
         }),
       view: (h, model) =>
         h.el(
           "p",
-          AsyncResult.match(h.queries.items, {
-            onInitial: () => "loading",
-            onFailure: () => "failed",
-            onSuccess: ({ value: { items } }) =>
-              items.map((item) => item.id).join(",")
-          }) + (model.touched ? " touched" : "")
+          [
+            AsyncResult.match(h.queries.items, {
+              onInitial: () => "loading",
+              onFailure: () => "failed",
+              onSuccess: ({ value: { items } }) =>
+                items.map((item) => item.id).join(",")
+            }) + (model.touched ? " touched" : "")
+          ]
         )
     })
     return run(

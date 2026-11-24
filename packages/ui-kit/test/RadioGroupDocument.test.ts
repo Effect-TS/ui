@@ -44,7 +44,7 @@ const Host = Component.define({
     SetShowIndicators: ($, { show }) => ({ ...$.model, showIndicators: show })
   },
   view: (h, model) =>
-    h.div(
+    h.div([
       RadioGroup(h, {
         props: { value: model.value, items, readOnly: model.readOnly },
         onEmit: {
@@ -52,11 +52,11 @@ const Host = Component.define({
         },
         view: (radioGroup) =>
           radioGroup.root(h.div).children(
-            ...items.map(({ value }) =>
+            items.map(({ value }) =>
               radioGroup.radio({
                 element: h.button.attr("data-value", value),
                 value
-              }).children(
+              }).children([
                 model.showIndicators
                   ? radioGroup.indicator({
                     element: h.span.attr("data-dot", value),
@@ -64,7 +64,7 @@ const Host = Component.define({
                     keepMounted: h.props.keepMounted
                   })
                   : undefined
-              )
+              ])
             )
           )
       }),
@@ -79,7 +79,7 @@ const Host = Component.define({
       h.button.attrs({ type: "button", "data-indicators-toggle": "" }).onClick(
         RadioGroupHostMessage.SetShowIndicators({ show: !model.showIndicators })
       )
-    )
+    ])
 })
 
 const holdExits = Effect.acquireRelease(

@@ -42,7 +42,7 @@ describe("ScrollArea", () => {
         expect(scrollArea.cornerHidden).type.toBe<boolean>()
 
         expect(scrollArea.root(h.div)).type.toBe<Div<never>>()
-        expect(scrollArea.viewport(h.div).children(needsClock)).type.toBe<
+        expect(scrollArea.viewport(h.div).children([needsClock])).type.toBe<
           Div<Clock>
         >()
         expect(scrollArea.content(h.div)).type.toBe<Div<never>>()
@@ -58,11 +58,11 @@ describe("ScrollArea", () => {
         })
         expect(bar).type.toBe<Div<Clock> | undefined>()
 
-        return scrollArea.root(h.div).children(
-          scrollArea.viewport(h.div).children(scrollArea.content(h.div)),
+        return scrollArea.root(h.div).children([
+          scrollArea.viewport(h.div).children([scrollArea.content(h.div)]),
           bar,
           scrollArea.corner(h.div)
-        )
+        ])
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()

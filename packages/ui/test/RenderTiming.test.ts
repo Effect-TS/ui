@@ -22,7 +22,7 @@ const makeApp = () => {
     view: (h, model) => {
       views.push(`child ${h.props.n}/${model.seen}`)
       return h.el("button").on("click", ChildMessage.make({ _tag: "Read" }))
-        .children(`${h.props.n}/${model.seen}`)
+        .children([`${h.props.n}/${model.seen}`])
     }
   })
   const ParentMessage = Schema.TaggedUnion({ Inc: {}, Hide: {} })
@@ -38,9 +38,9 @@ const makeApp = () => {
         : { ...$.model, shown: false },
     view: (h, model) => {
       views.push(`parent ${model.n}`)
-      return h.el("div").children(
+      return h.el("div").children([
         model.shown ? Child(h, { key: "child", props: { n: model.n } }) : "gone"
-      )
+      ])
     }
   })
   return { Parent, ParentMessage, views }
@@ -76,7 +76,7 @@ describe("render timing", () => {
       }).make({
         init: () => -1,
         update: ($) => $.props.n,
-        view: (h, model) => h.el("i").children(`${h.props.n}/${model}`)
+        view: (h, model) => h.el("i").children([`${h.props.n}/${model}`])
       })
       const Holder = Component.define({
         name: "Holder",
@@ -87,9 +87,9 @@ describe("render timing", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h, model) =>
-            h.el("div").children(
+            h.el("div").children([
               Reader(h, { key: "reader", props: { n: model } })
-            )
+            ])
         })
       return Effect.gen(function*() {
         const root = yield* TestHost.mount(Holder, {})
@@ -134,10 +134,10 @@ describe("render timing", () => {
       // The Command's result arrives before the flush or after it.
       update: ($, message) =>
         message === "click"
-          ? $.set($.model + 1).run(Again.make({}))
+          ? $.set($.model + 1).run([Again.make({})])
           : $.model + 1,
       view: (h, model) =>
-        h.el("button").on("click", "click").children(String(model))
+        h.el("button").on("click", "click").children([String(model)])
     })
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Counter, {})
@@ -255,21 +255,21 @@ describe("causedBy", () => {
         update: ($, message) => {
           switch (message._tag) {
             case "Start":
-              return $.run(
+              return $.run([
                 Load.make().pipe(
                   Command.map((value) =>
                     Message.make({ _tag: "Loaded", value })
                   )
                 ),
                 Command.asNoop(Hang.make())
-              )
+              ])
             case "Loaded":
               return message.value
             case "Stop":
-              return $.run(Command.asNoop(Hang.make()))
+              return $.run([Command.asNoop(Hang.make())])
           }
         },
-        view: (h, model) => h.el("p").children(model)
+        view: (h, model) => h.el("p").children([model])
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -355,11 +355,11 @@ describe("TestHost.layer flush", () => {
       init: () => 0,
       update: ($, message) =>
         message === "click"
-          ? $.set($.model + 1).run(Again.make({}))
+          ? $.set($.model + 1).run([Again.make({})])
           : $.model + 1,
       view: (h, model) => {
         count++
-        return h.el("button").on("click", "click").children(String(model))
+        return h.el("button").on("click", "click").children([String(model)])
       }
     })
     return Effect.gen(function*() {

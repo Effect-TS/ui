@@ -8,9 +8,9 @@
  * registered once for the app by module augmentation of `Register` plus
  * `registerElements`, or set on one component with `elements`.
  *
- * An element is written as a chain: `h.el("form").on("submit", msg).children(...)`.
+ * An element is written as a chain: `h.el("form").on("submit", msg).children([...])`.
  * `children` returns the builder, so the chain goes on, and a second call
- * adds after the first. `h.el(tag, ...children)` is shorthand for it. A
+ * adds after the first. `h.el(tag, children)` is shorthand for it. A
  * builder is itself a valid child or view, with the children it holds.
  * Arrays of children are flattened, and `false`, `null` and
  * `undefined` render nothing. Adjacent text merges into one text node when
@@ -26,7 +26,7 @@
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  *
  * const view = (count: number, h: View.Helper<typeof Message.Type, {}>) =>
- *   h.el("div", h.el("button").on("click", Message.ClickedIncrement()).children("+"), String(count))
+ *   h.el("div", [h.el("button").on("click", Message.ClickedIncrement()).children(["+"]), String(count)])
  * ```
  *
  * @stability experimental
@@ -63,7 +63,7 @@ import type * as Renderer from "./Renderer.ts"
  * import { Schema } from "effect"
  *
  * const Button = <Msg>(h: View.H<Msg>, label: string, message: Msg) =>
- *   h.button.onClick(message).children(label)
+ *   h.button.onClick(message).children([label])
  *
  * export const Counter = Component.define({
  *   name: "Counter",
@@ -599,7 +599,7 @@ type EventTag<Events> = Events extends { readonly _tag: infer T extends string }
  * const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
  *   readonly label: string
  *   readonly children: C
- * }) => h.label.children(options.label, h.div.class("control").children(options.children))
+ * }) => h.label.children([options.label, h.div.class(["control"]).children(options.children)])
  * ```
  *
  * @stability experimental
@@ -861,8 +861,7 @@ export const withForward = <B extends ElementBuilder<any, any, any, any>>(
 
 /**
  * A copy of `builder` with `inputs` after the children it already holds,
- * normalised as `children` does. What a builder's `children` calls, with
- * its rest arguments: the array is reused for the first children.
+ * normalised as `children` does. What a builder's `children` calls.
  *
  * @stability experimental
  * @category vocabularies
@@ -875,9 +874,7 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
   const out = copyBuilder(builder) as Mutable<B>
   const content = builder.content
   out.content = content === undefined
-    ? (inputs.length === 0
-      ? noChildren
-      : childrenOf(inputs as Array<Input<any, any>>))
+    ? (inputs.length === 0 ? noChildren : children(inputs))
     : inputs.length === 0
     ? content
     : children([...content, ...inputs])
@@ -929,43 +926,6 @@ const noTextMessage = (
   `<${tag}> can't hold text in the ${vocabulary.name} vocabulary; text goes inside ${
     (vocabulary.textParents ?? []).join(", ")
   }`
-
-/**
- * `children`, for an array the caller owns, such as a method's rest
- * arguments. While the inputs are nodes, builders and text that stands
- * alone, each is turned into its node where it is, and the array itself is
- * the result: no second array, and none with room to spare. The first input
- * that needs more, a hole, a nested array or text to join, hands what's left
- * to `children`.
- */
-const childrenOf = <Msg>(
-  inputs: Array<Input<Msg, any>>
-): Array<Node<Msg, any>> => {
-  let afterText = false
-  for (let i = 0; i < inputs.length; i++) {
-    const input = inputs[i]
-    if (typeof input === "string") {
-      if (input === "" || afterText) return children(inputs)
-      inputs[i] = text(input)
-      afterText = true
-    } else if (
-      input === false || input === null || input === undefined ||
-      Array.isArray(input)
-    ) {
-      return children(inputs)
-    } else {
-      const node: Node<Msg, any> = toNode(input as Content<Msg, any>)
-      if (node._tag === "Text") {
-        if (node.text === "" || afterText) return children(inputs)
-        afterText = true
-      } else {
-        afterText = false
-      }
-      inputs[i] = node
-    }
-  }
-  return inputs as Array<Node<Msg, any>>
-}
 
 const withTokens = (
   attrs: Readonly<Record<string, string>>,
@@ -1746,8 +1706,8 @@ export class ElementBuilder<
    * const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
    *
    * // The class and the attribute land on the input, inside the frame.
-   * const framed = h.input.forward((node) => h.div.class("frame").children(node))
-   * const frame = View.build(framed.class("amount").attr("inputmode", "decimal"), [])
+   * const framed = h.input.forward((node) => h.div.class(["frame"]).children([node]))
+   * const frame = View.build(framed.class(["amount"]).attr("inputmode", "decimal"), [])
    *
    * if (frame.tag !== "div" || frame.attrs.class !== "frame") throw new Error("the frame isn't outermost")
    * ```
@@ -1816,7 +1776,7 @@ export class ContainerBuilder<
    * @since 0.1.0
    */
   children<const C extends ReadonlyArray<Input<Msg, any>>>(
-    ...inputs: C
+    inputs: C
   ): ContainerBuilder<
     Msg,
     R | Requirements<C[number]>,
@@ -1841,14 +1801,14 @@ export class ContainerBuilder<
 }
 
 /**
- * A root builder that is also callable: `b(...inputs)` is
- * `b.children(...inputs)`. What a vocabulary puts on `h` for a tag that
- * takes children, such as `h.button("Add")`.
+ * A root builder that is also callable: `b(inputs)` is
+ * `b.children(inputs)`. What a vocabulary puts on `h` for a tag that
+ * takes children, such as `h.button(["Add"])`.
  *
  * **Details**
  *
  * The chain methods and the call return the builder `B`, which isn't
- * callable: `h.div(a).children(b)` adds `b`, and `h.div(a)(b)` doesn't
+ * callable: `h.div([a]).children([b])` adds `b`, and `h.div([a])([b])` doesn't
  * compile.
  *
  * @stability experimental
@@ -1856,7 +1816,7 @@ export class ContainerBuilder<
  * @since 0.1.0
  */
 export type Shorthand<
-  B extends { readonly children: (...inputs: any) => any }
+  B extends { readonly children: (inputs: any) => any }
 > = Omit<B, never> & B["children"]
 
 /**
@@ -1875,13 +1835,13 @@ export type Shorthand<
  */
 export const shorthand = <
   B extends ElementBuilder<any, any, any, any> & {
-    readonly children: (...inputs: any) => any
+    readonly children: (inputs: any) => any
   }
 >(
   builder: B
 ): Shorthand<B> => {
-  const root = (...inputs: ReadonlyArray<Input<any, any>>) =>
-    (root as any).children(...inputs)
+  const root = (inputs: ReadonlyArray<Input<any, any>>) =>
+    (root as any).children(inputs)
   Object.setPrototypeOf(root, Object.getPrototypeOf(builder))
   return Object.assign(root, builder) as any
 }
@@ -1957,7 +1917,7 @@ export interface HeadFold<E = any, H = any> {
  *
  * **Details**
  *
- * A tag that takes children is a `shorthand` builder, so `h.span(title)`
+ * A tag that takes children is a `shorthand` builder, so `h.span([title])`
  * works; a void tag is a plain builder.
  *
  * @stability experimental
@@ -2106,18 +2066,13 @@ export interface HelperBase<Msg, Props> {
   readonly props: Props
   /**
    * Any host element by name, with untyped event payloads. What host-neutral
-   * code uses: `h.el("x-foo").attr("a", "b").children(...)`.
+   * code uses: `h.el("x-foo").attr("a", "b").children([...])`.
    */
   el(tag: string): ContainerBuilder<Msg>
-  /** Shorthand for `h.el(tag).children(...children)`, with at least one child. */
-  el<
-    const C extends readonly [
-      Input<Msg, any>,
-      ...ReadonlyArray<Input<Msg, any>>
-    ]
-  >(
+  /** Shorthand for `h.el(tag).children(children)`. */
+  el<const C extends ReadonlyArray<Input<Msg, any>>>(
     tag: string,
-    ...children: C
+    children: C
   ): ContainerBuilder<Msg, Requirements<C[number]>>
   /**
    * Whether this instance has a run of the Command in flight, of the group if
@@ -2164,7 +2119,7 @@ export interface HelperBase<Msg, Props> {
    * type Row = { readonly id: number; readonly label: string }
    *
    * const row = <M>(h: View.H<M>, row: Row, selected: boolean) =>
-   *   h.tr.key(String(row.id)).class(selected && "danger").children(row.label)
+   *   h.tr.key(String(row.id)).class([selected && "danger"]).children([row.label])
    *
    * const rows = <M>(h: View.H<M>, rows: ReadonlyArray<Row>, selected: number) =>
    *   h.tbody.children(rows.map((item) => h.lazy(row, item, item.id === selected)))
@@ -2318,12 +2273,12 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     const at = this.at
     return idOf(typeof at === "string" ? at : at.path, name, key)
   }
-  el(tag: string, ...inputs: ReadonlyArray<Input<Msg, any>>): any {
+  el(tag: string, inputs?: ReadonlyArray<Input<Msg, any>>): any {
     const textParents = this.elements?.textParents
     const builder = textParents === undefined || textParents.includes(tag)
       ? new ContainerBuilder<Msg>(tag)
       : new NoTextBuilder<Msg>(tag, this.elements!)
-    return inputs.length === 0 ? builder : builder.children(...inputs)
+    return inputs === undefined ? builder : builder.children(inputs)
   }
   text(value: string): Text {
     return text(value)
@@ -2338,7 +2293,7 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
     this.vocabulary = vocabulary
   }
   override children<const C extends ReadonlyArray<Input<Msg, any>>>(
-    ...inputs: C
+    inputs: C
   ): ContainerBuilder<Msg, Requirements<C[number]>> {
     return withNoTextContent(this, inputs, this.vocabulary) as any
   }

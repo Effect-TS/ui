@@ -80,7 +80,7 @@ describe("NoteEditor", () => {
       assert.deepStrictEqual(s.subscriptions, ["autosave:1"])
       // Commands stay pending as data until a step resolves them. A
       // definition matches any args; `pending` holds them.
-      s.send(NoteEditorMessage.RequestedSave()).expectExact(SaveNote)
+      s.send(NoteEditorMessage.RequestedSave()).expectExact([SaveNote])
       assert.deepStrictEqual(s.pending[0].command.args, { note: edited })
       // `SaveNote` returns a `NoteEditorMessage`, so `resolve` takes the
       // message. A Command mapped with `Command.match` or `Command.map` takes
@@ -88,7 +88,7 @@ describe("NoteEditor", () => {
       s.resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
       assert.strictEqual(s.model.saved, edited.body)
       // An event the component emitted is acknowledged by naming it.
-      s.emitted(NoteEditorEvents.Saved({ note: edited }))
+      s.emitted([NoteEditorEvents.Saved({ note: edited })])
       // When the test ends, the end check fails if a Command is still
       // pending or an event isn't acknowledged.
     }))
@@ -102,7 +102,7 @@ describe("NoteEditor", () => {
         .expect(body).toHaveValue(edited.body)
         // A submit button submits its form, with the fields read from the view.
         .click(HtmlLocator.role("button", { name: "Save" }))
-        .expectExact(SaveNote)
+        .expectExact([SaveNote])
         .expect(HtmlLocator.role("button", { name: "Saving…" })).toBeDisabled(
           false
         )
@@ -110,7 +110,7 @@ describe("NoteEditor", () => {
           SaveNote,
           NoteEditorMessage.SucceededSaveNote({ note: edited })
         )
-        .emitted(NoteEditorEvents.Saved({ note: edited }))
+        .emitted([NoteEditorEvents.Saved({ note: edited })])
         .expect(HtmlLocator.role("button", { name: "Save" })).toBeDisabled()
     }))
 
@@ -121,12 +121,12 @@ describe("NoteEditor", () => {
       // browser's default. Reading it doesn't reset it.
       s.type(body, edited.body).keydown(body, "s", { ctrl: true })
       assert.isTrue(s.defaultPrevented)
-      s.expectExact(SaveNote)
+      s.expectExact([SaveNote])
         .resolve(
           SaveNote,
           NoteEditorMessage.SucceededSaveNote({ note: edited })
         )
-        .emitted(NoteEditorEvents.Saved({ note: edited }))
+        .emitted([NoteEditorEvents.Saved({ note: edited })])
       // Any other step resets it.
       assert.isFalse(s.defaultPrevented)
     }))
@@ -179,7 +179,7 @@ describe("Collapsible", () => {
       // `slots` stands in for a parent's content. Its `h` has no messages,
       // as the content's handlers would send the parent's.
       const s = yield* Scene.make(Collapsible, {}, {
-        slots: (h) => ({ summary: h.h2("Groceries"), body: h.p("Milk") })
+        slots: (h) => ({ summary: h.h2(["Groceries"]), body: h.p(["Milk"]) })
       })
       s.click("Hide")
         .expect(Locator.tag("h2")).toHaveText("Groceries")

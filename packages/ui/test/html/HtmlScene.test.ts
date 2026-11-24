@@ -22,14 +22,14 @@ const Board = Component.define({
           data["application/x-todo"] ?? files.map((file) => file.name).join(",")
         }`,
       { accepts: ["application/x-todo", "Files"] }
-    ).children(
+    ).children([
       h.div.attr("aria-label", "Inner")
-        .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children(
-          h.p("Inner child")
-        ),
-      h.p("Plain"),
-      h.output(log.join("|"))
-    )
+        .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children([
+          h.p(["Inner child"])
+        ]),
+      h.p(["Plain"]),
+      h.output([log.join("|")])
+    ])
 })
 
 const log = Locator.tag("output")
@@ -119,15 +119,15 @@ describe("HtmlScene", () => {
             Drawn: ({ width }) => ({ ...$.model, width })
           }),
         view: (h, model) =>
-          h.div(
+          h.div([
             h.canvas.onMount(
               DrawChart({ points: model.points }).pipe(
                 Mount.map((width) => Message.Drawn({ width }))
               )
             ),
-            h.button.onClick(Message.Add({ point: 3 })).children("Add"),
-            h.p(`width ${model.width}`)
-          )
+            h.button.onClick(Message.Add({ point: 3 })).children(["Add"]),
+            h.p([`width ${model.width}`])
+          ])
       })
       const s = yield* HtmlScene.make(Chart, {})
       s.expectMount(DrawChart({ points: [1, 2] }))
@@ -164,21 +164,21 @@ describe("HtmlScene", () => {
       view: (h, log) => {
         const saw = (event: string) => (payload: object) =>
           `${event} ${JSON.stringify(payload)}`
-        return h.div(
+        return h.div([
           h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input"))
             .onChange(saw("change"))
             .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
           h.input.prop("type", "checkbox").attr("aria-label", "PropBox")
             .onKeyDown(saw("keydown")),
           h.div.attr("contenteditable", "true").onKeyDown(saw("keydown"))
-            .children(
-              h.span.attr("id", "ce-child").children("Edit"),
-              h.div.attr("contenteditable", "false").children(
-                h.button.attr("id", "ce-island-btn").children("Stop")
-              )
-            ),
-          h.output(log.join("\n"))
-        )
+            .children([
+              h.span.attr("id", "ce-child").children(["Edit"]),
+              h.div.attr("contenteditable", "false").children([
+                h.button.attr("id", "ce-island-btn").children(["Stop"])
+              ])
+            ]),
+          h.output([log.join("\n")])
+        ])
       }
     })
     const name = HtmlLocator.label("Name")
@@ -233,7 +233,7 @@ describe("HtmlScene", () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, { names }) => [...$.model, names.join(",")],
         view: (h, log) =>
-          h.div(
+          h.div([
             h.input.attrs({ type: "file", "aria-label": "File" }).value("")
               .onChange(({ files }) =>
                 Message.Changed({ names: files.map((file) => file.name) })
@@ -241,8 +241,8 @@ describe("HtmlScene", () => {
             h.input.attr("aria-label", "Name").onChange(({ files }) =>
               Message.Changed({ names: [`${files.length}`] })
             ),
-            h.output(log.join(" | "))
-          )
+            h.output([log.join(" | ")])
+          ])
       })
       const s = yield* HtmlScene.make(Upload, {})
       s.change(HtmlLocator.label("File"), {
@@ -381,43 +381,45 @@ describe("HtmlScene", () => {
         zip: message === "fill" ? "new" : $.model.zip
       }),
       view: (h, model) =>
-        h.div(
+        h.div([
           h.form.attr("id", "f").onSubmit(({ entries }) =>
             `submit:${
               entries.map(([name, value]) => `${name}=${value}`).join("&")
             }`
-          ).children(
+          ).children([
             h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(
               model.zip
             ),
             // Inside the form, but owned by another one.
             h.input.attrs({ name: "elsewhere", form: "other" }).value("x"),
-            h.button.onClick("fill").children("Fill"),
-            h.button.onClick("stopped", { preventDefault: true }).children(
+            h.button.onClick("fill").children(["Fill"]),
+            h.button.onClick("stopped", { preventDefault: true }).children([
               "Stop"
-            ),
+            ]),
             h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
               .onClick("checked?", { preventDefault: true })
               .onChange(({ checked }) => `agree:${checked}`)
-          ),
+          ]),
           // Outside the form, owned by it through its form attribute.
           h.input.attrs({ name: "note", form: "f" }).value("hi"),
           h.button.attr("popovertarget", "menu").onClick("menu?", {
             preventDefault: true
-          }).children("Menu"),
+          }).children(["Menu"]),
           h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) =>
             `toggle:${newState}`
           ),
-          h.fieldset.attr("disabled", "").children(
-            h.legend(
-              h.button.attr("type", "button").onClick("legend").children(
+          h.fieldset.attr("disabled", "").children([
+            h.legend([
+              h.button.attr("type", "button").onClick("legend").children([
                 "In legend"
-              )
-            ),
-            h.button.attr("type", "button").onClick("body").children("In body")
-          ),
-          h.output(model.log.join("|"))
-        )
+              ])
+            ]),
+            h.button.attr("type", "button").onClick("body").children([
+              "In body"
+            ])
+          ]),
+          h.output([model.log.join("|")])
+        ])
     })
 
     it.effect("a cancelled click runs none of them: no submit, no checkbox change, no popover toggle", () =>

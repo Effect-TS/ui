@@ -17,7 +17,7 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `collapsible.panel(h.div)?.children("Content")`. The panel returns `undefined`
+ * `collapsible.panel(h.div)?.children(["Content"])`. The panel returns `undefined`
  * once it has closed, unless `keepMounted` or `hiddenUntilFound` is set. The
  * root is optional. A part's result is a builder, so it can also be another
  * kit call's `element`.
@@ -90,10 +90,10 @@
  *         Settled: () => undefined
  *       },
  *       view: (collapsible) =>
- *         collapsible.root(h.div).children(
- *           collapsible.trigger(h.button.class("trigger")).children("Shipping details"),
- *           collapsible.panel(h.div.class("panel"))?.children("Standard shipping takes 3 to 5 days.")
- *         )
+ *         collapsible.root(h.div).children([
+ *           collapsible.trigger(h.button.class(["trigger"])).children(["Shipping details"]),
+ *           collapsible.panel(h.div.class(["panel"]))?.children(["Standard shipping takes 3 to 5 days."])
+ *         ])
  *     })
  * })
  *
@@ -454,12 +454,12 @@ export const Collapsible = Component.define({
     ClickedTrigger: ($) =>
       $.props.disabled === true
         ? $.model
-        : $.emit(
+        : $.emit([
           CollapsibleEvents.Toggled({
             open: !$.props.open,
             reason: "trigger-press"
           })
-        ),
+        ]),
     MeasuredPanel: ($, { size }) =>
       $.evolve(
         $.props.open
@@ -479,9 +479,9 @@ export const Collapsible = Component.define({
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
       if (open) {
-        return $.evolve({ size: null, instant: false }).emit(
+        return $.evolve({ size: null, instant: false }).emit([
           CollapsibleEvents.Settled({ open })
-        )
+        ])
       }
       return $.model.ending && $.props.holdExit !== true
         ? $.evolve({
@@ -489,17 +489,17 @@ export const Collapsible = Component.define({
           started: false,
           ending: false,
           size: null
-        }).emit(
+        }).emit([
           CollapsibleEvents.Settled({ open })
-        )
+        ])
         : $.model
     },
     MatchedFind: ($) =>
       $.props.open || $.props.disabled === true
         ? $.model
-        : $.evolve({ started: true, instant: true }).emit(
+        : $.evolve({ started: true, instant: true }).emit([
           CollapsibleEvents.Toggled({ open: true, reason: "find-in-page" })
-        ),
+        ]),
     StayedHidden: ($) =>
       $.props.open ? $.model : $.evolve({ started: false, instant: false })
   },

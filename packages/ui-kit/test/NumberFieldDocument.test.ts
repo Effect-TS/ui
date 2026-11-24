@@ -55,18 +55,18 @@ const mount = Effect.fnUntraced(function*(
           Committed: ({ reason, value }) => Message.Committed({ value, reason })
         },
         view: (numberField) =>
-          numberField.root(h.div).children(
+          numberField.root(h.div).children([
             scrubs(model.value) && !model.committed && numberField.scrubArea({
-              element: h.span.class("scrub"),
+              element: h.span.class(["scrub"]),
               direction: vertical ? "vertical" : "horizontal"
-            }).children(
-              h.label.class("label").children("Amount"),
-              numberField.scrubAreaCursor(h.span.class("cursor"))
-            ),
-            numberField.decrement({ element: h.button.class("decrement") }),
-            numberField.input(h.input.class("amount")),
-            numberField.increment({ element: h.button.class("increment") })
-          )
+            }).children([
+              h.label.class(["label"]).children(["Amount"]),
+              numberField.scrubAreaCursor(h.span.class(["cursor"]))
+            ]),
+            numberField.decrement({ element: h.button.class(["decrement"]) }),
+            numberField.input(h.input.class(["amount"])),
+            numberField.increment({ element: h.button.class(["increment"]) })
+          ])
       })
   })
   const app = yield* container

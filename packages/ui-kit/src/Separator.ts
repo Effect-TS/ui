@@ -7,7 +7,7 @@
  *
  * `Separator` returns a single `<div>` builder. It uses `h.div` by default.
  * Pass `element` to share the divider with another part. Chain classes,
- * attributes and children on the result: `Separator(h).class("rule")`.
+ * attributes and children on the result: `Separator(h).class(["rule"])`.
  *
  * **Data attributes**
  *
@@ -39,11 +39,11 @@
  *   init: () => null,
  *   update: ($) => $.model,
  *   view: (h) =>
- *     h.nav(
- *       h.a.attr("href", "/docs").children("Docs"),
- *       Separator(h, { props: { orientation: "vertical" } }).class("rule"),
- *       h.a.attr("href", "/blog").children("Blog")
- *     )
+ *     h.nav([
+ *       h.a.attr("href", "/docs").children(["Docs"]),
+ *       Separator(h, { props: { orientation: "vertical" } }).class(["rule"]),
+ *       h.a.attr("href", "/blog").children(["Blog"])
+ *     ])
  * })
  *
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Nav, {}))

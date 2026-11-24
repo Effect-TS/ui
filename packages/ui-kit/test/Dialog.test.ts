@@ -19,40 +19,40 @@ type H = View.Helper<never, DialogProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (dialog: Parts, h: H) =>
-    h.div(
+    h.div([
       dialog.trigger(
-        h.button.class("open").attrs({
+        h.button.class(["open"]).attrs({
           "aria-expanded": "mixed",
           "data-popup-open": ""
         })
-      ).children(
+      ).children([
         "Open"
-      ),
-      dialog.trigger(h.button.attr("id", "other")).children("Other"),
+      ]),
+      dialog.trigger(h.button.attr("id", "other")).children(["Other"]),
       dialog.portal(
         h.dialog.attrs({
           id: "mine",
           "aria-describedby": "extra",
           style: "z-index:2"
         })
-      )?.children(
+      )?.children([
         dialog.backdrop(
-          h.div.class("backdrop").attrs({ role: "none", "data-closed": "" })
+          h.div.class(["backdrop"]).attrs({ role: "none", "data-closed": "" })
         ),
-        dialog.viewport(h.div.class("viewport").attr("data-nested", ""))
-          .children(
+        dialog.viewport(h.div.class(["viewport"]).attr("data-nested", ""))
+          .children([
             dialog.popup(
-              h.div.class("popup").attrs({ "data-open": "", tabindex: "0" })
-            ).children(
-              dialog.title(h.h2.attr("id", "heading")).children("Settings"),
-              dialog.description(h.p).children("For this workspace."),
+              h.div.class(["popup"]).attrs({ "data-open": "", tabindex: "0" })
+            ).children([
+              dialog.title(h.h2.attr("id", "heading")).children(["Settings"]),
+              dialog.description(h.p).children(["For this workspace."]),
               dialog.initialFocus(h.input),
-              dialog.close(h.button.class("shut")).children("Close")
-            )
-          )
-      ),
-      dialog.finalFocus(h.button.class("next")).children("Next")
-    )
+              dialog.close(h.button.class(["shut"])).children(["Close"])
+            ])
+          ])
+      ]),
+      dialog.finalFocus(h.button.class(["next"])).children(["Next"])
+    ])
 }
 
 const trigger = Locator.text("Open", { exact: true })
@@ -104,7 +104,7 @@ describe("Dialog", () => {
       assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
       assert.isString(s.get(trigger).attrs?.id)
       assert.strictEqual(s.get(other).attrs?.id, "other")
-      s.click(trigger).emitted({ _tag: "RequestedOpen", triggerId: null })
+      s.click(trigger).emitted([{ _tag: "RequestedOpen", triggerId: null }])
       assert.isNull(partsOf(s).openMethod)
       s.props({ open: true })
       s.expectMount(tracked(s))
@@ -117,7 +117,7 @@ describe("Dialog", () => {
         "data-popup-open": ""
       })
       assert.deepInclude(s.get(other).attrs, { "aria-expanded": "false" })
-      s.click(other).emitted({ _tag: "RequestedOpen", triggerId: "other" })
+      s.click(other).emitted([{ _tag: "RequestedOpen", triggerId: "other" }])
       assert.deepInclude(s.get(other).attrs, {
         "aria-expanded": "true",
         "aria-controls": id
@@ -126,7 +126,7 @@ describe("Dialog", () => {
       assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "false")
       // Enter or Space on the trigger is a click with no pointer.
       s.fire(other, "click", { button: 0, x: 0, y: 0, pointerType: "" })
-        .emitted(dismissed("trigger-press"))
+        .emitted([dismissed("trigger-press")])
       assert.strictEqual(partsOf(s).closeMethod, "keyboard")
       s.props({ open: true, triggerId: s.get(trigger).attrs?.id ?? null })
       s.expectMount(tracked(s))
@@ -202,10 +202,10 @@ describe("Dialog", () => {
       const s = yield* Scene.make(Dialog, { open: true }, {
         elements: Html,
         view: (dialog: Parts, h: H) =>
-          h.div(
+          h.div([
             dialog.portal(h.dialog.attr("aria-labelledby", "outside"))
-              ?.children(dialog.popup(h.div.class("popup")))
-          )
+              ?.children([dialog.popup(h.div.class(["popup"]))])
+          ])
       })
       s.expectMount(tracked(s))
       assert.strictEqual(s.get(portal).attrs?.["aria-labelledby"], "outside")
@@ -216,14 +216,14 @@ describe("Dialog", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Dialog, { open: true }, standIn)
       s.expectMount(tracked(s))
-      s.mounted(tracked(s), sent("PressedEscape")).emitted(
+      s.mounted(tracked(s), sent("PressedEscape")).emitted([
         dismissed("escape-key")
-      )
+      ])
       s.fire(close, "click", { button: 0, x: 0, y: 0, pointerType: "touch" })
-        .emitted(dismissed("close-press"))
+        .emitted([dismissed("close-press")])
       assert.strictEqual(partsOf(s).closeMethod, "touch")
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "pen" }))
-        .emitted(dismissed("outside-press"))
+        .emitted([dismissed("outside-press")])
       assert.strictEqual(partsOf(s).closeMethod, "pen")
       // With pointer dismissal off, neither a press outside nor focus leaving does.
       s.props({ open: true, modal: false, disablePointerDismissal: true })
@@ -249,7 +249,7 @@ describe("Dialog", () => {
       }
       s.expectMount(tracked(s))
         .mounted(tracked(s), sent("FinishedTransition", { open: true }))
-        .emitted({ _tag: "Settled", open: true })
+        .emitted([{ _tag: "Settled", open: true }])
 
       s.props({ open: false, holdExit: true })
       s.expectMount(tracked(s))
@@ -278,7 +278,7 @@ describe("Dialog", () => {
       s.mounted(tracked(s), sent("FinishedTransition", { open: true }))
       assert.deepStrictEqual(s.current.emitted, [])
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
+        .emitted([{ _tag: "Settled", open: false }])
       assert.isUndefined(s.query(portal))
     }))
 
@@ -364,10 +364,10 @@ const Nested = Component.define({
       key: "outer",
       props: { open: true },
       view: (outerDialog) =>
-        h.div(
-          outerDialog.portal(h.dialog)?.children(
-            outerDialog.backdrop(h.div.class("outer-backdrop")),
-            outerDialog.popup(h.div.class("outer")).children(
+        h.div([
+          outerDialog.portal(h.dialog)?.children([
+            outerDialog.backdrop(h.div.class(["outer-backdrop"])),
+            outerDialog.popup(h.div.class(["outer"])).children([
               Dialog(h, {
                 key: "inner",
                 props: { open: model.inner },
@@ -377,19 +377,19 @@ const Nested = Component.define({
                   Settled: () => undefined
                 },
                 view: (innerDialog) =>
-                  h.div(
-                    innerDialog.trigger(h.button).children("Confirm"),
-                    innerDialog.portal(h.dialog)?.children(
-                      innerDialog.backdrop(h.div.class("inner-backdrop")),
-                      innerDialog.popup(h.div.class("inner")).children(
-                        innerDialog.close(h.button).children("Keep")
-                      )
-                    )
-                  )
+                  h.div([
+                    innerDialog.trigger(h.button).children(["Confirm"]),
+                    innerDialog.portal(h.dialog)?.children([
+                      innerDialog.backdrop(h.div.class(["inner-backdrop"])),
+                      innerDialog.popup(h.div.class(["inner"])).children([
+                        innerDialog.close(h.button).children(["Keep"])
+                      ])
+                    ])
+                  ])
               })
-            )
-          )
-        )
+            ])
+          ])
+        ])
     })
 })
 

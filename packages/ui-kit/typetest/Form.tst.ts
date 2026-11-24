@@ -38,10 +38,10 @@ describe("Form", () => {
           view: (form) => {
             expect(form.root).type.not.toBeCallableWith(h.div)
             expect(form.root).type.not.toBeCallableWith({ element: h.form })
-            const root = form.root(h.form.class("signup")).children(
+            const root = form.root(h.form.class(["signup"])).children([
               h.input,
               needsClock
-            )
+            ])
             expect(root).type.toBe<Element<"form", Clock>>()
             return root
           }

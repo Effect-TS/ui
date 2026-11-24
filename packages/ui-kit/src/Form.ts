@@ -13,7 +13,7 @@
  *
  * `root` takes the consumer's builder and returns it, so the consumer goes
  * on chaining and adds the fields and the submit button with
- * `.children(...)`: `form.root(h.form.class("signup")).children(...)`. It
+ * `.children([...])`: `form.root(h.form.class(["signup"])).children([...])`. It
  * adds no markup.
  *
  * **Data attributes**
@@ -93,18 +93,18 @@
  *     Form(h, {
  *       onEmit: () => SignupMessage.SubmittedForm(),
  *       view: (form) =>
- *         form.root(h.form.class("signup")).children(
+ *         form.root(h.form.class(["signup"])).children([
  *           Field(h, {
  *             props: { invalid: model.submitted },
  *             view: (field) =>
- *               field.root(h.div).children(
- *                 field.label(h.label).children("Email"),
+ *               field.root(h.div).children([
+ *                 field.label(h.label).children(["Email"]),
  *                 field.control(h.input).attr("name", "email"),
- *                 field.error(h.div)?.children("Enter your email")
- *               )
+ *                 field.error(h.div)?.children(["Enter your email"])
+ *               ])
  *           }),
- *           h.button.attr("type", "submit").children("Sign up")
- *         )
+ *           h.button.attr("type", "submit").children(["Sign up"])
+ *         ])
  *     })
  * })
  *
@@ -224,7 +224,9 @@ export const Form = Component.define({
 }).make({
   init: () => ({}),
   update: ($, { entries, fields }) =>
-    $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
+    $.run([FocusInvalid.make()]).emit([
+      FormEvents.Submitted({ fields, entries })
+    ]),
   parts: (p) => ({
     root: p.part("form", (b) =>
       b.ref(Root)

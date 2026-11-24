@@ -69,7 +69,7 @@ const Tip = Component.define({
     expect(h.shared.provider).type.toBe<
       { open: boolean; instant: boolean } | undefined
     >()
-    return h.span()
+    return h.span([])
   }
 })
 

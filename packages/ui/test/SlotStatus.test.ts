@@ -62,12 +62,14 @@ const Doc = Component.define({
   view: (h) =>
     h.el(
       "div",
-      "doc:",
-      Editor.render(h, {
-        key: "e",
-        props: {},
-        fallback: (r) => h.text(shown(r))
-      })
+      [
+        "doc:",
+        Editor.render(h, {
+          key: "e",
+          props: {},
+          fallback: (r) => h.text(shown(r))
+        })
+      ]
     )
 })
 
@@ -96,12 +98,14 @@ describe("slot status", () => {
         view: (h, room) =>
           h.el(
             "div",
-            room + ":",
-            Editor.render(h, {
-              key: "e",
-              props: {},
-              fallback: (r) => h.text(shown(r))
-            })
+            [
+              room + ":",
+              Editor.render(h, {
+                key: "e",
+                props: {},
+                fallback: (r) => h.text(shown(r))
+              })
+            ]
           )
       })
       const Keyed = Component.provide(Room, {
@@ -160,12 +164,14 @@ describe("slot status", () => {
           view: (h) =>
             h.el(
               "div",
-              "spinner:",
-              Editor.render(h, {
-                key: "e",
-                props: {},
-                fallback: (r) => h.text(shown(r))
-              })
+              [
+                "spinner:",
+                Editor.render(h, {
+                  key: "e",
+                  props: {},
+                  fallback: (r) => h.text(shown(r))
+                })
+              ]
             )
         })
       const Inner = Component.provide(
@@ -179,12 +185,14 @@ describe("slot status", () => {
           view: (h) =>
             h.el(
               "div",
-              Doc(h, { key: "p" }),
-              Viewer.render(h, {
-                key: "v",
-                props: {},
-                fallback: () => Spinner(h, { key: "s" })
-              })
+              [
+                Doc(h, { key: "p" }),
+                Viewer.render(h, {
+                  key: "v",
+                  props: {},
+                  fallback: () => Spinner(h, { key: "s" })
+                })
+              ]
             )
         }),
         Layer.mergeAll(Viewer.toLayer(EditorView), Editor.toLayer(EditorView))
@@ -200,7 +208,7 @@ describe("slot status", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("div", Inner(h, { key: "i" }))
+          view: (h) => h.el("div", [Inner(h, { key: "i" })])
         }),
         Editor.toLayer(EditorView)
       )
@@ -247,8 +255,8 @@ describe("slot status", () => {
         init: () => null,
         update: ($, message) =>
           Msg.match(message, {
-            Go: () => $.run(Job.make().pipe(Command.asNoop)),
-            Stop: () => $.run(Command.interrupt(Job))
+            Go: () => $.run([Job.make().pipe(Command.asNoop)]),
+            Stop: () => $.run([Command.interrupt(Job)])
           }),
         view: (h) => h.text(h.isRunning(Job) ? "running" : "idle")
       })

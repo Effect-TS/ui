@@ -14,11 +14,11 @@ export const FixedDemo = Component.define({
   init: () => ({ jump: 0 }),
   update: { ClickedLast: ($) => ({ jump: $.model.jump + 1 }) },
   view: (h, model) =>
-    h.div.class("page").children(
-      h.div.class("toolbar").children(
+    h.div.class(["page"]).children([
+      h.div.class(["toolbar"]).children([
         h.button.attr("id", "last").onClick(FixedMessage.ClickedLast())
-          .children("Jump to the last row")
-      ),
+          .children(["Jump to the last row"])
+      ]),
       VirtualList(h, {
         props: {
           count: 10_000,
@@ -33,18 +33,18 @@ export const FixedDemo = Component.define({
             }
         },
         view: (virtualList) =>
-          virtualList.viewport(h.div.class("scroller")).children(
-            virtualList.list(h.ul.class("rows")).children(
+          virtualList.viewport(h.div.class(["scroller"])).children([
+            virtualList.list(h.ul.class(["rows"])).children(
               virtualList.items.map((index) =>
                 virtualList.item({
-                  element: h.li.class("row padded").key(String(index)),
+                  element: h.li.class(["row padded"]).key(String(index)),
                   index
-                }).children(
+                }).children([
                   "Row " + index
-                )
+                ])
               )
             )
-          )
+          ])
       })
-    )
+    ])
 })

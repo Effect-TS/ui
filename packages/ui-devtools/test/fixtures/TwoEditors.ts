@@ -75,20 +75,20 @@ const EditorNoDeps = Component.define({
     UpdatedDraft: ($, { text }) =>
       $.evolve({ draft: text, status: "Dirty" as const }),
     ClickedSave: ($) =>
-      $.evolve({ status: "Saving" as const }).run(
+      $.evolve({ status: "Saving" as const }).run([
         SaveNote.make({
           noteId: $.props.noteId,
           text: $.model.draft,
           token: $.props.token
         })
-      ),
+      ]),
     SucceededSaveNote: ($) =>
       $.evolve({ saved: $.model.draft, status: "Saved" as const }),
     FailedSaveNote: ($) => $.evolve({ status: "Dirty" as const }),
     PressedEscape: ($) =>
-      $.evolve({ linkPickerOpen: false }).run(
+      $.evolve({ linkPickerOpen: false }).run([
         Command.interrupt(SaveNote, { noteId: $.props.noteId })
-      ),
+      ]),
     ReceivedPresence: ($, { viewers }) => $.evolve({ viewers }),
     CompletedFocusBody: ($) => $.model
   },
@@ -99,7 +99,7 @@ const EditorNoDeps = Component.define({
     )
   ],
   view: (h, model) =>
-    h.section.attr("aria-label", "Editor " + h.props.noteId).children(
+    h.section.attr("aria-label", "Editor " + h.props.noteId).children([
       h.textarea.attr("aria-label", "Body " + h.props.noteId).value(model.draft)
         .onInput(({ value }) => EditorMessage.UpdatedDraft({ text: value }))
         .onMount(
@@ -107,11 +107,11 @@ const EditorNoDeps = Component.define({
             Mount.map(() => EditorMessage.CompletedFocusBody())
           )
         ),
-      h.button.onClick(EditorMessage.ClickedSave()).children(
+      h.button.onClick(EditorMessage.ClickedSave()).children([
         "Save " + h.props.noteId
-      ),
-      h.p(model.status)
-    )
+      ]),
+      h.p([model.status])
+    ])
 })
 const Editor = EditorNoDeps.pipe(Component.provide(SaveNote.layer))
 
@@ -132,15 +132,15 @@ const Workspace = Component.define({
   view: (h, model) =>
     h.main(
       model.open.map((noteId) =>
-        h.div.key(noteId).children(
+        h.div.key(noteId).children([
           Editor(h, {
             key: noteId,
             props: { noteId, token: Redacted.make("tok_live_9f2c") }
           }),
-          h.button.onClick(WorkspaceMessage.ClickedClose({ noteId })).children(
+          h.button.onClick(WorkspaceMessage.ClickedClose({ noteId })).children([
             "Close " + noteId
-          )
-        )
+          ])
+        ])
       )
     )
 })

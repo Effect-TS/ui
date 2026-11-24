@@ -46,7 +46,7 @@ describe("Field", () => {
             expect(field.focusWithin(h.div)).type.toBe<Element<"div">>()
             expect(field.member(h.input)).type.toBe<InputElement<Msg>>()
             expect(field.focused).type.toBe<boolean>()
-            expect(field.label(h.label.class("label"))).type.toBe<
+            expect(field.label(h.label.class(["label"]))).type.toBe<
               Element<"label">
             >()
             expect(field.control(h.input)).type.toBe<InputElement<Msg>>()
@@ -55,16 +55,16 @@ describe("Field", () => {
             >()
             expect(field.control(h.select)).type.toBe<Element<"select">>()
             expect(field.control(h.button)).type.toBe<Element<"button">>()
-            expect(field.description(h.p).children(needsClock)).type.toBe<
+            expect(field.description(h.p).children([needsClock])).type.toBe<
               Element<"p", Clock>
             >()
-            const error = field.error(h.div)?.children("Required", needsClock)
+            const error = field.error(h.div)?.children(["Required", needsClock])
             expect(error).type.toBe<Element<"div", Clock> | undefined>()
-            const root = field.root(h.section).children(
+            const root = field.root(h.section).children([
               field.label(h.label),
               field.control(h.input),
               error
-            )
+            ])
             expect(root).type.toBe<Element<"section", Clock>>()
             return root
           }
@@ -90,7 +90,7 @@ describe("Field", () => {
                 props: { value: "" }
               })
             ).type.toBe<InputElement<Msg>>()
-            return field.root(h.div).children(
+            return field.root(h.div).children([
               Checkbox(h, {
                 props: { checked: false },
                 view: (checkbox) => checkbox.root(field.control(h.button))
@@ -99,7 +99,7 @@ describe("Field", () => {
                 props: { checked: false },
                 view: (parts) => parts.root(field.control(h.button))
               })
-            )
+            ])
           }
         })
     })

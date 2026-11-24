@@ -19,8 +19,8 @@
  * | `legend` | any element, usually a `<div>` |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`:
- * `fieldset.root(h.fieldset).children(fieldset.legend(h.div).children("Billing details"), ...)`.
+ * goes on chaining and adds children with `.children([...])`:
+ * `fieldset.root(h.fieldset).children([fieldset.legend(h.div).children(["Billing details"]), ...])`.
  * No part adds markup.
  *
  * The root's `aria-labelledby` always points at the legend's id, so draw
@@ -79,16 +79,16 @@
  *     Fieldset(h, {
  *       props: { disabled: model.locked },
  *       view: (fieldset) =>
- *         fieldset.root(h.fieldset.class("billing")).children(
- *           fieldset.legend(h.div).children("Billing details"),
+ *         fieldset.root(h.fieldset.class(["billing"])).children([
+ *           fieldset.legend(h.div).children(["Billing details"]),
  *           ...["Company", "Tax ID"].map((name) =>
  *             Field(h, {
  *               key: name,
  *               view: (field) =>
- *                 field.root(h.div).children(field.label(h.label).children(name), field.control(h.input))
+ *                 field.root(h.div).children([field.label(h.label).children([name]), field.control(h.input)])
  *             })
  *           )
- *         )
+ *         ])
  *     })
  * })
  *

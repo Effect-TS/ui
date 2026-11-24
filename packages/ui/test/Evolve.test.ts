@@ -57,13 +57,15 @@ const Checkout = Component.define({
       const lines = $.model.lines.filter((line) => line.id !== id)
       const step = $.evolve({ lines })
       return lines.length === 0
-        ? step.evolve({ notice: "Your basket is empty" }).emit(Events.Emptied())
+        ? step.evolve({ notice: "Your basket is empty" }).emit([
+          Events.Emptied()
+        ])
         : step
     },
     SubmittedOrder: ($) =>
-      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run(
+      $.evolve({ submitting: true, attempts: (n) => n + 1 }).run([
         PlaceOrder.make({ lines: $.model.lines.length })
-      ),
+      ]),
     // Keeps every field, so the Model stays the same object.
     FailedPlaceOrder: ($) => UiStruct.evolve($.model, { submitting: false })
   },
@@ -100,7 +102,7 @@ describe("evolve", () => {
 
     s.send(Message.ClickedRemove({ id: "a" })).send(
       Message.ClickedRemove({ id: "b" })
-    ).emitted(Events.Emptied())
+    ).emitted([Events.Emptied()])
     assert.deepStrictEqual(s.model.lines, [])
     assert.strictEqual(s.model.notice, "Your basket is empty")
   })

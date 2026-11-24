@@ -97,8 +97,8 @@ const Steps = Effect.fnUntraced(function*(
     init: () => ({ step: 0 }),
     update: { Advanced: ($) => ({ step: $.model.step + 1 }) },
     view: (h, model) =>
-      h.div.children(
-        h.button.class("next").onClick(Message.Advanced()).children("Next"),
+      h.div.children([
+        h.button.class(["next"]).onClick(Message.Advanced()).children(["Next"]),
         VirtualList(h, {
           props: { count: 1000, itemSize, ...steps[model.step] },
           onEmit: (event) => {
@@ -107,21 +107,21 @@ const Steps = Effect.fnUntraced(function*(
           },
           view: (virtualList) =>
             (ownViewport
-              ? h.div.class("viewport").attr("style", "overflow-y:visible")
-              : virtualList.viewport(h.div.class("viewport"))).children(
-                virtualList.list(h.ul.class("list")).children(
+              ? h.div.class(["viewport"]).attr("style", "overflow-y:visible")
+              : virtualList.viewport(h.div.class(["viewport"]))).children([
+                virtualList.list(h.ul.class(["list"])).children(
                   virtualList.items.map((index) =>
                     virtualList.item({
-                      element: h.li.class("item").key(String(index)),
+                      element: h.li.class(["item"]).key(String(index)),
                       index
-                    }).children(
-                      h.button.children("Item " + index)
-                    )
+                    }).children([
+                      h.button.children(["Item " + index])
+                    ])
                   )
                 )
-              )
+              ])
         })
-      )
+      ])
   })
   const app = yield* container
   yield* BrowserHost.mountEffect(Demo, {}, app)

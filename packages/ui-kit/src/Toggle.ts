@@ -11,7 +11,7 @@
  * `Toggle` returns a single `<button>` builder. It uses `h.button` by
  * default. Pass `element` to share the button with another part, such as
  * a tooltip trigger. Chain classes, attributes and children on the result:
- * `Toggle(h, { props, onToggle }).class("tool").children("B")`.
+ * `Toggle(h, { props, onToggle }).class(["tool"]).children(["B"])`.
  *
  * Naming the toggle is the consumer's job: text inside it, or an
  * `aria-label` or `aria-labelledby` on the button. Keep the name the same
@@ -55,9 +55,9 @@
  *       props: { pressed: model.bold },
  *       onToggle: ({ pressed }) => EditorMessage.ToggledBold({ pressed })
  *     })
- *       .class("tool")
+ *       .class(["tool"])
  *       .attr("aria-label", "Bold")
- *       .children("B")
+ *       .children(["B"])
  * })
  *
  * // The button keeps the consumer's class and reports that it isn't pressed.
@@ -107,7 +107,7 @@ export type ToggleElement<Msg, R = never> = Html.Element<
 
 /**
  * A toggle button. Call it with the consumer's `h`, the `props`, and the
- * click as `onToggle`, then chain the label with `.children(...)`.
+ * click as `onToggle`, then chain the label with `.children([...])`.
  *
  * **Details**
  *

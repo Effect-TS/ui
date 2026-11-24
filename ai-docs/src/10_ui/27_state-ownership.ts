@@ -37,22 +37,22 @@ export const ConfirmDialog = Component.define({
   init: () => null,
   update: ($, message) =>
     ConfirmDialogMessage.match(message, {
-      CancelledDialog: () => $.emit(ConfirmDialogEvents.RequestedClose()),
+      CancelledDialog: () => $.emit([ConfirmDialogEvents.RequestedClose()]),
       // A close while `open` is still true is the browser's. One after the
       // caller set `open` to false only confirms the caller's decision.
       ClosedDialog: () =>
-        $.props.open ? $.emit(ConfirmDialogEvents.RequestedClose()) : $.model,
-      ClickedConfirm: () => $.emit(ConfirmDialogEvents.Confirmed())
+        $.props.open ? $.emit([ConfirmDialogEvents.RequestedClose()]) : $.model,
+      ClickedConfirm: () => $.emit([ConfirmDialogEvents.Confirmed()])
     }),
   view: (h) =>
     h.dialog.attr("aria-label", "Confirm").modal(h.props.open)
       .onCancel(ConfirmDialogMessage.CancelledDialog())
       .onClose(ConfirmDialogMessage.ClosedDialog())
-      .children(
-        h.button.onClick(ConfirmDialogMessage.ClickedConfirm()).children(
+      .children([
+        h.button.onClick(ConfirmDialogMessage.ClickedConfirm()).children([
           "Confirm"
-        )
-      )
+        ])
+      ])
 })
 
 // ---------------------------------------------------------------------------
@@ -79,9 +79,9 @@ export const Page = Component.define({
       ConfirmedDelete: () => ({ confirming: false, deleted: true })
     }),
   view: (h, model) =>
-    h.div(
-      h.button.onClick(PageMessage.ClickedDelete()).children("Delete"),
-      model.deleted && h.p.children("Deleted"),
+    h.div([
+      h.button.onClick(PageMessage.ClickedDelete()).children(["Delete"]),
+      model.deleted && h.p.children(["Deleted"]),
       ConfirmDialog(h, {
         props: { open: model.confirming },
         // Guaranteed: the record needs a handler for every event, so a third
@@ -91,7 +91,7 @@ export const Page = Component.define({
           Confirmed: () => PageMessage.ConfirmedDelete()
         }
       })
-    )
+    ])
 })
 
 // ---------------------------------------------------------------------------
@@ -125,19 +125,19 @@ export const Wizard = Component.define({
       ClickedNext: () =>
         $.model.step + 1 < $.props.steps
           ? { step: $.model.step + 1 }
-          : $.emit(WizardEvents.Finished()),
-      ClickedCancel: () => $.emit(WizardEvents.Cancelled()),
+          : $.emit([WizardEvents.Finished()]),
+      ClickedCancel: () => $.emit([WizardEvents.Cancelled()]),
       // The wizard is always open while mounted, so a forced close cancels it.
-      ClosedDialog: () => $.emit(WizardEvents.Cancelled())
+      ClosedDialog: () => $.emit([WizardEvents.Cancelled()])
     }),
   view: (h, model) =>
     h.dialog.attr("aria-label", "Import").modal(true)
       .onCancel(WizardMessage.ClickedCancel())
       .onClose(WizardMessage.ClosedDialog())
-      .children(
-        h.p.children(`Step ${model.step + 1} of ${h.props.steps}`),
-        h.button.onClick(WizardMessage.ClickedNext()).children("Next")
-      )
+      .children([
+        h.p.children([`Step ${model.step + 1} of ${h.props.steps}`]),
+        h.button.onClick(WizardMessage.ClickedNext()).children(["Next"])
+      ])
 })
 
 const HostMessage = UiSchema.TaggedEnum({
@@ -164,9 +164,9 @@ export const Host = Component.define({
       CancelledImport: () => $.evolve({ importing: false })
     }),
   view: (h, model) =>
-    h.div(
-      h.button.onClick(HostMessage.ClickedImport()).children("Import"),
-      h.p.children(`Imported ${model.imported}`),
+    h.div([
+      h.button.onClick(HostMessage.ClickedImport()).children(["Import"]),
+      h.p.children([`Imported ${model.imported}`]),
       model.importing && Wizard(h, {
         props: { steps: 3 },
         onEmit: {
@@ -174,7 +174,7 @@ export const Host = Component.define({
           Cancelled: () => HostMessage.CancelledImport()
         }
       })
-    )
+    ])
 })
 
 // ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ export const OpenButton = Component.define({
         $.send(ModalProvider, ModalProviderMessage.RequestedOpen())
     }),
   view: (h) =>
-    h.button.onClick(OpenButtonMessage.ClickedOpen()).children("Open")
+    h.button.onClick(OpenButtonMessage.ClickedOpen()).children(["Open"])
 })
 
 // Two events, two messages; they share the handler in `update`.
@@ -275,7 +275,9 @@ export const Shell = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    ModalProvider(h, { view: () => h.div(OpenButton(h, {}), ModalHost(h, {})) })
+    ModalProvider(h, {
+      view: () => h.div([OpenButton(h, {}), ModalHost(h, {})])
+    })
 })
 
 // ---------------------------------------------------------------------------
@@ -298,9 +300,9 @@ export const Counter = Component.define({
       ClickedIncrement: () => ({ count: $.model.count + 1 })
     }),
   view: (h, model) =>
-    h.button.onClick(CounterMessage.ClickedIncrement()).children(
+    h.button.onClick(CounterMessage.ClickedIncrement()).children([
       String(model.count)
-    )
+    ])
 })
 
 // ---------------------------------------------------------------------------
@@ -327,12 +329,12 @@ export const Dual = Component.define({
   // The prop is read again after `init`. That makes this a mirror, where
   // Counter above is a seed.
   view: (h, model) =>
-    h.div(
-      h.button.onClick(DualMessage.ClickedOpen()).children("Open"),
-      h.dialog.modal(model.open || h.props.open).children(
-        h.button.onClick(DualMessage.ClickedClose()).children("Close")
-      )
-    )
+    h.div([
+      h.button.onClick(DualMessage.ClickedOpen()).children(["Open"]),
+      h.dialog.modal(model.open || h.props.open).children([
+        h.button.onClick(DualMessage.ClickedClose()).children(["Close"])
+      ])
+    ])
 })
 
 // Routing around the owner. The closure hands the owner's parts to a child
@@ -351,7 +353,7 @@ export const Around = Component.define({
   view: (h) =>
     ModalProvider(h, {
       view: (modalProvider) =>
-        h.div(
+        h.div([
           OpenButton(h, {}),
           ConfirmDialog(h, {
             props: { open: modalProvider.open },
@@ -360,6 +362,6 @@ export const Around = Component.define({
               Confirmed: () => undefined
             }
           })
-        )
+        ])
     })
 })

@@ -71,11 +71,11 @@ const Page = Component.define({
     SetSelectValue: ($, { value }) => ({ ...$.model, selectValue: value }),
     SetSliderValue: ($, { value }) => ({ ...$.model, sliderValue: value }),
     Left: ($) =>
-      $.run(
+      $.run([
         Router.push(PageRoute, PageRoute.Away()).pipe(
           Command.map(() => PageMessage.Navigated())
         )
-      ),
+      ]),
     Navigated: ($) => $.model
   },
   subscriptions: ({ model }) => [
@@ -86,12 +86,14 @@ const Page = Component.define({
     )
   ],
   view: (h, model) =>
-    h.div(
+    h.div([
       h.button.attr("data-testid", "away").onClick(PageMessage.Left()).children(
-        "Away"
+        [
+          "Away"
+        ]
       ),
       model.route._tag === "Edit"
-        ? h.div(
+        ? h.div([
           Popover(h, {
             props: { open: model.popoverOpen },
             onEmit: (event) => {
@@ -104,14 +106,14 @@ const Page = Component.define({
               return undefined
             },
             view: (popover) =>
-              h.div(
+              h.div([
                 popover.trigger({
                   element: h.button.attr("data-testid", "popover-trigger"),
                   openOnHover: true,
                   delay: 100
-                }).children("Open"),
-                popover.popup(h.div).children("Body")
-              )
+                }).children(["Open"]),
+                popover.popup(h.div).children(["Body"])
+              ])
           }),
           Autocomplete(h, {
             props: { open: true, value: model.autocompleteValue, items },
@@ -120,10 +122,10 @@ const Page = Component.define({
                 ? PageMessage.SetAutocompleteValue({ value: event.value })
                 : undefined,
             view: (ac) =>
-              h.div(
+              h.div([
                 ac.input(h.input.attr("data-testid", "ac-input")),
                 ac.list(h.div).children(
-                  ...ac.items.map((item) =>
+                  ac.items.map((item) =>
                     ac.item({
                       element: h.div.attr(
                         "data-testid",
@@ -131,10 +133,10 @@ const Page = Component.define({
                       ),
                       value: item.value
                     })
-                      .children(item.label)
+                      .children([item.label])
                   )
                 )
-              )
+              ])
           }),
           Combobox(h, {
             props: {
@@ -148,10 +150,10 @@ const Page = Component.define({
                 ? PageMessage.SetComboboxInput({ value: event.inputValue })
                 : undefined,
             view: (cb) =>
-              h.div(
+              h.div([
                 cb.input(h.input.attr("data-testid", "cb-input")),
                 cb.list(h.div).children(
-                  ...cb.items.map((item) =>
+                  cb.items.map((item) =>
                     cb.item({
                       element: h.div.attr(
                         "data-testid",
@@ -159,10 +161,10 @@ const Page = Component.define({
                       ),
                       value: item.value
                     })
-                      .children(item.label)
+                      .children([item.label])
                   )
                 )
-              )
+              ])
           }),
           Select(h, {
             props: { open: false, value: model.selectValue, items },
@@ -173,14 +175,14 @@ const Page = Component.define({
                 : undefined,
             view: (select) =>
               select.trigger(h.button.attr("data-testid", "select-trigger"))
-                .children(model.selectValue ?? "none")
+                .children([model.selectValue ?? "none"])
           }),
           NumberField(h, {
             props: { value: 12 },
             view: (nf) =>
-              nf.root(h.div).children(
+              nf.root(h.div).children([
                 nf.input(h.input.attr("data-testid", "nf-input"))
-              )
+              ])
           }),
           OTPField(h, {
             props: { value: Redacted.make("12"), length: 2 },
@@ -204,30 +206,30 @@ const Page = Component.define({
                 : undefined,
             view: (slider) =>
               slider.root(h.div.attr("data-testid", "slider-root"))
-                .children(
+                .children([
                   slider.control(h.div.attr("data-testid", "slider-control"))
-                    .children(
-                      slider.track(h.div).children(
+                    .children([
+                      slider.track(h.div).children([
                         slider.thumb({
                           element: h.div.attr("data-testid", "slider-thumb"),
                           input: h.input.attr("data-testid", "slider-input")
                         })
-                      )
-                    )
-                )
+                      ])
+                    ])
+                ])
           }),
           ScrollArea(h, {
             props: {},
             view: (sa) =>
-              sa.root(h.div.attr("data-testid", "sa-root")).children(
-                sa.viewport(h.div.attr("data-testid", "sa-viewport")).children(
-                  sa.content(h.div).children("Body")
-                )
-              )
+              sa.root(h.div.attr("data-testid", "sa-root")).children([
+                sa.viewport(h.div.attr("data-testid", "sa-viewport")).children([
+                  sa.content(h.div).children(["Body"])
+                ])
+              ])
           })
-        )
+        ])
         : null
-    )
+    ])
 })
 
 describe("History restore", { concurrent: false }, () => {

@@ -8,7 +8,7 @@ import { vi } from "vitest"
 
 const { parseMarkdown } = MarkdownParser
 
-const lines = (...sourceLines: ReadonlyArray<string>): string =>
+const lines = (sourceLines: ReadonlyArray<string>): string =>
   sourceLines.join("\n")
 
 const wireDocument = (): unknown => ({
@@ -110,7 +110,7 @@ it.layer(TestHost.layer())("view", (it) => {
     Effect.gen(function*() {
       const html = yield* render(
         parseMarkdown(
-          lines(
+          lines([
             "# 1",
             "## 2",
             "### 3",
@@ -127,7 +127,7 @@ it.layer(TestHost.layer())("view", (it) => {
             "4. four",
             "",
             "---"
-          )
+          ])
         )
       )
 
@@ -145,7 +145,7 @@ it.layer(TestHost.layer())("view", (it) => {
     Effect.gen(function*() {
       const html = yield* render(
         parseMarkdown(
-          lines("| Stock | Speed |", "| :--- | ---: |", "| Portra | 400 |")
+          lines(["| Stock | Speed |", "| :--- | ---: |", "| Portra | 400 |"])
         )
       )
 
@@ -161,7 +161,7 @@ it.layer(TestHost.layer())("view", (it) => {
       const received: Array<number> = []
       yield* render(
         parseMarkdown(
-          lines(
+          lines([
             "```ts",
             "const first = 1",
             "```",
@@ -169,7 +169,7 @@ it.layer(TestHost.layer())("view", (it) => {
             "```ts",
             "const second = 2",
             "```"
-          )
+          ])
         ),
         {
           views: {
@@ -189,7 +189,7 @@ it.layer(TestHost.layer())("view", (it) => {
       const received: Array<number> = []
       const html = yield* render(
         parseMarkdown(
-          lines(
+          lines([
             ":::Note{tone=\"calm\"}",
             "Inside.",
             ":::",
@@ -199,13 +199,13 @@ it.layer(TestHost.layer())("view", (it) => {
             ":::Note",
             "Second.",
             ":::"
-          )
+          ])
         ),
         {
           islands: {
             Note: (h, attributes, content, occurrenceIndex) => {
               received.push(occurrenceIndex)
-              return h.aside.class(`note-${attributes.tone ?? "plain"}`)
+              return h.aside.class([`note-${attributes.tone ?? "plain"}`])
                 .children(content)
             },
             Other: (h) => h.hr
@@ -224,7 +224,7 @@ it.layer(TestHost.layer())("view", (it) => {
     Effect.gen(function*() {
       const warn = yield* spyWarn
       const document = parseMarkdown(
-        lines("::Missing", "", "::Missing", "", "::constructor")
+        lines(["::Missing", "", "::Missing", "", "::constructor"])
       )
       const html = yield* render(document, { islands: {} })
       yield* render(document, { islands: {} })
@@ -242,13 +242,13 @@ it.layer(TestHost.layer())("view", (it) => {
   it.effect("applies view overrides and exposes defaultViews for reuse", () =>
     Effect.gen(function*() {
       const html = yield* render(
-        parseMarkdown(lines("# Title", "", "A paragraph.")),
+        parseMarkdown(lines(["# Title", "", "A paragraph."])),
         {
           views: {
             Heading: (h, heading, content) =>
               Markdown.defaultViews.Heading(h, heading, content),
             Paragraph: (h, _paragraph, content) =>
-              h.p.class("leading-relaxed").children(content)
+              h.p.class(["leading-relaxed"]).children(content)
           }
         }
       )
@@ -265,7 +265,7 @@ it.layer(TestHost.layer())("view", (it) => {
       const html = yield* render(parseMarkdown("::Gauge"), {
         islands: Markdown.islandsFor(
           { Gauge: Schema.Struct({ level: Schema.String }) },
-          { Gauge: (h, { level }) => h.span.children(level) }
+          { Gauge: (h, { level }) => h.span.children([level]) }
         )
       })
 
@@ -277,7 +277,7 @@ it.layer(TestHost.layer())("view", (it) => {
 
   it.effect("viewBlocks renders the blocks without a container", () =>
     Effect.gen(function*() {
-      const document = parseMarkdown(lines("# Title", "", "Prose."))
+      const document = parseMarkdown(lines(["# Title", "", "Prose."]))
       const html = yield* HtmlServer.renderToHtml(
         Component.define({
           name: "Blocks",
@@ -312,10 +312,10 @@ const Counter = Component.define({
   init: () => ({ count: 0 }),
   update: { Incremented: ($) => ({ count: $.model.count + $.props.step }) },
   view: (h, model) =>
-    h.div.children(
-      h.span.attr("role", "status").children(String(model.count)),
-      h.button.onClick(CounterMessage.Incremented()).children("Increment")
-    )
+    h.div.children([
+      h.span.attr("role", "status").children([String(model.count)]),
+      h.button.onClick(CounterMessage.Incremented()).children(["Increment"])
+    ])
 })
 
 const islandAttributes = {
@@ -327,7 +327,7 @@ const islandAttributes = {
 }
 
 const post = parseMarkdown(
-  lines(
+  lines([
     "# Making this blog",
     "",
     "::Counter{label=\"First\"}",
@@ -341,7 +341,7 @@ const post = parseMarkdown(
     ":::Note",
     "*Islands wrap markdown too.*",
     ":::"
-  ),
+  ]),
   { islands: islandAttributes }
 )
 
@@ -356,23 +356,23 @@ const Post = Component.define({
   init: () => ({ renders: 0 }),
   update: { ClickedRefresh: ($) => ({ renders: $.model.renders + 1 }) },
   view: (h, model) =>
-    h.article.children(
-      h.button.onClick(PostMessage.ClickedRefresh()).children(
+    h.article.children([
+      h.button.onClick(PostMessage.ClickedRefresh()).children([
         `Refresh ${model.renders}`
-      ),
+      ]),
       Markdown.view(h, post, {
         islands: Markdown.islandsFor(islandAttributes, {
           Counter: (h, { label, step }, _content, index) =>
-            h.div.attr("role", "group").attr("aria-label", label).children(
+            h.div.attr("role", "group").attr("aria-label", label).children([
               Counter(h, {
                 key: `counter-${index}`,
                 props: { step: step ?? 1 }
               })
-            ),
+            ]),
           Note: (h, _attributes, content) => h.aside.children(content)
         })
-      }).class("prose")
-    )
+      }).class(["prose"])
+    ])
 })
 
 const countOf = (label: string) =>
@@ -407,15 +407,15 @@ const Greeting = Component.define({
   message: Schema.String,
   elements: Html
 }).make({
-  init: ($) => $.set("...").run(Greet.make({ name: $.props.name })),
+  init: ($) => $.set("...").run([Greet.make({ name: $.props.name })]),
   update: (_$, message) => message,
-  view: (h, text) => h.p.attr("role", "status").children(text)
+  view: (h, text) => h.p.attr("role", "status").children([text])
 })
 
 const greetingAttributes = { Greeting: Schema.Struct({ name: Schema.String }) }
 
 const greetingPost = parseMarkdown(
-  lines("Before.", "", "::Greeting{name=\"world\"}"),
+  lines(["Before.", "", "::Greeting{name=\"world\"}"]),
   { islands: greetingAttributes }
 )
 

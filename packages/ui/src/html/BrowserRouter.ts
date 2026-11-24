@@ -53,10 +53,10 @@
  *   update: (_, message) => message.route,
  *   subscriptions: ({ model }) => [Router.subscription(AppRoute, model, (route) => Message.ChangedRoute({ route }))],
  *   view: (h, route) =>
- *     h.div(
- *       h.a.attr("href", AppRoute.print(AppRoute.Person({ params: { id: 1 } }))).children("Ada"),
- *       h.h1(route._tag)
- *     )
+ *     h.div([
+ *       h.a.attr("href", AppRoute.print(AppRoute.Person({ params: { id: 1 } }))).children(["Ada"]),
+ *       h.h1([route._tag])
+ *     ])
  * })
  *
  * // Router.props reads the initial `{ route }` from the browser Router's URL.

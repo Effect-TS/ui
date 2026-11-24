@@ -25,20 +25,20 @@ export const Counter = Component.define({
     ClickedIncrement: ($) => $.evolve({ count: (count) => count + 1 })
   },
   view: (h, model) =>
-    h.div.class(
+    h.div.class([
       "flex items-center gap-3 rounded-lg border border-gray-200 px-4 py-3"
-    ).children(
+    ]).children([
       Button(h, { onPress: CounterMessage.ClickedDecrement() }).attr(
         "aria-label",
         "Decrement"
-      ).class(BUTTON_CLASS)
-        .children("-"),
-      h.output.class("w-12 text-center text-2xl font-mono tabular-nums")
-        .children(String(model.count)),
+      ).class([BUTTON_CLASS])
+        .children(["-"]),
+      h.output.class(["w-12 text-center text-2xl font-mono tabular-nums"])
+        .children([String(model.count)]),
       Button(h, { onPress: CounterMessage.ClickedIncrement() }).attr(
         "aria-label",
         "Increment"
-      ).class(BUTTON_CLASS)
-        .children("+")
-    )
+      ).class([BUTTON_CLASS])
+        .children(["+"])
+    ])
 })

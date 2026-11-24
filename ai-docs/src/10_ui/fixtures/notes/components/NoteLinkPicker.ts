@@ -36,11 +36,11 @@ export const NoteLinkPickerNoDeps = Component.define({
 }).make({
   init: () => ({ linked: null }),
   update: ($, { id }) =>
-    $.set({ linked: id }).emit(NoteLinkPickerEvents.Linked({ id })),
+    $.set({ linked: id }).emit([NoteLinkPickerEvents.Linked({ id })]),
   view: (h, model) =>
     AsyncResult.match(h.queries.notes, {
-      onInitial: () => h.p("Loading notes…"),
-      onFailure: () => h.p("The notes couldn't be loaded."),
+      onInitial: () => h.p(["Loading notes…"]),
+      onFailure: () => h.p(["The notes couldn't be loaded."]),
       onSuccess: ({ value }) => {
         const notes = new Map(
           value.filter((note) => note.id !== h.props.noteId).map((
@@ -75,16 +75,16 @@ export const NoteLinkPickerNoDeps = Component.define({
           // `Router.prefetch` doesn't walk into closures, so it never
           // prefetches the queries of a child placed in one.
           view: (listbox) =>
-            h.div.class("link-picker").children(
-              listbox.trigger(h.button).children(
+            h.div.class(["link-picker"]).children([
+              listbox.trigger(h.button).children([
                 model.linked === null
                   ? "Link to a note…"
                   : `Linked: ${
                     notes.get(model.linked)?.title ?? "a removed note"
                   }`
-              ),
+              ]),
               listbox.popup(h.div.attr("aria-label", "Link to a note"))
-                .children(
+                .children([
                   listbox.input(
                     h.input.attrs({
                       "aria-label": "Filter notes",
@@ -96,20 +96,20 @@ export const NoteLinkPickerNoDeps = Component.define({
                     // sees, looked up by the row's id.
                     listbox.shown.map((option) =>
                       listbox.option(
-                        h.li.key(option.id).class(
+                        h.li.key(option.id).class([
                           listbox.active === option.id && "active"
-                        ),
+                        ]),
                         option
                       )
-                        .children(
-                          h.strong(option.label),
-                          h.span(excerpt(notes.get(option.id)?.body ?? ""))
-                        )
+                        .children([
+                          h.strong([option.label]),
+                          h.span([excerpt(notes.get(option.id)?.body ?? "")])
+                        ])
                     )
                   ),
-                  listbox.shown.length === 0 && h.p("No notes match.")
-                )
-            )
+                  listbox.shown.length === 0 && h.p(["No notes match."])
+                ])
+            ])
         })
       }
     })

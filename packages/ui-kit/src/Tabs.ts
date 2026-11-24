@@ -19,7 +19,7 @@
  * value of an entry in the `tabs` prop. `panel` returns `undefined` while
  * its panel is hidden, unless it is kept mounted, and `indicator` returns
  * `undefined` while no tab is active, so the consumer writes
- * `tabs.panel({ element: h.div, value: "a" })?.children(...)`. No part adds
+ * `tabs.panel({ element: h.div, value: "a" })?.children([...])`. No part adds
  * markup.
  *
  * Draw the root around the list and the panels: it points each tab at its
@@ -106,17 +106,17 @@
  *       },
  *       onEmit: { Selected: ({ value }) => SettingsMessage.SelectedTab({ value }) },
  *       view: (tabs) =>
- *         tabs.root(h.div.class("tabs")).children(
- *           tabs.list(h.div.class("list")).children(
- *             tabs.tab({ element: h.button.class("tab"), value: "overview" }).children("Overview"),
- *             tabs.tab({ element: h.button.class("tab"), value: "projects" }).children("Projects"),
- *             tabs.tab({ element: h.button.class("tab"), value: "account" }).children("Account"),
- *             tabs.indicator(h.span.class("indicator"))
- *           ),
- *           tabs.panel({ element: h.div, value: "overview" })?.children("Workspace stats"),
- *           tabs.panel({ element: h.div, value: "projects" })?.children("Milestones"),
- *           tabs.panel({ element: h.div, value: "account" })?.children("Profile")
- *         )
+ *         tabs.root(h.div.class(["tabs"])).children([
+ *           tabs.list(h.div.class(["list"])).children([
+ *             tabs.tab({ element: h.button.class(["tab"]), value: "overview" }).children(["Overview"]),
+ *             tabs.tab({ element: h.button.class(["tab"]), value: "projects" }).children(["Projects"]),
+ *             tabs.tab({ element: h.button.class(["tab"]), value: "account" }).children(["Account"]),
+ *             tabs.indicator(h.span.class(["indicator"]))
+ *           ]),
+ *           tabs.panel({ element: h.div, value: "overview" })?.children(["Workspace stats"]),
+ *           tabs.panel({ element: h.div, value: "projects" })?.children(["Milestones"]),
+ *           tabs.panel({ element: h.div, value: "account" })?.children(["Profile"])
+ *         ])
  *     })
  * })
  *
@@ -384,12 +384,12 @@ const rtlOf = (
 
 const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
   if (!enabledIn($.props.tabs, value) || value === $.props.value) return model
-  return $.set(model).emit(
+  return $.set(model).emit([
     TabsEvents.Selected({
       value,
       activationDirection: directionOf($.props, rtlOf($), $.props.value, value)
     })
-  )
+  ])
 }
 
 const stepOf = (
@@ -428,9 +428,9 @@ const navigate = ($: TabsUpdate, value: string, to: Step) => {
     )
   const tab = tabs[target]
   if (tab === undefined || target === from) return $.model
-  return $.evolve({ highlighted: tab.value }).run(
+  return $.evolve({ highlighted: tab.value }).run([
     HtmlCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
-  )
+  ])
 }
 
 const TrackPanel = Mount.makeStream(

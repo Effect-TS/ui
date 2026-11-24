@@ -111,16 +111,16 @@ const save = NoteEditorDef.update(
       // before returned, and returns a step, so `.run` follows it. Ctrl+S can
       // save while the menu is open, so a save closes it. `$.run` only takes
       // Commands whose result is one of this component's messages.
-      : $.combine(closeActions, clearError).run(
+      : $.combine([closeActions, clearError]).run([
         SaveNote.make({ note: { ...$.props.note, body: $.model.draft } })
-      )
+      ])
 )
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
 const clickedDiscard = NoteEditorDef.update(
   "ClickedDiscard",
-  ($) => $.combine(closeActions, ($) => $.evolve({ confirming: true }))
+  ($) => $.combine([closeActions, ($) => $.evolve({ confirming: true })])
 )
 
 // A fragment takes `h` first and any other arguments after it, and is
@@ -137,19 +137,21 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
   h.dialog.attr("aria-label", "Discard your changes?")
     .modal(open)
     .onCancel(NoteEditorMessage.CancelledDiscardDialog())
-    .onClose(NoteEditorMessage.ClosedDiscardDialog()).children(
-      h.h2("Discard your changes?"),
+    .onClose(NoteEditorMessage.ClosedDiscardDialog()).children([
+      h.h2(["Discard your changes?"]),
       h.form.onSubmit(({ entries }) =>
         NoteEditorMessage.SubmittedDiscardForm({
           choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
         })
-      ).children(
-        h.button.attrs({ name: "choice", value: "keep" }).children(
+      ).children([
+        h.button.attrs({ name: "choice", value: "keep" }).children([
           "Keep editing"
-        ),
-        h.button.attrs({ name: "choice", value: "discard" }).children("Discard")
-      )
-    )
+        ]),
+        h.button.attrs({ name: "choice", value: "discard" }).children([
+          "Discard"
+        ])
+      ])
+    ])
 )
 
 // The view takes `(h, model)`, as `view` in `make` does: `h` first, like a
@@ -157,22 +159,23 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 //
 // `h.form`, `h.button` and the other HTML elements are on `h` because the
 // entry module imports `@effect/ui/html/register`. Attributes and handlers
-// chain on the tag, then `.children(...)` ends the element; `h.h2(title)`
-// is short for `h.h2.children(title)`. `false`, `null` and `undefined`
-// children render nothing. A handler is a message, or a function from a plain payload such
-// as `{ value }` for `input`. It never sees the DOM event. `value` is
-// controlled, so the field always shows the Model's draft. `class` takes
-// several tokens and skips `false`, `null` and `undefined` the same way,
-// so a conditional class is `cond && "name"`. `Html.classNames` builds
-// the same string anywhere else.
+// chain on the tag, then `.children([...])` ends the element. Children are
+// always one array, even for a single child, so a list built with `map` goes
+// in as it is; `h.h2([title])` is short for `h.h2.children([title])`.
+// `false`, `null` and `undefined` children render nothing. A handler is a
+// message, or a function from a plain payload such as `{ value }` for
+// `input`. It never sees the DOM event. `value` is controlled, so the field
+// always shows the Model's draft. `class` takes an array of tokens and skips
+// `false`, `null` and `undefined` the same way, so a conditional class is
+// `cond && "name"`. `Html.classNames` builds the same string anywhere else.
 const noteEditorView = NoteEditorDef.view((h, model) =>
-  h.div(
+  h.div([
     h.form.attr("aria-label", "Edit note").onSubmit(
       NoteEditorMessage.RequestedSave()
-    ).children(
-      h.h2(h.props.note.title),
+    ).children([
+      h.h2([h.props.note.title]),
       h.textarea.attr("aria-label", "Body").value(model.draft)
-        .class("note-body", model.draft !== model.saved && "unsaved")
+        .class(["note-body", model.draft !== model.saved && "unsaved"])
         .onInput(({ value }) => NoteEditorMessage.UpdatedBody({ body: value }))
         // Ctrl+S or Cmd+S saves instead of opening the browser's save
         // dialog. With `preventDefault`, the browser's default is cancelled
@@ -188,9 +191,9 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
         ),
       // `h.isRunning` is true while this instance has a save queued or running.
       h.button.attr("type", "submit")
-        .disabled(model.draft === model.saved).children(
+        .disabled(model.draft === model.saved).children([
           h.isRunning(SaveNote) ? "Saving…" : "Save"
-        ),
+        ]),
       // A menu is an auto popover in the top layer, so no ancestor's
       // `overflow` clips it. Its button is a `popovertarget` invoker: the
       // browser opens and closes it with no handler, and `onToggle` keeps
@@ -201,7 +204,7 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
         type: "button",
         popovertarget: `actions-${h.props.note.id}`,
         style: `anchor-name: --actions-${h.props.note.id}`
-      }).children("More actions"),
+      }).children(["More actions"]),
       h.div.attrs({
         id: `actions-${h.props.note.id}`,
         role: "menu",
@@ -211,16 +214,16 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
       })
         .popover("auto", model.actionsOpen)
         .onToggle(({ open }) => NoteEditorMessage.ToggledActions({ open }))
-        .children(
+        .children([
           h.button.attr("type", "button").disabled(model.draft === model.saved)
-            .onClick(NoteEditorMessage.ClickedDiscard()).children(
+            .onClick(NoteEditorMessage.ClickedDiscard()).children([
               "Discard changes"
-            )
-        ),
-      model.error !== null && h.p.attr("role", "alert").children(model.error)
-    ),
+            ])
+        ]),
+      model.error !== null && h.p.attr("role", "alert").children([model.error])
+    ]),
     discardDialog(h, model.confirming)
-  )
+  ])
 )
 
 // The component as defined, which requires `SaveNote`. It is exported so a
@@ -248,7 +251,7 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     RequestedSave: save,
     // `$.emit` reports to the parent.
     SucceededSaveNote: ($, { note }) =>
-      $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
+      $.evolve({ saved: note.body }).emit([NoteEditorEvents.Saved({ note })]),
     // A handler that returns a bare Model can use `UiStruct.evolve`, which
     // takes the same fields.
     FailedSaveNote: ($, { reason }) =>

@@ -42,7 +42,7 @@ const SearchApp = Component.define({
   subscriptions: (
     { model: route }
   ) => [Router.subscription(SearchRoute, route, (next) => next)],
-  view: (h, route) => h.h1(SearchRoute.print(route))
+  view: (h, route) => h.h1([SearchRoute.print(route)])
 })
 
 const ListRoute = Route.union({
@@ -75,32 +75,32 @@ const ListPage = Component.define({
   update: ($, message) =>
     ListMessage.match(message, {
       Typed: ({ value }) =>
-        $.run(
+        $.run([
           Router.patchSearch(ListRoute, $.props.route, {
             q: value || undefined
           }).pipe(patched)
-        ),
+        ]),
       Next: () =>
-        $.run(
+        $.run([
           Router.patchSearch(ListRoute, $.props.route, {
             page: $.props.route.search.page + 1
           }, {
             history: "push",
             scroll: true
           }).pipe(patched)
-        ),
+        ]),
       Patched: () => $.model
     }),
   view: (h) =>
-    h.div(
-      h.h1(`List page ${h.props.route.search.page}`),
+    h.div([
+      h.h1([`List page ${h.props.route.search.page}`]),
       h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "")
         .onInput(({ value }) => ListMessage.Typed({ value })),
-      h.button.onClick(ListMessage.Next()).children("Next"),
+      h.button.onClick(ListMessage.Next()).children(["Next"]),
       h.a.attr("href", ListRoute.print(ListRoute.List({ search: { page: 2 } })))
-        .children("Page 2"),
-      h.a.attr("href", "#results").children("Results")
-    )
+        .children(["Page 2"]),
+      h.a.attr("href", "#results").children(["Results"])
+    ])
 })
 
 /** Holds the route, and keys the list page by its path. */
@@ -120,7 +120,7 @@ const ListApp = Component.define({
     ListRoute.match(route, {
       List: (route) =>
         ListPage(h, { key: ListRoute.printPath(route), props: { route } }),
-      Other: () => h.h1("Other")
+      Other: () => h.h1(["Other"])
     })
 })
 
@@ -505,7 +505,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const slow = AppRoute.Slow()
       const routes = Route.union(
         AppRoute.routes,
-        Route.redirect("/old-slow", () => slow)
+        [Route.redirect("/old-slow", () => slow)]
       )
       const { app, router } = yield* start("/", {
         routes,
@@ -566,7 +566,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         view: (h) =>
           h.a.attr("href", "/people/1").onClick("Peek", {
             preventDefault: true
-          }).children("Person 1")
+          }).children(["Person 1"])
       })
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Peek, {}, app)

@@ -107,8 +107,8 @@ const Page = Component.define({
       RequestedQuery: () => undefined,
       Settled: () => undefined
     })
-    return h.div(
-      h.button.attrs({ id: "before", type: "button" }).children("Before"),
+    return h.div([
+      h.button.attrs({ id: "before", type: "button" }).children(["Before"]),
       Menubar(h, {
         props: {
           orientation: h.props.orientation,
@@ -124,7 +124,7 @@ const Page = Component.define({
               ...(h.props.rtl ? { style: "direction: rtl" } : {})
             })
           ).children(
-            ...menus.map(({ items, name }) =>
+            menus.map(({ items, name }) =>
               Menu(h, {
                 key: name,
                 props: {
@@ -134,24 +134,24 @@ const Page = Component.define({
                 },
                 onEmit: onEmit(name),
                 view: (menu) =>
-                  h.div(
+                  h.div([
                     menu.trigger({
                       element: h.button.attrs({
                         id: name,
                         role: "button",
                         tabindex: "5"
                       })
-                    }).children(
+                    }).children([
                       name
-                    ),
+                    ]),
                     name === "view" && h.props.twin
                       ? menu.trigger({ element: h.button.attr("id", "view2") })
-                        .children("view 2")
+                        .children(["view 2"])
                       : null,
                     menu.positioner(h.div.attr("id", name + "-positioner"))
-                      .children(
+                      .children([
                         menu.popup(h.div).children(
-                          ...items.map((item) =>
+                          items.map((item) =>
                             item.value === "share"
                               ? Menu(h, {
                                 props: {
@@ -161,19 +161,19 @@ const Page = Component.define({
                                 },
                                 onEmit: onEmit("share"),
                                 view: (share) =>
-                                  h.div(
+                                  h.div([
                                     menu.item({
                                       element: share.submenuTrigger(
                                         h.div.attr("data-testid", "share")
                                       ),
                                       value: "share"
                                     })
-                                      .children("Share"),
+                                      .children(["Share"]),
                                     share.positioner(
                                       h.div.attr("id", "share-positioner")
-                                    ).children(
+                                    ).children([
                                       share.popup(h.div).children(
-                                        ...shareItems.map((sub) =>
+                                        shareItems.map((sub) =>
                                           share.item({
                                             element: h.div.attr(
                                               "data-testid",
@@ -181,28 +181,28 @@ const Page = Component.define({
                                             ),
                                             value: sub.value
                                           })
-                                            .children(sub.label)
+                                            .children([sub.label])
                                         )
                                       )
-                                    )
-                                  )
+                                    ])
+                                  ])
                               })
                               : menu.item({
                                 element: h.div.attr("data-testid", item.value),
                                 value: item.value
-                              }).children(
+                              }).children([
                                 item.label
-                              )
+                              ])
                           )
                         )
-                      )
-                  )
+                      ])
+                  ])
               })
             )
           )
       }),
-      h.button.attrs({ id: "after", type: "button" }).children("After")
-    )
+      h.button.attrs({ id: "after", type: "button" }).children(["After"])
+    ])
   }
 })
 

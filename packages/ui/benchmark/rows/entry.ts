@@ -42,21 +42,21 @@ const lazyRow = (
   row: typeof Row.Type,
   selected: boolean
 ) =>
-  h.tr.key(String(row.id)).class(selected && "danger").children(
-    h.td.class("col-md-1").children(String(row.id)),
-    h.td.class("col-md-4").children(
-      h.a.onClick(Message.Select({ id: row.id })).children(row.label)
-    ),
-    h.td.class("col-md-1").children(
-      h.a.onClick(Message.Remove({ id: row.id })).children(
-        h.span.class("glyphicon", "glyphicon-remove").attr(
+  h.tr.key(String(row.id)).class([selected && "danger"]).children([
+    h.td.class(["col-md-1"]).children([String(row.id)]),
+    h.td.class(["col-md-4"]).children([
+      h.a.onClick(Message.Select({ id: row.id })).children([row.label])
+    ]),
+    h.td.class(["col-md-1"]).children([
+      h.a.onClick(Message.Remove({ id: row.id })).children([
+        h.span.class(["glyphicon", "glyphicon-remove"]).attr(
           "aria-hidden",
           "true"
         )
-      )
-    ),
-    h.td.class("col-md-6")
-  )
+      ])
+    ]),
+    h.td.class(["col-md-6"])
+  ])
 
 const RowMessage = UiSchema.TaggedEnum({ Select: {}, Remove: {} })
 const RowView = Component.define({
@@ -69,34 +69,34 @@ const RowView = Component.define({
 }).make({
   init: () => null,
   update: ($, message) =>
-    $.emit(
+    $.emit([
       message._tag === "Select"
         ? Message.Select({ id: $.props.row.id })
         : Message.Remove({ id: $.props.row.id })
-    ),
+    ]),
   view: (h) =>
-    h.tr.class(h.props.selected && "danger").children(
-      h.td.class("col-md-1").children(String(h.props.row.id)),
-      h.td.class("col-md-4").children(
-        h.a.onClick(RowMessage.Select()).children(h.props.row.label)
-      ),
-      h.td.class("col-md-1").children(
-        h.a.onClick(RowMessage.Remove()).children(
-          h.span.class("glyphicon", "glyphicon-remove").attr(
+    h.tr.class([h.props.selected && "danger"]).children([
+      h.td.class(["col-md-1"]).children([String(h.props.row.id)]),
+      h.td.class(["col-md-4"]).children([
+        h.a.onClick(RowMessage.Select()).children([h.props.row.label])
+      ]),
+      h.td.class(["col-md-1"]).children([
+        h.a.onClick(RowMessage.Remove()).children([
+          h.span.class(["glyphicon", "glyphicon-remove"]).attr(
             "aria-hidden",
             "true"
           )
-        )
-      ),
-      h.td.class("col-md-6")
-    )
+        ])
+      ]),
+      h.td.class(["col-md-6"])
+    ])
 })
 
 const componentRows = (
   h: Component.Helper<typeof TableDef>,
   model: TableModel
 ) =>
-  h.table.class("table").children(
+  h.table.class(["table"]).children([
     h.tbody.children(model.rows.map((row) =>
       RowView(h, {
         key: String(row.id),
@@ -104,7 +104,7 @@ const componentRows = (
         onEmit: (message) => message
       })
     ))
-  )
+  ])
 
 const tableUpdate = (
   $: { readonly model: TableModel },
@@ -117,38 +117,42 @@ const tables = (start: () => TableModel) => ({
     init: start,
     update: tableUpdate,
     view: (h, model) =>
-      h.table.class("table").children(
+      h.table.class(["table"]).children([
         h.tbody.children(model.rows.map((row) =>
-          h.tr.key(String(row.id)).class(row.id === model.selected && "danger")
-            .children(
-              h.td.class("col-md-1").children(String(row.id)),
-              h.td.class("col-md-4").children(
-                h.a.onClick(Message.Select({ id: row.id })).children(row.label)
-              ),
-              h.td.class("col-md-1").children(
-                h.a.onClick(Message.Remove({ id: row.id })).children(
-                  h.span.class("glyphicon", "glyphicon-remove").attr(
+          h.tr.key(String(row.id)).class([
+            row.id === model.selected && "danger"
+          ])
+            .children([
+              h.td.class(["col-md-1"]).children([String(row.id)]),
+              h.td.class(["col-md-4"]).children([
+                h.a.onClick(Message.Select({ id: row.id })).children([
+                  row.label
+                ])
+              ]),
+              h.td.class(["col-md-1"]).children([
+                h.a.onClick(Message.Remove({ id: row.id })).children([
+                  h.span.class(["glyphicon", "glyphicon-remove"]).attr(
                     "aria-hidden",
                     "true"
                   )
-                )
-              ),
-              h.td.class("col-md-6")
-            )
+                ])
+              ]),
+              h.td.class(["col-md-6"])
+            ])
         ))
-      )
+      ])
   }),
   lazy: TableDef.make({
     init: start,
     update: tableUpdate,
     view: (h, model) =>
-      h.table.class("table").children(
+      h.table.class(["table"]).children([
         h.tbody.children(
           model.rows.map((row) =>
             h.lazy(lazyRow, row, row.id === model.selected)
           )
         )
-      )
+      ])
   }),
   component: TableDef.make({
     init: start,

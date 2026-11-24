@@ -38,14 +38,14 @@ describe("Progress", () => {
             expect(progress.percentage).type.toBe<number | null>()
             expect(progress.valueText).type.toBe<string | undefined>()
             expect(progress.label(h.span)).type.toBe<Span<never>>()
-            expect(progress.value(h.span.class("pct")).children(needsClock))
+            expect(progress.value(h.span.class(["pct"])).children([needsClock]))
               .type.toBe<Span<Clock>>()
             expect(progress.track(h.div)).type.toBe<Div<never>>()
             const root = progress.root(h.div.onClick(Msg.Clicked()))
-              .children(
-                progress.track(h.div).children(progress.indicator(h.div)),
+              .children([
+                progress.track(h.div).children([progress.indicator(h.div)]),
                 needsClock
-              )
+              ])
             expect(root).type.toBe<Div<Clock>>()
             return root
           }

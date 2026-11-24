@@ -21,7 +21,7 @@
  * `keepMounted` on `indicator`). `indicator` returns `undefined` while its
  * radio is unchecked and not leaving, unless `keepMounted` is `true`, so
  * chain children on it with `?.`:
- * `radioGroup.indicator({ element: h.span, value })?.children(...)`.
+ * `radioGroup.indicator({ element: h.span, value })?.children([...])`.
  *
  * When `name` is set, a value is picked, and neither the group nor the
  * checked item is disabled, `root` appends a hidden `<input>` after any
@@ -87,14 +87,14 @@
  *       props: { value: model.storage, items: storage, name: "storage" },
  *       onEmit: { Picked: ({ value }) => PickerMessage.PickedStorage({ value }) },
  *       view: (radioGroup) =>
- *         radioGroup.root(h.div.class("group").attr("aria-label", "Storage")).children(
- *           ...storage.map(({ label, value }) =>
- *             h.label.children(
- *               radioGroup.radio({ element: h.button.class("radio"), value }).children(
- *                 radioGroup.indicator({ element: h.span.class("dot"), value })
- *               ),
+ *         radioGroup.root(h.div.class(["group"]).attr("aria-label", "Storage")).children(
+ *           storage.map(({ label, value }) =>
+ *             h.label.children([
+ *               radioGroup.radio({ element: h.button.class(["radio"]), value }).children([
+ *                 radioGroup.indicator({ element: h.span.class(["dot"]), value })
+ *               ]),
  *               label
- *             )
+ *             ])
  *           )
  *         )
  *     })
@@ -456,7 +456,7 @@ export const RadioGroup = Component.define({
       if ($.props.disabled === true || !available(item)) return $.model
       const highlighted = $.evolve({ highlighted: value })
       return picks($.props, item)
-        ? highlighted.emit(RadioGroupEvents.Picked({ value }))
+        ? highlighted.emit([RadioGroupEvents.Picked({ value })])
         : highlighted
     },
     FocusedRadio: ($, { value }) =>
@@ -470,11 +470,11 @@ export const RadioGroup = Component.define({
       const at = enabled.indexOf(source)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
       if (target === undefined) return $.model
-      const moved = $.evolve({ highlighted: target.value }).run(
+      const moved = $.evolve({ highlighted: target.value }).run([
         focusRadio(target.value)
-      )
+      ])
       return source.readOnly !== true && picks($.props, target)
-        ? moved.emit(RadioGroupEvents.Picked({ value: target.value }))
+        ? moved.emit([RadioGroupEvents.Picked({ value: target.value })])
         : moved
     },
     PressedEnter: ($) => $.model,
@@ -629,7 +629,7 @@ export const RadioGroup = Component.define({
             "data-readonly": flag(readOnly),
             "data-required": flag(required)
           })
-          .children(hidden)
+          .children([hidden])
           .onMount(TrackGroup())),
       radio: View.wrapPart(
         radioPart,

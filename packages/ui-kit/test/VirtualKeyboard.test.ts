@@ -151,7 +151,7 @@ const Sheet = Component.define({
           Mount.map((band) => Message.ChangedBand({ band }))
         )
       )
-      .children(h.input.id("field"), h.button.id("done").children("Done"))
+      .children([h.input.id("field"), h.button.id("done").children(["Done"])])
 })
 
 const probes = () =>

@@ -19,7 +19,7 @@
  * | `separator` | `<div>`, between items                 |
  *
  * `root` and `separator` take the consumer's builder and return it, so the
- * consumer goes on chaining and adds children with `.children(...)`. `group`,
+ * consumer goes on chaining and adds children with `.children([...])`. `group`,
  * `button`, `link` and `input` take `{ element, value }`: the builder and the
  * `value` of one entry in the `groups` or `items` prop. A `value` that isn't
  * there fails the render. No part adds markup.
@@ -106,16 +106,16 @@
  *     Toolbar(h, {
  *       props: { items: [{ value: "bold" }, { value: "italic" }, { value: "help" }] },
  *       view: (toolbar) =>
- *         toolbar.root(h.div.class("toolbar").attr("aria-label", "Formatting")).children(
+ *         toolbar.root(h.div.class(["toolbar"]).attr("aria-label", "Formatting")).children([
  *           Button(h, { element: toolbar.button({ element: h.button, value: "bold" }), onPress: EditorMessage.PressedBold() })
- *             .children("Bold"),
+ *             .children(["Bold"]),
  *           Button(h, {
  *             element: toolbar.button({ element: h.button, value: "italic" }),
  *             onPress: EditorMessage.PressedItalic()
- *           }).children("Italic"),
+ *           }).children(["Italic"]),
  *           toolbar.separator(h.div),
- *           toolbar.link({ element: h.a.attr("href", "/help"), value: "help" }).children("Help")
- *         )
+ *           toolbar.link({ element: h.a.attr("href", "/help"), value: "help" }).children(["Help"])
+ *         ])
  *     })
  * })
  *
@@ -378,9 +378,9 @@ const targetOf = (
 }
 
 const moveTo = ($: ToolbarUpdate, target: ToolbarItem) =>
-  $.set({ ...$.model, active: target.value }).run(
+  $.set({ ...$.model, active: target.value }).run([
     FocusItem.make({ ref: Item.at(target.value) })
-  )
+  ])
 
 /**
  * A headless toolbar. Call it with the consumer's `h`, the `props`, and a `view`
@@ -466,12 +466,12 @@ export const Toolbar = Component.define({
       if (target === undefined) return $.model
       if (caret === null) return moveTo($, target)
       if (key === keys.next) {
-        return $.run(
+        return $.run([
           FocusItem.make({
             ref: Item.at(target.value),
             leaving: { ref: Item.at(value), caret }
           })
-        )
+        ])
       }
       return caret > 0 ? $.model : moveTo($, target)
     }

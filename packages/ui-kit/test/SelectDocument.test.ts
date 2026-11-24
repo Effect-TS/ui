@@ -215,39 +215,39 @@ const Page = Component.define({
             Settled: () => undefined
           },
           view: (select) =>
-            field.root(h.div.attr("id", "field")).children(
-              select.label(h.div.attr("id", "label")).children("Theme"),
+            field.root(h.div.attr("id", "field")).children([
+              select.label(h.div.attr("id", "label")).children(["Theme"]),
               h.props.finalFocus
-                ? select.finalFocus(h.button.attr("id", "final")).children(
+                ? select.finalFocus(h.button.attr("id", "final")).children([
                   "Final"
-                )
+                ])
                 : null,
-              field.focusWithin(h.div).children(
-                select.trigger(field.member(h.button)).children(
+              field.focusWithin(h.div).children([
+                select.trigger(field.member(h.button)).children([
                   select.value(h.span.attr("data-geo", "value"))
-                ),
-                select.positioner(h.div.attr("id", "positioner")).children(
-                  select.popup(h.div.class("popup")).children(
-                    ...items.map(({ label, value }) =>
+                ]),
+                select.positioner(h.div.attr("id", "positioner")).children([
+                  select.popup(h.div.class(["popup"])).children(
+                    items.map(({ label, value }) =>
                       select.item({
                         element: h.div.attr("data-testid", value),
                         value
-                      }).children(
+                      }).children([
                         select.itemText(h.div.attr("data-geo", "text-" + value))
-                          .children(label)
-                      )
+                          .children([label])
+                      ])
                     )
                   )
-                )
-              )
-            )
+                ])
+              ])
+            ])
         })
     })
-    const form = h.form.attr("id", "form").children(
-      h.button.attrs({ id: "before", type: "button" }).children("Before"),
+    const form = h.form.attr("id", "form").children([
+      h.button.attrs({ id: "before", type: "button" }).children(["Before"]),
       select,
-      h.button.attrs({ id: "after", type: "button" }).children("After")
-    )
+      h.button.attrs({ id: "after", type: "button" }).children(["After"])
+    ])
     return h.props.dialog
       ? Dialog(h, {
         props: { open: true },
@@ -258,11 +258,11 @@ const Page = Component.define({
           Settled: () => undefined
         },
         view: (dialog) =>
-          h.div(
-            dialog.portal(h.dialog)?.children(
-              dialog.popup(h.div).children(form)
-            )
-          )
+          h.div([
+            dialog.portal(h.dialog)?.children([
+              dialog.popup(h.div).children([form])
+            ])
+          ])
       })
       : form
   }

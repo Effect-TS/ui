@@ -122,11 +122,11 @@ export const CanvasArt = Component.define({
           balls.map(advance(Math.min(delta, MAX_FRAME_MS) / 1000))
       }),
     ClickedCanvas: ($, { x, y }) =>
-      $.run(
+      $.run([
         GenerateBall.make({ x, y }).pipe(
           Command.map((ball) => CanvasArtMessage.CompletedGenerateBall(ball))
         )
-      ),
+      ]),
     CompletedGenerateBall: ($, { _tag, ...ball }) =>
       $.evolve({
         balls: [...$.model.balls, { id: $.model.nextId, ...ball }],
@@ -143,33 +143,33 @@ export const CanvasArt = Component.define({
   ],
   head: ({ model }) => [Head.title(`Canvas Art (${model.balls.length} balls)`)],
   view: (h, model) =>
-    h.div.class(
+    h.div.class([
       "flex flex-col items-center justify-center min-h-screen bg-black text-white p-8"
-    ).children(
-      h.h1.class("text-4xl font-bold mb-2").children("Canvas Art"),
-      h.p.class("text-zinc-400 mb-6").children(
+    ]).children([
+      h.h1.class(["text-4xl font-bold mb-2"]).children(["Canvas Art"]),
+      h.p.class(["text-zinc-400 mb-6"]).children([
         "Click the canvas to spawn a ball."
-      ),
+      ]),
       Canvas.view(h, {
         width: CANVAS_WIDTH,
         height: CANVAS_HEIGHT,
         pixelRatio: "auto",
         shapes: sceneOf(model),
         onPointerDown: ({ x, y }) => CanvasArtMessage.ClickedCanvas({ x, y })
-      }).class("rounded-lg shadow-2xl cursor-crosshair").attr(
+      }).class(["rounded-lg shadow-2xl cursor-crosshair"]).attr(
         "aria-label",
         "Canvas art"
       ),
-      h.div.class("flex gap-3 mt-4").children(
+      h.div.class(["flex gap-3 mt-4"]).children([
         Button(h, { onPress: CanvasArtMessage.ClickedTogglePlay() })
-          .class(BUTTON_CLASS, "bg-indigo-600 hover:bg-indigo-500")
-          .children(model.running ? "Pause" : "Play"),
+          .class([BUTTON_CLASS, "bg-indigo-600 hover:bg-indigo-500"])
+          .children([model.running ? "Pause" : "Play"]),
         Button(h, { onPress: CanvasArtMessage.ClickedClear() })
-          .class(BUTTON_CLASS, "bg-zinc-700 hover:bg-zinc-600")
-          .children("Clear"),
-        h.p.class("px-4 py-2 text-zinc-400 text-sm self-center").children(
+          .class([BUTTON_CLASS, "bg-zinc-700 hover:bg-zinc-600"])
+          .children(["Clear"]),
+        h.p.class(["px-4 py-2 text-zinc-400 text-sm self-center"]).children([
           `${model.balls.length} balls`
-        )
-      )
-    )
+        ])
+      ])
+    ])
 })

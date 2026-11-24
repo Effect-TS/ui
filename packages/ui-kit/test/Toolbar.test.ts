@@ -12,13 +12,13 @@ type H = View.Helper<never, ToolbarProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (toolbar: Parts, h: H) =>
-    toolbar.root(h.div.class("toolbar")).children(
+    toolbar.root(h.div.class(["toolbar"])).children([
       toolbar.button({
         element: h.button.attr("aria-label", "bold"),
         value: "bold"
       }),
-      toolbar.group({ element: h.div.class("format"), value: "format" })
-        .children(
+      toolbar.group({ element: h.div.class(["format"]), value: "format" })
+        .children([
           toolbar.button({
             element: h.button.attr("aria-label", "italic"),
             value: "italic"
@@ -27,8 +27,8 @@ const standIn = {
             element: h.button.attr("aria-label", "underline"),
             value: "underline"
           })
-        ),
-      toolbar.separator(h.div.class("separator")),
+        ]),
+      toolbar.separator(h.div.class(["separator"])),
       toolbar.link({
         element: h.a.attrs({ "aria-label": "help", href: "/help" }),
         value: "help"
@@ -37,7 +37,7 @@ const standIn = {
         element: h.input.attr("aria-label", "search"),
         value: "search"
       })
-    )
+    ])
 }
 
 const values = ["bold", "italic", "underline", "help", "search"]
@@ -341,7 +341,7 @@ describe("Toolbar", () => {
       "data-disabled": "x",
       "data-focusable": "x"
     }
-    const button = h.button.class("tool").attrs({
+    const button = h.button.class(["tool"]).attrs({
       ...owned,
       title: "Bold",
       type: "submit"
@@ -360,7 +360,7 @@ describe("Toolbar", () => {
     const after = parts({
       items: [{ value: "bold", focusableWhenDisabled: false }]
     })
-      .button({ element: h.button.class("tool"), value: "bold" })
+      .button({ element: h.button.class(["tool"]), value: "bold" })
       .attrs({ "aria-disabled": "true", "data-disabled": "" })
       .disabled(true)
     assert.deepStrictEqual(View.build(after, []).attrs, {
@@ -369,7 +369,7 @@ describe("Toolbar", () => {
       tabindex: "0",
       "data-orientation": "horizontal"
     })
-    const input = h.input.class("field").attrs({
+    const input = h.input.class(["field"]).attrs({
       ...owned,
       placeholder: "Search"
     }).disabled(true)
@@ -386,7 +386,7 @@ describe("Toolbar", () => {
     assert.deepStrictEqual(
       View.build(
         parts().link({
-          element: h.a.class("link").attrs({
+          element: h.a.class(["link"]).attrs({
             tabindex: "4",
             "data-orientation": "x"
           }),
@@ -397,7 +397,7 @@ describe("Toolbar", () => {
         .attrs,
       { class: "link", tabindex: "-1", "data-orientation": "horizontal" }
     )
-    const div = h.div.class("own").attrs({
+    const div = h.div.class(["own"]).attrs({
       role: "list",
       "aria-orientation": "x",
       "data-orientation": "x",
@@ -421,7 +421,7 @@ describe("Toolbar", () => {
     assert.deepStrictEqual(
       View.build(
         parts().separator(
-          h.div.class("own").attrs({
+          h.div.class(["own"]).attrs({
             role: "none",
             "aria-orientation": "x",
             "data-orientation": "x"

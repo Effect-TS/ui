@@ -3,7 +3,7 @@ import { markdown } from "@effect/ui/html/MarkdownVite"
 import { describe, expect, it } from "@effect/vitest"
 import { Schema } from "effect"
 
-const lines = (...sourceLines: ReadonlyArray<string>): string =>
+const lines = (sourceLines: ReadonlyArray<string>): string =>
   sourceLines.join("\n")
 
 const transform = (
@@ -40,7 +40,7 @@ describe("markdown", () => {
 
     expect(
       transform(
-        lines("---", "title: My Post", "---", "", "# Title"),
+        lines(["---", "title: My Post", "---", "", "# Title"]),
         "/site/src/content/post.md",
         options
       )?.code

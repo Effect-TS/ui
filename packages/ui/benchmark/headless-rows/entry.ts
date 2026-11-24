@@ -51,18 +51,20 @@ const Plain = Component.define(app).make({
   view: (h, rows) =>
     h.ul.children(
       rows.map((row) =>
-        h.li.key(row.id).class("row").attr(
+        h.li.key(row.id).class(["row"]).attr(
           "data-done",
           row.done ? "" : undefined
-        ).children(
+        ).children([
           h.button.attrs({
             "aria-expanded": "false",
             "aria-controls": h.id("panel", row.id)
           })
-            .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
-          h.span(row.done ? "done" : "todo"),
-          h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
-        )
+            .onClick(AppMessage.Toggle({ id: row.id })).children([row.label]),
+          h.span([row.done ? "done" : "todo"]),
+          h.div.id(h.id("panel", row.id)).attr("hidden", "").children([
+            "details"
+          ])
+        ])
       )
     )
 })
@@ -78,18 +80,18 @@ const NormalRow = Component.define({
   init: () => false,
   update: ($) => !$.model,
   view: (h, open) =>
-    h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
-      .children(
+    h.li.class(["row"]).attr("data-done", h.props.row.done ? "" : undefined)
+      .children([
         h.button.attrs({
           "aria-expanded": String(open),
           "aria-controls": h.id("panel")
         }).onClick(flip)
-          .children(h.props.row.label),
-        h.span(h.props.row.done ? "done" : "todo"),
-        h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children(
+          .children([h.props.row.label]),
+        h.span([h.props.row.done ? "done" : "todo"]),
+        h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children([
           "details"
-        )
-      )
+        ])
+      ])
 })
 const Normal = Component.define(app).make({
   init,
@@ -133,12 +135,12 @@ const Headless = Component.define(app).make({
       Disclosure(h, {
         key: row.id,
         view: (disclosure) =>
-          h.li.class("row").attr("data-done", row.done ? "" : undefined)
-            .children(
-              disclosure.trigger(h.button).children(row.label),
-              h.span(row.done ? "done" : "todo"),
-              disclosure.panel(h.div).children("details")
-            )
+          h.li.class(["row"]).attr("data-done", row.done ? "" : undefined)
+            .children([
+              disclosure.trigger(h.button).children([row.label]),
+              h.span([row.done ? "done" : "todo"]),
+              disclosure.panel(h.div).children(["details"])
+            ])
       })
     ))
 })
@@ -157,12 +159,12 @@ const WrappedRow = Component.define({
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
-        h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
-          .children(
-            disclosure.trigger(h.button).children(h.props.row.label),
-            h.span(h.props.row.done ? "done" : "todo"),
-            disclosure.panel(h.div).children("details")
-          )
+        h.li.class(["row"]).attr("data-done", h.props.row.done ? "" : undefined)
+          .children([
+            disclosure.trigger(h.button).children([h.props.row.label]),
+            h.span([h.props.row.done ? "done" : "todo"]),
+            disclosure.panel(h.div).children(["details"])
+          ])
     })
 })
 const Wrapped = Component.define(app).make({
@@ -216,13 +218,16 @@ const Poker = Component.define({
     init: () => null,
     update: ($, message) => $.send(Provider, message),
     view: (h) =>
-      h.div(
-        h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children(
-          "touch"
-        ),
-        h.button.class("poke-open").onClick(ProviderMessage.Open({ id: "r0" }))
-          .children("open")
-      )
+      h.div([
+        h.button.class(["poke-touch"]).onClick(ProviderMessage.Touch())
+          .children([
+            "touch"
+          ]),
+        h.button.class(["poke-open"]).onClick(
+          ProviderMessage.Open({ id: "r0" })
+        )
+          .children(["open"])
+      ])
   })
 
 const AppDef = Component.define(app)
@@ -233,12 +238,12 @@ const underProvider = <RV>(h: H, rows: () => View.Content<AppMessage, RV>) =>
   Provider(h, {
     key: "tips",
     view: (provider) =>
-      h.div(
-        h.span.class("touches").children(String(provider.touches)),
-        h.span.class("open").children(String(provider.open)),
+      h.div([
+        h.span.class(["touches"]).children([String(provider.touches)]),
+        h.span.class(["open"]).children([String(provider.open)]),
         Poker(h, { key: "poke" }),
         rows()
-      )
+      ])
   })
 
 /** headless rows written straight into the Provider's closure: every Provider update re-renders each. */
@@ -251,12 +256,12 @@ const OwnerHeadless = Component.define(app).make({
         Disclosure(h, {
           key: row.id,
           view: (disclosure) =>
-            h.li.class("row").attr("data-done", row.done ? "" : undefined)
-              .children(
-                disclosure.trigger(h.button).children(row.label),
-                h.span(row.done ? "done" : "todo"),
-                disclosure.panel(h.div).children("details")
-              )
+            h.li.class(["row"]).attr("data-done", row.done ? "" : undefined)
+              .children([
+                disclosure.trigger(h.button).children([row.label]),
+                h.span([row.done ? "done" : "todo"]),
+                disclosure.panel(h.div).children(["details"])
+              ])
         })
       )))
 })
@@ -290,12 +295,12 @@ const Body = Component.define({
       Disclosure(h, {
         key: row.id,
         view: (disclosure) =>
-          h.li.class("row").attr("data-done", row.done ? "" : undefined)
-            .children(
-              disclosure.trigger(h.button).children(row.label),
-              h.span(row.done ? "done" : "todo"),
-              disclosure.panel(h.div).children("details")
-            )
+          h.li.class(["row"]).attr("data-done", row.done ? "" : undefined)
+            .children([
+              disclosure.trigger(h.button).children([row.label]),
+              h.span([row.done ? "done" : "todo"]),
+              disclosure.panel(h.div).children(["details"])
+            ])
       })
     ))
 })
@@ -321,16 +326,16 @@ const ReaderRow = Component.define({
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
-        h.li.class("row").attrs({
+        h.li.class(["row"]).attrs({
           "data-done": h.props.row.done ? "" : undefined,
           "data-open": h.shared.provider.open === h.props.row.id
             ? ""
             : undefined
-        }).children(
-          disclosure.trigger(h.button).children(h.props.row.label),
-          h.span(h.props.row.done ? "done" : "todo"),
-          disclosure.panel(h.div).children("details")
-        )
+        }).children([
+          disclosure.trigger(h.button).children([h.props.row.label]),
+          h.span([h.props.row.done ? "done" : "todo"]),
+          disclosure.panel(h.div).children(["details"])
+        ])
     })
 })
 const OwnerReaders = Component.define(app).make({

@@ -40,16 +40,16 @@
  *   init: () => ({ saved: false }),
  *   update: ($, message) =>
  *     Message.match(message, {
- *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
+ *       ClickedSave: () => $.run([SaveTodo.make({ id: $.props.id })]),
  *       CompletedSaveTodo: () => ({ saved: true })
  *     }),
- *   view: (h) => h.el("button").on("click", Message.ClickedSave()).children("save")
+ *   view: (h) => h.el("button").on("click", Message.ClickedSave()).children(["save"])
  * })
  *
  * Effect.gen(function*() {
  *   const s = yield* Story.make(TodoItem, { id: "t1" })
  *   s.send(Message.ClickedSave())
- *     .expectExact(SaveTodo.make({ id: "t1" }))
+ *     .expectExact([SaveTodo.make({ id: "t1" })])
  *     .resolve(SaveTodo, Message.CompletedSaveTodo())
  *   console.log(s.model.saved) // true
  * }).pipe(Effect.scoped, Effect.runSync)
@@ -176,7 +176,7 @@ type AnyComponent =
  * }).make({
  *   init: () => ({ count: 0 }),
  *   update: ($) => ({ count: $.model.count + 1 }),
- *   view: (h, model) => h.el("button").on("click", Message.ClickedIncrement()).children(`+ ${model.count}`)
+ *   view: (h, model) => h.el("button").on("click", Message.ClickedIncrement()).children([`+ ${model.count}`])
  * })
  *
  * const twice = (s: Story.Steps<typeof Counter>) =>
@@ -384,7 +384,7 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  *   init: () => ({ name: "Ada" }),
  *   update: ($) => $.model,
  *   head: ({ model }) => [Head.title(model.name)],
- *   view: (h, model) => h.el("h1", model.name)
+ *   view: (h, model) => h.el("h1", [model.name])
  * })
  *
  * Story.head(Person, { name: "Grace" }) // => [Head.title("Grace")]

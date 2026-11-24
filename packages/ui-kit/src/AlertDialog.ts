@@ -96,17 +96,17 @@
  *         Settled: () => undefined
  *       },
  *       view: (alertDialog) =>
- *         h.div(
- *           alertDialog.trigger(h.button).children("Discard draft"),
- *           alertDialog.portal(h.dialog)?.children(
- *             alertDialog.popup(h.div.class("popup")).children(
- *               alertDialog.title(h.h2).children("Discard draft?"),
- *               alertDialog.description(h.p).children("You can't undo this."),
- *               alertDialog.initialFocus(alertDialog.close(h.button)).children("Cancel"),
- *               h.button.onClick(EditorMessage.ClickedDiscard()).children("Discard")
- *             )
- *           )
- *         )
+ *         h.div([
+ *           alertDialog.trigger(h.button).children(["Discard draft"]),
+ *           alertDialog.portal(h.dialog)?.children([
+ *             alertDialog.popup(h.div.class(["popup"])).children([
+ *               alertDialog.title(h.h2).children(["Discard draft?"]),
+ *               alertDialog.description(h.p).children(["You can't undo this."]),
+ *               alertDialog.initialFocus(alertDialog.close(h.button)).children(["Cancel"]),
+ *               h.button.onClick(EditorMessage.ClickedDiscard()).children(["Discard"])
+ *             ])
+ *           ])
+ *         ])
  *     })
  * })
  *

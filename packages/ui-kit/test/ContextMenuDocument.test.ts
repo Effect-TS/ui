@@ -63,27 +63,27 @@ const Page = Component.define({
           Settled: () => undefined
         },
         view: (contextMenu) =>
-          h.div(
-            contextMenu.trigger(h.div.attr("id", name)).children(
+          h.div([
+            contextMenu.trigger(h.div.attr("id", name)).children([
               name,
               inside ?? ""
-            ),
+            ]),
             contextMenu.backdrop(h.div.attr("id", name + "-backdrop")),
             contextMenu.positioner(h.div.attr("id", name + "-positioner"))
-              .children(
-                contextMenu.popup(h.div).children(
+              .children([
+                contextMenu.popup(h.div).children([
                   contextMenu.item({
                     element: h.div.attr("data-testid", name + "-copy"),
                     value: "copy"
-                  }).children("Copy")
-                )
-              )
-          )
+                  }).children(["Copy"])
+                ])
+              ])
+          ])
       })
-    return h.div(
-      h.button.attr("id", "before").attr("type", "button").children("Before"),
+    return h.div([
+      h.button.attr("id", "before").attr("type", "button").children(["Before"]),
       menu("outer", menu("inner"))
-    )
+    ])
   }
 })
 
@@ -116,17 +116,17 @@ const Hybrid = Component.define({
         Settled: () => undefined
       },
       view: (menu) =>
-        h.div(
-          menu.trigger({ element: h.button.attr("id", "more") }).children(
+        h.div([
+          menu.trigger({ element: h.button.attr("id", "more") }).children([
             "More"
-          ),
-          menu.contextTrigger(h.div.attr("id", "area")).children("Area"),
-          menu.positioner(h.div.attr("id", "hybrid-positioner")).children(
-            menu.popup(h.div).children(
-              menu.item({ element: h.div, value: "copy" }).children("Copy")
-            )
-          )
-        )
+          ]),
+          menu.contextTrigger(h.div.attr("id", "area")).children(["Area"]),
+          menu.positioner(h.div.attr("id", "hybrid-positioner")).children([
+            menu.popup(h.div).children([
+              menu.item({ element: h.div, value: "copy" }).children(["Copy"])
+            ])
+          ])
+        ])
     })
 })
 

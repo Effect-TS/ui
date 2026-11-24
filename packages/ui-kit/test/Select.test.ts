@@ -20,10 +20,10 @@ const items = [
 const standIn = {
   elements: Html,
   view: (select: Parts, h: H) =>
-    h.div(
-      select.label(h.div.class("label")).children("Theme"),
+    h.div([
+      select.label(h.div.class(["label"])).children(["Theme"]),
       select.trigger(
-        h.button.class("trigger").attrs({
+        h.button.class(["trigger"]).attrs({
           id: "mine",
           role: "button",
           "aria-expanded": "true",
@@ -31,23 +31,23 @@ const standIn = {
           "data-placeholder": "x",
           "data-note": "kept"
         })
-      ).children(
-        select.value(h.span.class("value")),
-        select.icon(h.span.class("icon"))
-      ),
-      select.backdrop(h.div.class("backdrop")),
-      select.positioner(h.div.class("positioner").attr("role", "dialog"))
-        .children(
+      ).children([
+        select.value(h.span.class(["value"])),
+        select.icon(h.span.class(["icon"]))
+      ]),
+      select.backdrop(h.div.class(["backdrop"])),
+      select.positioner(h.div.class(["positioner"]).attr("role", "dialog"))
+        .children([
           select.popup(
-            h.div.class("popup").attrs({ role: "menu", tabindex: "0" })
-          ).children(
-            select.scrollUpArrow({ element: h.div.class("up") }),
-            select.group({ element: h.div.class("group"), group: "all" })
-              .children(
+            h.div.class(["popup"]).attrs({ role: "menu", tabindex: "0" })
+          ).children([
+            select.scrollUpArrow({ element: h.div.class(["up"]) }),
+            select.group({ element: h.div.class(["group"]), group: "all" })
+              .children([
                 select.groupLabel({
-                  element: h.div.class("group-label"),
+                  element: h.div.class(["group-label"]),
                   group: "all"
-                }).children("All"),
+                }).children(["All"]),
                 ...items.map(({ label, value }) =>
                   select.item({
                     element: h.div.attrs({
@@ -58,22 +58,22 @@ const standIn = {
                       "data-highlighted": "x"
                     }),
                     value
-                  }).children(
-                    select.itemText(h.div).children(label),
+                  }).children([
+                    select.itemText(h.div).children([label]),
                     select.itemIndicator({
-                      element: h.span.class("check"),
+                      element: h.span.class(["check"]),
                       value
-                    })?.children("✓")
-                  )
+                    })?.children(["✓"])
+                  ])
                 )
-              ),
-            select.separator(h.div.class("separator")),
-            select.scrollDownArrow({ element: h.div.class("down") }),
-            select.arrow(h.div.class("arrow"))
-          )
-        ),
-      select.finalFocus(h.button.class("next")).children("Next")
-    )
+              ]),
+            select.separator(h.div.class(["separator"])),
+            select.scrollDownArrow({ element: h.div.class(["down"]) }),
+            select.arrow(h.div.class(["arrow"]))
+          ])
+        ]),
+      select.finalFocus(h.button.class(["next"])).children(["Next"])
+    ])
 }
 
 const label = Locator.attr("class", "label")
@@ -133,9 +133,9 @@ const open = Effect.fnUntraced(function*(props: Partial<SelectProps> = {}) {
     { open: false, items, ...props },
     standIn
   )
-  s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+  s.fire(trigger, "mousedown", pointer("mouse")).emitted([
     opened("trigger-press")
-  )
+  ])
   s.props({ open: true, items, ...props }).mounted(
     tracked(s),
     sent("ShowedPopup")
@@ -241,9 +241,9 @@ describe("Select", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
       s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
-      s.fire(trigger, "click", pointer("touch")).emitted(
+      s.fire(trigger, "click", pointer("touch")).emitted([
         opened("trigger-press")
-      )
+      ])
       s.props({ open: true, items }).expectMount(tracked(s))
       assert.strictEqual(partsOf(s).openMethod, "touch")
       assert.deepInclude(s.get(popup).attrs, { "data-side": "bottom" })
@@ -273,20 +273,20 @@ describe("Select", () => {
       assert.isDefined(s.query(arrow))
       assert.deepInclude(s.get(popup).attrs, { "data-side": "bottom" })
       s.mounted(tracked(s), sent("ResizedWindow"))
-      s.fire(popup, "keydown", key("Escape")).emitted(dismissed("escape-key"))
+      s.fire(popup, "keydown", key("Escape")).emitted([dismissed("escape-key")])
         .expectDefaultPrevented()
       s.props({ open: false, items })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
+        .emitted([{ _tag: "Settled", open: false }])
       assert.isFalse(s.get(positioner).props?.popoverOpen)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted([
         opened("trigger-press")
-      )
+      ])
       s.props({ open: true, items }).expectMount(tracked(s))
       assert.isUndefined(s.query(arrow))
-      s.mounted(tracked(s), sent("ResizedWindow")).emitted(
+      s.mounted(tracked(s), sent("ResizedWindow")).emitted([
         dismissed("window-resize")
-      )
+      ])
     }))
 
   it.effect("keyboard on the closed trigger opens it on the first or last item, and click with no pointer toggles", () =>
@@ -294,18 +294,18 @@ describe("Select", () => {
       const s = yield* HtmlScene.make(Select, { open: false, items }, standIn)
       s.fire(trigger, "keydown", key(" ")).expectIgnored()
       s.fire(trigger, "click", pointer("mouse")).expectIgnored()
-      s.fire(trigger, "click", pointer("")).emitted(opened("trigger-press"))
-      s.fire(trigger, "keydown", key("ArrowDown")).emitted(
+      s.fire(trigger, "click", pointer("")).emitted([opened("trigger-press")])
+      s.fire(trigger, "keydown", key("ArrowDown")).emitted([
         opened("list-navigation")
-      ).expectDefaultPrevented()
+      ]).expectDefaultPrevented()
       s.props({ open: true, items }).expectMount(tracked(s))
       assert.strictEqual(partsOf(s).highlighted, "light")
       assert.strictEqual(partsOf(s).openMethod, "keyboard")
-      s.fire(popup, "keydown", key("Escape")).emitted(dismissed("escape-key"))
+      s.fire(popup, "keydown", key("Escape")).emitted([dismissed("escape-key")])
       s.props({ open: false, items })
-      s.fire(trigger, "keydown", key("ArrowUp")).emitted(
+      s.fire(trigger, "keydown", key("ArrowUp")).emitted([
         opened("list-navigation")
-      )
+      ])
       s.props({ open: true, items }).expectMount(tracked(s))
       assert.strictEqual(partsOf(s).highlighted, "solar")
     }))
@@ -325,28 +325,28 @@ describe("Select", () => {
       step("Home", "light")
       s.fire(popup, "keydown", key("ArrowLeft")).expectIgnored()
       s.fire(popup, "keydown", key("Tab")).expectIgnored()
-      s.fire(popup, "keydown", key("Tab", { shift: true })).emitted(
+      s.fire(popup, "keydown", key("Tab", { shift: true })).emitted([
         dismissed("focus-out")
-      )
+      ])
     }))
 
   it.effect("Enter picks the highlighted item on keydown, and Space on keyup", () =>
     Effect.gen(function*() {
       const s = yield* open({ value: "light" })
       s.fire(popup, "keydown", key("ArrowDown"))
-      s.fire(popup, "keydown", key("Enter")).emitted(
+      s.fire(popup, "keydown", key("Enter")).emitted([
         picked("dark"),
         dismissed("item-press")
-      )
+      ])
       s.props({ open: true, items, value: "dark" })
       s.fire(popup, "keydown", key("ArrowDown"))
       s.fire(popup, "keydown", key("Enter"))
       s.fire(popup, "keydown", key("ArrowDown"))
       s.fire(popup, "keydown", key(" ")).expectDefaultPrevented()
-      s.fire(popup, "keyup", key(" ")).emitted(
+      s.fire(popup, "keyup", key(" ")).emitted([
         picked("system"),
         dismissed("item-press")
-      )
+      ])
       s.fire(popup, "keyup", key(" "))
     }))
 
@@ -396,10 +396,10 @@ describe("Select", () => {
         items,
         value: "light"
       }, standIn)
-      s.fire(trigger, "keydown", key("s")).emitted(picked("system", "none"))
+      s.fire(trigger, "keydown", key("s")).emitted([picked("system", "none")])
         .expectDefaultPrevented()
       s.props({ open: false, items, value: "system" })
-      s.fire(trigger, "keydown", key("s")).emitted(picked("solar", "none"))
+      s.fire(trigger, "keydown", key("s")).emitted([picked("solar", "none")])
       s.fire(trigger, "keydown", key("s", { ctrl: true })).expectIgnored()
       s.props({ open: false, items, value: "system", readOnly: true })
       s.fire(trigger, "keydown", key("l"))
@@ -415,16 +415,16 @@ describe("Select", () => {
       s.fire(item("dark"), "mouseup", pointer("mouse"))
       s.mounted(tracked(s), sent("DraggedPointer"))
       s.fire(item("light"), "mouseup", pointer("mouse"))
-      s.fire(item("dark"), "mouseup", pointer("mouse")).emitted(
+      s.fire(item("dark"), "mouseup", pointer("mouse")).emitted([
         picked("dark"),
         dismissed("item-press")
-      )
+      ])
       s.props({ open: true, items, value: "dark" })
       s.mounted(tracked(s), sent("AllowedRelease"))
-      s.fire(item("light"), "mouseup", pointer("mouse")).emitted(
+      s.fire(item("light"), "mouseup", pointer("mouse")).emitted([
         picked("light"),
         dismissed("item-press")
-      )
+      ])
     }))
 
   it.effect("a click on an item picks it, and a disabled item can't be picked", () =>
@@ -432,10 +432,10 @@ describe("Select", () => {
       const s = yield* open({ value: "light" })
       s.fire(item("dark"), "mousedown", pointer("mouse"))
       s.fire(item("dark"), "mouseup", pointer("mouse"))
-      s.fire(item("dark"), "click", pointer("mouse")).emitted(
+      s.fire(item("dark"), "click", pointer("mouse")).emitted([
         picked("dark"),
         dismissed("item-press")
-      )
+      ])
       s.fire(item("dim"), "click", pointer("touch"))
       s.fire(item("dark"), "click", pointer("mouse"))
     }))
@@ -465,9 +465,9 @@ describe("Select", () => {
         name: "themes"
       })
       assert.deepInclude(s.get(popup).attrs, { "aria-multiselectable": "true" })
-      s.fire(item("dark"), "click", pointer("")).emitted(
+      s.fire(item("dark"), "click", pointer("")).emitted([
         picked(["light", "dark"])
-      )
+      ])
       s.props({
         open: true,
         items,
@@ -475,7 +475,7 @@ describe("Select", () => {
         value: ["light", "dark"],
         name: "themes"
       })
-      s.fire(item("light"), "click", pointer("")).emitted(picked(["dark"]))
+      s.fire(item("light"), "click", pointer("")).emitted([picked(["dark"])])
       assert.strictEqual(Locator.textOf(s.get(value)), "Light, Dark")
       const hidden = s.all(Locator.attr("type", "hidden"))
       assert.deepStrictEqual(
@@ -491,9 +491,11 @@ describe("Select", () => {
     Effect.gen(function*() {
       const s = yield* open()
       s.mounted(tracked(s), sent("ReleasedPointer", { outside: true })).emitted(
-        dismissed("cancel-open")
+        [
+          dismissed("cancel-open")
+        ]
       )
-      s.mounted(tracked(s), sent("FocusedTrigger")).emitted(dismissed("none"))
+      s.mounted(tracked(s), sent("FocusedTrigger")).emitted([dismissed("none")])
     }))
 
   it.effect("disabled prevents opening, and readOnly allows browsing without changing", () =>
@@ -551,7 +553,7 @@ describe("Select", () => {
       s.fire(Locator.tag("input"), "change", {
         value: "System",
         checked: false
-      }).emitted(picked("system", "none"))
+      }).emitted([picked("system", "none")])
       s.fire(Locator.tag("input"), "change", { value: "Dim", checked: false })
       assert.deepStrictEqual(s.current.emitted, [])
       s.fire(Locator.tag("input"), "change", { value: "nope", checked: false })
@@ -565,7 +567,9 @@ describe("Select", () => {
       s.mounted(tracked(s), sent("RenderedFirstFrame"))
       assert.isNull(partsOf(s).transitionStatus)
       s.mounted(tracked(s), sent("FinishedTransition", { open: true })).emitted(
-        { _tag: "Settled", open: true }
+        [
+          { _tag: "Settled", open: true }
+        ]
       )
       s.props({ open: false, items })
       assert.strictEqual(partsOf(s).transitionStatus, "ending")
@@ -575,7 +579,7 @@ describe("Select", () => {
       })
       assert.isTrue(s.get(positioner).props?.popoverOpen)
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted({ _tag: "Settled", open: false })
+        .emitted([{ _tag: "Settled", open: false }])
       assert.isFalse(s.get(positioner).props?.popoverOpen)
     }))
 
@@ -589,26 +593,26 @@ describe("Select", () => {
       }, {
         elements: Html,
         view: (select, h) =>
-          h.div(
-            select.trigger(h.button.class("trigger")).children(
-              select.value(h.span.class("value")).children("Custom")
-            )
-          )
+          h.div([
+            select.trigger(h.button.class(["trigger"])).children([
+              select.value(h.span.class(["value"])).children(["Custom"])
+            ])
+          ])
       })
       assert.strictEqual(Locator.textOf(s.get(value)), "Custom")
 
       const hiddenTagCases: ReadonlyArray<
         (select: Parts, h: H) => View.Content<never>
       > = [
-        (select, h) => h.div(select.arrow(h.span as never)),
+        (select, h) => h.div([select.arrow(h.span as never)]),
         (select, h) =>
-          h.div(
+          h.div([
             select.itemIndicator({ element: h.div as never, value: "light" })
-          ),
+          ]),
         (select, h) =>
-          h.div(select.scrollUpArrow({ element: h.span as never })),
+          h.div([select.scrollUpArrow({ element: h.span as never })]),
         (select, h) =>
-          h.div(select.scrollDownArrow({ element: h.span as never }))
+          h.div([select.scrollDownArrow({ element: h.span as never })])
       ]
       for (const render of hiddenTagCases) {
         const exit = yield* Effect.exit(

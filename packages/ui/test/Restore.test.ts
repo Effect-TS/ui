@@ -26,9 +26,9 @@ const Login = Component.define({
   init: () => ({ email: "", password: "" }),
   update: () => ({ email: "ada@example.com", password: "hunter2" }),
   view: (h, model) =>
-    h.el("button").on("click", LoginMessage.Filled()).children(
+    h.el("button").on("click", LoginMessage.Filled()).children([
       `login ${model.email}|${model.password}`
-    )
+    ])
 })
 
 const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
@@ -43,9 +43,9 @@ const Counter = Component.define({
     init: () => 0,
     update: ($) => $.model + 1,
     view: (h, count) =>
-      h.el("button").on("click", CounterMessage.Clicked()).children(
+      h.el("button").on("click", CounterMessage.Clicked()).children([
         `counter ${count}`
-      )
+      ])
   })
 
 const GroupMessage = UiSchema.TaggedEnum({
@@ -95,16 +95,18 @@ const makeReader = (name: string, restore: false | undefined) =>
     view: (h) =>
       h.el(
         "p",
-        h.el("button").on("click", ReaderMessage.Toggled()).children(
-          `toggle ${name}`
-        ),
-        h.el("button").on("click", ReaderMessage.Picked()).children(
-          `pick ${name}`
-        ),
-        h.el(
-          "span",
-          `${name} on=${h.shared.group.on} picks=${h.shared.group.picks}`
-        )
+        [
+          h.el("button").on("click", ReaderMessage.Toggled()).children([
+            `toggle ${name}`
+          ]),
+          h.el("button").on("click", ReaderMessage.Picked()).children([
+            `pick ${name}`
+          ]),
+          h.el(
+            "span",
+            [`${name} on=${h.shared.group.on} picks=${h.shared.group.picks}`]
+          )
+        ]
       )
   })
 
@@ -121,10 +123,12 @@ const Page = Component.define({
   view: (h) =>
     h.el(
       "main",
-      Login(h, { key: "login" }),
-      Counter(h, { key: "counter" }),
-      Group(h, { key: "kept", view: () => Kept(h, { key: "r" }) }),
-      Group(h, { key: "fresh", view: () => Fresh(h, { key: "r" }) })
+      [
+        Login(h, { key: "login" }),
+        Counter(h, { key: "counter" }),
+        Group(h, { key: "kept", view: () => Kept(h, { key: "r" }) }),
+        Group(h, { key: "fresh", view: () => Fresh(h, { key: "r" }) })
+      ]
     )
 })
 
@@ -145,11 +149,11 @@ const App = Component.define({
     AppMessage.match(message, {
       ChangedRoute: (changed) => changed.route,
       Go: ({ route: next }) =>
-        $.run(
+        $.run([
           Router.push(AppRoute, next).pipe(
             Command.map(() => AppMessage.Navigated())
           )
-        ),
+        ]),
       Navigated: () => $.model
     }),
   subscriptions: (
@@ -164,12 +168,14 @@ const App = Component.define({
   view: (h, route) =>
     h.el(
       "div",
-      h.el("button").on("click", AppMessage.Go({ route: AppRoute.Home() }))
-        .children("Home"),
-      AppRoute.match(route, {
-        Home: () => h.el("h1", "Home"),
-        Page: () => Page(h, { key: "page" })
-      })
+      [
+        h.el("button").on("click", AppMessage.Go({ route: AppRoute.Home() }))
+          .children(["Home"]),
+        AppRoute.match(route, {
+          Home: () => h.el("h1", ["Home"]),
+          Page: () => Page(h, { key: "page" })
+        })
+      ]
     )
 })
 
@@ -212,10 +218,12 @@ const desk = (restore?: false) =>
     view: (h, count) =>
       h.el(
         "div",
-        h.el("button").on("click", CounterMessage.Clicked()).children(
-          `desk ${count}`
-        ),
-        h.keepAlive((s) => Login(s, { key: "login" }))
+        [
+          h.el("button").on("click", CounterMessage.Clicked()).children([
+            `desk ${count}`
+          ]),
+          h.keepAlive((s) => Login(s, { key: "login" }))
+        ]
       )
   })
 const Desk = desk()
@@ -250,11 +258,13 @@ const Shell = Component.define({
   view: (h, model) =>
     h.el(
       "div",
-      h.el("button").on("click", ShellMessage.Counted()).children(
-        `shell ${model.count}`
-      ),
-      h.el("button").on("click", ShellMessage.Shown()).children("show"),
-      model.shown ? Editor(h, { key: "editor" }) : null
+      [
+        h.el("button").on("click", ShellMessage.Counted()).children([
+          `shell ${model.count}`
+        ]),
+        h.el("button").on("click", ShellMessage.Shown()).children(["show"]),
+        model.shown ? Editor(h, { key: "editor" }) : null
+      ]
     )
 })
 

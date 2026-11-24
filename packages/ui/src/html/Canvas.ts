@@ -777,7 +777,7 @@ const pointerEvents = PointerEvent.literals
  *   height: 300,
  *   pixelRatio: "auto",
  *   shapes: [Canvas.Rect({ x: 0, y: 0, width: 600, height: 300, fill: "#111" })]
- * }).style({ width: "100%" }).children("A chart of sales")
+ * }).style({ width: "100%" }).children(["A chart of sales"])
  * ```
  *
  * @stability experimental

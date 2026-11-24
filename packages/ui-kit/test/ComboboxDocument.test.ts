@@ -176,54 +176,56 @@ const Page = Component.define({
           view: (combobox) => {
             const input = combobox.input(
               inPopup
-                ? h.input.class("input")
-                : field.control(h.input.class("input"))
+                ? h.input.class(["input"])
+                : field.control(h.input.class(["input"]))
             )
             const list = combobox.list(h.div.attr("id", "list")).children(
-              ...combobox.items.map(({ label, value }) =>
+              combobox.items.map(({ label, value }) =>
                 combobox.item({
                   element: h.div.attr("data-testid", value),
                   value
-                }).children(label)
+                }).children([label])
               )
             )
-            return field.root(h.div.attr("id", "field")).children(
+            return field.root(h.div.attr("id", "field")).children([
               inPopup
-                ? combobox.label(h.div.class("label")).children("Fruit")
-                : field.label(h.label.attr("id", "label")).children("Fruit"),
+                ? combobox.label(h.div.class(["label"])).children(["Fruit"])
+                : field.label(h.label.attr("id", "label")).children(["Fruit"]),
               inPopup
-                ? combobox.trigger(h.button.attr("id", "trigger")).children(
+                ? combobox.trigger(h.button.attr("id", "trigger")).children([
                   combobox.value(h.span)
-                )
+                ])
                 : multiple
-                ? combobox.chips(h.div.attr("id", "group")).children(
+                ? combobox.chips(h.div.attr("id", "group")).children([
                   ...combobox.selectedItems.map(({ label, value }) =>
                     combobox.chip({
                       element: h.div.attr("data-testid", "chip-" + value),
                       value
-                    }).children(label)
+                    }).children([label])
                   ),
                   input
-                )
-                : combobox.inputGroup(h.div.attr("id", "group")).children(
+                ])
+                : combobox.inputGroup(h.div.attr("id", "group")).children([
                   input,
-                  combobox.trigger(h.button.attr("id", "trigger")).children("▾")
-                ),
-              combobox.positioner(h.div.attr("id", "positioner")).children(
-                combobox.popup(h.div.attr("id", "popup")).children(
+                  combobox.trigger(h.button.attr("id", "trigger")).children([
+                    "▾"
+                  ])
+                ]),
+              combobox.positioner(h.div.attr("id", "positioner")).children([
+                combobox.popup(h.div.attr("id", "popup")).children([
                   ...(inPopup ? [input] : []),
                   list
-                )
-              )
-            )
+                ])
+              ])
+            ])
           }
         })
     })
-    const form = h.form.attr("id", "form").children(
-      h.button.attrs({ id: "before", type: "button" }).children("Before"),
+    const form = h.form.attr("id", "form").children([
+      h.button.attrs({ id: "before", type: "button" }).children(["Before"]),
       combobox,
-      h.button.attrs({ id: "after", type: "button" }).children("After")
-    )
+      h.button.attrs({ id: "after", type: "button" }).children(["After"])
+    ])
     return h.props.dialog
       ? Dialog(h, {
         props: { open: true },
@@ -234,11 +236,11 @@ const Page = Component.define({
           Settled: () => undefined
         },
         view: (dialog) =>
-          h.div(
-            dialog.portal(h.dialog)?.children(
-              dialog.popup(h.div).children(form)
-            )
-          )
+          h.div([
+            dialog.portal(h.dialog)?.children([
+              dialog.popup(h.div).children([form])
+            ])
+          ])
       })
       : form
   }

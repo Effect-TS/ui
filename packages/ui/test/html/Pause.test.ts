@@ -29,7 +29,7 @@ const Counter = Component.define({
     h.button.onClick(CounterMessage.Clicked()).onMount(
       Seen().pipe(Mount.map(() => Component.noop))
     )
-      .children(`clicked ${count}`)
+      .children([`clicked ${count}`])
 })
 
 const register = (roots: Array<BrowserHost.Controllable>) =>
@@ -122,7 +122,7 @@ const EditorView = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.span("editor")
+  view: (h) => h.span(["editor"])
 })
 
 const Note = Component.define({
@@ -134,7 +134,7 @@ const Note = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.span("note")
+    view: (h) => h.span(["note"])
   })
 
 const Pane = Component.define({
@@ -147,14 +147,14 @@ const Pane = Component.define({
     init: () => null,
     update: ($) => $.model,
     view: (h) =>
-      h.div(
+      h.div([
         Editor.render(h, {
           key: "e",
           props: {},
-          fallback: () => h.span("loading")
+          fallback: () => h.span(["loading"])
         }),
         Note(h, { key: "n" })
-      )
+      ])
   })
   .pipe(Component.provide(Editor.toLayer(EditorView)))
 
@@ -167,7 +167,7 @@ const Page = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.main(Pane(h, { key: "p" }), Note(h, { key: "n" }))
+    view: (h) => h.main([Pane(h, { key: "p" }), Note(h, { key: "n" })])
   })
 
 it.effect("pause reports the instances whose feature slot shows its fallback in the copy", () =>
@@ -218,7 +218,7 @@ const Settings = Component.define({
   init: () => false,
   update: (_, message) => message._tag === "Opened",
   view: (h, open) =>
-    h.dialog.modal(open).onCancel(DialogMessage.Closed()).children("settings")
+    h.dialog.modal(open).onCancel(DialogMessage.Closed()).children(["settings"])
 })
 
 it.effect("the live root's modal dialogs are closed while it's paused and shown again on resume", () =>
@@ -264,7 +264,7 @@ const Tally = Component.define({
     if (message._tag === "Broke") throw new Error("broke")
     return $.model + message.by
   },
-  view: (h, total) => h.span(`total ${total}`)
+  view: (h, total) => h.span([`total ${total}`])
 })
 const Board = Component.define({
   name: "Board",
@@ -274,7 +274,7 @@ const Board = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.div(Tally(h, { key: "t" }))
+  view: (h) => h.div([Tally(h, { key: "t" })])
 })
 
 const mountBoard = Effect.fnUntraced(function*() {

@@ -26,117 +26,117 @@ const fruits: ReadonlyArray<ComboboxItem> = [
 const standIn = {
   elements: Html,
   view: (combobox: Parts, h: H) =>
-    h.div(
-      combobox.inputGroup(h.div.class("group")).children(
-        combobox.input(h.input.class("input")),
-        combobox.clear({ element: h.button.class("clear") })?.children("×"),
-        combobox.trigger(h.button.class("trigger")).children(
-          combobox.icon(h.span.class("icon")).children("▾")
-        )
-      ),
-      combobox.positioner(h.div.class("positioner")).children(
-        combobox.popup(h.div.class("popup")).children(
-          combobox.empty(h.div.class("empty")).children("No fruit found"),
-          combobox.list(h.div.class("list")).children(
-            ...combobox.items.map(({ label, value }) =>
+    h.div([
+      combobox.inputGroup(h.div.class(["group"])).children([
+        combobox.input(h.input.class(["input"])),
+        combobox.clear({ element: h.button.class(["clear"]) })?.children(["×"]),
+        combobox.trigger(h.button.class(["trigger"])).children([
+          combobox.icon(h.span.class(["icon"])).children(["▾"])
+        ])
+      ]),
+      combobox.positioner(h.div.class(["positioner"])).children([
+        combobox.popup(h.div.class(["popup"])).children([
+          combobox.empty(h.div.class(["empty"])).children(["No fruit found"]),
+          combobox.list(h.div.class(["list"])).children(
+            combobox.items.map(({ label, value }) =>
               combobox.item({
                 element: h.div.attr("data-testid", value),
                 value
-              }).children(
+              }).children([
                 label,
                 combobox.itemIndicator({
-                  element: h.span.class("check"),
+                  element: h.span.class(["check"]),
                   value
-                })?.children("✓")
-              )
+                })?.children(["✓"])
+              ])
             )
           )
-        )
-      ),
-      combobox.status(h.div.class("status")).children(
+        ])
+      ]),
+      combobox.status(h.div.class(["status"])).children([
         combobox.items.length + " fruits"
-      )
-    )
+      ])
+    ])
 }
 
 const chipsStandIn = {
   elements: Html,
   view: (combobox: Parts, h: H) =>
-    h.div(
-      combobox.chips(h.div.class("chips")).children(
+    h.div([
+      combobox.chips(h.div.class(["chips"])).children([
         ...combobox.selectedItems.map(({ label, value }) =>
           combobox.chip({
             element: h.div.attr("data-testid", "chip-" + value),
             value
-          }).children(
+          }).children([
             label,
             combobox.chipRemove({
               element: h.button.attr("data-testid", "remove-" + value),
               value
-            }).children("×")
-          )
+            }).children(["×"])
+          ])
         ),
-        combobox.input(h.input.class("input"))
-      ),
-      combobox.positioner(h.div.class("positioner")).children(
-        combobox.popup(h.div.class("popup")).children(
-          combobox.list(h.div.class("list")).children(
-            ...combobox.items.map(({ label, value }) =>
+        combobox.input(h.input.class(["input"]))
+      ]),
+      combobox.positioner(h.div.class(["positioner"])).children([
+        combobox.popup(h.div.class(["popup"])).children([
+          combobox.list(h.div.class(["list"])).children(
+            combobox.items.map(({ label, value }) =>
               combobox.item({
                 element: h.div.attr("data-testid", value),
                 value
-              }).children(label)
+              }).children([label])
             )
           )
-        )
-      )
-    )
+        ])
+      ])
+    ])
 }
 
 const inPopupStandIn = {
   elements: Html,
   view: (combobox: Parts, h: H) =>
-    h.div(
-      combobox.label(h.div.class("label")).children("Fruit"),
-      combobox.trigger(h.button.class("trigger")).children(
-        combobox.value(h.span.class("value"))
-      ),
-      combobox.positioner(h.div.class("positioner")).children(
-        combobox.popup(h.div.class("popup")).children(
-          combobox.input(h.input.class("input")),
-          combobox.list(h.div.class("list")).children(
-            ...combobox.items.map(({ label, value }) =>
+    h.div([
+      combobox.label(h.div.class(["label"])).children(["Fruit"]),
+      combobox.trigger(h.button.class(["trigger"])).children([
+        combobox.value(h.span.class(["value"]))
+      ]),
+      combobox.positioner(h.div.class(["positioner"])).children([
+        combobox.popup(h.div.class(["popup"])).children([
+          combobox.input(h.input.class(["input"])),
+          combobox.list(h.div.class(["list"])).children(
+            combobox.items.map(({ label, value }) =>
               combobox.item({
                 element: h.div.attr("data-testid", value),
                 value
-              }).children(label)
+              }).children([label])
             )
           )
-        )
-      )
-    )
+        ])
+      ])
+    ])
 }
 
 const gridStandIn = {
   elements: Html,
   view: (combobox: Parts, h: H) =>
-    h.div(
-      combobox.input(h.input.class("input")),
-      combobox.list(h.div.class("list")).children(
-        ...combobox.groups.flatMap((group) =>
+    h.div([
+      combobox.input(h.input.class(["input"])),
+      combobox.list(h.div.class(["list"])).children(
+        combobox.groups.flatMap((group) =>
           group.rows.map((cells) =>
-            combobox.row(h.div.class("row")).children(
-              ...cells.map(({ label, value }) =>
+            combobox.row(h.div.class(["row"])).children(
+              cells.map(({ label, value }) =>
                 combobox.item({
                   element: h.div.attr("data-testid", value),
                   value
-                }).children(label)
+                }).children([label])
               )
             )
           )
         )
       )
-    )
+    ])
 }
 
 const input = Locator.attr("class", "input")
@@ -274,10 +274,10 @@ describe("Combobox", () => {
       })
       s.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored()
         .expectDefaultPrevented()
-      s.fire(clearButton, "click", pointer("mouse")).emitted(
+      s.fire(clearButton, "click", pointer("mouse")).emitted([
         edited("", "clear-press"),
         picked(null, "clear-press")
-      )
+      ])
       s.resolve(HtmlCommand.Focus, { found: true })
       s.props({ ...base, name: "fruit" })
       assert.isUndefined(s.query(clearButton))
@@ -289,7 +289,7 @@ describe("Combobox", () => {
         elements: Html,
         view: (combobox: Parts, h: H) =>
           combobox.input(
-            h.input.class("input").attrs({
+            h.input.class(["input"]).attrs({
               name: "query",
               form: "search",
               required: ""
@@ -306,14 +306,14 @@ describe("Combobox", () => {
   it.effect("typing opens and filters; autofill reports without opening; composition waits for compositionend", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "input", typed("Apple", "insertReplacementText")).emitted(
+      s.fire(input, "input", typed("Apple", "insertReplacementText")).emitted([
         edited("Apple")
-      )
-      s.fire(input, "input", typed("ba", "")).emitted(edited("ba"))
-      s.fire(input, "input", typed("ap")).emitted(
+      ])
+      s.fire(input, "input", typed("ba", "")).emitted([edited("ba")])
+      s.fire(input, "input", typed("ap")).emitted([
         edited("ap"),
         opened("input-change")
-      )
+      ])
       s.props({ ...base, open: true, inputValue: "ap" }).mounted(
         tracked(s),
         sent("ShowedPopup")
@@ -324,18 +324,18 @@ describe("Combobox", () => {
         "aria-expanded": "true",
         "aria-controls": s.get(list).attrs?.id
       })
-      s.fire(input, "input", typed("zz")).emitted(edited("zz"))
+      s.fire(input, "input", typed("zz")).emitted([edited("zz")])
       s.props({ ...base, open: true, inputValue: "zz" })
       assert.isTrue(partsOf(s).listEmpty)
       assert.strictEqual(Locator.textOf(s.get(empty)), "No fruit found")
       assert.deepInclude(s.get(positioner).attrs, { "data-empty": "" })
       s.props(base)
       s.fire(input, "input", typed("り", "insertCompositionText", true))
-        .emitted(opened("input-change"))
+        .emitted([opened("input-change")])
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(input, "compositionend", { value: "りんご" }).emitted(
+      s.fire(input, "compositionend", { value: "りんご" }).emitted([
         edited("りんご")
-      )
+      ])
     }))
 
   it.effect("filters by mode, limit, filteredItems and drops empty groups", () =>
@@ -373,41 +373,41 @@ describe("Combobox", () => {
   it.effect("pointer opens from input, group or trigger, hovers items, and picks on release", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "mousedown", pointer("mouse")).emitted(
+      s.fire(input, "mousedown", pointer("mouse")).emitted([
         opened("input-press")
-      ).expectDefaultPrevented(false)
+      ]).expectDefaultPrevented(false)
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
-      s.fire(item("banana"), "mouseenter").emitted(
+      s.fire(item("banana"), "mouseenter").emitted([
         highlighted("banana", 2, "pointer")
-      )
-      s.fire(item("banana"), "mouseleave").emitted(
+      ])
+      s.fire(item("banana"), "mouseleave").emitted([
         highlighted(null, -1, "pointer")
-      )
-      s.fire(item("grape"), "mouseenter").emitted(
+      ])
+      s.fire(item("grape"), "mouseenter").emitted([
         highlighted("grape", 4, "pointer")
-      )
-      s.fire(item("grape"), "mouseup", pointer("mouse")).emitted(
+      ])
+      s.fire(item("grape"), "mouseup", pointer("mouse")).emitted([
         picked("grape"),
         edited("Grape", "item-press"),
         dismissed("item-press")
-      )
+      ])
       s.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted([
         dismissed("trigger-press")
-      ).expectDefaultPrevented()
+      ]).expectDefaultPrevented()
       s.resolve(HtmlCommand.Focus, { found: true })
       s.props(base)
-      s.fire(group, "mousedown", pointer("mouse")).emitted(
+      s.fire(group, "mousedown", pointer("mouse")).emitted([
         opened("input-press"),
         highlighted(null, -1, "none")
-      )
+      ])
         .expectDefaultPrevented()
       s.resolve(HtmlCommand.Focus, { found: true })
       s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
-      s.fire(trigger, "click", pointer("touch")).emitted(
+      s.fire(trigger, "click", pointer("touch")).emitted([
         opened("trigger-press")
-      )
+      ])
       s.props({ ...base, open: true, highlightItemOnHover: false })
       assert.strictEqual(partsOf(s).openMethod, "touch")
       s.fire(item("banana"), "mouseenter").expectIgnored()
@@ -418,60 +418,62 @@ describe("Combobox", () => {
   it.effect("keyboard opens on the selected or end item, loops or clamps, and skips modified keys", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         opened("list-navigation"),
         highlighted("apple", 0)
-      )
+      ])
         .expectDefaultPrevented()
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepInclude(s.get(item("apple")).attrs, { "data-highlighted": "" })
-      s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
+      s.fire(input, "keydown", key("Escape")).emitted([dismissed("escape-key")])
       s.props(base)
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           highlighted(null, -1, "none"),
           settled(false)
-        )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(
+        ])
+      s.fire(input, "keydown", key("ArrowUp")).emitted([
         opened("list-navigation"),
         highlighted("grape", 4)
-      )
+      ])
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted(null, -1))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
+        highlighted(null, -1)
+      ])
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted(null, -1))
+      ])
+      s.fire(input, "keydown", key("ArrowUp")).emitted([highlighted(null, -1)])
       s.props({ ...base, open: true, loopFocus: false })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
+      ])
       s.fire(input, "keydown", key("ArrowUp")).expectDefaultPrevented()
       assert.strictEqual(partsOf(s).highlighted, "apple")
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apricot", 1)
-      )
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      ])
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("banana", 2)
-      )
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      ])
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("cherry", 3)
-      )
+      ])
       s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
       s.fire(input, "keydown", key("Home")).expectIgnored()
       s.fire(input, "keydown", key("ArrowDown", { shift: true }))
         .expectIgnored()
-      s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
+      s.fire(input, "keydown", key("Escape")).emitted([dismissed("escape-key")])
       s.props({ ...base, value: "banana", inputValue: "Banana" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           highlighted(null, -1, "none"),
           settled(false)
-        )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(
+        ])
+      s.fire(input, "keydown", key("ArrowUp")).emitted([
         opened("list-navigation"),
         highlighted("banana", 2)
-      )
+      ])
       s.props({ ...base, value: "banana", inputValue: "Banana", open: true })
         .mounted(tracked(s), sent("ShowedPopup"))
       assert.strictEqual(values(s).length, 5)
@@ -483,51 +485,51 @@ describe("Combobox", () => {
         ...base,
         autoHighlight: true
       }, standIn)
-      s.fire(input, "input", typed("an")).emitted(
+      s.fire(input, "input", typed("an")).emitted([
         edited("an"),
         opened("input-change")
-      )
+      ])
       s.props({ ...base, autoHighlight: true, open: true, inputValue: "an" })
         .mounted(tracked(s), sent("ShowedPopup"))
       assert.strictEqual(
         s.get(input).attrs?.["aria-activedescendant"],
         s.get(item("banana")).attrs?.id
       )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      s.fire(input, "keydown", key("Enter")).emitted([
         picked("banana"),
         edited("Banana", "item-press"),
         dismissed("item-press")
-      ).expectDefaultPrevented()
+      ]).expectDefaultPrevented()
       s.props(base)
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           highlighted(null, -1, "none"),
           settled(false)
-        )
+        ])
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(input, "keydown", key("Enter")).expectIgnored()
-      s.fire(input, "keyup", key("Enter")).emitted(dismissed("none"))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keyup", key("Enter")).emitted([dismissed("none")])
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
+      ])
       s.fire(input, "keyup", key("Enter")).expectIgnored()
-      s.fire(input, "keydown", key(" ")).emitted(
+      s.fire(input, "keydown", key(" ")).emitted([
         picked("apple"),
         edited("Apple", "item-press"),
         dismissed("item-press")
-      ).expectDefaultPrevented()
+      ]).expectDefaultPrevented()
       s.props({ ...base, open: true, inputValue: "a" })
       s.fire(input, "keydown", key(" ")).expectIgnored()
       s.props({ ...base, value: "banana", inputValue: "Banana" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           highlighted(null, -1, "none"),
           settled(false)
-        )
-      s.fire(input, "keydown", key("Escape")).emitted(
+        ])
+      s.fire(input, "keydown", key("Escape")).emitted([
         edited("", "escape-key"),
         picked(null, "escape-key")
-      )
+      ])
         .expectDefaultPrevented()
       s.props(base)
       s.fire(input, "keydown", key("Escape")).expectIgnored()
@@ -543,44 +545,44 @@ describe("Combobox", () => {
   it.effect("freezes the filter during exit, restores the selected label on dismiss, and deselects when cleared", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "input", typed("ap")).emitted(
+      s.fire(input, "input", typed("ap")).emitted([
         edited("ap"),
         opened("input-change")
-      )
+      ])
       s.props({ ...base, open: true, inputValue: "ap" }).mounted(
         tracked(s),
         sent("ShowedPopup")
       )
-      s.fire(item("apricot"), "click", pointer("mouse")).emitted(
+      s.fire(item("apricot"), "click", pointer("mouse")).emitted([
         picked("apricot"),
         edited("Apricot", "item-press"),
         dismissed("item-press")
-      )
+      ])
       s.props({ ...base, value: "apricot", inputValue: "Apricot" })
       assert.deepStrictEqual(values(s), ["apple", "apricot", "grape"])
       assert.strictEqual(partsOf(s).transitionStatus, "ending")
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(settled(false))
+        .emitted([settled(false)])
       assert.strictEqual(values(s).length, 5)
-      s.fire(input, "input", typed("gr")).emitted(
+      s.fire(input, "input", typed("gr")).emitted([
         edited("gr"),
         opened("input-change")
-      )
+      ])
       s.props({ ...base, value: "apricot", open: true, inputValue: "gr" })
         .mounted(tracked(s), sent("ShowedPopup"))
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "mouse" }))
-        .emitted(dismissed("outside-press"))
+        .emitted([dismissed("outside-press")])
       s.props({ ...base, value: "apricot", inputValue: "gr" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           edited("Apricot", "none"),
           settled(false)
-        )
+        ])
       s.props({ ...base, value: "apricot", inputValue: "Apricot" })
-      s.fire(input, "input", typed("")).emitted(
+      s.fire(input, "input", typed("")).emitted([
         edited(""),
         picked(null, "input-clear")
-      )
+      ])
     }))
 
   it.effect("multiple toggles items, closes after a filtered pick, and manages chips", () =>
@@ -599,25 +601,25 @@ describe("Combobox", () => {
         role: "toolbar"
       })
       assert.strictEqual(s.all(Locator.attr("name", "fruit")).length, 1)
-      s.fire(item("grape"), "click", pointer("mouse")).emitted(
+      s.fire(item("grape"), "click", pointer("mouse")).emitted([
         picked(["apple", "grape"])
-      )
+      ])
       s.props({ ...props, value: ["apple", "grape"] })
-      s.fire(item("apple"), "click", pointer("mouse")).emitted(
+      s.fire(item("apple"), "click", pointer("mouse")).emitted([
         picked(["grape"])
-      )
-      s.fire(input, "input", typed("ban")).emitted(edited("ban"))
+      ])
+      s.fire(input, "input", typed("ban")).emitted([edited("ban")])
       s.props({ ...props, value: ["grape"], inputValue: "ban" })
-      s.fire(item("banana"), "click", pointer("mouse")).emitted(
+      s.fire(item("banana"), "click", pointer("mouse")).emitted([
         picked(["grape", "banana"]),
         edited("", "input-clear"),
         dismissed("item-press")
-      )
+      ])
       s.props({ ...base, multiple: true, value: ["apple", "grape"] })
       assert.deepInclude(s.get(item("chip-apple")).attrs, { tabindex: "-1" })
-      s.fire(input, "keydown", key("Backspace")).emitted(
+      s.fire(input, "keydown", key("Backspace")).emitted([
         picked(["apple"], "none")
-      )
+      ])
       s.fire(
         input,
         "keydown",
@@ -631,9 +633,9 @@ describe("Combobox", () => {
       ).expectIgnored()
       s.fire(item("remove-apple"), "mousedown", pointer("mouse"))
         .expectIgnored().expectDefaultPrevented()
-      s.fire(item("remove-apple"), "click", pointer("mouse")).emitted(
+      s.fire(item("remove-apple"), "click", pointer("mouse")).emitted([
         picked(["grape"], "chip-remove-press")
-      )
+      ])
       s.resolve(HtmlCommand.Focus, { found: true })
       s.props({ ...base, multiple: true, value: ["apple"], inputValue: "a" })
       s.fire(input, "keydown", key("Backspace")).expectIgnored()
@@ -662,7 +664,7 @@ describe("Combobox", () => {
         "Pick a fruit"
       )
       assert.deepInclude(s.get(popup).attrs, { role: "dialog" })
-      s.fire(trigger, "keydown", key("g")).emitted(picked("grape", "none"))
+      s.fire(trigger, "keydown", key("g")).emitted([picked("grape", "none")])
       s.resolve(
         s.current.pending[0]!.command,
         sent("CompletedWaitBeforeResetTyping")
@@ -672,10 +674,10 @@ describe("Combobox", () => {
         Locator.textOf(s.get(Locator.attr("class", "value"))),
         "Grape"
       )
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      s.fire(trigger, "mousedown", pointer("mouse")).emitted([
         opened("trigger-press"),
         highlighted("grape", 4, "none")
-      )
+      ])
         .expectDefaultPrevented(false)
       s.props({ ...props, value: "grape", open: true }).mounted(
         tracked(s),
@@ -686,28 +688,30 @@ describe("Combobox", () => {
         s.get(popup).attrs?.id
       )
       s.mounted(tracked(s), sent("ReleasedPointer", { outside: true })).emitted(
-        dismissed("cancel-open")
+        [
+          dismissed("cancel-open")
+        ]
       )
-      s.fire(input, "input", typed("ba")).emitted(
+      s.fire(input, "input", typed("ba")).emitted([
         edited("ba"),
         highlighted(null, -1, "none")
-      )
+      ])
       s.props({ ...props, value: "grape", open: true, inputValue: "ba" })
       assert.deepStrictEqual(values(s), ["banana"])
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("banana", 0)
-      )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      ])
+      s.fire(input, "keydown", key("Enter")).emitted([
         picked("banana"),
         dismissed("item-press")
-      )
+      ])
       s.props({ ...props, value: "banana", inputValue: "ba" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           highlighted(null, -1, "none"),
           edited("", "input-clear"),
           settled(false)
-        )
+        ])
     }))
 
   it.effect("grid navigates rows and columns, flips horizontal arrows in RTL, and leaves the caret alone when unhighlighted", () =>
@@ -727,14 +731,18 @@ describe("Combobox", () => {
       })
       assert.deepInclude(s.get(item("e0")).attrs, { role: "gridcell" })
       s.fire(input, "keydown", key("ArrowRight")).expectIgnored()
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("e0", 0))
-      s.fire(input, "keydown", key("ArrowRight")).emitted(highlighted("e1", 1))
-      s.fire(input, "keydown", key("ArrowRight")).emitted(highlighted("e2", 2))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("e5", 5))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("e6", 6))
-      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted("e3", 3))
+      s.fire(input, "keydown", key("ArrowDown")).emitted([highlighted("e0", 0)])
+      s.fire(input, "keydown", key("ArrowRight")).emitted([
+        highlighted("e1", 1)
+      ])
+      s.fire(input, "keydown", key("ArrowRight")).emitted([
+        highlighted("e2", 2)
+      ])
+      s.fire(input, "keydown", key("ArrowDown")).emitted([highlighted("e5", 5)])
+      s.fire(input, "keydown", key("ArrowDown")).emitted([highlighted("e6", 6)])
+      s.fire(input, "keydown", key("ArrowUp")).emitted([highlighted("e3", 3)])
       s.props({ ...props, dir: "rtl" })
-      s.fire(input, "keydown", key("ArrowLeft")).emitted(highlighted("e4", 4))
+      s.fire(input, "keydown", key("ArrowLeft")).emitted([highlighted("e4", 4)])
     }))
 
   it.effect("inline stays expanded, navigates while closed, restores highlight on focus, and clears on Escape keyup", () =>
@@ -746,25 +754,25 @@ describe("Combobox", () => {
         "aria-expanded": "true",
         "aria-controls": s.get(list).attrs?.id
       })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      ])
+      s.fire(input, "keydown", key("Enter")).emitted([
         picked("apple"),
         edited("Apple", "item-press")
-      )
-      s.fire(input, "focusout", { within: false, disabled: false }).emitted(
+      ])
+      s.fire(input, "focusout", { within: false, disabled: false }).emitted([
         highlighted(null, -1, "none")
-      )
-      s.fire(input, "focusin", { within: false }).emitted(
+      ])
+      s.fire(input, "focusin", { within: false }).emitted([
         highlighted("apple", 0, "none")
-      )
+      ])
       s.props({ ...props, inputValue: "Apple", value: "apple" })
       s.fire(input, "keydown", key("Escape")).expectIgnored()
-      s.fire(input, "keyup", key("Escape")).emitted(
+      s.fire(input, "keyup", key("Escape")).emitted([
         edited("", "escape-key"),
         picked(null, "escape-key")
-      )
+      ])
       s.props({ ...props, inputValue: "Apple", value: "apple", disabled: true })
       s.fire(input, "keyup", key("Escape"))
       assert.deepStrictEqual(s.current.emitted, [])
@@ -786,10 +794,10 @@ describe("Combobox", () => {
         "aria-readonly": "true",
         "aria-autocomplete": "none"
       })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         opened("list-navigation"),
         highlighted("apple", 0)
-      )
+      ])
       s.props({ ...base, readOnly: true, open: true }).mounted(
         tracked(s),
         sent("ShowedPopup")
@@ -815,30 +823,30 @@ describe("Combobox", () => {
       }, {
         elements: Html,
         view: (combobox, h) =>
-          h.div(
-            combobox.value(h.span.class("custom-value")).children("Chosen"),
+          h.div([
+            combobox.value(h.span.class(["custom-value"])).children(["Chosen"]),
             combobox.input(
-              h.input.class("input").attr("aria-disabled", "true")
+              h.input.class(["input"]).attr("aria-disabled", "true")
             ),
             combobox.trigger(
-              h.button.class("trigger").attr("aria-disabled", "true")
+              h.button.class(["trigger"]).attr("aria-disabled", "true")
             ),
             combobox.clear({
-              element: h.button.class("clear").attr("aria-disabled", "true")
+              element: h.button.class(["clear"]).attr("aria-disabled", "true")
             }),
-            combobox.chips(h.div.class("chips")).children(
-              combobox.chip({ element: h.div.class("chip"), value: "apple" })
-                .children(
+            combobox.chips(h.div.class(["chips"])).children([
+              combobox.chip({ element: h.div.class(["chip"]), value: "apple" })
+                .children([
                   combobox.chipRemove({
-                    element: h.button.class("chip-remove").attr(
+                    element: h.button.class(["chip-remove"]).attr(
                       "aria-disabled",
                       "true"
                     ),
                     value: "apple"
                   })
-                )
-            )
-          )
+                ])
+            ])
+          ])
       })
       assert.strictEqual(
         Locator.textOf(s.get(Locator.attr("class", "custom-value"))),
@@ -869,11 +877,11 @@ describe("Combobox", () => {
       const hiddenTagCases: ReadonlyArray<
         (combobox: Parts, h: H) => View.Content<never>
       > = [
-        (combobox, h) => h.div(combobox.clear({ element: h.div as never })),
+        (combobox, h) => h.div([combobox.clear({ element: h.div as never })]),
         (combobox, h) =>
-          h.div(
+          h.div([
             combobox.itemIndicator({ element: h.div as never, value: "apple" })
-          )
+          ])
       ]
       for (const render of hiddenTagCases) {
         const exit = yield* Effect.exit(

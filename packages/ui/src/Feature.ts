@@ -185,7 +185,7 @@ export const isService = (u: unknown): u is Any =>
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
- *   view: (h) => h.el("p", "no todos")
+ *   view: (h) => h.el("p", ["no todos"])
  * })
  *
  * const TodosFake = Todos.toLayer(FakeTodos)

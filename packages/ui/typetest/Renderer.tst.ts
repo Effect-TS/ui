@@ -34,7 +34,7 @@ describe("Renderer", () => {
     }).make({
       init: () => "",
       update: ($) => $.model,
-      view: (h) => h.box(h.field)
+      view: (h) => h.box([h.field])
     })
     expect(Renderer.mount(Form, {}, null)).type.toBe<
       Effect.Effect<
@@ -64,7 +64,7 @@ describe("Renderer", () => {
     }).make({
       init: () => "",
       update: ($) => $.model,
-      view: (h) => h.box(h.field)
+      view: (h) => h.box([h.field])
     })
     expect(TestHost.mount(Form, {})).type.toBe<
       Effect.Effect<
@@ -162,7 +162,7 @@ describe("View elements", () => {
       view: (h) => {
         expect(h.field.ref(Field)).type.not.toRaiseError()
         expect(h.box.ref).type.not.toBeCallableWith(Field)
-        return h.box()
+        return h.box([])
       }
     })
   })
@@ -214,7 +214,7 @@ describe("View elements", () => {
         )
         expect(h.field.on).type.not.toBeCallableWith("click", Msg.Mounted())
         expect(h.field.on).type.not.toBeCallableWith("input", "not a message")
-        return h.box()
+        return h.box([])
       }
     })
   })
@@ -232,17 +232,16 @@ describe("View elements", () => {
           View.ContainerBuilder<typeof Msg.Type>
         >()
         // The shorthand and `children` return the builder, so the chain goes on.
-        expect(h.el("x-foo", "a")).type.toBe<
+        expect(h.el("x-foo", ["a"])).type.toBe<
           View.ContainerBuilder<typeof Msg.Type>
         >()
-        expect(h.el("x-foo").attr("a", "b").children("c").attr("d", "e")).type
+        expect(h.el("x-foo").attr("a", "b").children(["c"]).attr("d", "e")).type
           .toBe<
             View.ContainerBuilder<typeof Msg.Type>
           >()
-        // The shorthand takes at least one child, so a spread of an array goes through children.
         const items: Array<string> = []
-        expect(h.el).type.not.toBeCallableWith("x-foo", ...items)
-        expect(h.el("x-foo").children).type.toBeCallableWith(...items)
+        expect(h.el).type.toBeCallableWith("x-foo", items)
+        expect(h.el("x-foo").children).type.toBeCallableWith(items)
         return h.el("x-foo")
       }
     })
@@ -261,9 +260,11 @@ describe("View elements", () => {
         expect(h.field).type.not.toHaveProperty("children")
         expect(h.field.value("a")).type.not.toHaveProperty("children")
         expect(h.box.on("click", Msg.Mounted()).children).type.toBeCallableWith(
-          h.field
+          [
+            h.field
+          ]
         )
-        return h.box(h.field)
+        return h.box([h.field])
       }
     })
   })

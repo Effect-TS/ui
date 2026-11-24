@@ -168,22 +168,22 @@
  *             Settled: () => undefined
  *           },
  *           view: (select) =>
- *             field.root(h.div).children(
- *               select.label(h.div).children("Theme"),
- *               field.focusWithin(h.div).children(
- *                 select.trigger(field.member(h.button)).children(select.value(h.span), select.icon(h.span).children("▾")),
- *                 select.positioner(h.div).children(
+ *             field.root(h.div).children([
+ *               select.label(h.div).children(["Theme"]),
+ *               field.focusWithin(h.div).children([
+ *                 select.trigger(field.member(h.button)).children([select.value(h.span), select.icon(h.span).children(["▾"])]),
+ *                 select.positioner(h.div).children([
  *                   select.popup(h.div).children(
- *                     ...themes.map(({ label, value }) =>
- *                       select.item({ element: h.div, value }).children(
- *                         select.itemText(h.div).children(label),
- *                         select.itemIndicator({ element: h.span, value })?.children("✓")
- *                       )
+ *                     themes.map(({ label, value }) =>
+ *                       select.item({ element: h.div, value }).children([
+ *                         select.itemText(h.div).children([label]),
+ *                         select.itemIndicator({ element: h.span, value })?.children(["✓"])
+ *                       ])
  *                     )
  *                   )
- *                 )
- *               )
- *             )
+ *                 ])
+ *               ])
+ *             ])
  *         })
  *     })
  * })
@@ -590,7 +590,7 @@ const open = (
     pressedItem: false,
     releaseSelected: false,
     releaseUnselected: false
-  }).emit(SelectEvents.RequestedOpen({ reason }))
+  }).emit([SelectEvents.RequestedOpen({ reason })])
 }
 
 const dismiss = (
@@ -606,9 +606,9 @@ const dismiss = (
       focusLeft,
       pressing: false,
       spaceDown: false
-    }).emit(
+    }).emit([
       SelectEvents.RequestedClose({ reason })
-    )
+    ])
     : model
 
 const toggle = ($: SelectUpdate, method: SelectInteraction) =>
@@ -631,20 +631,20 @@ const pick = (
   }
   const next = UiStruct.evolve(model, { active: value, pressedItem: false })
   if (props.multiple === true) {
-    return $.set(next).emit(
+    return $.set(next).emit([
       SelectEvents.Picked({
         value: toggled(valuesOf(props), value),
         reason: "item-press"
       })
-    )
+    ])
   }
   return $.set(next).evolve({
     closeMethod: method,
     focusLeft: false,
     pressing: false
   })
-    .emit(SelectEvents.Picked({ value, reason: "item-press" }))
-    .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
+    .emit([SelectEvents.Picked({ value, reason: "item-press" })])
+    .emit([SelectEvents.RequestedClose({ reason: "item-press" })])
 }
 
 const highlight = (
@@ -675,17 +675,17 @@ const typeKey = ($: SelectUpdate, key: string) => {
   const moved = props.open && item !== undefined
     ? { active: item.value, activeByKey: true }
     : undefined
-  const typed = $.evolve({ ...next, ...moved }).run(
+  const typed = $.evolve({ ...next, ...moved }).run([
     WaitBeforeResetTyping.make({})
-  )
+  ])
   return item === undefined || props.open ||
       valuesOf(props).includes(item.value)
     ? typed
-    : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
+    : typed.emit([SelectEvents.Picked({ value: item.value, reason: "none" })])
 }
 
 const focusTrigger = ($: SelectUpdate) =>
-  $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+  $.run([HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop)])
 
 const tolerance = 1
 
@@ -1420,7 +1420,7 @@ export const Select = Component.define({
       const item = autofillMatch(props.items, value)
       return !available(item) || valuesOf(props).includes(item.value)
         ? $.model
-        : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
+        : $.emit([SelectEvents.Picked({ value: item.value, reason: "none" })])
     },
     PressedPopupKey: ($, { key }) => {
       const props = $.props
@@ -1489,7 +1489,7 @@ export const Select = Component.define({
       $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.emit(SelectEvents.Settled({ open }))
+      if (open) return $.emit([SelectEvents.Settled({ open })])
       return $.model.mounted && $.props.holdExit !== true
         ? $.evolve({
           mounted: false,
@@ -1498,7 +1498,7 @@ export const Select = Component.define({
           scrollUp: false,
           scrollDown: false,
           pressedItem: false
-        }).emit(SelectEvents.Settled({ open }))
+        }).emit([SelectEvents.Settled({ open })])
         : $.model
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
@@ -1662,7 +1662,7 @@ export const Select = Component.define({
             })
           return inputs.length === 0
             ? named
-            : inputsBox.children(named, ...inputs)
+            : inputsBox.children([named, ...inputs])
         }))
 
     const value = p.part(
@@ -1710,7 +1710,7 @@ export const Select = Component.define({
           )
         )
       const layered = modal
-        ? decorated.children(open ? blocking.open : blocking.closed)
+        ? decorated.children([open ? blocking.open : blocking.closed])
         : decorated
       if (!shown) return layered
       const alignItem = props.items.find((item) => chosen.has(item.value)) ??

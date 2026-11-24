@@ -25,8 +25,8 @@ export const Collapsible = Component.define({
   // doesn't run for it. Leaving a slot out of the view unmounts its content,
   // and placing it again mounts it fresh.
   view: (h, model) =>
-    h.section(
-      h.header(
+    h.section([
+      h.header([
         h.slots.summary,
         h.button
           .attrs({
@@ -34,8 +34,8 @@ export const Collapsible = Component.define({
             "aria-expanded": model.open ? "true" : "false"
           })
           .onClick(CollapsibleMessage.ClickedToggle())
-          .children(model.open ? "Hide" : "Show")
-      ),
+          .children([model.open ? "Hide" : "Show"])
+      ]),
       model.open && h.slots.body
-    )
+    ])
 })

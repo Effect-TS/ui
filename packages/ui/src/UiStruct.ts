@@ -140,7 +140,7 @@ const applyFields = (self: any, fields: Record<PropertyKey, unknown>) => {
  *         notice: null
  *       })
  *   },
- *   view: (h, model) => h.el("p", `${model.lines.length} lines`)
+ *   view: (h, model) => h.el("p", [`${model.lines.length} lines`])
  * })
  * ```
  *

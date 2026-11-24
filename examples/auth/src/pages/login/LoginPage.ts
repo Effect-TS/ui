@@ -72,13 +72,15 @@ const FormField = <M>(h: View.H<M>, options: {
     key: options.key,
     props: { ...fieldValidationProps(state), disabled: options.disabled },
     view: (field) =>
-      field.root(h.div).children(
-        h.div.class("flex items-center gap-2 mb-1").children(
-          field.label(h.label).class("block text-sm font-medium text-gray-700")
-            .children(options.label),
+      field.root(h.div).children([
+        h.div.class(["flex items-center gap-2 mb-1"]).children([
+          field.label(h.label).class([
+            "block text-sm font-medium text-gray-700"
+          ])
+            .children([options.label]),
           state._tag === "Valid" &&
-            h.span.class("text-green-600 text-sm").children("✓")
-        ),
+          h.span.class(["text-green-600 text-sm"]).children(["✓"])
+        ]),
         Input(h, {
           element: field.control(h.input),
           props: { value: options.value },
@@ -86,15 +88,15 @@ const FormField = <M>(h: View.H<M>, options: {
         })
           .attr("type", options.type)
           .attr("placeholder", options.placeholder)
-          .class(
+          .class([
             "w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
             "disabled:bg-gray-100 data-valid:border-green-500 data-invalid:border-red-500"
-          ),
+          ]),
         state._tag === "Invalid" &&
-          field.error(h.div)?.class("text-red-600 text-sm mt-1").children(
-            state.errors[0]
-          )
-      )
+        field.error(h.div)?.class(["text-red-600 text-sm mt-1"]).children([
+          state.errors[0]
+        ])
+      ])
   })
 }
 
@@ -131,14 +133,14 @@ export const LoginPageNoDeps = Component.define({
       return Option.match(LoginValidation.validate(form).value, {
         onNone: () => $.evolve({ form }),
         onSome: ({ email, password }) =>
-          $.evolve({ form, submitting: true }).run(
+          $.evolve({ form, submitting: true }).run([
             SimulateAuthRequest.make({ email, password })
-          )
+          ])
       })
     },
 
     SucceededSimulateAuthRequest: ($, { session }) =>
-      $.emit(LoginPageEvents.SignedIn({ session })),
+      $.emit([LoginPageEvents.SignedIn({ session })]),
 
     FailedSimulateAuthRequest: ($, { error }) =>
       $.evolve({
@@ -150,20 +152,20 @@ export const LoginPageNoDeps = Component.define({
   view: (h, model) => {
     const validated = LoginValidation.validate(model.form)
     const canSubmit = Option.isSome(validated.value) && !model.submitting
-    return h.div.class("max-w-md mx-auto px-4").children(
-      h.div.class("bg-white rounded-xl shadow-lg p-8").children(
-        h.h1.class("text-3xl font-bold text-gray-800 text-center mb-8")
-          .children("Sign In"),
-        h.div.class("mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg")
-          .children(
-            h.p.class("text-sm text-blue-700").children(
+    return h.div.class(["max-w-md mx-auto px-4"]).children([
+      h.div.class(["bg-white rounded-xl shadow-lg p-8"]).children([
+        h.h1.class(["text-3xl font-bold text-gray-800 text-center mb-8"])
+          .children(["Sign In"]),
+        h.div.class(["mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg"])
+          .children([
+            h.p.class(["text-sm text-blue-700"]).children([
               "Hint: Use any email with password \"password\""
-            )
-          ),
-        h.form.attr("aria-label", "Sign in").attr("novalidate", "").class(
+            ])
+          ]),
+        h.form.attr("aria-label", "Sign in").attr("novalidate", "").class([
           "space-y-6"
-        )
-          .onSubmit(LoginPageMessage.SubmittedForm()).children(
+        ])
+          .onSubmit(LoginPageMessage.SubmittedForm()).children([
             FormField(h, {
               key: "email",
               label: "Email",
@@ -188,22 +190,22 @@ export const LoginPageNoDeps = Component.define({
                 })
             }),
             Button(h, { props: { type: "submit", disabled: !canSubmit } })
-              .class(
+              .class([
                 "w-full py-3 font-medium rounded-lg transition bg-blue-500 text-white cursor-pointer",
                 "enabled:hover:bg-blue-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
-              )
-              .children(model.submitting ? "Signing in..." : "Sign In")
-          ),
-        h.div.class("mt-6 text-center").children(
-          h.span.class("text-gray-600").children("Back to "),
-          h.a.attr("href", AppRoute.print(LoggedOutRoute.Home())).class(
+              ])
+              .children([model.submitting ? "Signing in..." : "Sign In"])
+          ]),
+        h.div.class(["mt-6 text-center"]).children([
+          h.span.class(["text-gray-600"]).children(["Back to "]),
+          h.a.attr("href", AppRoute.print(LoggedOutRoute.Home())).class([
             "text-blue-500 hover:underline"
-          ).children(
+          ]).children([
             "Home"
-          )
-        )
-      )
-    )
+          ])
+        ])
+      ])
+    ])
   }
 })
 

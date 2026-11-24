@@ -17,19 +17,19 @@ export const ShellDemo = Component.define({
     ClickedAppend: ($) => $.evolve({ count: (count) => count + 1 })
   },
   view: (h, model) =>
-    h.div.class("shell").children(
-      h.aside.class("sidebar").children(
-        h.strong.children("Inbox"),
+    h.div.class(["shell"]).children([
+      h.aside.class(["sidebar"]).children([
+        h.strong.children(["Inbox"]),
         h.button.attr("id", "jump").onClick(ShellMessage.ClickedJump())
-          .children("Jump to 5,000"),
+          .children(["Jump to 5,000"]),
         h.button.attr("id", "append").onClick(ShellMessage.ClickedAppend())
-          .children("Append a row")
-      ),
-      h.main.class("main").children(
-        h.h1.children("Messages"),
-        h.p.children(
+          .children(["Append a row"])
+      ]),
+      h.main.class(["main"]).children([
+        h.h1.children(["Messages"]),
+        h.p.children([
           "The list scrolls with this <main>, which it doesn't render."
-        ),
+        ]),
         VirtualList(h, {
           props: {
             count: model.count,
@@ -44,17 +44,17 @@ export const ShellDemo = Component.define({
               }
           },
           view: (virtualList) =>
-            virtualList.list(h.ul.class("rows")).children(
+            virtualList.list(h.ul.class(["rows"])).children(
               virtualList.items.map((index) =>
                 virtualList.item({
-                  element: h.li.class("row").key(String(index)),
+                  element: h.li.class(["row"]).key(String(index)),
                   index
-                }).children(
-                  h.button.class("row-button").children("Message " + index)
-                )
+                }).children([
+                  h.button.class(["row-button"]).children(["Message " + index])
+                ])
               )
             )
         })
-      )
-    )
+      ])
+    ])
 })

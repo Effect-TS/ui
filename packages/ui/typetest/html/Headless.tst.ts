@@ -92,7 +92,7 @@ describe("headless components", () => {
             expect(menu.open).type.toBe<boolean>()
             // Args is fixed by the author: (b, item: Item).
             expect(menu.item).type.toBe<View.Part<"li", [item: Item], never>>()
-            const trigger = menu.trigger(h.button.class("btn"))
+            const trigger = menu.trigger(h.button.class(["btn"]))
             expect(trigger).type.toBe<
               Html.Element<
                 Msg,
@@ -102,19 +102,19 @@ describe("headless components", () => {
                 "button"
               >
             >()
-            return h.div.class("toolbar").children(
-              trigger.children("Actions"),
-              menu.popup(h.div.class("menu")).children(
+            return h.div.class(["toolbar"]).children([
+              trigger.children(["Actions"]),
+              menu.popup(h.div.class(["menu"])).children([
                 menu.input(h.input.attr("aria-label", "Filter actions")),
-                menu.visible.length === 0 && h.p("No actions found."),
+                menu.visible.length === 0 && h.p(["No actions found."]),
                 h.ul.children(menu.visible.map((item) => {
                   expect(item).type.toBe<Item>()
                   return menu.item(h.li.key(item.id), item).onClick(
                     Msg.Clicked()
-                  ).children(item.label)
+                  ).children([item.label])
                 }))
-              )
-            )
+              ])
+            ])
           }
         })
     })
@@ -145,9 +145,9 @@ describe("headless components", () => {
               >
             >()
             expect(menu.trigger(h.button)).type.not.toBeAssignableTo<
-              (...children: ReadonlyArray<string>) => unknown
+              (children: ReadonlyArray<string>) => unknown
             >()
-            expect(h.button).type.toBeCallableWith("Actions")
+            expect(h.button).type.toBeCallableWith(["Actions"])
             // A part is tied to its tag name: a button part rejects a div, and the missing item is an error.
             expect(menu.trigger).type.not.toBeCallableWith(h.div)
             expect(menu.trigger).type.not.toBeCallableWith(h.el("button"))
@@ -158,9 +158,9 @@ describe("headless components", () => {
               key: "confirm",
               props: { label: "Confirm" },
               view: (dialog) =>
-                dialog.popup(h.dialog).children(
-                  dialog.close(menu.item(h.li, items[0]!)).children("Close")
-                )
+                dialog.popup(h.dialog).children([
+                  dialog.close(menu.item(h.li, items[0]!)).children(["Close"])
+                ])
             })
           }
         })
@@ -185,12 +185,12 @@ describe("headless components", () => {
         init: () => null,
         update: ($) => $.model,
         parts: (p) => ({
-          inside: p.part("button", (b) => b.children(seen())),
+          inside: p.part("button", (b) => b.children([seen()])),
           around: p.part(
             "button",
             (b) =>
               b.forward((node) =>
-                new Html.Element<never>("div").children(node, seen())
+                new Html.Element<never>("div").children([node, seen()])
               )
           )
         })
@@ -214,7 +214,7 @@ describe("headless components", () => {
               timed.clock(h.time).onMount(
                 MarkSeen().pipe(Mount.map(() => Msg.Seen()))
               )
-                .children(String(timed.now))
+                .children([String(timed.now)])
           })
       }
     )
@@ -292,10 +292,10 @@ describe("headless components", () => {
                   "div"
                 >
               >()
-              return h.div(
+              return h.div([
                 wrapped.clock(h.time),
                 wrapped.seen({ element: h.div, label: "Seen" })
-              )
+              ])
             }
           })
       }
@@ -357,7 +357,7 @@ describe("headless components", () => {
           key: "actions",
           props: { items }
         })
-        return h.div()
+        return h.div([])
       }
     })
   })

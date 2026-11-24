@@ -64,28 +64,28 @@ export const Confirm = Component.define({
         ConfirmMessage.Escaped({ forced: cancelable === false })
       )
       .onClose(ConfirmMessage.Closed())
-    return h.div(
-      h.button.onClick(ConfirmMessage.Ask()).children("Ask"),
-      h.button.onClick(ConfirmMessage.Remove()).children("Remove"),
+    return h.div([
+      h.button.onClick(ConfirmMessage.Ask()).children(["Ask"]),
+      h.button.onClick(ConfirmMessage.Remove()).children(["Remove"]),
       model.shown &&
-        (model.state === "modal"
-          ? dialog.modal(true)
-          : dialog.open(model.state === "open")).children(
-            h.h2("Delete note?"),
-            h.form.attr("method", "dialog").onSubmit(({ entries }) =>
-              ConfirmMessage.Chosen({
-                choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
-              })
-            ).children(
-              h.button.attrs({ name: "choice", value: "keep" }).children(
-                "Keep"
-              ),
-              h.button.attrs({ name: "choice", value: "delete" }).children(
-                "Delete"
-              )
-            )
-          )
-    )
+      (model.state === "modal"
+        ? dialog.modal(true)
+        : dialog.open(model.state === "open")).children([
+          h.h2(["Delete note?"]),
+          h.form.attr("method", "dialog").onSubmit(({ entries }) =>
+            ConfirmMessage.Chosen({
+              choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
+            })
+          ).children([
+            h.button.attrs({ name: "choice", value: "keep" }).children([
+              "Keep"
+            ]),
+            h.button.attrs({ name: "choice", value: "delete" }).children([
+              "Delete"
+            ])
+          ])
+        ])
+    ])
   }
 })
 
@@ -100,8 +100,10 @@ export const Nested = Component.define({
   update: ($) => $.model,
   view: (h) =>
     h.dialog
-      .attr("aria-label", "Outer").modal(true).children(
-        h.p("Outer"),
-        h.dialog.attr("aria-label", "Inner").modal(true).children(h.p("Inner"))
-      )
+      .attr("aria-label", "Outer").modal(true).children([
+        h.p(["Outer"]),
+        h.dialog.attr("aria-label", "Inner").modal(true).children([
+          h.p(["Inner"])
+        ])
+      ])
 })

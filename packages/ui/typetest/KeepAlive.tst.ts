@@ -22,7 +22,7 @@ const NoteEditor = Component.define({
 }).make({
   init: () => "",
   update: ($, message) => message._tag === "Typed" ? message.text : $.model,
-  view: (h, text) => h.textarea().value(text)
+  view: (h, text) => h.textarea([]).value(text)
 })
 
 const ProfileForm = Component.define({
@@ -33,7 +33,7 @@ const ProfileForm = Component.define({
   .make({
     init: () => "",
     update: ($) => $.model,
-    view: (h, text) => h.el("p", text)
+    view: (h, text) => h.el("p", [text])
   })
 
 const Tooltip = Component.define({
@@ -74,12 +74,12 @@ describe("keepAlive", () => {
     >()
     expect(
       h.keepAlive((s) =>
-        h.div(
+        h.div([
           ProfileForm(s, { key: "billing" }),
           ProfileForm(s, { key: "shipping" }),
           NoteEditor(s, { key: "draft", props: { noteId: "a" } }),
           Tooltip(s, {})
-        )
+        ])
       )
     ).type.not.toRaiseError()
     expect(

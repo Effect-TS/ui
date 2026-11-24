@@ -41,7 +41,9 @@ const Card = Component.define({
   init: () => ({ likes: 0 }),
   update: { ClickedLike: ($) => $.evolve({ likes: $.model.likes + 1 }) },
   view: (h, model) =>
-    h.button.onClick(CardMessage.ClickedLike()).children(`Like ${model.likes}`)
+    h.button.onClick(CardMessage.ClickedLike()).children([
+      `Like ${model.likes}`
+    ])
 })
 
 const Gallery = Component.define({
@@ -61,9 +63,9 @@ const Gallery = Component.define({
       $.evolve({ layout }).viewTransition(["layout-change"]),
     TypedFilter: ($, { value }) => $.evolve({ filter: value }),
     ClickedOpen: ($) =>
-      $.run(
+      $.run([
         Router.push(GalleryRoute, GalleryRoute.Detail()).pipe(Command.asNoop)
-      ),
+      ]),
     ChangedRoute: ($, { route }) =>
       $.evolve({ route }).viewTransition(["to-detail"])
   },
@@ -75,20 +77,20 @@ const Gallery = Component.define({
     )
   ],
   view: (h, model) =>
-    h.main(
-      h.p(`${model.route._tag} ${model.layout} ${model.filter}`),
-      h.button.onClick(Message.ClickedLayout({ layout: "grid" })).children(
+    h.main([
+      h.p([`${model.route._tag} ${model.layout} ${model.filter}`]),
+      h.button.onClick(Message.ClickedLayout({ layout: "grid" })).children([
         "Grid"
-      ),
-      h.button.onClick(Message.ClickedLayout({ layout: "list" })).children(
+      ]),
+      h.button.onClick(Message.ClickedLayout({ layout: "list" })).children([
         "List"
-      ),
-      h.button.onClick(Message.ClickedOpen()).children("Open"),
+      ]),
+      h.button.onClick(Message.ClickedOpen()).children(["Open"]),
       h.input.attr("aria-label", "Filter").onInput(({ value }) =>
         Message.TypedFilter({ value })
       ),
       Card(h, { props: { layout: model.layout } })
-    )
+    ])
 })
 
 const tick = Effect.promise(() =>

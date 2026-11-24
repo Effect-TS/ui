@@ -79,9 +79,9 @@ const makeApp = () => {
             : "none"
         }),
         Touch: () =>
-          $.run(
+          $.run([
             Touch.make({ id: $.props.id }).pipe(Command.as(touched))
-          ),
+          ]),
         Touched: () => $.model
       }),
     head: (
@@ -92,14 +92,16 @@ const makeApp = () => {
       )
     ],
     view: (h, model) =>
-      h.div(
-        h.p(AsyncResult.match(h.queries.note, {
+      h.div([
+        h.p([AsyncResult.match(h.queries.note, {
           onInitial: () => "loading",
           onSuccess: ({ value }) => value,
           onFailure: () => "failed"
-        })),
-        h.button.onClick(NoteMessage.Click()).children(`clicks ${model.clicks}`)
-      )
+        })]),
+        h.button.onClick(NoteMessage.Click()).children([
+          `clicks ${model.clicks}`
+        ])
+      ])
   })
 
   const AppRoute = Route.union({
@@ -124,11 +126,11 @@ const makeApp = () => {
       )
     ],
     view: (h, route) =>
-      h.main(AppRoute.match(route, {
-        Home: () => h.h1("Home"),
+      h.main([AppRoute.match(route, {
+        Home: () => h.h1(["Home"]),
         Note: (note) =>
           Note(h, { key: AppRoute.print(note), props: { id: note.params.id } })
-      }))
+      })])
   })
 
   // Passes its id to one Note under a fixed key, so a new id is new props, not a re-key.
@@ -141,7 +143,7 @@ const makeApp = () => {
   }).make({
     init: () => "1",
     update: (_, message) => message.id,
-    view: (h, id) => h.div(Note(h, { key: "note", props: { id } }))
+    view: (h, id) => h.div([Note(h, { key: "note", props: { id } })])
   })
   const setId = (id: string) => ShellMessage.SetId({ id })
 

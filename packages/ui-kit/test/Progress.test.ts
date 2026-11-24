@@ -30,23 +30,23 @@ const standIn = {
         "aria-valuetext": "wrong"
       })
     )
-      .children(
+      .children([
         progress.label(
-          h.span.class("label").attrs({
+          h.span.class(["label"]).attrs({
             ...stale,
             id: "custom-label",
             role: "heading"
           })
-        ).children(
+        ).children([
           "Uploading"
-        ),
+        ]),
         progress.value(
-          h.span.class("value").attrs({ ...stale, "aria-hidden": "false" })
+          h.span.class(["value"]).attrs({ ...stale, "aria-hidden": "false" })
         ),
-        progress.track(h.div.class("track").attrs(stale)).children(
-          progress.indicator(h.div.class("fill").attrs(stale))
-        )
-      )
+        progress.track(h.div.class(["track"]).attrs(stale)).children([
+          progress.indicator(h.div.class(["fill"]).attrs(stale))
+        ])
+      ])
 }
 
 const root = Locator.attr("role", "progressbar")
@@ -129,11 +129,11 @@ describe("Progress", () => {
   it("custom value children remain visible before the root's hidden label helper", () => {
     const progress = parts({ value: 1, max: 3 })
     assert.strictEqual(progress.valueText, "33%")
-    const custom = progress.value(h.span).children("Almost there")
-    const before = progress.value(h.span.children("Starting"))
+    const custom = progress.value(h.span).children(["Almost there"])
+    const before = progress.value(h.span.children(["Starting"]))
     const bar = build(
-      progress.root(h.div.attr("aria-label", "Upload").children(before))
-        .children(custom)
+      progress.root(h.div.attr("aria-label", "Upload").children([before]))
+        .children([custom])
     )
     assert.strictEqual(bar.attrs["aria-label"], "Upload")
     const children = bar.children

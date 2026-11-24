@@ -45,7 +45,7 @@ const WrappedDialog = Component.define({
   elements: Html
 }).make({
   init: () => null,
-  update: ($, event) => $.emit(event),
+  update: ($, event) => $.emit([event]),
   parts: (p) =>
     p.child(Dialog, {
       props: p.props,
@@ -72,7 +72,7 @@ const Combo = Component.define({
   update: ($, message) =>
     ComboMessage.match(message, {
       Picked: ({ id }) =>
-        $.set([...$.model, "picked " + id]).emit(ComboEvents.Picked({ id })),
+        $.set([...$.model, "picked " + id]).emit([ComboEvents.Picked({ id })]),
       Closed: () => [...$.model, "closed"]
     }),
   parts: (p, log) => {
@@ -118,17 +118,17 @@ const App = Component.define({
         props: { items },
         onEmit: (event) => AppMessage.Picked({ id: event.id }),
         view: (combo) =>
-          h.div(
-            combo.dialog.popup(h.dialog).children(
-              combo.menu.trigger(h.button).children("Combo menu"),
+          h.div([
+            combo.dialog.popup(h.dialog).children([
+              combo.menu.trigger(h.button).children(["Combo menu"]),
               h.ul.children(combo.menu.visible.map((item) =>
                 combo.dialog.close(combo.menu.item(h.li.key(item.id), item))
                   .onClick(AppMessage.Clicked({ id: item.id }))
-                  .children(item.label)
+                  .children([item.label])
               ))
-            ),
-            combo.badge(h.output).children(log.join(", "))
-          )
+            ]),
+            combo.badge(h.output).children([log.join(", ")])
+          ])
       })
   })
 
@@ -140,7 +140,7 @@ const Hello = Component.define({
   events: UiSchema.TaggedEnum({ Said: {} }),
   elements: Html
 }).make({
-  init: ($) => $.set(null).emit({ _tag: "Said" }),
+  init: ($) => $.set(null).emit([{ _tag: "Said" }]),
   update: ($) => $.model,
   parts: () => ({})
 })
@@ -173,7 +173,7 @@ const owning = (
     update: ($, message) =>
       ChildFailed.match(message, {
         Said: () => [...$.model, "said"],
-        Failed: () => $.set([...$.model, "failed"]).emit({ _tag: "Lost" })
+        Failed: () => $.set([...$.model, "failed"]).emit([{ _tag: "Lost" }])
       }),
     parts: (p, heard) =>
       p.child(child as typeof Hello, {
@@ -193,14 +193,14 @@ const owning = (
       init: () => [],
       update: ($, message) => [...$.model, message],
       view: (h, log) =>
-        h.div(
+        h.div([
           Owner(h, {
             onEmit: () => "lost",
             fallback: () => h.text("owner down"),
-            view: (owner) => h.span.children("heard " + owner.heard.join(","))
+            view: (owner) => h.span.children(["heard " + owner.heard.join(",")])
           }),
-          h.p.children(log.join(","))
-        )
+          h.p.children([log.join(",")])
+        ])
     })
 }
 
@@ -285,13 +285,13 @@ describe("p.child in a Scene", () => {
     const s = Scene.start(Combo, { items }, {
       elements: Html,
       view: (combo, h) =>
-        h.div(
+        h.div([
           combo.dialog.popup(h.dialog),
-          combo.badge(h.output).children(combo.log.join(", "))
-        )
+          combo.badge(h.output).children([combo.log.join(", ")])
+        ])
     })
     s.childEmit(Menu, "menu", { _tag: "Picked", id: "a" })
-      .emitted(ComboEvents.Picked({ id: "a" }))
+      .emitted([ComboEvents.Picked({ id: "a" })])
       .childEmit(WrappedDialog, { _tag: "Closed" })
       .givenChild(Dialog, { open: true })
       .parts((combo) => {

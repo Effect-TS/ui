@@ -63,7 +63,7 @@ describe("NumberField", () => {
           props: { value: 40, disabled: field.disabled },
           view: (numberField) => {
             expect(numberField.root(h.div)).type.toBe<Div<never>>()
-            expect(numberField.group(h.div).children(needsClock)).type.toBe<
+            expect(numberField.group(h.div).children([needsClock])).type.toBe<
               Div<Clock>
             >()
             expect(numberField.input(h.input)).type.toBe<Input<never>>()
@@ -98,7 +98,7 @@ describe("NumberField", () => {
               field.control(h.input.onMount(NeedsClock()))
             )
             expect(input).type.toBe<Input<Clock>>()
-            return numberField.root(field.root(h.div)).children(input)
+            return numberField.root(field.root(h.div)).children([input])
           }
         })
         expect<View.Requirements<typeof child>>().type.toBe<Clock>()

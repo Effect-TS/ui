@@ -40,18 +40,18 @@
  *   init: ($) => $.set({}),
  *   update: ($, message) =>
  *     TodoItemMessage.match(message, {
- *       ClickedToggle: () => $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
+ *       ClickedToggle: () => $.emit([TodoItemEvents.Toggled({ done: !$.props.todo.done })]),
  *       // Nothing to report: the save ends in `Component.noop`.
- *       ClickedSave: () => $.run(SaveTodo.make($.props.todo).pipe(Command.asNoop))
+ *       ClickedSave: () => $.run([SaveTodo.make($.props.todo).pipe(Command.asNoop)])
  *     }),
  *   // `h.isRunning` is true from `ClickedSave` until the save ends.
  *   view: (h) =>
  *     h.el(
  *       "li",
- *       h.el("button").on("click", TodoItemMessage.ClickedToggle()).children(h.props.todo.done ? "[x]" : "[ ]"),
- *       h.el("span", h.props.todo.title),
- *       h.el("button").on("click", TodoItemMessage.ClickedSave()).children("save"),
- *       h.isRunning(SaveTodo) ? " saving" : ""
+ *       [h.el("button").on("click", TodoItemMessage.ClickedToggle()).children([h.props.todo.done ? "[x]" : "[ ]"]),
+ *       h.el("span", [h.props.todo.title]),
+ *       h.el("button").on("click", TodoItemMessage.ClickedSave()).children(["save"]),
+ *       h.isRunning(SaveTodo) ? " saving" : ""]
  *     )
  * })
  * ```
@@ -161,7 +161,7 @@ export interface Noop {
  *
  * **Gotchas**
  *
- * It's a message value, not a Command: `$.run(Component.noop)` doesn't
+ * It's a message value, not a Command: `$.run([Component.noop])` doesn't
  * compile. Test for it with `Component.isNoop`, never `===`: the runtime
  * doesn't compare by identity, and `!==` doesn't narrow a union. View
  * handlers keep `undefined` for "no message".
@@ -552,10 +552,13 @@ export interface InitStep<
   evolve(fields: UiStruct.EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
-    ...commands: C
+    commands: readonly [...C]
+  ): InitStep<Model, Msg, Events, R | Command.Requirements<C[number]>>
+  run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
+    commands: C
   ): InitStep<Model, Msg, Events, R | Command.Requirements<C[number]>>
   /** Reports to the parent. */
-  emit(...emitted: ReadonlyArray<Events>): InitStep<Model, Msg, Events, R>
+  emit(emitted: ReadonlyArray<Events>): InitStep<Model, Msg, Events, R>
 }
 
 /**
@@ -605,10 +608,13 @@ export interface Step<
    * `Component.noop` is rejected. A result of `Component.noop` sends nothing.
    */
   run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
-    ...commands: C
+    commands: readonly [...C]
+  ): Step<Model, Msg, Events, R | Command.Requirements<C[number]>, L>
+  run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
+    commands: C
   ): Step<Model, Msg, Events, R | Command.Requirements<C[number]>, L>
   /** Reports to the parent. */
-  emit(...emitted: ReadonlyArray<Events>): Step<Model, Msg, Events, R, L>
+  emit(emitted: ReadonlyArray<Events>): Step<Model, Msg, Events, R, L>
   /**
    * Loads the next page of an infinite query. The runtime takes the args from the
    * query, after this `update`'s Model. The page arrives in the query's
@@ -701,8 +707,8 @@ export interface Step<
    *     TypedFilter: ($, { value }) => $.evolve({ filter: value })
    *   },
    *   view: (h, model) =>
-   *     h.ul.class(model.layout).children(
-   *       ...["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
+   *     h.ul.class([model.layout]).children(
+   *       ["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children([id]))
    *     )
    * })
    * ```
@@ -804,7 +810,7 @@ export interface Update<
       ) => Model | Step<Model, Msg, Events, any, L>
     >
   >(
-    ...updates: F
+    updates: readonly [...F]
   ): Step<Model, Msg, Events, RawStepRequirements<ReturnType<F[number]>>, L>
 }
 
@@ -848,11 +854,11 @@ const StepProto = {
   },
   run(
     this: Step<any, any, any, any>,
-    ...commands: ReadonlyArray<Command.Command<any, any>>
+    commands: ReadonlyArray<Command.Command<any, any>>
   ) {
     return stepWith(this, { commands: [...this.commands, ...commands] })
   },
-  emit(this: Step<any, any, any, any>, ...emitted: ReadonlyArray<unknown>) {
+  emit(this: Step<any, any, any, any>, emitted: ReadonlyArray<unknown>) {
     return stepWith(this, { emitted: [...this.emitted, ...emitted] })
   },
   loadMore(this: Step<any, any, any, any>, name: string) {
@@ -929,7 +935,7 @@ const UpdateProto = {
       message
     )
   },
-  combine(this: AnyUpdate$, ...updates: ReadonlyArray<AnyUpdate>) {
+  combine(this: AnyUpdate$, updates: ReadonlyArray<AnyUpdate>) {
     const msg = this["~message"]
     let model = this.model
     const commands: Array<Command.Command<any, any>> = [...this.commands]
@@ -1650,7 +1656,7 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *   update: ($, message) =>
    *     DialogMessage.match(message, {
    *       Opened: () => true,
-   *       Closed: () => $.set(false).emit(DialogEvents.Dismissed())
+   *       Closed: () => $.set(false).emit([DialogEvents.Dismissed()])
    *     }),
    *   parts: (p, open) => ({
    *     open,
@@ -2713,12 +2719,12 @@ export declare namespace Definition {
  * })
  *
  * const noteRow = (h: Component.Helper<typeof NoteListDef>, note: typeof Note.Type) =>
- *   h.el("li", note.title).key(note.id)
+ *   h.el("li", [note.title]).key(note.id)
  *
  * export const NoteList = NoteListDef.make({
  *   init: () => ({ notes: [] }),
  *   update: ($) => $.model,
- *   view: (h, model) => h.el("ul", ...model.notes.map((note) => noteRow(h, note)))
+ *   view: (h, model) => h.el("ul", model.notes.map((note) => noteRow(h, note)))
  * })
  * ```
  *
@@ -2958,9 +2964,9 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *   view: (h, model) =>
  *     h.el(
  *       "div",
- *       h.el("button").on("click", CounterMessage.ClickedDecrement()).children("-"),
- *       h.el("span", String(model.count)),
- *       h.el("button").on("click", CounterMessage.ClickedIncrement()).children("+")
+ *       [h.el("button").on("click", CounterMessage.ClickedDecrement()).children(["-"]),
+ *       h.el("span", [String(model.count)]),
+ *       h.el("button").on("click", CounterMessage.ClickedIncrement()).children(["+"])]
  *     )
  * })
  * ```
@@ -3006,10 +3012,10 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *   update: ($) => $.model,
  *   view: (h) =>
  *     AsyncResult.match(h.queries.user, {
- *       onInitial: () => h.el("p", "Loading…"),
- *       onFailure: () => h.el("p", "No such user"),
+ *       onInitial: () => h.el("p", ["Loading…"]),
+ *       onFailure: () => h.el("p", ["No such user"]),
  *       onSuccess: ({ value }) =>
- *         h.el("p", value.name, AsyncResult.isSuccess(h.queries.team) ? ` of ${h.queries.team.value.title}` : "")
+ *         h.el("p", [value.name, AsyncResult.isSuccess(h.queries.team) ? ` of ${h.queries.team.value.title}` : ""])
  *     })
  * })
  * ```
@@ -3034,18 +3040,18 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * // `msg` is the UpdatedBody message.
  * const handleUpdatedBody = NotePageDef.update("UpdatedBody", ($, msg) =>
- *   $.combine(($) => $.evolve({ body: msg.body }), touch))
+ *   $.combine([($) => $.evolve({ body: msg.body }), touch]))
  *
  * // `h` first, then any other arguments.
- * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", `${edits} edits`))
+ * const counter = NotePageDef.fragment((h, edits: number) => h.el("small", [`${edits} edits`]))
  *
- * const noteView = NotePageDef.view((h, model) => h.el("div", h.el("p", model.body), counter(h, model.edits)))
+ * const noteView = NotePageDef.view((h, model) => h.el("div", [h.el("p", [model.body]), counter(h, model.edits)]))
  *
  * export const NotePage = NotePageDef.make({
  *   init: () => ({ body: "", edits: 0, error: null }),
  *   update: {
  *     UpdatedBody: handleUpdatedBody,
- *     ClickedSave: ($) => $.combine(validate)
+ *     ClickedSave: ($) => $.combine([validate])
  *   },
  *   view: noteView
  * })
@@ -3066,7 +3072,7 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *   init: () => true,
  *   update: ($) => !$.model,
  *   view: (h, open) =>
- *     h.el("section", h.el("h2", h.slots.title), h.el("button").onClick("ClickedToggle"), open && h.slots.body)
+ *     h.el("section", [h.el("h2", [h.slots.title]), h.el("button").onClick("ClickedToggle"), open && h.slots.body])
  * })
  *
  * export const Page = Component.define({
@@ -3080,7 +3086,7 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *   view: (h, likes) =>
  *     Card(h, {
  *       key: "card",
- *       slots: { title: "Likes", body: h.el("button").onClick("ClickedLike").children(`${likes} likes`) }
+ *       slots: { title: "Likes", body: h.el("button").onClick("ClickedLike").children([`${likes} likes`]) }
  *     })
  * })
  * ```
@@ -3970,9 +3976,9 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *   init: () => ({}),
  *   update: ($, message) =>
  *     RowMessage.match(message, {
- *       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id }).pipe(Command.asNoop))
+ *       ClickedSave: () => $.run([SaveTodo.make({ id: $.props.id }).pipe(Command.asNoop)])
  *     }),
- *   view: (h) => h.el("li", h.props.id)
+ *   view: (h) => h.el("li", [h.props.id])
  * })
  *
  * const RowLive = Component.provide(Row, [SaveTodo.layer])            // shared per Env
@@ -4007,14 +4013,14 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *   model: Schema.Struct({ room: Schema.String, joined: Schema.String }),
  *   message: RoomMessage
  * }).make({
- *   init: ($) => $.set({ room: "lobby", joined: "" }).run(JoinRoom.make()),
+ *   init: ($) => $.set({ room: "lobby", joined: "" }).run([JoinRoom.make()]),
  *   update: ($, message) =>
  *     RoomMessage.match(message, {
  *       // Selects the new room's Layer: JoinRoom runs against it.
- *       SelectedRoom: ({ room }) => $.evolve({ room }).run(JoinRoom.make()),
+ *       SelectedRoom: ({ room }) => $.evolve({ room }).run([JoinRoom.make()]),
  *       CompletedJoinRoom: ({ room }) => $.evolve({ joined: room })
  *     }),
- *   view: (h, model) => h.el("p", model.joined)
+ *   view: (h, model) => h.el("p", [model.joined])
  * })
  *
  * // Requires `Rooms`, provided above, so the rooms outlive a switch.
@@ -4316,7 +4322,7 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy
  * // SettingsPage(h, {
  * //   props: { user },
  * //   onEmit: { Saved: () => AppMessage.SavedSettings() },
- * //   fallback: (result) => h.p.children(result._tag === "Failure" ? "Couldn't load settings." : "Loading…")
+ * //   fallback: (result) => h.p.children([result._tag === "Failure" ? "Couldn't load settings." : "Loading…"])
  * // })
  * ```
  *

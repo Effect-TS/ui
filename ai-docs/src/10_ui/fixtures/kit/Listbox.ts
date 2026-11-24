@@ -104,11 +104,11 @@ export const Listbox = Component.define({
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
         $.evolve({ open, query: "", active: open ? $.props.selected : null })
-          .run(
+          .run([
             open
               ? HtmlCommand.focus(Input, silent)
               : HtmlCommand.focus(Trigger, silent)
-          ),
+          ]),
       UpdatedQuery: ({ value }) =>
         $.evolve({
           query: value,
@@ -126,18 +126,18 @@ export const Listbox = Component.define({
             return next === null
               ? $.evolve({ open: true })
               : $.evolve({ open: true, active: next })
-                .run(
+                .run([
                   HtmlCommand.scrollIntoView(Row.at(next), silent, {
                     block: "nearest"
                   })
-                )
+                ])
           }
           case "Enter":
             return active === null
               ? $.model
-              : $.evolve({ open: false }).emit(
+              : $.evolve({ open: false }).emit([
                 ListboxEvents.Picked({ id: active })
-              )
+              ])
           case "Escape":
             return $.evolve({ open: false })
           default: {
@@ -155,14 +155,14 @@ export const Listbox = Component.define({
             const hit = find(typed)
             return hit === undefined
               ? $.evolve({ typed: "" })
-              : $.evolve({ typed }).emit(ListboxEvents.Picked({ id: hit.id }))
+              : $.evolve({ typed }).emit([ListboxEvents.Picked({ id: hit.id })])
           }
         }
       },
       ClickedOption: ({ id }) =>
         activeIn($.props.options, id) === null
           ? $.model
-          : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id }))
+          : $.evolve({ open: false }).emit([ListboxEvents.Picked({ id })])
     }),
   // `parts` returns plain values for the consumer to read, and parts to
   // apply to its elements. `p.part(tag, decorate)` takes only a builder of

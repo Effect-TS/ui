@@ -40,7 +40,7 @@
  * `viewport` takes the consumer's builder. Every other part takes
  * `{ element, toast }`, with a toast from the parts' `toasts`, and returns
  * the builder for the consumer to chain on and fill:
- * `toastProvider.title({ element: h.strong, toast }).children(toast.title)`. `root` sets
+ * `toastProvider.title({ element: h.strong, toast }).children([toast.title])`. `root` sets
  * the element's key to the toast's `id`, so a toast keeps its element as
  * the list changes. The viewport adds, after the consumer's children, a
  * visually hidden alert for each high-priority toast.
@@ -124,7 +124,7 @@
  *         toast: { id: "saved", title: "Saved", type: "success" }
  *       })
  *   },
- *   view: (h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
+ *   view: (h) => h.button.onClick(EditorMessage.ClickedSave()).children(["Save"])
  * })
  *
  * const App = Component.define({ name: "App", model: Schema.Null, message: Schema.Never, elements: Html }).make({
@@ -133,17 +133,17 @@
  *   view: (h) =>
  *     ToastProvider(h, {
  *       view: (toastProvider) =>
- *         h.div(
+ *         h.div([
  *           Editor(h, {}),
- *           toastProvider.viewport(h.div.class("toasts")).children(
- *             ...toastProvider.toasts.map((toast) =>
- *               toastProvider.root({ element: h.div.class("toast"), toast }).children(
- *                 toastProvider.title({ element: h.strong, toast }).children(toast.title),
- *                 toastProvider.close({ element: h.button, toast }).children("Dismiss")
- *               )
+ *           toastProvider.viewport(h.div.class(["toasts"])).children(
+ *             toastProvider.toasts.map((toast) =>
+ *               toastProvider.root({ element: h.div.class(["toast"]), toast }).children([
+ *                 toastProvider.title({ element: h.strong, toast }).children([toast.title]),
+ *                 toastProvider.close({ element: h.button, toast }).children(["Dismiss"])
+ *               ])
  *             )
  *           )
- *         )
+ *         ])
  *     })
  * })
  *
@@ -635,11 +635,11 @@ const settle = ($: ProviderUpdate, next: ToastProviderModel) => {
   const step = $.set(next)
   const paused = pausedBy($.model)
   if (!paused && pausedBy(next)) {
-    return step.run(Command.interrupt(WaitBeforeDismissal))
+    return step.run([Command.interrupt(WaitBeforeDismissal)])
   }
   if (paused && !pausedBy(next)) {
     return step.run(
-      ...next.toasts.filter((toast) => timed(toast, $.props)).map((toast) =>
+      next.toasts.filter((toast) => timed(toast, $.props)).map((toast) =>
         wait(toast, $.props)
       )
     )
@@ -660,8 +660,8 @@ const close = ($: ProviderUpdate, id: string, user: boolean) => {
   const step = settle(
     $,
     UiStruct.evolve($.model, { toasts, hovering: showing && $.model.hovering })
-  ).run(stop(id))
-  return user ? step.emit(ToastProviderEvents.Dismissed({ id })) : step
+  ).run([stop(id)])
+  return user ? step.emit([ToastProviderEvents.Dismissed({ id })]) : step
 }
 
 // The user closed the toast, with the close part or Escape, or its timeout
@@ -752,7 +752,7 @@ export const ToastProvider = Component.define({
       const toasts = existing === undefined
         ? [entry, ...$.model.toasts.filter((other) => other.id !== toast.id)]
         : replace($.model, entry)
-      return $.evolve({ toasts }).run(...timer($, entry))
+      return $.evolve({ toasts }).run(timer($, entry))
     },
     // A running timer goes on, unless the update sets a timeout. One starts
     // when the update makes the toast timed, as when a loading toast gets
@@ -764,7 +764,7 @@ export const ToastProvider = Component.define({
       const step = $.evolve({ toasts: replace($.model, next) })
       const running = timed(entry, $.props) && timed(next, $.props) &&
         changes.timeout === undefined
-      return running ? step : step.run(...timer($, next))
+      return running ? step : step.run(timer($, next))
     },
     RequestedClose: ($, { id }) => close($, id, false),
     ClickedClose: dismiss,
@@ -835,14 +835,14 @@ export const ToastProvider = Component.define({
       )
     const alerts = urgent.length === 0 ? undefined : View.toNode(
       new Html.Element<never>("div").attr("style", visuallyHidden).children(
-        ...urgent.map((toast) =>
+        urgent.map((toast) =>
           new Html.Element<never>("div").key(toast.id).attrs({
             role: "alert",
             "aria-atomic": "true"
-          }).children(
-            new Html.Element<never>("div").children(toast.title ?? ""),
-            new Html.Element<never>("div").children(toast.description ?? "")
-          )
+          }).children([
+            new Html.Element<never>("div").children([toast.title ?? ""]),
+            new Html.Element<never>("div").children([toast.description ?? ""])
+          ])
         )
       )
     )
@@ -876,7 +876,7 @@ export const ToastProvider = Component.define({
               )
             )
             : labelled
-          return alerts === undefined ? styled : styled.children(alerts)
+          return alerts === undefined ? styled : styled.children([alerts])
         }))
 
     const rootPart = p.part("div", (b, toast: ToastItem) => {

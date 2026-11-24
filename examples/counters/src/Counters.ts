@@ -30,39 +30,45 @@ export const Counters = Component.define({
   },
   head: ({ model }) => [Head.title(`Counters (${model.counterIds.length})`)],
   view: (h, model) =>
-    h.div.class(
+    h.div.class([
       "min-h-screen bg-white flex flex-col items-center py-12 px-6 gap-6"
-    ).children(
-      h.h1.class("text-2xl font-semibold text-gray-900").children("Counters"),
-      h.p.class("text-sm text-gray-500 max-w-md text-center").children(
+    ]).children([
+      h.h1.class(["text-2xl font-semibold text-gray-900"]).children([
+        "Counters"
+      ]),
+      h.p.class(["text-sm text-gray-500 max-w-md text-center"]).children([
         "Each row is a Counter child keyed by its id. The parent holds only the list of ids, and each Counter keeps its own count, so adding, updating or removing one leaves the others as they were."
-      ),
-      h.div.class("flex flex-col gap-3 w-full max-w-md").children(
+      ]),
+      h.div.class(["flex flex-col gap-3 w-full max-w-md"]).children(
         model.counterIds.map((id) => {
           const labelId = h.id("label", id)
           return h.div.key(String(id)).attr("role", "group").attr(
             "aria-labelledby",
             labelId
           )
-            .class("flex items-center gap-2").children(
-              h.span.id(labelId).class("w-20 text-sm text-gray-500").children(
-                `Counter ${id}`
+            .class(["flex items-center gap-2"]).children([
+              h.span.id(labelId).class(["w-20 text-sm text-gray-500"]).children(
+                [
+                  `Counter ${id}`
+                ]
               ),
-              h.div.class("flex-1").children(Counter(h, { key: String(id) })),
+              h.div.class(["flex-1"]).children([
+                Counter(h, { key: String(id) })
+              ]),
               Button(h, {
                 onPress: CountersMessage.ClickedRemoveCounter({ id })
               })
-                .class(
+                .class([
                   "rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:border-red-300 hover:text-red-600 transition cursor-pointer"
-                )
-                .children("Remove")
-            )
+                ])
+                .children(["Remove"])
+            ])
         })
       ),
       Button(h, { onPress: CountersMessage.ClickedAddCounter() })
-        .class(
+        .class([
           "rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition cursor-pointer"
-        )
-        .children("+ Add Counter")
-    )
+        ])
+        .children(["+ Add Counter"])
+    ])
 })

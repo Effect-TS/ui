@@ -13,7 +13,7 @@ describe("OpenTui vocabulary types", () => {
     }).make({
       init: () => undefined,
       update: () => undefined,
-      view: (h) => h.text("child")
+      view: (h) => h.text(["child"])
     })
 
     const Kept = Component.define({
@@ -24,7 +24,7 @@ describe("OpenTui vocabulary types", () => {
     }).make({
       init: () => undefined,
       update: () => undefined,
-      view: (h) => h.text("kept")
+      view: (h) => h.text(["kept"])
     })
 
     const InputRef = OpenTui.ref("Input", "input")
@@ -38,25 +38,25 @@ describe("OpenTui vocabulary types", () => {
       init: () => undefined,
       update: () => undefined,
       view: (h) => {
-        const textNode = h.text("hello").style({ fg: "#00ff00" })
+        const textNode = h.text(["hello"]).style({ fg: "#00ff00" })
         expect(textNode).type.toBeAssignableTo<
           View.ElementBuilder<never, never, any, any, "text">
         >()
 
         h.input.ref(InputRef)
         expect(h.box.ref).type.not.toBeCallableWith(InputRef)
-        expect(h.box).type.not.toBeCallableWith("stray")
-        expect(h.box.children).type.not.toBeCallableWith("stray")
-        expect(h.scrollbox).type.not.toBeCallableWith("stray")
+        expect(h.box).type.not.toBeCallableWith(["stray"])
+        expect(h.box.children).type.not.toBeCallableWith(["stray"])
+        expect(h.scrollbox).type.not.toBeCallableWith(["stray"])
 
-        return h.box.children(
+        return h.box.children([
           textNode,
           Child(h, {}),
           h.keepAlive((s) => {
             expect(s.text).type.toBe(h.text)
-            return s.box.children(Kept(s, { key: "k" }), s.text("ok"))
+            return s.box.children([Kept(s, { key: "k" }), s.text(["ok"])])
           })
-        )
+        ])
       }
     })
   })

@@ -61,10 +61,10 @@ const Picker = Component.define({
       props: { label: "Confirm" },
       onEmit: () => PickerMessage.Closed(),
       view: (dialog) =>
-        h.div(
-          dialog.trigger(h.button).children("Open"),
-          dialog.popup(h.dialog).children(
-            dialog.title(h.h2).children("Pick one"),
+        h.div([
+          dialog.trigger(h.button).children(["Open"]),
+          dialog.popup(h.dialog).children([
+            dialog.title(h.h2).children(["Pick one"]),
             Menu(h, {
               key: "actions",
               props: { items },
@@ -73,12 +73,12 @@ const Picker = Component.define({
                 h.ul.children(menu.visible.map((item) =>
                   dialog.close(menu.item(h.li.key(item.id), item))
                     .onClick(PickerMessage.Clicked({ id: item.id }))
-                    .children(item.label)
+                    .children([item.label])
                 ))
             })
-          ),
-          h.output(log.join(", "))
-        )
+          ]),
+          h.output([log.join(", ")])
+        ])
     })
 })
 
@@ -105,8 +105,8 @@ const Toolbar = Component.define({
     ToolbarMessage.match(message, {
       Picked: ({ id }) => [...$.model, "picked " + id],
       Focus: () =>
-        $.run(HtmlCommand.focus(Mine, ({ found }) =>
-          ToolbarMessage.Focused({ found }))),
+        $.run([HtmlCommand.focus(Mine, ({ found }) =>
+          ToolbarMessage.Focused({ found }))]),
       Focused: ({ found }) => [...$.model, "focused " + String(found)]
     }),
   view: (h, log) =>
@@ -115,20 +115,20 @@ const Toolbar = Component.define({
       props: { items },
       onEmit: (event) => ToolbarMessage.Picked({ id: event.id }),
       view: (menu) =>
-        h.div.class("toolbar").children(
-          menu.trigger(h.button.class("btn")).children("Actions"),
-          menu.popup(h.div.class("menu")).children(
+        h.div.class(["toolbar"]).children([
+          menu.trigger(h.button.class(["btn"])).children(["Actions"]),
+          menu.popup(h.div.class(["menu"])).children([
             // The Menu's part puts its ref on this input, and so does the Toolbar.
             menu.input(h.input.ref(Mine).attr("aria-label", "Filter actions")),
-            menu.visible.length === 0 && h.p("No actions found."),
+            menu.visible.length === 0 && h.p(["No actions found."]),
             h.ul.children(
               menu.visible.map((item) =>
-                menu.item(h.li.key(item.id), item).children(item.label)
+                menu.item(h.li.key(item.id), item).children([item.label])
               )
             )
-          ),
-          h.output(log.join(", "))
-        )
+          ]),
+          h.output([log.join(", ")])
+        ])
     })
 })
 
@@ -181,10 +181,10 @@ const Tip = Component.define({
       key: "anchor",
       view: (anchor) => {
         const button = h.button.attr("aria-label", "Target")
-        return h.div(
-          (on ? anchor.anchor(button) : button).children("target"),
-          h.output(String(anchor.count))
-        )
+        return h.div([
+          (on ? anchor.anchor(button) : button).children(["target"]),
+          h.output([String(anchor.count)])
+        ])
       }
     })
 })
@@ -204,32 +204,32 @@ const Page = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.main(
+    h.main([
       Menu(h, {
         key: "ok",
         props: { items },
         view: (menu) =>
-          h.div(
-            menu.trigger(h.button).children("Actions"),
-            menu.popup(h.div).children(
+          h.div([
+            menu.trigger(h.button).children(["Actions"]),
+            menu.popup(h.div).children([
               h.ul.children(
                 menu.visible.map((item) =>
-                  menu.item(h.li.key(item.id), item).children(item.label)
+                  menu.item(h.li.key(item.id), item).children([item.label])
                 )
               )
-            )
-          )
+            ])
+          ])
       }),
       Menu(h, {
         key: "flaky",
         props: { items },
-        fallback: () => h.p("menu down"),
+        fallback: () => h.p(["menu down"]),
         view: (menu) => {
           if (flaky.throws) throw new Error("the closure threw")
-          return menu.trigger(h.button).children("More")
+          return menu.trigger(h.button).children(["More"])
         }
       })
-    )
+    ])
 })
 
 // ---------------------------------------------------------------------------
@@ -266,15 +266,15 @@ const KeysApp = Component.define({
     Keys(h, {
       key: "keys",
       view: (keys) =>
-        keys.container(h.div).children(
+        keys.container(h.div).children([
           h.input.attr("aria-label", "Bare"),
           // A handler of the consumer's that sends nothing still takes the event from the container.
           h.input.attr("aria-label", "Shadowing").onKeyDown(() => undefined),
           keys.focused(h.input.attr("aria-label", "Composed")).onKeyDown((
             { key }
           ) => "consumer " + key),
-          h.output(keys.seen.join(", ") + " | " + seen.join(", "))
-        )
+          h.output([keys.seen.join(", ") + " | " + seen.join(", ")])
+        ])
     })
 })
 
@@ -296,11 +296,13 @@ const Confirm = Component.define({
       props: { label: "Confirm" },
       onEmit: () => "closed" as const,
       view: (dialog) =>
-        h.div(
-          dialog.trigger(h.button).children("Open"),
-          dialog.popup(h.dialog).children(dialog.title(h.h2).children("Sure?")),
-          h.output(String(closed))
-        )
+        h.div([
+          dialog.trigger(h.button).children(["Open"]),
+          dialog.popup(h.dialog).children([
+            dialog.title(h.h2).children(["Sure?"])
+          ]),
+          h.output([String(closed)])
+        ])
     })
 })
 
@@ -366,37 +368,37 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.main(
+            h.main([
               Menu(h, {
                 key: "ok",
                 props: { items },
                 view: (menu) =>
-                  h.div(
-                    menu.trigger(h.button).children("Actions"),
-                    menu.popup(h.div).children(
+                  h.div([
+                    menu.trigger(h.button).children(["Actions"]),
+                    menu.popup(h.div).children([
                       h.ul.children(
                         menu.visible.map((item) =>
-                          menu.item(h.li.key(item.id), item).children(
+                          menu.item(h.li.key(item.id), item).children([
                             item.label
-                          )
+                          ])
                         )
                       )
-                    )
-                  )
+                    ])
+                  ])
               }),
               Menu(h, {
                 key: "flaky",
                 props: { items },
-                fallback: () => h.p("menu down"),
+                fallback: () => h.p(["menu down"]),
                 view: (menu) => {
                   if (flaky.throws) {
                     flaky.throws = false
                     throw new Error("the closure threw")
                   }
-                  return menu.trigger(h.button).children("More")
+                  return menu.trigger(h.button).children(["More"])
                 }
               })
-            )
+            ])
         })
       // ssr() fails if the client rebuilds a node the server rendered outside a deferred instance.
       const result = yield* ssr(failing, {})
@@ -579,7 +581,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
             view: (hit) =>
               hit.button(h.button).onClick(() => undefined, {
                 preventDefault: false
-              }).children("hit")
+              }).children(["hit"])
           })
       })
       const app = yield* container
@@ -615,7 +617,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
               key: "p",
               view: (plain) =>
                 plain.button(h.button).onClick("own", { preventDefault: true })
-                  .children("hit")
+                  .children(["hit"])
             })
         })
       const app = yield* container
@@ -653,13 +655,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         init: () => true,
         update: () => false,
         view: (h, shown) =>
-          h.main(
+          h.main([
             shown
               ? Frame(h, {
-                view: (frame) => frame.root(h.div).children(h.button)
+                view: (frame) => frame.root(h.div).children([h.button])
               })
-              : h.p("gone")
-          )
+              : h.p(["gone"])
+          ])
       })
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Page, {}, app)

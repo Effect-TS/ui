@@ -22,7 +22,7 @@ describe("Separator", () => {
       update: ($) => $.model,
       view: (h) => {
         expect(Separator(h)).type.toBe<SeparatorElement<typeof Msg.Type>>()
-        expect(Separator(h).children(needsClock)).type.toBe<
+        expect(Separator(h).children([needsClock])).type.toBe<
           SeparatorElement<typeof Msg.Type, Clock>
         >()
         expect(Separator).type.not.toBeCallableWith(h, { element: h.span })

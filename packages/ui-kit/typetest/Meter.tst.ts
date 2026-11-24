@@ -36,7 +36,7 @@ describe("Meter", () => {
           view: (meter) => {
             expect(meter.percentage).type.toBe<number>()
             expect(meter.valueText).type.toBe<string>()
-            expect(meter.label(h.span).children(needsClock)).type.toBe<
+            expect(meter.label(h.span).children([needsClock])).type.toBe<
               Span<Clock>
             >()
             expect(meter.value(h.span.onClick(Msg.Clicked()))).type.toBe<
@@ -44,10 +44,10 @@ describe("Meter", () => {
             >()
             expect(meter.track(h.div)).type.toBe<Div<never>>()
             expect(meter.indicator(h.div)).type.toBe<Div<never>>()
-            const root = meter.root(h.div).children(
+            const root = meter.root(h.div).children([
               meter.label(h.span),
               needsClock
-            )
+            ])
             expect(root).type.toBe<Div<Clock>>()
             return root
           }

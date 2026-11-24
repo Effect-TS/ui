@@ -68,10 +68,10 @@ const Both = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.div(
+    h.div([
       users.ListPage(h, { key: "list" }),
       users.DetailPage(h, { key: "detail", props: { id: "1" } })
-    )
+    ])
 })
 
 describe("the worked example", () => {

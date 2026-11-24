@@ -20,7 +20,7 @@ const values = ["left", "center", "right"]
 const standIn = {
   elements: Html,
   view: (toggleGroup: Parts, h: H) =>
-    toggleGroup.root(h.div.class("group")).children(
+    toggleGroup.root(h.div.class(["group"])).children(
       h.props.items.map(({ value }) =>
         toggleGroup.item({ element: h.button.attr("aria-label", value), value })
       )
@@ -56,18 +56,18 @@ describe("ToggleGroup", () => {
   it.effect("a click asks for the value with the item pressed or released, and disabled items report nothing", () =>
     Effect.gen(function*() {
       const s = yield* scene()
-      s.click(item("center")).emitted({ _tag: "Toggled", value: ["center"] })
+      s.click(item("center")).emitted([{ _tag: "Toggled", value: ["center"] }])
       s.props(props({ value: ["center"] }))
-      s.click(item("left")).emitted({ _tag: "Toggled", value: ["left"] })
-      s.click(item("center")).emitted({ _tag: "Toggled", value: [] })
+      s.click(item("left")).emitted([{ _tag: "Toggled", value: ["left"] }])
+      s.click(item("center")).emitted([{ _tag: "Toggled", value: [] }])
 
       s.props(props({ value: ["right"], multiple: true }))
-      s.click(item("left")).emitted({
+      s.click(item("left")).emitted([{
         _tag: "Toggled",
         value: ["right", "left"]
-      })
+      }])
       s.props(props({ value: ["right", "left"], multiple: true }))
-      s.click(item("right")).emitted({ _tag: "Toggled", value: ["left"] })
+      s.click(item("right")).emitted([{ _tag: "Toggled", value: ["left"] }])
 
       s.props(
         props({
@@ -207,7 +207,7 @@ describe("ToggleGroup", () => {
         () => s.keydown(item("left"), "ArrowRight"),
         /nothing handles "keydown"/
       )
-      s.click(item("center")).emitted({ _tag: "Toggled", value: ["center"] })
+      s.click(item("center")).emitted([{ _tag: "Toggled", value: ["center"] }])
 
       s.shared(Toolbar, {
         disabled: false,
@@ -219,7 +219,7 @@ describe("ToggleGroup", () => {
       assert.isUndefined(s.get(item("left")).attrs?.["data-disabled"])
       s.fire(item("center"), "click")
       assert.deepStrictEqual(s.current.emitted, [])
-      s.click(item("right")).emitted({ _tag: "Toggled", value: ["right"] })
+      s.click(item("right")).emitted([{ _tag: "Toggled", value: ["right"] }])
 
       s.shared(Toolbar, {
         disabled: true,
@@ -242,7 +242,7 @@ describe("ToggleGroup", () => {
         props: props(overrides)
       })
     const own = h.button
-      .class("tool")
+      .class(["tool"])
       .attrs({
         title: "Left",
         type: "submit",
@@ -264,7 +264,7 @@ describe("ToggleGroup", () => {
       }
     )
     const group = h.div
-      .class("group")
+      .class(["group"])
       .attrs({
         role: "toolbar",
         "data-orientation": "x",

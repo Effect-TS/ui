@@ -51,11 +51,11 @@ const Row = Component.define({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, clicks) =>
-    h.li(
-      h.button.onClick(RowMessage.Clicked()).children(h.props.label),
-      h.span(`${clicks} clicked`),
-      h.em(`row ${h.props.label}`)
-    )
+    h.li([
+      h.button.onClick(RowMessage.Clicked()).children([h.props.label]),
+      h.span([`${clicks} clicked`]),
+      h.em([`row ${h.props.label}`])
+    ])
 })
 
 const List = Component.define({
@@ -67,14 +67,14 @@ const List = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.div(
-      h.h1("rows"),
-      h.ul(...["A", "B", "C"].map((label) =>
-        Row(h, { key: label, props: { label } })
-      )),
+    h.div([
+      h.h1(["rows"]),
+      h.ul(
+        ["A", "B", "C"].map((label) => Row(h, { key: label, props: { label } }))
+      ),
       "tail ",
       "text"
-    )
+    ])
 })
 
 const sameElements = (app: Element, server: ReadonlyArray<Element>) => {
@@ -109,7 +109,7 @@ const Late = Component.define({
 }).make({
   init: () => "late",
   update: ($) => $.model,
-  view: (h) => serving ? h.p.class("server").children("extra") : h.p()
+  view: (h) => serving ? h.p.class(["server"]).children(["extra"]) : h.p([])
 })
 
 const LateHolder = Component.define({
@@ -120,7 +120,7 @@ const LateHolder = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.div(Late(h, { key: "l" }), h.i("after"))
+  view: (h) => h.div([Late(h, { key: "l" }), h.i(["after"])])
 })
 
 const renderLate = Effect.fnUntraced(function*<A, E>(
@@ -153,7 +153,7 @@ const Search = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.form(h.input.attr("name", "q"))
+  view: (h) => h.form([h.input.attr("name", "q")])
 })
 
 const LateForm = Component.define({
@@ -164,7 +164,7 @@ const LateForm = Component.define({
 }).make({
   init: () => "late",
   update: ($) => $.model,
-  view: (h) => h.form(h.input.attr("name", "q"))
+  view: (h) => h.form([h.input.attr("name", "q")])
 })
 
 const LateFormHolder = Component.define({
@@ -175,7 +175,7 @@ const LateFormHolder = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.div(LateForm(h, { key: "f" }))
+  view: (h) => h.div([LateForm(h, { key: "f" })])
 })
 
 let layerGate: Effect.Effect<void> = Effect.void
@@ -188,7 +188,7 @@ const Gated = Component.provide(
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.form(h.input.attr("name", "q"))
+    view: (h) => h.form([h.input.attr("name", "q")])
   }),
   Layer.effectDiscard(Effect.suspend(() => layerGate))
 )
@@ -207,7 +207,7 @@ describe("HtmlHydrate", () => {
             throw new Error("boom")
           },
           update: ($) => $.model,
-          view: (h) => h.p("never")
+          view: (h) => h.p(["never"])
         })
       const Holder = Component.define({
         name: "Holder",
@@ -218,10 +218,10 @@ describe("HtmlHydrate", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div(
-            Boom(h, { key: "b", fallback: () => h.span("boom fallback") }),
-            h.i("after")
-          )
+          h.div([
+            Boom(h, { key: "b", fallback: () => h.span(["boom fallback"]) }),
+            h.i(["after"])
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Holder, {})
       const app = yield* container(rendered.html)
@@ -250,7 +250,7 @@ describe("HtmlHydrate", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.p("panel")
+        view: (h) => h.p(["panel"])
       })
       const gate = yield* Deferred.make<void>()
       const Shell = Component.provide(
@@ -263,15 +263,15 @@ describe("HtmlHydrate", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h, count) =>
-            h.div(
-              h.button.onClick(Bumped.Bumped()).children(String(count)),
+            h.div([
+              h.button.onClick(Bumped.Bumped()).children([String(count)]),
               Panel.render(h, {
                 key: "p",
                 props: {},
-                fallback: () => h.p("loading")
+                fallback: () => h.p(["loading"])
               }),
-              h.i("after")
-            )
+              h.i(["after"])
+            ])
         }),
         Layer.merge(
           Panel.toLayer(PanelLive),
@@ -319,11 +319,11 @@ describe("HtmlHydrate", () => {
         init: () => ({ pick: Option.some("server"), at: new Date(0) }),
         update: ($) => $.model,
         view: (h, model) =>
-          h.p(
+          h.p([
             Option.getOrElse(model.pick, () => "none"),
             " ",
             String(model.at.getTime())
-          )
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Picked, {})
       const encoded = rendered.state["/Picked"] as {
@@ -407,17 +407,24 @@ describe("HtmlHydrate", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.div(h.b("before"), Texty(h, { key: "t" }), h.i("after"))
+        view: (h) =>
+          h.div([h.b(["before"]), Texty(h, { key: "t" }), h.i(["after"])])
       })
       const rendered = yield* HtmlServer.renderToHtml(Holder, {})
-      assert.include(rendered.html, "<!--[/Holder/Texty[t]-->hello<!--]/Holder/Texty[t]-->")
+      assert.include(
+        rendered.html,
+        "<!--[/Holder/Texty[t]-->hello<!--]/Holder/Texty[t]-->"
+      )
       const html = rendered.html.replace("hello", "<s>stale</s>")
       const app = yield* container(html)
       const before = app.querySelector("b")!
       const stale = app.querySelector("s")!
       const after = app.querySelector("i")!
       yield* HtmlHydrate.hydrateEffect(Holder, {}, app, rendered.state)
-      assert.strictEqual(app.innerHTML, "<div><b>before</b>hello<i>after</i></div>")
+      assert.strictEqual(
+        app.innerHTML,
+        "<div><b>before</b>hello<i>after</i></div>"
+      )
       assert.strictEqual(comments(app), 0)
       assert.strictEqual(app.querySelector("b"), before)
       assert.strictEqual(app.querySelector("i"), after)

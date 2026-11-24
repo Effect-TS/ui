@@ -49,13 +49,13 @@ describe("ToggleGroup", () => {
               toggleGroup.item({
                 element: h.button.onClick(Msg.Clicked()),
                 value: "right"
-              }).children(needsClock)
+              }).children([needsClock])
             )
               .type.toBe<Button<Clock>>()
-            const root = toggleGroup.root(h.div.class("group")).children(
+            const root = toggleGroup.root(h.div.class(["group"])).children([
               toggleGroup.item({ element: h.button, value: "left" }),
               needsClock
-            )
+            ])
             expect(root).type.toBe<Div<Clock>>()
             return root
           }

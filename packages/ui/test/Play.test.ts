@@ -24,11 +24,11 @@ const Saver = Component.define({
   init: () => null,
   update: ($, message) =>
     SaverMessage.match(message, {
-      ClickedSave: () => $.run(Save.make({})),
-      SucceededSave: () => $.emit(SaverEvents.Saved())
+      ClickedSave: () => $.run([Save.make({})]),
+      SucceededSave: () => $.emit([SaverEvents.Saved()])
     }),
   view: (h) =>
-    h.el("button").on("click", SaverMessage.ClickedSave()).children("Save")
+    h.el("button").on("click", SaverMessage.ClickedSave()).children(["Save"])
 })
 
 const Page = Component.define({
@@ -39,11 +39,11 @@ const Page = Component.define({
   init: () => 0,
   update: ($, message) => message === "Saved" ? $.model + 1 : $.model,
   view: (h, saves) =>
-    h.el("div").children(
+    h.el("div").children([
       Saver(h, { props: {}, onEmit: () => "Saved" }),
-      h.el("button").on("click", () => undefined).children("Nothing"),
-      h.el("p").children(`saves: ${saves}`)
-    )
+      h.el("button").on("click", () => undefined).children(["Nothing"]),
+      h.el("p").children([`saves: ${saves}`])
+    ])
 }).pipe(Component.provide(Save.layer))
 
 const saves = Locator.tag("p")

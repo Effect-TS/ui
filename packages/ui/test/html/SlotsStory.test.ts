@@ -13,7 +13,7 @@ const Note = Component.define({
 }).make({
   init: () => 0,
   update: ($) => $.model,
-  view: (h, n) => h.span("note " + n)
+  view: (h, n) => h.span(["note " + n])
 })
 
 const Panel = Component.define({
@@ -25,7 +25,8 @@ const Panel = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.section(h.h2(h.slots.title), h.p("panel's own"), h.slots.body)
+  view: (h) =>
+    h.section([h.h2([h.slots.title]), h.p(["panel's own"]), h.slots.body])
 })
 
 const PageMsg = UiSchema.TaggedEnum({
@@ -45,13 +46,13 @@ const Page = Component.define({
       : { ...$.model, saved: msg.text },
   // An element around the child: a query sees through the child to the content under it.
   view: (h, model) =>
-    h.main(
+    h.main([
       Panel(h, {
         key: "p",
         slots: {
           title: "bumps " + model.bumps,
           body: [
-            h.button.onClick(PageMsg.Bump()).children("bump"),
+            h.button.onClick(PageMsg.Bump()).children(["bump"]),
             Note(h, {
               key: "n",
               onEmit: (event) => PageMsg.Saved({ text: event.text })
@@ -59,8 +60,8 @@ const Page = Component.define({
           ]
         }
       }),
-      h.output(model.saved)
-    )
+      h.output([model.saved])
+    ])
 })
 
 describe("slots in a story", () => {
@@ -90,7 +91,7 @@ describe("slots in a story", () => {
       const s = yield* Scene.make(Panel, {}, {
         slots: (h) => ({
           title: "hello",
-          body: [h.em("the body"), Note(h, { key: "n" })]
+          body: [h.em(["the body"]), Note(h, { key: "n" })]
         })
       })
       assert.strictEqual(Locator.textOf(s.get(Locator.tag("h2"))), "hello")
@@ -109,11 +110,11 @@ describe("View queries", () => {
   it("textOf and nodes walk a child's slot content in the order it was passed", () => {
     const h = View.makeHelper({}, Html)
     const node = View.toNode(
-      h.div(
+      h.div([
         "a",
-        Panel(h, { key: "p", slots: { body: h.b("c"), title: "b" } }),
+        Panel(h, { key: "p", slots: { body: h.b(["c"]), title: "b" } }),
         "d"
-      )
+      ])
     )
     assert.strictEqual(View.textOf(node), "acbd")
     const tags = [...View.nodes(node)].map((n) =>
@@ -147,7 +148,7 @@ describe("headless closures in slot content", () => {
             Panel(h, {
               key: "p",
               slots: {
-                title: h.output(text),
+                title: h.output([text]),
                 body: Headless(h, {
                   key: "h",
                   view: () =>
@@ -172,7 +173,7 @@ describe("headless closures in slot content", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.div(Note(h, { key: "N" }), h.slots.body)
+        view: (h) => h.div([Note(h, { key: "N" }), h.slots.body])
       })
       const s = yield* Scene.make(Receiver, {}, {
         slots: (h) => ({

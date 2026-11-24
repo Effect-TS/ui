@@ -99,7 +99,7 @@ export const AppNoDeps = Component.define({
   init: ($) => {
     const model = guard($.props.route, $.props.session)
     return redirected(model, $.props.route)
-      ? $.set(model).run(redirectTo(model.route))
+      ? $.set(model).run([redirectTo(model.route)])
       : model
   },
 
@@ -112,28 +112,28 @@ export const AppNoDeps = Component.define({
           : Option.none()
       )
       return redirected(next, route)
-        ? $.set(next).run(redirectTo(next.route))
+        ? $.set(next).run([redirectTo(next.route)])
         : next
     },
 
     SignedIn: ($, { session }) =>
       $.set(AppModel.LoggedIn({ route: LoggedInRoute.Dashboard(), session }))
-        .run(
+        .run([
           SaveSession.make({ session }),
           redirectTo(LoggedInRoute.Dashboard())
-        ),
+        ]),
 
     SignedOut: ($) =>
-      $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run(
+      $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run([
         ClearSession.make({}),
         redirectTo(LoggedOutRoute.Home())
-      ),
+      ]),
 
     FailedSaveSession: ($, { error }) =>
-      $.run(LogError.make({ entries: ["Failed to save session:", error] })),
+      $.run([LogError.make({ entries: ["Failed to save session:", error] })]),
 
     FailedClearSession: ($, { error }) =>
-      $.run(LogError.make({ entries: ["Failed to clear session:", error] }))
+      $.run([LogError.make({ entries: ["Failed to clear session:", error] })])
   },
 
   subscriptions: ({ model }) => [
@@ -153,7 +153,7 @@ export const AppNoDeps = Component.define({
   ],
 
   view: (h, model) =>
-    h.div.class("min-h-screen bg-gray-100").children(
+    h.div.class(["min-h-screen bg-gray-100"]).children([
       AppModel.match(model, {
         LoggedOut: ({ route }) =>
           LoggedOut(h, {
@@ -168,7 +168,7 @@ export const AppNoDeps = Component.define({
             onEmit: { SignedOut: () => AppMessage.SignedOut() }
           })
       })
-    )
+    ])
 })
 
 export const App = AppNoDeps.pipe(

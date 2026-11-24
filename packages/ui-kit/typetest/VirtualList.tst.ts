@@ -83,7 +83,7 @@ describe("VirtualList", () => {
         expect(virtualList.atEnd).type.toBe<boolean>()
         expect(virtualList.scrolling).type.toBe<boolean>()
 
-        expect(virtualList.viewport(h.div).children(needsClock)).type.toBe<
+        expect(virtualList.viewport(h.div).children([needsClock])).type.toBe<
           Div<Clock>
         >()
         expect(virtualList.list(h.ul)).type.toBe<Ul<never>>()
@@ -97,9 +97,9 @@ describe("VirtualList", () => {
         })
         expect(item).type.toBe<Div<Clock>>()
 
-        return virtualList.viewport(h.div).children(
-          virtualList.list(h.div).children(item)
-        )
+        return virtualList.viewport(h.div).children([
+          virtualList.list(h.div).children([item])
+        ])
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()
@@ -116,7 +116,7 @@ describe("VirtualList", () => {
         expect(virtualList.table(h.table)).type.toBe<Table>()
         expect(virtualList.list(h.tbody)).type.toBe<Tbody>()
         expect(virtualList.item({ element: h.tr, index: 0 })).type.toBe<Tr>()
-        return virtualList.table(h.table).children(virtualList.list(h.tbody))
+        return virtualList.table(h.table).children([virtualList.list(h.tbody)])
       }
     })
   })

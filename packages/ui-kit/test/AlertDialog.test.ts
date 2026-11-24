@@ -26,12 +26,12 @@ const Page = Component.define({
         Settled: () => undefined
       },
       view: (alertDialog) =>
-        h.div(
+        h.div([
           alertDialog.portal(h.dialog.attr("role", "dialog"))?.attr(
             "role",
             "region"
-          ).children(alertDialog.popup(h.div))
-        )
+          ).children([alertDialog.popup(h.div)])
+        ])
     })
 })
 

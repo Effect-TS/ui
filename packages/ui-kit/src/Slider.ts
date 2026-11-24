@@ -18,7 +18,7 @@
  * | `thumb`     | any element that can contain an `<input>`, with the `<input type="range">` inside |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`. `thumb` takes
+ * goes on chaining and adds children with `.children([...])`. `thumb` takes
  * two builders, `{ element, input, index }`: `element` is the thumb you
  * see and drag, and `input` is the `<input>` that takes focus, the keys,
  * the screen reader and the form value. The thumb sets the input up as a
@@ -128,8 +128,8 @@
  *   view: (h, model) =>
  *     Field(h, {
  *       view: (field) =>
- *         field.root(h.div).children(
- *           field.label(h.label).children("Volume"),
+ *         field.root(h.div).children([
+ *           field.label(h.label).children(["Volume"]),
  *           Slider(h, {
  *             props: { value: model.volume, disabled: field.disabled },
  *             onEmit: {
@@ -137,19 +137,19 @@
  *               Committed: () => undefined
  *             },
  *             view: (slider) =>
- *               slider.root(h.div.class("slider")).children(
- *                 slider.control(h.div.class("control")).children(
- *                   slider.track(h.div.class("track")).children(
- *                     slider.indicator(h.div.class("indicator")),
+ *               slider.root(h.div.class(["slider"])).children([
+ *                 slider.control(h.div.class(["control"])).children([
+ *                   slider.track(h.div.class(["track"])).children([
+ *                     slider.indicator(h.div.class(["indicator"])),
  *                     slider.thumb({
- *                       element: h.div.class("thumb"),
+ *                       element: h.div.class(["thumb"]),
  *                       input: field.control(h.input).attr("name", "volume")
  *                     })
- *                   )
- *                 )
- *               )
+ *                   ])
+ *                 ])
+ *               ])
  *           })
- *         )
+ *         ])
  *     })
  * })
  *
@@ -529,7 +529,7 @@ const setThumb = (
   const value = changed(s, withThumb(s, index, next))
   return value === undefined
     ? $.model
-    : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
+    : $.emit([SliderEvents.Moved({ value }), SliderEvents.Committed({ value })])
 }
 
 const sliderKeys = new Set([
@@ -603,7 +603,7 @@ const drag = (
   const value = changed(s, moved.values)
   return value === undefined
     ? $.set(next)
-    : $.set(next).evolve({ moved: value }).emit(SliderEvents.Moved({ value }))
+    : $.set(next).evolve({ moved: value }).emit([SliderEvents.Moved({ value })])
 }
 
 const released: SliderModel = {
@@ -908,7 +908,7 @@ export const Slider = Component.define({
       const next = UiStruct.evolve(released, { active: $.model.active })
       return $.model.moved === null || $.props.disabled === true
         ? next
-        : $.set(next).emit(SliderEvents.Committed({ value: $.model.moved }))
+        : $.set(next).emit([SliderEvents.Committed({ value: $.model.moved })])
     },
     PressedKey: ($, { index, key, shift }) => {
       const s = settingsOf($.props)
@@ -998,7 +998,7 @@ export const Slider = Component.define({
             )
           )
         )
-        .children(input as never)
+        .children([input as never])
     )
     return {
       values: s.values,

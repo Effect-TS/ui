@@ -52,8 +52,8 @@ const Page = Component.define({
     Picked: ($, { value }) => ({ ...$.model, zoom: value, select: false })
   },
   view: (h, model) =>
-    h.div(
-      h.button.attrs({ id: "before", type: "button" }).children("Before"),
+    h.div([
+      h.button.attrs({ id: "before", type: "button" }).children(["Before"]),
       Toolbar(h, {
         props: {
           disabled: h.props.disabled,
@@ -74,15 +74,15 @@ const Page = Component.define({
         view: (toolbar) =>
           toolbar.root(
             h.div.attrs({ id: "toolbar", "data-clicks": String(model.clicks) })
-          ).children(
+          ).children([
             toolbar.button({
               element: h.button.attr("id", "bold").onClick(
                 Message.ClickedBold()
               ),
               value: "bold"
             })
-              .children("Bold"),
-            toolbar.group({ element: h.div, value: "align" }).children(
+              .children(["Bold"]),
+            toolbar.group({ element: h.div, value: "align" }).children([
               ToggleGroup(h, {
                 props: {
                   value: model.align,
@@ -90,7 +90,7 @@ const Page = Component.define({
                 },
                 onEmit: { Toggled: ({ value }) => Message.Toggled({ value }) },
                 view: (group) =>
-                  group.root(h.div.attr("id", "align")).children(
+                  group.root(h.div.attr("id", "align")).children([
                     toolbar.button({
                       element: group.item({
                         element: h.button.attr("id", "left"),
@@ -98,7 +98,7 @@ const Page = Component.define({
                       }),
                       value: "left"
                     })
-                      .children("Left"),
+                      .children(["Left"]),
                     toolbar.button({
                       element: group.item({
                         element: h.button.attr("id", "right"),
@@ -106,19 +106,19 @@ const Page = Component.define({
                       }),
                       value: "right"
                     })
-                      .children("Right")
-                  )
+                      .children(["Right"])
+                  ])
               })
-            ),
+            ]),
             toolbar.separator(h.div),
             toolbar.button({
               element: h.button.attr("id", "off"),
               value: "off"
-            }).children("Off"),
+            }).children(["Off"]),
             toolbar.button({
               element: h.button.attr("id", "dim"),
               value: "dim"
-            }).children("Dim"),
+            }).children(["Dim"]),
             Menu(h, {
               props: {
                 open: model.menu,
@@ -136,27 +136,29 @@ const Page = Component.define({
                 Settled: () => undefined
               },
               view: (menu) =>
-                h.div(
+                h.div([
                   toolbar.button({
                     element: menu.trigger({
                       element: h.button.attr("id", "menu"),
                       disabled: toolbar.isDisabled("menu")
                     }),
                     value: "menu"
-                  }).children("Edit"),
+                  }).children(["Edit"]),
                   menu.positioner(h.div.attr("id", "menu-positioner")).children(
-                    menu.popup(h.div).children(
-                      menu.item({
-                        element: h.div.attr("id", "copy"),
-                        value: "copy"
-                      }).children("Copy"),
-                      menu.item({
-                        element: h.div.attr("id", "paste"),
-                        value: "paste"
-                      }).children("Paste")
-                    )
+                    [
+                      menu.popup(h.div).children([
+                        menu.item({
+                          element: h.div.attr("id", "copy"),
+                          value: "copy"
+                        }).children(["Copy"]),
+                        menu.item({
+                          element: h.div.attr("id", "paste"),
+                          value: "paste"
+                        }).children(["Paste"])
+                      ])
+                    ]
                   )
-                )
+                ])
             }),
             Select(h, {
               props: {
@@ -179,40 +181,40 @@ const Page = Component.define({
                 Settled: () => undefined
               },
               view: (select) =>
-                h.div(
+                h.div([
                   toolbar.button({
                     element: select.trigger(h.button.attr("id", "zoom")),
                     value: "zoom"
-                  }).children(
+                  }).children([
                     select.value(h.span)
-                  ),
+                  ]),
                   select.positioner(h.div.attr("id", "select-positioner"))
-                    .children(
-                      select.popup(h.div).children(
+                    .children([
+                      select.popup(h.div).children([
                         select.item({
                           element: h.div.attr("id", "zoom-100"),
                           value: "100"
-                        }).children("100%"),
+                        }).children(["100%"]),
                         select.item({
                           element: h.div.attr("id", "zoom-200"),
                           value: "200"
-                        }).children("200%")
-                      )
-                    )
-                )
+                        }).children(["200%"])
+                      ])
+                    ])
+                ])
             }),
             toolbar.link({
               element: h.a.attrs({ id: "help", href: "#help" }),
               value: "help"
-            }).children("Help"),
+            }).children(["Help"]),
             toolbar.input({
               element: h.input.attrs({ id: "search", value: "abc" }),
               value: "search"
             })
-          )
+          ])
       }),
-      h.button.attrs({ id: "after", type: "button" }).children("After")
-    )
+      h.button.attrs({ id: "after", type: "button" }).children(["After"])
+    ])
 })
 
 const key = (target: Element, key: string, init: KeyboardEventInit = {}) => {

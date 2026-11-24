@@ -91,14 +91,14 @@ export const Snippet = Component.define({
         Mount.map((width) => SnippetMessage.CompletedMeasure({ width }))
       )
     )
-      .children(
+      .children([
         h.div.onMount(
           AttachEditor({ text: model.text }).pipe(
             Mount.map((text) => SnippetMessage.UpdatedCode({ text }))
           )
         ),
-        h.p(`${model.text.length} characters in ${model.width}px`)
-      )
+        h.p([`${model.text.length} characters in ${model.width}px`])
+      ])
 })
 
 // ---------------------------------------------------------------------------

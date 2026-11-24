@@ -22,8 +22,8 @@
  * | `indicator` | `<span>` inside the root |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`:
- * `checkbox.root(h.button).children(checkbox.indicator(h.span))`. When the checkbox has
+ * goes on chaining and adds children with `.children([...])`:
+ * `checkbox.root(h.button).children([checkbox.indicator(h.span)])`. When the checkbox has
  * a form value to submit, `root` appends its hidden input after any
  * children already on the button and before children you chain afterward,
  * so the form value can't be left out. `indicator` adds no markup.
@@ -104,10 +104,10 @@
  *       props: { checked: model.terms, name: "terms", required: true },
  *       onEmit: { Toggled: ({ checked }) => SignupMessage.ToggledTerms({ checked }) },
  *       view: (checkbox) =>
- *         h.label.class("terms").children(
- *           checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick"))),
+ *         h.label.class(["terms"]).children([
+ *           checkbox.root(h.button.class(["checkbox"])).children([checkbox.indicator(h.span.class(["tick"]))]),
  *           "I accept the terms"
- *         )
+ *         ])
  *     })
  * })
  *
@@ -363,9 +363,9 @@ export const Checkbox = Component.define({
     ClickedRoot: ($) => {
       const resolved = resolve($.props, $.shared.group)
       if (!interactive(resolved)) return $.model
-      const toggled = $.emit(
+      const toggled = $.emit([
         CheckboxEvents.Toggled({ checked: !resolved.checked })
-      )
+      ])
       switch (resolved.role) {
         case "member":
           return toggled.send(
@@ -423,7 +423,7 @@ export const Checkbox = Component.define({
             )
             // The form field goes after the children already on the button, and
             // before the ones the consumer chains afterward.
-            .children(hidden)
+            .children([hidden])
       ),
       indicator: p.part("span", (b) => state(b, resolved))
     }

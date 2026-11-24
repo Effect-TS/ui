@@ -13,8 +13,10 @@ const standIn = {
     h: View.Helper<never, AvatarProps> & View.Tags<Html.Elements, never>
   ) =>
     avatar.root(h.span.attr("data-status", avatar.imageLoadingStatus)).children(
-      avatar.image(h.img),
-      avatar.fallback(h.span.class("fallback"))?.children("AL")
+      [
+        avatar.image(h.img),
+        avatar.fallback(h.span.class(["fallback"]))?.children(["AL"])
+      ]
     )
 }
 
@@ -52,10 +54,10 @@ describe("Avatar", () => {
             props: { src },
             view: (avatar) =>
               avatar.root(h.span.attr("data-status", avatar.imageLoadingStatus))
-                .children(
+                .children([
                   avatar.image(h.img),
-                  avatar.fallback(h.span.class("fallback"))
-                )
+                  avatar.fallback(h.span.class(["fallback"]))
+                ])
           })
       })
       const root = yield* TestHost.mount(Page, {}, {
@@ -82,7 +84,7 @@ describe("Avatar", () => {
 
   it("the image keeps the consumer's attributes, but its own win, present or absent, before the part or after, and come last with src after the rest", () => {
     const element = h.img
-      .class("photo")
+      .class(["photo"])
       .attrs({
         alt: "Ada Lovelace",
         src: "/other.png",

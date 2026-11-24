@@ -36,7 +36,7 @@ const Toolbar = Component.define({
           element: tooltip.trigger(h.button),
           props: { pressed: model.bold },
           onToggle: ({ pressed }) => ToolbarMessage.ToggledBold({ pressed })
-        }).children("Bold")
+        }).children(["Bold"])
     })
 })
 
@@ -70,7 +70,7 @@ describe("Toggle", () => {
   it("the toggle's own attributes win before and after the call, the consumer's others stay, and a click handler clashes with onToggle", () => {
     const own = (element: ToggleElement<typeof ToolbarMessage.Type>) =>
       element
-        .class("tool")
+        .class(["tool"])
         .attrs({
           type: "submit",
           "aria-pressed": "mixed",

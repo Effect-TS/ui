@@ -29,7 +29,7 @@ describe("Collapsible", () => {
       props: { open: false },
       view: (collapsible) => {
         const trigger = collapsible.trigger(
-          h.button.class("trigger").onClick(Msg.Clicked())
+          h.button.class(["trigger"]).onClick(Msg.Clicked())
         )
         expect(trigger).type.toBe<Button>()
         expect(collapsible.root(h.div)).type.toBe<Div>()
@@ -43,10 +43,10 @@ describe("Collapsible", () => {
         expect(collapsible.root).type.not.toBeCallableWith(h.span)
         expect(collapsible.trigger).type.not.toBeCallableWith(h.div)
         expect(collapsible.panel).type.not.toBeCallableWith(h.section)
-        return collapsible.root(h.div).children(
+        return collapsible.root(h.div).children([
           trigger,
-          collapsible.panel(h.div)?.children("Content")
-        )
+          collapsible.panel(h.div)?.children(["Content"])
+        ])
       }
     })
   })

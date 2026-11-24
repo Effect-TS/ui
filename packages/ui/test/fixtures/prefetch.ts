@@ -42,7 +42,7 @@ const reader = <const Name extends string>(name: Name) =>
   }).make({
     init: () => ({}),
     update: ($) => $.model,
-    view: (h) => h.el("p", name)
+    view: (h) => h.el("p", [name])
   })
 
 export const Sidebar = reader("Sidebar")
@@ -59,7 +59,7 @@ export const Note = Component.define({
 }).make({
   init: () => ({}),
   update: ($) => $.model,
-  view: (h) => h.el("p", "Note")
+  view: (h) => h.el("p", ["Note"])
 })
 
 /** Places what its parent passes, so a walk reaches the parent's content through it. */
@@ -72,7 +72,7 @@ export const Frame = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.el("section", h.slots.body)
+    view: (h) => h.el("section", [h.slots.body])
   })
 
 export class Badge
@@ -91,16 +91,18 @@ export const Walked = Component.define({
   view: (h) =>
     h.el(
       "div",
-      Frame(h, {
-        key: "frame",
-        slots: { body: Card(h, { key: "card", props: { id: 2 } }) }
-      }),
-      Badge.render(h, { key: "badge", fallback: () => h.text("") }),
-      Note.pipe(Component.provide(GetNote.layer))(h, {
-        key: "provided",
-        props: { id: 1 }
-      }),
-      Note(h, { key: "bare", props: { id: 2 } })
+      [
+        Frame(h, {
+          key: "frame",
+          slots: { body: Card(h, { key: "card", props: { id: 2 } }) }
+        }),
+        Badge.render(h, { key: "badge", fallback: () => h.text("") }),
+        Note.pipe(Component.provide(GetNote.layer))(h, {
+          key: "provided",
+          props: { id: 1 }
+        }),
+        Note(h, { key: "bare", props: { id: 2 } })
+      ]
     )
 })
 
@@ -128,7 +130,7 @@ export const Failing = Component.define({
 }).make({
   init: () => ({}),
   update: ($) => $.model,
-  view: (h) => h.el("p", "Failing")
+  view: (h) => h.el("p", ["Failing"])
 }).pipe(Component.provide(Layer.effect(Nothing, Effect.die("no build"))))
 
 /** What the Person handler saw as the current location when it ran. */
@@ -168,18 +170,21 @@ export const App = Component.define({
   view: (h, model) =>
     h.el(
       "div",
-      Sidebar(h, { key: "sidebar", props: { id: 0 } }),
-      Routes.match(model.route, {
-        Home: () => h.el("h1", "Home"),
-        Person: (route) =>
-          Detail(h, {
-            key: Routes.print(route),
-            props: { id: route.params.id }
-          }),
-        Walk: () => h.el("h1", "Walk"),
-        Broken: () => h.el("h1", "Broken"),
-        Empty: () => h.el("h1", "Empty"),
-        Failing: (route) => Failing(h, { key: Routes.print(route), props: {} })
-      })
+      [
+        Sidebar(h, { key: "sidebar", props: { id: 0 } }),
+        Routes.match(model.route, {
+          Home: () => h.el("h1", ["Home"]),
+          Person: (route) =>
+            Detail(h, {
+              key: Routes.print(route),
+              props: { id: route.params.id }
+            }),
+          Walk: () => h.el("h1", ["Walk"]),
+          Broken: () => h.el("h1", ["Broken"]),
+          Empty: () => h.el("h1", ["Empty"]),
+          Failing: (route) =>
+            Failing(h, { key: Routes.print(route), props: {} })
+        })
+      ]
     )
 })

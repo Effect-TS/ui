@@ -149,27 +149,27 @@ const Page = Component.define({
     })
     return ToastProvider(h, {
       view: (toastProvider) =>
-        h.div(
-          h.button.attr("id", "page").children("Page"),
-          h.div(
-            model.late ? h.button.attr("id", "late").children("Late") : null
-          ),
-          h.button.attr("id", "shut").onClick(Message.Closed()).children(
+        h.div([
+          h.button.attr("id", "page").children(["Page"]),
+          h.div([
+            model.late ? h.button.attr("id", "late").children(["Late"]) : null
+          ]),
+          h.button.attr("id", "shut").onClick(Message.Closed()).children([
             "Shut"
-          ),
-          h.button.attr("id", "switch").onClick(Message.Switched()).children(
+          ]),
+          h.button.attr("id", "switch").onClick(Message.Switched()).children([
             "Switch"
-          ),
+          ]),
           h.button.attr("id", "reopen").onClick(
             Message.RequestedOpen({ which: "a", triggerId: null, method: null })
           )
-            .children(
+            .children([
               "Reopen"
-            ),
+            ]),
           model.toasts
-            ? toastProvider.viewport(h.div.attr("id", "toasts")).children(
-              h.button.attr("id", "toast").children("Undo")
-            )
+            ? toastProvider.viewport(h.div.attr("id", "toasts")).children([
+              h.button.attr("id", "toast").children(["Undo"])
+            ])
             : null,
           props.detached
             ? DialogTrigger(h, {
@@ -177,7 +177,7 @@ const Page = Component.define({
               props: { open: model.a, popupId: "settings" },
               onPress: ({ method, triggerId }) =>
                 Message.RequestedOpen({ which: "a", triggerId, method })
-            }).children("Settings")
+            }).children(["Settings"])
             : null,
           model.removed && !props.nested ? null : Dialog(h, {
             key: "a",
@@ -194,12 +194,12 @@ const Page = Component.define({
             onEmit: on("a"),
             view: (dialog) => {
               const popup = dialog.popup(h.div.attr("class", "popup-a"))
-                .children(
+                .children([
                   props.skips
                     ? [
-                      h.fieldset.attr("disabled", "").children(
+                      h.fieldset.attr("disabled", "").children([
                         h.input.attr("id", "in-fieldset")
-                      ),
+                      ]),
                       h.input.attrs({
                         id: "invisible",
                         style: "visibility:hidden"
@@ -225,7 +225,7 @@ const Page = Component.define({
                         method: null
                       })
                     )
-                      .children("Open B")
+                      .children(["Open B"])
                     : null,
                   props.nested
                     ? Dialog(h, {
@@ -233,52 +233,52 @@ const Page = Component.define({
                       props: { open: model.b, modal: props.modal },
                       onEmit: on("b"),
                       view: (nestedDialog) =>
-                        h.div(
+                        h.div([
                           nestedDialog.trigger(h.button.attr("id", "trigger-b"))
-                            .children("B"),
+                            .children(["B"]),
                           model.removed
                             ? null
                             : nestedDialog.finalFocus(
                               h.button.attr("id", "final-b")
-                            ).children("Back"),
+                            ).children(["Back"]),
                           model.removed ?
                             null :
-                            nestedDialog.portal(h.dialog)?.children(
-                              nestedDialog.popup(h.div).children(
+                            nestedDialog.portal(h.dialog)?.children([
+                              nestedDialog.popup(h.div).children([
                                 h.input.attr("id", "b-field")
-                              )
-                            )
-                        )
+                              ])
+                            ])
+                        ])
                     })
                     : null
-                )
-              return h.div(
+                ])
+              return h.div([
                 props.triggers
-                  ? h.div(
-                    dialog.trigger(h.button.attr("id", "ta")).children("A"),
-                    dialog.trigger(h.button.attr("id", "tb")).children("B")
-                  )
+                  ? h.div([
+                    dialog.trigger(h.button.attr("id", "ta")).children(["A"]),
+                    dialog.trigger(h.button.attr("id", "tb")).children(["B"])
+                  ])
                   : props.detached
                   ? null
-                  : dialog.trigger(h.button.attr("id", "trigger")).children(
+                  : dialog.trigger(h.button.attr("id", "trigger")).children([
                     "Open"
-                  ),
+                  ]),
                 props.finalMark
-                  ? dialog.finalFocus(h.button.attr("id", "final")).children(
+                  ? dialog.finalFocus(h.button.attr("id", "final")).children([
                     "Final"
-                  )
+                  ])
                   : null,
-                h.output.attr("id", "close-method").children(
+                h.output.attr("id", "close-method").children([
                   String(dialog.closeMethod)
-                ),
-                dialog.portal(h.dialog)?.children(
+                ]),
+                dialog.portal(h.dialog)?.children([
                   props.viewport
-                    ? dialog.viewport(h.div.attr("id", "viewport")).children(
+                    ? dialog.viewport(h.div.attr("id", "viewport")).children([
                       popup
-                    )
+                    ])
                     : popup
-                )
-              )
+                ])
+              ])
             }
           }),
           props.siblings
@@ -287,17 +287,19 @@ const Page = Component.define({
               props: { open: model.b, modal: props.modal },
               onEmit: on("b"),
               view: (dialog) =>
-                h.div(
-                  dialog.trigger(h.button.attr("id", "trigger-b")).children(
+                h.div([
+                  dialog.trigger(h.button.attr("id", "trigger-b")).children([
                     "B"
-                  ),
-                  dialog.portal(h.dialog)?.children(
-                    dialog.popup(h.div).children(h.input.attr("id", "b-field"))
-                  )
-                )
+                  ]),
+                  dialog.portal(h.dialog)?.children([
+                    dialog.popup(h.div).children([
+                      h.input.attr("id", "b-field")
+                    ])
+                  ])
+                ])
             })
             : null
-        )
+        ])
     })
   }
 })

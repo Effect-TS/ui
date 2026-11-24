@@ -22,18 +22,18 @@ const standIn = {
         "aria-valuenow": "99",
         "aria-valuetext": "wrong"
       })
-    ).children(
+    ).children([
       meter.label(
-        h.span.class("label").attrs({ id: "custom-label", role: "heading" })
-      ).children("Storage"),
-      meter.value(h.span.class("value").attr("aria-hidden", "false")),
-      meter.track(h.div.class("track")).children(
-        meter.indicator(h.div.class("fill")).attr(
+        h.span.class(["label"]).attrs({ id: "custom-label", role: "heading" })
+      ).children(["Storage"]),
+      meter.value(h.span.class(["value"]).attr("aria-hidden", "false")),
+      meter.track(h.div.class(["track"])).children([
+        meter.indicator(h.div.class(["fill"])).attr(
           "style",
           "background:red;width:1px"
         )
-      )
-    )
+      ])
+    ])
 }
 
 const root = Locator.attr("role", "meter")
@@ -69,7 +69,9 @@ describe("Meter", () => {
       assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
       assert.strictEqual(Locator.textOf(s.get(value)), "40%")
 
-      const custom = built(parts({ value: 40 }).value(h.span).children("four"))
+      const custom = built(
+        parts({ value: 40 }).value(h.span).children(["four"])
+      )
       assert.deepStrictEqual(custom.children, [{ _tag: "Text", text: "four" }])
 
       s.props({ value: 150, min: 50, max: 250, valueText: "150 units" })

@@ -94,12 +94,12 @@ const makeApp = (options?: {
         },
         Rename: ({ name }) => {
           order.push(`update ${$.props.tag} Rename`)
-          return $.set({ ...$.model, saving: true }).run(
+          return $.set({ ...$.model, saving: true }).run([
             RenameUser.make({ id: $.props.id, name }).pipe(Command.match({
               onSuccess: () => CardMessage.Renamed(),
               onFailure: () => CardMessage.Renamed()
             }))
-          )
+          ])
         },
         Renamed: () => ({ ...$.model, saving: false })
       }),
@@ -119,7 +119,7 @@ const makeApp = (options?: {
       })
       order.push(`view ${h.props.tag} ${text}${model.saving ? " saving" : ""}`)
       return h.el("p").on("click", CardMessage.Rename({ name: "Bob" }))
-        .children(`${h.props.tag}=${text}`)
+        .children([`${h.props.tag}=${text}`])
     }
   })
 
@@ -182,16 +182,16 @@ const makeApp = (options?: {
     update: ($, message) =>
       ToolsMessage.match(message, {
         Get: ({ id }) =>
-          $.run(
+          $.run([
             Load.make({ id }).pipe(
               Command.match({ onSuccess: got, onFailure: () => got("failed") })
             )
-          ),
+          ]),
         Prefetch: ({ id }) =>
-          $.run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
+          $.run([Warm.make({ id }).pipe(Command.map(() => got("prefetched")))]),
         Got: ({ name }) => name
       }),
-    view: (h, model) => h.el("p", model)
+    view: (h, model) => h.el("p", [model])
   })
 
   return {
@@ -262,7 +262,7 @@ describe("Query results", () => {
 
   it.effect("debounce: a burst of args changes shows the previous value, then fetches the last args once", () => {
     const app = makeApp({ debounce: "300 millis" })
-    const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
+    const set = (cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
       Effect.gen(function*() {
@@ -271,7 +271,7 @@ describe("Query results", () => {
         yield* load
         assert.strictEqual(root.text(), "a=Ann")
         for (const id of ["2", "3", "2"]) {
-          root.send(set(`a:${id}`))
+          root.send(set([`a:${id}`]))
           yield* TestHost.settle
           yield* TestClock.adjust("100 millis")
         }
@@ -292,7 +292,7 @@ describe("Query results", () => {
 
   it.effect("debounce: new args interrupt the old args' fetch, unless another watcher still needs it", () => {
     const app = makeApp({ debounce: "300 millis" })
-    const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
+    const set = (cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
       Effect.gen(function*() {
@@ -300,7 +300,7 @@ describe("Query results", () => {
         yield* TestHost.settle
         // Mid-fetch: a's fetch is a's alone, and b's is shared once a moves onto it.
         yield* TestClock.adjust("5 millis")
-        root.send(set("a:2", "b:2"))
+        root.send(set(["a:2", "b:2"]))
         yield* TestHost.settle
         yield* load
         assert.deepStrictEqual(app.db.interrupted, ["1"])
@@ -311,7 +311,7 @@ describe("Query results", () => {
         const other = yield* TestHost.mount(app.List, { cards: ["c:1", "d:1"] })
         yield* TestHost.settle
         yield* TestClock.adjust("5 millis")
-        other.send(set("c:", "d:1"))
+        other.send(set(["c:", "d:1"]))
         yield* load
         assert.deepStrictEqual(app.db.interrupted, ["1"])
         assert.strictEqual(other.text(), "c=idled=Ann")
@@ -322,17 +322,17 @@ describe("Query results", () => {
 
   it.effect("debounce: args whose entry is fresh, and a disabled query, don't wait", () => {
     const app = makeApp({ debounce: "300 millis" })
-    const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
+    const set = (cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
       Effect.gen(function*() {
         const root = yield* TestHost.mount(app.List, { cards: ["a:1", "b:2"] })
         yield* load
         // b leaves, so a moves onto a fresh entry nothing watches.
-        root.send(set("a:2"))
+        root.send(set(["a:2"]))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a=Bea")
-        root.send(set("a:"))
+        root.send(set(["a:"]))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a=idle")
         assert.strictEqual(app.db.calls, 2)
@@ -412,18 +412,20 @@ describe("Query results", () => {
       view: (h, swapped) =>
         h.el(
           "div",
-          h.el(
-            "section",
-            swapped
-              ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })]
-              : []
-          ),
-          h.el(
-            "section",
-            swapped
-              ? []
-              : [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })]
-          )
+          [
+            h.el(
+              "section",
+              swapped
+                ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })]
+                : []
+            ),
+            h.el(
+              "section",
+              swapped
+                ? []
+                : [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })]
+            )
+          ]
         )
     })
     return run(
@@ -498,13 +500,15 @@ describe("Query results", () => {
       view: (h, swapped) =>
         h.el(
           "div",
-          h.el(
-            "section",
-            swapped
-              ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })]
-              : []
-          ),
-          Shell(h, { key: "shell", props: { show: !swapped } })
+          [
+            h.el(
+              "section",
+              swapped
+                ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })]
+                : []
+            ),
+            Shell(h, { key: "shell", props: { show: !swapped } })
+          ]
         )
     })
     return run(
@@ -579,7 +583,7 @@ describe("Query results", () => {
       view: (h) =>
         h.el(
           "p",
-          `${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`
+          [`${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`]
         )
     })
   }
@@ -615,20 +619,22 @@ describe("Query results", () => {
         view: (h, swapped) =>
           h.el(
             "div",
-            h.el(
-              "section",
-              swapped
-                ? [Watcher(h, { key: "new", props: { id: "9", tag: "n" } })]
-                : []
-            ),
-            extracted
-              ? Shell(h, { key: "shell", props: { show: !swapped } })
-              : h.el(
-                "div",
+            [
+              h.el(
+                "section",
                 swapped
-                  ? []
-                  : [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })]
-              )
+                  ? [Watcher(h, { key: "new", props: { id: "9", tag: "n" } })]
+                  : []
+              ),
+              extracted
+                ? Shell(h, { key: "shell", props: { show: !swapped } })
+                : h.el(
+                  "div",
+                  swapped
+                    ? []
+                    : [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })]
+                )
+            ]
           )
       })
       return run(
@@ -721,7 +727,7 @@ describe("Query results", () => {
         view: (h) =>
           h.el(
             "p",
-            `${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`
+            [`${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`]
           )
       })
       const Shell = Component.define({
@@ -767,20 +773,22 @@ describe("Query results", () => {
         view: (h, model) =>
           h.el(
             "div",
-            h.el(
-              "section",
-              model.swapped
-                ? [Watcher(h, { key: "new", props: { tag: "n" } })]
-                : []
-            ),
-            extracted
-              ? Shell(h, { key: "shell", props: { show: !model.swapped } })
-              : h.el(
-                "div",
+            [
+              h.el(
+                "section",
                 model.swapped
-                  ? []
-                  : [Watcher(h, { key: "old", props: { tag: "o" } })]
-              )
+                  ? [Watcher(h, { key: "new", props: { tag: "n" } })]
+                  : []
+              ),
+              extracted
+                ? Shell(h, { key: "shell", props: { show: !model.swapped } })
+                : h.el(
+                  "div",
+                  model.swapped
+                    ? []
+                    : [Watcher(h, { key: "old", props: { tag: "o" } })]
+                )
+            ]
           )
       })
       return run(
@@ -851,8 +859,12 @@ describe("Query results", () => {
       view: (h, joined) =>
         h.el(
           "div",
-          Watcher(h, { key: "a", props: { id: "9", tag: "a" } }),
-          joined ? [Watcher(h, { key: "b", props: { id: "9", tag: "b" } })] : []
+          [
+            Watcher(h, { key: "a", props: { id: "9", tag: "a" } }),
+            joined
+              ? [Watcher(h, { key: "b", props: { id: "9", tag: "b" } })]
+              : []
+          ]
         )
     })
     return run(
@@ -895,8 +907,8 @@ describe("Query results", () => {
       }
     }).make({
       init: () => ({}),
-      update: ($) => $.emit($.props.id),
-      view: (h) => h.el("p", "emitter")
+      update: ($) => $.emit([$.props.id]),
+      view: (h) => h.el("p", ["emitter"])
     })
     const ParentMessage = UiSchema.TaggedEnum({
       Switch: {},
@@ -918,15 +930,17 @@ describe("Query results", () => {
       view: (h, model) =>
         h.el(
           "div",
-          app.Card(h, { key: "warm", props: { id: "2", tag: "w" } }),
-          Emitter(h, {
-            key: "emitter",
-            props: { id: model.switched ? "2" : "1" },
-            onEmit: (id) =>
-              ParentMessage.Noted({
-                label: (model.switched ? "new " : "old ") + id
-              })
-          })
+          [
+            app.Card(h, { key: "warm", props: { id: "2", tag: "w" } }),
+            Emitter(h, {
+              key: "emitter",
+              props: { id: model.switched ? "2" : "1" },
+              onEmit: (id) =>
+                ParentMessage.Noted({
+                  label: (model.switched ? "new " : "old ") + id
+                })
+            })
+          ]
         )
     })
     return run(
@@ -962,11 +976,11 @@ describe("Query results", () => {
       message: BadMessage,
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
-      init: ($) => $.set({}).run(Hold.make()),
+      init: ($) => $.set({}).run([Hold.make()]),
       update: (): {} => {
         throw new Error("crash")
       },
-      view: (h) => h.el("p").on("click", BadMessage.Crash()).children("bad")
+      view: (h) => h.el("p").on("click", BadMessage.Crash()).children(["bad"])
     })
     const Host = Component.define({
       name: "Host",
@@ -1032,10 +1046,10 @@ describe("Query results", () => {
       init: () => ({ done: false }),
       update: ($, message) =>
         PollMessage.match(message, {
-          Go: () => $.run(Go.make()),
+          Go: () => $.run([Go.make()]),
           Done: () => ({ ...$.model, done: true })
         }),
-      view: (h, model) => h.el("p", model.done ? "done" : "not yet")
+      view: (h, model) => h.el("p", [model.done ? "done" : "not yet"])
     })
     return run(
       app.layer,
@@ -1099,18 +1113,18 @@ describe("Query results", () => {
         }
       }
     }).make({
-      init: ($) => $.set({}).run(Note.make({ text: "init" })),
+      init: ($) => $.set({}).run([Note.make({ text: "init" })]),
       update: ($, message) =>
         Message.match(message, {
           UserChanged: () => {
             seen.push("update UserChanged")
-            return $.run(Note.make({ text: "fold" }))
+            return $.run([Note.make({ text: "fold" })])
           },
           Noted: () => $.model
         }),
       view: (h) => {
         seen.push(`view ${h.queries.user._tag}`)
-        return h.el("i", "noter")
+        return h.el("i", ["noter"])
       }
     })
     const Host = Component.define({
@@ -1123,8 +1137,10 @@ describe("Query results", () => {
       view: (h, show) =>
         h.el(
           "div",
-          app.Card(h, { key: "a", props: { id: "1", tag: "a" } }),
-          show && Noter(h, { key: "n" })
+          [
+            app.Card(h, { key: "a", props: { id: "1", tag: "a" } }),
+            show && Noter(h, { key: "n" })
+          ]
         )
     })
     return run(
@@ -1409,7 +1425,7 @@ describe("Query results", () => {
     } as any).make({
       init: () => ({}),
       update: ($: any) => $.model,
-      view: (h: any) => h.el("p", "never")
+      view: (h: any) => h.el("p", ["never"])
     } as any)
     return run(
       app.layer,
@@ -1459,9 +1475,11 @@ describe("Query results", () => {
       view: (h) =>
         h.el(
           "p",
-          AsyncResult.isSuccess(h.queries.account)
-            ? Redacted.value(h.queries.account.value.secret)
-            : "…"
+          [
+            AsyncResult.isSuccess(h.queries.account)
+              ? Redacted.value(h.queries.account.value.secret)
+              : "…"
+          ]
         )
     })
     return run(
@@ -1535,10 +1553,10 @@ describe("Query results", () => {
     }).make({
       init: () => ({}),
       update: ($) =>
-        $.run(
+        $.run([
           BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))
-        ),
-      view: (h) => h.el("p", "breaker")
+        ]),
+      view: (h) => h.el("p", ["breaker"])
     })
     return run(
       Layer.merge(app.layer, BadRename.layer),
@@ -1582,10 +1600,10 @@ describe("Query results", () => {
       model: Schema.Number,
       message: Message
     }).make({
-      init: ($) => $.set(0).run(Wait.make()),
+      init: ($) => $.set(0).run([Wait.make()]),
       // Each Tick issues the next: the work never runs out.
-      update: ($) => $.set($.model + 1).run(Spin.make()),
-      view: (h, count) => h.el("p", String(count))
+      update: ($) => $.set($.model + 1).run([Spin.make()]),
+      view: (h, count) => h.el("p", [String(count)])
     })
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Spinner, {})

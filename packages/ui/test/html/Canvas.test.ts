@@ -50,7 +50,7 @@ const Dots = Component.define({
     Bumped: ($) => ({ ...$.model, bumps: $.model.bumps + 1 })
   },
   view: (h, model) =>
-    h.div(
+    h.div([
       Canvas.view(h, {
         width: 300,
         height: 200,
@@ -62,8 +62,8 @@ const Dots = Component.define({
           Message.Pressed({ x, y, pointerType }),
         onPointerUp: ({ x, y }) => Message.Released({ x, y })
       }),
-      h.output(String(model.bumps))
-    )
+      h.output([String(model.bumps)])
+    ])
 })
 
 describe("Canvas", { concurrent: false }, () => {

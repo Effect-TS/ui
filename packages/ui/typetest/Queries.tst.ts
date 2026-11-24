@@ -114,17 +114,17 @@ const Card = Component.define({
     expect(h.patched.team).type.toBe<boolean>()
     return AsyncResult.match(h.queries.user, {
       onInitial: () =>
-        h.p(
+        h.p([
           Option.isSome(h.previous.user)
             ? h.previous.user.value.name
             : "Loading"
-        ),
-      onFailure: () => h.p("Missing"),
+        ]),
+      onFailure: () => h.p(["Missing"]),
       onSuccess: ({ value }) =>
-        h.p.onClick(Message.Bump()).children(
+        h.p.onClick(Message.Bump()).children([
           value.name,
           h.patched.team ? "*" : ""
-        )
+        ])
     })
   }
 })
@@ -441,11 +441,11 @@ const List = Component.define({
   view: (h) =>
     h.ul(
       h.queries.users.map(({ args, result, patched }) =>
-        h.li.key(args.id).children(
+        h.li.key(args.id).children([
           AsyncResult.isSuccess(result)
             ? result.value.name + (patched ? "*" : "")
             : "…"
-        )
+        ])
       )
     )
 })
@@ -670,7 +670,7 @@ const Chat = Component.define({
       Option.Option<Omit<Component.InfiniteData<typeof ListMessages>, "more">>
     >()
     expect(h.patched.messages).type.toBe<boolean>()
-    return h.p("")
+    return h.p([""])
   }
 })
 
@@ -718,7 +718,7 @@ describe("List queries", () => {
           // @ts-expect-error Argument of type '"user"' is not assignable to parameter of type '"messages"'
           Refresh: () => $.reset("user")
         }),
-      view: (h) => h.p("")
+      view: (h) => h.p([""])
     })
     Component.define({
       name: "Reset",

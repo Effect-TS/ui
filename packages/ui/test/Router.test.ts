@@ -199,7 +199,7 @@ describe("Router", { concurrent: false }, () => {
         subscriptions: (
           { model }
         ) => [Router.subscription(routes, model.route, map)],
-        view: (h, model) => h.el("p", model.route._tag)
+        view: (h, model) => h.el("p", [model.route._tag])
       })
     const Broken = subscriber("Broken", () => {
       throw new Error("bad mapper")
@@ -255,7 +255,7 @@ describe("Router", { concurrent: false }, () => {
           })]
           : [],
       head: ({ model }) => [Head.title(model.route._tag)],
-      view: (h, model) => h.el("p", model.route._tag)
+      view: (h, model) => h.el("p", [model.route._tag])
     })
     return Effect.gen(function*() {
       const root = yield* TestHost.mount(Root, Router.props(routes))
@@ -924,7 +924,7 @@ describe("Router.patchSearch", { concurrent: false }, () => {
       PageMessage.match(message, {
         Write: ({ label }) =>
           $.run(
-            ...writes[label]!.map(([patch, options]) =>
+            writes[label]!.map(([patch, options]) =>
               Router.patchSearch(Routes, $.props.route, patch, options).pipe(
                 Command.map((outcome) => PageMessage.Outcome({ outcome }))
               )
@@ -940,17 +940,21 @@ describe("Router.patchSearch", { concurrent: false }, () => {
     view: (h, model) =>
       h.el(
         "div",
-        h.el(
-          "p",
-          `q=${h.props.route.search.q ?? ""} page=${h.props.route.search.page};`
-        ),
-        h.el("p", `outcomes ${model.outcomes.join(",")};`),
-        ...Object.keys(writes).map((label) =>
-          h.el("button").on("click", PageMessage.Write({ label })).children(
-            label
-          )
-        ),
-        h.el("button").on("click", PageMessage.Dirty()).children("dirty")
+        [
+          h.el(
+            "p",
+            [`q=${
+              h.props.route.search.q ?? ""
+            } page=${h.props.route.search.page};`]
+          ),
+          h.el("p", [`outcomes ${model.outcomes.join(",")};`]),
+          ...Object.keys(writes).map((label) =>
+            h.el("button").on("click", PageMessage.Write({ label })).children([
+              label
+            ])
+          ),
+          h.el("button").on("click", PageMessage.Dirty()).children(["dirty"])
+        ]
       )
   })
   const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes } })
@@ -975,9 +979,9 @@ describe("Router.patchSearch", { concurrent: false }, () => {
         Routes.match(model.route, {
           Search: (route) =>
             SearchPage(h, { key: key(route), props: { route } }),
-          Home: () => h.el("h1", "Home"),
-          Item: () => h.el("h1", "Item"),
-          NotFound: () => h.el("h1", "Not found")
+          Home: () => h.el("h1", ["Home"]),
+          Item: () => h.el("h1", ["Item"]),
+          NotFound: () => h.el("h1", ["Not found"])
         })
     })
   const App = makeApp((route) => SearchOnly.printPath(route))
@@ -1484,7 +1488,7 @@ describe("Router.prefetch", { concurrent: false }, () => {
             Router.prefetch(Routes.subset(["Home"]), { Home: () => [] }),
             Router.prefetch(Routes.subset(["Walk"]), { Walk: () => [] })
           ],
-          view: (h) => h.el("p", "Twice")
+          view: (h) => h.el("p", ["Twice"])
         })
         yield* TestHost.mount(Twice, {})
         const error = yield* Effect.flip(TestHost.settle)

@@ -56,7 +56,7 @@
  *     }),
  *     NotFound: Route.make("/*")
  *   },
- *   Route.redirect("/old/:id", (params) => ({ _tag: "Person", params: { id: Number(params.id) }, search: {} }))
+ *   [Route.redirect("/old/:id", (params) => ({ _tag: "Person", params: { id: Number(params.id) }, search: {} }))]
  * )
  *
  * Option.getOrThrow(AppRoute.parse("/people/1?tab=posts")).search // => { tab: "posts" }
@@ -956,5 +956,5 @@ export const union = <const Routes extends Record<string, Any>>(
     & {
       readonly [K in keyof Routes]: K extends Union.ReservedTag ? never : Any
     },
-  ...redirects: ReadonlyArray<Redirect>
+  redirects: ReadonlyArray<Redirect> = []
 ): Union<Routes> => build(routes, redirects, { value: "" })

@@ -36,7 +36,7 @@
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,
- *   view: (_, h) => h.h1("Hello")
+ *   view: (_, h) => h.h1(["Hello"])
  * })
  *
  * const Main = BrowserHost.mount(App, {}, document.getElementById("app")!).pipe(

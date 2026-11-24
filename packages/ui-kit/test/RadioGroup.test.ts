@@ -26,14 +26,14 @@ const standIn = {
   elements: Html,
   view: (radioGroup: Parts, h: H) =>
     radioGroup.root(h.div).children(
-      ...items.map(({ value }) =>
+      items.map(({ value }) =>
         radioGroup.radio({ element: h.button.attr("aria-label", value), value })
-          .children(
+          .children([
             radioGroup.indicator({
               element: h.span.attr("data-dot", value),
               value
             })
-          )
+          ])
       )
     )
 }
@@ -130,7 +130,10 @@ describe("RadioGroup", () => {
       assert.deepStrictEqual(s.current.emitted, [])
       assert.strictEqual(s.get(radio("tape")).attrs?.tabindex, "0")
 
-      s.fire(radio("nvme"), "click").emitted({ _tag: "Picked", value: "nvme" })
+      s.fire(radio("nvme"), "click").emitted([{
+        _tag: "Picked",
+        value: "nvme"
+      }])
       assert.strictEqual(s.get(radio("nvme")).attrs?.["aria-checked"], "false")
 
       s.props({
@@ -163,7 +166,7 @@ describe("RadioGroup", () => {
 
       s.fire(radio("ssd"), "keydown", { key: "ArrowDown" })
         .expectDefaultPrevented()
-        .emitted({ _tag: "Picked", value: "nvme" })
+        .emitted([{ _tag: "Picked", value: "nvme" }])
       expectFocus(s, "nvme")
 
       s.fire(radio("nvme"), "keydown", { key: "ArrowRight" })
@@ -213,7 +216,7 @@ describe("RadioGroup", () => {
       s.shared(DirectionProvider, { direction: "rtl" })
       s.fire(radio("ssd"), "keydown", { key: "ArrowLeft" })
         .expectDefaultPrevented()
-        .emitted({ _tag: "Picked", value: "nvme" })
+        .emitted([{ _tag: "Picked", value: "nvme" }])
       expectFocus(s, "nvme")
     }))
 
@@ -255,7 +258,7 @@ describe("RadioGroup", () => {
       View.build(
         group.root(
           h.div
-            .class("group")
+            .class(["group"])
             .attrs({
               "aria-label": "Storage",
               role: "group",
@@ -277,7 +280,7 @@ describe("RadioGroup", () => {
       View.build(
         group.radio({
           element: h.button
-            .class("radio")
+            .class(["radio"])
             .attrs({
               type: "submit",
               role: "checkbox",
@@ -350,8 +353,8 @@ describe("RadioGroup", () => {
           Field(viewH, {
             props: { invalid: true },
             view: (field) =>
-              field.root(viewH.div).children(
-                field.legend(viewH.div).children("Storage"),
+              field.root(viewH.div).children([
+                field.legend(viewH.div).children(["Storage"]),
                 RadioGroup(viewH, {
                   props: {
                     value: null,
@@ -361,16 +364,16 @@ describe("RadioGroup", () => {
                   },
                   onEmit: { Picked: () => undefined },
                   view: (radioGroup) =>
-                    radioGroup.root(field.group(viewH.div)).children(
+                    radioGroup.root(field.group(viewH.div)).children([
                       radioGroup.radio({
                         element: field.member(
                           viewH.button.attr("aria-label", "ssd")
                         ),
                         value: "ssd"
                       })
-                    )
+                    ])
                 })
-              )
+              ])
           })
       })
 

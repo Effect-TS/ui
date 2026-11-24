@@ -386,7 +386,7 @@ const groupsOf = (items: ReadonlyArray<Item>): ReadonlyArray<Group> => {
 const focus = <E>(
   step: Step<E>,
   ref: typeof Input | typeof Trigger | typeof Chip
-): Step<E> => step.run(HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop))
+): Step<E> => step.run([HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop)])
 
 const picked = <E>(
   step: Step<E>,
@@ -396,7 +396,7 @@ const picked = <E>(
 ): Step<E> =>
   props.emits.picked === undefined
     ? step
-    : step.emit(props.emits.picked(value, reason))
+    : step.emit([props.emits.picked(value, reason)])
 
 const rewrite = <E>(
   step: Step<E>,
@@ -406,7 +406,7 @@ const rewrite = <E>(
 ): Step<E> =>
   props.inputValue === inputValue
     ? step
-    : step.emit(props.emits.edited(inputValue, reason))
+    : step.emit([props.emits.edited(inputValue, reason)])
 
 const highlight = <E>(
   step: Step<E>,
@@ -432,13 +432,13 @@ const highlight = <E>(
     completion
   })
   const after = highlightedOf(next.model, props, shown)
-  return before === after ? next : next.emit(
+  return before === after ? next : next.emit([
     props.emits.highlighted(
       after,
       after === null ? -1 : shown.findIndex((item) => item.value === after),
       reason
     )
-  )
+  ])
 }
 
 const unhighlight = <E>(
@@ -488,7 +488,7 @@ const open = <E>(
     typed: "",
     pressing: reason === "trigger-press" && props.inputInPopup === true &&
       (method === "mouse" || method === "pen")
-  }).emit(props.emits.requestedOpen(reason))
+  }).emit([props.emits.requestedOpen(reason)])
   const opened = { ...props, open: true, inputValue }
   const shown = shownOf(next.model, opened, true)
   let target: string | null = null
@@ -545,7 +545,7 @@ const dismiss = <E>(
     pressing: false,
     completion: null
   })
-    .emit(props.emits.requestedClose(reason))
+    .emit([props.emits.requestedClose(reason)])
 }
 
 const toggle = <E>(
@@ -589,11 +589,11 @@ const pick = <E>(
     method
   )
   return props.submitOnItemClick === true
-    ? closed.run(
+    ? closed.run([
       HtmlCommand.RequestSubmit.make({
         ref: props.inputInPopup === true ? Trigger : Input
       }).pipe(Command.asNoop)
-    )
+    ])
     : closed
 }
 
@@ -673,7 +673,7 @@ const edit = <E>(
       : next
   }
   const typed = inputType !== "" && inputType !== "insertReplacementText"
-  next = next.emit(props.emits.edited(value, "input-change"))
+  next = next.emit([props.emits.edited(value, "input-change")])
   if (typed) {
     if (query !== "") next = next.evolve({ queryChanged: true })
     if (props.open) next = next.evolve({ closeQuery: null })
@@ -1229,7 +1229,7 @@ export const make = <P, E>(
         props.items.findIndex((item) => values.includes(item.value))
       )
       const item = props.items[index]
-      const typed = $.evolve(next).run(WaitBeforeResetTyping.make({}))
+      const typed = $.evolve(next).run([WaitBeforeResetTyping.make({})])
       return item === undefined || values.includes(item.value)
         ? typed
         : picked(typed, props, item.value, "none")
@@ -1290,7 +1290,7 @@ export const make = <P, E>(
     FinishedTransition: ($, { open }) => {
       const props = s($)
       if (open !== props.open) return $.model
-      if (open) return $.emit(props.emits.settled(open))
+      if (open) return $.emit([props.emits.settled(open)])
       if (!$.model.mounted || props.holdExit === true) return $.model
       const rest = props.inputInPopup === true ? "" : selectedLabelOf(props)
       const closed = unhighlight($, props, "none").evolve({
@@ -1304,7 +1304,7 @@ export const make = <P, E>(
       const settled = selectableOf(props)
         ? rewrite(closed, props, rest, rest === "" ? "input-clear" : "none")
         : closed
-      return settled.emit(props.emits.settled(open))
+      return settled.emit([props.emits.settled(open)])
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
     PressedOutside: ($, { pointerType }) =>
@@ -1579,7 +1579,7 @@ export const make = <P, E>(
           : node
         return inPopup || inputs.length === 0
           ? named
-          : inputsBox.children(named, ...inputs)
+          : inputsBox.children([named, ...inputs])
       })
     })
 
@@ -1638,7 +1638,7 @@ export const make = <P, E>(
           })
           return inputs.length === 0
             ? named
-            : inputsBox.children(named, ...inputs)
+            : inputsBox.children([named, ...inputs])
         })
     })
 
@@ -1751,7 +1751,7 @@ export const make = <P, E>(
             withStyle(node.elementAttrs.style, positionerStyle)
           )
           return dismissable
-            ? styled.children(
+            ? styled.children([
               dismissPart(
                 new Html.Element<
                   never,
@@ -1761,11 +1761,11 @@ export const make = <P, E>(
                   "span"
                 >("span")
               )
-            )
+            ])
             : styled
         })
       const layered = modal
-        ? decorated.children(open ? blocking.open : blocking.closed)
+        ? decorated.children([open ? blocking.open : blocking.closed])
         : decorated
       if (!shown) return layered
       return layered.onMount(

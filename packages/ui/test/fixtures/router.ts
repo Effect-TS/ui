@@ -24,14 +24,14 @@ export const AppRoute = Route.union(
     Slow: Route.make("/slow"),
     NotFound: Route.make("/*")
   },
-  Route.redirect(
+  [Route.redirect(
     "/old/:id",
     (params) => ({
       _tag: "Person",
       params: { id: Number(params.id) },
       search: {}
     })
-  )
+  )]
 )
 export type AppRoute = typeof AppRoute.Type
 
@@ -51,7 +51,7 @@ export const Home = Component.define({
     Head.title("Home"),
     HtmlHead.meta({ name: "description", content: "The home page" })
   ],
-  view: (h) => h.el("h1", "Home")
+  view: (h) => h.el("h1", ["Home"])
 })
 
 /**
@@ -127,18 +127,18 @@ export const Person = Component.define({
   }
 }).make({
   init: ($) =>
-    $.set({ id: $.props.id, name: "Loading", count: 0, visits: 0 }).run(
+    $.set({ id: $.props.id, name: "Loading", count: 0, visits: 0 }).run([
       CountVisit.make()
-    ),
+    ]),
   update: ($, message) =>
     PersonMessage.match(message, {
       Loaded: ({ name }) => ({ ...$.model, name }),
       Rename: () =>
-        $.run(
+        $.run([
           RenamePerson.make({ id: $.model.id }).pipe(
             Command.map(() => PersonMessage.Renamed())
           )
-        ),
+        ]),
       Renamed: () => $.model,
       Visited: () => ({ ...$.model, visits: $.model.visits + 1 }),
       Bump: () => ({ ...$.model, count: $.model.count + 1 })
@@ -152,12 +152,14 @@ export const Person = Component.define({
   view: (h, model) =>
     h.el(
       "div",
-      h.el("h1", model.name),
-      h.queries.person.waiting ? h.el("p", "Refreshing") : null,
-      h.el("button").on("click", PersonMessage.Bump()).children(
-        `count ${model.count}`
-      ),
-      h.el("button").on("click", PersonMessage.Rename()).children("Rename")
+      [
+        h.el("h1", [model.name]),
+        h.queries.person.waiting ? h.el("p", ["Refreshing"]) : null,
+        h.el("button").on("click", PersonMessage.Bump()).children([
+          `count ${model.count}`
+        ]),
+        h.el("button").on("click", PersonMessage.Rename()).children(["Rename"])
+      ]
     )
 }).pipe(Component.provide(Layer.merge(GetPerson.layer, RenamePerson.layer)))
 
@@ -176,7 +178,7 @@ export const Slow = Component.define({
   init: () => ({}),
   update: ($) => $.model,
   head: () => [Head.title("Slow")],
-  view: (h) => h.el("h1", "Slow")
+  view: (h) => h.el("h1", ["Slow"])
 }).pipe(
   Component.provide(
     Layer.effect(
@@ -217,8 +219,8 @@ export const App = Component.define({
     AppMessage.match(message, {
       ChangedRoute: ({ route }) => ({ ...$.model, route }),
       Go: ({ route }) =>
-        $.run(Router.push(AppRoute, route).pipe(Command.map(navigated))),
-      Back: () => $.run(Router.Back.make().pipe(Command.map(navigated))),
+        $.run([Router.push(AppRoute, route).pipe(Command.map(navigated))]),
+      Back: () => $.run([Router.Back.make().pipe(Command.map(navigated))]),
       Block: () => ({ ...$.model, blocked: true }),
       Unblock: () => ({ ...$.model, blocked: false }),
       Navigated: ({ outcome }) => ({
@@ -240,29 +242,35 @@ export const App = Component.define({
   ],
   view: (h, model) => {
     const go = (label: string, route: AppRoute) =>
-      h.el("button").on("click", AppMessage.Go({ route })).children(label)
+      h.el("button").on("click", AppMessage.Go({ route })).children([label])
     return h.el(
       "div",
-      h.el(
-        "nav",
-        go("Home", AppRoute.Home()),
-        go("Person 1", AppRoute.Person({ params: { id: 1 } })),
-        go("Person 2", AppRoute.Person({ params: { id: 2 } })),
-        go("Slow", AppRoute.Slow()),
-        h.el("button").on("click", AppMessage.Back()).children("Back"),
-        h.el("button").on("click", AppMessage.Block()).children("Block"),
-        h.el("button").on("click", AppMessage.Unblock()).children("Unblock")
-      ),
-      AppRoute.match(model.route, {
-        Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),
-        Person: (route) =>
-          Person(h, {
-            key: AppRoute.print(route),
-            props: { id: route.params.id }
-          }),
-        Slow: (route) => Slow(h, { key: AppRoute.print(route), props: {} }),
-        NotFound: () => h.el("h1", "Not found")
-      })
+      [
+        h.el(
+          "nav",
+          [
+            go("Home", AppRoute.Home()),
+            go("Person 1", AppRoute.Person({ params: { id: 1 } })),
+            go("Person 2", AppRoute.Person({ params: { id: 2 } })),
+            go("Slow", AppRoute.Slow()),
+            h.el("button").on("click", AppMessage.Back()).children(["Back"]),
+            h.el("button").on("click", AppMessage.Block()).children(["Block"]),
+            h.el("button").on("click", AppMessage.Unblock()).children([
+              "Unblock"
+            ])
+          ]
+        ),
+        AppRoute.match(model.route, {
+          Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),
+          Person: (route) =>
+            Person(h, {
+              key: AppRoute.print(route),
+              props: { id: route.params.id }
+            }),
+          Slow: (route) => Slow(h, { key: AppRoute.print(route), props: {} }),
+          NotFound: () => h.el("h1", ["Not found"])
+        })
+      ]
     )
   }
 })

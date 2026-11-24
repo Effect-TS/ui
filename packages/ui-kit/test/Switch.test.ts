@@ -35,18 +35,20 @@ const Settings = Component.define({
     ClickedRow: ($) => ({ ...$.model, rowClicks: $.model.rowClicks + 1 })
   },
   view: (h, model) =>
-    h.div.onClick(SettingsMessage.ClickedRow()).children(
+    h.div.onClick(SettingsMessage.ClickedRow()).children([
       Switch(h, {
         props: { checked: model.notify, ...h.props },
         onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
         view: (parts) =>
-          h.label(
-            parts.root(h.button).children(parts.thumb(h.span.class("thumb"))),
+          h.label([
+            parts.root(h.button).children([
+              parts.thumb(h.span.class(["thumb"]))
+            ]),
             "Notifications"
-          )
+          ])
       }),
-      h.output(String(model.rowClicks))
-    )
+      h.output([String(model.rowClicks)])
+    ])
 })
 
 const root = Locator.attr("role", "switch")
@@ -66,7 +68,7 @@ const rootOf = (
   View.build(
     Switch(h, {
       props,
-      view: (parts) => chain(parts.root(element)).children("label")
+      view: (parts) => chain(parts.root(element)).children(["label"])
     }),
     []
   )
@@ -118,7 +120,7 @@ describe("Switch", () => {
 
   it("the root keeps the consumer's attributes, but the switch's own win, present or absent", () => {
     const element = h.button
-      .class("switch")
+      .class(["switch"])
       .attrs({
         "aria-label": "Mute",
         type: "submit",
@@ -167,7 +169,7 @@ describe("Switch", () => {
   })
 
   it("the thumb drops a state the switch doesn't have, and its result is another call's element", () => {
-    const element = h.span.class("thumb")
+    const element = h.span.class(["thumb"])
       .attrs({
         "data-checked": "",
         "data-disabled": "",
@@ -178,7 +180,7 @@ describe("Switch", () => {
       View.build(
         Switch(h, {
           props: { checked },
-          view: (parts) => parts.thumb(span).children("on")
+          view: (parts) => parts.thumb(span).children(["on"])
         }),
         []
       )

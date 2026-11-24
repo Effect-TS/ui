@@ -29,7 +29,7 @@ describe("@effect/ui/html/register", () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("Hello")
+        view: (h) => h.p(["Hello"])
       })
       const rendered = yield* HtmlServer.renderToHtml(Greeting, {})
       assert.include(rendered.html, "<p>Hello</p>")

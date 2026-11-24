@@ -26,29 +26,33 @@ const fruits: ReadonlyArray<AutocompleteItem> = [
 const standIn = {
   elements: Html,
   view: (autocomplete: Parts, h: H) =>
-    h.div(
-      autocomplete.inputGroup(h.div.class("group")).children(
-        autocomplete.input(h.input.class("input")),
-        autocomplete.clear({ element: h.button.class("clear") })?.children("×"),
-        autocomplete.trigger(h.button.class("trigger")).children(
-          autocomplete.icon(h.span.class("icon")).children("▾")
-        )
-      ),
-      autocomplete.value(h.span.class("value")),
-      autocomplete.positioner(h.div.class("positioner")).children(
-        autocomplete.popup(h.div.class("popup")).children(
-          autocomplete.empty(h.div.class("empty")).children("No fruit found"),
-          autocomplete.list(h.div.class("list")).children(
-            ...autocomplete.items.map(({ label, value }) =>
+    h.div([
+      autocomplete.inputGroup(h.div.class(["group"])).children([
+        autocomplete.input(h.input.class(["input"])),
+        autocomplete.clear({ element: h.button.class(["clear"]) })?.children([
+          "×"
+        ]),
+        autocomplete.trigger(h.button.class(["trigger"])).children([
+          autocomplete.icon(h.span.class(["icon"])).children(["▾"])
+        ])
+      ]),
+      autocomplete.value(h.span.class(["value"])),
+      autocomplete.positioner(h.div.class(["positioner"])).children([
+        autocomplete.popup(h.div.class(["popup"])).children([
+          autocomplete.empty(h.div.class(["empty"])).children([
+            "No fruit found"
+          ]),
+          autocomplete.list(h.div.class(["list"])).children(
+            autocomplete.items.map(({ label, value }) =>
               autocomplete.item({
                 element: h.div.attr("data-testid", value),
                 value
-              }).children(label)
+              }).children([label])
             )
           )
-        )
-      )
-    )
+        ])
+      ])
+    ])
 }
 
 const input = Locator.attr("class", "input")
@@ -155,9 +159,9 @@ describe("Autocomplete", () => {
         "Ban"
       )
       assert.deepInclude(s.get(clearButton).attrs, { "data-visible": "" })
-      s.fire(clearButton, "click", pointer("mouse")).emitted(
+      s.fire(clearButton, "click", pointer("mouse")).emitted([
         updated("", "clear-press")
-      )
+      ])
       s.resolve(HtmlCommand.Focus, { found: true })
       s.props({ ...base, name: "q" })
       assert.isUndefined(s.query(clearButton))
@@ -167,63 +171,63 @@ describe("Autocomplete", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Autocomplete, base, standIn)
       s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
-      s.fire(input, "input", typed("ap")).emitted(
+      s.fire(input, "input", typed("ap")).emitted([
         updated("ap"),
         opened("input-change")
-      )
+      ])
       s.props({ ...base, open: true, value: "ap" }).mounted(
         tracked(s),
         sent("ShowedPopup")
       )
       assert.deepStrictEqual(values(s), ["apple", "apricot", "grape"])
-      s.fire(input, "input", typed("")).emitted(
+      s.fire(input, "input", typed("")).emitted([
         updated(""),
         dismissed("input-clear")
-      )
+      ])
       s.props({ ...base, openOnInputClick: true })
-      s.fire(input, "mousedown", pointer("mouse")).emitted(
+      s.fire(input, "mousedown", pointer("mouse")).emitted([
         opened("input-press")
-      )
+      ])
     }))
 
   it.effect("arrow keys open without a highlight, picking puts the label in the input, and submitOnItemClick submits", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Autocomplete, base, standIn)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         opened("list-navigation")
-      ).expectDefaultPrevented()
+      ]).expectDefaultPrevented()
       s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
       assert.isNull(partsOf(s).highlighted)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      ])
+      s.fire(input, "keydown", key("Enter")).emitted([
         updated("Apple", "item-press"),
         dismissed("item-press")
-      )
+      ])
         .expectDefaultPrevented()
         .expectNone()
       s.props({ ...base, value: "Apple" })
       s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-        .emitted(
+        .emitted([
           highlighted(null, -1, "none"),
           settled(false)
-        )
+        ])
       assert.strictEqual(shownText(s), "Apple")
       s.props({ ...base, autoHighlight: true })
-      s.fire(input, "keydown", key("ArrowUp")).emitted(
+      s.fire(input, "keydown", key("ArrowUp")).emitted([
         opened("list-navigation"),
         highlighted("grape", 4)
-      )
+      ])
       const props = { ...base, open: true, value: "ap", name: "q" }
       s.props(props).mounted(tracked(s), sent("ShowedPopup"))
       s.fire(item("apricot"), "click", pointer("mouse"))
-        .emitted(updated("Apricot", "item-press"), dismissed("item-press"))
+        .emitted([updated("Apricot", "item-press"), dismissed("item-press")])
         .expectNone()
       s.props({ ...props, submitOnItemClick: true })
       s.fire(item("grape"), "click", pointer("mouse"))
-        .emitted(updated("Grape", "item-press"), dismissed("item-press"))
-        .expectExact(HtmlCommand.RequestSubmit)
+        .emitted([updated("Grape", "item-press"), dismissed("item-press")])
+        .expectExact([HtmlCommand.RequestSubmit])
       s.resolve(HtmlCommand.RequestSubmit, { found: true, submitted: true })
     }))
 
@@ -236,38 +240,38 @@ describe("Autocomplete", () => {
         s.get(input).attrs?.["aria-activedescendant"],
         s.get(item("apple")).attrs?.id
       )
-      s.fire(input, "input", typed("gr")).emitted(updated("gr"))
+      s.fire(input, "input", typed("gr")).emitted([updated("gr")])
       s.props({ ...always, value: "gr" })
       assert.strictEqual(partsOf(s).highlighted, "grape")
       s.fire(input, "keydown", key("ArrowDown")).expectDefaultPrevented()
       assert.strictEqual(partsOf(s).highlighted, "grape")
       const both = { ...always, open: false, mode: "both" as const }
       s.props(both)
-      s.fire(input, "input", typed("ap")).emitted(
+      s.fire(input, "input", typed("ap")).emitted([
         updated("ap"),
         opened("input-change"),
         highlighted("apple", 0)
-      )
+      ])
       s.props({ ...both, open: true, value: "ap" })
       assert.strictEqual(partsOf(s).highlighted, "apple")
       assert.strictEqual(shownText(s), "ap")
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apricot", 1)
-      )
+      ])
       assert.strictEqual(shownText(s), "Apricot")
       s.props({ ...both, value: "ap" })
       assert.strictEqual(shownText(s), "ap")
       s.props({ ...base, open: true })
-      s.fire(item("banana"), "mouseenter").emitted(
+      s.fire(item("banana"), "mouseenter").emitted([
         highlighted("banana", 2, "pointer")
-      )
-      s.fire(item("banana"), "mouseleave").emitted(
+      ])
+      s.fire(item("banana"), "mouseleave").emitted([
         highlighted(null, -1, "pointer")
-      )
+      ])
       s.props({ ...base, open: true, keepHighlight: true })
-      s.fire(item("grape"), "mouseenter").emitted(
+      s.fire(item("grape"), "mouseenter").emitted([
         highlighted("grape", 4, "pointer")
-      )
+      ])
       s.fire(item("grape"), "mouseleave")
       assert.strictEqual(partsOf(s).highlighted, "grape")
     }))
@@ -277,48 +281,48 @@ describe("Autocomplete", () => {
       const props = { ...base, open: true, value: "ap", mode: "both" as const }
       const s = yield* shown(props)
       assert.strictEqual(s.get(input).attrs?.["aria-autocomplete"], "both")
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
+      ])
       assert.strictEqual(shownText(s), "Apple")
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apricot", 1)
-      )
+      ])
       assert.strictEqual(shownText(s), "Apricot")
       assert.deepStrictEqual(values(s), ["apple", "apricot", "grape"])
-      s.fire(item("grape"), "mouseenter").emitted(
+      s.fire(item("grape"), "mouseenter").emitted([
         highlighted("grape", 2, "pointer")
-      )
+      ])
       assert.strictEqual(shownText(s), "Apricot")
-      s.fire(input, "input", typed("Apricots")).emitted(
+      s.fire(input, "input", typed("Apricots")).emitted([
         updated("Apricots"),
         highlighted(null, -1, "none")
-      )
+      ])
       s.props({ ...props, value: "Apricots" })
       assert.strictEqual(shownText(s), "Apricots")
       s.props(props)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apple", 0)
-      )
+      ])
       assert.strictEqual(shownText(s), "Apple")
-      s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
+      s.fire(input, "keydown", key("Escape")).emitted([dismissed("escape-key")])
       assert.strictEqual(shownText(s), "ap")
       const inline = { ...props, mode: "inline" as const }
       s.props(inline)
       assert.strictEqual(s.get(input).attrs?.["aria-autocomplete"], "inline")
       assert.strictEqual(values(s).length, 5)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("apricot", 1)
-      )
+      ])
       assert.strictEqual(shownText(s), "Apricot")
       s.props({ ...inline, readOnly: true })
       assert.strictEqual(s.get(input).attrs?.["aria-autocomplete"], "none")
       assert.strictEqual(shownText(s), "ap")
       s.props({ ...inline, mode: "none" })
       assert.strictEqual(values(s).length, 5)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("banana", 2)
-      )
+      ])
       assert.strictEqual(shownText(s), "ap")
     }))
 
@@ -334,13 +338,13 @@ describe("Autocomplete", () => {
         inputInPopup: true
       }
       const s = yield* shown(props)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      s.fire(input, "keydown", key("ArrowDown")).emitted([
         highlighted("banana", 0)
-      )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      ])
+      s.fire(input, "keydown", key("Enter")).emitted([
         updated("Banana", "item-press"),
         dismissed("item-press")
-      )
+      ])
       s.props({ ...props, open: false, value: "Banana" })
       assert.strictEqual(
         Locator.textOf(s.get(Locator.attr("class", "value"))),

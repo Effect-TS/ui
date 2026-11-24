@@ -21,7 +21,7 @@
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
- *   view: (h) => h.p("Hello")
+ *   view: (h) => h.p(["Hello"])
  * })
  * ```
  *

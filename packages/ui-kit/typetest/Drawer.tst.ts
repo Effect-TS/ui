@@ -114,7 +114,7 @@ describe("Drawer", () => {
           element: h.div,
           swipeDirection: "sideways"
         })
-        return h.div(drawer.portal(h.dialog)?.children(drawer.popup(h.div)))
+        return h.div([drawer.portal(h.dialog)?.children([drawer.popup(h.div)])])
       }
     })
   })
@@ -131,10 +131,10 @@ describe("DrawerProvider", () => {
         expect(drawerProvider.indentBackground).type.not.toBeCallableWith(
           h.span
         )
-        return h.div(
+        return h.div([
           drawerProvider.indentBackground(h.div),
           drawerProvider.indent(h.div)
-        )
+        ])
       }
     })
   })

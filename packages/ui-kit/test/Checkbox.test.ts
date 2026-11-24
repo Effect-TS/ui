@@ -14,10 +14,10 @@ const standIn = {
     checkbox: Component.Headless.Parts<typeof Checkbox>,
     h: View.Helper<never, CheckboxProps> & View.Tags<Html.Elements, never>
   ) =>
-    h.label(
-      checkbox.root(h.button).children(checkbox.indicator(h.span)),
+    h.label([
+      checkbox.root(h.button).children([checkbox.indicator(h.span)]),
       "Accept the terms"
-    )
+    ])
 }
 
 const root = Locator.attr("role", "checkbox")
@@ -32,7 +32,7 @@ describe("Checkbox", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Checkbox, { checked: false }, standIn)
       s.fire(root, "click")
-        .emitted({ _tag: "Toggled", checked: true })
+        .emitted([{ _tag: "Toggled", checked: true }])
       // Nothing changes until the consumer passes the new value back.
       assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
       s.props({ checked: true })
@@ -41,7 +41,7 @@ describe("Checkbox", () => {
       assert.strictEqual(s.get(indicator).attrs?.["data-checked"], "")
       assert.isUndefined(s.get(indicator).attrs?.["data-unchecked"])
       s.fire(root, "click")
-        .emitted({ _tag: "Toggled", checked: false })
+        .emitted([{ _tag: "Toggled", checked: false }])
     }))
 
   it.effect("an indeterminate checkbox is mixed, neither checked nor unchecked, and a click asks for the other value", () =>
@@ -57,7 +57,7 @@ describe("Checkbox", () => {
       assert.isUndefined(attrs?.["data-checked"])
       assert.isUndefined(attrs?.["data-unchecked"])
       s.fire(root, "click")
-        .emitted({ _tag: "Toggled", checked: false })
+        .emitted([{ _tag: "Toggled", checked: false }])
     }))
 
   it.effect("a disabled or read-only checkbox ignores clicks, and only a disabled one leaves the tab order", () =>
@@ -106,7 +106,7 @@ describe("Checkbox", () => {
 
   it("the root keeps the consumer's attributes, but the checkbox's own win, present or absent", () => {
     const element = h.button
-      .class("checkbox")
+      .class(["checkbox"])
       .attrs({
         "aria-label": "Terms",
         type: "submit",
@@ -138,7 +138,7 @@ describe("Checkbox", () => {
     )
     // The indicator drops a state the checkbox doesn't have.
     const indicator = parts({ checked: false }).indicator(
-      h.span.class("tick")
+      h.span.class(["tick"])
         .attrs({
           "data-checked": "",
           "data-indeterminate": "",
@@ -175,7 +175,7 @@ describe("Checkbox", () => {
   it("the root draws the form field before the children chained on it: value when ticked, and uncheckedValue or nothing when not", () => {
     const field = (props: CheckboxProps) => {
       const button = View.build(
-        parts(props).root(h.button).children("label"),
+        parts(props).root(h.button).children(["label"]),
         []
       )
       const first = button.children[0]!

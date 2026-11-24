@@ -104,8 +104,8 @@ describe("p.child", () => {
     Combo(h, {
       props: { items: [] },
       view: (combo) => {
-        expect(combo.trigger(h.button.class("btn"))).type.toBe<Button>()
-        return h.div(combo.popup(h.dialog), combo.badge(h.output))
+        expect(combo.trigger(h.button.class(["btn"]))).type.toBe<Button>()
+        return h.div([combo.popup(h.dialog), combo.badge(h.output)])
       }
     })
   })

@@ -117,18 +117,18 @@ export const Sky = Component.define({
     )
   ],
   view: (h, model) =>
-    h.div(
+    h.div([
       Canvas.view(h, {
         width: WIDTH,
         height: HEIGHT,
         pixelRatio: "auto",
         shapes: sceneOf(model.comets),
         onPointerDown: ({ x, y }) => SkyMessage.PressedSky({ x, y })
-      }).style({ width: "100%" }).children("A night sky with comets"),
-      h.button.onClick(SkyMessage.ClickedPause()).children(
+      }).style({ width: "100%" }).children(["A night sky with comets"]),
+      h.button.onClick(SkyMessage.ClickedPause()).children([
         model.running ? "Pause" : "Play"
-      )
-    )
+      ])
+    ])
 })
 
 // ---------------------------------------------------------------------------

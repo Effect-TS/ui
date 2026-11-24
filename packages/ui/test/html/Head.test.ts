@@ -5,7 +5,7 @@ import type * as runtime from "@effect/ui/internal/runtime"
 import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
-const head = (...entries: ReadonlyArray<HtmlHead.Entry>) =>
+const head = (entries: ReadonlyArray<HtmlHead.Entry>) =>
   HtmlHead.merge({ entries, children: [] })
 
 const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
@@ -113,7 +113,7 @@ describe("BrowserHost head", { concurrent: false }, () => {
         warn: (message) => warnings.push(message)
       })
       hosts.push(host)
-      host.head!(head(...entries))
+      host.head!(head(entries))
       const link = target.head.querySelector("link")!
       if (hydrate) expect(link).toBe(before)
       expect(link.getAttributeNames()).toEqual(["rel", "href", "data-eui"])
@@ -125,10 +125,10 @@ describe("BrowserHost head", { concurrent: false }, () => {
         expect(element.getAttribute("data-eui")).toBe("data-theme")
       }
       host.head!(
-        head(
+        head([
           HtmlHead.htmlData("data-THEME", "updated"),
           HtmlHead.bodyData("data-THEME", "updated")
-        )
+        ])
       )
       for (const element of [target.documentElement, target.body]) {
         expect(element.getAttribute("data-theme")).toBe("updated")
@@ -142,7 +142,7 @@ describe("BrowserHost head", { concurrent: false }, () => {
         )
         expect(element.hasAttribute("data-eui")).toBe(false)
       }
-      host.head!(head(...unsafeData))
+      host.head!(head(unsafeData))
       expect(target.documentElement.hasAttribute("data-eui")).toBe(false)
       expect(target.body.hasAttribute("data-eui")).toBe(false)
       expect(warnings).toEqual([])
@@ -168,7 +168,7 @@ describe("BrowserHost head", { concurrent: false }, () => {
       "<link rel=\"canonical\" href=\"/last\" data-eui><link rel=\"alternate\" href=\"/same\" hreflang=\"fr\" data-eui>"
     )
     const { apply } = sync()
-    apply(head(...entries))
+    apply(head(entries))
     expect([...document.head.querySelectorAll("link")].map((link) => [
       link.getAttribute("rel"),
       link.getAttribute("href"),
@@ -187,7 +187,7 @@ describe("BrowserHost head", { concurrent: false }, () => {
     )
     expect(rendered.bodyAttributes).toBe(rendered.htmlAttributes)
     const { apply } = sync()
-    apply(head(...entries))
+    apply(head(entries))
     for (const element of [document.documentElement, document.body]) {
       expect(element.getAttribute("data-a&copy;")).toBe("amp")
       expect(element.getAttribute("data-eui")).toBe("data-a&copy;")
@@ -209,14 +209,17 @@ describe("BrowserHost head", { concurrent: false }, () => {
       HtmlHead.meta({ name: "description", content: "About Ada" }),
       HtmlHead.jsonLd({ name: "Ada" })
     ]
-    apply(head(...entries))
+    apply(head(entries))
     expect(document.head.querySelector("meta")).toBe(meta)
     expect(document.head.querySelector("script")).toBe(script)
     expect(document.head.children.length).toBe(3)
 
     // A JSON-LD block is rewritten only when its canonical form changes.
     apply(
-      head(...entries.slice(0, 2), HtmlHead.jsonLd({ name: "Ada", born: 1815 }))
+      head([
+        ...entries.slice(0, 2),
+        HtmlHead.jsonLd({ name: "Ada", born: 1815 })
+      ])
     )
     expect(document.head.querySelector("script")).not.toBe(script)
     expect(document.head.querySelector("script")!.textContent).toBe(
@@ -231,13 +234,13 @@ describe("BrowserHost head", { concurrent: false }, () => {
     document.body.setAttribute("data-theme", "light")
     document.body.className = "shell dark"
     const { apply } = sync()
-    apply(head(
+    apply(head([
       Head.title("App"),
       HtmlHead.lang("en"),
       HtmlHead.dir("rtl"),
       HtmlHead.bodyClass("dark app"),
       HtmlHead.bodyData("data-theme", "dark")
-    ))
+    ]))
     expect(document.title).toBe("App")
     expect(document.documentElement.getAttribute("lang")).toBe("en")
     expect(document.documentElement.getAttribute("data-eui")).toBe("lang dir")
@@ -261,18 +264,18 @@ describe("BrowserHost head", { concurrent: false }, () => {
     document.documentElement.setAttribute("lang", "fr")
     const first = BrowserHost.makeHost(document)
     first.head!(
-      head(
+      head([
         Head.title("First"),
         HtmlHead.lang("en"),
         HtmlHead.meta({ name: "description", content: "First" })
-      )
+      ])
     )
     first.dispose()
     expect(document.title).toBe("Shell")
     expect(document.documentElement.getAttribute("lang")).toBe("fr")
     expect(document.head.querySelector("meta")).toBeNull()
     const { apply } = sync()
-    apply(head(Head.title("Second")))
+    apply(head([Head.title("Second")]))
     expect(document.title).toBe("Second")
     apply(HtmlHead.empty)
     expect(document.title).toBe("Shell")
@@ -292,12 +295,12 @@ describe("BrowserHost head", { concurrent: false }, () => {
       `<script type="application/ld+json">{}</script>`
     document.documentElement.setAttribute("lang", "fr")
     const { apply, warnings } = sync()
-    apply(head(
+    apply(head([
       HtmlHead.meta({ name: "description", content: "App" }),
       HtmlHead.link({ rel: "canonical", href: "/app" }),
       HtmlHead.jsonLd({ a: 1 }),
       HtmlHead.lang("en")
-    ))
+    ]))
     expect(warnings.length).toBe(4)
     expect(document.head.querySelectorAll("meta").length).toBe(2)
     apply(HtmlHead.empty)
@@ -312,7 +315,7 @@ describe("BrowserHost head", { concurrent: false }, () => {
     document.documentElement.setAttribute("class", "h-full")
     document.documentElement.setAttribute("data-eui", "class")
     const { apply, warnings } = sync()
-    apply(head(HtmlHead.htmlClass("dark")))
+    apply(head([HtmlHead.htmlClass("dark")]))
     expect(warnings).toEqual([
       "Head: <html> is missing the class tokens dark the marker lists"
     ])
@@ -327,13 +330,13 @@ describe("BrowserHost head", { concurrent: false }, () => {
       [...document.head.querySelectorAll("link[data-eui]")].map((link) =>
         link.getAttribute("href")
       )
-    apply(head(sheet("a.css"), sheet("b.css")))
+    apply(head([sheet("a.css"), sheet("b.css")]))
     expect(hrefs()).toEqual(["a.css", "b.css"])
     const b = document.head.querySelector("link[href='b.css']")
-    apply(head(sheet("a2.css"), sheet("b.css")))
+    apply(head([sheet("a2.css"), sheet("b.css")]))
     expect(hrefs()).toEqual(["a2.css", "b.css"])
     expect(document.head.querySelector("link[href='b.css']")).toBe(b)
-    apply(head(sheet("b.css"), sheet("a2.css"), sheet("c.css")))
+    apply(head([sheet("b.css"), sheet("a2.css"), sheet("c.css")]))
     expect(hrefs()).toEqual(["b.css", "a2.css", "c.css"])
     expect(document.head.querySelector("link[href='b.css']")).toBe(b)
   })
@@ -341,7 +344,7 @@ describe("BrowserHost head", { concurrent: false }, () => {
   it("warns about a duplicated shell tag whose attribute value holds quotes", () => {
     document.head.innerHTML = `<meta name='say "hi"' content="Shell">`
     const { apply, warnings } = sync()
-    apply(head(HtmlHead.meta({ name: "say \"hi\"", content: "App" })))
+    apply(head([HtmlHead.meta({ name: "say \"hi\"", content: "App" })]))
     expect(warnings).toEqual([
       `Head: the shell has its own meta[name="say \\"hi\\""], which a head entry also sets`
     ])
@@ -369,7 +372,7 @@ const Titled = Component.define({
     Head.title(title),
     HtmlHead.meta({ name: "description", content: title })
   ],
-  view: (h, title) => h.p(title)
+  view: (h, title) => h.p([title])
 })
 
 const mountIn = Effect.fnUntraced(

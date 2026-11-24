@@ -144,7 +144,7 @@ describe("Story", () => {
     }).make({
       init: () => 0,
       update: ($) => $.model,
-      view: (h, model) => h.el("p", String(model))
+      view: (h, model) => h.el("p", [String(model)])
     })
     const steps = Story.start(Static, {})
     expect(steps).type.toBe<Story.Steps<typeof Static>>()
@@ -187,10 +187,10 @@ describe("Story", () => {
       args: { key: Schema.String },
       stream: true
     }, () => Stream.never)
-    expect(counter.expectExact).type.toBeCallableWith(
+    expect(counter.expectExact).type.toBeCallableWith([
       Hold.make({ key: "one" }),
       Watch.make({ key: "one" })
-    )
+    ])
     expect(counter.expectHas).type.toBeCallableWith(Hold.make({ key: "one" }))
     expect(counter.end).type.toBeCallableWith(Watch.make({ key: "one" }))
     expect(counter.end).type.not.toBeCallableWith(Hold.make({ key: "one" }))

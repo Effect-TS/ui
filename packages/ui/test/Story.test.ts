@@ -189,23 +189,25 @@ describe("Story", () => {
       view: (h, model) =>
         h.el(
           "div",
-          h.el("input").attr("data-testid", "name").on(
-            "input",
-            // The payload is unknown, so this goes through the checked `make`.
-            (payload: unknown) =>
-              Message.cases.Typed.make({
-                value: (payload as { readonly value: string }).value
-              })
-          ),
-          h.el("button").on("click", Message.Pressed()).children(
-            h.el("span", "Save")
-          ),
-          h.el("p", "Save draft"),
-          h.el("p", "plain"),
-          h.el("output").attr("data-testid", "value").children(model.value),
-          h.el("output").attr("data-testid", "presses").children(
-            String(model.presses)
-          )
+          [
+            h.el("input").attr("data-testid", "name").on(
+              "input",
+              // The payload is unknown, so this goes through the checked `make`.
+              (payload: unknown) =>
+                Message.cases.Typed.make({
+                  value: (payload as { readonly value: string }).value
+                })
+            ),
+            h.el("button").on("click", Message.Pressed()).children([
+              h.el("span", ["Save"])
+            ]),
+            h.el("p", ["Save draft"]),
+            h.el("p", ["plain"]),
+            h.el("output").attr("data-testid", "value").children([model.value]),
+            h.el("output").attr("data-testid", "presses").children([
+              String(model.presses)
+            ])
+          ]
         )
     })
 
@@ -259,22 +261,24 @@ describe("Story", () => {
           view: (h, sent) =>
             h.el(
               "div",
-              h.el("textarea").on(
-                "keydown",
-                (payload: unknown) =>
-                  (payload as { readonly key: string }).key === "Enter"
-                    ? Sent.Send()
-                    : undefined,
-                { preventDefault: true }
-              ),
-              h.el("form").on("submit", () => undefined).children(
-                h.el("button", "Ignored")
-              ),
-              h.el("form", h.el("button", "Unhandled")),
-              h.el("p").on("contextmenu", () => undefined, {
-                preventDefault: "always"
-              }).children("Menu"),
-              h.el("output", String(sent))
+              [
+                h.el("textarea").on(
+                  "keydown",
+                  (payload: unknown) =>
+                    (payload as { readonly key: string }).key === "Enter"
+                      ? Sent.Send()
+                      : undefined,
+                  { preventDefault: true }
+                ),
+                h.el("form").on("submit", () => undefined).children([
+                  h.el("button", ["Ignored"])
+                ]),
+                h.el("form", [h.el("button", ["Unhandled"])]),
+                h.el("p").on("contextmenu", () => undefined, {
+                  preventDefault: "always"
+                }).children(["Menu"]),
+                h.el("output", [String(sent)])
+              ]
             )
         })
         const keyDown = (key: string) => (s: Scene.Steps<typeof Composer>) =>
@@ -310,7 +314,7 @@ describe("Story", () => {
       Effect.gen(function*() {
         const s = yield* Scene.make(TodoItem, { todo })
         s.click("[ ]")
-          .emitted(TodoItemEvents.Toggled({ done: true }))
+          .emitted([TodoItemEvents.Toggled({ done: true })])
       }))
 
     it.effect("a props change re-renders without reaching update", () =>
@@ -326,7 +330,7 @@ describe("Story", () => {
         const s = yield* Scene.make(TodoItem, { todo })
         s.click("save")
           .expect(Locator.text("saving")).toExist()
-          .expectExact(SaveTodo.make(todo))
+          .expectExact([SaveTodo.make(todo)])
           .expectHas(SaveTodo)
         assert.deepStrictEqual(
           s.pending.map((
@@ -389,20 +393,20 @@ describe("Story", () => {
       update: ($, message) =>
         Msg.match(message, {
           Save: () =>
-            $.run(
+            $.run([
               Save.make({ title: "milk" }).pipe(Command.match({
                 onSuccess: () => Msg.Saved(),
                 onFailure: (error) => Msg.Failed({ reason: error.reason })
               }))
-            ),
+            ]),
           Saved: () => "saved",
           Failed: ({ reason }) => `failed: ${reason}`,
-          Stop: () => $.run(Command.interrupt(Save))
+          Stop: () => $.run([Command.interrupt(Save)])
         }),
       view: (h, model) =>
         h.el("div", [
-          h.el("button").on("click", Msg.Save()).children("save"),
-          h.el("button").on("click", Msg.Stop()).children("stop"),
+          h.el("button").on("click", Msg.Save()).children(["save"]),
+          h.el("button").on("click", Msg.Stop()).children(["stop"]),
           h.text(h.isRunning(Save) ? "saving" : model)
         ])
     })
@@ -498,7 +502,7 @@ describe("Story", () => {
         assert.deepStrictEqual(s.interrupted.map((command) => command.args), [{
           text: "a"
         }])
-        s.expectExact(Search.make({ text: "ab" }))
+        s.expectExact([Search.make({ text: "ab" })])
           .resolve(Search, SearchMessage.Results({ items: ["ab"] }))
         assert.deepStrictEqual(s.model.items, ["ab"])
       }))
@@ -551,11 +555,11 @@ describe("Story", () => {
       update: ($, message) =>
         Message.match(message, {
           Upload: () =>
-            $.run(
+            $.run([
               UploadFile.make({ name: "me.png" }).pipe(
                 Command.map((url) => Message.Uploaded({ url }))
               )
-            ),
+            ]),
           Uploaded: ({ url }) => ({ url })
         }),
       view: (h, model) => h.el("img").attr("src", model.url)
@@ -565,7 +569,7 @@ describe("Story", () => {
       Effect.gen(function*() {
         const s = yield* Story.make(Avatar, {})
         s.send(Message.Upload())
-          .expectExact(UploadFile.make({ name: "me.png" }))
+          .expectExact([UploadFile.make({ name: "me.png" })])
           .resolve(UploadFile, "https://cdn/me.png")
         assert.strictEqual(s.model.url, "https://cdn/me.png")
       }))
@@ -600,14 +604,14 @@ describe("Story", () => {
       update: ($, message) =>
         Message.match(message, {
           Go: () =>
-            $.run(
+            $.run([
               Router.push(AppRoute, AppRoute.About()).pipe(
                 Command.map((outcome) => Message.Navigated({ outcome }))
               )
-            ),
+            ]),
           Navigated: ({ outcome }) => ({ outcome })
         }),
-      view: (h, model) => h.el("p", model.outcome)
+      view: (h, model) => h.el("p", [model.outcome])
     })
 
     it.effect("a navigation Command stays pending until resolved, like any other", () =>
@@ -642,21 +646,21 @@ describe("Story", () => {
           update: ($, message) =>
             BoxMessage.match(message, {
               Typed: ({ value }) =>
-                $.run(
+                $.run([
                   Router.patchSearch(Routes, $.props.route, {
                     q: value || undefined
                   }).pipe(
                     Command.map((outcome) => BoxMessage.Patched({ outcome }))
                   )
-                ),
+                ]),
               Patched: ({ outcome }) => ({ outcome })
             }),
-          view: (h, model) => h.el("p", model.outcome)
+          view: (h, model) => h.el("p", [model.outcome])
         })
         const route = Routes.Search()
         const s = yield* Story.make(Box, { route })
         s.send(BoxMessage.Typed({ value: "ada" }))
-          .expectExact(Router.patchSearch(Routes, route, { q: "ada" }))
+          .expectExact([Router.patchSearch(Routes, route, { q: "ada" })])
           .resolve(Router.PatchSearch, "stale")
         assert.strictEqual(s.model.outcome, "stale")
       }))
@@ -673,7 +677,7 @@ describe("Story", () => {
       update: ($) => ({ n: $.model.n + 1 }),
       view: (h, model) => {
         if (model.n > 0) throw new Error(`view broke at ${model.n}`)
-        return h.el("button").on("click", Message.Bump()).children("bump")
+        return h.el("button").on("click", Message.Bump()).children(["bump"])
       }
     })
 
@@ -869,7 +873,7 @@ describe("Story", () => {
           String(model.changes)
         ].join(" ")
         renders.push(out)
-        return h.p(out)
+        return h.p([out])
       }
     })
     const user = (id: string, name: string, email = "") => ({
@@ -974,13 +978,13 @@ describe("Story", () => {
           init: () => ({ changes: 0 }),
           update: ($) => ({ changes: $.model.changes + 1 }),
           view: (h, model) =>
-            h.p(
+            h.p([
               `${
                 h.queries.friends.filter((entry) =>
                   AsyncResult.isSuccess(entry.result)
                 ).length
               } ${model.changes}`
-            )
+            ])
         })
         const s = yield* Scene.make(Pals, { id: "1" })
         s.given({ changes: 0 }, {
@@ -1027,7 +1031,7 @@ describe("Story", () => {
           init: () => ({ id: "1", changes: 0 }),
           update: ($) => ({ ...$.model, changes: $.model.changes + 1 }),
           view: (h, model) =>
-            h.p(
+            h.p([
               `${
                 h.queries.friends.map((entry) =>
                   AsyncResult.isSuccess(entry.result)
@@ -1038,7 +1042,7 @@ describe("Story", () => {
                     "+"
                   )
               } ${model.changes}`
-            )
+            ])
         })
         const s = yield* Scene.make(Circle, {})
         s.given({ id: "1", changes: 0 }, {
@@ -1089,7 +1093,7 @@ describe("Story", () => {
         init: () => null,
         update: ($, { at, kind }) =>
           kind === "emit"
-            ? $.emit({ token: Redacted.make("synthetic-event-secret"), at })
+            ? $.emit([{ token: Redacted.make("synthetic-event-secret"), at }])
             : $.send(Receiver, {
               _tag: "Take",
               token: Redacted.make("synthetic-send-secret"),
@@ -1120,10 +1124,10 @@ describe("Story", () => {
                 errorOf(() => s.send(message)),
                 errorOf(() =>
                   kind === "emit"
-                    ? s.emitted({
+                    ? s.emitted([{
                       token: Redacted.make("synthetic-other-secret"),
                       at
-                    })
+                    }])
                     : s.sent(Receiver, {
                       _tag: "Take",
                       token: Redacted.make("synthetic-other-secret"),
@@ -1200,10 +1204,10 @@ describe("Story", () => {
           .resolve(SaveNoteCommand, NoteMessage.Saved())
         assert.throws(() => s.send(edit), /was emitted/)
         assert.throws(
-          () => s.emitted(NoteEvents.Saved({ text: "other" })),
+          () => s.emitted([NoteEvents.Saved({ text: "other" })]),
           /^Story\.emitted: /
         )
-        s.emitted(saved)
+        s.emitted([saved])
         assert.lengthOf(s.current.emitted, 0)
         const message = yield* defect(Effect.gen(function*() {
           const story = yield* Story.make(Note, {})

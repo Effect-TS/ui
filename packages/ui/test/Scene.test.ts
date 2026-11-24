@@ -26,9 +26,9 @@ describe("Scene", () => {
       s.fire(text, "input", { value: "milk", checked: false })
         .click(save)
         .expect(Locator.text("saving")).toExist()
-        .expectExact(SaveNote.make({ text: "milk" }))
+        .expectExact([SaveNote.make({ text: "milk" })])
         .resolve(SaveNote, NoteMessage.Saved())
-        .emitted(NoteEvents.Saved({ text: "milk" }))
+        .emitted([NoteEvents.Saved({ text: "milk" })])
         .expect(status).toHaveText("saved milk")
         // Already saved: the handler returns no message.
         .click(saveAgain)
@@ -43,10 +43,10 @@ describe("Scene", () => {
         () => s.click(saveAgain),
         /^Scene\.click: earlier work isn't settled or acknowledged:\n {2}- notes\/SaveNote\(\{"text":""\}\) \[running\] is pending: settle it with resolve or fail, or keep it with keepPending/
       )
-      s.keepPending(SaveNote).click(saveAgain).expectExact(
+      s.keepPending(SaveNote).click(saveAgain).expectExact([
         SaveNote.make({ text: "" }),
         SaveNote.make({ text: "" })
-      )
+      ])
       assert.throws(
         () => s.childEmit(Badge, "Badge", { _tag: "Opened", count: 1 }),
         /^Scene\.childEmit: earlier work/
@@ -165,14 +165,14 @@ describe("Scene", () => {
           init: () => "",
           update: (_, message) => message,
           view: (h, seen) =>
-            h.div(
-              h.p(seen),
+            h.div([
+              h.p([seen]),
               Panel.render(h, {
                 key: "panel",
-                fallback: () => h.i(),
+                fallback: () => h.i([]),
                 onEmit: (event) => event.to
               })
-            )
+            ])
         })
       const s = yield* Scene.make(Page, {})
       s.childEmit(Panel, "panel", { _tag: "Changed", to: "dark" }).expect(
@@ -200,15 +200,15 @@ describe("Scene", () => {
           init: () => "",
           update: (_, message) => message,
           view: (h, seen) =>
-            h.div(
-              h.p(seen),
+            h.div([
+              h.p([seen]),
               Note(h, { onEmit: () => "note", onFailure: () => "note failed" }),
               Badge(h, {
                 onEmit: () => "badge",
                 onFailure: () => "badge failed",
                 fallback: () => h.text("no badge")
               })
-            )
+            ])
         })
       const s = yield* Scene.make(Page, {})
       s.childEmit(Badge, { _tag: "Opened", count: 1 }).expect(Locator.tag("p"))
@@ -257,13 +257,13 @@ describe("Scene", () => {
           Disclosure(h, {
             key: "outer",
             view: (outerDisclosure) =>
-              h.div(
-                h.p(state(outerDisclosure.open)),
+              h.div([
+                h.p([state(outerDisclosure.open)]),
                 Disclosure(h, {
                   key: "inner",
-                  view: (innerDisclosure) => h.p(state(innerDisclosure.open))
+                  view: (innerDisclosure) => h.p([state(innerDisclosure.open)])
                 })
-              )
+              ])
           })
       })
       const texts = (s: Scene.Steps.Any) =>
@@ -288,11 +288,11 @@ describe("Scene", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Disclosure(h, { key: "a", view: () => Badge(h, {}) }),
             Disclosure(h, { key: "b", view: () => Badge(h, {}) }),
             Note(h, { fallback: () => h.text("no note") })
-          )
+          ])
       })
       const view = Scene.start(Page, {}).view
       assert.deepStrictEqual(
@@ -309,12 +309,12 @@ describe("Scene", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Badge(h, {}),
             Disclosure(h, {
               view: () => Note(h, { fallback: () => Badge(h, {}) })
             })
-          )
+          ])
       })
       const fallback = Scene.fallback(
         Scene.start(Root, {}).view,
@@ -330,7 +330,7 @@ describe("Scene", () => {
       const inner = (h: View.Helper<never, unknown>) =>
         cached ??= Disclosure(h, {
           key: "inner",
-          view: (disclosure) => h.el("p", state(disclosure.open))
+          view: (disclosure) => h.el("p", [state(disclosure.open)])
         })
       const page = (name: string, nested: boolean) =>
         Component.define({
@@ -343,7 +343,7 @@ describe("Scene", () => {
           view: (h) =>
             nested
               ? Disclosure(h, { key: "outer", view: () => inner(h) })
-              : h.el("div", inner(h))
+              : h.el("div", [inner(h)])
         })
       const top = Scene.start(page("Top", false), {})
       void top.view
@@ -381,17 +381,17 @@ describe("Scene", () => {
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
       view: (h, log) =>
-        h.div(
+        h.div([
           h.props.shown && h.ul.onMount(Hello()).children(
             ["a", "b"].map((id) =>
               h.li.key(id).onMount(
                 Measure({ id }).pipe(Mount.map((width) => `${id} is ${width}`))
-              ).children(id)
+              ).children([id])
             )
           ),
-          h.p(log.join(", ")),
-          h.button.onClick("clicked").children("go")
-        )
+          h.p([log.join(", ")]),
+          h.button.onClick("clicked").children(["go"])
+        ])
     })
     const log = Locator.tag("p")
     const go = Locator.tag("button")
@@ -560,10 +560,10 @@ describe("Scene", () => {
           {
             elements: Html,
             view: (anchor, h) =>
-              h.div(
-                anchor.anchor(h.button).children("target"),
-                h.p(String(anchor.width))
-              )
+              h.div([
+                anchor.anchor(h.button).children(["target"]),
+                h.p([String(anchor.width)])
+              ])
           }
         )
         anchor.mounted(Place, 21).expect(Locator.tag("p")).toHaveText("42")
@@ -576,7 +576,7 @@ describe("Scene", () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.section(h.slots.body)
+          view: (h) => h.section([h.slots.body])
         })
         const Page = Component.define({
           name: "Page",
@@ -588,7 +588,7 @@ describe("Scene", () => {
             init: () => "",
             update: (_, message) => message,
             view: (h, seen) =>
-              h.div(
+              h.div([
                 Frame(h, {
                   key: "frame",
                   slots: {
@@ -599,10 +599,10 @@ describe("Scene", () => {
                 }),
                 Anchor(h, {
                   key: "anchor",
-                  view: (anchor) => anchor.anchor(h.button).children("go")
+                  view: (anchor) => anchor.anchor(h.button).children(["go"])
                 }),
-                h.p(seen)
-              )
+                h.p([seen])
+              ])
           })
         const page = yield* Scene.make(Page, {})
         page.mounted(Measure, 42).expect(Locator.tag("p")).toHaveText("42")

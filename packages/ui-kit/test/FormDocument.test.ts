@@ -64,7 +64,7 @@ const Signup = Component.define({
       return Option.match(SignupValidation.validate(form).value, {
         onNone: () => ({ ...$.model, form }),
         onSome: ({ email }) =>
-          $.set({ form, saving: true }).run(Save.make({ email }))
+          $.set({ form, saving: true }).run([Save.make({ email })])
       })
     },
     SucceededSave: ($) => ({ ...$.model, saving: false })
@@ -76,20 +76,20 @@ const Signup = Component.define({
         key: name,
         props: { invalid: fields[name]._tag === "Invalid" },
         view: (field) =>
-          field.root(h.div).children(
+          field.root(h.div).children([
             field.control(h.input).attrs({ name, "aria-label": name }).value(
               fields[name].value
             )
               .disabled(model.saving)
               .onInput(({ value }) => Message.UpdatedField({ name, value })),
-            field.error(h.span)?.children("Invalid")
-          )
+            field.error(h.span)?.children(["Invalid"])
+          ])
       })
     const plans = [{ value: "free", disabled: true }, { value: "team" }]
     return Form(h, {
       onEmit: () => Message.SubmittedForm(),
       view: (form) =>
-        form.root(h.form).children(
+        form.root(h.form).children([
           RadioGroup(h, {
             props: {
               value: fields.plan.value === "" ? null : fields.plan.value,
@@ -102,7 +102,7 @@ const Signup = Component.define({
             },
             view: (radioGroup) =>
               radioGroup.root(h.div).children(
-                ...plans.map(({ value }) =>
+                plans.map(({ value }) =>
                   radioGroup.radio({
                     element: h.button.attr("data-plan", value),
                     value
@@ -114,8 +114,8 @@ const Signup = Component.define({
             key: "billing",
             props: { invalid: fields.billing._tag === "Invalid" },
             view: (field) =>
-              field.group(h.div).children(
-                field.legend(h.span).children("Billing"),
+              field.group(h.div).children([
+                field.legend(h.span).children(["Billing"]),
                 ...["monthly", "yearly"].map((value) =>
                   field.member(h.input).attrs({
                     type: "radio",
@@ -125,12 +125,12 @@ const Signup = Component.define({
                     .checked(fields.billing.value === value)
                     .onClick(Message.UpdatedField({ name: "billing", value }))
                 )
-              )
+              ])
           }),
           text("email"),
           text("name"),
-          h.button.attr("type", "submit").children("Sign up")
-        )
+          h.button.attr("type", "submit").children(["Sign up"])
+        ])
     })
   }
 })

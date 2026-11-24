@@ -85,13 +85,13 @@ describe("Router.patchSearch", () => {
       init: () => ({ typed: 0 }),
       update: ($, message) =>
         message._tag === "Typed"
-          ? $.run(
+          ? $.run([
             Router.patchSearch(AppRoute, $.props.route, {
               q: message.value || undefined
             }).pipe(
               Command.map(() => Message.Patched())
             )
-          )
+          ])
           : $.model,
       view: (h) => h.text("")
     })

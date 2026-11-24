@@ -14,7 +14,7 @@
  * | `thumb` | `<span>` inside the root                        |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining: `parts.root(h.button.class("switch")).children(...)`.
+ * goes on chaining: `parts.root(h.button.class(["switch"])).children([...])`.
  * `root` adds the hidden `<input>` that carries the form value to the
  * button, after the children already on the builder it gets and before those
  * chained on its result, so a switch with a `name` can't be drawn without
@@ -73,10 +73,10 @@
  *       props: { checked: model.notify, name: "notify" },
  *       onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
  *       view: (parts) =>
- *         h.label.class("setting").children(
- *           parts.root(h.button.class("switch")).children(parts.thumb(h.span.class("thumb"))),
+ *         h.label.class(["setting"]).children([
+ *           parts.root(h.button.class(["switch"])).children([parts.thumb(h.span.class(["thumb"]))]),
  *           "Notifications"
- *         )
+ *         ])
  *     })
  * })
  *
@@ -208,7 +208,7 @@ const state = <B extends Attributed<B>>(
 /**
  * A switch. Call it with the consumer's `h`, the `props`, and a `view`
  * closure that draws the root with `parts.root(h.button)`, usually with
- * `parts.thumb(h.span.class("thumb"))` as a child. It returns what `view`
+ * `parts.thumb(h.span.class(["thumb"]))` as a child. It returns what `view`
  * returns.
  *
  * **Details**
@@ -252,7 +252,7 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
     readOnly: props.readOnly === true,
     required: props.required === true,
     root: (element) =>
-      element.children(hidden).forward((node) => {
+      element.children([hidden]).forward((node) => {
         // By `onToggle` alone, not by the state: a read-only switch sets no
         // handler now, but the clash would only show once it became editable.
         if (onToggle !== undefined && node.handlers.click !== undefined) {

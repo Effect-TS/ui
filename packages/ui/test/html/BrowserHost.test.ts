@@ -148,7 +148,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         .make({
           init: () => "",
           update: ($, message) =>
-            message === "ping" ? $.run(Ping.make()) : message,
+            message === "ping" ? $.run([Ping.make()]) : message,
           view: (h, model) => h.text(model)
         })
       const mounted = Effect.fnUntraced(function*(app: Element) {
@@ -301,7 +301,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       // Every change is rejected.
       update: ($) => $.model,
       view: (h, model) =>
-        h.div(
+        h.div([
           // A handler that ignores the event: nothing reaches update.
           h.input.attr("aria-label", "Ignored").value(model.text).onInput(() =>
             undefined
@@ -314,12 +314,12 @@ describe("BrowserHost", { concurrent: false }, () => {
             .onInput(({ checked }) => Message.Checked({ checked })),
           h.select
             .attr("aria-label", "Pick")
-            .value("b").children(
-              h.option.attr("value", "a").children("A"),
-              h.option.attr("value", "b").children("B")
-            ),
-          h.details.open(model.open).children(h.summary("More"), "Details")
-        )
+            .value("b").children([
+              h.option.attr("value", "a").children(["A"]),
+              h.option.attr("value", "b").children(["B"])
+            ]),
+          h.details.open(model.open).children([h.summary(["More"]), "Details"])
+        ])
     })
 
     it.effect("an ignored or unhandled change is put back", () =>
@@ -370,16 +370,16 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.form(
+            h.form([
               h.input.attr("aria-label", "Name").value("fixed"),
               h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
                 .checked(true),
               h.select
-                .attr("aria-label", "Pick").children(
-                  h.option.attr("value", "a").children("A"),
-                  h.option.attr("value", "b").selected(true).children("B")
-                )
-            )
+                .attr("aria-label", "Pick").children([
+                  h.option.attr("value", "a").children(["A"]),
+                  h.option.attr("value", "b").selected(true).children(["B"])
+                ])
+            ])
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Resettable, {}, app)
@@ -457,7 +457,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             ResetUpper: () => ({ ...$.model, upper: "ABCDEF" })
           }),
         view: (h, model) =>
-          h.div(
+          h.div([
             h.input.attr("aria-label", "Fixed").value("123456").onInput(() =>
               undefined
             ),
@@ -472,9 +472,9 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.input.attrs({ type: "email", "aria-label": "Email" }).value(
               model.pushed
             ),
-            h.button.onClick(Edited.Push()).children("Push"),
-            h.button.onClick(Edited.ResetUpper()).children("Reset")
-          )
+            h.button.onClick(Edited.Push()).children(["Push"]),
+            h.button.onClick(Edited.ResetUpper()).children(["Reset"])
+          ])
       })
       const mountFields = Effect.gen(function*() {
         const app = yield* container
@@ -634,13 +634,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           Typed: ({ value }) =>
             /\d/.test(value)
               ? $.model
-              : $.run(
+              : $.run([
                 Router.patchSearch(SearchRoute, $.props.route, {
                   q: value || undefined
                 }).pipe(
                   Command.map((outcome) => SearchMessage.Patched({ outcome }))
                 )
-              ),
+              ]),
           Patched: () => $.model
         }),
       view: (h) =>
@@ -673,7 +673,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               key: SearchRoute.printPath(route),
               props: { route }
             }),
-          NotFound: () => h.p("Not found")
+          NotFound: () => h.p(["Not found"])
         })
     })
 
@@ -811,7 +811,9 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
-        h.props.rows.length === 0 ? h.span("none") : h.em(h.props.rows.join(""))
+        h.props.rows.length === 0
+          ? h.span(["none"])
+          : h.em([h.props.rows.join("")])
     })
     const Lists = Component.define({
       name: "Lists",
@@ -822,15 +824,15 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: (): ReadonlyArray<string> => ["a", "b", "c"],
       update: (_, message) => message.rows,
       view: (h, rows) =>
-        h.div(
-          h.ul(rows.map((row) => h.li.key(row).children(row))),
-          h.ol(
-            h.li("first"),
-            rows.map((row) => h.li.key(row).children(row)),
+        h.div([
+          h.ul(rows.map((row) => h.li.key(row).children([row]))),
+          h.ol([
+            h.li(["first"]),
+            rows.map((row) => h.li.key(row).children([row])),
             "last"
-          ),
-          h.p("before", Shown(h, { key: "shown", props: { rows } }), "after")
-        )
+          ]),
+          h.p(["before", Shown(h, { key: "shown", props: { rows } }), "after"])
+        ])
     })
 
     it.effect("a list that loses every row keeps the nodes beside it, whether it's emptied or replaced", () =>
@@ -871,11 +873,11 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: (): ReadonlyArray<string> => ["p", "a", "one"],
           update: (_, message) => message.rows,
           view: (h, [tag, key, text]) =>
-            h.div(
+            h.div([
               tag === "p"
-                ? h.p.key(key!).children(text!)
-                : h.span.key(key!).children(text!)
-            )
+                ? h.p.key(key!).children([text!])
+                : h.span.key(key!).children([text!])
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Only, {}, app)
@@ -919,7 +921,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: (): ReadonlyArray<string> => ["a"],
           update: (_, message) => message.rows,
-          view: (h, [name]) => h.div(h.el("x-classed").attr("class", name))
+          view: (h, [name]) => h.div([h.el("x-classed").attr("class", name)])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Page, {}, app)
@@ -960,9 +962,9 @@ describe("BrowserHost", { concurrent: false }, () => {
       selected: boolean
     ) => {
       built.push(item.label)
-      return h.li.key(String(item.id)).class(selected && "on").children(
+      return h.li.key(String(item.id)).class([selected && "on"]).children([
         item.label
-      )
+      ])
     }
     const Items = ItemsDef.make({
       init: () => ({
@@ -989,12 +991,12 @@ describe("BrowserHost", { concurrent: false }, () => {
           Tick: () => ({ ...$.model, ticks: $.model.ticks + 1 })
         }),
       view: (h, model) =>
-        h.div(
-          h.p(String(model.ticks)),
+        h.div([
+          h.p([String(model.ticks)]),
           h.ul(model.items.map((item) =>
             h.lazy(row, item, item.id === model.selected)
           ))
-        )
+        ])
     })
 
     it.effect("builds a row again only when one of its arguments changes, and keeps every row's nodes", () =>
@@ -1060,7 +1062,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             .make({
               init: () => null,
               update: ($) => $.model,
-              view: (h) => h.p("ready")
+              view: (h) => h.p(["ready"])
             })
           const ready = yield* Deferred.make<void>()
           const FrameDef = Component.define({
@@ -1070,14 +1072,14 @@ describe("BrowserHost", { concurrent: false }, () => {
             elements: Html
           })
           const frame = (h: Component.Helper<typeof FrameDef>, title: string) =>
-            h.section(
-              alone ? undefined : h.h2(title),
+            h.section([
+              alone ? undefined : h.h2([title]),
               Leaf.render(h, {
                 key: "leaf",
                 props: {},
-                fallback: () => h.p("loading")
+                fallback: () => h.p(["loading"])
               })
-            )
+            ])
           const Frame = Component.provide(
             FrameDef.make({
               init: () => null,
@@ -1116,24 +1118,24 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         // The option asks for `a` and the select for `b`: the select is set after its options, so `b` wins.
         const field = (h: Component.Helper<typeof FieldsDef>, label: string) =>
-          h.div(
+          h.div([
             h.input.attr("aria-label", label).value("fixed"),
-            h.select.value("b").children(
-              h.option.attr("value", "a").selected(true).children("A"),
-              h.option.attr("value", "b").children("B")
-            )
-          )
+            h.select.value("b").children([
+              h.option.attr("value", "a").selected(true).children(["A"]),
+              h.option.attr("value", "b").children(["B"])
+            ])
+          ])
         let kept: View.Node<typeof LazyMessage.Type> | undefined
         const Fields = FieldsDef.make({
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h, ticks) =>
-            h.div(
-              h.p(String(ticks)),
+            h.div([
+              h.p([String(ticks)]),
               field(h, "built"),
               h.lazy(field, "lazy"),
               kept ??= View.toNode(field(h, "kept"))
-            )
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Fields, {}, app)
@@ -1228,28 +1230,28 @@ describe("BrowserHost", { concurrent: false }, () => {
           ) => [...$.model, `${event}${within ? " within" : ""}`]
         }),
       view: (h) =>
-        h.div(
+        h.div([
           h.section.attr("aria-label", "Outer").onClick(
             Message.Clicked({ where: "outer" })
-          ).children(
-            h.button.onClick(Message.Clicked({ where: "inner" })).children(
+          ).children([
+            h.button.onClick(Message.Clicked({ where: "inner" })).children([
               "Inner"
-            ),
-            h.button("Plain")
-          ),
+            ]),
+            h.button(["Plain"])
+          ]),
           h.div
-            .on("focus", Message.Focused({ where: "div" })).children(
+            .on("focus", Message.Focused({ where: "div" })).children([
               h.input.attr("aria-label", "Focus me")
-            ),
+            ]),
           h.div
             .on("focusin", ({ within }) =>
               Message.FocusMoved({ event: "focusin", within }))
             .on("focusout", ({ within }) =>
               Message.FocusMoved({ event: "focusout", within }))
-            .children(
+            .children([
               h.input.attr("aria-label", "First"),
               h.input.attr("aria-label", "Second")
-            ),
+            ]),
           h.button.onClick(({ pointerType }) =>
             Message.PointerClicked({ pointerType })
           )
@@ -1257,7 +1259,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               Message.PointerClicked({
                 pointerType: `down ${button} ${pointerType}`
               }))
-            .children("Pointer"),
+            .children(["Pointer"]),
           h.input.attr("aria-label", "Keys")
             .onKeyDown(({ key, shift }) =>
               Message.Key({ key, shift })
@@ -1274,7 +1276,7 @@ describe("BrowserHost", { concurrent: false }, () => {
                 value
               )
             })
-          ).children(
+          ).children([
             h.input.attrs({
               name: "title",
               "aria-label": "Title",
@@ -1292,9 +1294,9 @@ describe("BrowserHost", { concurrent: false }, () => {
               value: "b",
               checked: ""
             }),
-            h.button.attr("type", "submit").children("Send")
-          )
-        )
+            h.button.attr("type", "submit").children(["Send"])
+          ])
+        ])
     })
 
     it.effect("only the innermost element with a handler gets an event", () =>
@@ -1360,17 +1362,21 @@ describe("BrowserHost", { concurrent: false }, () => {
             ? h.el("section").on("click", "inner")
             : h.el("section")
           return h.el("div").on("click", log.length === 0 ? "old" : "new")
-            .children(
-              inner.children(
+            .children([
+              inner.children([
                 log.length === 0
                   ? h.el("span")
                   : h.el(
                     "x-clicks-on-connect",
-                    h.el("button").on("click", "inserted").children("Inserted"),
-                    h.el("button").children("Go")
+                    [
+                      h.el("button").on("click", "inserted").children([
+                        "Inserted"
+                      ]),
+                      h.el("button").children(["Go"])
+                    ]
                   )
-              )
-            )
+              ])
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Page, {}, app)
@@ -1391,7 +1397,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           view: (h, count) =>
             h.el(
               "x-clicks-on-connect",
-              h.el("button").on("click", "hit").children(`Hit ${count}`)
+              [h.el("button").on("click", "hit").children([`Hit ${count}`])]
             )
         })
         const Outer = Component.define({
@@ -1403,7 +1409,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             init: () => null,
             update: ($) => $.model,
             view: (h) =>
-              h.keepAlive((s) => h.el("section", Counter(s, { key: "c" })))
+              h.keepAlive((s) => h.el("section", [Counter(s, { key: "c" })]))
           })
         const Shell = Component.define({
           name: "Shell",
@@ -1416,7 +1422,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             view: (h, shown) =>
               h.el(
                 "div",
-                h.keepAlive((s) => shown ? Outer(s, { key: "o" }) : null)
+                [h.keepAlive((s) => shown ? Outer(s, { key: "o" }) : null)]
               )
           })
         const app = yield* container
@@ -1448,7 +1454,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: () => ({ email: "server" }),
           update: ($) => $.model,
-          view: (h, model) => h.p(model.email)
+          view: (h, model) => h.p([model.email])
         })
         const history = Router.memoryHistory("/")
         history.replace("/", {
@@ -1475,10 +1481,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Page = logPage((h) =>
           h.el(
             "main",
-            h.el(
+            [h.el(
               "x-clicks-on-connect",
-              h.el("button").on("click", "hit").children("Hit")
-            )
+              [h.el("button").on("click", "hit").children(["Hit"])]
+            )]
           )
         )
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
@@ -1527,9 +1533,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         Effect.gen(function*() {
           prevented.length = 0
           const Page = logPage((h, log) =>
-            form(h, log.length > 0).children(
+            form(h, log.length > 0).children([
               log.length > 0 ? h.el("x-submits-on-insert") : h.el("span")
-            )
+            ])
           )
           const app = yield* container
           const root = yield* BrowserHost.mountEffect(Page, {}, app)
@@ -1558,23 +1564,33 @@ describe("BrowserHost", { concurrent: false }, () => {
             view: (h, count) =>
               h.el(
                 "div",
-                h.el("button").on("click", "more").children("More"),
-                ...Array.from({ length: count }, (_, index) =>
-                  h.el("p", `${index}`))
+                [
+                  h.el("button").on("click", "more").children(["More"]),
+                  ...Array.from(
+                    { length: count },
+                    (_, index) => h.el("p", [`${index}`])
+                  )
+                ]
               )
           })
         const Page = logPage((h, log) =>
           h.el(
             "div",
-            Rows(h, { key: "r" }),
-            ...(log.length === 0
-              ? []
-              : [
-                h.el(
-                  "x-flushes-then-clicks",
-                  h.el("button").on("click", "appended").children("Appended")
-                )
-              ])
+            [
+              Rows(h, { key: "r" }),
+              ...(log.length === 0
+                ? []
+                : [
+                  h.el(
+                    "x-flushes-then-clicks",
+                    [
+                      h.el("button").on("click", "appended").children([
+                        "Appended"
+                      ])
+                    ]
+                  )
+                ])
+            ]
           )
         )
         const app = yield* container
@@ -1643,13 +1659,13 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: ($, message) =>
             message._tag === "Clicked" ? [...$.model, message.where] : $.model,
           view: (h, log) =>
-            h.section.onClick(Message.Clicked({ where: "outer" })).children(
+            h.section.onClick(Message.Clicked({ where: "outer" })).children([
               // The inner handler goes after the first click lands on it.
               log.length === 0
                 ? h.button.onClick(Message.Clicked({ where: "inner" }))
-                  .children("Go")
-                : h.button("Go")
-            )
+                  .children(["Go"])
+                : h.button(["Go"])
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Toggle, {}, app)
@@ -1723,16 +1739,16 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.div.on(
               "focusout",
               ({ disabled }) => Left.Left({ event: "focusout", disabled })
-            ).children(
+            ).children([
               h.input.onBlur(({ disabled }) =>
                 Left.Left({ event: "blur", disabled })
               ),
               h.form.attr("tabindex", "0").onBlur(({ disabled }) =>
                 Left.Left({ event: "blur", disabled })
-              ).children(
+              ).children([
                 h.input.attr("name", "matches")
-              )
-            )
+              ])
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Leaving, {}, app)
@@ -1824,7 +1840,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         view: (h) => {
           const saw = (label: string) => (payload: object) =>
             Seen.Saw({ entry: `${label} ${JSON.stringify(payload)}` })
-          return h.div(
+          return h.div([
             h.input.attr("aria-label", "Text").on("input", saw("input")).on(
               "change",
               saw("change")
@@ -1835,8 +1851,8 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.input.attrs({ type: "checkbox", "aria-label": "Box" }).onKeyDown(
               saw("key")
             ),
-            h.button.onKeyDown(saw("key")).children("Button")
-          )
+            h.button.onKeyDown(saw("key")).children(["Button"])
+          ])
         }
       })
 
@@ -1987,28 +2003,28 @@ describe("BrowserHost", { concurrent: false }, () => {
                 .onKeyUp(({ editable, key, repeat }) =>
                   `el:up:${key}:${editable}:${repeat}`
                 )
-                .children(
+                .children([
                   h.input.attr("id", "kt-text"),
                   h.input.attr("id", "kt-readonly").attr("readonly", ""),
                   h.input.attr("id", "kt-unknown").attr("type", "futuretype"),
                   h.textarea.attr("id", "kt-area"),
-                  h.select.attr("id", "kt-select").children(
-                    h.option.attr("value", "a").children("A")
-                  ),
+                  h.select.attr("id", "kt-select").children([
+                    h.option.attr("value", "a").children(["A"])
+                  ]),
                   ...nonEditableTypes.map((type) =>
                     h.input.attr("id", `kt-${type}`).attr("type", type)
                   ),
                   h.div.attr("id", "kt-ce").attr("contenteditable", "true")
-                    .children(
-                      h.span.attr("id", "kt-ce-child").children("hi"),
+                    .children([
+                      h.span.attr("id", "kt-ce-child").children(["hi"]),
                       h.div.attr("id", "kt-ce-island").attr(
                         "contenteditable",
                         "false"
-                      ).children(
-                        h.button.attr("id", "kt-ce-btn").children("x")
-                      )
-                    )
-                ),
+                      ).children([
+                        h.button.attr("id", "kt-ce-btn").children(["x"])
+                      ])
+                    ])
+                ]),
             subscriptions: () => [
               HtmlSubscription.onDocument(
                 "keydown",
@@ -2102,14 +2118,14 @@ describe("BrowserHost", { concurrent: false }, () => {
             init: () => "",
             update: (_, { value }) => value.toUpperCase(),
             view: (h, text) =>
-              h.div(
+              h.div([
                 h.input.attr("aria-label", "Upper").value(text).onInput((
                   { value }
                 ) => Typed.Typed({ value })),
                 h.input.attr("aria-label", "Fixed").value("fixed").onInput(() =>
                   undefined
                 )
-              )
+              ])
           })
           const app = yield* container
           const shadowHost = yield* container
@@ -2222,7 +2238,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.form(h.input.attr("name", "q"))
+          view: (h) => h.form([h.input.attr("name", "q")])
         })
         const bare = yield* container
         yield* BrowserHost.mountEffect(Bare, {}, bare)
@@ -2243,7 +2259,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           .make({
             init: () => null,
             update: ($) => $.model,
-            view: (h) => h.el("FORM", h.input.attr("name", "q"))
+            view: (h) => h.el("FORM", [h.input.attr("name", "q")])
           })
         const upper = yield* container
         yield* BrowserHost.mountEffect(Upper, {}, upper)
@@ -2266,13 +2282,13 @@ describe("BrowserHost", { concurrent: false }, () => {
             return $.model + 1
           },
           view: (h) =>
-            h.div.on("contextmenu", "Menu", { preventDefault: true }).children(
+            h.div.on("contextmenu", "Menu", { preventDefault: true }).children([
               h.textarea.attr("aria-label", "Message").onKeyDown(
                 ({ composing, key, shift }) =>
                   key === "Enter" && !shift && !composing ? "Send" : undefined,
                 { preventDefault: true }
               )
-            )
+            ])
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Composer, {}, app)
@@ -2318,12 +2334,12 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.form.onSubmit((payload) => {
               seen.push(payload)
               return undefined
-            }).children(
+            }).children([
               h.input.attrs({ name: "constructor", value: "a" }),
               h.input.attrs({ name: "__proto__", value: "b" }),
               h.input.attrs({ name: "toString", value: "c" }),
               h.input.attrs({ name: "toString", value: "d" })
-            )
+            ])
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Prototype, {}, app)
@@ -2408,12 +2424,12 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => false,
           update: (_, draggable) => draggable,
           view: (h, draggable) =>
-            h.div(
-              h.p.draggable({ "text/plain": "first" }).children("first"),
+            h.div([
+              h.p.draggable({ "text/plain": "first" }).children(["first"]),
               draggable
-                ? h.p.draggable({ "text/plain": "second" }).children("second")
-                : h.p("second")
-            )
+                ? h.p.draggable({ "text/plain": "second" }).children(["second"])
+                : h.p(["second"])
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Cards, {}, app)
@@ -2436,19 +2452,19 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
       view: (h) =>
-        h.div(
+        h.div([
           // Either order keeps the data and the handler.
           h.p.attr("aria-label", "Milk").draggable({
             "application/x-todo": "milk"
           }, { effectAllowed: "move" })
             .onDragStart("start milk").onDragEnd(({ dropped }) =>
               `end milk dropped=${dropped}`
-            ).children("Milk"),
+            ).children(["Milk"]),
           h.p.attr("aria-label", "Eggs").onDragStart("start eggs").draggable({
             "application/x-todo": "eggs"
-          }).children(
+          }).children([
             "Eggs"
-          ),
+          ]),
           h.section.attr("aria-label", "Done")
             .onDrop(
               ({ data, files, height, width, x, y }) =>
@@ -2459,9 +2475,9 @@ describe("BrowserHost", { concurrent: false }, () => {
               { accepts: ["application/x-todo", "Files"], dropEffect: "move" }
             )
             .onDragEnter("enter").onDragLeave("leave")
-            .onDragOver(({ x, y }) => `over ${x},${y}`).children(
-              h.p.attr("aria-label", "Header").children("Header"),
-              h.p.attr("aria-label", "Body").children("Body"),
+            .onDragOver(({ x, y }) => `over ${x},${y}`).children([
+              h.p.attr("aria-label", "Header").children(["Header"]),
+              h.p.attr("aria-label", "Body").children(["Body"]),
               h.div.attr("aria-label", "Inner")
                 .onDrop(
                   ({ data }) => `inner drop ${data["application/x-todo"]}`,
@@ -2470,10 +2486,14 @@ describe("BrowserHost", { concurrent: false }, () => {
                   }
                 )
                 .onDragEnter("inner enter").onDragLeave("inner leave").children(
-                  h.p.attr("aria-label", "Inner child").children("Inner child")
+                  [
+                    h.p.attr("aria-label", "Inner child").children([
+                      "Inner child"
+                    ])
+                  ]
                 )
-            )
-        )
+            ])
+        ])
     })
 
     it.effect("a drag between two elements carries the source's data, and the source hears it was dropped", () =>
@@ -2638,7 +2658,7 @@ describe("BrowserHost", { concurrent: false }, () => {
     }
     /** The options `onDrop` stores, for a target bound by hand. */
     const accepting = (
-      ...accepts: ReadonlyArray<string>
+      accepts: ReadonlyArray<string>
     ): Readonly<Record<string, View.EventOptions>> => {
       const drop: Html.DropTargetOptions = { accepts, preventDefault: "always" }
       return { drop }
@@ -2657,7 +2677,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             element,
             { drop: () => undefined, dragover: over },
             dispatch,
-            accepting("application/x-todo")
+            accepting(["application/x-todo"])
           )
           const todo = new Transfer()
           todo.setData("application/x-todo", "milk")
@@ -2668,7 +2688,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             element,
             { ...rebound, dragover: over },
             dispatch,
-            accepting("text/uri-list")
+            accepting(["text/uri-list"])
           )
           yield* tick
           expect(seen).toEqual([])
@@ -2694,7 +2714,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           target,
           { drop: () => undefined },
           dispatch,
-          accepting("text/uri-list")
+          accepting(["text/uri-list"])
         )
         const first = new Transfer()
         first.setData("text/uri-list", "https://example.com")
@@ -2879,11 +2899,11 @@ describe("BrowserHost", { concurrent: false }, () => {
           view: (h) =>
             h.dialog.attr("aria-label", "Upload").modal(true).onCancel(
               Message.Cancelled()
-            ).children(
+            ).children([
               h.input.attrs({ type: "file", "aria-label": "File" }).value(
                 "notes.txt"
               )
-            )
+            ])
         })
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Upload, {}, app)
@@ -3077,10 +3097,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => true,
           update: () => false,
           view: (h, open) =>
-            h.div(
-              h.button.onClick(DrawerMessage.Close()).children("Close"),
+            h.div([
+              h.button.onClick(DrawerMessage.Close()).children(["Close"]),
               open && Nested(h, { key: "nested" })
-            )
+            ])
         })
         const drawer = yield* container
         yield* BrowserHost.mountEffect(Drawer, {}, drawer)
@@ -3106,15 +3126,15 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => 0,
           update: (_, step) => step,
           view: (h, step) =>
-            h.div(
-              step < 2 && h.div(
+            h.div([
+              step < 2 && h.div([
                 h.dialog.attr("aria-label", "First").key("first").modal(
                   step === 1
-                ).children(h.p("First")),
+                ).children([h.p(["First"])]),
                 h.dialog.attr("aria-label", "Second").key("second").modal(true)
-                  .children(h.p("Second"))
-              )
-            )
+                  .children([h.p(["Second"])])
+              ])
+            ])
         })
         const stack = yield* BrowserHost.mountEffect(
           Stack,
@@ -3407,7 +3427,7 @@ describe("BrowserHost", { concurrent: false }, () => {
                 Mount.map((count) => ({ _tag: "Saw" as const, count }))
               )
             ).children(
-              Array.from({ length: rows }, (_, index) => h.li(String(index)))
+              Array.from({ length: rows }, (_, index) => h.li([String(index)]))
             )
         })
         const app = yield* container
@@ -3444,33 +3464,33 @@ describe("BrowserHost", { concurrent: false }, () => {
         update: ($, message) =>
           Message.match(message, {
             Focus: () =>
-              $.run(
+              $.run([
                 HtmlCommand.focus(
                   Field,
                   ({ found }) => Message.Found({ found })
                 )
-              ),
+              ]),
             FocusMissing: () =>
-              $.run(
+              $.run([
                 HtmlCommand.focus(Missing, ({ found }) =>
                   Message.Found({ found }))
-              ),
+              ]),
             Measure: () =>
-              $.run(
+              $.run([
                 HtmlCommand.measure(Field, (rect) =>
                   Message.Measured({ some: Option.isSome(rect) }))
-              ),
+              ]),
             Found: ({ found }) => [...$.model, `found ${found}`],
             Measured: ({ some }) => [...$.model, `measured ${some}`],
             Mounted: ({ tag }) => [...$.model, `mounted ${tag}`]
           }),
         view: (h) =>
-          h.div(
+          h.div([
             h.input.attr("aria-label", "Field").ref(Field)
               .onMount(
                 ReadTag().pipe(Mount.map((tag) => Message.Mounted({ tag })))
               )
-          )
+          ])
       })
 
     const vocabularies: ReadonlyArray<
@@ -3524,30 +3544,30 @@ describe("BrowserHost", { concurrent: false }, () => {
         EntryMessage.match(message, {
           Pasted: ({ text }) => [...$.model, `pasted ${text}`],
           Select: () =>
-            $.run(HtmlCommand.select(Code, ({ found }) =>
-              EntryMessage.Selected({ found }))),
+            $.run([HtmlCommand.select(Code, ({ found }) =>
+              EntryMessage.Selected({ found }))]),
           Selected: ({ found }) => [...$.model, `selected ${found}`],
           Submit: ({ loose }) =>
-            $.run(
+            $.run([
               HtmlCommand.requestSubmit(loose ? Loose : Code, ({ submitted }) =>
                 EntryMessage.Submitted({ submitted }))
-            ),
+            ]),
           Submitted: ({ submitted }) => [...$.model, `submitted ${submitted}`],
           Sent: ({ code }) => [...$.model, `sent ${code}`]
         }),
       view: (h) =>
-        h.div(
+        h.div([
           h.form.onSubmit(({ fields }) =>
             EntryMessage.Sent({ code: fields.code ?? "" })
-          ).children(
+          ).children([
             h.input.attrs({ "aria-label": "Code", name: "code" }).ref(Code)
               .value("7")
               .onPaste(({ text }) => EntryMessage.Pasted({ text }), {
                 preventDefault: true
               })
-          ),
+          ]),
           h.input.attr("aria-label", "Loose").ref(Loose)
-        )
+        ])
     })
 
     it.effect("a field reports pasted text, is selected, and submits its form", () =>
@@ -3604,10 +3624,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.form(
+            h.form([
               h.el("div").attrs({ "Data-Kind": "box", "a b": "dropped" }),
-              h.el("svg", h.el("rect").attr("viewBox", "0 0 1 1"))
-            )
+              h.el("svg", [h.el("rect").attr("viewBox", "0 0 1 1")])
+            ])
         })
         const app = yield* container
         yield* BrowserHost.mountEffect(Shapes, {}, app)
@@ -3646,14 +3666,14 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
-        h.div(
-          h.p("before"),
+        h.div([
+          h.p(["before"]),
           NativeBox(h, {
             key: "box",
-            fallback: () => h.p("wrong host")
+            fallback: () => h.p(["wrong host"])
           }),
-          h.p("after")
-        )
+          h.p(["after"])
+        ])
     })
 
     it.effect("a nested component of another vocabulary fails as a child", () =>
@@ -3725,7 +3745,7 @@ describe("BrowserHost", { concurrent: false }, () => {
                 return value
               },
               update: ($) => $.model,
-              view: (h) => h.el("button").on("click", null).children("Item")
+              view: (h) => h.el("button").on("click", null).children(["Item"])
             })
           const Page = Component.define({
             name: "Page",
@@ -3738,8 +3758,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               view: (h, shown) =>
                 h.el(
                   "div",
-                  h.text("Remove"),
-                  shown ? Item(h, { key: "i" }) : null
+                  [h.text("Remove"), shown ? Item(h, { key: "i" }) : null]
                 )
             })
           const app = yield* container
@@ -3789,9 +3808,11 @@ describe("BrowserHost", { concurrent: false }, () => {
                 // Two elements with one key: the render fails once its child paths are checked.
                 return h.el(
                   "div",
-                  Item(h, { key: "i", props: value }),
-                  h.el("p").key("k"),
-                  h.el("p").key("k")
+                  [
+                    Item(h, { key: "i", props: value }),
+                    h.el("p").key("k"),
+                    h.el("p").key("k")
+                  ]
                 )
               }
             })
@@ -3854,7 +3875,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         subscriptions: () => [
           Subscription.make("held", Stream.onExit(Stream.never, record))
         ],
-        view: (h) => h.p.onMount(Held()).children("held")
+        view: (h) => h.p.onMount(Held()).children(["held"])
       })
       const app = yield* container
       const scope = yield* Scope.make()
@@ -3883,15 +3904,15 @@ describe("BrowserHost", { concurrent: false }, () => {
           elements: Html
         }).make({
           init: ($) =>
-            $.set(0).run(
+            $.set(0).run([
               Load.make({ id: 1 }),
               Load.make({ id: 2 }),
               Load.make({ id: 3 })
-            ),
+            ]),
           update: ($) => $.model + 1,
           view: (h, loaded) => {
             renders++
-            return h.p(`${loaded} loaded`)
+            return h.p([`${loaded} loaded`])
           }
         }).pipe(Component.provide(Load.layer))
         const app = yield* container
@@ -4060,7 +4081,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       }).make({
         init: ($) => $.props,
         update: ($) => $.model,
-        view: (h) => h.div()
+        view: (h) => h.div([])
       })
       const outer = TestHost.makeHost()
       const app = yield* container

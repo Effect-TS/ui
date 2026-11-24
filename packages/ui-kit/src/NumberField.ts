@@ -21,7 +21,7 @@
  *
  * `root`, `group`, `input` and `scrubAreaCursor` each take the consumer's
  * builder and return it, so the consumer goes on chaining and adds children
- * with `.children(...)`. The others take an options object and return its
+ * with `.children([...])`. The others take an options object and return its
  * `element`:
  *
  * - `decrement({ element, disabled })` and `increment({ element, disabled })`:
@@ -36,7 +36,7 @@
  * `root` adds a visually hidden `<input type="number">` after the
  * children you chain, which holds the form value. `scrubAreaCursor` returns
  * `undefined` unless a drag holds the pointer lock, so write
- * `numberField.scrubAreaCursor(h.span)?.children(icon)`.
+ * `numberField.scrubAreaCursor(h.span)?.children([icon])`.
  *
  * The parts also return `value`, `inputValue`, the text the input shows,
  * `disabled`, `readOnly`, `required` and `scrubbing`, for markup that
@@ -173,17 +173,17 @@
  *             Committed: () => undefined
  *           },
  *           view: (numberField) =>
- *             numberField.root(field.root(h.div)).children(
- *               numberField.scrubArea({ element: h.span }).children(
- *                 field.label(h.label).children("Price"),
- *                 numberField.scrubAreaCursor(h.span)?.children("↔")
- *               ),
- *               numberField.group(h.div).children(
- *                 numberField.decrement({ element: h.button }).children("-"),
- *                 numberField.input(field.control(h.input.class("amount"))),
- *                 numberField.increment({ element: h.button }).children("+")
- *               )
- *             )
+ *             numberField.root(field.root(h.div)).children([
+ *               numberField.scrubArea({ element: h.span }).children([
+ *                 field.label(h.label).children(["Price"]),
+ *                 numberField.scrubAreaCursor(h.span)?.children(["↔"])
+ *               ]),
+ *               numberField.group(h.div).children([
+ *                 numberField.decrement({ element: h.button }).children(["-"]),
+ *                 numberField.input(field.control(h.input.class(["amount"]))),
+ *                 numberField.increment({ element: h.button }).children(["+"])
+ *               ])
+ *             ])
  *         })
  *     })
  * })
@@ -653,7 +653,7 @@ const shown = (model: NumberFieldModel, s: Settings): number | null =>
 const apply = ($: NumberFieldUpdate, change: Change) =>
   change.events.length === 0
     ? change.model
-    : $.set(change.model).emit(...change.events)
+    : $.set(change.model).emit(change.events)
 
 const commit = (
   $: NumberFieldUpdate,
@@ -662,10 +662,10 @@ const commit = (
   },
   reason: NumberFieldCommitReason
 ) =>
-  $.set(change.model).evolve({ pending: false }).emit(
+  $.set(change.model).evolve({ pending: false }).emit([
     ...(change.events ?? []),
     NumberFieldEvents.Committed({ value: change.value, reason })
-  )
+  ])
 
 const settle = (
   $: NumberFieldUpdate,
@@ -1768,7 +1768,7 @@ export const NumberField = Component.define({
       required,
       scrubbing: model.scrubbing,
       root: p.part((b) => {
-        const wired = state(b).forward((node) => node.children(form))
+        const wired = state(b).forward((node) => node.children([form]))
         return model.scrubbing ? wired.onMount(WatchScrub({ cursorId })) : wired
       }),
       group: p.part((b) => state(b).attr("role", "group")),

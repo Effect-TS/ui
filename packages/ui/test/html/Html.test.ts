@@ -20,7 +20,7 @@ const Item = Component.define({
 }).make({
   init: ($) => $.props.title,
   update: ($) => $.model,
-  view: (h, title) => h.li(title)
+  view: (h, title) => h.li([title])
 })
 const helper = () => View.makeHelper<TodoMessage, {}, Html.Elements>({}, Html)
 const element = (
@@ -55,8 +55,8 @@ describe("Html", () => {
       const h = helper()
       const tree = View.build(h.form.onSubmit(add), [
         h.input.ref(NewTodo).value("draft").onInput(onInput),
-        h.button.attr("type", "submit").children("Add"),
-        h.span("Todos"),
+        h.button.attr("type", "submit").children(["Add"]),
+        h.span(["Todos"]),
         todos.map((title) => Item(h, { key: title, props: { title } }))
       ])
       assert.deepStrictEqual(
@@ -86,15 +86,15 @@ describe("Html", () => {
           init: () => "draft",
           update: ($) => $.model,
           view: (h, draft) =>
-            h.form.onSubmit(add).children(
+            h.form.onSubmit(add).children([
               h.input.ref(NewTodo).value(draft).onInput(onInput),
-              h.button.attr("type", "submit").children("Add"),
-              h.span("Todos"),
+              h.button.attr("type", "submit").children(["Add"]),
+              h.span(["Todos"]),
               todos.map((title) => Item(h, { key: title, props: { title } }))
-            )
+            ])
         })
         const rendered = yield* HtmlServer.renderToHtml(Todos, {})
-        // The markup the children-first form, h.form(...children).onSubmit(add), rendered.
+        // The markup the children-first form, h.form(children).onSubmit(add), rendered.
         assert.strictEqual(
           rendered.html,
           "<!--[/Todos--><form><input value=\"draft\"><button type=\"submit\">Add</button><span>Todos</span>" +
@@ -105,14 +105,17 @@ describe("Html", () => {
     it("the shorthand call is children, and a builder alone is an element with no children", () => {
       const h = helper()
       assert.deepStrictEqual(
-        h.li("a", ["b", false], null, h.br),
-        h.li.children("a", ["b", false], null, h.br)
+        h.li(["a", ["b", false], null, h.br]),
+        h.li.children(["a", ["b", false], null, h.br])
       )
       assert.deepStrictEqual(
-        h.ul(h.li, h.li.key("k")),
-        h.ul(h.li(), h.li.key("k").children())
+        h.ul([h.li, h.li.key("k")]),
+        h.ul([h.li([]), h.li.key("k").children([])])
       )
-      assert.deepStrictEqual(h.el("x-foo", "a"), h.el("x-foo").children("a"))
+      assert.deepStrictEqual(
+        h.el("x-foo", ["a"]),
+        h.el("x-foo").children(["a"])
+      )
       assert.deepStrictEqual<unknown>(
         View.toNode(h.input.value("a")),
         element("input", { props: { value: "a" } }, [])
@@ -156,7 +159,7 @@ describe("Html", () => {
         Object.keys(h.form.attr("method", "post")).sort(),
         builder
       )
-      assert.deepStrictEqual(Object.keys(h.form("a")).sort(), builder)
+      assert.deepStrictEqual(Object.keys(h.form(["a"])).sort(), builder)
       assert.deepStrictEqual(
         Object.keys(View.toNode(h.form)).sort(),
         ["_tag", "children", ...node].sort()
@@ -166,7 +169,7 @@ describe("Html", () => {
     it("builders are values: a chain call leaves its receiver alone", () => {
       const h = helper()
       const base = h.button.attr("type", "button")
-      const primary = base.class("primary")
+      const primary = base.class(["primary"])
       assert.deepStrictEqual(base.elementAttrs, { type: "button" })
       assert.deepStrictEqual(primary.elementAttrs, {
         type: "button",
@@ -366,9 +369,9 @@ describe("Html", () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.div.style({ color: "red" }).children(
+            h.div.style({ color: "red" }).children([
               h.input.style({ width: "2px" })
-            )
+            ])
         })
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
         assert.strictEqual(
@@ -400,12 +403,12 @@ describe("Html", () => {
           [h.span, h.text("")],
           [h.span, false, "a"],
           ["a", null, "b"],
-          [h.span, undefined, h.p("x")],
+          [h.span, undefined, h.p(["x"])],
           [h.span, ["a", "b"], "c"],
           ["a", [h.span, false], Item(h, { key: "i", props: { title: "t" } })],
           [
             h.span.attr("id", "x"),
-            h.p("x"),
+            h.p(["x"]),
             Item(h, { key: "i", props: { title: "t" } }),
             "end"
           ]
@@ -416,14 +419,14 @@ describe("Html", () => {
         const built = (
           builder: View.ElementBuilder<TodoMessage, any, any, any>
         ) => View.build(builder, []).children
-        assert.deepStrictEqual(built(h.div.children(...inputs)), expected)
+        assert.deepStrictEqual(built(h.div.children(inputs)), expected)
         assert.deepStrictEqual(
-          built(h.div(...inputs as [View.Input<TodoMessage, any>])),
+          built(h.div(inputs as [View.Input<TodoMessage, any>])),
           expected
         )
         assert.deepStrictEqual(
           built(
-            new View.ContainerBuilder<TodoMessage>("div").children(...inputs)
+            new View.ContainerBuilder<TodoMessage>("div").children(inputs)
           ),
           expected
         )
@@ -490,27 +493,27 @@ describe("Html", () => {
   describe("classNames", () => {
     it("joins tokens with one space", () => {
       assert.strictEqual(
-        Html.classNames("rounded px-3", "py-1"),
+        Html.classNames(["rounded px-3", "py-1"]),
         "rounded px-3 py-1"
       )
     })
 
     it("skips false, null, undefined and empty tokens", () => {
       assert.strictEqual(
-        Html.classNames(false, "a", null, "", undefined, "b"),
+        Html.classNames([false, "a", null, "", undefined, "b"]),
         "a b"
       )
     })
 
     it("returns an empty string when no token is left", () => {
-      assert.strictEqual(Html.classNames(), "")
-      assert.strictEqual(Html.classNames(false, null, undefined, ""), "")
+      assert.strictEqual(Html.classNames([]), "")
+      assert.strictEqual(Html.classNames([false, null, undefined, ""]), "")
     })
   })
 
   describe("Element.class", () => {
     it("still takes a single string", () => {
-      assert.deepStrictEqual(button().class("primary").elementAttrs, {
+      assert.deepStrictEqual(button().class(["primary"]).elementAttrs, {
         class: "primary"
       })
     })
@@ -518,11 +521,11 @@ describe("Html", () => {
     it("joins several tokens and drops the falsy ones", () => {
       const saving = true
       const error: string | undefined = undefined
-      const element = button().class(
+      const element = button().class([
         "rounded px-3 py-1",
         saving && "opacity-50",
         error !== undefined && "ring-2"
-      )
+      ])
       assert.deepStrictEqual(element.elementAttrs, {
         class: "rounded px-3 py-1 opacity-50"
       })
@@ -530,11 +533,11 @@ describe("Html", () => {
 
     it("removes the attribute when every token is falsy", () => {
       assert.deepStrictEqual(
-        button().class(false, null, undefined, "").elementAttrs,
+        button().class([false, null, undefined, ""]).elementAttrs,
         {}
       )
       assert.deepStrictEqual(
-        button().class("primary").class(false).elementAttrs,
+        button().class(["primary"]).class([false]).elementAttrs,
         {}
       )
     })
@@ -550,11 +553,11 @@ describe("Html", () => {
           init: () => ({ saving: false }),
           update: ($) => $.model,
           view: (h, model) =>
-            h.div(
-              h.button.class("rounded", model.saving && "opacity-50", "px-3")
-                .children("Save"),
-              h.p.class(model.saving && "busy").children("Idle")
-            )
+            h.div([
+              h.button.class(["rounded", model.saving && "opacity-50", "px-3"])
+                .children(["Save"]),
+              h.p.class([model.saving && "busy"]).children(["Idle"])
+            ])
         })
         const rendered = yield* HtmlServer.renderToHtml(Classes, {})
         assert.include(

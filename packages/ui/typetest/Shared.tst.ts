@@ -46,7 +46,7 @@ const Tip = Component.define({
   update: ($) => $.model,
   view: (h) => {
     expect(h.shared.provider).type.toBe<{ open: string | null }>()
-    return h.span()
+    return h.span([])
   }
 })
 
@@ -212,7 +212,10 @@ describe("shared state", () => {
 
   it("takes an owner as a scene's component", () => {
     expect(
-      Scene.make(TipsProvider, {}, { elements: Html, view: (_, h) => h.span() })
+      Scene.make(TipsProvider, {}, {
+        elements: Html,
+        view: (_, h) => h.span([])
+      })
     ).type.not.toRaiseError()
   })
 })

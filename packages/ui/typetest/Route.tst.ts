@@ -125,11 +125,11 @@ describe("Router", () => {
       init: () => ({ n: 0 }),
       update: ($, message) =>
         message._tag === "Go"
-          ? $.run(
+          ? $.run([
             Router.push(AppRoute, AppRoute.Home()).pipe(
               Command.map(() => Message.Done())
             )
-          )
+          ])
           : $.model,
       subscriptions: () => [Router.subscription(AppRoute, AppRoute.Home(), () =>
         Message.Done())],

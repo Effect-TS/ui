@@ -83,7 +83,7 @@ import * as HtmlServer from "./HtmlServer.ts"
  * }).make({
  *   init: ($) => ({ route: $.props.route }),
  *   update: ($) => $.model,
- *   view: (h, { route }) => h.el("h1", route._tag === "Home" ? "Home" : "Page not found")
+ *   view: (h, { route }) => h.el("h1", [route._tag === "Home" ? "Home" : "Page not found"])
  * })
  *
  * const Pages = layerHttp(App, {

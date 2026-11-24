@@ -11,10 +11,10 @@ type H = View.Helper<never, CollapsibleProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (collapsible: Parts, h: H) =>
-    collapsible.root(h.div.class("root")).children(
-      collapsible.trigger(h.button.class("trigger")).children("Details"),
-      collapsible.panel(h.div.class("panel"))?.children("Content")
-    )
+    collapsible.root(h.div.class(["root"])).children([
+      collapsible.trigger(h.button.class(["trigger"])).children(["Details"]),
+      collapsible.panel(h.div.class(["panel"]))?.children(["Content"])
+    ])
 }
 
 const root = Locator.attr("class", "root")
@@ -56,11 +56,11 @@ describe("Collapsible", () => {
       assert.isUndefined(s.get(trigger).attrs?.["aria-controls"])
       assert.deepInclude(s.get(root).attrs, { "data-closed": "" })
 
-      s.click(trigger).emitted({
+      s.click(trigger).emitted([{
         _tag: "Toggled",
         open: true,
         reason: "trigger-press"
-      })
+      }])
       assert.isUndefined(s.query(panel))
 
       s.props({ open: true })
@@ -72,11 +72,11 @@ describe("Collapsible", () => {
         "aria-controls": id,
         "data-panel-open": ""
       })
-      s.click(trigger).emitted({
+      s.click(trigger).emitted([{
         _tag: "Toggled",
         open: false,
         reason: "trigger-press"
-      })
+      }])
 
       const disabled = yield* Scene.make(Collapsible, {
         open: false,
@@ -115,17 +115,17 @@ describe("Collapsible", () => {
       .id!
     const collapsible = parts({ open: true })
     const node = View.build(
-      collapsible.root(h.div).children(
-        h.h3.children(
+      collapsible.root(h.div).children([
+        h.h3.children([
           collapsible.trigger(
             h.button.forward((button) =>
-              h.span.class("wrapper").children(button)
+              h.span.class(["wrapper"]).children([button])
             )
           )
-        ),
+        ]),
         h.button.attr("aria-controls", generated),
         collapsible.panel(h.div.attr("id", "shipping"))
-      ),
+      ]),
       []
     )
     const wrapper = (node.children[0] as View.Element<never>)
@@ -168,7 +168,7 @@ describe("Collapsible", () => {
     const closed = parts({ open: false, disabled: true, keepMounted: true })
     const consumer = (element: typeof h.div) =>
       element
-        .class("mine")
+        .class(["mine"])
         .attr("aria-label", "Shipping")
         .attr("data-open", "x")
         .attr("data-closed", "x")
@@ -194,7 +194,7 @@ describe("Collapsible", () => {
       const triggerNode = View.build(
         collapsible.trigger(
           h.button
-            .class("mine")
+            .class(["mine"])
             .attr("aria-label", "Shipping")
             .attr("type", "submit")
             .attr("disabled", "")

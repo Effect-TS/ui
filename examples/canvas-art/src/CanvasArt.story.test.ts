@@ -18,7 +18,7 @@ describe("CanvasArt", () => {
       const s = yield* Story.make(CanvasArt, {})
       s.given(empty)
         .send(CanvasArtMessage.ClickedCanvas({ x: 150, y: 200 }))
-        .expectExact(GenerateBall.make({ x: 150, y: 200 }))
+        .expectExact([GenerateBall.make({ x: 150, y: 200 })])
         .resolve(GenerateBall, {
           x: 150,
           y: 200,

@@ -10,7 +10,7 @@
  * `Input` returns a single `<input>` builder. It uses `h.input` by
  * default. Pass `element` to share the input with another part. Chain
  * classes and attributes on the result:
- * `Input(h, { props, onUpdate }).class("name").attr("name", "name")`.
+ * `Input(h, { props, onUpdate }).class(["name"]).attr("name", "name")`.
  * It adds no markup.
  *
  * Naming the input is the caller's job: a `<label>` around it or one
@@ -55,13 +55,13 @@
  *     UpdatedName: ($, { value }) => $.evolve({ name: value })
  *   },
  *   view: (h, model) =>
- *     h.label(
+ *     h.label([
  *       "Name",
  *       Input(h, {
  *         props: { value: model.name },
  *         onUpdate: ({ value }) => ProfileMessage.UpdatedName({ value })
- *       }).class("name").attr("name", "name")
- *     )
+ *       }).class(["name"]).attr("name", "name")
+ *     ])
  * })
  *
  * // The input keeps the caller's class and name.

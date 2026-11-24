@@ -101,36 +101,36 @@ export const App = AppDef.make({
   head: ({ model }) => [Head.title(routeTitle(model.route))],
 
   view: (h, { route, searchHistory, searchInput }) =>
-    h.div.class("min-h-screen bg-gray-100").children(
-      h.header.children(
+    h.div.class(["min-h-screen bg-gray-100"]).children([
+      h.header.children([
         NavigationMenu(h, {
           view: (navigationMenu) =>
             navigationMenu.root(
-              h.nav.class("bg-blue-500 text-white p-4 mb-6").attr(
+              h.nav.class(["bg-blue-500 text-white p-4 mb-6"]).attr(
                 "aria-label",
                 "Main"
               )
-            ).children(
+            ).children([
               navigationMenu.list(
-                h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")
+                h.ul.class(["max-w-4xl mx-auto flex gap-6 list-none"])
               ).children(
                 navLinks(route).map(({ active, inSection, label, to }) =>
-                  navigationMenu.item(h.li.key(label)).children(
+                  navigationMenu.item(h.li.key(label)).children([
                     navigationMenu.link({
                       element: h.a.attr("href", AppRoute.print(to))
-                        .class(
+                        .class([
                           "hover:bg-blue-600 font-medium px-3 py-1 rounded transition data-active:bg-blue-700/50",
                           inSection && "bg-blue-700/50"
-                        ),
+                        ]),
                       active
-                    }).children(label)
-                  )
+                    }).children([label])
+                  ])
                 )
               )
-            )
+            ])
         })
-      ),
-      h.main.class("max-w-4xl mx-auto px-4 py-8").children(
+      ]),
+      h.main.class(["max-w-4xl mx-auto px-4 py-8"]).children([
         AppRoute.match(route, {
           Home: () => HomePage(h),
           Nested: () => NestedPage(h),
@@ -142,17 +142,17 @@ export const App = AppDef.make({
                   AppMessage.ChangedSearchInput({ value })
               },
               fallback: (result) =>
-                h.p.class("text-lg text-gray-600").children(
+                h.p.class(["text-lg text-gray-600"]).children([
                   result._tag === "Failure"
                     ? "Couldn't load this page. Reload to try again."
                     : "Loading…"
-                )
+                ])
             }),
           Person: ({ params }) => PersonPage(h, params.personId),
           FilesIndex: () => FilesIndexPage(h),
           Files: (route) => FilesPage(h, filesPathOf(route)),
           NotFound: ({ params }) => NotFoundPage(h, `/${params["*"]}`)
         })
-      )
-    )
+      ])
+    ])
 })

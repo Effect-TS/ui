@@ -51,10 +51,10 @@ const Page = Component.define({
     RemovedB: ($) => ({ ...$.model, showB: false })
   },
   view: (h, model) =>
-    h.div(
-      h.button.attr("id", "outside").onClick(Message.RemovedB()).children(
+    h.div([
+      h.button.attr("id", "outside").onClick(Message.RemovedB()).children([
         "Outside"
-      ),
+      ]),
       PreviewCard(h, {
         props: {
           open: model.open,
@@ -69,37 +69,37 @@ const Page = Component.define({
           Settled: () => undefined
         },
         view: (previewCard) =>
-          h.p(
+          h.p([
             previewCard.trigger({
               element: h.a.attr("id", "a").attr("href", "/a"),
               delay: 0,
               closeDelay: 0
             })
-              .children("A"),
+              .children(["A"]),
             model.showB
               ? previewCard.trigger({
                 element: h.a.attr("id", "b").attr("href", "/b"),
                 delay: 0,
                 closeDelay: 0
               })
-                .children("B")
+                .children(["B"])
               : null,
             previewCard.trigger({
               element: h.a.attr("id", "wrapped").attr("href", "/w"),
               delay: 100
             })
-              .children("A link that wraps"),
-            previewCard.portal(h.div)?.children(
+              .children(["A link that wraps"]),
+            previewCard.portal(h.div)?.children([
               previewCard.positioner(h.div.attr("data-positioner", ""))
-                .children(
-                  previewCard.popup(h.div.attr("data-popup", "")).children(
-                    h.a.attr("id", "inner").attr("href", "/inner").children(
+                .children([
+                  previewCard.popup(h.div.attr("data-popup", "")).children([
+                    h.a.attr("id", "inner").attr("href", "/inner").children([
                       `More on ${model.triggerId}`
-                    )
-                  )
-                )
-            )
-          )
+                    ])
+                  ])
+                ])
+            ])
+          ])
       }),
       PreviewCardTrigger(h, {
         element: h.a.attr("id", "detached").attr("href", "/detached"),
@@ -109,8 +109,8 @@ const Page = Component.define({
           delay: 0,
           closeDelay: 0
         }
-      }).children("Detached")
-    )
+      }).children(["Detached"])
+    ])
 })
 
 const mountPage = Effect.fnUntraced(function*() {

@@ -201,31 +201,32 @@ const toneClass = (tone: Read.Tone | undefined) =>
 const Mark = (
   h: H,
   mark: Read.Mark,
-  ...classes: ReadonlyArray<string | null>
+  classes: ReadonlyArray<string | null> = []
 ) =>
-  h.span.class("mk", "mk-" + mark, ...classes).attr("aria-hidden", "true").attr(
-    "data-mark",
-    mark
-  )
+  h.span.class(["mk", "mk-" + mark, ...classes]).attr("aria-hidden", "true")
+    .attr(
+      "data-mark",
+      mark
+    )
 
-const Code = (h: H, text: string) => h.span.class("code").children(text)
+const Code = (h: H, text: string) => h.span.class(["code"]).children([text])
 
 const Name = (h: H, entry: Entry, text: string) =>
   text === entry._tag ? text : Code(h, text)
 
 const SeqLink = (h: H, ref: Ref) =>
   ref.entry._tag === "Outside"
-    ? h.span.class("ref", "outside").attr(
+    ? h.span.class(["ref", "outside"]).attr(
       "title",
       "Outside the inspector's buffer"
-    ).children("#" + ref.seq)
-    : h.button.class("ref").attr(
+    ).children(["#" + ref.seq])
+    : h.button.class(["ref"]).attr(
       "aria-label",
       "Go to #" + ref.seq + " " + Read.summaryOf(ref.entry)
     )
-      .onClick(OverlayMessage.ClickedLink({ seq: ref.seq })).children(
+      .onClick(OverlayMessage.ClickedLink({ seq: ref.seq })).children([
         "#" + ref.seq
-      )
+      ])
 
 const Json = (h: H, value: Schema.Json | undefined): Children => {
   if (value === undefined) return []
@@ -233,47 +234,50 @@ const Json = (h: H, value: Schema.Json | undefined): Children => {
   if (value === null || typeof value !== "object") {
     return [
       typeof value === "string"
-        ? h.span.class("t-str").children(JSON.stringify(value))
-        : h.span.class(value === null ? null : "t-num").children(String(value))
+        ? h.span.class(["t-str"]).children([JSON.stringify(value)])
+        : h.span.class([value === null ? null : "t-num"]).children([
+          String(value)
+        ])
     ]
   }
   if (Array.isArray(value)) {
     return [
-      h.span.class("t-punct").children("["),
+      h.span.class(["t-punct"]).children(["["]),
       ...value.flatMap((item, index) => [
-        ...(index === 0 ? [] : [h.span.class("t-punct").children(", ")]),
+        ...(index === 0 ? [] : [h.span.class(["t-punct"]).children([", "])]),
         ...Json(h, item)
       ]),
-      h.span.class("t-punct").children("]")
+      h.span.class(["t-punct"]).children(["]"])
     ]
   }
   const keys = Object.keys(value)
-  if (keys.length === 0) return [h.span.class("t-punct").children("{}")]
+  if (keys.length === 0) return [h.span.class(["t-punct"]).children(["{}"])]
   return [
-    h.span.class("t-punct").children("{ "),
+    h.span.class(["t-punct"]).children(["{ "]),
     ...keys.flatMap((key, index) => [
-      ...(index === 0 ? [] : [h.span.class("t-punct").children(", ")]),
-      h.span.class("t-key").children(key + ": "),
+      ...(index === 0 ? [] : [h.span.class(["t-punct"]).children([", "])]),
+      h.span.class(["t-key"]).children([key + ": "]),
       ...Json(h, (value as Schema.JsonObject)[key])
     ]),
-    h.span.class("t-punct").children(" }")
+    h.span.class(["t-punct"]).children([" }"])
   ]
 }
 
 const Placeholder = (h: H, value: MessageLog.Placeholder) =>
   "~redacted" in value
-    ? h.span.class("placeholder").attr(
+    ? h.span.class(["placeholder"]).attr(
       "title",
       "Redacted by the encoder: the value never left the app"
     )
-      .children("redacted")
+      .children(["redacted"])
     : "~truncated" in value
-    ? h.span.class("placeholder").attr("title", "Over maxEntryBytes").children(
-      "truncated, " + value["~truncated"] + " bytes"
-    )
-    : h.span.class("placeholder").attr("title", "No JSON form").children(
+    ? h.span.class(["placeholder"]).attr("title", "Over maxEntryBytes")
+      .children([
+        "truncated, " + value["~truncated"] + " bytes"
+      ])
+    : h.span.class(["placeholder"]).attr("title", "No JSON form").children([
       "unserialisable " + value["~unserialisable"]
-    )
+    ])
 
 const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
   const sessions = feed.inspector.sessions()
@@ -287,19 +291,20 @@ const shows = (model: OverlayModel, session: string, seq: number) =>
   model.paused?.session === session && model.paused.seq === seq
 
 const PausedBadge = (h: H, seq: number) =>
-  h.span.class("paused").children(
-    h.span.class("paused-label").children("Paused at #" + seq),
-    h.button.class("resume").attr("aria-label", "Resume the live page").onClick(
-      OverlayMessage.ClickedResume()
-    )
-      .children("Resume")
-  )
+  h.span.class(["paused"]).children([
+    h.span.class(["paused-label"]).children(["Paused at #" + seq]),
+    h.button.class(["resume"]).attr("aria-label", "Resume the live page")
+      .onClick(
+        OverlayMessage.ClickedResume()
+      )
+      .children(["Resume"])
+  ])
 
 const paths = (h: H, list: ReadonlyArray<string>) =>
   list.flatMap((
     path,
     at
-  ) => [at === 0 ? null : ", ", h.code.class("path").children(path)])
+  ) => [at === 0 ? null : ", ", h.code.class(["path"]).children([path])])
 
 const PausedBar = (
   h: H,
@@ -310,12 +315,12 @@ const PausedBar = (
   const stops = timeline.filter((entry) => paintable(entry.session, entry.seq))
     .reverse()
   const at = stops.findIndex((entry) => entry.seq === paused.seq)
-  return h.section.class("pausebar").attr(
+  return h.section.class(["pausebar"]).attr(
     "aria-label",
     "Page shown at an earlier entry"
-  ).children(
-    h.div.class("scrub").children(
-      h.span.class("muted").children("Page at"),
+  ).children([
+    h.div.class(["scrub"]).children([
+      h.span.class(["muted"]).children(["Page at"]),
       h.input.attr("type", "range").attr(
         "aria-label",
         "Entry shown on the page"
@@ -331,21 +336,21 @@ const PausedBar = (
             ? undefined
             : OverlayMessage.ScrubbedPage({ seq: entry.seq })
         }),
-      h.span.class("at").children("#" + paused.seq)
-    ),
+      h.span.class(["at"]).children(["#" + paused.seq])
+    ]),
     paused.fellBack.length === 0 ?
       null :
-      h.p.class("pause-note", "tone-open").children(
+      h.p.class(["pause-note", "tone-open"]).children([
         "No state at #" + paused.seq + ", shown from init: ",
         paths(h, paused.fellBack)
-      ),
+      ]),
     paused.fallbacks.length === 0 ?
       null :
-      h.p.class("pause-note", "tone-open").children(
+      h.p.class(["pause-note", "tone-open"]).children([
         "A feature slot shows its fallback, since its Layer isn't built on the painted page, in: ",
         paths(h, paused.fallbacks)
-      )
-  )
+      ])
+  ])
 }
 
 const Header = (
@@ -356,36 +361,36 @@ const Header = (
 ) => {
   const following = model.selected === null && model.pinned
   const canClear = session !== undefined && count > 0 && model.paused === null
-  return h.header.class("bar").children(
-    h.span.class("logo").attr("aria-hidden", "true"),
-    h.h2.class("title").children("Effect UI inspector"),
+  return h.header.class(["bar"]).children([
+    h.span.class(["logo"]).attr("aria-hidden", "true"),
+    h.h2.class(["title"]).children(["Effect UI inspector"]),
     session?.app === undefined
       ? null
-      : h.span.class("app").children(session.app),
-    h.span.class("spacer"),
+      : h.span.class(["app"]).children([session.app]),
+    h.span.class(["spacer"]),
     model.paused === null ? null : PausedBadge(h, model.paused.seq),
-    h.span.class("count").children(
+    h.span.class(["count"]).children([
       count === 1 ? "1 entry" : count + " entries"
-    ),
-    h.button.class("clear").disabled(!canClear)
+    ]),
+    h.button.class(["clear"]).disabled(!canClear)
       .attr(
         "title",
         model.paused !== null ? "Resume before clearing" : "Clear the timeline"
       )
-      .onClick(OverlayMessage.ClickedClear()).children("Clear"),
-    h.button.class("follow", following && "on").attr(
+      .onClick(OverlayMessage.ClickedClear()).children(["Clear"]),
+    h.button.class(["follow", following && "on"]).attr(
       "aria-pressed",
       String(following)
     )
-      .onClick(OverlayMessage.ClickedFollowLatest()).children(
-        h.span.class("dot").attr("aria-hidden", "true"),
+      .onClick(OverlayMessage.ClickedFollowLatest()).children([
+        h.span.class(["dot"]).attr("aria-hidden", "true"),
         "Follow latest"
-      ),
-    h.button.class("close").attr("aria-label", "Close the inspector").onClick(
+      ]),
+    h.button.class(["close"]).attr("aria-label", "Close the inspector").onClick(
       OverlayMessage.ClickedClose()
     )
-      .children("✕")
-  )
+      .children(["✕"])
+  ])
 }
 
 interface InstanceRow {
@@ -454,36 +459,36 @@ const lineage = (session: Session, summary: Inspector.Summary) => {
 
 const Statuses = (h: H, summary: Inspector.Summary) => {
   const statuses = Read.statusesOf(summary)
-  return h.span.class("status").attr(
+  return h.span.class(["status"]).attr(
     "title",
     statuses.map((status) => status.text).join(", ") || undefined
   ).children(
     statuses.flatMap((status, index) => [
       index === 0 ? null : ", ",
-      h.span.class(toneClass(status.tone)).children(status.text)
+      h.span.class([toneClass(status.tone)]).children([status.text])
     ])
   )
 }
 
 const Rollup = (h: H, below: Inspector.Summary["below"]) =>
-  h.span.class("rollup").children(
-    h.span.class("under").children(
+  h.span.class(["rollup"]).children([
+    h.span.class(["under"]).children([
       below.instances.toLocaleString("en-US"),
-      h.span.class("sr").children(
+      h.span.class(["sr"]).children([
         below.instances === 1 ? " instance under it" : " instances under it"
-      )
-    ),
-    below.failing === 0 ? null : h.span.class("roll", "tone-bad").children(
+      ])
+    ]),
+    below.failing === 0 ? null : h.span.class(["roll", "tone-bad"]).children([
       Mark(h, "bad"),
       String(below.failing),
-      h.span.class("sr").children(" failed or interrupted")
-    ),
-    below.running === 0 ? null : h.span.class("roll", "tone-open").children(
+      h.span.class(["sr"]).children([" failed or interrupted"])
+    ]),
+    below.running === 0 ? null : h.span.class(["roll", "tone-open"]).children([
       Mark(h, "start"),
       String(below.running),
-      h.span.class("sr").children(" running")
-    )
-  )
+      h.span.class(["sr"]).children([" running"])
+    ])
+  ])
 
 const instanceMarks = { bad: "bad", open: "start", calm: "message" } as const
 
@@ -504,40 +509,40 @@ const InstanceItem = (
   const tone = Read.toneOf(summary)
   return [
     !tree ? null : summary.below.instances === 0
-      ? h.span.class("chev").attr("aria-hidden", "true")
-      : h.button.class("chev").attr("aria-expanded", String(row.expanded))
+      ? h.span.class(["chev"]).attr("aria-hidden", "true")
+      : h.button.class(["chev"]).attr("aria-expanded", String(row.expanded))
         .attr("aria-label", "Instances under " + name)
         .onClick(OverlayMessage.ToggledBranch({ instance: summary.instance }))
-        .children(
+        .children([
           row.expanded ? "▾" : "▸"
-        ),
-    h.button.class(
+        ]),
+    h.button.class([
       "irow",
       scoped && "on",
       owner === summary.instance && "owner"
-    )
+    ])
       .attr("aria-pressed", String(scoped))
       .attr("aria-current", owner === summary.instance ? "true" : undefined)
       .attr("data-instance", name)
       .attr("title", "Show only " + name + " and the instances under it")
       .onClick(OverlayMessage.ClickedScope({ instance: summary.instance }))
-      .children(
+      .children([
         tree
           ? null
-          : Mark(h, instanceMarks[tone ?? "calm"], "imark", toneClass(tone)),
-        h.span.class("id").children(
-          h.span.class("iname", "code").children(name),
+          : Mark(h, instanceMarks[tone ?? "calm"], ["imark", toneClass(tone)]),
+        h.span.class(["id"]).children([
+          h.span.class(["iname", "code"]).children([name]),
           parent === undefined
             ? null
-            : h.span.class("in").children(
+            : h.span.class(["in"]).children([
               " in ",
               Code(h, Read.nameOf(parent.path))
-            )
-        ),
+            ])
+        ]),
         tree && summary.below.instances > 0
           ? Rollup(h, summary.below)
           : Statuses(h, summary)
-      )
+      ])
   ]
 }
 
@@ -571,19 +576,19 @@ const InstanceList = (
     },
     view: (list) =>
       list.viewport(
-        h.div.class("ilist", mode === "tree" && "tree-list").attr(
+        h.div.class(["ilist", mode === "tree" && "tree-list"]).attr(
           "aria-label",
           "Instances"
         )
-      ).children(
+      ).children([
         list.list(h.ul).children(
           list.items.map((index) => {
             const row = rows[index]!
             return list.item({
-              element: h.li.key(keys[index]!).class(
+              element: h.li.key(keys[index]!).class([
                 "iitem",
                 row.split && "split"
-              ).attr(
+              ]).attr(
                 "style",
                 mode === "tree"
                   ? "padding-left:" + (8 + row.depth * 14) + "px"
@@ -591,11 +596,11 @@ const InstanceList = (
               ),
               index
             }).children(
-              ...InstanceItem(h, session, row, model, owner, mode === "tree")
+              InstanceItem(h, session, row, model, owner, mode === "tree")
             )
           })
         )
-      )
+      ])
   })
 }
 
@@ -616,52 +621,55 @@ const Instances = (
       owner,
       model.scope === null ? undefined : session.summary(model.scope)
     ])
-  return h.section.class("instances").attr("aria-label", "Instances").children(
-    h.div.class("ihead").children(
-      h.h3.class("heading").children("Instances"),
-      h.span.class("icount").children(count.toLocaleString("en-US")),
-      h.input.class("find").attr("type", "search").attr(
-        "aria-label",
-        "Find an instance"
-      )
-        .attr("placeholder", "Find an instance").attr("spellcheck", "false")
-        .value(model.find)
-        .onInput(({ value }) => OverlayMessage.TypedFind({ text: value }))
-    ),
-    rows.length === 0
-      ? h.p.class("inote").children(
-        mode === "find"
-          ? "No instance matches."
-          : "No instance has run a Command or taken a message yet."
-      )
-      : InstanceList(h, session, rows, model, owner?.instance, mode),
-    mode === "find" ? null : h.button.class("browse").onClick(
-      OverlayMessage.ClickedBrowse({
-        browse: !model.browse,
-        branches: model.browse || owner === undefined
-          ? []
-          : lineage(session, owner).slice(0, -1).map(({ instance }) => instance)
-      })
-    ).children(
-      model.browse
-        ? "Back to active instances"
-        : "Browse all " + count.toLocaleString("en-US")
-    )
-  )
+  return h.section.class(["instances"]).attr("aria-label", "Instances")
+    .children([
+      h.div.class(["ihead"]).children([
+        h.h3.class(["heading"]).children(["Instances"]),
+        h.span.class(["icount"]).children([count.toLocaleString("en-US")]),
+        h.input.class(["find"]).attr("type", "search").attr(
+          "aria-label",
+          "Find an instance"
+        )
+          .attr("placeholder", "Find an instance").attr("spellcheck", "false")
+          .value(model.find)
+          .onInput(({ value }) => OverlayMessage.TypedFind({ text: value }))
+      ]),
+      rows.length === 0
+        ? h.p.class(["inote"]).children([
+          mode === "find"
+            ? "No instance matches."
+            : "No instance has run a Command or taken a message yet."
+        ])
+        : InstanceList(h, session, rows, model, owner?.instance, mode),
+      mode === "find" ? null : h.button.class(["browse"]).onClick(
+        OverlayMessage.ClickedBrowse({
+          browse: !model.browse,
+          branches: model.browse || owner === undefined
+            ? []
+            : lineage(session, owner).slice(0, -1).map(({ instance }) =>
+              instance
+            )
+        })
+      ).children([
+        model.browse
+          ? "Back to active instances"
+          : "Browse all " + count.toLocaleString("en-US")
+      ])
+    ])
 }
 
 const Filters = (h: H, model: OverlayModel) =>
-  h.div.class("filters").attr("role", "group").attr(
+  h.div.class(["filters"]).attr("role", "group").attr(
     "aria-label",
     "Show in the timeline"
   ).children(
     filters.map(([filter, label]) =>
-      h.button.key(filter).class("filter", model.filter === filter && "on")
+      h.button.key(filter).class(["filter", model.filter === filter && "on"])
         .attr(
           "aria-pressed",
           String(model.filter === filter)
         )
-        .onClick(OverlayMessage.ClickedFilter({ filter })).children(label)
+        .onClick(OverlayMessage.ClickedFilter({ filter })).children([label])
     )
   )
 
@@ -702,15 +710,15 @@ const Gutter = (
     Array.from(
       set,
       (at) =>
-        h.i.key(kind + at).class("g-" + kind).attr(
+        h.i.key(kind + at).class(["g-" + kind]).attr(
           "style",
           "top:" + (at * 100 / gutterSteps) + "%"
         )
     )
-  return h.div.class("gutter").attr("aria-hidden", "true").children(
+  return h.div.class(["gutter"]).attr("aria-hidden", "true").children([
     ...marks(linked, "link"),
     ...marks(failed, "bad")
-  )
+  ])
 }
 
 const Timeline = (
@@ -728,10 +736,10 @@ const Timeline = (
   const railed = timeline.map((entry) => chain.has(entry.seq))
   const first = railed.indexOf(true)
   const last = railed.lastIndexOf(true)
-  return h.div.class("timeline-box", steps.some(Read.inRun) && "cmd").attr(
+  return h.div.class(["timeline-box", steps.some(Read.inRun) && "cmd"]).attr(
     "style",
     "--seq-digits:" + String(newest).length
-  ).children(
+  ).children([
     VirtualList(h, {
       key: "timeline",
       props: {
@@ -747,9 +755,9 @@ const Timeline = (
       },
       view: (list) =>
         list.viewport(
-          h.div.class("timeline").attr("aria-label", "Timeline, newest first")
-        ).children(
-          list.list(h.div.class("rows")).children(
+          h.div.class(["timeline"]).attr("aria-label", "Timeline, newest first")
+        ).children([
+          list.list(h.div.class(["rows"])).children(
             list.items.map((index) => {
               const entry = timeline[index]!
               const label = Read.rowOf(session, entry)
@@ -761,18 +769,18 @@ const Timeline = (
                 ? "bot"
                 : "mid"
               return list.item({
-                element: h.div.key(keys[index]!).class(
+                element: h.div.key(keys[index]!).class([
                   "row",
                   entry.seq === selected && "selected",
                   railed[index] && "linked"
-                ),
+                ]),
                 index
               }).attr("data-seq", String(entry.seq)).attr(
                 "data-tag",
                 entry._tag
-              ).children(
-                h.span.class("rail", rail).attr("aria-hidden", "true"),
-                h.button.class("row-button").attr(
+              ).children([
+                h.span.class(["rail", rail]).attr("aria-hidden", "true"),
+                h.button.class(["row-button"]).attr(
                   "aria-label",
                   "#" + entry.seq + " " + Read.summaryOf(entry)
                 )
@@ -781,40 +789,47 @@ const Timeline = (
                     entry.seq === selected ? "true" : undefined
                   )
                   .onClick(OverlayMessage.ClickedEntry({ seq: entry.seq }))
-                  .children(
-                    h.span.class("seq").children(String(entry.seq)),
-                    Mark(h, Read.markOf(entry), "mark", toneClass(label.tone)),
-                    h.span.class("lw").children(
-                      h.span.class("label").children(
+                  .children([
+                    h.span.class(["seq"]).children([String(entry.seq)]),
+                    Mark(h, Read.markOf(entry), [
+                      "mark",
+                      toneClass(label.tone)
+                    ]),
+                    h.span.class(["lw"]).children([
+                      h.span.class(["label"]).children([
                         Name(h, entry, label.text),
                         label.detail === undefined ?
                           null :
-                          h.span.class("verb", toneClass(label.tone)).children(
-                            " " + label.detail
-                          )
-                      ),
+                          h.span.class(["verb", toneClass(label.tone)])
+                            .children([
+                              " " + label.detail
+                            ])
+                      ]),
                       "path" in entry
-                        ? h.span.class("who", "code").attr("title", entry.path)
-                          .children(Read.nameOf(entry.path))
+                        ? h.span.class(["who", "code"]).attr(
+                          "title",
+                          entry.path
+                        )
+                          .children([Read.nameOf(entry.path)])
                         : null
-                    )
-                  )
-              )
+                    ])
+                  ])
+              ])
             })
           ),
-          hidden === 0 ? null : h.p.class("hidden-note").children(
+          hidden === 0 ? null : h.p.class(["hidden-note"]).children([
             (hidden === 1
               ? "1 lifecycle entry"
               : hidden + " lifecycle entries") + " hidden. ",
             h.button.onClick(OverlayMessage.ClickedFilter({ filter: "all" }))
-              .children(
+              .children([
                 hidden === 1 ? "Show it" : "Show them"
-              )
-          )
-        )
+              ])
+          ])
+        ])
     }),
     timeline.length > 20 ? Gutter(h, timeline, chain, selected) : null
-  )
+  ])
 }
 
 const sourceText = (source: Read.Source): string => {
@@ -853,28 +868,31 @@ const Label = (
   const label = Read.labelOf(entry)
   return [
     strong
-      ? h.strong.class(label.text === entry._tag ? null : "code").children(
+      ? h.strong.class([label.text === entry._tag ? null : "code"]).children([
         label.text
-      )
+      ])
       : Name(h, entry, label.text),
     label.detail === undefined
       ? null
-      : h.span.class("muted", toneClass(label.tone)).children(
+      : h.span.class(["muted", toneClass(label.tone)]).children([
         " " + label.detail
-      )
+      ])
   ]
 }
 
 const RefSummary = (h: H, ref: Ref): Children =>
   ref.entry._tag === "Outside"
-    ? [SeqLink(h, ref), h.span.class("muted").children(" outside the buffer")]
+    ? [
+      SeqLink(h, ref),
+      h.span.class(["muted"]).children([" outside the buffer"])
+    ]
     : [...Label(h, ref.entry), " ", SeqLink(h, ref)]
 
 const Stopped = (h: H, refs: ReadonlyArray<Ref>): Children =>
   refs.length === 0
     ? []
     : [
-      h.span.class("muted").children(", stopped "),
+      h.span.class(["muted"]).children([", stopped "]),
       ...refs.flatMap((ref) => [SeqLink(h, ref), " "])
     ]
 
@@ -907,19 +925,19 @@ const Step = (
   tone?: Tone,
   extra?: Children
 ) =>
-  h.li.class(
+  h.li.class([
     "step",
     tone === undefined ? null : "step-" + tone,
     Read.inRun(step) && "run"
-  )
+  ])
     .attr("data-step", step._tag).attr(
       "data-index",
       step._tag === "Command" ? String(step.index) : undefined
-    ).children(
-      h.span.class("node").children(Mark(h, markOfStep(step))),
-      h.div.class("what").children(...body),
-      extra === undefined ? null : h.div.class("args").children(...extra)
-    )
+    ).children([
+      h.span.class(["node"]).children([Mark(h, markOfStep(step))]),
+      h.div.class(["what"]).children(body),
+      extra === undefined ? null : h.div.class(["args"]).children(extra)
+    ])
 
 const endText = (end: Entry | Inspector.Outside): string => {
   switch (end._tag) {
@@ -942,7 +960,7 @@ const linkText: { readonly [R in Inspector.Link["rel"]]: string } = {
 }
 
 const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
-  h.ol.class("chain").attr("aria-label", "Causal chain").children(
+  h.ol.class(["chain"]).attr("aria-label", "Causal chain").children(
     steps.map((step, index) => {
       switch (step._tag) {
         case "Source":
@@ -964,7 +982,7 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
               ...Label(h, step.ref.entry, step.selected),
               " ",
               step.selected
-                ? h.span.class("muted").children("this entry")
+                ? h.span.class(["muted"]).children(["this entry"])
                 : SeqLink(h, step.ref),
               ...Stopped(h, step.stopped ?? [])
             ],
@@ -976,7 +994,7 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
               "Interrupt " + step.command.name,
               step.command.group === null
                 ? null
-                : h.span.class("muted").children(" " + step.command.group),
+                : h.span.class(["muted"]).children([" " + step.command.group]),
               ...Stopped(h, step.stopped)
             ])
             : Step(
@@ -1015,7 +1033,7 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
               : [
                 "Still running since ",
                 SeqLink(h, step.since),
-                h.span.class("muted").children(", no end logged yet")
+                h.span.class(["muted"]).children([", no end logged yet"])
               ],
             "open"
           )
@@ -1035,14 +1053,16 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
               " ",
               SeqLink(h, step.ref),
               end._tag === "Failed"
-                ? h.span.class("muted").children(", which failed its instance")
+                ? h.span.class(["muted"]).children([
+                  ", which failed its instance"
+                ])
                 : null,
               ...(next?._tag === "CausedBy"
                 ? [
-                  h.span.class("cause").children(
+                  h.span.class(["cause"]).children([
                     " by ",
                     ...RefSummary(h, next.ref)
-                  )
+                  ])
                 ]
                 : [])
             ],
@@ -1061,7 +1081,7 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
               ...Label(h, link.entry),
               " ",
               SeqLink(h, { seq: link.seq, entry: link.entry }),
-              h.span.class("muted").children(" (" + link.rel + ")")
+              h.span.class(["muted"]).children([" (" + link.rel + ")"])
             ])
           ])
       }
@@ -1081,42 +1101,46 @@ const treeRow = (h: H, row: Read.Row) => {
     : closed && branch.changes > 0
     ? changesText(branch.changes)
     : undefined
-  return h.div.key(row.id).class("tl", (kind ?? label) !== undefined && "chg")
+  return h.div.key(row.id).class(["tl", (kind ?? label) !== undefined && "chg"])
     .attr(
       "style",
       "padding-left:" + (row.depth * 16 + 12) + "px"
-    ).attr("data-change", kind).children(
+    ).attr("data-change", kind).children([
       branch === undefined
-        ? h.span.class("k").children(key)
-        : h.button.class("k", "toggle").attr(
+        ? h.span.class(["k"]).children([key])
+        : h.button.class(["k", "toggle"]).attr(
           "aria-expanded",
           String(branch.expanded)
         ).attr(
           "aria-label",
           label === undefined ? key : key + ", " + label
         ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path }))
-          .children(
-            h.span.class("chev").attr("aria-hidden", "true").children(
+          .children([
+            h.span.class(["chev"]).attr("aria-hidden", "true").children([
               branch.expanded ? "▾" : "▸"
-            ),
+            ]),
             key
-          ),
-      h.span.class("v").children(
+          ]),
+      h.span.class(["v"]).children([
         closed
-          ? h.span.class("t-punct").children(branch.preview)
+          ? h.span.class(["t-punct"]).children([branch.preview])
           : row.open ?? row.close ?? null,
         ...(kind === "changed"
           ? [
-            h.del.class("old").children(...Json(h, change!.before)),
-            h.span.class("arrow").attr("aria-hidden", "true").children(" → "),
-            h.ins.class("new").children(...Json(h, change!.after))
+            h.del.class(["old"]).children(Json(h, change!.before)),
+            h.span.class(["arrow"]).attr("aria-hidden", "true").children([
+              " → "
+            ]),
+            h.ins.class(["new"]).children(Json(h, change!.after))
           ]
           : row.open === undefined && row.close === undefined
           ? Json(h, row.value)
           : []),
-        label === undefined ? null : h.span.class("muted").children(" " + label)
-      )
-    )
+        label === undefined
+          ? null
+          : h.span.class(["muted"]).children([" " + label])
+      ])
+    ])
 }
 
 const Tree = (
@@ -1124,7 +1148,7 @@ const Tree = (
   value: Schema.Json,
   changes: ReadonlyArray<Inspector.Change>
 ) =>
-  h.div.class("tree").children(
+  h.div.class(["tree"]).children(
     Read.treeOf(value, changes).map((row) => treeRow(h, row))
   )
 
@@ -1142,14 +1166,14 @@ const VirtualTree = (
       dataset
     },
     view: (list) =>
-      list.viewport(h.div.class("tree", "scroll").attr("aria-label", label))
-        .children(
+      list.viewport(h.div.class(["tree", "scroll"]).attr("aria-label", label))
+        .children([
           list.list(h.div).children(
             list.items.map((index) =>
               list.item({ element: treeRow(h, rows[index]!), index })
             )
           )
-        )
+        ])
   })
 
 const propsText = {
@@ -1209,34 +1233,34 @@ const recordRow = (h: H, session: Session, record: Inspector.Record) => {
   ).attr(
     "data-kind",
     record.kind
-  ).children(
-    h.th.attr("scope", "row").children(kind),
-    h.td.children(what),
-    h.td.children(
+  ).children([
+    h.th.attr("scope", "row").children([kind]),
+    h.td.children([what]),
+    h.td.children([
       verb,
       startRef === undefined ? "" : SeqLink(h, startRef),
       record.kind === "command" && record.start !== undefined
-        ? h.span.children(
+        ? h.span.children([
           ", started ",
           SeqLink(h, Read.refOf(session, record.start))
-        )
+        ])
         : null
-    ),
-    h.td.class(toneClass(tone)).children(
+    ]),
+    h.td.class([toneClass(tone)]).children([
       record.end === undefined
         ? record.kind === "command"
           ? record.start === undefined ? "not started" : "running"
           : "open"
         : derived
-        ? h.span.children("closed by unmount ", SeqLink(h, endRef!))
-        : h.span.children(
+        ? h.span.children(["closed by unmount ", SeqLink(h, endRef!)])
+        : h.span.children([
           Read.reasonText[record.reason ?? "ended"],
           took >= 1 ? " after " + Read.duration(took) : "",
           " ",
           SeqLink(h, endRef!)
-        )
-    )
-  )
+        ])
+    ])
+  ])
 }
 
 const Lifecycle = (h: H, session: Session, info: Inspector.Instance) => {
@@ -1247,39 +1271,41 @@ const Lifecycle = (h: H, session: Session, info: Inspector.Instance) => {
       unmounted.causedBy === undefined
     ? undefined
     : Read.refOf(session, unmounted.causedBy)
-  return h.table.class("life").attr(
+  return h.table.class(["life"]).attr(
     "aria-label",
     "Lifecycle of " + Read.nameOf(info.path)
-  ).children(
-    h.tbody.children(
-      h.tr.attr("data-kind", "instance").children(
-        h.th.attr("scope", "row").children("Instance"),
-        h.td.children(info.path),
-        h.td.children(
+  ).children([
+    h.tbody.children([
+      h.tr.attr("data-kind", "instance").children([
+        h.th.attr("scope", "row").children(["Instance"]),
+        h.td.children([info.path]),
+        h.td.children([
           info.mounted === undefined
             ? "mounted before the buffer"
-            : h.span.children(
+            : h.span.children([
               "mounted ",
               SeqLink(h, Read.refOf(session, info.mounted))
-            )
-        ),
-        h.td.class(info.unmounted === undefined ? null : "tone-bad").children(
-          info.unmounted === undefined
-            ? "mounted"
-            : h.span.children(
-              "unmounted ",
-              SeqLink(h, Read.refOf(session, info.unmounted)),
-              cause === undefined || cause.entry._tag === "Outside"
-                ? ""
-                : " by " + Read.labelOf(cause.entry).text
-            )
+            ])
+        ]),
+        h.td.class([info.unmounted === undefined ? null : "tone-bad"]).children(
+          [
+            info.unmounted === undefined
+              ? "mounted"
+              : h.span.children([
+                "unmounted ",
+                SeqLink(h, Read.refOf(session, info.unmounted)),
+                cause === undefined || cause.entry._tag === "Outside"
+                  ? ""
+                  : " by " + Read.labelOf(cause.entry).text
+              ])
+          ]
         )
-      ),
+      ]),
       session.records(info.instance).map((record) =>
         recordRow(h, session, record)
       )
-    )
-  )
+    ])
+  ])
 }
 
 interface Section {
@@ -1325,13 +1351,13 @@ const Details = (
       ? []
       : Inspector.diff(before.props, state.props)
     return [
-      h.h4.children(
+      h.h4.children([
         "Props",
-        before === undefined ? null : h.span.class("muted").children(
+        before === undefined ? null : h.span.class(["muted"]).children([
           " · " + propsText[Read.statusOf(propChanges)],
           SeqLink(h, Read.refOf(session, before.seq))
-        )
-      ),
+        ])
+      ]),
       Tree(h, state.props, propChanges)
     ]
   }
@@ -1348,21 +1374,21 @@ const Details = (
           unit: changed === 1 ? "change" : "changes"
         }),
       body: () => [
-        h.p.class("note").children(
+        h.p.class(["note"]).children([
           previous === undefined
             ? "First state of " + name
             : unavailable
-            ? h.span.children(
+            ? h.span.children([
               previous.changed === true ? "Changed since " : "No diff against ",
               SeqLink(h, Read.refOf(session, previous.seq)),
               ", which is outside the buffer"
-            )
-            : h.span.children(
+            ])
+            : h.span.children([
               "Since ",
               SeqLink(h, Read.refOf(session, previous.seq)),
               ", the previous state of " + name
-            )
-        ),
+            ])
+        ]),
         VirtualTree(
           h,
           "Model after #" + entry.seq,
@@ -1376,7 +1402,7 @@ const Details = (
         value: "message",
         label: "Message",
         body: () => [
-          h.p.class("note").children("From " + sourceText(entry.source)),
+          h.p.class(["note"]).children(["From " + sourceText(entry.source)]),
           Tree(h, entry.message, []),
           ...Props()
         ]
@@ -1391,38 +1417,38 @@ const Details = (
         ...(commands.length === 0 ? {} : { count: String(commands.length) }),
         body: () =>
           commands.length === 0
-            ? [h.p.class("note").children("This entry issued no command.")]
+            ? [h.p.class(["note"]).children(["This entry issued no command."])]
             : [
-              h.ol.class("commands").children(
+              h.ol.class(["commands"]).children(
                 commands.map((command, index) => {
                   const run = command._tag === "Interrupt"
                     ? undefined
                     : session.run({ seq: entry.seq, index })
-                  return h.li.key(String(index)).children(
-                    h.div.children(
+                  return h.li.key(String(index)).children([
+                    h.div.children([
                       command._tag === "Interrupt"
                         ? "Interrupt " + command.name
                         : command.name,
                       run === undefined
                         ? null
-                        : h.span.class("muted").children(
+                        : h.span.class(["muted"]).children([
                           " " + runText(run) + " "
-                        ),
+                        ]),
                       run?.end === undefined
                         ? null
                         : SeqLink(h, Read.refOf(session, run.end))
-                    ),
-                    h.div.class("args").children(
+                    ]),
+                    h.div.class(["args"]).children([
                       ...(command._tag === "Interrupt"
                         ? []
                         : Json(h, command.args)),
                       command.group === null
                         ? null
-                        : h.span.class("muted").children(
+                        : h.span.class(["muted"]).children([
                           " group " + command.group
-                        )
-                    )
-                  )
+                        ])
+                    ])
+                  ])
                 })
               )
             ]
@@ -1433,9 +1459,9 @@ const Details = (
       label: "Events",
       count: String(events.length),
       body: () => [
-        h.ol.class("commands").children(
+        h.ol.class(["commands"]).children(
           events.map((event, index) =>
-            h.li.key(String(index)).class("args").children(...Json(h, event))
+            h.li.key(String(index)).class(["args"]).children(Json(h, event))
           )
         )
       ]
@@ -1451,13 +1477,13 @@ const Details = (
       body: () => {
         const frame = JSON.stringify(entry, null, 2)
         return [
-          h.div.class("raw-head").children(
-            h.p.class("note").children("The frame as the log encoded it"),
-            h.button.class("copy").ref(CopyButton).onClick(
+          h.div.class(["raw-head"]).children([
+            h.p.class(["note"]).children(["The frame as the log encoded it"]),
+            h.button.class(["copy"]).ref(CopyButton).onClick(
               OverlayMessage.ClickedCopyFrame({ seq: entry.seq, text: frame })
-            ).children(model.copied === entry.seq ? "Copied" : "Copy frame")
-          ),
-          h.pre.class("raw").children(frame)
+            ).children([model.copied === entry.seq ? "Copied" : "Copy frame"])
+          ]),
+          h.pre.class(["raw"]).children([frame])
         ]
       }
     }
@@ -1471,35 +1497,38 @@ const Details = (
     },
     onEmit: { Selected: ({ value }) => OverlayMessage.SelectedTab({ value }) },
     view: (t) =>
-      t.root(h.div.class("details")).children(
-        t.list(h.div.class("tabs").attr("aria-label", "Entry details"))
+      t.root(h.div.class(["details"])).children([
+        t.list(h.div.class(["tabs"]).attr("aria-label", "Entry details"))
           .children(
-            ...sections.map((section) =>
+            sections.map((section) =>
               t.tab({
-                element: h.button.class("tab").children(
+                element: h.button.class(["tab"]).children([
                   section.label,
                   section.count === undefined ? null : " ",
                   section.count === undefined ?
                     null :
-                    h.small.class("pill").children(
+                    h.small.class(["pill"]).children([
                       section.count,
                       section.unit === undefined
                         ? null
-                        : h.span.class("unit").children(" " + section.unit)
-                    )
-                ),
+                        : h.span.class(["unit"]).children([" " + section.unit])
+                    ])
+                ]),
                 value: section.value
               })
             )
           ),
         ...sections.map((section) =>
           t.panel({
-            element: h.div.class("pane", section.value === "model" && "model"),
+            element: h.div.class([
+              "pane",
+              section.value === "model" && "model"
+            ]),
             value: section.value
           })
             ?.children(section.body())
         )
-      )
+      ])
   })
 }
 
@@ -1508,19 +1537,21 @@ const Crumbs = (
   chain: ReadonlyArray<Inspector.Summary>,
   scope: number | null
 ) =>
-  h.nav.class("crumbs").attr("aria-label", "Path of the instance")
+  h.nav.class(["crumbs"]).attr("aria-label", "Path of the instance")
     .children(
       chain.flatMap(({ instance, path }, index) => {
         const segment = Read.nameOf(path)
         return [
           index === 0
             ? null
-            : h.span.class("slash").attr("aria-hidden", "true").children("/"),
-          h.button.class(
+            : h.span.class(["slash"]).attr("aria-hidden", "true").children([
+              "/"
+            ]),
+          h.button.class([
             "crumb",
             "code",
             index === chain.length - 1 && "here"
-          ).attr(
+          ]).attr(
             "aria-pressed",
             String(scope === instance)
           )
@@ -1528,9 +1559,9 @@ const Crumbs = (
               "title",
               "Show only " + segment + " and the instances under it"
             )
-            .onClick(OverlayMessage.ClickedScope({ instance })).children(
+            .onClick(OverlayMessage.ClickedScope({ instance })).children([
               segment
-            )
+            ])
         ]
       })
     )
@@ -1556,13 +1587,13 @@ const Inspected = (
   const paintable = feed.paintable(entry.session, entry.seq)
   const shown = shows(model, entry.session, entry.seq)
   return [
-    h.section.class("ehead").children(
-      h.div.class("ehead-top").children(
-        h.h3.class("headline").children(
+    h.section.class(["ehead"]).children([
+      h.div.class(["ehead-top"]).children([
+        h.h3.class(["headline"]).children([
           Name(h, entry, label.text),
           label.detail === undefined ? null : " " + label.detail
-        ),
-        h.button.class("show", shown && "on").attr(
+        ]),
+        h.button.class(["show", shown && "on"]).attr(
           "aria-pressed",
           String(shown)
         ).disabled(!paintable)
@@ -1577,21 +1608,21 @@ const Inspected = (
               session: entry.session,
               seq: entry.seq
             })
-          ).children(
+          ).children([
             "Time travel"
-          )
-      ),
-      h.p.class("sub").children(
+          ])
+      ]),
+      h.p.class(["sub"]).children([
         kind + " #" + entry.seq,
         origin === undefined
           ? ""
           : ", " + Read.position(entry.at - origin) + " after start"
-      ),
+      ]),
       self === undefined
         ? null
         : Crumbs(h, lineage(session, self), model.scope),
       Chain(h, steps)
-    ),
+    ]),
     Details(h, session, entry, info, model)
   ]
 }
@@ -1600,16 +1631,16 @@ const Panel = (h: H, model: OverlayModel) => {
   const feed = h.props.feed
   const session = sessionOf(feed, model)
   if (session === undefined) {
-    return h.div.class("panel", "empty").attr("role", "dialog").attr(
+    return h.div.class(["panel", "empty"]).attr("role", "dialog").attr(
       "aria-label",
       "Effect UI inspector"
-    ).children(
-      h.span.class("grip").attr("aria-hidden", "true"),
+    ).children([
+      h.span.class(["grip"]).attr("aria-hidden", "true"),
       Header(h, undefined, 0, model),
-      h.p.class("empty-note").children(
+      h.p.class(["empty-note"]).children([
         "Nothing logged yet. Entries appear here as the app runs."
-      )
-    )
+      ])
+    ])
   }
   const entries = session.entries()
   const scope = model.scope
@@ -1643,20 +1674,20 @@ const Panel = (h: H, model: OverlayModel) => {
   const at = entry === undefined ? undefined : Read.instanceOf(entry)
   const owner = at === undefined ? undefined : session.summary(at)
   const shown = scope === null ? owner : session.summary(scope)
-  return h.div.class("panel", model.paused !== null && "pausing").attr(
+  return h.div.class(["panel", model.paused !== null && "pausing"]).attr(
     "role",
     "dialog"
   ).attr(
     "aria-label",
     "Effect UI inspector"
-  ).attr("data-pane", model.pane).children(
-    h.span.class("grip").attr("aria-hidden", "true"),
+  ).attr("data-pane", model.pane).children([
+    h.span.class(["grip"]).attr("aria-hidden", "true"),
     Header(h, session, entries.length, model),
     model.paused === null
       ? null
       : PausedBar(h, model.paused, timeline, feed.paintable),
-    h.div.class("body").children(
-      h.div.class("left").children(
+    h.div.class(["body"]).children([
+      h.div.class(["left"]).children([
         Instances(h, session, model, owner),
         Filters(h, model),
         Timeline(
@@ -1669,26 +1700,26 @@ const Panel = (h: H, model: OverlayModel) => {
           selected?.seq,
           steps
         )
-      ),
-      h.div.class("right").children(
-        h.button.class("back").attr("aria-label", "Back to the timeline")
+      ]),
+      h.div.class(["right"]).children([
+        h.button.class(["back"]).attr("aria-label", "Back to the timeline")
           .onClick(OverlayMessage.ClickedBack())
-          .children("← Timeline"),
+          .children(["← Timeline"]),
         entry === undefined
-          ? h.section.class("ehead").children(
-            h.h3.class("headline").children(
+          ? h.section.class(["ehead"]).children([
+            h.h3.class(["headline"]).children([
               selected === undefined ? "No entry" : "#" + selected.seq
-            ),
-            h.p.class("sub").children(
+            ]),
+            h.p.class(["sub"]).children([
               selected === undefined
                 ? "Nothing matches the filter."
                 : "Outside the buffer."
-            )
-          )
+            ])
+          ])
           : Inspected(h, feed, session, entry, shown, steps, model)
-      )
-    )
-  )
+      ])
+    ])
+  ])
 }
 
 const synced = (model: OverlayModel, feed: Feed) => {
@@ -1702,32 +1733,32 @@ const synced = (model: OverlayModel, feed: Feed) => {
 const Launcher = (h: H, model: OverlayModel) => {
   const failures = h.props.feed.failures() - model.failures
   const noun = failures === 1 ? " failure" : " failures"
-  return h.div.class("launch").children(
-    h.button.class("launcher").attr(
+  return h.div.class(["launch"]).children([
+    h.button.class(["launcher"]).attr(
       "aria-label",
       "Open the Effect UI inspector"
     ).onClick(OverlayMessage.ClickedOpen())
-      .children(
-        h.span.class("logo").attr("aria-hidden", "true"),
+      .children([
+        h.span.class(["logo"]).attr("aria-hidden", "true"),
         "Effect UI",
-        h.span.class("launcher-count").children(
+        h.span.class(["launcher-count"]).children([
           String(sessionOf(h.props.feed, model)?.entries().length ?? 0)
-        )
-      ),
+        ])
+      ]),
     failures <= 0 ?
       null :
-      h.span.class("alert").attr(
+      h.span.class(["alert"]).attr(
         "title",
         failures.toLocaleString("en-US") + noun +
           " since the inspector was closed"
       )
-        .children(
+        .children([
           Mark(h, "bad"),
           String(failures),
-          h.span.class("sr").children(noun)
-        ),
+          h.span.class(["sr"]).children([noun])
+        ]),
     model.paused === null ? null : PausedBadge(h, model.paused.seq)
-  )
+  ])
 }
 
 const resumePage = () => Paint.make({ session: "", seq: null })
@@ -1777,20 +1808,20 @@ export const Overlay = Component.define({
         ...synced($.model, $.props.feed)
       }),
     ClickedOpen: ($) =>
-      $.evolve({ open: true, atStart: true, ...following }).run(
+      $.evolve({ open: true, atStart: true, ...following }).run([
         SaveOpen.make({ open: true })
-      ),
+      ]),
     ClickedClose: ($) =>
-      $.evolve({ open: false, failures: $.props.feed.failures() }).run(
+      $.evolve({ open: false, failures: $.props.feed.failures() }).run([
         SaveOpen.make({ open: false })
-      ),
+      ]),
     ClickedEntry: ($, { seq }) =>
       $.evolve({
         selected: seq,
         pane: "entry",
         ...($.model.pinned ? { pins: increment } : {})
       })
-        .run(...repaint($.model, $.props.feed, seq)),
+        .run(repaint($.model, $.props.feed, seq)),
     ClickedLink: ($, { seq }) =>
       $.evolve({
         selected: seq,
@@ -1800,7 +1831,7 @@ export const Overlay = Component.define({
         reveal: seq,
         pins: increment
       })
-        .run(...repaint($.model, $.props.feed, seq)),
+        .run(repaint($.model, $.props.feed, seq)),
     ClickedScope: ($, { instance }) =>
       $.evolve({ scope: $.model.scope === instance ? null : instance }),
     TypedFind: ($, { text }) => $.evolve({ find: text }),
@@ -1817,7 +1848,7 @@ export const Overlay = Component.define({
       const next = $.evolve({ selected: null, ...following })
       return $.model.paused === null
         ? next
-        : next.evolve({ paused: null }).run(resumePage())
+        : next.evolve({ paused: null }).run([resumePage()])
     },
     ClickedBack: ($) => $.evolve({ pane: "timeline" }),
     ScrolledTimeline: ($, { atStart }) =>
@@ -1835,27 +1866,27 @@ export const Overlay = Component.define({
             : [...paths, path]
       }),
     ClickedCopyFrame: ($, { seq, text }) =>
-      $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
+      $.evolve({ copied: null }).run([CopyFrame.make({ seq, text })]),
     SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
     FailedCopyFrame: ($) => $.evolve({ copied: null }),
     ClickedTimeTravel: ($, { session, seq }) =>
       shows($.model, session, seq)
-        ? $.evolve({ paused: null }).run(resumePage())
-        : $.run(Paint.make({ session, seq })),
+        ? $.evolve({ paused: null }).run([resumePage()])
+        : $.run([Paint.make({ session, seq })]),
     ScrubbedPage: ($, { seq }) =>
       $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment })
-        .run(
+        .run([
           Paint.make({
             session: sessionOf($.props.feed, $.model)?.id ?? "",
             seq
           })
-        ),
-    ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
+        ]),
+    ClickedResume: ($) => $.evolve({ paused: null }).run([resumePage()]),
     ClickedClear: ($) => {
       const session = sessionOf($.props.feed, $.model)
       return $.model.paused !== null || session === undefined
         ? $.model
-        : $.run(Clear.make({ session: session.id }))
+        : $.run([Clear.make({ session: session.id })])
     },
     Cleared: ($) => {
       const session = sessionOf($.props.feed, $.model)
@@ -1878,9 +1909,9 @@ export const Overlay = Component.define({
     )
   ],
   view: (h, model) =>
-    h.div.class("overlay").children(
+    h.div.class(["overlay"]).children([
       model.open
         ? Panel(h, model)
         : Launcher(h, model)
-    )
+    ])
 })

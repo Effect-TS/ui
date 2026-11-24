@@ -16,7 +16,7 @@ const RowDef = Component.define({
 const Row = RowDef.make({
   init: () => "",
   update: ($) => $.model,
-  view: (h, text) => h.el("li", text)
+  view: (h, text) => h.el("li", [text])
 })
 
 const ListboxDef = Component.define({
@@ -131,7 +131,7 @@ describe("a component call", () => {
 
 describe("a feature's render", () => {
   it("builds a child for the service", () => {
-    const fallback = () => h.el("p", "loading")
+    const fallback = () => h.el("p", ["loading"])
     const child = Todos.render(h, { key: "t", fallback })
     assert.strictEqual(child.component, Todos)
     assert.strictEqual(child.key, "t")

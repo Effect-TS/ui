@@ -51,47 +51,47 @@ export const NotesIndexNoDeps = Component.define({
   ],
   view: (h, model) =>
     AsyncResult.match(h.queries.notes, {
-      onInitial: () => h.p("Loading notes…"),
-      onFailure: () => h.p("The notes couldn't be loaded."),
+      onInitial: () => h.p(["Loading notes…"]),
+      onFailure: () => h.p(["The notes couldn't be loaded."]),
       // Links are plain anchors with a printed route. The browser Router
       // intercepts clicks on hrefs the routes parse. `.key` identifies a row.
       onSuccess: ({ value: notes }) =>
-        h.div(
+        h.div([
           h.ul(notes.map((note) =>
             h.li.key(note.id)
               // A drag source: the host puts this data on the drag.
               .draggable({ [NoteType]: note.id }, { effectAllowed: "link" })
-              .children(
-                h.a.attr("href", noteUrl(note.id)).children(note.title),
+              .children([
+                h.a.attr("href", noteUrl(note.id)).children([note.title]),
                 // Drag and drop needs a pointer, so every drag has a button
                 // that sends the same message, for the keyboard and touch.
                 h.button.attr("aria-label", `Pin ${note.title}`)
                   .onClick(NotesIndexMessage.PinnedNote({ id: note.id }))
-                  .children("Pin")
-              )
+                  .children(["Pin"])
+              ])
           )),
           // A drop target takes the drags whose types it accepts. Enter and
           // leave go to the target the drop would land on, once each, and
           // not to its children, so the highlight doesn't flicker.
-          h.aside.attr("aria-label", "Pinned").class(
+          h.aside.attr("aria-label", "Pinned").class([
             "pins",
             model.over && "drop-here"
-          )
+          ])
             .onDrop(
               ({ data }) =>
                 NotesIndexMessage.PinnedNote({ id: data[NoteType] ?? "" }),
               { accepts: [NoteType], dropEffect: "link" }
             )
             .onDragEnter(NotesIndexMessage.DraggedIntoPins())
-            .onDragLeave(NotesIndexMessage.DraggedOutOfPins()).children(
-              h.h2("Pinned"),
+            .onDragLeave(NotesIndexMessage.DraggedOutOfPins()).children([
+              h.h2(["Pinned"]),
               h.ul(model.pinned.map((id) =>
-                h.li.key(id).children(
+                h.li.key(id).children([
                   notes.find((note) => note.id === id)?.title ?? id
-                )
+                ])
               ))
-            )
-        )
+            ])
+        ])
     })
 })
 

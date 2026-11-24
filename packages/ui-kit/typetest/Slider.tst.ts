@@ -45,11 +45,11 @@ describe("Slider", () => {
           view: (slider) => {
             expect(slider.root(h.div)).type.toBe<Div<never>>()
             expect(slider.value(h.output)).type.toBe<Output<never>>()
-            expect(slider.track(h.span).children(needsClock)).type.toBe<
+            expect(slider.track(h.span).children([needsClock])).type.toBe<
               Span<Clock>
             >()
             expect(slider.indicator(h.span)).type.toBe<Span<never>>()
-            expect(slider.control(h.div).children(needsClock)).type.toBe<
+            expect(slider.control(h.div).children([needsClock])).type.toBe<
               Div<Clock>
             >()
             expect(slider.values).type.toBe<ReadonlyArray<number>>()
@@ -62,7 +62,7 @@ describe("Slider", () => {
               input: field.control(h.input.onMount(NeedsClock()))
             })
             expect(thumb).type.toBe<Span<Clock>>()
-            return slider.root(h.div).children(thumb)
+            return slider.root(h.div).children([thumb])
           }
         })
         expect<View.Requirements<typeof child>>().type.toBe<Clock>()

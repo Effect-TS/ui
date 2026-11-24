@@ -172,14 +172,14 @@ export const Menu = Component.define({
       Remove: () => ({ ...$.model, shown: false })
     }),
   view: (h, model) =>
-    h.div(
+    h.div([
       model.shown && h.div.attrs({ "aria-label": "Menu", role: "menu" })
         .popover(model.mode, model.open)
         .onToggle(({ newState, oldState, open }) =>
           MenuMessage.Toggled({ open, newState, oldState })
         )
-        .children(h.button("Rename"))
-    )
+        .children([h.button(["Rename"])])
+    ])
 })
 
 /** A modal dialog holding an auto popover, both open from the start. */
@@ -193,11 +193,11 @@ export const ModalMenu = Component.define({
   update: ($) => $.model,
   view: (h) =>
     h.dialog
-      .attr("aria-label", "Settings").modal(true).children(
-        h.div.attr("aria-label", "Menu").popover("auto", true).children(
-          h.button("Rename")
-        )
-      )
+      .attr("aria-label", "Settings").modal(true).children([
+        h.div.attr("aria-label", "Menu").popover("auto", true).children([
+          h.button(["Rename"])
+        ])
+      ])
 })
 
 const Popup = Component.define({
@@ -211,7 +211,7 @@ const Popup = Component.define({
   update: ($) => $.model,
   view: (h) =>
     h.div.attr("aria-label", h.props.label).popover(h.props.mode, true)
-      .children(h.button(h.props.label))
+      .children([h.button([h.props.label])])
 })
 
 /**
@@ -229,9 +229,9 @@ export const Rows = Component.define({
   update: (_, reversed) => reversed,
   view: (h, reversed) => {
     const rows = ["A", "B"].map((label) =>
-      h.div.key(label).children(
+      h.div.key(label).children([
         Popup(h, { key: label, props: { label, mode: h.props.mode } })
-      )
+      ])
     )
     return h.div(reversed ? rows.reverse() : rows)
   }

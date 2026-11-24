@@ -23,7 +23,7 @@
  * | `title`, `description`, `close`, `initialFocus`, `finalFocus` | as for a `Dialog` |
  *
  * Each part takes the consumer's builder and returns it, as a `Dialog`'s do:
- * `drawer.portal(h.dialog)?.children(drawer.popup(h.div).children(...))`.
+ * `drawer.portal(h.dialog)?.children([drawer.popup(h.div).children([...])])`.
  * `swipeArea` takes `{ element, swipeDirection, disabled }` and can be drawn
  * more than once. Its direction is the opposite of the drawer's by default.
  *
@@ -131,19 +131,19 @@
  *         Snapped: () => undefined
  *       },
  *       view: (drawer) =>
- *         h.div(
- *           drawer.trigger(h.button).children("Filters"),
- *           drawer.portal(h.dialog)?.children(
- *             drawer.backdrop(h.div.class("backdrop")),
- *             drawer.viewport(h.div.class("viewport")).children(
- *               drawer.popup(h.div.class("sheet")).children(
- *                 drawer.title(h.h2).children("Filters"),
- *                 drawer.content(h.div).children("Pick the filters to apply."),
- *                 drawer.close(h.button).children("Done")
- *               )
- *             )
- *           )
- *         )
+ *         h.div([
+ *           drawer.trigger(h.button).children(["Filters"]),
+ *           drawer.portal(h.dialog)?.children([
+ *             drawer.backdrop(h.div.class(["backdrop"])),
+ *             drawer.viewport(h.div.class(["viewport"])).children([
+ *               drawer.popup(h.div.class(["sheet"])).children([
+ *                 drawer.title(h.h2).children(["Filters"]),
+ *                 drawer.content(h.div).children(["Pick the filters to apply."]),
+ *                 drawer.close(h.button).children(["Done"])
+ *               ])
+ *             ])
+ *           ])
+ *         ])
  *     })
  * })
  *
@@ -1876,13 +1876,13 @@ export const Drawer = Component.define({
           return released.evolve({
             dismissed: true,
             strength: decision.strength
-          }).emit(
+          }).emit([
             DrawerEvents.RequestedClose({ reason: "swipe" })
-          )
+          ])
         case "Snap":
-          return released.emit(
+          return released.emit([
             DrawerEvents.Snapped({ snapPoint: decision.snapPoint })
-          )
+          ])
         case "Settle":
           return released
       }
@@ -1898,18 +1898,18 @@ export const Drawer = Component.define({
     StartedAreaSwipe: ($, { key }) =>
       $.props.open || $.model.area !== null
         ? $.model
-        : $.evolve({ area: key, dismissed: false, strength: null }).emit(
+        : $.evolve({ area: key, dismissed: false, strength: null }).emit([
           DrawerEvents.RequestedOpen({ triggerId: null, reason: "swipe" })
-        ),
+        ]),
     ReleasedAreaSwipe: ($, { displacement: moved, size, velocity: speed }) => {
       const released = $.evolve({ area: null })
       if (
         !$.props.open || opensOnRelease(moved, speed, size) ||
         $.model.area === null
       ) return released
-      return released.evolve({ dismissed: true, strength: null }).emit(
+      return released.evolve({ dismissed: true, strength: null }).emit([
         DrawerEvents.RequestedClose({ reason: "swipe" })
-      )
+      ])
     },
     CancelledAreaSwipe: ($) => $.evolve({ area: null }),
     ChangedNested: ($, { count, height, swiping }) =>
@@ -1919,12 +1919,12 @@ export const Drawer = Component.define({
         nestedHeight: height
       }),
     RequestedOpenDialog: ($, { triggerId }) =>
-      $.emit(
+      $.emit([
         DrawerEvents.RequestedOpen({ triggerId, reason: "trigger-press" })
-      ),
+      ]),
     RequestedCloseDialog: ($, { reason }) =>
-      $.emit(DrawerEvents.RequestedClose({ reason })),
-    SettledDialog: ($, { open }) => $.emit(DrawerEvents.Settled({ open }))
+      $.emit([DrawerEvents.RequestedClose({ reason })]),
+    SettledDialog: ($, { open }) => $.emit([DrawerEvents.Settled({ open })])
   },
   parts: (p, model) => {
     const props = p.props

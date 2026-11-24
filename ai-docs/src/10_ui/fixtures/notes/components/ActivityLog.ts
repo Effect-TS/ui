@@ -11,5 +11,5 @@ export const ActivityLog = Component.define({
 }).make({
   init: () => ({}),
   update: ($) => $.model,
-  view: (h) => h.aside(`No activity yet on note ${h.props.noteId}.`)
+  view: (h) => h.aside([`No activity yet on note ${h.props.noteId}.`])
 })

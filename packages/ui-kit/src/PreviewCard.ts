@@ -28,7 +28,7 @@
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
- * `previewCard.portal(h.div)?.children(previewCard.positioner(h.div).children(previewCard.popup(h.div).children("…")))`.
+ * `previewCard.portal(h.div)?.children([previewCard.positioner(h.div).children([previewCard.popup(h.div).children(["…"])])])`.
  * The trigger takes an options object, `previewCard.trigger({ element: h.a })`,
  * since each trigger has its own delays. The portal returns `undefined`
  * while the card is closed, unless `keepMounted`. `backdrop`, `viewport`
@@ -171,18 +171,18 @@
  *         Settled: () => undefined
  *       },
  *       view: (previewCard) =>
- *         h.div(
- *           h.p(
+ *         h.div([
+ *           h.p([
  *             "Good ",
- *             previewCard.trigger({ element: h.a.attr("href", "/typography") }).children("typography"),
+ *             previewCard.trigger({ element: h.a.attr("href", "/typography") }).children(["typography"]),
  *             " makes text easy to read."
- *           ),
- *           previewCard.portal(h.div)?.children(
- *             previewCard.positioner(h.div).children(
- *               previewCard.popup(h.div.class("card")).children("Typography is the art of arranging type.")
- *             )
- *           )
- *         )
+ *           ]),
+ *           previewCard.portal(h.div)?.children([
+ *             previewCard.positioner(h.div).children([
+ *               previewCard.popup(h.div.class(["card"])).children(["Typography is the art of arranging type."])
+ *             ])
+ *           ])
+ *         ])
  *     })
  * })
  *
@@ -572,20 +572,20 @@ const openFor = (
     anchorHit: reason === "trigger-hover" ? model.point : null,
     closeReason: null,
     transition: $.props.open ? model.transition : null
-  }).run(
+  }).run([
     Command.interrupt(WaitBeforeOpening),
     Command.interrupt(WaitBeforeClosing)
-  ).emit(
+  ]).emit([
     PreviewCardEvents.RequestedOpen({ triggerId, reason })
-  )
+  ])
 
 const dismiss = ($: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
   $.props.open
-    ? $.evolve({ closeReason: reason }).run(
+    ? $.evolve({ closeReason: reason }).run([
       Command.interrupt(WaitBeforeClosing)
-    ).emit(
+    ]).emit([
       PreviewCardEvents.RequestedClose({ reason })
-    )
+    ])
     : $.model
 
 const cancelled = (
@@ -594,9 +594,9 @@ const cancelled = (
   reason: PreviewCardOpenReason
 ) =>
   !$.props.open && model.pending === reason
-    ? $.set(model).evolve({ pending: null, pendingTrigger: null }).run(
+    ? $.set(model).evolve({ pending: null, pendingTrigger: null }).run([
       Command.interrupt(WaitBeforeOpening)
-    )
+    ])
     : model
 
 const watchLines = (
@@ -1142,14 +1142,14 @@ export const PreviewCard = Component.define({
             closeDelay,
             pending: "trigger-hover",
             pendingTrigger: triggerId
-          }).run(
+          }).run([
             WaitBeforeOpening.make({ delay })
-          )
+          ])
       }
       const active = activeOf($.model, $.props)
       return uncovered || $.model.touched || active === null ||
           active === triggerId
-        ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
+        ? $.set(next).run([Command.interrupt(WaitBeforeClosing)])
         : openFor(
           UiStruct.evolve(next, { closeDelay }),
           $,
@@ -1189,13 +1189,13 @@ export const PreviewCard = Component.define({
           closeDelay,
           pending: "trigger-focus",
           pendingTrigger: triggerId
-        }).run(
+        }).run([
           WaitBeforeOpening.make({ delay })
-        )
+        ])
       }
       const active = activeOf($.model, $.props)
       return active === null || active === triggerId
-        ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
+        ? $.set(next).run([Command.interrupt(WaitBeforeClosing)])
         : openFor(
           UiStruct.evolve(next, { closeDelay }),
           $,
@@ -1216,11 +1216,13 @@ export const PreviewCard = Component.define({
       if ($.model.away) return $.model
       const next = UiStruct.evolve($.model, { away: true })
       return $.props.open && !held(next)
-        ? $.set(next).run(WaitBeforeClosing.make({ delay: $.model.closeDelay }))
+        ? $.set(next).run([
+          WaitBeforeClosing.make({ delay: $.model.closeDelay })
+        ])
         : next
     },
     ReturnedToHoverArea: ($) =>
-      $.evolve({ away: false }).run(Command.interrupt(WaitBeforeClosing)),
+      $.evolve({ away: false }).run([Command.interrupt(WaitBeforeClosing)]),
     PressedOutside: ($) => dismiss($, "outside-press"),
     PressedEscape: ($) => dismiss($, "escape-key"),
     RemovedTrigger: ($) => dismiss($, "trigger-removed"),
@@ -1252,11 +1254,11 @@ export const PreviewCard = Component.define({
       $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.emit(PreviewCardEvents.Settled({ open }))
+      if (open) return $.emit([PreviewCardEvents.Settled({ open })])
       return $.model.mounted && $.props.holdExit !== true
-        ? $.evolve({ mounted: false, started: false, transition: null }).emit(
+        ? $.evolve({ mounted: false, started: false, transition: null }).emit([
           PreviewCardEvents.Settled({ open })
-        )
+        ])
         : $.model
     },
     ChangedViewport: ($, { change }) =>

@@ -1747,15 +1747,15 @@ export const trackPosition = (
  *         style: Positioning.positionerStyle(args.positionMethod),
  *         "data-side": model.placement?.side ?? args.options.side
  *       })
- *       .children("Saved")
- *     return h.span(
- *       h.button.id(anchorId).children("Save"),
+ *       .children(["Saved"])
+ *     return h.span([
+ *       h.button.id(anchorId).children(["Save"]),
  *       h.props.open
  *         ? positioner.onMount(
  *           Positioning.TrackPosition(args).pipe(Mount.map((placement) => HintMessage.ChangedPlacement({ placement })))
  *         )
  *         : positioner
- *     )
+ *     ])
  *   }
  * })
  *

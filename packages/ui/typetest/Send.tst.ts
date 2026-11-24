@@ -55,7 +55,7 @@ const Note = Component.define({
 }).make({
   init: () => "",
   update: ($) => $.model,
-  view: (h, text) => h.el("p", text)
+  view: (h, text) => h.el("p", [text])
 })
 
 class Store extends Context.Service<Store, { readonly draft: string }>()(
@@ -190,9 +190,9 @@ describe("$.send to self", () => {
       update: {
         Pick: picked,
         Picked: ($) =>
-          $.combine(($) =>
-            $.send("self", NestMessage.Picked()).set($.model + 1)
-          ),
+          $.combine([
+            ($) => $.send("self", NestMessage.Picked()).set($.model + 1)
+          ]),
         Closed: ($) => $.model
       },
       parts: (_, picked) => ({ picked })
@@ -312,7 +312,7 @@ describe("Component.provide", () => {
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", h.props.name)
+          view: (h) => h.el("p", [h.props.name])
         })
     type Inline = Component.Component<
       "Inline",
@@ -335,7 +335,7 @@ describe("Component.provide", () => {
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", h.props.name)
+          view: (h) => h.el("p", [h.props.name])
         }),
       (props) =>
         Layer.effect(
@@ -356,7 +356,7 @@ describe("Component.provide", () => {
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", h.props.name)
+          view: (h) => h.el("p", [h.props.name])
         }),
       Layer.effect(Store, Effect.fail("no")),
       { onFailure: () => "failed" }

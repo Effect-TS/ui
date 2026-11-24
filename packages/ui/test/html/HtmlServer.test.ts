@@ -111,13 +111,13 @@ const hydrateRows = Effect.fnUntraced(
         })
       ],
       view: (h, clicks) =>
-        h.li(
-          h.button.onClick(RowMessage.Clicked()).onMount(Seen()).children(
+        h.li([
+          h.button.onClick(RowMessage.Clicked()).onMount(Seen()).children([
             h.props.label
-          ),
-          h.span(`${clicks} clicked`),
-          h.em(`row ${h.props.label}`)
-        )
+          ]),
+          h.span([`${clicks} clicked`]),
+          h.em([`row ${h.props.label}`])
+        ])
     })
     const Rows = Component.define({
       name: "Rows",
@@ -129,7 +129,7 @@ const hydrateRows = Effect.fnUntraced(
       update: ($) => $.model,
       view: (h) =>
         h.ul(
-          ...["A", "B", "C"].map((label) =>
+          ["A", "B", "C"].map((label) =>
             Row(h, { key: label, props: { label } })
           )
         )
@@ -209,12 +209,12 @@ describe("HtmlServer", { concurrent: false }, () => {
                 element.attr(name, remove ? undefined : "alert(1)"),
               element
             )
-          return h.div.children(
+          return h.div.children([
             unsafe(h.div.attr("data-safe", remove ? "updated" : "a\"<&"))
-              .children("hi"),
+              .children(["hi"]),
             unsafe(h.el("x-safe")),
             unsafe(h.el("svg"))
-          )
+          ])
         }
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
@@ -280,7 +280,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.span.children("item")
+        view: (h) => h.span.children(["item"])
       })
       const Shown = item === undefined ? Item : item(Item)
       return Component.define({
@@ -296,11 +296,11 @@ describe("HtmlServer", { concurrent: false }, () => {
           Group(h, {
             key: "g",
             view: (group) =>
-              h.div.children(
-                h.p.children(`collected ${group.count}`),
+              h.div.children([
+                h.p.children([`collected ${group.count}`]),
                 h.props.item !== null &&
-                  Shown(h, { key: "i", props: { open: h.props.item } })
-              )
+                Shown(h, { key: "i", props: { open: h.props.item } })
+              ])
           })
       })
     }
@@ -430,15 +430,15 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div.attrs({ TYPE: "first", type: "last" }).children(
+          h.div.attrs({ TYPE: "first", type: "last" }).children([
             h.el("x-safe").attrs({ "DATA-X": "first", "data-x": "last" }),
-            h.select.value("chosen").children(
-              h.option.attr("VALUE", "chosen").children("label")
-            ),
-            h.el("svg").attr("viewBox", "0 0 10 10").children(
+            h.select.value("chosen").children([
+              h.option.attr("VALUE", "chosen").children(["label"])
+            ]),
+            h.el("svg").attr("viewBox", "0 0 10 10").children([
               h.el("linearGradient").attr("gradientUnits", "userSpaceOnUse")
-            )
-          )
+            ])
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
@@ -478,14 +478,14 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div.children(
-            h.p.children("a<b>&c"),
-            h.pre.children("\nx"),
-            h.select.value("b").children(
-              h.option.children("a"),
-              h.option.children("b")
-            )
-          )
+          h.div.children([
+            h.p.children(["a<b>&c"]),
+            h.pre.children(["\nx"]),
+            h.select.value("b").children([
+              h.option.children(["a"]),
+              h.option.children(["b"])
+            ])
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
@@ -506,14 +506,14 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div.children(
-            h.textarea.children(
-              h.el("span").prop("value", unreadable).children("only text")
-            ),
-            h.el("br").children(
-              h.el("span").prop("value", unreadable).children("none")
-            )
-          )
+          h.div.children([
+            h.textarea.children([
+              h.el("span").prop("value", unreadable).children(["only text"])
+            ]),
+            h.el("br").children([
+              h.el("span").prop("value", unreadable).children(["none"])
+            ])
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
@@ -541,13 +541,13 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.div.children(
+          h.div.children([
             withHiddenValue(h.button),
-            h.select.value("a").children(
-              withHiddenValue(h.option.attr("value", "a").children("A"))
-            ),
+            h.select.value("a").children([
+              withHiddenValue(h.option.attr("value", "a").children(["A"]))
+            ]),
             h.input.prop("value", Object.freeze({ toString: next }))
-          )
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
@@ -569,7 +569,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.div.children(h.input.prop("value", value))
+        view: (h) => h.div.children([h.input.prop("value", value)])
       }).pipe(
         Component.provide(
           Layer.effectDiscard(Effect.addFinalizer(() =>
@@ -607,11 +607,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: (_, message) => message,
         view: (h, step) => {
           const { loser, winner } = steps[step]!
-          return h.div.children(
+          return h.div.children([
             h.div.attrs({ "DATA-X": loser, "data-x": winner }),
             h.el("x-safe").attrs({ "DATA-X": loser, "data-x": winner }),
             h.el("svg").attrs({ viewBox: "0 0 10 10", viewbox: loser })
-          )
+          ])
         }
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
@@ -943,14 +943,14 @@ describe("HtmlServer", { concurrent: false }, () => {
         }
       }).make({
         // init's Command is dropped silently: the client runs it when it adopts.
-        init: ($) => $.set({ status: "loading" }).run(Track.make()),
+        init: ($) => $.set({ status: "loading" }).run([Track.make()]),
         update: ($, message) =>
           message._tag === "Loaded"
-            ? $.set({ status: "loaded" }).run(Command.interrupt(Track)).run(
+            ? $.set({ status: "loaded" }).run([Command.interrupt(Track)]).run([
               Track.make()
-            ).emit(
+            ]).emit([
               "loaded"
-            )
+            ])
             : { ...$.model, status: "tracked" },
         subscriptions: () => [
           // subscriptions() runs on the server, but a Stream's builder doesn't.
@@ -959,7 +959,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             return Stream.never
           })
         ],
-        view: (h, model) => h.span(model.status)
+        view: (h, model) => h.span([model.status])
       }).pipe(Component.provide(GetText.layer))
       const Broken = Component.define({
         name: "Broken",
@@ -984,7 +984,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("live")
+        view: (h) => h.p(["live"])
       }).pipe(
         Component.provide(Layer.succeed(Connection, "socket"), {
           server: false
@@ -1000,15 +1000,15 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => false,
         update: () => true,
         view: (h, ready) =>
-          h.div(
-            h.p(ready ? "ready" : "waiting"),
+          h.div([
+            h.p([ready ? "ready" : "waiting"]),
             Child(
               h,
               { key: "a", props: {}, onEmit: () => ParentMessage.Ready() }
             ),
-            Broken(h, { key: "b", props: {}, fallback: () => h.p("broken") }),
+            Broken(h, { key: "b", props: {}, fallback: () => h.p(["broken"]) }),
             Live(h, { key: "c", props: {} })
-          )
+          ])
       })
 
       // The opted-out Layer doesn't spend the budget: under the TestClock, waiting for it would never end.
@@ -1073,10 +1073,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         message: Message,
         elements: Html
       }).make({
-        init: ($) => $.set(0).run(Log.make()),
-        update: ($) => $.set($.model + 1).run(Log.make()),
+        init: ($) => $.set(0).run([Log.make()]),
+        update: ($) => $.set($.model + 1).run([Log.make()]),
         view: (h, count) =>
-          h.p.onMount(mountSending("Go", Message.Go())).children(String(count))
+          h.p.onMount(mountSending("Go", Message.Go())).children([
+            String(count)
+          ])
       })
       // An event from a child drives the parent's update twice on the server.
       const Child = Component.define({
@@ -1086,9 +1088,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         events: Schema.Literal("twice"),
         elements: Html
       }).make({
-        init: ($) => $.set({}).emit("twice").emit("twice"),
+        init: ($) => $.set({}).emit(["twice"]).emit(["twice"]),
         update: ($) => $.model,
-        view: (h) => h.span("child")
+        view: (h) => h.span(["child"])
       })
       const Parent = Component.define({
         name: "Parent",
@@ -1097,12 +1099,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: ($) => $.set($.model + 1).run(Log.make()),
+        update: ($) => $.set($.model + 1).run([Log.make()]),
         view: (h, count) =>
-          h.div(
-            h.p(String(count)),
+          h.div([
+            h.p([String(count)]),
             Child(h, { key: "c", props: {}, onEmit: () => Message.Go() })
-          )
+          ])
       })
       const problems: Array<Query.Problem.Any> = []
       const rendered = yield* HtmlServer.renderToHtml(Parent, {}).pipe(
@@ -1158,9 +1160,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         view: (h, model) =>
           h.button
             .onClick(Message.Clicked())
-            .onMount(mountSending("Mounted", Message.Mounted())).children(
+            .onMount(mountSending("Mounted", Message.Mounted())).children([
               `${model.clicks} ${model.mounted ? "mounted" : "server"}`
-            )
+            ])
       }).pipe(
         Component.provide(
           Layer.effect(Store, Effect.as(Effect.sleep("50 millis"), "ready"))
@@ -1247,7 +1249,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           const input =
             (field: string) => ({ value }: { readonly value: string }) =>
               Message.Input({ field, value })
-          return h.form(
+          return h.form([
             h.input.attr("aria-label", "Name").value(model.name).onInput(
               input("name")
             )
@@ -1266,7 +1268,7 @@ describe("HtmlServer", { concurrent: false }, () => {
               .onChange(({ checked }) =>
                 Message.Change({ field: "agree", value: String(checked) })
               )
-          )
+          ])
         }
       })
     const field = <A extends globalThis.Element>(
@@ -1373,14 +1375,17 @@ describe("HtmlServer", { concurrent: false }, () => {
           // The browser starts on B: A is disabled by its group.
           const select = h.select.attr("aria-label", "Pick").value(model.pick)
             .onChange(({ value }) => Message.Change({ field: "pick", value }))
-            .children(
-              h.optgroup.attr("disabled", "").children(
-                h.option.attr("value", "a").children("A")
-              ),
-              h.option.attr("value", "b").children("B"),
-              h.option.attr("value", "c").children("C")
-            )
-          return h.div(h.form.attr("id", "choices").children(select), ...radios)
+            .children([
+              h.optgroup.attr("disabled", "").children([
+                h.option.attr("value", "a").children(["A"])
+              ]),
+              h.option.attr("value", "b").children(["B"]),
+              h.option.attr("value", "c").children(["C"])
+            ])
+          return h.div([
+            h.form.attr("id", "choices").children([select]),
+            ...radios
+          ])
         }
       })
 
@@ -1437,9 +1442,9 @@ describe("HtmlServer", { concurrent: false }, () => {
           message: Schema.String,
           elements: Html
         }).make({
-          init: ($) => $.set({ side, store: "" }).run(ReadStore.make()),
+          init: ($) => $.set({ side, store: "" }).run([ReadStore.make()]),
           update: ($, store) => ({ ...$.model, store }),
-          view: (h, model) => h.p(`${model.side}:${model.store}`)
+          view: (h, model) => h.p([`${model.side}:${model.store}`])
         }),
         {
           key: (_, model) => model.side,
@@ -1473,7 +1478,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
-        view: (h, label) => h.li(label)
+        view: (h, label) => h.li([label])
       })
       const List = Component.define({
         name: "List",
@@ -1484,10 +1489,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.ul(
+          h.ul([
             Item(h, { key: "a", props: { label: "A" } }),
             Item(h, { key: "b", props: { label: "B" } })
-          )
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(List, {})
       const app = yield* container(
@@ -1610,7 +1615,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             false,
           update: ($, message) =>
             message._tag === "Look"
-              ? $.run(Look.make())
+              ? $.run([Look.make()])
               : message._tag === "Move"
               ? true
               : $.model,
@@ -1623,23 +1628,23 @@ describe("HtmlServer", { concurrent: false }, () => {
                     key: "i",
                     slots: {
                       body: [
-                        h.button("first"),
-                        h.button.ref(Go).onMount(Seen()).children("go")
+                        h.button(["first"]),
+                        h.button.ref(Go).onMount(Seen()).children(["go"])
                       ]
                     }
                   }),
-                  h.u("tail")
+                  h.u(["tail"])
                 ]
               }
             })
-            const mid = h.s.key("m").children("mid")
+            const mid = h.s.key("m").children(["mid"])
             return at === "root"
               ? card
-              : h.main(
-                h.i("before"),
+              : h.main([
+                h.i(["before"]),
                 moved ? [mid, card] : [card, mid],
-                h.b("after")
-              )
+                h.b(["after"])
+              ])
           }
         })
         const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
@@ -1725,7 +1730,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
-        view: (h, label) => h.li(label)
+        view: (h, label) => h.li([label])
       })
       const List = Component.define({
         name: "List",
@@ -1736,10 +1741,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.ul(
+          h.ul([
             Item(h, { key: "a", props: { label: "A" } }),
             Item(h, { key: client ? "a" : "b", props: { label: "B" } })
-          )
+          ])
       })
       const Page = Component.define({
         name: "Page",
@@ -1750,9 +1755,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.main(
-            List(h, { key: "l", props: {}, fallback: () => h.p("failed") })
-          )
+          h.main([
+            List(h, { key: "l", props: {}, fallback: () => h.p(["failed"]) })
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toContain("<li>B</li>")
@@ -1799,11 +1804,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.p(
+          h.p([
             AsyncResult.isSuccess(h.queries.text)
               ? h.queries.text.value
               : "loading"
-          )
+          ])
       }).pipe(Component.provide(GetText.layer))
       const Page = Component.define({
         name: "Page",
@@ -1814,13 +1819,13 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Panel.render(h, {
               key: "p",
               props: {},
-              fallback: () => h.p("fallback")
+              fallback: () => h.p(["fallback"])
             })
-          )
+          ])
       }).pipe(
         Component.provide(
           Layer.merge(
@@ -1858,7 +1863,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("loading")
+        view: (h) => h.p(["loading"])
       }).pipe(Component.provide(Die.layer))
       const Page = Component.define({
         name: "Page",
@@ -1869,9 +1874,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
-            Doomed(h, { key: "d", props: {}, fallback: () => h.p("failed") })
-          )
+          h.div([
+            Doomed(h, { key: "d", props: {}, fallback: () => h.p(["failed"]) })
+          ])
       })
 
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
@@ -1894,7 +1899,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => "inner",
         update: ($) => $.model,
-        view: (h, text) => h.p(text)
+        view: (h, text) => h.p([text])
       }).pipe(Component.provide(Layer.effect(
         Greeting,
         Effect.suspend(() =>
@@ -1910,10 +1915,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.main(
-            Inner(h, { key: "i", fallback: () => h.em("fallback") }),
-            h.span("after")
-          )
+          h.main([
+            Inner(h, { key: "i", fallback: () => h.em(["fallback"]) }),
+            h.span(["after"])
+          ])
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toContain("<p>inner</p>")
@@ -1984,26 +1989,26 @@ describe("HtmlServer", { concurrent: false }, () => {
           name: "Item",
           shared: { group: { owner: Group, report: () => true } }
         })
-          .make({ ...made, view: (h) => h.span("item") })
+          .make({ ...made, view: (h) => h.span(["item"]) })
         const Asks = Component.define({
           ...leaf,
           name: "Asks",
           queries: { text: { query: GetText, args: () => ({}) } }
         })
-          .make({ ...made, view: (h) => h.p("asks") }).pipe(
+          .make({ ...made, view: (h) => h.p(["asks"]) }).pipe(
             Component.provide(GetText.layer)
           )
         const Off = Component.define({ ...leaf, name: "Off" })
           .make({
             ...made,
-            view: (h) => h.p("off")
+            view: (h) => h.p(["off"])
           }).pipe(
             Component.provide(Layer.empty, { server: false })
           )
         const Slow = Component.define({ ...leaf, name: "Slow" })
           .make({
             ...made,
-            view: (h) => h.p("slow")
+            view: (h) => h.p(["slow"])
           }).pipe(
             Component.provide(Layer.effectDiscard(Effect.sleep("1 second")))
           )
@@ -2011,7 +2016,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           .make({
             ...made,
             view: (h) =>
-              h.div(
+              h.div([
                 Slow(h, { key: "s", props: {} }),
                 Group(h, {
                   key: "g",
@@ -2019,7 +2024,7 @@ describe("HtmlServer", { concurrent: false }, () => {
                 }),
                 Off(h, { key: "o", props: {} }),
                 Asks(h, { key: "a", props: {} })
-              )
+              ])
           })
 
         const reserved = [
@@ -2108,7 +2113,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("page")
+        view: (h) => h.p(["page"])
       }).pipe(Component.provide(Held))
       const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
       yield* TestClock.adjust("20 millis")
@@ -2139,7 +2144,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(h.textarea(Word(h, { key: "a", props: {} })), h.p("after"))
+          h.div([
+            h.textarea([Word(h, { key: "a", props: {} })]),
+            h.p(["after"])
+          ])
       })
       const result = yield* ssr(Form, {})
       expect(result.html).toBe(
@@ -2162,10 +2170,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: () => true,
         view: (h, mounted) =>
           mounted
-            ? h.div("mounted")
-            : h.p.onMount(mountSending("Swap", Message.Mounted())).children(
+            ? h.div(["mounted"])
+            : h.p.onMount(mountSending("Swap", Message.Mounted())).children([
               "server"
-            )
+            ])
       })
       const result = yield* ssr(Swap, {})
       yield* TestHost.settle
@@ -2181,7 +2189,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("leaf")
+        view: (h) => h.p(["leaf"])
       })
       const Root = Component.define({
         name: "Root",
@@ -2220,7 +2228,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("waiting")
+        view: (h) => h.p(["waiting"])
       }).pipe(
         Component.provide(
           Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
@@ -2237,9 +2245,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: () => "mounted",
         head: ({ model: title }) => [Head.title(title)],
         view: (h) =>
-          h.div.onMount(mountSending("Title", Message.Mounted())).children(
+          h.div.onMount(mountSending("Title", Message.Mounted())).children([
             Waiting(h, { key: "w", props: {} })
-          )
+          ])
       })
       const result = yield* ssr(Titled, {})
       expect(result.adopted).toEqual(["/Titled", "/Titled/Waiting[w]"])
@@ -2257,7 +2265,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("waiting")
+        view: (h) => h.p(["waiting"])
       }).pipe(
         Component.provide(
           Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
@@ -2272,7 +2280,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title("mounted")],
-        view: (h) => h.p("titled")
+        view: (h) => h.p(["titled"])
       })
       const Message = UiSchema.TaggedEnum({ Mounted: {} })
       // Nothing has a head until the mount's message places the child that does.
@@ -2285,10 +2293,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => false,
         update: () => true,
         view: (h, titled) =>
-          h.div.onMount(mountSending("Title", Message.Mounted())).children(
+          h.div.onMount(mountSending("Title", Message.Mounted())).children([
             Waiting(h, { key: "w", props: {} }),
             titled && Titled(h, { key: "t", props: {} })
-          )
+          ])
       })
       const result = yield* ssr(Page, {})
       expect(result.adopted).toEqual(["/Page", "/Page/Waiting[w]"])
@@ -2308,7 +2316,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title(runs++ % 2 === 0 ? "server" : "client")],
-        view: (h) => h.p("same")
+        view: (h) => h.p(["same"])
       })
       const unstable = yield* Effect.flip(ssr(Unstable, {}))
       expect(unstable.problems).toEqual([
@@ -2333,7 +2341,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           Head.title(title),
           Head.titleTemplate((inner) => `wrap(${inner})`)
         ],
-        view: (h, title) => h.p(title)
+        view: (h, title) => h.p([title])
       })
       const Siblings = Component.define({
         name: "Siblings",
@@ -2344,10 +2352,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Box(h, { key: "a", props: { title: "A" } }),
             Box(h, { key: "a]/Box[b", props: { title: "B" } })
-          )
+          ])
       })
       const siblings = yield* Effect.flip(ssr(Siblings, {}))
       const conflict =
@@ -2370,7 +2378,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           const side = templates++ % 2 === 0 ? "server" : "client"
           return [Head.titleTemplate((inner) => `${inner} (${side})`)]
         },
-        view: (h) => h.div(Box(h, { key: "a", props: { title: "Inner" } }))
+        view: (h) => h.div([Box(h, { key: "a", props: { title: "Inner" } })])
       })
       const nested = yield* Effect.flip(ssr(Outer, {}))
       expect(nested.problems).toEqual([
@@ -2391,7 +2399,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => ({}),
           update: ($) => $.model,
           head: ({ props }) => [Head.title(props.title + suffix())],
-          view: (h) => h.p("grandchild")
+          view: (h) => h.p(["grandchild"])
         })
         const Child = Component.define({
           name: "Child",
@@ -2407,10 +2415,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           ) => [Head.titleTemplate((title) => `${props.title}: ${title}`)],
           // The title is in the nodes too: the child adopts them with the props it was placed with.
           view: (h) =>
-            h.div(
-              h.span(h.props.title),
+            h.div([
+              h.span([h.props.title]),
               Grandchild(h, { key: "g", props: { title: h.props.title } })
-            )
+            ])
         }).pipe(
           Component.provide(
             Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
@@ -2426,9 +2434,9 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => "Server",
           update: () => "Mounted",
           view: (h, title) =>
-            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children([
               Child(h, { key: "c", props: { title } })
-            )
+            ])
         })
       }
 
@@ -2467,7 +2475,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => ({}),
           update: ($) => $.model,
           head: ({ props }) => [Head.title(props.title + suffix())],
-          view: (h) => h.p(h.props.title)
+          view: (h) => h.p([h.props.title])
         })
         const Framed = Component.define({
           name: "Framed",
@@ -2478,7 +2486,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         }).make({
           init: () => ({}),
           update: ($) => $.model,
-          view: (h) => h.div(h.slots.body)
+          view: (h) => h.div([h.slots.body])
         }).pipe(
           Component.provide(
             Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
@@ -2495,12 +2503,12 @@ describe("HtmlServer", { concurrent: false }, () => {
           update: () => "Mounted",
           // The slot's content changes while the child waits: it adopts what it was placed with, "Server".
           view: (h, title) =>
-            h.div.onMount(mountSending("Rename", Message.Mounted())).children(
+            h.div.onMount(mountSending("Rename", Message.Mounted())).children([
               Framed(h, {
                 key: "c",
                 slots: { body: Grandchild(h, { key: "g", props: { title } }) }
               })
-            )
+            ])
         })
       }
 
@@ -2536,7 +2544,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("waiting")
+        view: (h) => h.p(["waiting"])
       }).pipe(
         Component.provide(
           Layer.effect(Slow, Effect.as(Effect.sleep("30 millis"), "ready"))
@@ -2551,7 +2559,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title("title")],
-        view: (h) => h.p("titled")
+        view: (h) => h.p(["titled"])
       })
       const Message = UiSchema.TaggedEnum({ Mounted: {} })
       const Page = Component.define({
@@ -2563,10 +2571,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => true,
         update: () => false,
         view: (h, showTitled) =>
-          h.div.onMount(mountSending("Hide", Message.Mounted())).children(
-            showTitled ? Titled(h, { key: "t", props: {} }) : h.p("gone"),
+          h.div.onMount(mountSending("Hide", Message.Mounted())).children([
+            showTitled ? Titled(h, { key: "t", props: {} }) : h.p(["gone"]),
             Waiting(h, { key: "w", props: {} })
-          )
+          ])
       })
       const result = yield* ssr(Page, {})
       expect(result.head.title).toBe("title")
@@ -2598,7 +2606,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: ($) => ({ label: `panel ${$.props.id}` }),
         update: ($) => $.model,
-        view: (h, model) => h.p(model.label)
+        view: (h, model) => h.p([model.label])
       }).pipe(
         Component.provide(
           Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))
@@ -2613,7 +2621,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => true,
         update: (_, show) => show,
         view: (h, show) =>
-          h.div(show ? Panel(h, { key: "p", props: { id: "a" } }) : h.p("gone"))
+          h.div([
+            show ? Panel(h, { key: "p", props: { id: "a" } }) : h.p(["gone"])
+          ])
       })
 
       const fiber = yield* Effect.forkChild(
@@ -2687,7 +2697,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p(`panel ${h.props.id}`)
+        view: (h) => h.p([`panel ${h.props.id}`])
       }).pipe(
         Component.provide(
           Layer.effect(Slow, Effect.as(Effect.sleep("50 millis"), "ready"))
@@ -2702,7 +2712,9 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => "a",
         update: (_, id) => id,
         view: (h, id) =>
-          h.div(id === "" ? h.p("gone") : Panel(h, { key: "p", props: { id } }))
+          h.div([
+            id === "" ? h.p(["gone"]) : Panel(h, { key: "p", props: { id } })
+          ])
       })
 
       const fiber = yield* Effect.forkChild(HtmlServer.renderToHtml(Page, {}))
@@ -2752,7 +2764,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title("leaf")],
-        view: (h) => h.p("leaf")
+        view: (h) => h.p(["leaf"])
       })
       const withTemplate = (template: (calls: number) => string) => {
         let calls = 0
@@ -2765,7 +2777,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => ({}),
           update: ($) => $.model,
           head: () => [Head.titleTemplate(() => template(calls++))],
-          view: (h) => h.div(Leaf(h, { key: "l", props: {} }))
+          view: (h) => h.div([Leaf(h, { key: "l", props: {} })])
         })
         return { Parent, calls: () => calls }
       }
@@ -2797,7 +2809,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title("leaf")],
-        view: (h) => h.p("leaf")
+        view: (h) => h.p(["leaf"])
       })
       const Broken = Component.define({
         name: "Broken",
@@ -2812,7 +2824,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             throw new Error("template")
           })
         ],
-        view: (h) => h.div(Leaf(h, { key: "l", props: {} }))
+        view: (h) => h.div([Leaf(h, { key: "l", props: {} })])
       })
       const Parent = Component.define({
         name: "Parent",
@@ -2824,18 +2836,18 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: ($) => $.model,
         // Two siblings, each failed by its own template in the fold: neither contributes, on either side.
         view: (h) =>
-          h.div(
+          h.div([
             Broken(h, {
               key: "a",
               props: {},
-              fallback: () => h.p("fallback a")
+              fallback: () => h.p(["fallback a"])
             }),
             Broken(h, {
               key: "b",
               props: {},
-              fallback: () => h.p("fallback b")
+              fallback: () => h.p(["fallback b"])
             })
-          )
+          ])
       })
       const result = yield* ssr(Parent, {})
       expect(result.head.title).toBeUndefined()
@@ -2863,7 +2875,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         head: () => [Head.title("leaf")],
-        view: (h) => h.p("leaf")
+        view: (h) => h.p(["leaf"])
       })
       const Message = UiSchema.TaggedEnum({ Bump: {} })
       const Layout = Component.define({
@@ -2876,7 +2888,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: ($) => $.model + 1,
         head: () => [template],
         view: (h, count) =>
-          h.div(h.p(String(count)), Leaf(h, { key: "l", props: {} }))
+          h.div([h.p([String(count)]), Leaf(h, { key: "l", props: {} })])
       })
       const bumpThrice = Effect.fnUntraced(
         function*(
@@ -2925,8 +2937,8 @@ describe("HtmlServer", { concurrent: false }, () => {
           client && h.props.tag === "empty"
             ? h.text("")
             : client && h.props.tag === "p"
-            ? h.p.attr("data-l", label).children(label)
-            : h.li.attr("data-l", label).children(h.span(label))
+            ? h.p.attr("data-l", label).children([label])
+            : h.li.attr("data-l", label).children([h.span([label])])
       })
       const makeList = (
         order: (isClient: boolean) => ReadonlyArray<readonly [string, string?]>
@@ -2940,12 +2952,12 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => ({}),
           update: ($) => $.model,
           view: (h) =>
-            h.ul(
+            h.ul([
               order(client).map(([label, tag]) =>
                 Item(h, { key: label, props: { label, tag: tag ?? "" } })
               ),
-              h.li("tail")
-            )
+              h.li(["tail"])
+            ])
         })
       const assertMatchesDeclared = (actual: Element, expected: Element) => {
         const actualNodes = [...actual.querySelector("ul")!.childNodes]
@@ -3035,7 +3047,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: ($) => $.props.label,
         update: ($) => $.model,
-        view: (h, label) => h.li(label)
+        view: (h, label) => h.li([label])
       })
       const List = Component.define({
         name: "List",
@@ -3047,10 +3059,10 @@ describe("HtmlServer", { concurrent: false }, () => {
           init: () => ({}),
           update: ($) => $.model,
           view: (h) =>
-            h.ul(
+            h.ul([
               Item(h, { key: "A", props: { label: "A" } }),
               Item(h, { key: "B", props: { label: "B" } })
-            )
+            ])
         })
       const rendered = yield* HtmlServer.renderToHtml(List, {})
       const legacyHtml = rendered.html
@@ -3087,7 +3099,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => renders++ === 0 ? h.li("a") : h.p("a")
+        view: (h) => renders++ === 0 ? h.li(["a"]) : h.p(["a"])
       })
       const List = Component.define({
         name: "List",
@@ -3097,7 +3109,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.ul(Item(h, { key: "a", props: {} }))
+        view: (h) => h.ul([Item(h, { key: "a", props: {} })])
       })
       const error = yield* Effect.flip(ssr(List, {}))
       assert.include(
@@ -3145,7 +3157,7 @@ const makeItems = () => {
   }).make({
     init: () => ({}),
     update: ($) => $.model,
-    view: (h) => h.p(show(h.queries.item))
+    view: (h) => h.p([show(h.queries.item)])
   }).pipe(Component.provide(GetItem.layer))
   return { calls, GetItem, Item, show }
 }
@@ -3163,11 +3175,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Item(h, { key: "a", props: { id: 1 } }),
             Item(h, { key: "b", props: { id: 1 } }),
             Item(h, { key: "c", props: { id: 404 } })
-          )
+          ])
       })
       const result = yield* ssr(Page, {})
       expect(result.html).toContain("<p>Item 1</p>")
@@ -3212,7 +3224,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         update: ($, message) => ({
           page: message.ok && $.model.page < 3 ? $.model.page + 1 : $.model.page
         }),
-        view: (h) => h.p(show(h.queries.item))
+        view: (h) => h.p([show(h.queries.item)])
       }).pipe(Component.provide(GetItem.layer))
       const result = yield* ssr(Pager, {})
       expect(result.html).toContain("<p>Item 3</p>")
@@ -3269,13 +3281,13 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         view: (h) =>
           h.ul(
             h.queries.items.map(({ args, result }) =>
-              h.li.key(String(args.id)).children(
+              h.li.key(String(args.id)).children([
                 AsyncResult.isSuccess(result)
                   ? result.value
                   : AsyncResult.isFailure(result)
                   ? "failed"
                   : "loading"
-              )
+              ])
             )
           )
       }).pipe(Component.provide(GetSlowItem.layer))
@@ -3324,7 +3336,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("count")
+        view: (h) => h.p(["count"])
       }).pipe(Component.provide(GetCount.layer))
       const error = yield* Effect.flip(ssr(Page, {}))
       expect(error.problems).toContainEqual(
@@ -3347,7 +3359,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("slow")
+        view: (h) => h.p(["slow"])
       }).pipe(Component.provide(Layer.effect(
         Store,
         Effect.suspend(() =>
@@ -3369,13 +3381,13 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         // init's Command reruns on the client, and its invalidation refetches the hydrated entry while
         // the instance below still holds the window open.
-        init: ($) => $.set({}).run(Refresh.make()),
+        init: ($) => $.set({}).run([Refresh.make()]),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Item(h, { key: "a", props: { id: 1 } }),
             Slow(h, { key: "s", props: {} })
-          )
+          ])
       }).pipe(Component.provide(Refresh.layer))
       yield* hosted(Effect.gen(function*() {
         const error = yield* Effect.flip(ssr(Page, {}))
@@ -3408,7 +3420,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("slow")
+        view: (h) => h.p(["slow"])
       }).pipe(Component.provide(Layer.effect(
         Store,
         Effect.suspend(() =>
@@ -3430,19 +3442,19 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         // On the client, init navigates, and only then invalidates: the fetch lands after the window closed.
         init: ($) =>
-          $.set({}).run(
+          $.set({}).run([
             Router.push(AppRoute, Option.getOrThrow(AppRoute.parse("/slow")))
               .pipe(
                 Command.map(() => Message.Navigated())
               )
-          ),
+          ]),
         update: ($, message) =>
-          message._tag === "Navigated" ? $.run(Refresh.make()) : $.model,
+          message._tag === "Navigated" ? $.run([Refresh.make()]) : $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Item(h, { key: "a", props: { id: 1 } }),
             Slow(h, { key: "s", props: {} })
-          )
+          ])
       }).pipe(Component.provide(Refresh.layer))
       const { router } = yield* routed("/")
       yield* hosted(Effect.gen(function*() {
@@ -3475,7 +3487,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("now")
+        view: (h) => h.p(["now"])
       })
       // Holds the window open on the client: the instance waits 10 millis for its Layer.
       class Store extends Context.Service<Store, string>()("test/Store") {}
@@ -3488,7 +3500,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("slow")
+        view: (h) => h.p(["slow"])
       }).pipe(Component.provide(Layer.effect(
         Store,
         Effect.suspend(() =>
@@ -3506,14 +3518,14 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         // On the client, init navigates while the instance holds the window open.
         init: ($) =>
-          $.set({}).run(
+          $.set({}).run([
             Router.push(
               AppRoute,
               Option.getOrThrow(AppRoute.parse("/people/1"))
             ).pipe(
               Command.map(() => Message.Navigated())
             )
-          ),
+          ]),
         update: ($) => $.model,
         subscriptions: () => [
           Router.prefetch(AppRoute, {
@@ -3526,10 +3538,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         ],
         // The mounted page is older than the push, so the check after it skips it.
         view: (h) =>
-          h.div(
+          h.div([
             Now(h, { key: "a", props: { id: 1 } }),
             Slow(h, { key: "s", props: {} })
-          )
+          ])
       }).pipe(Component.provide(GetNow.layer))
       const { router } = yield* routed("/")
       yield* hosted(Effect.gen(function*() {
@@ -3576,7 +3588,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("slow")
+        view: (h) => h.p(["slow"])
       }).pipe(Component.provide(Layer.effect(
         Store,
         Effect.suspend(() =>
@@ -3591,13 +3603,13 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         message: Schema.Never,
         elements: Html
       }).make({
-        init: ($) => $.set({}).run(ReadBack.make()),
+        init: ($) => $.set({}).run([ReadBack.make()]),
         update: ($) => $.model,
         view: (h) =>
-          h.div(
+          h.div([
             Item(h, { key: "a", props: { id: 1 } }),
             Slow(h, { key: "s", props: {} })
-          )
+          ])
       }).pipe(
         Component.provide(
           ReadBack.layer.pipe(Layer.provideMerge(GetItem.layer))
@@ -3622,7 +3634,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("panel")
+        view: (h) => h.p(["panel"])
       }).pipe(Component.provide(Layer.effect(
         Store,
         Effect.suspend(() =>
@@ -3657,7 +3669,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.p("panel")
+        view: (h) => h.p(["panel"])
       }).pipe(
         Component.provide(Layer.effect(
           Store,
@@ -3674,7 +3686,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: ($) => $.model,
-        view: (h) => h.div(Panel(h, { key: "p", props: {} }))
+        view: (h) => h.div([Panel(h, { key: "p", props: {} })])
       })
       const error = yield* Effect.flip(ssr(Page, {}, { budget: "1 second" }))
       expect(error.problems).toEqual([
@@ -3714,11 +3726,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
             renders++
             const text = (result: AsyncResult.AsyncResult<string>) =>
               AsyncResult.isSuccess(result) ? result.value : "…"
-            return h.p(
+            return h.p([
               `${text(h.queries.first)}, ${text(h.queries.second)}, ${
                 text(h.queries.third)
               }`
-            )
+            ])
           }
         }).pipe(Component.provide(GetText.layer))
         const rendered = yield* HtmlServer.renderToHtml(Page, {})

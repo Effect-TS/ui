@@ -45,17 +45,17 @@ describe("LoginPage", () => {
         .expect(submittingButton).toBeDisabled()
         .expect(emailField).toBeDisabled()
         .expect(passwordField).toBeDisabled()
-        .expectExact(
+        .expectExact([
           SimulateAuthRequest.make({
             email: alice.email,
             password: Redacted.make("password")
           })
-        )
+        ])
         .resolve(
           SimulateAuthRequest,
           LoginPageMessage.SucceededSimulateAuthRequest({ session: alice })
         )
-        .emitted(LoginPageEvents.SignedIn({ session: alice }))
+        .emitted([LoginPageEvents.SignedIn({ session: alice })])
     }))
 
   it.effect("failed auth shows the error and leaves submit disabled until the password changes", () =>

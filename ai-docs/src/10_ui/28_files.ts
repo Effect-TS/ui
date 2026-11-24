@@ -90,48 +90,48 @@ export const CsvImport = Component.define({
     ChoseFiles: ($, { files: [file] }) =>
       file === undefined
         ? $.model
-        : $.set(ImportModel.Reading({ name: file.name })).run(
+        : $.set(ImportModel.Reading({ name: file.name })).run([
           ReadCsv.make({ file })
-        ),
+        ]),
     PressedOpen: ($) =>
-      $.run(
+      $.run([
         HtmlFiles.pick(({ files }) => ImportMessage.ChoseFiles({ files }), {
           accept: [".csv", "text/csv"]
         })
-      ),
+      ]),
     ClickedCancel: ($) =>
       $.model._tag === "Reading"
-        ? $.set(ImportModel.Cancelled({ name: $.model.name })).run(
+        ? $.set(ImportModel.Cancelled({ name: $.model.name })).run([
           Command.interrupt(ReadCsv)
-        )
+        ])
         : $.model,
     CompletedReadCsv: (_, { name, rows }) =>
       ImportModel.Imported({ name, rows }),
     FailedReadCsv: (_, { name }) => ImportModel.Failed({ name })
   },
   view: (h, model) =>
-    h.section(
-      h.label.children(
+    h.section([
+      h.label.children([
         "Import a CSV file",
-        h.input.attrs({ type: "file", accept: ".csv,text/csv" }).class(
+        h.input.attrs({ type: "file", accept: ".csv,text/csv" }).class([
           "visually-hidden"
-        ).value("")
+        ]).value("")
           .onChange(({ files }) => ImportMessage.ChoseFiles({ files }))
-      ),
+      ]),
       ImportModel.match(model, {
         Idle: () => null,
         Reading: ({ name }) =>
-          h.p(
+          h.p([
             `Reading ${name}…`,
-            h.button.onClick(ImportMessage.ClickedCancel()).children("Cancel")
-          ),
+            h.button.onClick(ImportMessage.ClickedCancel()).children(["Cancel"])
+          ]),
         Imported: ({ name, rows }) =>
-          h.p(`Imported ${rows} rows from ${name}.`),
-        Cancelled: ({ name }) => h.p(`Cancelled importing ${name}.`),
+          h.p([`Imported ${rows} rows from ${name}.`]),
+        Cancelled: ({ name }) => h.p([`Cancelled importing ${name}.`]),
         Failed: ({ name }) =>
-          h.p.attr("role", "alert").children(`Couldn't read ${name}.`)
+          h.p.attr("role", "alert").children([`Couldn't read ${name}.`])
       })
-    ),
+    ]),
   subscriptions: () => [
     HtmlSubscription.shortcuts([
       {
@@ -157,7 +157,7 @@ export const pickedAndCancelled = Effect.gen(function*() {
   const s = yield* Story.make(CsvImport, {})
   s.send(ImportMessage.PressedOpen())
     .resolve(HtmlFiles.Pick, { opened: true, files: [file] })
-    .expectExact(ReadCsv.make({ file }))
+    .expectExact([ReadCsv.make({ file })])
     .send(ImportMessage.ClickedCancel())
   return [s.model._tag, s.interrupted.map((command) => command.name)] // ["Cancelled", ["import/ReadCsv"]]
 })

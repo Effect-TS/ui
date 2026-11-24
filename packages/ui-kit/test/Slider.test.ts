@@ -14,21 +14,21 @@ type H = View.Helper<never, SliderProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (slider: Parts, h: H) =>
-    slider.root(h.div.class("slider")).children(
-      slider.value(h.output).children(slider.values.join(" - ")),
-      slider.control(h.div.class("control")).children(
-        slider.track(h.div.class("track")).children(
-          slider.indicator(h.div.class("indicator")),
+    slider.root(h.div.class(["slider"])).children([
+      slider.value(h.output).children([slider.values.join(" - ")]),
+      slider.control(h.div.class(["control"])).children([
+        slider.track(h.div.class(["track"])).children([
+          slider.indicator(h.div.class(["indicator"])),
           ...slider.values.map((_, index) =>
             slider.thumb({
-              element: h.div.class("thumb").key(String(index)),
+              element: h.div.class(["thumb"]).key(String(index)),
               input: h.input.attr("aria-label", "Thumb " + index),
               index: slider.values.length > 1 ? index : undefined
             })
           )
-        )
-      )
-    )
+        ])
+      ])
+    ])
 }
 
 const input = (index = 0) => Locator.attr("aria-label", "Thumb " + index)
@@ -120,16 +120,16 @@ describe("Slider", () => {
   it.effect("the keys move the focused thumb by a step or a large step, to the ends, and commit at once", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 40, largeStep: 20 })
-      s.keydown(input(), "ArrowRight").emitted(...both(41))
+      s.keydown(input(), "ArrowRight").emitted(both(41))
         .expectDefaultPrevented()
-      s.keydown(input(), "ArrowUp").emitted(...both(41))
-      s.keydown(input(), "ArrowLeft").emitted(...both(39))
-      s.keydown(input(), "ArrowDown").emitted(...both(39))
-      s.keydown(input(), "ArrowRight", { shift: true }).emitted(...both(60))
-      s.keydown(input(), "PageUp").emitted(...both(60))
-      s.keydown(input(), "PageDown").emitted(...both(20))
-      s.keydown(input(), "Home").emitted(...both(0))
-      s.keydown(input(), "End").emitted(...both(100))
+      s.keydown(input(), "ArrowUp").emitted(both(41))
+      s.keydown(input(), "ArrowLeft").emitted(both(39))
+      s.keydown(input(), "ArrowDown").emitted(both(39))
+      s.keydown(input(), "ArrowRight", { shift: true }).emitted(both(60))
+      s.keydown(input(), "PageUp").emitted(both(60))
+      s.keydown(input(), "PageDown").emitted(both(20))
+      s.keydown(input(), "Home").emitted(both(0))
+      s.keydown(input(), "End").emitted(both(100))
       // Other keys keep their default, so Tab moves focus.
       s.keydown(input(), "Tab").expectIgnored().expectDefaultPrevented(false)
       // At the end, a key that would go past it reports nothing.
@@ -141,31 +141,34 @@ describe("Slider", () => {
   it.effect("the input's own change is reported and committed, kept within the range", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 40 })
-      s.type(input(), "55").emitted(...both(55))
+      s.type(input(), "55").emitted(both(55))
       s.type(input(), "")
       quiet(s)
-      s.type(input(), "500").emitted(...both(100))
+      s.type(input(), "500").emitted(both(100))
     }))
 
   it.effect("a click on the thumb is quiet; dragging snaps to a step and commits only on release", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 0.3, max: 1, step: 0.1 })
-      s.keydown(input(), "ArrowRight").emitted(...both(0.4))
+      s.keydown(input(), "ArrowRight").emitted(both(0.4))
       s.mounted(tracked(s), pressed(0, 0.3, true))
       quiet(s)
       s.mounted(tracked(s), releasedPointer)
       quiet(s)
       s.mounted(tracked(s), pressed(0, 0.3, true))
-      s.mounted(tracked(s), moved(0.71)).emitted({ _tag: "Moved", value: 0.7 })
+      s.mounted(tracked(s), moved(0.71)).emitted([{
+        _tag: "Moved",
+        value: 0.7
+      }])
       s.parts((slider) => assert.isTrue(slider.dragging))
       assert.strictEqual(s.get(thumb()).attrs?.["data-dragging"], "")
       assert.strictEqual(s.get(control).attrs?.["data-dragging"], "")
       s.props({ value: 0.7, max: 1, step: 0.1 })
-      s.mounted(tracked(s), moved(1.4)).emitted({ _tag: "Moved", value: 1 })
-      s.mounted(tracked(s), releasedPointer).emitted({
+      s.mounted(tracked(s), moved(1.4)).emitted([{ _tag: "Moved", value: 1 }])
+      s.mounted(tracked(s), releasedPointer).emitted([{
         _tag: "Committed",
         value: 1
-      })
+      }])
       s.parts((slider) => assert.isFalse(slider.dragging))
       assert.isUndefined(s.get(thumb()).attrs?.["data-dragging"])
     }))
@@ -199,25 +202,28 @@ describe("Slider", () => {
       // A large step off the grid goes to the nearest step, as the input
       // would show it.
       const s = yield* scene({ value: 0, max: 12, step: 3, largeStep: 5 })
-      s.keydown(input(), "PageUp").emitted(...both(6))
+      s.keydown(input(), "PageUp").emitted(both(6))
       // A max between two steps: the last step below it is the end.
       s.props({ value: 0, max: 10, step: 3 })
-      s.keydown(input(), "End").emitted(...both(9))
-      s.mounted(tracked(s), pressed(0, 1)).emitted({ _tag: "Moved", value: 9 })
-      s.mounted(tracked(s), releasedPointer).emitted({
+      s.keydown(input(), "End").emitted(both(9))
+      s.mounted(tracked(s), pressed(0, 1)).emitted([{
+        _tag: "Moved",
+        value: 9
+      }])
+      s.mounted(tracked(s), releasedPointer).emitted([{
         _tag: "Committed",
         value: 9
-      })
+      }])
       // A value off the grid shows at the step the native input shows, which
       // also bounds its neighbour.
       s.props({ value: [0, 5], max: 12, step: 3 })
       s.parts((slider) => assert.deepStrictEqual(slider.values, [0, 6]))
       assert.strictEqual(s.get(input(1)).attrs?.["aria-valuenow"], "6")
-      s.keydown(input(0), "End").emitted(...both([6, 6]))
+      s.keydown(input(0), "End").emitted(both([6, 6]))
       // Decimal steps keep exactly the gap.
       s.props({ value: [0.1, 0.3], step: 0.1, minStepsBetweenValues: 1 })
-      s.keydown(input(0), "End").emitted(...both([0.2, 0.3]))
-      s.keydown(input(1), "Home").emitted(...both([0.1, 0.2]))
+      s.keydown(input(0), "End").emitted(both([0.2, 0.3]))
+      s.keydown(input(1), "Home").emitted(both([0.1, 0.2]))
     }))
 
   it.effect("a range has a thumb per value, labelled by its end, and a key cannot close the gap", () =>
@@ -238,7 +244,7 @@ describe("Slider", () => {
         s.get(indicator).attrs?.style,
         "--slider-indicator-start:20%;--slider-indicator-size:50%"
       )
-      s.keydown(input(0), "Home").emitted(...both([0, 70]))
+      s.keydown(input(0), "Home").emitted(both([0, 70]))
       // A key that brings the thumbs closer than the gap reports nothing.
       s.props({ value: [65, 70], minStepsBetweenValues: 5 })
       s.keydown(input(0), "ArrowRight")
@@ -255,26 +261,26 @@ describe("Slider", () => {
     Effect.gen(function*() {
       const s = yield* scene({ value: [20, 60], minStepsBetweenValues: 10 })
       // The control's mount picks the thumb; the press drags it there.
-      s.mounted(tracked(s), pressed(0, 0.3)).emitted({
+      s.mounted(tracked(s), pressed(0, 0.3)).emitted([{
         _tag: "Moved",
         value: [30, 60]
-      })
+      }])
       s.props({ value: [30, 60], minStepsBetweenValues: 10 })
-      s.mounted(tracked(s), moved(0.8)).emitted({
+      s.mounted(tracked(s), moved(0.8)).emitted([{
         _tag: "Moved",
         value: [80, 90]
-      })
+      }])
       s.props({ value: [80, 90], minStepsBetweenValues: 10 })
       // Dragged back, the pushed thumb stays where it was pushed.
-      s.mounted(tracked(s), moved(0.4)).emitted({
+      s.mounted(tracked(s), moved(0.4)).emitted([{
         _tag: "Moved",
         value: [40, 90]
-      })
+      }])
       s.props({ value: [40, 90], minStepsBetweenValues: 10 })
-      s.mounted(tracked(s), releasedPointer).emitted({
+      s.mounted(tracked(s), releasedPointer).emitted([{
         _tag: "Committed",
         value: [40, 90]
-      })
+      }])
     }))
 
   it.effect("with swap, a thumb dragged past the other trades places and the drag goes on with the other thumb", () =>
@@ -285,16 +291,16 @@ describe("Slider", () => {
       })
       s.mounted(tracked(s), pressed(0, 0.2, true))
       quiet(s)
-      s.mounted(tracked(s), moved(0.8)).emitted({
+      s.mounted(tracked(s), moved(0.8)).emitted([{
         _tag: "Moved",
         value: [60, 80]
-      })
+      }])
       s.props({ value: [60, 80], thumbCollisionBehavior: "swap" })
       // The drag now moves the thumb at index 1.
-      s.mounted(tracked(s), moved(0.9)).emitted({
+      s.mounted(tracked(s), moved(0.9)).emitted([{
         _tag: "Moved",
         value: [60, 90]
-      })
+      }])
     }))
 
   it.effect("with none, a dragged thumb stops at the other", () =>
@@ -304,10 +310,10 @@ describe("Slider", () => {
         thumbCollisionBehavior: "none"
       })
       s.mounted(tracked(s), pressed(0, 0.2, true))
-      s.mounted(tracked(s), moved(0.8)).emitted({
+      s.mounted(tracked(s), moved(0.8)).emitted([{
         _tag: "Moved",
         value: [60, 60]
-      })
+      }])
     }))
 
   it("each part keeps the consumer's attributes, while the slider's own win, present or absent", () => {
@@ -318,7 +324,7 @@ describe("Slider", () => {
     }
     const slider = parts({ value: 40 })
     const element = h.input
-      .class("range")
+      .class(["range"])
       .attrs({
         name: "volume",
         "aria-label": "Volume",
@@ -337,7 +343,7 @@ describe("Slider", () => {
       .disabled(true)
     const built = View.build(
       slider.thumb({
-        element: h.div.class("thumb").attrs({
+        element: h.div.class(["thumb"]).attrs({
           ...stale,
           "data-index": "9",
           style: "color:blue"
@@ -374,7 +380,7 @@ describe("Slider", () => {
         ...attrs
       })
     expectAttrs(
-      slider.root(h.div.class("slider").attrs({ ...stale, role: "region" })),
+      slider.root(h.div.class(["slider"]).attrs({ ...stale, role: "region" })),
       {
         class: "slider",
         role: "group"
@@ -382,22 +388,22 @@ describe("Slider", () => {
     )
     expectAttrs(
       slider.value(
-        h.output.class("value").attrs({ ...stale, "aria-live": "polite" })
+        h.output.class(["value"]).attrs({ ...stale, "aria-live": "polite" })
       ),
       {
         class: "value",
         "aria-live": "off"
       }
     )
-    expectAttrs(slider.control(h.div.class("control").attrs(stale)), {
+    expectAttrs(slider.control(h.div.class(["control"]).attrs(stale)), {
       class: "control"
     })
-    expectAttrs(slider.track(h.div.class("track").attrs(stale)), {
+    expectAttrs(slider.track(h.div.class(["track"]).attrs(stale)), {
       class: "track"
     })
     expectAttrs(
       slider.indicator(
-        h.div.class("indicator").attrs({ ...stale, style: "color:blue" })
+        h.div.class(["indicator"]).attrs({ ...stale, style: "color:blue" })
       ),
       {
         class: "indicator",

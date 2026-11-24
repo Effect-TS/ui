@@ -28,7 +28,7 @@ describe("Avatar", () => {
             expect(avatar.imageLoadingStatus).type.toBe<
               "loading" | "loaded" | "error"
             >()
-            expect(avatar.root(h.span.class("avatar"))).type.toBe<
+            expect(avatar.root(h.span.class(["avatar"]))).type.toBe<
               AvatarSpan<Msg>
             >()
             expect(avatar.image(h.img.attr("alt", "Ada"))).type.toBe<
@@ -37,12 +37,15 @@ describe("Avatar", () => {
             expect(avatar.fallback(h.span.onClick(Msg.Clicked()))).type.toBe<
               AvatarSpan<Msg> | undefined
             >()
-            const fallback = avatar.fallback(h.span)?.children("AL", needsClock)
+            const fallback = avatar.fallback(h.span)?.children([
+              "AL",
+              needsClock
+            ])
             expect(fallback).type.toBe<AvatarSpan<Msg, Clock> | undefined>()
-            const root = avatar.root(h.span).children(
+            const root = avatar.root(h.span).children([
               avatar.image(h.img),
               fallback
-            )
+            ])
             expect(root).type.toBe<AvatarSpan<Msg, Clock>>()
             return root
           }

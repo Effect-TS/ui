@@ -161,11 +161,11 @@ const makeApp = (options?: {
         },
         Rename: ({ id, name }) => {
           order.push(`update ${$.props.tag} Rename`)
-          return $.run(
+          return $.run([
             RenameUser.make({ id, name }).pipe(
               Command.map(() => BoardMessage.Renamed())
             )
-          )
+          ])
         },
         Renamed: () => $.model
       }),
@@ -178,7 +178,7 @@ const makeApp = (options?: {
       return h.el("p").on(
         "click",
         BoardMessage.Rename({ id: "1", name: `Bob${h.props.tag}` })
-      ).children(`${h.props.tag}: ${text}`)
+      ).children([`${h.props.tag}: ${text}`])
     }
   })
 
@@ -420,7 +420,7 @@ describe("Keyed query fields", () => {
         )
           .join(" ")
         order.push(`view ${text}`)
-        return h.el("p", text)
+        return h.el("p", [text])
       }
     })
     const PageMessage = UiSchema.TaggedEnum({
@@ -436,8 +436,10 @@ describe("Keyed query fields", () => {
       view: (h, ids) =>
         h.el(
           "div",
-          Row(h, { key: "row", props: { ids } }),
-          app.Board(h, { key: "b", props: { tag: "b", ids: ["3"] } })
+          [
+            Row(h, { key: "row", props: { ids } }),
+            app.Board(h, { key: "b", props: { tag: "b", ids: ["3"] } })
+          ]
         )
     })
     return run(
@@ -858,10 +860,12 @@ describe("Keyed query fields", () => {
       view: (h) =>
         h.el(
           "p",
-          h.queries.users.map(({ result }) =>
-            AsyncResult.isSuccess(result) ? "y" : "n"
-          ).join("") +
+          [
+            h.queries.users.map(({ result }) =>
+              AsyncResult.isSuccess(result) ? "y" : "n"
+            ).join("") +
             (AsyncResult.isSuccess(h.queries.user) ? "+" : "-")
+          ]
         )
     })
     return run(
@@ -937,7 +941,7 @@ describe("Keyed query fields", () => {
         })
         return h.el(
           "p",
-          `${name} ${Option.isNone(h.queries.users.get({ id: "3" }))}`
+          [`${name} ${Option.isNone(h.queries.users.get({ id: "3" }))}`]
         )
       }
     })
@@ -1037,7 +1041,7 @@ describe("Keyed results", () => {
     }).make({
       init: () => ({}),
       update: ($) => $.model,
-      view: (h) => h.el("p", "x")
+      view: (h) => h.el("p", ["x"])
     })
     const Host = Component.define({
       name: "Host",
@@ -1047,7 +1051,7 @@ describe("Keyed results", () => {
       init: () => ({}),
       update: ($) => $.model,
       view: (h) =>
-        h.el("div", Bad(h, { key: "bad", props: {} }), h.el("p", "host"))
+        h.el("div", [Bad(h, { key: "bad", props: {} }), h.el("p", ["host"])])
     })
     return run(
       app.layer,
@@ -1107,12 +1111,14 @@ describe("Keyed redaction", () => {
       view: (h) =>
         h.el(
           "p",
-          h.queries.accounts.map(({ result }) =>
-            AsyncResult.isSuccess(result)
-              ? Redacted.value(result.value.secret)
-              : "…"
-          )
-            .join(" ")
+          [
+            h.queries.accounts.map(({ result }) =>
+              AsyncResult.isSuccess(result)
+                ? Redacted.value(result.value.secret)
+                : "…"
+            )
+              .join(" ")
+          ]
         )
     })
     return run(
@@ -1259,9 +1265,9 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
       }
       const result = row.value.result
       // A click shows the first id only, so a scene can make the change.
-      return h.el("p").on("click", Message.Show({ ids: ["1"] })).children(
+      return h.el("p").on("click", Message.Show({ ids: ["1"] })).children([
         AsyncResult.isSuccess(result) ? result.value.name : "…"
-      )
+      ])
     }
   })
   return { Message, Selection }
@@ -1371,15 +1377,15 @@ describe("Keyed history restore", () => {
       update: ($, message) =>
         Message.match(message, {
           ShowAndGo: ({ ids }) =>
-            $.set({ ...$.model, ids }).run(
+            $.set({ ...$.model, ids }).run([
               Router.push(PageRoute, PageRoute.Next()).pipe(
                 Command.map(() => Message.Navigated())
               )
-            ),
+            ]),
           Navigated: () => $.model
         }),
       view: (h) =>
-        h.el("p", h.queries.users.map(({ args }) => args.id).join(","))
+        h.el("p", [h.queries.users.map(({ args }) => args.id).join(",")])
     })
     const base = Router.memoryHistory("/")
     const written: Array<{ readonly url: string; readonly state: unknown }> = []
@@ -1446,11 +1452,11 @@ describe("Keyed history restore", () => {
         ShellMessage.match(message, {
           ChangedRoute: ({ route }) => route,
           Go: ({ route }) =>
-            $.run(
+            $.run([
               Router.push(ShellRoute, route).pipe(
                 Command.map(() => ShellMessage.Navigated())
               )
-            ),
+            ]),
           Navigated: () => $.model
         }),
       subscriptions: ({ model }) => [
@@ -1463,16 +1469,18 @@ describe("Keyed history restore", () => {
       view: (h, model) =>
         h.el(
           "div",
-          h.el("button").on(
-            "click",
-            ShellMessage.Go({ route: ShellRoute.Home() })
-          ).children("Home"),
-          model._tag === "Board"
-            ? app.Board(h, {
-              key: "board",
-              props: { tag: "a", ids: ["1", "2"] }
-            })
-            : h.el("p", "home")
+          [
+            h.el("button").on(
+              "click",
+              ShellMessage.Go({ route: ShellRoute.Home() })
+            ).children(["Home"]),
+            model._tag === "Board"
+              ? app.Board(h, {
+                key: "board",
+                props: { tag: "a", ids: ["1", "2"] }
+              })
+              : h.el("p", ["home"])
+          ]
         )
     })
     const history = Router.memoryHistory("/board")

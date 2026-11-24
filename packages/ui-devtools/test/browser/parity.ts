@@ -23,11 +23,11 @@ const Counter = Component.define({
     Clicked: ($) => $.evolve({ count: $.model.count + 1 })
   },
   view: (h, model) =>
-    h.section(
-      h.output.attr("id", "state").children(`${model.moves}:${model.count}`),
-      h.button.onClick(CounterMessage.Moved()).children("Move"),
-      h.button.onClick(CounterMessage.Clicked()).children("Count")
-    )
+    h.section([
+      h.output.attr("id", "state").children([`${model.moves}:${model.count}`]),
+      h.button.onClick(CounterMessage.Moved()).children(["Move"]),
+      h.button.onClick(CounterMessage.Clicked()).children(["Count"])
+    ])
 })
 
 const SideMessage = UiSchema.TaggedEnum({ Toggled: {} })
@@ -41,10 +41,10 @@ const Side = Component.define({
   init: () => ({ on: false }),
   update: { Toggled: ($) => $.evolve({ on: !$.model.on }) },
   view: (h, model) =>
-    h.section(
-      h.span.attr("id", "side").children(model.on ? "on" : "off"),
-      h.button.onClick(SideMessage.Toggled()).children("Toggle")
-    )
+    h.section([
+      h.span.attr("id", "side").children([model.on ? "on" : "off"]),
+      h.button.onClick(SideMessage.Toggled()).children(["Toggle"])
+    ])
 })
 
 const App = Component.define({
@@ -56,10 +56,10 @@ const App = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.main(
+    h.main([
       Counter(h, { key: "counter", props: {} }),
       Side(h, { key: "side", props: {} })
-    )
+    ])
 })
 
 const Main = BrowserHost.mount(App, {}, document.getElementById("root")!).pipe(

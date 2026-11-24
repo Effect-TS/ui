@@ -25,7 +25,7 @@
  * }).make({
  *   init: () => "loading",
  *   update: { Settled: (_, { status }) => status },
- *   view: (h, status) => h.p(status),
+ *   view: (h, status) => h.p([status]),
  *   subscriptions: () => [
  *     Subscription.make(
  *       "photo",

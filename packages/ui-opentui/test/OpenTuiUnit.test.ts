@@ -44,7 +44,7 @@ describe("OpenTui FFI-free testing", () => {
           Resized: ($, { height, width }) =>
             $.evolve({ size: `${width}x${height}` }),
           RunCommands: ($) =>
-            $.run(
+            $.run([
               OpenTuiCommand.focus(BoxRef, () => Message.Done()),
               OpenTuiCommand.scrollTo(ScrollRef, 5, () => Message.Done()),
               OpenTuiCommand.measure(BoxRef, (rect) =>
@@ -52,7 +52,7 @@ describe("OpenTui FFI-free testing", () => {
                   width: Option.isSome(rect) ? rect.value.width : -1
                 })),
               OpenTuiCommand.quit()
-            ),
+            ]),
           Measured: ($, { width }) => $.evolve({ measured: width }),
           Done: ($) => $.model
         },
@@ -69,13 +69,13 @@ describe("OpenTui FFI-free testing", () => {
           )
         ],
         view: (h, model) =>
-          h.box.ref(BoxRef).style({ border: true }).children(
-            h.scrollbox.ref(ScrollRef).children(
-              h.text(
+          h.box.ref(BoxRef).style({ border: true }).children([
+            h.scrollbox.ref(ScrollRef).children([
+              h.text([
                 `ups=${model.ups} pasted=${model.pasted} size=${model.size}`
-              )
-            )
-          )
+              ])
+            ])
+          ])
       })
 
       const root = yield* TestHost.mount(App, {})
@@ -114,7 +114,7 @@ describe("OpenTui FFI-free testing", () => {
   it.effect("rejects stray text in h.el and in box slots via Outlet", () =>
     Effect.gen(function*() {
       const h = View.makeHelper<never, {}, OpenTui.Elements>({}, OpenTui)
-      expect(() => h.el("box", "stray")).toThrow(/can't hold text/)
+      expect(() => h.el("box", ["stray"])).toThrow(/can't hold text/)
 
       const Frame = Component.define({
         name: "Frame",
@@ -125,7 +125,7 @@ describe("OpenTui FFI-free testing", () => {
       }).make({
         init: () => undefined,
         update: () => undefined,
-        view: (h) => h.box.children(h.slots.body)
+        view: (h) => h.box.children([h.slots.body])
       })
 
       const BadParent = Component.define({
@@ -149,7 +149,7 @@ describe("OpenTui FFI-free testing", () => {
         update: () => undefined,
         view: (h) =>
           BadParent(h, {
-            fallback: () => h.text("caught")
+            fallback: () => h.text(["caught"])
           })
       })
 

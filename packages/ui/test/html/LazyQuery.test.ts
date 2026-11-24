@@ -65,11 +65,11 @@ const lateSave = Effect.gen(function*() {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.p.children(AsyncResult.match(h.queries.note, {
+            h.p.children([AsyncResult.match(h.queries.note, {
               onInitial: () => "loading",
               onFailure: () => "failed",
               onSuccess: (success) => success.value
-            }))
+            })])
         }).pipe(Component.provide(GetNote.layer))
         child = (h) => Note(h, {})
         write = (saved) => GetNote.set({ id: "1" }, saved)
@@ -99,19 +99,19 @@ const lateSave = Effect.gen(function*() {
       init: () => false,
       update: ($, message) =>
         Message.match(message, {
-          Save: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
+          Save: () => $.run([Save.make({}).pipe(Command.as(Message.Saved()))]),
           Replace: () =>
-            $.run(Replace.make({}).pipe(Command.as(Message.Show()))),
+            $.run([Replace.make({}).pipe(Command.as(Message.Show()))]),
           Show: () => true,
           Saved: () => $.model
         }),
       view: (h, shown) =>
-        h.div.children(
-          h.button.onClick(Message.Save()).children("Save"),
-          h.button.onClick(Message.Replace()).children("Replace"),
-          h.button.onClick(Message.Show()).children("Show"),
-          shown && child !== undefined ? child(h) : h.p.children("hidden")
-        )
+        h.div.children([
+          h.button.onClick(Message.Save()).children(["Save"]),
+          h.button.onClick(Message.Replace()).children(["Replace"]),
+          h.button.onClick(Message.Show()).children(["Show"]),
+          shown && child !== undefined ? child(h) : h.p.children(["hidden"])
+        ])
     }).pipe(Component.provide(Save.layer), Component.provide(Replace.layer))
   const app = yield* container
   const problems: Array<string> = []
@@ -166,10 +166,11 @@ const savedWith = Effect.fnUntraced(
       init: () => "idle",
       update: ($, message) =>
         Message.match(message, {
-          Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
+          Clicked: () =>
+            $.run([Save.make({}).pipe(Command.as(Message.Saved()))]),
           Saved: () => "saved"
         }),
-      view: (h, model) => h.button.onClick(Message.Clicked()).children(model)
+      view: (h, model) => h.button.onClick(Message.Clicked()).children([model])
     }).pipe(Component.provide(Save.layer))
     const App = Component.define({
       name: "App",
@@ -179,7 +180,7 @@ const savedWith = Effect.fnUntraced(
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.div.children(Saver(h, {}), h.p.children(" in app"))
+      view: (h) => h.div.children([Saver(h, {}), h.p.children([" in app"])])
     })
     const app = yield* container
     yield* BrowserHost.mountEffect(App, {}, app)
@@ -215,10 +216,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         init: () => false,
         update: () => true,
         view: (h, open) =>
-          h.div.children(
-            h.button.onClick(Message.Opened()).children("Open"),
-            open && child !== undefined ? child(h) : h.p.children("closed")
-          )
+          h.div.children([
+            h.button.onClick(Message.Opened()).children(["Open"]),
+            open && child !== undefined ? child(h) : h.p.children(["closed"])
+          ])
       })
       const app = yield* container
       yield* BrowserHost.mountEffect(App, {}, app)
@@ -246,11 +247,11 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.p.children(AsyncResult.match(h.queries.note, {
+          h.p.children([AsyncResult.match(h.queries.note, {
             onInitial: () => "loading",
             onFailure: () => "failed",
             onSuccess: (success) => success.value
-          }))
+          })])
       }).pipe(Component.provide(GetNote.layer))
       child = (h) => Note(h, {})
 
@@ -313,11 +314,11 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
               init: () => null,
               update: ($) => $.model,
               view: (h) =>
-                h.p.children(AsyncResult.match(h.queries.note, {
+                h.p.children([AsyncResult.match(h.queries.note, {
                   onInitial: () => "loading",
                   onFailure: () => "failed",
                   onSuccess: (success) => success.value
-                }))
+                })])
             }).pipe(Component.provide(GetNote.layer))
             child = (h) => Note(h, {})
             write = (saved) => GetNote.set({ id: "1" }, saved)
@@ -336,14 +337,14 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         update: ($, message) =>
           Message.match(message, {
             Clicked: () =>
-              $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
+              $.run([Save.make({}).pipe(Command.as(Message.Saved()))]),
             Saved: () => true
           }),
         view: (h, saved) =>
-          h.div.children(
-            h.button.onClick(Message.Clicked()).children("Save"),
-            saved && child !== undefined ? child(h) : h.p.children("unsaved")
-          )
+          h.div.children([
+            h.button.onClick(Message.Clicked()).children(["Save"]),
+            saved && child !== undefined ? child(h) : h.p.children(["unsaved"])
+          ])
       }).pipe(Component.provide(Save.layer))
       const app = yield* container
       yield* BrowserHost.mountEffect(App, {}, app)

@@ -20,14 +20,14 @@ const makeRoutes = () =>
       Files: Route.make("/files/*"),
       NotFound: Route.make("/*")
     },
-    Route.redirect(
+    [Route.redirect(
       "/old/:id",
       (params) => ({
         _tag: "Person",
         params: { id: Number(params.id) },
         search: {}
       })
-    )
+    )]
   )
 
 const parse = (routes: Route.AnyUnion, url: string): any =>

@@ -6,13 +6,13 @@ import { Effect, Schema } from "effect"
 
 const node = (
   entries: ReadonlyArray<HtmlHead.Entry>,
-  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry>>
+  children: ReadonlyArray<Head.Tree<HtmlHead.Entry>> = []
 ): Head.Tree<HtmlHead.Entry> => ({ entries, children })
 
 const at = (
   path: string,
   entries: ReadonlyArray<HtmlHead.Entry>,
-  ...children: ReadonlyArray<Head.Tree<HtmlHead.Entry>>
+  children: ReadonlyArray<Head.Tree<HtmlHead.Entry>> = []
 ): Head.Tree<HtmlHead.Entry> => ({ path, entries, children })
 
 describe("HtmlHead", () => {
@@ -52,7 +52,7 @@ describe("HtmlHead", () => {
             HtmlHead.link({ rel: "stylesheet", href: "/app.css" }),
             HtmlHead.htmlClass("app")
           ],
-          ...children
+          children
         ),
         { onConflict: (conflict) => conflicts.push(conflict) }
       )
@@ -99,11 +99,11 @@ describe("HtmlHead", () => {
         HtmlHead.bodyClass(["a b"]),
         HtmlHead.htmlData("data-theme", "light")
       ],
-      node([
+      [node([
         HtmlHead.htmlClass(["dark", "x"]),
         HtmlHead.htmlData("data-theme", "dark"),
         HtmlHead.bodyData("data-page", "")
-      ])
+      ])]
     ))
     assert.deepStrictEqual(head.html.class, ["h-full", "dark", "x"])
     assert.deepStrictEqual(head.body.class, ["a", "b"])
@@ -120,7 +120,7 @@ describe("HtmlHead", () => {
         HtmlHead.bodyData("data-PAGE", "first"),
         HtmlHead.bodyData("data-page", "middle")
       ],
-      node([HtmlHead.bodyData("data-PAGE", "last")])
+      [node([HtmlHead.bodyData("data-PAGE", "last")])]
     ))
     assert.deepStrictEqual(head.html.data, { "data-theme": "last" })
     assert.deepStrictEqual(head.body.data, { "data-page": "last" })
@@ -145,11 +145,13 @@ describe("HtmlHead", () => {
     const head = HtmlHead.merge(
       node(
         [a],
-        at("/b", [b]),
-        at("/k", [
-          HtmlHead.jsonLd({ b: 2 }, { key: "k" }),
-          HtmlHead.jsonLd({ b: 3 }, { key: "k" })
-        ])
+        [
+          at("/b", [b]),
+          at("/k", [
+            HtmlHead.jsonLd({ b: 2 }, { key: "k" }),
+            HtmlHead.jsonLd({ b: 3 }, { key: "k" })
+          ])
+        ]
       )
     )
     assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [
@@ -191,7 +193,7 @@ describe("HtmlHead", () => {
           HtmlHead.meta({ name: "description", content: post.description }),
           HtmlHead.jsonLd({ "@type": "BlogPosting", headline: post.title })
         ],
-        view: (h) => h.article(h.props.post.title)
+        view: (h) => h.article([h.props.post.title])
       })
       const Blog = Component.define({
         name: "Blog",
@@ -209,11 +211,11 @@ describe("HtmlHead", () => {
         ],
         view: (h) => {
           const post = h.props.post
-          return h.section(
+          return h.section([
             post === undefined
-              ? h.p("All posts")
+              ? h.p(["All posts"])
               : BlogPost(h, { key: post.slug, props: { post } })
-          )
+          ])
         }
       })
       const Message = UiSchema.TaggedEnum({
@@ -245,7 +247,7 @@ describe("HtmlHead", () => {
           }))
         ],
         view: (h, model) =>
-          h.main(Blog(h, { key: "blog", props: { post: model.post } }))
+          h.main([Blog(h, { key: "blog", props: { post: model.post } })])
       })
 
       const root = yield* TestHost.mount(Site, {})
@@ -336,7 +338,7 @@ describe("HtmlHead", () => {
       HtmlHead.lang("en"),
       HtmlHead.meta({ name: "description", content: "Page" })
     ],
-    view: (h) => h.main(Neutral(h, { key: "n", props: {} }))
+    view: (h) => h.main([Neutral(h, { key: "n", props: {} })])
   })
   const Shell = Component.define({
     name: "Shell",

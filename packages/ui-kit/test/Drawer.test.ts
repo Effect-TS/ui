@@ -17,23 +17,23 @@ type H = View.Helper<never, DrawerProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (drawer: Parts, h: H) =>
-    h.div(
+    h.div([
       drawer.swipeArea({
-        element: h.div.class("area").attr("style", "z-index:1")
+        element: h.div.class(["area"]).attr("style", "z-index:1")
       }),
-      drawer.backdrop(h.div.class("backdrop").attr("data-swiping", "x")),
-      drawer.viewport(h.div.class("viewport")).children(
+      drawer.backdrop(h.div.class(["backdrop"]).attr("data-swiping", "x")),
+      drawer.viewport(h.div.class(["viewport"])).children([
         drawer.popup(
-          h.div.class("popup")
+          h.div.class(["popup"])
             .attrs({
               "data-swiping": "x",
               "data-swipe-direction": "sideways",
               "data-nested-drawer-open": "x",
               style: "color:red"
             })
-        ).children(drawer.content(h.div.class("content")))
-      )
-    )
+        ).children([drawer.content(h.div.class(["content"]))])
+      ])
+    ])
 }
 
 const popup = Locator.attr("class", "popup")
@@ -85,7 +85,7 @@ const openedByArea = Effect.gen(function*() {
       trackedArea(s),
       sent("StartedAreaSwipe", { key: argsOf(trackedArea(s)).key })
     )
-    .emitted(opened)
+    .emitted([opened])
     .props({ open: true })
   return s.expectMount(tracked(s)).expectMount(trackedArea(s))
 })
@@ -112,13 +112,13 @@ describe("Drawer", () => {
         s.mounted(tracked(s), settled)
         assert.deepStrictEqual(s.current.emitted, [])
       }
-      s.mounted(tracked(s), release({ deltaY: 30, velocityY: 0.5 })).emitted(
+      s.mounted(tracked(s), release({ deltaY: 30, velocityY: 0.5 })).emitted([
         swiped
-      )
+      ])
       s.mounted(tracked(s), sent("StartedSwipe"))
-      s.mounted(tracked(s), release({ deltaY: 150, velocityY: 0.3 })).emitted(
+      s.mounted(tracked(s), release({ deltaY: 150, velocityY: 0.3 })).emitted([
         swiped
-      )
+      ])
       assert.isUndefined(s.get(popup).attrs?.["data-swiping"])
     }))
 
@@ -144,7 +144,7 @@ describe("Drawer", () => {
         s.expectMount(tracked(s)).mounted(
           tracked(s),
           release({ direction, ...long })
-        ).emitted(swiped)
+        ).emitted([swiped])
       }
     }))
 
@@ -171,13 +171,13 @@ describe("Drawer", () => {
       )
       s.expectMount(tracked(s))
         .mounted(tracked(s), flickUp)
-        .emitted(snapped(1))
+        .emitted([snapped(1)])
         .expectMount(tracked(s))
         .mounted(
           tracked(s),
           release({ direction: "up", deltaY: -250, height: 800 })
         )
-        .emitted(snapped(0.5))
+        .emitted([snapped(0.5)])
         .expectMount(tracked(s))
         .mounted(
           tracked(s),
@@ -188,7 +188,7 @@ describe("Drawer", () => {
             height: 800
           })
         )
-        .emitted(swiped)
+        .emitted([swiped])
         .props({
           open: true,
           snapPoints: [0.25, 0.5, 1],
@@ -196,13 +196,13 @@ describe("Drawer", () => {
         })
         .expectMount(tracked(s))
         .mounted(tracked(s), flickUp)
-        .emitted(snapped(0.5))
+        .emitted([snapped(0.5)])
         .expectMount(tracked(s))
         .mounted(
           tracked(s),
           release({ direction: "up", deltaY: -590, height: 800 })
         )
-        .emitted(snapped(1))
+        .emitted([snapped(1)])
     }))
 
   it.effect("a refused dismiss puts the drawer back", () =>
@@ -213,7 +213,7 @@ describe("Drawer", () => {
           tracked(s),
           release({ deltaY: 150, velocityY: 1, releaseVelocityY: 1 })
         )
-        .emitted(swiped)
+        .emitted([swiped])
       assert.isTrue(argsOf(tracked(s)).dismissed)
       assert.notInclude(s.get(popup).attrs?.style, "--drawer-swipe-strength:1;")
       s.props({ open: false })
@@ -232,15 +232,15 @@ describe("Drawer", () => {
       const s = yield* Scene.make(Drawer, { open: true }, standIn)
       s.expectMount(tracked(s)).expectMount(trackedArea(s))
         .childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "menu" })
-        .emitted({
+        .emitted([{
           _tag: "RequestedOpen",
           triggerId: "menu",
           reason: "trigger-press"
-        })
+        }])
         .childEmit(Dialog, { _tag: "RequestedClose", reason: "escape-key" })
-        .emitted({ _tag: "RequestedClose", reason: "escape-key" })
+        .emitted([{ _tag: "RequestedClose", reason: "escape-key" }])
         .childEmit(Dialog, { _tag: "Settled", open: false })
-        .emitted({ _tag: "Settled", open: false })
+        .emitted([{ _tag: "Settled", open: false }])
     }))
 
   it.effect("a nested drawer's report marks the popup and stops its swipes", () =>
@@ -310,7 +310,7 @@ describe("Drawer", () => {
         trackedArea(s),
         sent("StartedAreaSwipe", { key: argsOf(trackedArea(s)).key })
       )
-        .emitted(opened)
+        .emitted([opened])
       assert.deepInclude(s.get(area).attrs, { "data-swiping": "" })
       assert.strictEqual(s.get(popup).attrs?.["data-swiping"], "")
       s.props({ open: true }).expectMount(tracked(s)).expectMount(
@@ -324,7 +324,7 @@ describe("Drawer", () => {
             size: 400
           })
         )
-        .emitted(swiped)
+        .emitted([swiped])
 
       const long = yield* openedByArea
       long.mounted(
@@ -352,13 +352,13 @@ describe("Drawer", () => {
       const s = yield* Scene.make(Drawer, { open: false }, {
         elements: Html,
         view: (drawer: Parts, h: H) =>
-          h.div(
+          h.div([
             drawer.swipeArea({
-              element: h.div.class("area"),
+              element: h.div.class(["area"]),
               swipeDirection: "left",
               disabled: true
             })
-          )
+          ])
       })
       s.expectMount(trackedArea(s))
       assert.isTrue(argsOf(trackedArea(s)).disabled)
@@ -384,9 +384,9 @@ const Page = Component.define({
   view: (h, model) =>
     DrawerProvider(h, {
       view: (drawerProvider) =>
-        h.div(
-          drawerProvider.indentBackground(h.div.class("background")),
-          drawerProvider.indent(h.div.class("indent")),
+        h.div([
+          drawerProvider.indentBackground(h.div.class(["background"])),
+          drawerProvider.indent(h.div.class(["indent"])),
           Drawer(h, {
             props: { open: model.open },
             onEmit: {
@@ -396,16 +396,16 @@ const Page = Component.define({
               Snapped: () => undefined
             },
             view: (drawer) =>
-              h.div(
-                drawer.trigger(h.button).children("Open"),
-                drawer.portal(h.dialog)?.children(
-                  drawer.popup(h.div).children(
-                    drawer.close(h.button).children("Close")
-                  )
-                )
-              )
+              h.div([
+                drawer.trigger(h.button).children(["Open"]),
+                drawer.portal(h.dialog)?.children([
+                  drawer.popup(h.div).children([
+                    drawer.close(h.button).children(["Close"])
+                  ])
+                ])
+              ])
           })
-        )
+        ])
     })
 })
 
@@ -458,32 +458,32 @@ const Mixed = Component.define({
       key: "outer",
       props: { open: true },
       view: (outerDialog) =>
-        h.div(
-          outerDialog.portal(h.dialog)?.children(
-            outerDialog.popup(h.div.class("outer")).children(
+        h.div([
+          outerDialog.portal(h.dialog)?.children([
+            outerDialog.popup(h.div.class(["outer"])).children([
               Drawer(h, {
                 props: { open: true },
                 view: (drawer) =>
-                  h.div(
-                    drawer.portal(h.dialog)?.children(
-                      drawer.popup(h.div.class("middle")).children(
+                  h.div([
+                    drawer.portal(h.dialog)?.children([
+                      drawer.popup(h.div.class(["middle"])).children([
                         Dialog(h, {
                           key: "inner",
                           props: { open: true },
                           view: (innerDialog) =>
-                            h.div(
-                              innerDialog.portal(h.dialog)?.children(
-                                innerDialog.popup(h.div.class("inner"))
-                              )
-                            )
+                            h.div([
+                              innerDialog.portal(h.dialog)?.children([
+                                innerDialog.popup(h.div.class(["inner"]))
+                              ])
+                            ])
                         })
-                      )
-                    )
-                  )
+                      ])
+                    ])
+                  ])
               })
-            )
-          )
-        )
+            ])
+          ])
+        ])
     })
 })
 

@@ -39,18 +39,18 @@ describe("Tooltip", () => {
           props: { open: false },
           view: (tooltip) => {
             const trigger = tooltip.trigger(
-              h.button.class("tool").onClick(Msg.Clicked())
+              h.button.class(["tool"]).onClick(Msg.Clicked())
             )
             expect(trigger).type.toBe<Button>()
             expect(tooltip.positioner(h.div)).type.toBe<Div>()
             expect(tooltip.popup(h.div)).type.toBe<Div>()
             expect(tooltip.arrow(h.div)).type.toBe<Div>()
-            return h.span(
-              trigger.children("B"),
-              tooltip.positioner(h.div).children(
-                tooltip.popup(h.div).children("Bold")
-              )
-            )
+            return h.span([
+              trigger.children(["B"]),
+              tooltip.positioner(h.div).children([
+                tooltip.popup(h.div).children(["Bold"])
+              ])
+            ])
           }
         })
     })

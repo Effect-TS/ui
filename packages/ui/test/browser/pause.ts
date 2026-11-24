@@ -60,34 +60,36 @@ const Scene = Component.define({
       $.evolve({ sub: open, subToggles: $.model.subToggles + 1 })
   },
   view: (h, model) =>
-    h.main(
-      h.button.class("count").onClick(Message.ClickedCount()).children(
+    h.main([
+      h.button.class(["count"]).onClick(Message.ClickedCount()).children([
         `Count ${model.count}`
-      ),
-      h.p.class("heard").children(`Heard ${model.heard}`),
-      h.button.class("open-menu").onClick(Message.ClickedMenu()).children(
+      ]),
+      h.p.class(["heard"]).children([`Heard ${model.heard}`]),
+      h.button.class(["open-menu"]).onClick(Message.ClickedMenu()).children([
         "Open menu"
-      ),
-      h.div.class("menu").popover("auto", model.menu).onToggle(({ open }) =>
+      ]),
+      h.div.class(["menu"]).popover("auto", model.menu).onToggle(({ open }) =>
         Message.ToggledMenu({ open })
       )
-        .children(
-          h.p("Menu"),
-          h.button.class("open-sub").onClick(Message.ClickedSub()).children(
+        .children([
+          h.p(["Menu"]),
+          h.button.class(["open-sub"]).onClick(Message.ClickedSub()).children([
             "Open submenu"
-          ),
-          h.div.class("sub").popover("auto", model.sub).onToggle(({ open }) =>
+          ]),
+          h.div.class(["sub"]).popover("auto", model.sub).onToggle(({ open }) =>
             Message.ToggledSub({ open })
           )
-            .children("Submenu")
-        ),
+            .children(["Submenu"])
+        ]),
       h.dialog.modal(model.dialog).onCancel(Message.Closed()).onToggle((
         { open }
       ) => Message.ToggledDialog({ open }))
-        .children(
-          h.button.class("close").onClick(Message.Closed()).children("Close")
-        )
-    ),
+        .children([
+          h.button.class(["close"]).onClick(Message.Closed()).children([
+            "Close"
+          ])
+        ])
+    ]),
   subscriptions:
     () => [HtmlSubscription.onDocument("click", Message.HeardClick())]
 })

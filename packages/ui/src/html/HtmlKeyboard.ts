@@ -86,7 +86,7 @@ export interface Shortcut<Msg> {
  *         { key: "k", message: Message.PressedPrevious() }
  *       ]),
  *       { preventDefault: true }
- *     ).children(`row ${row}`)
+ *     ).children([`row ${row}`])
  * })
  *
  * Effect.gen(function*() {

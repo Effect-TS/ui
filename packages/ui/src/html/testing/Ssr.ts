@@ -38,7 +38,7 @@
  *   init: () => ({}),
  *   update: ($) => $.model,
  *   head: () => [Head.title("Home")],
- *   view: (h) => h.el("h1", "Home")
+ *   view: (h) => h.el("h1", ["Home"])
  * })
  *
  * const test = Effect.gen(function*() {

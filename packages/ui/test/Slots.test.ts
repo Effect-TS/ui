@@ -55,7 +55,7 @@ const slotted = <const Name extends string>(name: Name) =>
 const Leaf = define("Leaf").make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.p("leaf")
+  view: (h) => h.p(["leaf"])
 })
 
 // Places its slot until "toggle" hides it.
@@ -72,10 +72,10 @@ const Frame = Component.define({
   update: ($) => !$.model,
   view: (h, shown) => {
     frameViews++
-    return h.div(
-      h.button.onClick(Toggle.Toggle()).children("toggle"),
+    return h.div([
+      h.button.onClick(Toggle.Toggle()).children(["toggle"]),
       shown && h.slots.body
-    )
+    ])
   }
 })
 
@@ -90,13 +90,13 @@ const Editor = Component.define({
   init: () => 0,
   update: ($, msg) => {
     if (msg._tag === "Break") throw new Error("broke")
-    return $.set($.model + 1).emit($.model + 1)
+    return $.set($.model + 1).emit([$.model + 1])
   },
   view: (h, n) =>
-    h.span(
-      h.button.onClick(EditorMsg.Typed()).children("type " + n),
-      h.button.onClick(EditorMsg.Break()).children("break")
-    )
+    h.span([
+      h.button.onClick(EditorMsg.Typed()).children(["type " + n]),
+      h.button.onClick(EditorMsg.Break()).children(["break"])
+    ])
 })
 
 const PageMsg = UiSchema.TaggedEnum({
@@ -118,12 +118,12 @@ const Page = Component.define({
         key: "f",
         slots: {
           body: [
-            h.output(log),
+            h.output([log]),
             Editor(h, {
               key: "Draft",
               onEmit: (count) => PageMsg.Changed({ count }),
               onFailure: () => PageMsg.Failed(),
-              fallback: () => h.span("editor down")
+              fallback: () => h.span(["editor down"])
             })
           ]
         }
@@ -139,7 +139,7 @@ const badge = (text: string) =>
     define("Badge").make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.span(text)
+      view: (h) => h.span([text])
     })
   )
 
@@ -195,7 +195,7 @@ describe("slots", () => {
               slots: {
                 body: Badge.render(h, {
                   key: "b",
-                  fallback: () => h.span("no badge")
+                  fallback: () => h.span(["no badge"])
                 })
               }
             })
@@ -222,24 +222,24 @@ describe("slots", () => {
             init: () => false,
             update: () => true,
             view: (h, filled) =>
-              h.div(
-                h.button.onClick(LateMsg.Fill()).children("fill"),
+              h.div([
+                h.button.onClick(LateMsg.Fill()).children(["fill"]),
                 // No slots at first: the content comes with a later render.
                 filled
                   ? Frame(h, {
                     key: "f",
                     slots: {
                       body: [
-                        h.button.onClick(LateMsg.Hit()).children("hit"),
+                        h.button.onClick(LateMsg.Hit()).children(["hit"]),
                         Badge.render(h, {
                           key: "b",
-                          fallback: () => h.span("no badge")
+                          fallback: () => h.span(["no badge"])
                         })
                       ]
                     }
                   })
                   : Frame(h, { key: "f" })
-              )
+              ])
           }
         ),
         badge("late's")
@@ -274,7 +274,7 @@ describe("slots", () => {
         message: Schema.Boolean,
         elements: Html
       }).make({
-        init: ($) => $.set(undefined).run(Look.make()),
+        init: ($) => $.set(undefined).run([Look.make()]),
         update: (_, found) => found,
         view: (h) => Frame(h, { key: "f", slots: { body: h.input.ref(Field) } })
       })
@@ -351,22 +351,25 @@ describe("placing a slot twice fails the receiver", () => {
     "in its view": slotted("Twice").make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.div(h.slots.body, h.slots.body)
+      view: (h) => h.div([h.slots.body, h.slots.body])
     }),
     "once forwarded to a child": slotted("Twice").make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
-        h.div(
+        h.div([
           h.slots.body,
           Frame(h, { key: "f", slots: { body: h.slots.body } })
-        )
+        ])
     }),
     "once in a headless child's closure": slotted("Twice").make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
-        h.div(h.slots.body, Headless(h, { key: "h", view: () => h.slots.body }))
+        h.div([
+          h.slots.body,
+          Headless(h, { key: "h", view: () => h.slots.body })
+        ])
     })
   }
   for (const [where, Twice] of Object.entries(cases)) {
@@ -379,7 +382,7 @@ describe("placing a slot twice fails the receiver", () => {
             Twice(h, {
               key: "c",
               slots: { body: "x" },
-              fallback: () => h.p("child down")
+              fallback: () => h.p(["child down"])
             })
         })
         const root = yield* TestHost.mount(Holder, {})
@@ -418,7 +421,7 @@ describe("a mistake in content fails the parent that wrote it", () => {
       throw new Error("broke")
     },
     update: ($) => $.model,
-    view: (h) => h.p("broken")
+    view: (h) => h.p(["broken"])
   })
   const writers = {
     "two elements with one key": define("Writer").make({
@@ -449,7 +452,7 @@ describe("a mistake in content fails the parent that wrote it", () => {
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            Writer(h, { key: "w", fallback: () => h.p("writer down") })
+            Writer(h, { key: "w", fallback: () => h.p(["writer down"]) })
         })
         const root = yield* TestHost.mount(Top, {})
         yield* TestHost.settle
@@ -471,7 +474,7 @@ describe("a mistake in content fails the parent that wrote it", () => {
       const Inner = tiny("Inner").make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("box", h.slots.body)
+        view: (h) => h.el("box", [h.slots.body])
       })
       const Outer = tiny("Outer").make({
         init: () => null,
@@ -498,7 +501,7 @@ describe("a mistake in content fails the parent that wrote it", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          Writer(h, { key: "w", fallback: () => h.label("writer down") })
+          Writer(h, { key: "w", fallback: () => h.label(["writer down"]) })
       })
       const root = yield* TestHost.mount(Top, {})
       yield* TestHost.settle

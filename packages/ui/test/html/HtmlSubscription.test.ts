@@ -35,7 +35,7 @@ const Keys = Component.define({
     Stopped: ($) => ({ ...$.model, listening: false })
   },
   view: (h, model) =>
-    h.div(
+    h.div([
       h.input.attr("id", "field").onKeyDown(
         ({ key }) =>
           key === "Enter" ? Message.Renamed({ prefix: "field" }) : undefined,
@@ -45,8 +45,8 @@ const Keys = Component.define({
       ),
       h.button.attr("id", "rename").onClick(Message.Renamed({ prefix: "b" })),
       h.button.attr("id", "stop").onClick(Message.Stopped()),
-      h.output(model.log.join(","))
-    ),
+      h.output([model.log.join(",")])
+    ]),
   subscriptions: ({ model }) => [
     model.listening && HtmlSubscription.onDocument(
       "keydown",
@@ -74,7 +74,7 @@ const Phases = Component.define({
   init: (): ReadonlyArray<string> => [],
   update: ($, { what }) => [...$.model, what],
   view: (h, log) =>
-    h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
+    h.div([h.button.attr("id", "inner"), h.output([log.join(",")])]),
   subscriptions: ({ model: log }) => [
     !log.includes("capture") &&
     HtmlSubscription.onDocument(
@@ -163,7 +163,7 @@ describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.p("throws"),
+        view: (h) => h.p(["throws"]),
         subscriptions: () => [
           HtmlSubscription.onDocument("keydown", (): typeof Message.Type => {
             throw new Error("boom")
@@ -195,7 +195,7 @@ const Listener = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.span(),
+  view: (h) => h.span([]),
   subscriptions: ({ props: { preventDefault } }) => [
     HtmlSubscription.onDocument(
       "keydown",
@@ -216,11 +216,11 @@ const Parent = Component.define({
   init: () => "always" as const,
   update: { Set: (_, { listen }) => listen },
   view: (h, listen) =>
-    h.div(
+    h.div([
       listen === null
         ? undefined
         : Listener(h, { props: { preventDefault: listen } })
-    )
+    ])
 })
 
 describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
@@ -329,7 +329,7 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, { what }) => [...$.model, what],
-        view: (h, log) => h.output(log.join(",")),
+        view: (h, log) => h.output([log.join(",")]),
         subscriptions: () => [
           HtmlSubscription.onCustomEvent(
             "submit",
@@ -426,7 +426,7 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, entry) => [...$.model, entry],
-        view: (h, log) => h.output(log.join(",")),
+        view: (h, log) => h.output([log.join(",")]),
         subscriptions: () => [
           HtmlSubscription.onDocument(
             "keydown",
@@ -469,7 +469,7 @@ describe("HtmlSubscription.shortcuts", () => {
           }).make({
             init: (): ReadonlyArray<string> => [],
             update: ($, entry) => [...$.model, entry],
-            view: (h, log) => h.output(log.join(",")),
+            view: (h, log) => h.output([log.join(",")]),
             subscriptions: () => [
               HtmlSubscription.shortcuts(
                 [{ key: "?", message: "help" }],
@@ -521,7 +521,7 @@ const Frames = Component.define({
     }),
     Toggled: ($) => ({ ...$.model, running: !$.model.running })
   },
-  view: (h, model) => h.p(model.deltas.join(",")),
+  view: (h, model) => h.p([model.deltas.join(",")]),
   subscriptions: ({ model }) => [
     model.running &&
     HtmlSubscription.onAnimationFrame((delta) =>

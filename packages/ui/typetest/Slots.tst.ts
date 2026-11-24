@@ -21,7 +21,8 @@ const PanelDef = Component.define({
 const Panel = PanelDef.make({
   init: () => true,
   update: ($) => !$.model,
-  view: (h, open) => h.section(open && h.slots.body, h.footer(h.slots.footer))
+  view: (h, open) =>
+    h.section([open && h.slots.body, h.footer([h.slots.footer])])
 })
 
 const Plain = Component.define({
@@ -32,7 +33,7 @@ const Plain = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.p("plain")
+  view: (h) => h.p(["plain"])
 })
 
 // Needs Clock to render.
@@ -105,7 +106,10 @@ describe("slots", () => {
     expect(Panel(h, {
       key: "p",
       slots: {
-        body: [h.p("note"), h.button.onClick(PageMsg.Saved()).children("save")]
+        body: [
+          h.p(["note"]),
+          h.button.onClick(PageMsg.Saved()).children(["save"])
+        ]
       }
     })).type.toBe<View.Child<PageMsg, never>>()
     expect(
@@ -127,7 +131,7 @@ describe("slots", () => {
     })
     expect(Panel).type.not.toBeCallableWith(h, {
       key: "p",
-      slots: { body: other.button.onClick(OtherMsg.Other()).children("x") }
+      slots: { body: other.button.onClick(OtherMsg.Other()).children(["x"]) }
     })
   })
 
@@ -207,7 +211,7 @@ describe("slots", () => {
     >()
     expect(Panel<PageMsg>).type.not.toBeCallableWith(h, {
       key: "p",
-      slots: { body: h.p("x") }
+      slots: { body: h.p(["x"]) }
     })
   })
 
@@ -225,8 +229,8 @@ describe("slots", () => {
     const options = {
       key: "p",
       slots: { body: "x" },
-      view: () => h.p("x"),
-      fallback: () => h.p("wait")
+      view: () => h.p(["x"]),
+      fallback: () => h.p(["wait"])
     }
     expect(Headless).type.not.toBeCallableWith(h, options)
     expect(Badge.render).type.not.toBeCallableWith(h, options)

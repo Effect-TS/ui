@@ -164,10 +164,12 @@ const QueryPage = Component.define({
     view: (h) =>
       h.el(
         "main",
-        ByArgs(h, { key: "args" }),
-        ByError(h, { key: "error" }),
-        ByKeys(h, { key: "keys" }),
-        Plain(h, { key: "plain" })
+        [
+          ByArgs(h, { key: "args" }),
+          ByError(h, { key: "error" }),
+          ByKeys(h, { key: "keys" }),
+          Plain(h, { key: "plain" })
+        ]
       )
   })
 
@@ -181,9 +183,11 @@ const Page = Component.define({
   view: (h) =>
     h.el(
       "main",
-      Secret(h, { key: "secret" }),
-      Loaded(h, { key: "loaded" }),
-      Plain(h, { key: "plain" })
+      [
+        Secret(h, { key: "secret" }),
+        Loaded(h, { key: "loaded" }),
+        Plain(h, { key: "plain" })
+      ]
     )
 })
 

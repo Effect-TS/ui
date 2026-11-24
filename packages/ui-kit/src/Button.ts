@@ -9,7 +9,7 @@
  * `Button` returns a single `<button>` builder. It uses `h.button` by
  * default. Pass `element` to share the button with another part, such as
  * a tooltip trigger. Chain classes, attributes and children on the result:
- * `Button(h, { onPress }).class("save").children("Save")`.
+ * `Button(h, { onPress }).class(["save"]).children(["Save"])`.
  *
  * **Data attributes**
  *
@@ -66,8 +66,8 @@
  *       props: { disabled: model.saving, focusableWhenDisabled: true },
  *       onPress: EditorMessage.PressedSave()
  *     })
- *       .class("save")
- *       .children(model.saving ? "Saving" : "Save")
+ *       .class(["save"])
+ *       .children([model.saving ? "Saving" : "Save"])
  * })
  *
  * // The button keeps the caller's class, and doesn't submit a form.
@@ -124,7 +124,7 @@ export type ButtonElement<Msg, R = never> = Html.Element<
 /**
  * A button that can stay focusable while disabled. Call it with the
  * caller's `h` and the press as `onPress`, then chain the label with
- * `.children(...)`.
+ * `.children([...])`.
  *
  * **Details**
  *

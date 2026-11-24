@@ -62,8 +62,8 @@ const Page = Component.define({
     Settled: ($) => $.model
   },
   view: (h, model) =>
-    h.div(
-      h.button.attr("id", "show").onClick(Message.Shown()).children("Show"),
+    h.div([
+      h.button.attr("id", "show").onClick(Message.Shown()).children(["Show"]),
       h.span.attr("id", "anchor"),
       Popover(h, {
         props: {
@@ -81,34 +81,36 @@ const Page = Component.define({
           Settled: ({ open }) => Message.Settled({ open })
         },
         view: (popover) =>
-          h.div(
+          h.div([
             popover.trigger({
               element: h.button.attr("id", "a"),
               openOnHover: true,
               delay: 0
-            }).children("A"),
+            }).children(["A"]),
             popover.trigger({
               element: h.button.attr("id", "b"),
               openOnHover: true,
               delay: 0
-            }).children("B"),
+            }).children(["B"]),
             model.third === "gone" ? null : popover.trigger({
               element: h.button.attr("id", "c"),
               openOnHover: true,
               delay: 30,
               disabled: model.third === "off"
-            }).children("C"),
-            popover.finalFocus(h.button.attr("id", "final")).children("Final"),
-            popover.portal(h.dialog)?.children(
-              popover.positioner(h.div.attr("data-positioner", "")).children(
-                popover.popup(h.div).children(
-                  popover.viewport(h.div.attr("id", "viewport")).children(
-                    popover.title(h.h2).children(`For ${popover.triggerId}`)
-                  )
-                )
-              )
-            )
-          )
+            }).children(["C"]),
+            popover.finalFocus(h.button.attr("id", "final")).children([
+              "Final"
+            ]),
+            popover.portal(h.dialog)?.children([
+              popover.positioner(h.div.attr("data-positioner", "")).children([
+                popover.popup(h.div).children([
+                  popover.viewport(h.div.attr("id", "viewport")).children([
+                    popover.title(h.h2).children([`For ${popover.triggerId}`])
+                  ])
+                ])
+              ])
+            ])
+          ])
       }),
       PopoverTrigger(h, {
         element: h.button.attr("id", "detached"),
@@ -116,7 +118,7 @@ const Page = Component.define({
           open: model.open && model.triggerId === "detached",
           popupId: "popover"
         }
-      }).children("Detached"),
+      }).children(["Detached"]),
       model.third === "gone" ? null : PopoverTrigger(h, {
         element: h.button.attr(
           "id",
@@ -129,8 +131,8 @@ const Page = Component.define({
           delay: 30,
           disabled: model.third === "off"
         }
-      }).children("Detached C")
-    )
+      }).children(["Detached C"])
+    ])
 })
 
 const mountPage = Effect.fnUntraced(

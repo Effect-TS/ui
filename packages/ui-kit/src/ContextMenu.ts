@@ -104,14 +104,14 @@
  *         Settled: () => undefined
  *       },
  *       view: (contextMenu) =>
- *         h.div(
- *           contextMenu.trigger(h.div.class("row")).children("report.pdf"),
- *           contextMenu.positioner(h.div).children(
+ *         h.div([
+ *           contextMenu.trigger(h.div.class(["row"])).children(["report.pdf"]),
+ *           contextMenu.positioner(h.div).children([
  *             contextMenu.popup(h.div).children(
- *               ...actions.map(({ label, value }) => contextMenu.item({ element: h.div, value }).children(label))
+ *               actions.map(({ label, value }) => contextMenu.item({ element: h.div, value }).children([label]))
  *             )
- *           )
- *         )
+ *           ])
+ *         ])
  *     })
  * })
  *

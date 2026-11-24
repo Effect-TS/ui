@@ -71,7 +71,7 @@ const Page = Component.define({
   view: (h, model) =>
     h.form.onSubmit(({ fields }) =>
       Message.Submitted({ query: fields.q ?? "" })
-    ).children(
+    ).children([
       Field(h, {
         props: { filled: model.value !== "" },
         view: (field) =>
@@ -93,26 +93,26 @@ const Page = Component.define({
               Settled: () => undefined
             },
             view: (autocomplete) =>
-              field.root(h.div).children(
-                field.label(h.label).children("Fruit"),
-                autocomplete.input(field.control(h.input.class("input"))),
+              field.root(h.div).children([
+                field.label(h.label).children(["Fruit"]),
+                autocomplete.input(field.control(h.input.class(["input"]))),
                 autocomplete.positioner(h.div.attr("id", "positioner"))
-                  .children(
-                    autocomplete.popup(h.div).children(
+                  .children([
+                    autocomplete.popup(h.div).children([
                       autocomplete.list(h.div).children(
-                        ...autocomplete.items.map(({ label, value }) =>
+                        autocomplete.items.map(({ label, value }) =>
                           autocomplete.item({
                             element: h.div.attr("data-testid", value),
                             value
-                          }).children(label)
+                          }).children([label])
                         )
                       )
-                    )
-                  )
-              )
+                    ])
+                  ])
+              ])
           })
       })
-    )
+    ])
 })
 
 const InPopup = Component.define({
@@ -124,7 +124,7 @@ const InPopup = Component.define({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
   view: (h, model) =>
-    h.div(
+    h.div([
       h.form.attr("id", "search").onSubmit(({ fields }) =>
         Message.Submitted({ query: fields.q ?? "" })
       ),
@@ -146,26 +146,26 @@ const InPopup = Component.define({
           Settled: () => undefined
         },
         view: (autocomplete) =>
-          h.div(
-            autocomplete.trigger(h.button.attr("id", "trigger")).children(
+          h.div([
+            autocomplete.trigger(h.button.attr("id", "trigger")).children([
               autocomplete.value(h.span)
-            ),
-            autocomplete.positioner(h.div).children(
-              autocomplete.popup(h.div).children(
-                autocomplete.input(h.input.class("input")),
+            ]),
+            autocomplete.positioner(h.div).children([
+              autocomplete.popup(h.div).children([
+                autocomplete.input(h.input.class(["input"])),
                 autocomplete.list(h.div).children(
-                  ...autocomplete.items.map(({ label, value }) =>
+                  autocomplete.items.map(({ label, value }) =>
                     autocomplete.item({
                       element: h.div.attr("data-testid", value),
                       value
-                    }).children(label)
+                    }).children([label])
                   )
                 )
-              )
-            )
-          )
+              ])
+            ])
+          ])
       })
-    )
+    ])
 })
 
 const NestedMessage = UiSchema.TaggedEnum({
@@ -212,11 +212,11 @@ const Nested = Component.define({
         Settled: () => undefined
       },
       view: (combobox) =>
-        h.div(
-          combobox.input(h.input.class("outer")),
-          combobox.positioner(h.div).children(
-            combobox.popup(h.div).children(
-              combobox.list(h.div).children(
+        h.div([
+          combobox.input(h.input.class(["outer"])),
+          combobox.positioner(h.div).children([
+            combobox.popup(h.div).children([
+              combobox.list(h.div).children([
                 Autocomplete(h, {
                   key: "inner",
                   props: { open: model.inner, value: "", items, modal: true },
@@ -238,20 +238,20 @@ const Nested = Component.define({
                     Settled: () => undefined
                   },
                   view: (autocomplete) =>
-                    h.div(
-                      autocomplete.input(h.input.class("inner")),
+                    h.div([
+                      autocomplete.input(h.input.class(["inner"])),
                       autocomplete.positioner(h.div.attr("id", "inner"))
-                        .children(
-                          autocomplete.popup(h.div).children(
+                        .children([
+                          autocomplete.popup(h.div).children([
                             autocomplete.list(h.div).children(
-                              ...autocomplete.items.map(({ label, value }) =>
+                              autocomplete.items.map(({ label, value }) =>
                                 autocomplete.item({ element: h.div, value })
-                                  .children(label)
+                                  .children([label])
                               )
                             )
-                          )
-                        )
-                    )
+                          ])
+                        ])
+                    ])
                 }),
                 Autocomplete(h, {
                   key: "picker",
@@ -279,24 +279,24 @@ const Nested = Component.define({
                     Settled: () => undefined
                   },
                   view: (autocomplete) =>
-                    h.div(
-                      autocomplete.trigger(h.button.class("picker")),
+                    h.div([
+                      autocomplete.trigger(h.button.class(["picker"])),
                       autocomplete.positioner(h.div.attr("id", "picker"))
-                        .children(
-                          autocomplete.popup(h.div).children(
-                            autocomplete.input(h.input.class("picker-input")),
+                        .children([
+                          autocomplete.popup(h.div).children([
+                            autocomplete.input(h.input.class(["picker-input"])),
                             autocomplete.list(h.div)
-                          )
-                        )
-                    )
+                          ])
+                        ])
+                    ])
                 }),
                 ...combobox.items.map(({ label, value }) =>
-                  combobox.item({ element: h.div, value }).children(label)
+                  combobox.item({ element: h.div, value }).children([label])
                 )
-              )
-            )
-          )
-        )
+              ])
+            ])
+          ])
+        ])
     })
 })
 

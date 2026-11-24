@@ -44,7 +44,7 @@ const Page = Component.define({
   view: (h, model) =>
     h.form.onSubmit(({ fields }) =>
       Message.Logged({ entry: "submitted " + fields.code })
-    ).children(
+    ).children([
       DirectionProvider(h, {
         props: { direction: "rtl" },
         view: () =>
@@ -54,8 +54,8 @@ const Page = Component.define({
               filled: Redacted.value(model.code) !== ""
             },
             view: (field) =>
-              field.root(h.div.id("field")).children(
-                field.legend(h.div).children("Verification code"),
+              field.root(h.div.id("field")).children([
+                field.legend(h.div).children(["Verification code"]),
                 OTPField(h, {
                   props: {
                     value: model.code,
@@ -83,18 +83,18 @@ const Page = Component.define({
                         { length: otpField.length },
                         (_, index) =>
                           otpField.input({
-                            element: field.member(h.input.class("slot")),
+                            element: field.member(h.input.class(["slot"])),
                             index
                           })
                       )
                     )
                 }),
-                field.description(h.p).children("Sent to your phone")
-              )
+                field.description(h.p).children(["Sent to your phone"])
+              ])
           })
       }),
-      h.button.attr("type", "button").children("After")
-    )
+      h.button.attr("type", "button").children(["After"])
+    ])
 })
 
 const enter = (slot: HTMLInputElement, text: string) => {
@@ -161,9 +161,9 @@ const Labelled = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.div(
-      h.label.attr("for", "otp").children("Verification code"),
-      h.p.id("own").children("Fourth digit"),
+    h.div([
+      h.label.attr("for", "otp").children(["Verification code"]),
+      h.p.id("own").children(["Fourth digit"]),
       OTPField(h, {
         props: { value: Redacted.make(""), length: 5, id: "otp" },
         onEmit: {
@@ -172,26 +172,26 @@ const Labelled = Component.define({
           Rejected: () => undefined
         },
         view: (otpField) =>
-          otpField.root(h.div).children(
+          otpField.root(h.div).children([
             otpField.input({ element: h.input, index: 0 }),
             otpField.input({
               element: h.input.attr("aria-label", "Second digit"),
               index: 1
             }),
-            h.div(otpField.input({ element: h.input, index: 2 })),
+            h.div([otpField.input({ element: h.input, index: 2 })]),
             otpField.input({
               element: h.input.attr("aria-labelledby", "own"),
               index: 3
             }),
             Frame(h, {
               view: (frame) =>
-                frame.root(h.span).children(
+                frame.root(h.span).children([
                   otpField.input({ element: h.input, index: 4 })
-                )
+                ])
             })
-          )
+          ])
       })
-    )
+    ])
 })
 
 const focusedSlot = (slots: ReadonlyArray<HTMLInputElement>) =>
@@ -426,7 +426,7 @@ describe("OTPField in a document", { concurrent: false }, () => {
                 Array.from(
                   { length: otpField.length },
                   (_, index) =>
-                    otpField.input({ element: h.input.class("slot"), index })
+                    otpField.input({ element: h.input.class(["slot"]), index })
                 )
               )
           })

@@ -22,7 +22,7 @@ const Greeting = Component.define({
 }).make({
   init: () => ({}),
   update: ($) => $.model,
-  view: (h) => h.p.onMount(Hello()).children("hello")
+  view: (h) => h.p.onMount(Hello()).children(["hello"])
 })
 
 // The tests that fail on purpose run with the scope `it.effect` provides, so the end check runs as that
@@ -58,7 +58,7 @@ describe("make's end check, in the scope it.effect provides", {
       record(ctx)
       const story = yield* Story.make(TodoItem, { todo })
       story.send(save)
-      story.expectExact(SaveTodo)
+      story.expectExact([SaveTodo])
     }))
 
   it.effect.fails("a Scene that ends with a mount not acknowledged", (ctx) =>

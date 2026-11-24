@@ -442,13 +442,13 @@ describe("Validation", () => {
             {
               onNone: () => ({ form }),
               onSome: ({ username }) =>
-                $.set({ form }).run(CreateAccount.make({ username }))
+                $.set({ form }).run([CreateAccount.make({ username })])
             }
           )
         },
         CreatedAccount: ($) => $.model
       },
-      view: (h, model) => h.el("p", model.form.values.username)
+      view: (h, model) => h.el("p", [model.form.values.username])
     })
 
     it.effect("drops a stale answer and submits once the check passes", () =>
@@ -475,7 +475,7 @@ describe("Validation", () => {
         s.loaded("taken", false)
         assert.strictEqual(username()._tag, "Valid")
         s.send(Message.ClickedSubmit())
-          .expectExact(CreateAccount.make({ username: "grace" }))
+          .expectExact([CreateAccount.make({ username: "grace" })])
           .resolve(CreateAccount, Message.CreatedAccount())
       }))
   })

@@ -65,7 +65,7 @@ describe("HtmlServerHttp.layerHttp", () => {
         return {}
       },
       update: ($) => $.model,
-      view: (h) => h.h1("Home")
+      view: (h) => h.h1(["Home"])
     })
     const response = await request(
       layerHttp(Root, { routes: HomeRoute, document }),
@@ -105,7 +105,7 @@ describe("HtmlServerHttp.layerHttp", () => {
     }).make({
       init: () => ({}),
       update: ($) => $.model,
-      view: (h) => h.p(`Page ${h.props.route.search.page}`)
+      view: (h) => h.p([`Page ${h.props.route.search.page}`])
     })
     const lists = layerHttp(List, { routes: ListRoute, document })
     const response = await request(lists, "/list?page=x&utm_source=mail")

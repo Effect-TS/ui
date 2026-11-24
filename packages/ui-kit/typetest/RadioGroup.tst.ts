@@ -59,7 +59,7 @@ describe("RadioGroup", () => {
             }
           },
           view: (radioGroup) => {
-            expect(radioGroup.root(field.group(h.div)).children(needsClock))
+            expect(radioGroup.root(field.group(h.div)).children([needsClock]))
               .type.toBe<Div<Clock>>()
             expect(
               radioGroup.radio({
@@ -81,14 +81,14 @@ describe("RadioGroup", () => {
             expect(radioGroup.readOnly).type.toBe<boolean>()
             expect(radioGroup.required).type.toBe<boolean>()
             expect(radioGroup.invalid).type.toBe<boolean>()
-            return radioGroup.root(h.div).children(
+            return radioGroup.root(h.div).children([
               radioGroup.radio({
                 element: h.button.onMount(NeedsClock()),
                 value: "ssd"
-              }).children(
+              }).children([
                 radioGroup.indicator({ element: h.span, value: "ssd" })
-              )
-            )
+              ])
+            ])
           }
         })
         expect<View.Requirements<typeof child>>().type.toBe<Clock>()

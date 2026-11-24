@@ -29,27 +29,33 @@ const Page = Component.define({
       },
       onEmit: { Selected: ({ value }) => Message.Selected({ value }) },
       view: (tabs) =>
-        tabs.root(h.div.class("root")).children(
-          tabs.list(h.div.class("list")).children(
-            tabs.tab({ element: h.button.class("a"), value: "a" }).children(
+        tabs.root(h.div.class(["root"])).children([
+          tabs.list(h.div.class(["list"])).children([
+            tabs.tab({ element: h.button.class(["a"]), value: "a" }).children([
               "A"
-            ),
-            tabs.tab({ element: h.button.class("b"), value: "b" }).children(
+            ]),
+            tabs.tab({ element: h.button.class(["b"]), value: "b" }).children([
               "B"
-            ),
-            tabs.tab({ element: h.a.class("c").attr("href", "#c"), value: "c" })
-              .children("C"),
-            tabs.tab({ element: h.a.class("d").attr("href", "#d"), value: "d" })
-              .children("D"),
-            tabs.tab({ element: h.a.class("e"), value: "e" }).children("E"),
-            tabs.indicator(h.span.class("indicator"))
-          ),
+            ]),
+            tabs.tab({
+              element: h.a.class(["c"]).attr("href", "#c"),
+              value: "c"
+            })
+              .children(["C"]),
+            tabs.tab({
+              element: h.a.class(["d"]).attr("href", "#d"),
+              value: "d"
+            })
+              .children(["D"]),
+            tabs.tab({ element: h.a.class(["e"]), value: "e" }).children(["E"]),
+            tabs.indicator(h.span.class(["indicator"]))
+          ]),
           ["a", "b", "c", "d", "e"].map((value) =>
-            tabs.panel({ element: h.div.class("panel"), value })?.children(
+            tabs.panel({ element: h.div.class(["panel"]), value })?.children([
               value
-            )
+            ])
           )
-        )
+        ])
     })
 })
 

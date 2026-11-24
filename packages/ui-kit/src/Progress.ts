@@ -14,7 +14,7 @@
  * | `indicator` | `<div>` inside the track      |
  *
  * Each part takes the consumer's builder and returns it, so the consumer
- * goes on chaining and adds children with `.children(...)`. `root`
+ * goes on chaining and adds children with `.children([...])`. `root`
  * appends a visually hidden `<span role="presentation">` after all its
  * children, which makes NVDA read the label. `value` fills in the value
  * text when the consumer gives it no children. The other parts add no
@@ -65,11 +65,11 @@
  *     Progress(h, {
  *       props: { value: model.sent },
  *       view: (progress) =>
- *         progress.root(h.div.class("progress")).children(
- *           progress.label(h.span).children("Uploading"),
+ *         progress.root(h.div.class(["progress"])).children([
+ *           progress.label(h.span).children(["Uploading"]),
  *           progress.value(h.span),
- *           progress.track(h.div.class("track")).children(progress.indicator(h.div.class("fill")))
- *         )
+ *           progress.track(h.div.class(["track"])).children([progress.indicator(h.div.class(["fill"]))])
+ *         ])
  *     })
  * })
  *
@@ -239,7 +239,7 @@ export const Progress = Component.define({
             "aria-labelledby": labelId
           })
           // After every child, including the ones chained after the part.
-          .forward((node) => node.children(nvdaLabel))),
+          .forward((node) => node.children([nvdaLabel]))),
       label: p.part(
         "span",
         (b) => state(b).attrs({ id: labelId, role: "presentation" })

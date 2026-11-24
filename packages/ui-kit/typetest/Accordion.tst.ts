@@ -42,7 +42,7 @@ describe("Accordion", () => {
         expect(accordion.value).type.toBe<ReadonlyArray<string>>()
         expect(accordion.orientation).type.toBe<"vertical" | "horizontal">()
         expect(accordion.root).type.not.toBeCallableWith(h.span)
-        return accordion.root(h.div).children(
+        return accordion.root(h.div).children([
           AccordionItem(h, {
             key: "a",
             props: { value: "a" },
@@ -62,13 +62,13 @@ describe("Accordion", () => {
               expect(item.header).type.not.toBeCallableWith(h.div)
               expect(item.trigger).type.not.toBeCallableWith(h.div)
               expect(item.panel).type.not.toBeCallableWith(h.section)
-              return item.root(h.div).children(
-                item.header(h.h3).children(trigger),
+              return item.root(h.div).children([
+                item.header(h.h3).children([trigger]),
                 item.panel(h.div)
-              )
+              ])
             }
           })
-        )
+        ])
       }
     })
   })

@@ -45,11 +45,11 @@ const Tip = Component.define({
   init: () => null,
   update: ($, message) => $.send(TipsProvider, message),
   view: (h) =>
-    h.el("button").on("click", TipMessage.Enter({ id: h.props.id })).children(
+    h.el("button").on("click", TipMessage.Enter({ id: h.props.id })).children([
       `${h.props.id}:${
         h.shared.provider.open === h.props.id ? "open" : "closed"
       }${h.shared.provider.label}`
-    )
+    ])
 })
 
 /** A headless reader: its part is the open tip. */
@@ -85,7 +85,7 @@ const App = Component.define({
           Tip(h, { key: "a", props: { id: "a" } }),
           Trigger(h, {
             key: "t",
-            view: (trigger) => h.el("i", trigger.open ?? "")
+            view: (trigger) => h.el("i", [trigger.open ?? ""])
           })
         ])
     })
@@ -146,7 +146,7 @@ describe("shared state", () => {
           update: ($) => $.model,
           view: (h) => {
             renders++
-            return h.el("p", String(h.shared.provider.getTime()))
+            return h.el("p", [String(h.shared.provider.getTime())])
           }
         })
       const Ticker = Component.define({
@@ -156,7 +156,7 @@ describe("shared state", () => {
       }).make({
         init: () => null,
         update: ($, message) => $.send(ClockProvider, message),
-        view: (h) => h.el("button").on("click", Tick.Tick()).children("tick")
+        view: (h) => h.el("button").on("click", Tick.Tick()).children(["tick"])
       })
       const Host = Component.define({
         name: "Host",
@@ -205,8 +205,8 @@ describe("shared state", () => {
         view: (h) =>
           BrokenProvider(h, {
             key: "b",
-            view: () => h.el("p", "inside"),
-            fallback: () => h.el("p", "broken")
+            view: () => h.el("p", ["inside"]),
+            fallback: () => h.el("p", ["broken"])
           })
       })
       const root = yield* TestHost.mount(Host, {})
@@ -267,7 +267,7 @@ describe("shared state in a Scene", () => {
         slots: (h) => ({
           body: Trigger(h, {
             key: "t",
-            view: (trigger) => h.el("i", trigger.label)
+            view: (trigger) => h.el("i", [trigger.label])
           })
         })
       })
@@ -325,7 +325,7 @@ describe("shared state in a Scene", () => {
           .make({
             init: () => null,
             update: ($) => $.model,
-            view: (h) => h.el("p", String(h.shared.a + h.shared.b))
+            view: (h) => h.el("p", [String(h.shared.a + h.shared.b)])
           })
         const shared = yield* Scene.make(Sum, {})
         assert.strictEqual(
@@ -405,7 +405,7 @@ const makeReader = (answer: (told: boolean) => boolean) =>
         ChangedGroup: ({ on }) => answer(on)
       }),
     view: (h) =>
-      h.el("button").on("click", ReaderMessage.Clicked()).children("reader")
+      h.el("button").on("click", ReaderMessage.Clicked()).children(["reader"])
   })
 
 const BumperMessage = UiSchema.TaggedEnum({ Bump: { times: Schema.Number } })
@@ -425,7 +425,7 @@ const Bumper = Component.define({
   },
   view: (h) =>
     h.el("button").on("click", BumperMessage.Bump({ times: h.props.times }))
-      .children("bump")
+      .children(["bump"])
 })
 
 const makePage = (Reader: ReturnType<typeof makeReader>) =>
@@ -443,8 +443,10 @@ const makePage = (Reader: ReturnType<typeof makeReader>) =>
         view: () =>
           h.el(
             "div",
-            Bumper(h, { key: "b", props: { times: 150 } }),
-            Reader(h, { key: "r" })
+            [
+              Bumper(h, { key: "b", props: { times: 150 } }),
+              Reader(h, { key: "r" })
+            ]
           )
       })
   })
@@ -464,9 +466,9 @@ describe("optional owners, reports and onChange", () => {
         init: () => null,
         update: ($, message) => $.send(TipsProvider, message),
         view: (h) =>
-          h.el("button").on("click", TipMessage.Enter({ id: "a" })).children(
+          h.el("button").on("click", TipMessage.Enter({ id: "a" })).children([
             h.shared.provider === undefined ? "alone" : "grouped"
-          )
+          ])
       })
       const root = yield* TestHost.mount(Lone, {})
       yield* TestHost.settle
@@ -576,9 +578,11 @@ describe("optional owners, reports and onChange", () => {
             view: (controls) =>
               h.el(
                 "div",
-                h.el("p", controls.ids.join(" ")),
-                Box(h, { key: "a" }),
-                Box(h, { key: "b" })
+                [
+                  h.el("p", [controls.ids.join(" ")]),
+                  Box(h, { key: "a" }),
+                  Box(h, { key: "b" })
+                ]
               )
           })
       })
@@ -705,9 +709,9 @@ describe("shared state in update", () => {
       ])
         .send(Clock, ClockMessage.Ticked()),
     view: (h, seen) =>
-      h.el("button").on("click", WatchMessage.Clicked()).children(
+      h.el("button").on("click", WatchMessage.Clicked()).children([
         `saw [${seen.join(",")}]`
-      )
+      ])
   })
   const Ticker = Component.define({
     name: "Ticker",
@@ -718,7 +722,7 @@ describe("shared state in update", () => {
     init: () => null,
     update: ($, message) => $.send(Clock, message),
     view: (h) =>
-      h.el("button").on("click", ClockMessage.Ticked()).children("tick")
+      h.el("button").on("click", ClockMessage.Ticked()).children(["tick"])
   })
   const Face = Component.define({
     name: "Face",
@@ -730,7 +734,8 @@ describe("shared state in update", () => {
     view: (h) =>
       Clock(h, {
         key: "clock",
-        view: () => h.el("div", Watch(h, { key: "w" }), Ticker(h, { key: "t" }))
+        view: () =>
+          h.el("div", [Watch(h, { key: "w" }), Ticker(h, { key: "t" })])
       })
   })
 
@@ -820,9 +825,11 @@ describe("onChange rounds and declarations", () => {
             view: () =>
               h.el(
                 "div",
-                Bumper(h, { key: "b", props: { times: 1 } }),
-                Replier(h, { key: "a" }),
-                Reader(h, { key: "r" })
+                [
+                  Bumper(h, { key: "b", props: { times: 1 } }),
+                  Replier(h, { key: "a" }),
+                  Reader(h, { key: "r" })
+                ]
               )
           })
       })
@@ -902,9 +909,9 @@ describe("optional owners, reports and onChange in a Story", () => {
         ChangedGroup: ({ on }) => on
       }),
     view: (h) =>
-      h.el("button").on("click", ReaderMessage.Clicked()).children(
+      h.el("button").on("click", ReaderMessage.Clicked()).children([
         h.shared.group === undefined ? "alone" : `bumps ${h.shared.group.bumps}`
-      )
+      ])
   })
 
   it.effect("an optional owner is absent until given: no report, and a send to it is dropped", () =>
@@ -937,7 +944,7 @@ describe("optional owners, reports and onChange in a Story", () => {
   it.effect("collected sends the owner's collects.onChange message when it differs from the last", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Group, {}, {
-        view: (group, h) => h.el("p", group.on ? "on" : "off")
+        view: (group, h) => h.el("p", [group.on ? "on" : "off"])
       })
       // The same message as for no reports.
       s.collected([false, false])
@@ -994,7 +1001,7 @@ describe("a component that reads its own kind", () => {
       ) =>
         h.el(
           "span",
-          `${name} ${nest.nested ? "nested" : "outer"} ${nest.below}`
+          [`${name} ${nest.nested ? "nested" : "outer"} ${nest.below}`]
         )
       return Nest(h, {
         props: { open: true },
@@ -1043,7 +1050,7 @@ describe("a component that reads its own kind", () => {
         { nested: false, below: 0 }
       )
       const scene = yield* Scene.make(Nest, { open: true }, {
-        view: (nest, h) => h.el("p", nest.nested ? "nested" : "outermost")
+        view: (nest, h) => h.el("p", [nest.nested ? "nested" : "outermost"])
       })
       scene.expect(Locator.text("outermost")).toExist()
       scene.shared(Nest, { open: true }).expect(Locator.text("nested"))
@@ -1082,14 +1089,14 @@ describe("a component that reads its own kind", () => {
       Menu(h, {
         key: "outer",
         view: (outer) =>
-          h.div(
-            outer.item(h.button.children(`outer ${outer.picked}`)),
+          h.div([
+            outer.item(h.button.children([`outer ${outer.picked}`])),
             Menu(h, {
               key: "inner",
               view: (inner) =>
-                inner.item(h.button.children(`inner ${inner.picked}`))
+                inner.item(h.button.children([`inner ${inner.picked}`]))
             })
-          )
+          ])
       })
   })
 
@@ -1118,7 +1125,7 @@ describe("a component that reads its own kind", () => {
     const scene = () =>
       Scene.start(Menu, {}, {
         elements: Html,
-        view: (menu, h) => menu.item(h.button.children("pick"))
+        view: (menu, h) => menu.item(h.button.children(["pick"]))
       })
     const alone = scene()
     alone.click("pick")

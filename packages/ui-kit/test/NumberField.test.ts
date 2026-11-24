@@ -17,16 +17,16 @@ type H = View.Helper<never, NumberFieldProps> & View.Tags<Html.Elements, never>
 const standIn = {
   elements: Html,
   view: (numberField: Parts, h: H) =>
-    numberField.root(h.div.class("root")).children(
-      numberField.scrubArea({ element: h.span.class("scrub") }).children(
-        numberField.scrubAreaCursor(h.span.class("cursor"))
-      ),
-      numberField.group(h.div.class("group")).children(
-        numberField.decrement({ element: h.button.class("decrement") }),
-        numberField.input(h.input.class("input")),
-        numberField.increment({ element: h.button.class("increment") })
-      )
-    )
+    numberField.root(h.div.class(["root"])).children([
+      numberField.scrubArea({ element: h.span.class(["scrub"]) }).children([
+        numberField.scrubAreaCursor(h.span.class(["cursor"]))
+      ]),
+      numberField.group(h.div.class(["group"])).children([
+        numberField.decrement({ element: h.button.class(["decrement"]) }),
+        numberField.input(h.input.class(["input"])),
+        numberField.increment({ element: h.button.class(["increment"]) })
+      ])
+    ])
 }
 
 const root = Locator.attr("class", "root")
@@ -157,21 +157,21 @@ describe("NumberField", () => {
         elements: Html,
         view: (numberField, h) =>
           numberField.root(
-            h.div.class("root").attrs({
+            h.div.class(["root"]).attrs({
               "data-disabled": "no",
               "data-scrubbing": "yes"
             })
-          ).children(
+          ).children([
             numberField.scrubArea({
-              element: h.span.class("scrub").attrs({
+              element: h.span.class(["scrub"]).attrs({
                 role: "button",
                 style: "cursor:ew-resize"
               })
             }),
-            numberField.group(h.div.class("group").attr("role", "toolbar"))
-              .children(
+            numberField.group(h.div.class(["group"]).attr("role", "toolbar"))
+              .children([
                 numberField.decrement({
-                  element: h.button.class("decrement").attrs({
+                  element: h.button.class(["decrement"]).attrs({
                     "aria-label": "Less",
                     tabindex: "0",
                     "aria-controls": "other",
@@ -180,7 +180,7 @@ describe("NumberField", () => {
                   }).disabled(true)
                 }),
                 numberField.input(
-                  h.input.class("input").attrs({
+                  h.input.class(["input"]).attrs({
                     id: "amount",
                     type: "number",
                     inputmode: "tel",
@@ -191,13 +191,13 @@ describe("NumberField", () => {
                   }).value("nine").disabled(false)
                 ),
                 numberField.increment({
-                  element: h.button.class("increment").attr(
+                  element: h.button.class(["increment"]).attr(
                     "aria-disabled",
                     "false"
                   )
                 })
-              )
-          )
+              ])
+          ])
       })
       assert.strictEqual(custom.get(root).attrs?.["data-disabled"], "")
       assert.isUndefined(custom.get(root).attrs?.["data-scrubbing"])
@@ -272,15 +272,15 @@ describe("NumberField", () => {
       const own = yield* scene({ value: 2 }, {
         elements: Html,
         view: (numberField, h) =>
-          numberField.root(h.div.class("root")).children(
-            numberField.scrubArea({ element: h.span.class("scrub") }),
+          numberField.root(h.div.class(["root"])).children([
+            numberField.scrubArea({ element: h.span.class(["scrub"]) }),
             numberField.decrement({
-              element: h.button.class("decrement"),
+              element: h.button.class(["decrement"]),
               disabled: true
             }),
-            numberField.input(h.input.class("input")),
-            numberField.increment({ element: h.button.class("increment") })
-          )
+            numberField.input(h.input.class(["input"])),
+            numberField.increment({ element: h.button.class(["increment"]) })
+          ])
       })
       assert.deepInclude(own.get(decrement).attrs, {
         "aria-disabled": "true",
@@ -317,25 +317,25 @@ describe("NumberField", () => {
   it.effect("steps with keyboard modifiers, bounds, empty start, floating-point precision, and snapOnStep", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 5, locale: "en-US" })
-      s.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
+      s.keydown(input, "ArrowUp").emitted(keyed(6, 1))
         .expectDefaultPrevented()
-      s.keydown(input, "ArrowDown").emitted(...keyed(4, -1))
+      s.keydown(input, "ArrowDown").emitted(keyed(4, -1))
         .expectDefaultPrevented()
-      s.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(15, 1))
-      s.keydown(input, "ArrowDown", { alt: true }).emitted(...keyed(4.9, -1))
+      s.keydown(input, "ArrowUp", { shift: true }).emitted(keyed(15, 1))
+      s.keydown(input, "ArrowDown", { alt: true }).emitted(keyed(4.9, -1))
 
       s.props({ value: 5, step: 0.25, smallStep: 0.01, largeStep: 100 })
-      s.keydown(input, "ArrowUp").emitted(...keyed(5.25, 1))
-      s.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(105, 1))
-      s.keydown(input, "ArrowDown", { alt: true }).emitted(...keyed(4.99, -1))
+      s.keydown(input, "ArrowUp").emitted(keyed(5.25, 1))
+      s.keydown(input, "ArrowUp", { shift: true }).emitted(keyed(105, 1))
+      s.keydown(input, "ArrowDown", { alt: true }).emitted(keyed(4.99, -1))
 
       s.props({ value: 5, step: "any" })
-      s.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
+      s.keydown(input, "ArrowUp").emitted(keyed(6, 1))
 
       s.props({ value: 9, min: 0, max: 10 })
-      s.keydown(input, "Home").emitted(...keyed(0)).expectDefaultPrevented()
-      s.keydown(input, "End").emitted(...keyed(10)).expectDefaultPrevented()
-      s.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(10, 1))
+      s.keydown(input, "Home").emitted(keyed(0)).expectDefaultPrevented()
+      s.keydown(input, "End").emitted(keyed(10)).expectDefaultPrevented()
+      s.keydown(input, "ArrowUp", { shift: true }).emitted(keyed(10, 1))
       s.keydown(input, "ArrowUp", { ctrl: true }).expectIgnored()
         .expectDefaultPrevented(false)
       s.fire(input, "keydown", {
@@ -356,18 +356,18 @@ describe("NumberField", () => {
 
       s.props({ value: null })
       assert.strictEqual(text(s), "")
-      s.keydown(input, "ArrowUp").emitted(...keyed(0))
+      s.keydown(input, "ArrowUp").emitted(keyed(0))
       s.props({ value: null, min: 5 })
-      s.keydown(input, "ArrowDown").emitted(...keyed(5))
+      s.keydown(input, "ArrowDown").emitted(keyed(5))
 
       s.props({ value: 0.1, step: 0.2 })
-      s.keydown(input, "ArrowUp").emitted(...keyed(0.3, 1))
+      s.keydown(input, "ArrowUp").emitted(keyed(0.3, 1))
       s.props({ value: 3, step: 5, min: 2, snapOnStep: true })
-      s.keydown(input, "ArrowUp").emitted(...keyed(7, 1))
+      s.keydown(input, "ArrowUp").emitted(keyed(7, 1))
       s.props({ value: 1.26, smallStep: 0.5, snapOnStep: true })
-      s.keydown(input, "ArrowUp", { alt: true }).emitted(...keyed(2, 1))
+      s.keydown(input, "ArrowUp", { alt: true }).emitted(keyed(2, 1))
       s.props({ value: 5, step: 5, max: 8, snapOnStep: true })
-      s.keydown(input, "ArrowUp").emitted(...keyed(8, 1))
+      s.keydown(input, "ArrowUp").emitted(keyed(8, 1))
     }))
 
   it.effect("handles typing, clearing, invalid input, range clamping, rounding, and blur commit", () =>
@@ -375,19 +375,19 @@ describe("NumberField", () => {
       const s = yield* scene({ value: 5, locale: "en-US" })
       s.blur(input)
       quiet(s)
-      s.type(input, "1,234.50").emitted(updated(1234.5, "input-change"))
+      s.type(input, "1,234.50").emitted([updated(1234.5, "input-change")])
       assert.strictEqual(text(s), "1,234.50")
       s.props({ value: 1234.5, locale: "en-US" })
       assert.strictEqual(text(s), "1,234.50")
-      s.blur(input).emitted(committed(1234.5, "input-blur"))
+      s.blur(input).emitted([committed(1234.5, "input-blur")])
       assert.strictEqual(text(s), "1,234.5")
       s.blur(input)
       quiet(s)
 
-      s.type(input, "1234.5").emitted(updated(1234.5, "input-change"))
-      s.type(input, "").emitted(updated(null, "input-clear"))
+      s.type(input, "1234.5").emitted([updated(1234.5, "input-change")])
+      s.type(input, "").emitted([updated(null, "input-clear")])
       s.props({ value: null, locale: "en-US" })
-      s.blur(input).emitted(committed(null, "input-clear"))
+      s.blur(input).emitted([committed(null, "input-clear")])
 
       s.props({ value: 5, locale: "en-US" })
       s.type(input, "12a").expectHandled()
@@ -399,30 +399,30 @@ describe("NumberField", () => {
       quiet(s)
       assert.strictEqual(text(s), "5")
 
-      s.type(input, "20").emitted(updated(20, "input-change"))
-      s.keydown(input, "ArrowDown").emitted(...keyed(19, -1))
+      s.type(input, "20").emitted([updated(20, "input-change")])
+      s.keydown(input, "ArrowDown").emitted(keyed(19, -1))
       assert.strictEqual(text(s), "5")
 
       s.props({ value: 5, min: 0, max: 10 })
-      s.type(input, "50").emitted(updated(10, "input-change"))
+      s.type(input, "50").emitted([updated(10, "input-change")])
       s.props({ value: 5, min: 0, max: 10, allowOutOfRange: true })
-      s.type(input, "50").emitted(updated(50, "input-change"))
+      s.type(input, "50").emitted([updated(50, "input-change")])
       s.props({ value: 50, min: 0, max: 10, allowOutOfRange: true })
-      s.keydown(input, "ArrowUp").emitted(...keyed(10, 1))
+      s.keydown(input, "ArrowUp").emitted(keyed(10, 1))
 
       const rounded = yield* scene({
         value: 1,
         locale: "en-US",
         format: { maximumFractionDigits: 2 }
       })
-      rounded.type(input, "1.239").emitted(updated(1.24, "input-change"))
+      rounded.type(input, "1.239").emitted([updated(1.24, "input-change")])
       assert.strictEqual(text(rounded), "1.239")
       rounded.props({
         value: 1.24,
         locale: "en-US",
         format: { maximumFractionDigits: 2 }
       })
-      rounded.blur(input).emitted(committed(1.24, "input-blur"))
+      rounded.blur(input).emitted([committed(1.24, "input-blur")])
       assert.strictEqual(text(rounded), "1.24")
       rounded.props({
         value: 2.555,
@@ -430,33 +430,33 @@ describe("NumberField", () => {
         format: { maximumFractionDigits: 2 }
       })
       assert.strictEqual(text(rounded), "2.56")
-      rounded.blur(input).emitted(
+      rounded.blur(input).emitted([
         updated(2.56, "input-blur"),
         committed(2.56, "input-blur")
-      )
+      ])
     }))
 
   it.effect("formats and parses locales, non-Latin numbering systems, and percent, currency, and unit styles", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 1234.5, locale: "de-DE" })
       assert.strictEqual(text(s), "1.234,5")
-      s.type(input, "2.345,75").emitted(updated(2345.75, "input-change"))
+      s.type(input, "2.345,75").emitted([updated(2345.75, "input-change")])
       s.props({ value: 1234.5, locale: "fr-FR" })
-      s.blur(input).emitted(updated(2345.75, "input-blur"))
+      s.blur(input).emitted([updated(2345.75, "input-blur")])
       assert.match(text(s) as string, /^1\s234,5$/)
-      s.type(input, "9 876,5").emitted(updated(9876.5, "input-change"))
+      s.type(input, "9 876,5").emitted([updated(9876.5, "input-change")])
       s.props({ value: 1234.5, locale: "de-CH" })
-      s.type(input, "1'234.25").emitted(updated(1234.25, "input-change"))
+      s.type(input, "1'234.25").emitted([updated(1234.25, "input-change")])
       s.props({ value: 1234.5, locale: "en-IN" })
-      s.type(input, "12,34,567").emitted(updated(1234567, "input-change"))
+      s.type(input, "12,34,567").emitted([updated(1234567, "input-change")])
 
       const ar = yield* scene({ value: 1234.5, locale: "ar-EG" })
       assert.strictEqual(text(ar), "١٬٢٣٤٫٥")
-      ar.type(input, "٢٬٣٤٥٫٧٥").emitted(updated(2345.75, "input-change"))
-      ar.type(input, "۱۲۳").emitted(updated(123, "input-change"))
-      ar.type(input, "１２３．５").emitted(updated(123.5, "input-change"))
-      ar.type(input, "一二三").emitted(updated(123, "input-change"))
-      ar.type(input, "−4").emitted(updated(-4, "input-change"))
+      ar.type(input, "٢٬٣٤٥٫٧٥").emitted([updated(2345.75, "input-change")])
+      ar.type(input, "۱۲۳").emitted([updated(123, "input-change")])
+      ar.type(input, "１２３．５").emitted([updated(123.5, "input-change")])
+      ar.type(input, "一二三").emitted([updated(123, "input-change")])
+      ar.type(input, "−4").emitted([updated(-4, "input-change")])
 
       const pct = yield* scene({
         value: 0.5,
@@ -464,16 +464,16 @@ describe("NumberField", () => {
         format: { style: "percent" }
       })
       assert.strictEqual(text(pct), "50%")
-      pct.type(input, "25%").emitted(updated(0.25, "input-change"))
-      pct.type(input, "5‰").emitted(updated(0.005, "input-change"))
+      pct.type(input, "25%").emitted([updated(0.25, "input-change")])
+      pct.type(input, "5‰").emitted([updated(0.005, "input-change")])
       pct.props({
         value: 50,
         locale: "en-US",
         format: { style: "unit", unit: "percent" }
       })
-      pct.blur(input).emitted(updated(0.005, "input-blur"))
+      pct.blur(input).emitted([updated(0.005, "input-blur")])
       assert.strictEqual(text(pct), "50%")
-      pct.type(input, "25%").emitted(updated(25, "input-change"))
+      pct.type(input, "25%").emitted([updated(25, "input-change")])
 
       const eur = yield* scene({
         value: 1234.5,
@@ -481,7 +481,7 @@ describe("NumberField", () => {
         format: { style: "currency", currency: "EUR" }
       })
       assert.match(text(eur) as string, /^1\.234,50\s€$/)
-      eur.type(input, "99,90 €").emitted(updated(99.9, "input-change"))
+      eur.type(input, "99,90 €").emitted([updated(99.9, "input-change")])
 
       const speed = yield* scene({
         value: 12,
@@ -489,7 +489,7 @@ describe("NumberField", () => {
         format: { style: "unit", unit: "kilometer-per-hour" }
       })
       assert.strictEqual(text(speed), "12 km/h")
-      speed.type(input, "80 km/h").emitted(updated(80, "input-change"))
+      speed.type(input, "80 km/h").emitted([updated(80, "input-change")])
 
       const debt = yield* scene({
         value: -12,
@@ -501,7 +501,7 @@ describe("NumberField", () => {
         }
       })
       assert.strictEqual(text(debt), "($12.00)")
-      debt.type(input, "($7.50)").emitted(updated(-7.5, "input-change"))
+      debt.type(input, "($7.50)").emitted([updated(-7.5, "input-change")])
     }))
 
   it.effect("ignores input when disabled or read-only", () =>
@@ -520,9 +520,9 @@ describe("NumberField", () => {
   it.effect("handles hidden form input autofill and iOS inputmode", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 5, max: 10 })
-      s.change(formInput, "7.5").emitted(updated(7.5, "none"))
-      s.change(formInput, "70").emitted(updated(10, "none"))
-      s.change(formInput, "").emitted(updated(null, "none"))
+      s.change(formInput, "7.5").emitted([updated(7.5, "none")])
+      s.change(formInput, "70").emitted([updated(10, "none")])
+      s.change(formInput, "").emitted([updated(null, "none")])
       s.change(formInput, "5")
       quiet(s)
       s.props({ value: 5, min: 0 })

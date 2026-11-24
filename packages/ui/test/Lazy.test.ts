@@ -41,15 +41,17 @@ const makeApp = (
     view: (h, model) =>
       h.el(
         "p",
-        `app${model.saved}:`,
-        model.open
-          ? LazyPage(h, {
-            props: { title: "a" },
-            onEmit: { Saved: ({ title }) => AppMessage.Saved({ title }) },
-            fallback: (result) =>
-              h.text(AsyncResult.isFailure(result) ? "failed" : "loading")
-          })
-          : ""
+        [
+          `app${model.saved}:`,
+          model.open
+            ? LazyPage(h, {
+              props: { title: "a" },
+              onEmit: { Saved: ({ title }) => AppMessage.Saved({ title }) },
+              fallback: (result) =>
+                h.text(AsyncResult.isFailure(result) ? "failed" : "loading")
+            })
+            : ""
+        ]
       )
   })
 
@@ -151,9 +153,9 @@ describe("Component.lazy", () => {
           init: () => 0,
           update: ($) => $.model + 1,
           view: (h, count) =>
-            h.el("button").on("click", DraftMessage.Typed()).children(
+            h.el("button").on("click", DraftMessage.Typed()).children([
               `draft:${count}`
-            )
+            ])
         }
       ).pipe(
         Component.provide(
@@ -178,13 +180,13 @@ describe("Component.lazy", () => {
         view: (h, model) =>
           h.el(
             "main",
-            h.keepAlive(({ model }) => model.alive, (s) =>
+            [h.keepAlive(({ model }) => model.alive, (s) =>
               model.open
                 ? LazyDraft(s, {
                   key: "d",
                   fallback: () => h.text("loading")
                 })
-                : null)
+                : null)]
           )
       })
       const root = yield* TestHost.mount(Host, {})
@@ -240,8 +242,10 @@ describe("Component.lazy", () => {
           view: (h, open) =>
             h.el(
               "section",
-              h.el("button").on("click", "toggle").children("toggle"),
-              open ? h.slots.body : null
+              [
+                h.el("button").on("click", "toggle").children(["toggle"]),
+                open ? h.slots.body : null
+              ]
             )
         })
         const Host = Component.define({
@@ -259,7 +263,7 @@ describe("Component.lazy", () => {
                 fallback: () => Spinner(h, {})
               })
               return placement === "placed directly"
-                ? h.el("main", open ? page : null)
+                ? h.el("main", [open ? page : null])
                 : Panel(h, { slots: { body: page } })
             })
         })
@@ -341,8 +345,10 @@ describe("Component.lazy", () => {
           view: (h, open) =>
             h.el(
               "section",
-              h.el("button").on("click", "toggle").children("toggle"),
-              open ? h.slots.body : null
+              [
+                h.el("button").on("click", "toggle").children(["toggle"]),
+                open ? h.slots.body : null
+              ]
             )
         })
         const Host = Component.define({
@@ -356,19 +362,21 @@ describe("Component.lazy", () => {
             h.keepAlive((s) =>
               h.el(
                 "main",
-                Panel(h, {
-                  slots: {
-                    body: LazyPage(s, {
-                      key: "p",
-                      props: { title: "a" },
-                      fallback: (result) =>
-                        clash || AsyncResult.isFailure(result)
-                          ? Spinner(h, {})
-                          : Spinner(h, { key: "initial" })
-                    })
-                  }
-                }),
-                Spinner(h, {})
+                [
+                  Panel(h, {
+                    slots: {
+                      body: LazyPage(s, {
+                        key: "p",
+                        props: { title: "a" },
+                        fallback: (result) =>
+                          clash || AsyncResult.isFailure(result)
+                            ? Spinner(h, {})
+                            : Spinner(h, { key: "initial" })
+                      })
+                    }
+                  }),
+                  Spinner(h, {})
+                ]
               )
             )
         })
@@ -443,13 +451,15 @@ describe("Component.lazy", () => {
           h.keepAlive((s) =>
             h.el(
               "main",
-              shown
-                ? LazyPage(kept ? s : h, {
-                  key: "p",
-                  props: { title: "a" },
-                  fallback: () => Spinner(h, {})
-                })
-                : null
+              [
+                shown
+                  ? LazyPage(kept ? s : h, {
+                    key: "p",
+                    props: { title: "a" },
+                    fallback: () => Spinner(h, {})
+                  })
+                  : null
+              ]
             )
           )
       })

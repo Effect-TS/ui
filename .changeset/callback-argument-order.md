@@ -11,9 +11,9 @@ Reorder the arguments of a component's callbacks so the helper comes first, an u
 
 ```diff
 - update: (model, message, $) => $.set(model + message.by),
-- view: (model, h) => h.p(String(model)),
+- view: (model, h) => h.p([String(model)]),
 - subscriptions: (_model, props) => [ticks(props.interval)],
 + update: ($, message) => $.set($.model + message.by),
-+ view: (h, model) => h.p(String(model)),
++ view: (h, model) => h.p([String(model)]),
 + subscriptions: ({ props }) => [ticks(props.interval)],
 ```

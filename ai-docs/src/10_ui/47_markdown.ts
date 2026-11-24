@@ -73,8 +73,8 @@ export const GuidePageNoDeps = Component.define({
   init: () => ({}),
   update: ($) => $.model,
   view: (h) =>
-    h.article(
-      h.h1(frontmatter?.title ?? "Guide"),
+    h.article([
+      h.h1([frontmatter?.title ?? "Guide"]),
       Markdown.view(h, Markdown.decodeDocument(guide), {
         // A view replaces one node's rendering. Every other node keeps its
         // unstyled semantic element from `Markdown.defaultViews`.
@@ -84,7 +84,7 @@ export const GuidePageNoDeps = Component.define({
               "data-language",
               language._tag === "Some" ? language.value : "text"
             )
-              .children(h.code.children(value))
+              .children([h.code.children([value])])
         },
         // `islandsFor` needs a view for every definition, and each view
         // gets its attributes decoded through the island's schema. A
@@ -102,15 +102,15 @@ export const GuidePageNoDeps = Component.define({
               key: `activity-${occurrence}`,
               props: { noteId: note },
               fallback: (result) =>
-                h.p(
+                h.p([
                   AsyncResult.isInitial(result)
                     ? "Loading activity…"
                     : "No activity."
-                )
+                ])
             })
         })
       })
-    )
+    ])
 })
 
 // `GuidePageNoDeps` requires `NoteActivity`, from the island, as it would

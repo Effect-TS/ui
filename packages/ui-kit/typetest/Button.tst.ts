@@ -26,7 +26,7 @@ describe("Button", () => {
         expect(Button(h, { onPress: save })).type.toBe<
           ButtonElement<typeof Msg.Type>
         >()
-        expect(Button(h, { onPress: save }).children("Save", needsClock)).type
+        expect(Button(h, { onPress: save }).children(["Save", needsClock])).type
           .toBe<
             ButtonElement<typeof Msg.Type, Clock>
           >()
@@ -35,7 +35,7 @@ describe("Button", () => {
           onPress: Other.PressedOther()
         })
         expect(Button).type.not.toBeCallableWith(h, { children: ["Save"] })
-        return Button(h, { onPress: save }).children("Save")
+        return Button(h, { onPress: save }).children(["Save"])
       }
     })
   })

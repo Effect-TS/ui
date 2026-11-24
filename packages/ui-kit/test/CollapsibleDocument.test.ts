@@ -65,19 +65,19 @@ const Page = Component.define({
         Settled: ({ open }) => PageMessage.Settled({ open })
       },
       view: (collapsible) =>
-        collapsible.root(h.div.attr("id", "root")).children(
-          collapsible.trigger(h.button.attr("id", "trigger")).children(
+        collapsible.root(h.div.attr("id", "root")).children([
+          collapsible.trigger(h.button.attr("id", "trigger")).children([
             "Details"
-          ),
+          ]),
           h.button.attr("id", "release").onClick(PageMessage.ReleaseHold())
-            .children("Release"),
+            .children(["Release"]),
           collapsible.panel(
             h.div.attr("id", "panel").attr("style", model.config.style)
-          )?.children(
+          )?.children([
             "Content",
             h.div.attr("id", "child")
-          )
-        )
+          ])
+        ])
     })
 })
 

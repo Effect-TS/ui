@@ -70,11 +70,11 @@
  *   init: () => "",
  *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
  *   view: (h, draft) =>
- *     h.form.onSubmit(Message.SubmittedForm()).children(
+ *     h.form.onSubmit(Message.SubmittedForm()).children([
  *       h.input.ref(NewTodo).attr("aria-label", "New todo").value(draft)
  *         .onInput(({ value }) => Message.UpdatedDraft({ value })),
- *       h.button.attr("type", "submit").children("Add")
- *     )
+ *       h.button.attr("type", "submit").children(["Add"])
+ *     ])
  * })
  * ```
  *
@@ -822,7 +822,7 @@ export class VoidElement<
    *   color: model.error !== undefined && "red",
    *   marginTop: "1rem",
    *   "--accent": "#09f"
-   * }).children("Note")
+   * }).children(["Note"])
    * ```
    *
    * @since 0.1.0
@@ -860,16 +860,16 @@ export class VoidElement<
    * declare const h: Html.Tags<never>
    * declare const model: { readonly saving: boolean; readonly error: string | undefined }
    *
-   * const save = h.button.class(
+   * const save = h.button.class([
    *   "rounded px-3 py-1",
    *   model.saving && "opacity-50",
    *   model.error !== undefined && "ring-2 ring-red-500"
-   * ).children("Save")
+   * ]).children(["Save"])
    * ```
    *
    * @since 0.1.0
    */
-  class(...tokens: ReadonlyArray<ClassToken>): this {
+  class(tokens: ReadonlyArray<ClassToken>): this {
     // One token, the common call, is the value as it is.
     const value = tokens.length === 1
       ? tokens[0] || ""
@@ -1291,8 +1291,8 @@ for (
  * **Details**
  *
  * On `h`, a tag's root builder is also callable as shorthand for
- * `children`, for an element with no attributes: `h.span(title)` is
- * `h.span.children(title)`. Either way the result is the builder, so more
+ * `children`, for an element with no attributes: `h.span([title])` is
+ * `h.span.children([title])`. Either way the result is the builder, so more
  * children and attributes can follow, and a second `children` adds after
  * the first.
  *
@@ -1336,7 +1336,7 @@ export class Element<
    * @since 0.1.0
    */
   children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
-    ...inputs: C
+    inputs: C
   ): Element<Msg, R | View.Requirements<C[number]>, E, Node, Tag> {
     return View.withContent(this, inputs) as any
   }
@@ -1425,7 +1425,7 @@ export type Style =
  * ```ts import.meta.vitest
  * import { Html } from "@effect/ui/html"
  *
- * const tabClass = (active: boolean) => Html.classNames("tab", active && "tab-active")
+ * const tabClass = (active: boolean) => Html.classNames(["tab", active && "tab-active"])
  *
  * tabClass(true) // => "tab tab-active"
  * tabClass(false) // => "tab"
@@ -1435,7 +1435,7 @@ export type Style =
  * @category attributes
  * @since 0.1.0
  */
-export const classNames = (...tokens: ReadonlyArray<ClassToken>): string =>
+export const classNames = (tokens: ReadonlyArray<ClassToken>): string =>
   joinClassTokens(tokens)
 
 const joinClassTokens = (tokens: ReadonlyArray<ClassToken>): string => {
@@ -1686,7 +1686,7 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
  * }).make({
  *   init: () => undefined,
  *   update: () => undefined,
- *   view: (h) => h.span.children("Ready")
+ *   view: (h) => h.span.children(["Ready"])
  * })
  * ```
  *

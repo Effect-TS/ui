@@ -160,7 +160,7 @@ describe("HtmlFiles", { concurrent: false }, () => {
         update: ($, message) =>
           Message.match(message, {
             PressedOpen: () =>
-              $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
+              $.run([HtmlCommand.showPicker(Attachment, Message.ShowedPicker)]),
             ShowedPicker: (
               { found, opened }
             ) => [...$.model, `found ${found}, opened ${opened}`],
@@ -216,22 +216,22 @@ describe("HtmlFiles", { concurrent: false }, () => {
         update: ($, message) =>
           Message.match(message, {
             OpenSubmit: () =>
-              $.run(HtmlCommand.showPicker(Submit, Message.ShowedPicker)),
+              $.run([HtmlCommand.showPicker(Submit, Message.ShowedPicker)]),
             OpenFile: () =>
-              $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
+              $.run([HtmlCommand.showPicker(Attachment, Message.ShowedPicker)]),
             OpenLocked: () =>
-              $.run(HtmlCommand.showPicker(Locked, Message.ShowedPicker)),
+              $.run([HtmlCommand.showPicker(Locked, Message.ShowedPicker)]),
             ShowedPicker: (
               { found, opened }
             ) => [...$.model, `found ${found}, opened ${opened}`],
             Submitted: () => [...$.model, "submitted"]
           }),
         view: (h) =>
-          h.form.onSubmit(Message.Submitted()).children(
+          h.form.onSubmit(Message.Submitted()).children([
             h.input.attr("type", "submit").ref(Submit),
             h.input.attr("type", "file").ref(Attachment),
             h.input.attr("type", "file").disabled(true).ref(Locked)
-          )
+          ])
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))

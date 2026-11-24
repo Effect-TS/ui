@@ -48,12 +48,12 @@
  *     }),
  *   view: (h, model) =>
  *     model.signedIn
- *       ? h.p(`Welcome, ${model.email}`)
- *       : h.form.onSubmit(Message.SubmittedForm()).children(
- *         h.label.attr("for", "email").children("Email"),
+ *       ? h.p([`Welcome, ${model.email}`])
+ *       : h.form.onSubmit(Message.SubmittedForm()).children([
+ *         h.label.attr("for", "email").children(["Email"]),
  *         h.input.attr("id", "email").value(model.email).onInput(({ value }) => Message.ChangedEmail({ value })),
- *         h.button.children("Sign In")
- *       )
+ *         h.button.children(["Sign In"])
+ *       ])
  * })
  *
  * Effect.gen(function*() {

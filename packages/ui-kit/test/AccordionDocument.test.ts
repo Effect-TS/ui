@@ -46,10 +46,10 @@ const Page = Component.define({
     Reversed: ($) => ({ ...$.model, order: [...$.model.order].reverse() })
   },
   view: (h, model) =>
-    h.main.children(
-      h.button.attr("id", "reverse").onClick(PageMessage.Reversed()).children(
+    h.main.children([
+      h.button.attr("id", "reverse").onClick(PageMessage.Reversed()).children([
         "Reverse"
-      ),
+      ]),
       Accordion(h, {
         props: {
           value: model.open,
@@ -60,7 +60,7 @@ const Page = Component.define({
           Toggled: ({ value, reason }) => PageMessage.Toggled({ value, reason })
         },
         view: (accordion) =>
-          accordion.root(h.div.attr("id", "root")).children(h.section.children(
+          accordion.root(h.div.attr("id", "root")).children([h.section.children(
             model.order.map((value) =>
               AccordionItem(h, {
                 key: value,
@@ -71,29 +71,29 @@ const Page = Component.define({
                   Settled: () => undefined
                 },
                 view: (item) =>
-                  item.root(h.div.attr("id", "item-" + value)).children(
-                    item.header(h.h3).children(
+                  item.root(h.div.attr("id", "item-" + value)).children([
+                    item.header(h.h3).children([
                       item.trigger(
                         h.props.wrapTriggers === true
                           ? h.button.attr("id", "trigger-" + value).forward((
                             button
                           ) =>
-                            h.span.attr("id", "wrapper-" + value).children(
+                            h.span.attr("id", "wrapper-" + value).children([
                               button
-                            )
+                            ])
                           )
                           : h.button.attr("id", "trigger-" + value)
-                      ).children(value)
-                    ),
-                    item.panel(h.div.attr("id", "panel-" + value))?.children(
+                      ).children([value])
+                    ]),
+                    item.panel(h.div.attr("id", "panel-" + value))?.children([
                       "Answer " + value
-                    )
-                  )
+                    ])
+                  ])
               })
             )
-          ))
+          )])
       })
-    )
+    ])
 })
 
 const open = () =>

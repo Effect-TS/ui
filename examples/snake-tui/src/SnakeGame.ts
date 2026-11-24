@@ -117,7 +117,7 @@ export const SnakeGame = Component.define({
 }).make({
   init: ($) =>
     $.set({ ...NEW_GAME, apple: { x: 15, y: 15 }, highScore: 0 })
-      .run(generateApplePosition(NEW_GAME.snake)),
+      .run([generateApplePosition(NEW_GAME.snake)]),
   update: {
     PressedKey: ($, { key }) => {
       const direction = MOVE_DIRECTIONS.get(key)
@@ -130,12 +130,12 @@ export const SnakeGame = Component.define({
         return $.evolve({ gameState: (gameState) => NEXT_ON_SPACE[gameState] })
       }
       if (key === "r") {
-        return $.evolve(NEW_GAME).run(generateApplePosition(NEW_GAME.snake))
+        return $.evolve(NEW_GAME).run([generateApplePosition(NEW_GAME.snake)])
       }
       return $.model
     },
 
-    PressedQuit: ($) => $.run(OpenTuiCommand.quit()),
+    PressedQuit: ($) => $.run([OpenTuiCommand.quit()]),
 
     TickedClock: ($) => {
       if ($.model.gameState !== "Playing") return $.model
@@ -167,7 +167,9 @@ export const SnakeGame = Component.define({
           ? $.model.points + GAME.POINTS_PER_APPLE
           : $.model.points
       }
-      return willEatApple ? $.set(next).run(generateApplePosition(snake)) : next
+      return willEatApple
+        ? $.set(next).run([generateApplePosition(snake)])
+        : next
     },
 
     CompletedGenerateApplePosition: ($, { position }) =>
@@ -193,14 +195,14 @@ export const SnakeGame = Component.define({
       padding: 1,
       gap: 1,
       width: Position.GRID_SIZE * 2 + 4
-    }).children(
-      h.text(
-        h.b("Snake"),
+    }).children([
+      h.text([
+        h.b(["Snake"]),
         `  Score: ${model.points}  High: ${model.highScore}`
-      ),
-      h.text.style({ fg: "#9ca3af" }).children(
+      ]),
+      h.text.style({ fg: "#9ca3af" }).children([
         GAME_STATE_TEXT[model.gameState]
-      ),
+      ]),
       h.box.style({
         border: true,
         flexDirection: "column",
@@ -211,12 +213,12 @@ export const SnakeGame = Component.define({
           h.text(
             Array.makeBy(Position.GRID_SIZE, (x) => {
               const glyph = cellGlyph({ x, y }, model)
-              return h.span.style({ fg: glyph.fg }).children(glyph.char)
+              return h.span.style({ fg: glyph.fg }).children([glyph.char])
             })
           ))
       ),
-      h.text.style({ fg: "#6b7280" }).children(
+      h.text.style({ fg: "#6b7280" }).children([
         "Arrows/WASD: move  SPACE: start/pause  R: restart  Q: quit"
-      )
-    )
+      ])
+    ])
 })

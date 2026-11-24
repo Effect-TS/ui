@@ -47,18 +47,18 @@ export const NoteBoardNoDeps = Component.define({
     TypedFilter: ($, { value }) => $.evolve({ filter: value })
   },
   view: (h, model) =>
-    h.section(
-      h.div(
+    h.section([
+      h.div([
         h.input.attr("aria-label", "Filter").value(model.filter).onInput((
           { value }
         ) => NoteBoardMessage.TypedFilter({ value })),
         h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "grid" }))
-          .children("Grid"),
+          .children(["Grid"]),
         h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "list" }))
-          .children("List")
-      ),
+          .children(["List"])
+      ]),
       AsyncResult.isSuccess(h.queries.notes)
-        ? h.ul.class(model.layout).children(
+        ? h.ul.class([model.layout]).children(
           h.queries.notes.value
             .filter((note) =>
               note.title.toLowerCase().includes(model.filter.toLowerCase())
@@ -69,11 +69,11 @@ export const NoteBoardNoDeps = Component.define({
               // Each name must be unique among the elements on screen, so it
               // carries the note's id.
               h.li.key(note.id).style({ viewTransitionName: `note-${note.id}` })
-                .children(note.title)
+                .children([note.title])
             )
         )
-        : h.p("Loading notes…")
-    )
+        : h.p(["Loading notes…"])
+    ])
 })
 
 export const NoteBoard = NoteBoardNoDeps.pipe(
@@ -123,7 +123,7 @@ export const TransitionApp = Component.define({
     )
   ],
   view: (h, route) =>
-    h.main(
+    h.main([
       AppRoute.match(route, {
         Index: (route) => NotesIndex(h, { key: AppRoute.printPath(route) }),
         Note: (route) =>
@@ -131,10 +131,10 @@ export const TransitionApp = Component.define({
             key: AppRoute.printPath(route),
             props: { id: route.params.id }
           }),
-        Search: () => h.h1("Search"),
-        NotFound: () => h.h1("Page not found")
+        Search: () => h.h1(["Search"]),
+        NotFound: () => h.h1(["Page not found"])
       })
-    )
+    ])
 })
 
 // The stylesheet picks the animation by type. Without types, or for a

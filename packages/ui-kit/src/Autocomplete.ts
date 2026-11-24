@@ -172,7 +172,7 @@
  *     UpdatedQuery: ($, { query }) => $.evolve({ query })
  *   },
  *   view: (h, model) =>
- *     h.form(
+ *     h.form([
  *       Autocomplete(h, {
  *         props: { open: model.open, value: model.query, items: tags, name: "q" },
  *         onEmit: {
@@ -183,24 +183,24 @@
  *           Settled: () => undefined
  *         },
  *         view: (autocomplete) =>
- *           h.div(
- *             autocomplete.inputGroup(h.div).children(
+ *           h.div([
+ *             autocomplete.inputGroup(h.div).children([
  *               autocomplete.input(h.input.attr("aria-label", "Search tags")),
- *               autocomplete.clear({ element: h.button })?.children("×")
- *             ),
- *             autocomplete.positioner(h.div).children(
- *               autocomplete.popup(h.div).children(
- *                 autocomplete.empty(h.div).children("No tags"),
+ *               autocomplete.clear({ element: h.button })?.children(["×"])
+ *             ]),
+ *             autocomplete.positioner(h.div).children([
+ *               autocomplete.popup(h.div).children([
+ *                 autocomplete.empty(h.div).children(["No tags"]),
  *                 autocomplete.list(h.div).children(
- *                   ...autocomplete.items.map(({ label, value }) =>
- *                     autocomplete.item({ element: h.div, value }).children(label)
+ *                   autocomplete.items.map(({ label, value }) =>
+ *                     autocomplete.item({ element: h.div, value }).children([label])
  *                   )
  *                 )
- *               )
- *             )
- *           )
+ *               ])
+ *             ])
+ *           ])
  *       })
- *     )
+ *     ])
  * })
  *
  * // The input is the form field, and holds the typed text.

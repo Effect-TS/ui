@@ -20,12 +20,12 @@ type Shared = Component.Shared.Value<typeof Accordion>
 const standIn = {
   elements: Html,
   view: (item: ItemParts, h: H) =>
-    item.root(h.div.class("item")).children(
-      item.header(h.h3.class("header")).children(
-        item.trigger(h.button.class("trigger")).children("Question")
-      ),
-      item.panel(h.div.class("panel"))?.children("Answer")
-    )
+    item.root(h.div.class(["item"])).children([
+      item.header(h.h3.class(["header"])).children([
+        item.trigger(h.button.class(["trigger"])).children(["Question"])
+      ]),
+      item.panel(h.div.class(["panel"]))?.children(["Answer"])
+    ])
 }
 
 const itemRoot = Locator.attr("class", "item")
@@ -91,10 +91,10 @@ describe("Accordion", () => {
         /--accordion-panel-height:var\(--collapsible-panel-height\);--accordion-panel-width:var\(--collapsible-panel-width\)/
       )
 
-      s.childEmit(Collapsible, { _tag: "Settled", open: true }).emitted({
+      s.childEmit(Collapsible, { _tag: "Settled", open: true }).emitted([{
         _tag: "Settled",
         open: true
-      })
+      }])
     }))
 
   it.effect("a disabled item or accordion asks for nothing, and the accordion's mount options reach the panel", () =>
@@ -147,20 +147,20 @@ describe("Accordion", () => {
     Effect.gen(function*() {
       const s = yield* itemScene({ value: "a" }, { value: ["a"] })
       s.parts((item) => {
-        const body = h.section.children(
+        const body = h.section.children([
           item.panel(
             h.div.attr("id", "panel-a").forward((panel) =>
-              h.div.class("wrapper").children(panel)
+              h.div.class(["wrapper"]).children([panel])
             )
           )
-        )
+        ])
         const node = View.build(
-          item.root(h.div).children(
-            item.header(h.h3).children(
+          item.root(h.div).children([
+            item.header(h.h3).children([
               item.trigger(h.button.attr("id", "trigger-a"))
-            ),
+            ]),
             body
-          ),
+          ]),
           []
         )
         const triggerAttrs = ((node.children[0] as View.Element<never>)
@@ -183,7 +183,7 @@ describe("Accordion", () => {
       s.parts((item) => {
         item.trigger(h.button.attr("id", "unused"))
         const node = View.build(
-          item.root(h.div).children(item.panel(h.div.class("panel"))),
+          item.root(h.div).children([item.panel(h.div.class(["panel"]))]),
           []
         )
         assert.isUndefined(
@@ -197,7 +197,7 @@ describe("Accordion", () => {
       const accordionAttrs = (props: AccordionProps) =>
         View.build(
           Story.parts(Accordion, { model: {}, props }).root(
-            h.div.class("mine").attrs({
+            h.div.class(["mine"]).attrs({
               "data-orientation": "x",
               "data-disabled": "x"
             })
@@ -238,7 +238,7 @@ describe("Accordion", () => {
           "data-orientation": "x"
         }
         const rootAttrs =
-          View.build(item.root(h.div.class("mine").attrs(stale)), []).attrs
+          View.build(item.root(h.div.class(["mine"]).attrs(stale)), []).attrs
         assert.deepInclude(rootAttrs, {
           class: "mine",
           "data-open": "",
@@ -249,7 +249,7 @@ describe("Accordion", () => {
         assert.isUndefined(rootAttrs["data-index"])
 
         const headerAttrs =
-          View.build(item.header(h.h3.class("mine").attrs(stale)), []).attrs
+          View.build(item.header(h.h3.class(["mine"]).attrs(stale)), []).attrs
         assert.deepStrictEqual(headerAttrs, {
           class: "mine",
           "data-open": "",
@@ -258,7 +258,7 @@ describe("Accordion", () => {
 
         const triggerNode = View.build(
           item.trigger(
-            h.button.class("mine").attrs({
+            h.button.class(["mine"]).attrs({
               ...stale,
               id: "question",
               "aria-expanded": "false"
@@ -275,7 +275,7 @@ describe("Accordion", () => {
 
         const panelNode = View.build(
           item.panel(
-            h.div.class("mine").attrs({
+            h.div.class(["mine"]).attrs({
               ...stale,
               id: "answer",
               role: "note",

@@ -42,7 +42,11 @@ const SlowSide = Component.define({
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
-}).make({ init: () => null, update: ($) => $.model, view: (h) => h.i("side") })
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.i(["side"])
+})
   .pipe(Component.provide(slow))
 
 let serving = false
@@ -73,7 +77,7 @@ const vault = (name: string, restore: false | ((model: string) => string)) => {
     init: () => null,
     update: ($) => $.model,
     view: (h) =>
-      h.div(Plain(h, { key: "p" }), h.keepAlive((s) => Kept(s, { key: "k" })))
+      h.div([Plain(h, { key: "p" }), h.keepAlive((s) => Kept(s, { key: "k" }))])
   }).pipe(Component.provide(slow))
 }
 const ExcludedVault = vault("ExcludedVault", false)
@@ -125,7 +129,7 @@ const holder = (child: typeof KeepAliveForm) =>
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.keepAlive((s) => h.div(child(s, { key: "d" })))
+    view: (h) => h.keepAlive((s) => h.div([child(s, { key: "d" })]))
   })
 const Holder = holder(KeepAliveForm)
 const ExcludedHolder = holder(ExcludedKeepAliveForm)
@@ -162,15 +166,15 @@ const lateSettings = (child: typeof Draft) =>
     init: () => "",
     update: (_, shown) => shown,
     view: (h, shown) =>
-      h.div(
-        h.button.onClick("shown").children("show"),
+      h.div([
+        h.button.onClick("shown").children(["show"]),
         shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
           ? h.keepAlive(
             ({ queries }) => !AsyncResult.isFailure(queries.tab),
             (s) => child(s, { key: "d" })
           )
           : null
-      )
+      ])
   }).pipe(Component.provide(GetTab.layer))
 const LateSettings = lateSettings(Draft)
 const ExcludedLateSettings = lateSettings(draft(false))
@@ -200,7 +204,7 @@ const lateHolder = (child: typeof LateKeepAlive) =>
   }).make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.keepAlive((s) => h.div(child(s, { key: "d" })))
+    view: (h) => h.keepAlive((s) => h.div([child(s, { key: "d" })]))
   })
 const LateHolder = lateHolder(LateKeepAlive)
 const FilteredLateHolder = lateHolder(FilteredLateKeepAlive)
@@ -223,7 +227,7 @@ const Group = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.div(Form(h, { key: "c" }), h.keepAlive((s) => Field(s, { key: "e" })))
+    h.div([Form(h, { key: "c" }), h.keepAlive((s) => Field(s, { key: "e" }))])
 })
 const LateCard = Component.define({
   name: "LateCard",
@@ -234,7 +238,7 @@ const LateCard = Component.define({
   init: () => "client",
   update: ($) => $.model,
   view: (h) =>
-    h.div(h.keepAlive((s) => Field(s, { key: "p" })), Group(h, { key: "g" }))
+    h.div([h.keepAlive((s) => Field(s, { key: "p" })), Group(h, { key: "g" })])
 })
 const Card = Component.define({
   name: "Card",
@@ -244,7 +248,7 @@ const Card = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.div(LateCard(h, { key: "l" }))
+  view: (h) => h.div([LateCard(h, { key: "l" })])
 })
 const CardHolder = Component.define({
   name: "CardHolder",
@@ -254,7 +258,7 @@ const CardHolder = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.keepAlive((s) => h.div(Card(s, { key: "d" })))
+  view: (h) => h.keepAlive((s) => h.div([Card(s, { key: "d" })]))
 })
 const Outer = Component.define({
   name: "Outer",
@@ -265,7 +269,7 @@ const Outer = Component.define({
   .make({
     init: () => null,
     update: ($) => $.model,
-    view: (h) => h.keepAlive((s) => h.div(Draft(s, { key: "d" })))
+    view: (h) => h.keepAlive((s) => h.div([Draft(s, { key: "d" })]))
   })
 const Nesting = Component.define({
   name: "Nesting",
@@ -275,7 +279,7 @@ const Nesting = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.keepAlive((s) => h.div(Outer(s, { key: "o" })))
+  view: (h) => h.keepAlive((s) => h.div([Outer(s, { key: "o" })]))
 })
 
 type Page =
@@ -323,17 +327,17 @@ const appOf = (page: Page) =>
       Msg.match(message, {
         Changed: (changed) => changed.route,
         Go: () =>
-          $.run(
+          $.run([
             Router.push(Routes, Routes.Away()).pipe(
               Command.map(() => Msg.Went())
             )
-          ),
+          ]),
         Next: () =>
-          $.run(
+          $.run([
             Router.push(Routes, Routes.Next()).pipe(
               Command.map(() => Msg.Went())
             )
-          ),
+          ]),
         Went: () => $.model
       }),
     subscriptions: (
@@ -343,13 +347,13 @@ const appOf = (page: Page) =>
         Msg.Changed({ route: changed }))
     ],
     view: (h, route) =>
-      h.main(
+      h.main([
         page.endsWith("slow side") ||
           (page.startsWith("open") && route._tag === "Home")
           ? SlowSide(h, { key: "s" })
           : null,
         route._tag === "Away"
-          ? h.p("away")
+          ? h.p(["away"])
           : page === "slow side"
           ? Form(h, { key: "f" })
           : page === "excluded slow side"
@@ -385,7 +389,7 @@ const appOf = (page: Page) =>
           : page === "open contact" || page === "late contact"
           ? LateCard(h, { key: "f" })
           : SlowForm(h, { key: "f" })
-      )
+      ])
   })
 
 const editor = (name: string) =>
@@ -399,12 +403,12 @@ const editor = (name: string) =>
     init: () => "subject",
     update: (_, subject) => subject,
     view: (h, subject) =>
-      h.section(
+      h.section([
         h.input.value(subject ?? "").onInput(({ value }) =>
           value === "" ? null : value
         ),
         h.props.open ? h.keepAlive((s) => Draft(s, { key: "d" })) : null
-      )
+      ])
   })
 const Editor = editor("Editor")
 const SlowEditor = editor("SlowEditor").pipe(Component.provide(slow))
@@ -418,9 +422,9 @@ const SlowNesting = Component.define({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
-    h.section(
+    h.section([
       h.keepAlive(({ props }) => props.open, (s) => Outer(s, { key: "o" }))
-    )
+    ])
 }).pipe(Component.provide(slow))
 const Shown = Schema.Literals(["none", "closed", "open"])
 const DeskMsg = UiSchema.TaggedEnum({
@@ -442,11 +446,11 @@ const deskOf = (waits: boolean, nested: boolean) =>
       DeskMsg.match(message, {
         Changed: ({ route }) => ({ ...$.model, route }),
         Go: () =>
-          $.run(
+          $.run([
             Router.push(Routes, Routes.Away()).pipe(
               Command.map(() => DeskMsg.Went())
             )
-          ),
+          ]),
         Went: () => $.model,
         Show: ({ editor }) => ({ ...$.model, editor })
       }),
@@ -456,10 +460,10 @@ const deskOf = (waits: boolean, nested: boolean) =>
       DeskMsg.Changed({ route }))],
     view: (h, desk) => {
       if (desk.route._tag === "Away") {
-        return h.main("away")
+        return h.main(["away"])
       }
       const props = { open: desk.editor === "open" }
-      return h.main(
+      return h.main([
         SlowSide(h, { key: "s" }),
         desk.editor === "none"
           ? null
@@ -468,7 +472,7 @@ const deskOf = (waits: boolean, nested: boolean) =>
           : waits
           ? SlowEditor(h, { key: "e", props })
           : Editor(h, { key: "e", props })
-      )
+      ])
     }
   })
 
@@ -530,10 +534,10 @@ const Panel = Component.define({
   init: () => true,
   update: (_, shown) => shown,
   view: (h, shown) =>
-    h.main(
+    h.main([
       SlowSide(h, { key: "s" }),
       shown ? Editor(h, { key: "e", props: { open: true } }) : null
-    )
+    ])
 })
 const aside = Effect.fnUntraced(function*(first: Page) {
   const { app, state } = yield* serve(HtmlServer.renderToHtml(Panel, {}), false)

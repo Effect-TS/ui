@@ -34,29 +34,29 @@ describe("OpenTuiHost", () => {
             border: true,
             flexDirection: "column",
             width: 36
-          }).title("Counter").children(
-            h.text(
+          }).title("Counter").children([
+            h.text([
               "Count: ",
-              h.b(String(model.count)),
+              h.b([String(model.count)]),
               h.br,
-              h.i("hi "),
-              h.u("u"),
+              h.i(["hi "]),
+              h.u(["u"]),
               " ",
-              h.a.href("https://effect.website").children("link")
-            ),
+              h.a.href("https://effect.website").children(["link"])
+            ]),
             h.box.style({ border: true, width: 10 }).onMouseDown(
               Message.ClickedIncrement()
-            ).children(h.text("[ + ]")),
+            ).children([h.text(["[ + ]"])]),
             h.input.style({ width: 20 }).placeholder("name").value(model.name)
               .focused(true).onInput(({ value }) =>
                 Message.UpdatedName({ value })
               ),
             model.count > 0
-              ? h.text.key("positive").style({ fg: "#00ff00" }).children(
+              ? h.text.key("positive").style({ fg: "#00ff00" }).children([
                 "positive!"
-              )
+              ])
               : false
-          )
+          ])
       })
 
       const app = yield* OpenTuiTest.mount(Counter, {}, {
@@ -118,11 +118,11 @@ describe("OpenTuiHost", () => {
           ])
         ],
         view: (h, model) =>
-          h.box.style({ flexDirection: "column", width: 30 }).children(
+          h.box.style({ flexDirection: "column", width: 30 }).children([
             h.input.style({ width: 20 }).value(model.value).focused(true)
               .onInput(({ value }) => Message.UpdatedValue({ value })),
-            h.text(`val=${model.value}`)
-          )
+            h.text([`val=${model.value}`])
+          ])
       })
 
       const app = yield* OpenTuiTest.mount(App, {}, { width: 34, height: 8 })
@@ -182,7 +182,7 @@ describe("OpenTuiHost", () => {
         },
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 30, height: 12 })
-            .children(
+            .children([
               h.input.style({ width: 20 }).value(model.digits)
                 .focused(model.focusTarget === "input").onInput(({ value }) =>
                   Message.UpdatedInput({ value })
@@ -200,8 +200,8 @@ describe("OpenTuiHost", () => {
                   Message.ChangedSelect({ index })
                 )
                 .onItemSelected(({ index }) => Message.PickedItem({ index })),
-              h.text(`tick=${model.tick}`)
-            )
+              h.text([`tick=${model.tick}`])
+            ])
       })
 
       const app = yield* OpenTuiTest.mount(Form, {}, { width: 34, height: 14 })
@@ -273,38 +273,38 @@ describe("OpenTuiHost", () => {
               active: (a) => (a === "first" ? "second" : "first")
             }),
           RequestedMeasure: ($) =>
-            $.run(
+            $.run([
               OpenTuiCommand.measure(First, (rect) =>
                 Message.Measured({
                   width: Option.isSome(rect) ? rect.value.width : -1
                 }))
-            ),
+            ]),
           Measured: ($, { width }) => $.evolve({ measuredWidth: width }),
           RequestedScroll: ($) =>
-            $.run(
+            $.run([
               OpenTuiCommand.scrollTo(Scroll, 2, ({ found }) =>
                 Message.Scrolled({ found }))
-            ),
+            ]),
           Scrolled: ($, { found }) => $.evolve({ scrolled: found }),
-          RequestedQuit: ($) => $.run(OpenTuiCommand.quit())
+          RequestedQuit: ($) => $.run([OpenTuiCommand.quit()])
         },
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 24, height: 10 })
-            .children(
+            .children([
               h.input.ref(First).style({ width: 16 }).value(model.firstText)
                 .focused(model.active === "first")
                 .onInput(({ value }) => Message.UpdatedFirst({ value })),
               h.input.style({ width: 16 }).value(model.secondText)
                 .focused(model.active === "second")
                 .onInput(({ value }) => Message.UpdatedSecond({ value })),
-              h.scrollbox.ref(Scroll).style({ width: 20, height: 4 }).children(
-                h.text("line 1"),
-                h.text("line 2"),
-                h.text("line 3"),
-                h.text("line 4"),
-                h.text("line 5")
-              )
-            )
+              h.scrollbox.ref(Scroll).style({ width: 20, height: 4 }).children([
+                h.text(["line 1"]),
+                h.text(["line 2"]),
+                h.text(["line 3"]),
+                h.text(["line 4"]),
+                h.text(["line 5"])
+              ])
+            ])
       })
 
       const app = yield* OpenTuiTest.mount(App, {}, { width: 30, height: 12 })
@@ -352,9 +352,9 @@ describe("OpenTuiHost", () => {
         update: { Incremented: ($) => $.model + 1 },
         view: (h, count) =>
           h.el("tracked-box").prop("width", 20).prop("height", 3)
-            .on("mousedown", TabMsg.Incremented()).children(
-              h.text(`tab-count=${count}`)
-            )
+            .on("mousedown", TabMsg.Incremented()).children([
+              h.text([`tab-count=${count}`])
+            ])
       })
 
       const PendingLazy = Component.lazy(
@@ -382,11 +382,11 @@ describe("OpenTuiHost", () => {
         message: Schema.Never,
         elements: OpenTui
       }).make({
-        init: ($) => $.set(null).run(Boom.make()),
+        init: ($) => $.set(null).run([Boom.make()]),
         update: ($) => $.model,
         view: (h) =>
           h.el("tracked-box").prop("width", 20).prop("height", 2)
-            .children(h.text("fragile-ok"))
+            .children([h.text(["fragile-ok"])])
       })
 
       let fallbackActive = 0
@@ -427,13 +427,13 @@ describe("OpenTuiHost", () => {
         update: () => undefined,
         view: (h) =>
           h.box.style({ flexDirection: "column", width: 24, height: 10 })
-            .children(
+            .children([
               h.keepAlive(
                 ({ props }) => props.keepTab,
                 (s) =>
                   h.props.showTab
                     ? Tab(s, { key: "a" })
-                    : h.text("hidden-tab")
+                    : h.text(["hidden-tab"])
               ),
               h.keepAlive(
                 ({ props }) => props.keepLazy,
@@ -443,9 +443,9 @@ describe("OpenTuiHost", () => {
                       key: "lazy",
                       fallback: () =>
                         h.el("tracked-box").prop("width", 20).prop("height", 2)
-                          .children(h.text("loading-lazy"))
+                          .children([h.text(["loading-lazy"])])
                     })
-                    : h.text("hidden-lazy")
+                    : h.text(["hidden-lazy"])
               ),
               h.keepAlive(
                 ({ props }) => props.keepFragile,
@@ -456,11 +456,11 @@ describe("OpenTuiHost", () => {
                       fallback: () =>
                         h.el("tracked-box").prop("width", 20).prop("height", 2)
                           .onMount(TrackFallback())
-                          .children(h.text("fragile-down"))
+                          .children([h.text(["fragile-down"])])
                     })
-                    : h.text("hidden-fragile")
+                    : h.text(["hidden-fragile"])
               )
-            )
+            ])
       })
 
       const RootMsg = UiSchema.TaggedEnum({
@@ -522,7 +522,7 @@ describe("OpenTuiHost", () => {
                 keepFragile: model.keepFragile
               }
             })
-            : h.text("unmounted")
+            : h.text(["unmounted"])
       })
 
       const app = yield* OpenTuiTest.mount(Root, {}, {
@@ -680,10 +680,10 @@ describe("OpenTuiHost", () => {
             width: 24,
             height: 6,
             ...(model.bordered ? { border: true } : {})
-          }).onMouseDown(Message.OuterClicked()).children(
+          }).onMouseDown(Message.OuterClicked()).children([
             h.box.style({ width: 12, height: 3 }).onMouseDown(() => undefined)
-              .children(h.text("inner"))
-          )
+              .children([h.text(["inner"])])
+          ])
       })
 
       const app = yield* OpenTuiTest.mount(App, {}, { width: 28, height: 8 })
@@ -714,9 +714,9 @@ describe("OpenTuiHost", () => {
         init: () => undefined,
         update: () => undefined,
         view: (h) =>
-          h.el("custom-box").prop("border", true).prop("width", 18).children(
-            h.text("custom!")
-          )
+          h.el("custom-box").prop("border", true).prop("width", 18).children([
+            h.text(["custom!"])
+          ])
       })
 
       const app = yield* OpenTuiTest.mount(App, {}, {

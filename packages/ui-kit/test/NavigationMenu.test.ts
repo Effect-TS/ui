@@ -22,16 +22,16 @@ const Page = Component.define({
     PressedRight: ($) => $.model
   },
   view: (h, model) =>
-    h.div(
+    h.div([
       NavigationMenu(h, {
         key: "outer",
         props: { orientation: model.vertical ? "vertical" : "horizontal" },
         view: (navigationMenu) =>
-          navigationMenu.root(h.nav).children(
+          navigationMenu.root(h.nav).children([
             navigationMenu.list(
               h.ul.attr("style", h.props.rtl ? "direction:rtl" : undefined)
-            ).children(
-              navigationMenu.item(h.li).children(
+            ).children([
+              navigationMenu.item(h.li).children([
                 navigationMenu.link({
                   element: h.a.attr("href", "/").onKeyDown(
                     ({ key }) =>
@@ -41,43 +41,43 @@ const Page = Component.define({
                     { preventDefault: true }
                   ),
                   active: true
-                }).children("Home")
-              ),
-              navigationMenu.item(h.li).children(
+                }).children(["Home"])
+              ]),
+              navigationMenu.item(h.li).children([
                 navigationMenu.link({ element: h.a.attr("href", "/people") })
-                  .children("People")
-              ),
-              navigationMenu.item(h.li).children(
+                  .children(["People"])
+              ]),
+              navigationMenu.item(h.li).children([
                 navigationMenu.link({
                   element: h.a.attr("href", "/files").attr(
                     "aria-disabled",
                     "true"
                   )
                 })
-                  .children("Files")
-              ),
-              navigationMenu.item(h.li).children(
+                  .children(["Files"])
+              ]),
+              navigationMenu.item(h.li).children([
                 navigationMenu.link({ element: h.a.attr("href", "/nested") })
-                  .children("Nested"),
+                  .children(["Nested"]),
                 NavigationMenu(h, {
                   key: "inner",
                   view: (inner) =>
-                    inner.root(h.nav).children(
-                      inner.list(h.ul).children(
-                        inner.item(h.li).children(
+                    inner.root(h.nav).children([
+                      inner.list(h.ul).children([
+                        inner.item(h.li).children([
                           inner.link({
                             element: h.a.attr("href", "/nested/inner")
-                          }).children("Inner")
-                        )
-                      )
-                    )
+                          }).children(["Inner"])
+                        ])
+                      ])
+                    ])
                 })
-              )
-            )
-          )
+              ])
+            ])
+          ])
       }),
-      h.button.onClick(Message.ClickedTurn()).children("Turn")
-    )
+      h.button.onClick(Message.ClickedTurn()).children(["Turn"])
+    ])
 })
 
 const mount = Effect.fn(
@@ -178,7 +178,7 @@ describe("NavigationMenu", () => {
   it("the link keeps the consumer's attributes, but its own win, present or absent", () => {
     const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
     const navigationMenu = Story.parts(NavigationMenu, { model: {}, props: {} })
-    const element = h.a.class("link").attr("href", "/").attr("tabindex", "-1")
+    const element = h.a.class(["link"]).attr("href", "/").attr("tabindex", "-1")
       .attr("aria-label", "Home")
     const scope = View.build(navigationMenu.link({ element: h.a }), [])
       .attrs["data-navigation-menu-link"]

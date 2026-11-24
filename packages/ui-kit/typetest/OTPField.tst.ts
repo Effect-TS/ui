@@ -76,7 +76,8 @@ describe("OTPField", () => {
             expect(otpField.root(h.div.onClick(Msg.Clicked()))).type.toBe<
               Div<never>
             >()
-            expect(otpField.root(field.group(h.div)).children(needsClock)).type
+            expect(otpField.root(field.group(h.div)).children([needsClock]))
+              .type
               .toBe<Div<Clock>>()
             expect(otpField.input({ element: h.input, index: 0 })).type.toBe<
               Input<never>
@@ -91,12 +92,12 @@ describe("OTPField", () => {
             expect(otpField.value).type.toBe<Redacted.Redacted<string>>()
             expect(otpField.length).type.toBe<number>()
             expect(otpField.complete).type.toBe<boolean>()
-            return otpField.root(h.div).children(
+            return otpField.root(h.div).children([
               otpField.input({
                 element: h.input.onMount(NeedsClock()),
                 index: 2
               })
-            )
+            ])
           }
         })
         expect<View.Requirements<typeof child>>().type.toBe<Clock>()

@@ -131,10 +131,10 @@ describe("Select", () => {
               key: "s",
               props: { open: false, items },
               view: (select) =>
-                field.focusWithin(h.div).children(
+                field.focusWithin(h.div).children([
                   select.trigger(field.member(h.button)),
                   select.positioner(h.div)
-                )
+                ])
             })
         })
     })

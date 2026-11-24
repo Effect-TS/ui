@@ -25,8 +25,9 @@ const Counter = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: ($) => $.set($.model + 1).emit({ _tag: "Added", count: $.model + 1 }),
-  view: (h, n) => h.button.onClick(CounterMsg.Add()).children("add " + n)
+  update: ($) =>
+    $.set($.model + 1).emit([{ _tag: "Added", count: $.model + 1 }]),
+  view: (h, n) => h.button.onClick(CounterMsg.Add()).children(["add " + n])
 })
 
 const Card = Component.define({
@@ -40,11 +41,11 @@ const Card = Component.define({
   update: ($) => $.model,
   // Text either side of the title, and an aside its parent leaves empty.
   view: (h) =>
-    h.article(
-      h.h2("[", h.slots.title, "]"),
+    h.article([
+      h.h2(["[", h.slots.title, "]"]),
       h.slots.body,
-      h.aside(h.slots.aside)
-    )
+      h.aside([h.slots.aside])
+    ])
 })
 
 const where = { server: true }
@@ -58,13 +59,13 @@ const Page = Component.define({
   init: () => 0,
   update: (_, msg) => msg.count,
   view: (h, n) =>
-    h.main(
+    h.main([
       Card(h, {
         key: "c",
         slots: {
           title: "note",
           body: [
-            h.p(where.server ? "from the server" : "from the client"),
+            h.p([where.server ? "from the server" : "from the client"]),
             Counter(h, {
               key: "n",
               onEmit: (event) => PageMsg.Added({ count: event.count })
@@ -72,8 +73,8 @@ const Page = Component.define({
           ]
         }
       }),
-      h.output("added " + n)
-    )
+      h.output(["added " + n])
+    ])
 })
 
 describe("slots on the server", () => {
@@ -175,7 +176,7 @@ describe("slots on the server", () => {
         view: (h) =>
           Card(h, {
             key: "c",
-            slots: { body: h.p(renders++ === 0 ? "server" : "client") }
+            slots: { body: h.p([renders++ === 0 ? "server" : "client"]) }
           })
       })
       const error = yield* Effect.flip(ssr(Flip, {}))

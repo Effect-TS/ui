@@ -42,27 +42,27 @@ const mountArea = Effect.fnUntraced(function*(
       ScrollArea(h, {
         props,
         view: (scrollArea) =>
-          scrollArea.root(h.div.class("root")).children(
-            scrollArea.viewport(h.div.class("viewport")).children(
-              scrollArea.content(h.div.class("content")).children("Items")
-            ),
+          scrollArea.root(h.div.class(["root"])).children([
+            scrollArea.viewport(h.div.class(["viewport"])).children([
+              scrollArea.content(h.div.class(["content"])).children(["Items"])
+            ]),
             scrollArea.scrollbar({
-              element: h.div.class("bar-y"),
-              thumb: h.div.class("thumb-y"),
+              element: h.div.class(["bar-y"]),
+              thumb: h.div.class(["thumb-y"]),
               keepMounted: options.keepMounted
             }),
             options.horizontal
               ? scrollArea.scrollbar({
-                element: h.div.class("bar-x"),
-                thumb: h.div.class("thumb-x"),
+                element: h.div.class(["bar-x"]),
+                thumb: h.div.class(["thumb-x"]),
                 orientation: "horizontal",
                 keepMounted: options.keepMounted
               })
               : undefined,
             options.horizontal
-              ? scrollArea.corner(h.div.class("corner"))
+              ? scrollArea.corner(h.div.class(["corner"]))
               : undefined
-          )
+          ])
       })
   })
   const app = yield* container
