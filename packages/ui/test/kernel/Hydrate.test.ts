@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
-import * as SpikeHydrate from "@effect/ui/html/SpikeHydrate"
+import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
 import { assert, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Layer, Option, Schema, SchemaGetter } from "effect"
+import { Deferred, Effect, Layer, Option, Schema } from "effect"
 
 const tick = Effect.promise(() =>
   new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -129,14 +129,14 @@ const sameElements = (app: Element, server: ReadonlyArray<Element>) => {
 const texts = (app: Element, selector: string) =>
   [...app.querySelectorAll(selector)].map((node) => node.textContent)
 
-describe("spike hydration", () => {
+describe("HtmlHydrate", () => {
   it.effect("reuses the server's nodes, starts from the shipped Model and handles events", () =>
     Effect.gen(function*() {
       const rendered = yield* HtmlServer.renderToHtml(Counter, { label: "add" })
       const app = yield* container(rendered.html)
       const state = { ...rendered.state, "/Counter": 5 }
       const server = [...app.querySelectorAll("*")]
-      const root = yield* SpikeHydrate.hydrateEffect(
+      const root = yield* HtmlHydrate.hydrateEffect(
         Counter,
         { label: "add" },
         app,
@@ -164,7 +164,7 @@ describe("spike hydration", () => {
       const app = yield* container(rendered.html)
       const server = [...app.querySelectorAll("*")]
       const state = { ...rendered.state, "/List/Row[B]": 7, "/List/Row[C]": 2 }
-      yield* SpikeHydrate.hydrateEffect(List, {}, app, state)
+      yield* HtmlHydrate.hydrateEffect(List, {}, app, state)
       sameElements(app, server)
       assert.deepStrictEqual(texts(app, "span"), [
         "0 clicked",
@@ -193,7 +193,7 @@ describe("spike hydration", () => {
       assert.include(Object.keys(rendered.state), path)
       const app = yield* container(rendered.html)
       const server = [...app.querySelectorAll("*")]
-      yield* SpikeHydrate.hydrateEffect(Page, {}, app, {
+      yield* HtmlHydrate.hydrateEffect(Page, {}, app, {
         ...rendered.state,
         [path]: 4
       })
@@ -241,7 +241,7 @@ describe("spike hydration", () => {
         "span",
         "i"
       ])
-      yield* SpikeHydrate.hydrateEffect(Holder, {}, app, rendered.state)
+      yield* HtmlHydrate.hydrateEffect(Holder, {}, app, rendered.state)
       sameElements(app, server)
       assert.strictEqual(app.textContent, "boom fallbackafter")
     }).pipe(Effect.scoped))
@@ -295,7 +295,7 @@ describe("spike hydration", () => {
       assert.deepStrictEqual(rendered.state["~deferred"], ["/Shell"])
       const app = yield* container(rendered.html)
       const server = [...app.querySelectorAll("*")]
-      yield* SpikeHydrate.hydrateEffect(Shell, {}, app, rendered.state)
+      yield* HtmlHydrate.hydrateEffect(Shell, {}, app, rendered.state)
       sameElements(app, server)
       assert.strictEqual(app.textContent, "0loadingafter")
       yield* Deferred.succeed(gate, undefined)
@@ -344,7 +344,7 @@ describe("spike hydration", () => {
       assert.strictEqual(typeof encoded.at, "string")
       const app = yield* container(rendered.html)
       const server = [...app.querySelectorAll("*")]
-      const root = yield* SpikeHydrate.hydrateEffect(
+      const root = yield* HtmlHydrate.hydrateEffect(
         Picked,
         {},
         app,
@@ -355,43 +355,6 @@ describe("spike hydration", () => {
       assert.isTrue(Option.isOption(model.pick))
       assert.isTrue(model.at instanceof Date)
       assert.strictEqual(app.textContent, "server 0")
-    }).pipe(Effect.scoped))
-
-  it.effect("starts from init while a Model decodes asynchronously, then renders the decoded one", () =>
-    Effect.gen(function*() {
-      let open: () => void = () => {}
-      let gate = Promise.resolve()
-      const Label = Schema.String.pipe(Schema.decode({
-        decode: SchemaGetter.transformEffect((label: string) =>
-          Effect.promise(() => gate.then(() => label))
-        ),
-        encode: SchemaGetter.passthrough()
-      }))
-      const Labelled = Component.define({
-        name: "Labelled",
-        model: Schema.Struct({ label: Label }),
-        message: Schema.Never,
-        elements: Html
-      }).make({
-        init: () => ({ label: "init" }),
-        update: ($) => $.model,
-        view: (h, model) => h.p(model.label)
-      })
-      const rendered = yield* HtmlServer.renderToHtml(Labelled, {})
-      const app = yield* container(rendered.html)
-      const server = [...app.querySelectorAll("*")]
-      gate = new Promise((resolve) => (open = resolve))
-      const root = yield* SpikeHydrate.hydrateEffect(Labelled, {}, app, {
-        ...rendered.state,
-        "/Labelled": { label: "shipped" }
-      })
-      sameElements(app, server)
-      assert.strictEqual(app.textContent, "init")
-      open()
-      yield* tick
-      assert.deepStrictEqual(root.model(), { label: "shipped" })
-      assert.strictEqual(app.textContent, "shipped")
-      sameElements(app, server)
     }).pipe(Effect.scoped))
 
   describe("where the server's nodes don't match", () => {
@@ -405,7 +368,7 @@ describe("spike hydration", () => {
           items: [...app.querySelectorAll("li")],
           all: [...app.querySelectorAll("*")]
         }
-        yield* SpikeHydrate.hydrateEffect(List, {}, app, {
+        yield* HtmlHydrate.hydrateEffect(List, {}, app, {
           ...rendered.state,
           "/List/Row[A]": 1,
           "/List/Row[C]": 3
@@ -528,7 +491,7 @@ describe("spike hydration", () => {
           rendered.html.replace("hello", "<s>stale</s>")
         )
         const server = [...app.querySelectorAll("*")]
-        yield* SpikeHydrate.hydrateEffect(Holder, {}, app, rendered.state)
+        yield* HtmlHydrate.hydrateEffect(Holder, {}, app, rendered.state)
         assert.strictEqual(
           app.innerHTML,
           "<div><b>before</b>hello<i>after</i></div>"
