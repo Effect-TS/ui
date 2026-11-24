@@ -128,6 +128,17 @@ describe("keepAlive", () => {
     void kept
   })
 
+  it("needs keepAlive: true present, not maybe absent", () => {
+    const enabled = Math.random() > 0.5
+    Component.define({
+      name: "Maybe",
+      // @ts-expect-error Type 'undefined' is not assignable to type 'true'
+      keepAlive: enabled ? true : undefined,
+      model: Schema.Null,
+      message: Schema.Never
+    })
+  })
+
   it("writes keep-alive children inside h.keepAlive, and returns what the content returns", () => {
     expect(h.keepAlive((s) => ProfileForm(s, {}))).type.toBe<
       View.Child<Message, never>

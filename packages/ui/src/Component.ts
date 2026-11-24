@@ -3191,7 +3191,8 @@ export const define = <
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
   // Left out, `keepAlive` infers nothing, so it's `false`. The return type is `NoInfer`, so an annotation such as
-  // `{ keepAlive: true }` on the result can't make it `true`.
+  // `{ keepAlive: true }` on the result can't make it `true`. A `true` that may be absent, such as
+  // `enabled ? true : undefined`, must meet the `keepAlive: boolean` that `options` adds for it.
   Sc extends boolean = false
 >(
   options: {
@@ -3324,7 +3325,7 @@ export const define = <
       | false
       | ((model: Model, props: Props) => NoInfer<Model>)
       | undefined
-  }
+  } & ([Sc] extends [true] ? { readonly keepAlive: boolean } : unknown)
 ): Definition<
   Name,
   Props,
