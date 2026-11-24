@@ -286,10 +286,6 @@ const Shell = Component.define({
     })
 })
 
-// ---------------------------------------------------------------------------
-// A child in a closure, given a message while the headless component that draws it waits to render
-// ---------------------------------------------------------------------------
-
 const ProbeMessage = UiSchema.TaggedEnum({ Read: {} })
 
 const Probe = Component.define({
@@ -333,7 +329,6 @@ describe("headless components", () => {
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(Counted, {})
       yield* TestHost.settle
-      // Counted renders before Menu takes its message, and Menu, which draws Probe, waits for the flush.
       click(root, "bump")
       click(root, "toggle")
       click(root, "read []")

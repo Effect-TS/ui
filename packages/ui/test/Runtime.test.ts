@@ -211,7 +211,6 @@ describe("Runtime", () => {
           update: ($) => $.model,
           view: (h) => h.p("leaf")
         })
-        // An element and a child with one key, and an unkeyed sibling first, so the list's middle is diffed.
         const Mixed = Component.define({
           name: "Mixed",
           model: Schema.Boolean,
@@ -861,7 +860,6 @@ describe("Runtime", () => {
           update: ($) => $.model,
           view: (h) => h.text("leaf")
         })
-        // Its view starts a child, then places a slot, which a root has no content for: placing it throws.
         const Half = Component.define({
           name: "Half",
           model: Schema.Boolean,

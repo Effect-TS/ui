@@ -23,7 +23,7 @@ export const normalize = (
   return [...out]
 }
 
-/** The attributes of a meta or link tag, in a stable order, without the marker. @internal */
+/** @internal */
 export const attributes = (
   entry: HtmlHead.Meta | HtmlHead.Link
 ): ReadonlyArray<readonly [string, string]> => {
@@ -42,7 +42,7 @@ export const attributes = (
   return out
 }
 
-/** The head with no entries. @internal */
+/** @internal */
 export const empty: HtmlHead.HtmlHead = {
   title: undefined,
   meta: [],

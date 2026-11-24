@@ -50,7 +50,6 @@ const isWanted = (node: Node): boolean =>
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
-/** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
 const changeOnBlur: ReadonlySet<string> = new Set([
   "text",
   "search",
@@ -74,7 +73,6 @@ const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> =>
       )
     ).filter((other) => other.name === radio.name && other.form === radio.form)
 
-/** The property the user changes on `node`, if it's a control. */
 const userProp = (node: Node): string | undefined => {
   switch ((node as Element).localName) {
     case "input": {
@@ -109,7 +107,6 @@ const selectionChanged = (select: HTMLSelectElement): boolean => {
   return options.some((option, i) => option.selected !== (i === index))
 }
 
-/** The control an option's change is reported on and held for: its `select`, if it has one. */
 const controlOf = (node: Node): Element =>
   (node as Element).localName === "option"
     ? (node as Element).closest("select") ?? (node as Element)
@@ -173,7 +170,6 @@ class Edits {
       const field = control as HTMLInputElement
       if (!field.isConnected || (isRadio(field) && !field.checked)) continue
       field.dispatchEvent(new Event("input", { bubbles: true }))
-      // A focused text field gets no `change`: the browser fires it when focus leaves.
       const typing = field.localName === "textarea" ||
         (field.localName === "input" && changeOnBlur.has(field.type))
       if (!typing || field.ownerDocument.activeElement !== field) {

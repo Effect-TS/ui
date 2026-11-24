@@ -15,8 +15,7 @@ interface LoggerLike {
   }) => void
 }
 
-// Reads Effect's logger, console, and clock references via `mapUnsafe` so apps
-// that don't configure them don't bundle Effect's default logger/formatter/clock.
+// Read via `mapUnsafe` so apps that don't set these references don't bundle Effect's defaults.
 const getLoggers = (
   ctx: Context.Context<any>,
   level: LogLevel
