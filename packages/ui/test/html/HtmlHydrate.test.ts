@@ -699,6 +699,36 @@ describe("HtmlHydrate", () => {
         Effect.scoped
       ))
 
+    it.effect("leave a rebuilt form to submit natively while its Layer builds", () =>
+      Effect.gen(function*() {
+        const rendered = yield* HtmlServer.renderToHtml(Gated, {})
+        const latch = yield* Deferred.make<void>()
+        layerGate = Deferred.await(latch)
+        const app = yield* container(
+          rendered.html.replaceAll("<form", "<section").replaceAll(
+            "</form>",
+            "</section>"
+          )
+        )
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Gated,
+          {},
+          app,
+          rendered.state
+        )
+        yield* tick
+        const built = app.querySelector("form")!
+        assert.isNull(app.querySelector("section"))
+        assert.isTrue(submitted(built))
+        yield* Deferred.succeed(latch, undefined)
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("form"), built)
+        assert.isFalse(submitted(built))
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => layerGate = Effect.void)),
+        Effect.scoped
+      ))
+
     it.effect("leave a held child's form to submit natively until it adopts", () =>
       Effect.gen(function*() {
         const [rendered, open] = yield* renderLate(

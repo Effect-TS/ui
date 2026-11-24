@@ -400,7 +400,9 @@ const between = (
       wantedTag = tag
       const node = take(isWanted)
       if (node === null) {
-        const element = base.createElement(tag)
+        const element = tag === "form"
+          ? container.ownerDocument!.createElement(tag)
+          : base.createElement(tag)
         fresh.add(element)
         ours.add(element)
         made = true
@@ -475,7 +477,7 @@ const between = (
     },
     made(node, inst) {
       if (freshDepth > 0 && fresh.delete(node)) freshDepth--
-      else if ((node as Element).localName === "form") {
+      if ((node as Element).localName === "form") {
         const env = inst.env
         if (
           inst.tree.served?.(inst) !== undefined && env.ctx === undefined &&
