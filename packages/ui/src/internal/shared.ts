@@ -122,10 +122,10 @@ export const unsupplied = (
  * @internal
  */
 export const check = (definition: Component.Definition.Any): void => {
-  const { name, reads } = definition
-  if (reads === undefined) return
+  const { name, reads: declared } = definition
+  if (declared === undefined) return
   const handled = new Map<Component.Definition.Any, string>()
-  for (const [key, entry] of Object.entries(reads)) {
+  for (const [key, entry] of Object.entries(declared)) {
     if (typeof entry === "function") continue
     if (entry.owner === "self") {
       if (definition.shares === undefined) {

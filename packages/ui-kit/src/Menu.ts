@@ -873,8 +873,8 @@ const disabledOf = (input: Reads): boolean =>
 const hoverOf = (props: MenuProps, nested: boolean): boolean =>
   props.openOnHover ?? nested
 
-const hoverOpened = (reason: MenuChangeReason | null, reads: Reads): boolean =>
-  reason === "trigger-hover" && barOf(reads) === undefined
+const hoverOpened = (reason: MenuChangeReason | null, input: Reads): boolean =>
+  reason === "trigger-hover" && barOf(input) === undefined
 
 const filteringOf = (props: MenuProps): boolean => props.query !== undefined
 
