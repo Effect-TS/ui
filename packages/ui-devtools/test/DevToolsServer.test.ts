@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { DevTools } from "@effect/ui-devtools"
 import * as Remote from "@effect/ui-devtools/internal/remote"
@@ -9,6 +10,7 @@ import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema, Stream } from "effect"
+import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
@@ -24,19 +26,8 @@ const overlay = () =>
   document.querySelector<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")!
     .contentDocument!.body
 
-const parse = (body: string): any => {
-  if (body === "") return undefined
-  if (!body.startsWith("event:") && !body.startsWith("data:")) {
-    return JSON.parse(body)
-  }
-  const data = body.split("\n").filter((line) => line.startsWith("data:")).map((
-    line
-  ) => line.slice(5)).join("")
-  return JSON.parse(data)
-}
-
-// happy-dom's fetch applies CORS, so the agent and the probes use node:http.
-const send = (
+// happy-dom's fetch applies CORS, so the origin probes use node:http.
+const probeStatus = (
   url: string,
   options: {
     readonly method?: string
@@ -44,110 +35,77 @@ const send = (
   },
   body = ""
 ) =>
-  new Promise<
-    {
-      status: number
-      headers: Record<string, string | Array<string> | undefined>
-      body: string
-    }
-  >(
-    (resolve, reject) => {
-      const req = request(url, options, (res) => {
-        let text = ""
-        res.setEncoding("utf8")
-        res.on("data", (chunk) => text += chunk)
-        res.on(
-          "end",
-          () =>
-            resolve({
-              status: res.statusCode ?? 0,
-              headers: res.headers,
-              body: text
-            })
-        )
+  Effect.promise(
+    () =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(url, options, (res) => {
+          res.resume()
+          res.on("end", () => resolve(res.statusCode ?? 0))
+        })
+        req.on("upgrade", (res, socket) => {
+          socket.destroy()
+          resolve(res.statusCode ?? 0)
+        })
+        req.on("error", reject)
+        req.end(body)
       })
-      req.on("upgrade", (res, socket) => {
-        socket.destroy()
-        resolve({ status: res.statusCode ?? 0, headers: res.headers, body: "" })
-      })
-      req.on("error", reject)
-      req.end(body)
-    }
   )
 
-const makeAgent = async (base: string) => {
-  let session: string | undefined
-  let id = 0
+const makeAgent = Effect.fnUntraced(function*(base: string) {
+  const transport = yield* McpClient.http({
+    url: base + "/mcp",
+    protocol: McpProtocol.v2025_11_25
+  }).pipe(Effect.provide(NodeHttpClient.layerNodeHttp))
+  const client = yield* McpClient.make({ name: "test", version: "0" }).pipe(
+    Effect.provideService(McpClient.Transport, transport)
+  )
+  const tools = yield* client.listTools()
+  const byName = new Map(tools.map((tool) => [tool.name, tool]))
   const results: Array<string> = []
-  const post = async (body: object, headers: Record<string, string> = {}) => {
-    const response = await send(base + "/mcp", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(session === undefined
-          ? {}
-          : {
-            "mcp-session-id": session,
-            "mcp-protocol-version": "2025-06-18"
-          }),
-        ...headers
-      }
-    }, JSON.stringify(body))
-    const sid = response.headers["mcp-session-id"]
-    session = typeof sid === "string" ? sid : session
-    return { status: response.status, json: parse(response.body) }
-  }
-  await post({
-    jsonrpc: "2.0",
-    id: ++id,
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "test", version: "0" }
-    }
-  })
-  await post({ jsonrpc: "2.0", method: "notifications/initialized" })
-  const call = async (name: string, args: object = {}) => {
-    const { json } = await post({
-      jsonrpc: "2.0",
-      id: ++id,
-      method: "tools/call",
-      params: { name, arguments: args }
-    })
-    results.push(JSON.stringify(json))
-    if (json.error !== undefined) throw new Error(JSON.stringify(json.error))
-    return json.result
-  }
+  const invoke = (name: string, args?: Record<string, unknown>) =>
+    client.callTool({ tool: byName.get(name)!, arguments: args }).pipe(
+      Effect.orDie,
+      Effect.tap((result) =>
+        Effect.sync(() => results.push(JSON.stringify(result)))
+      )
+    )
   return {
-    post,
+    tools,
     results,
-    tools: async () =>
-      (await post({ jsonrpc: "2.0", id: ++id, method: "tools/list" })).json
-        .result.tools,
-    call: async (name: string, args?: object) => {
-      const result = await call(name, args)
-      if (result.isError === true) {
-        throw new Error(result.content?.[0]?.text ?? JSON.stringify(result))
-      }
-      return result.structuredContent.result
-    },
-    fails: async (name: string, args?: object): Promise<string> => {
-      const result = await call(name, args)
-      assert.isTrue(result.isError, name + " should fail")
-      return JSON.stringify(result.content ?? result.structuredContent)
-    }
+    call: <A = any>(
+      name: string,
+      args?: Record<string, unknown>
+    ): Effect.Effect<A> =>
+      invoke(name, args).pipe(
+        Effect.map((result) => {
+          if (result.isError === true) {
+            throw new Error(
+              result.content?.[0]?.type === "text"
+                ? result.content[0].text
+                : JSON.stringify(result)
+            )
+          }
+          return (result.structuredContent as { readonly result: A }).result
+        })
+      ),
+    fails: (
+      name: string,
+      args?: Record<string, unknown>
+    ): Effect.Effect<string> =>
+      invoke(name, args).pipe(
+        Effect.map((result) => {
+          assert.isTrue(result.isError, name + " should fail")
+          return JSON.stringify(result.content ?? result.structuredContent)
+        })
+      )
   }
-}
-
-type Agent = Awaited<ReturnType<typeof makeAgent>>
+})
 
 const serve = Effect.fnUntraced(
   function*(options: DevToolsServer.Options & { readonly port: number }) {
     yield* Layer.build(DevToolsServer.layer(options))
     const url = DevToolsServer.url(options)
-    return { url, agent: yield* Effect.promise(() => makeAgent(url)) }
+    return { url, agent: yield* makeAgent(url) }
   }
 )
 
@@ -162,11 +120,6 @@ const open = Effect.fnUntraced(
     return app
   }
 )
-
-const ask = <A = any>(agent: Agent, name: string, args?: object) =>
-  Effect.promise((): Promise<A> => agent.call(name, args))
-const refused = (agent: Agent, name: string, args?: object) =>
-  Effect.promise(() => agent.fails(name, args))
 
 const until = (check: () => boolean) =>
   Effect.suspend(function loop(): Effect.Effect<void> {
@@ -193,7 +146,7 @@ const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
     )
   )
   const url = "http://127.0.0.1:" + port
-  return { url, agent: yield* Effect.promise(() => makeAgent(url)) }
+  return { url, agent: yield* makeAgent(url) }
 })
 
 const connectSocket = (url: string) =>
@@ -250,10 +203,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const { agent, url } = yield* serve({ port: 47741 })
         yield* open(url, "interrupted")
 
-        const tools: ReadonlyArray<any> = yield* Effect.promise(() =>
-          agent.tools()
-        )
-        assert.deepStrictEqual(tools.map((tool) => tool.name), [
+        assert.deepStrictEqual(agent.tools.map((tool) => tool.name), [
           "list_sessions",
           "list_instances",
           "list_entries",
@@ -269,22 +219,21 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "wait"
         ])
         assert.isTrue(
-          tools.find((tool) => tool.name === "dispatch").annotations
-            .destructiveHint
+          agent.tools.find((tool) => tool.name === "dispatch")?.annotations
+            ?.destructiveHint
         )
         assert.isTrue(
-          tools.find((tool) => tool.name === "get_state").annotations
-            .readOnlyHint
+          agent.tools.find((tool) => tool.name === "get_state")?.annotations
+            ?.readOnlyHint
         )
 
-        const [session] = yield* ask(agent, "list_sessions")
+        const [session] = yield* agent.call("list_sessions")
         assert.strictEqual(session.app, "Workspace")
         assert.strictEqual(session.host, "browser")
         assert.isTrue(session.connected)
         assert.isTrue(session.controllable)
 
-        const instances: ReadonlyArray<any> = yield* ask(
-          agent,
+        const instances: ReadonlyArray<any> = yield* agent.call(
           "list_instances"
         )
         const n2 = instances.find((instance) =>
@@ -293,7 +242,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.match(n2.status, /interrupted/)
         assert.isDefined(n2.unmounted)
 
-        const { rows } = yield* ask(agent, "list_entries", {
+        const { rows } = yield* agent.call("list_entries", {
           instance: n2.instance,
           filter: "commands"
         })
@@ -303,7 +252,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const save = rows.find((row: any) => row.label === "ClickedSave")
         assert.isDefined(interrupted)
 
-        const chain: ReadonlyArray<any> = yield* ask(agent, "get_chain", {
+        const chain: ReadonlyArray<any> = yield* agent.call("get_chain", {
           seq: interrupted.seq
         })
         const steps = JSON.stringify(chain)
@@ -311,7 +260,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.include(steps, "PressedEscape")
         assert.include(steps, "notes/SaveNote")
 
-        const diff = yield* ask(agent, "diff_state", { seq: save.seq })
+        const diff = yield* agent.call("diff_state", { seq: save.seq })
         assert.deepInclude(diff.changes, {
           path: ["status"],
           kind: "changed",
@@ -319,19 +268,19 @@ describe("DevToolsServer", { concurrent: false }, () => {
           after: "Saving"
         })
 
-        const state = yield* ask(agent, "get_state", {
+        const state = yield* agent.call("get_state", {
           instance: n2.instance,
           at: save.seq
         })
         assert.strictEqual(state.model.status, "Saving")
         assert.deepStrictEqual(state.props.token, { "~redacted": true })
-        const now = yield* ask(agent, "get_state", { instance: n2.instance })
+        const now = yield* agent.call("get_state", { instance: n2.instance })
         assert.match(now.unmounted, /^unmounted at #\d+$/)
 
-        const counts = yield* ask(agent, "count_entries")
+        const counts = yield* agent.call("count_entries")
         assert.strictEqual(counts.messages.ClickedSave, 2)
 
-        const entry = yield* ask(agent, "get_entry", {
+        const entry = yield* agent.call("get_entry", {
           seq: save.seq,
           path: ["message"]
         })
@@ -347,18 +296,17 @@ describe("DevToolsServer", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { agent, url } = yield* serve({ port: 47742, size: 12 })
         yield* open(url, "open", 12)
-        const instances: ReadonlyArray<any> = yield* ask(
-          agent,
+        const instances: ReadonlyArray<any> = yield* agent.call(
           "list_instances"
         )
         const workspace = instances.find((instance) =>
           instance.path === "/Workspace"
         )
-        const state = yield* ask(agent, "get_state", {
+        const state = yield* agent.call("get_state", {
           instance: workspace.instance
         })
         assert.deepStrictEqual(state.model, { open: ["n1", "n2"] })
-        const message = yield* refused(agent, "get_state", {
+        const message = yield* agent.fails("get_state", {
           instance: workspace.instance,
           at: 0
         })
@@ -372,29 +320,34 @@ describe("DevToolsServer", { concurrent: false }, () => {
     () =>
       Effect.gen(function*() {
         const { agent, url } = yield* serve({ port: 47743 })
-        const mcp = yield* Effect.promise(() =>
-          agent.post({ jsonrpc: "2.0", id: 1, method: "tools/list" }, {
-            origin: "http://evil.example"
-          })
+        const mcpStatus = yield* probeStatus(
+          url + "/mcp",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              origin: "http://evil.example"
+            }
+          },
+          JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })
         )
-        assert.strictEqual(mcp.status, 403)
+        assert.strictEqual(mcpStatus, 403)
         for (const path of ["/log", "/control"]) {
           const probe = (origin: string) =>
-            Effect.promise(() =>
-              send(url + path, {
-                headers: {
-                  connection: "Upgrade",
-                  upgrade: "websocket",
-                  "sec-websocket-version": "13",
-                  "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-                  origin
-                }
-              }).then((response) => response.status)
-            )
+            probeStatus(url + path, {
+              headers: {
+                connection: "Upgrade",
+                upgrade: "websocket",
+                "sec-websocket-version": "13",
+                "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+                origin
+              }
+            })
           assert.strictEqual(yield* probe("http://evil.example"), 403, path)
           assert.strictEqual(yield* probe("http://localhost:5173"), 101, path)
         }
-        const message = yield* refused(agent, "list_instances")
+        const message = yield* agent.fails("list_instances")
         assert.include(message, "No session has connected yet")
       }).pipe(Effect.scoped),
     30_000
@@ -407,12 +360,12 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const { agent, url } = yield* serve({ port: 47744 })
         const app = yield* open(url, "open")
         const root = overlay()
-        const { rows } = yield* ask(agent, "list_entries", {
+        const { rows } = yield* agent.call("list_entries", {
           tag: "ClickedSave"
         })
         const seq = rows[0].seq
 
-        const shown = yield* ask(agent, "show_entry", { seq })
+        const shown = yield* agent.call("show_entry", { seq })
         assert.deepStrictEqual(shown, {
           paused: seq,
           fellBack: [],
@@ -422,10 +375,10 @@ describe("DevToolsServer", { concurrent: false }, () => {
         yield* until(() =>
           text(root.querySelector(".paused-label")) === "Paused at #" + seq
         )
-        const [paused] = yield* ask(agent, "list_sessions")
+        const [paused] = yield* agent.call("list_sessions")
         assert.strictEqual(paused.paused, seq)
 
-        yield* ask(agent, "resume")
+        yield* agent.call("resume")
         assert.notStrictEqual(app.style.display, "none")
         yield* until(() => root.querySelector(".paused") === null)
 
@@ -445,33 +398,33 @@ describe("DevToolsServer", { concurrent: false }, () => {
           HtmlLocator.getByRole(root, "button", { name: "Time travel" })
         )
         yield* wait(50)
-        const [human] = yield* ask(agent, "list_sessions")
+        const [human] = yield* agent.call("list_sessions")
         assert.strictEqual(
           "Paused at #" + human.paused,
           text(root.querySelector(".paused-label"))
         )
-        yield* ask(agent, "resume")
+        yield* agent.call("resume")
         yield* until(() => root.querySelector(".paused") === null)
 
         const both: ReadonlyArray<number> = rows.map((row: any) => row.seq)
         yield* Effect.all(
-          both.map((seq) => ask(agent, "show_entry", { seq })),
+          both.map((seq) => agent.call("show_entry", { seq })),
           { concurrency: "unbounded" }
         )
-        const [raced] = yield* ask(agent, "list_sessions")
+        const [raced] = yield* agent.call("list_sessions")
         assert.include(both, raced.paused)
         yield* until(() =>
           text(root.querySelector(".paused-label")) ===
             "Paused at #" + raced.paused
         )
         assert.strictEqual(document.querySelectorAll("[inert]").length, 1)
-        yield* ask(agent, "resume")
+        yield* agent.call("resume")
         yield* until(() => root.querySelector(".paused") === null)
         assert.strictEqual(document.querySelectorAll("[inert]").length, 0)
 
-        const outside = yield* refused(agent, "show_entry", { seq: 10_000 })
+        const outside = yield* agent.fails("show_entry", { seq: 10_000 })
         assert.include(outside, "not in the session's buffer")
-        const off = yield* refused(agent, "dispatch", {
+        const off = yield* agent.fails("dispatch", {
           instance: 1,
           messages: [{ _tag: "ClickedSave" }]
         })
@@ -486,26 +439,25 @@ describe("DevToolsServer", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { agent, url } = yield* serve({ port: 47745, dispatch: true })
         const app = yield* open(url, "open")
-        const instances: ReadonlyArray<any> = yield* ask(
-          agent,
+        const instances: ReadonlyArray<any> = yield* agent.call(
           "list_instances"
         )
         const n1 = instances.find((instance) =>
           instance.path === "/Workspace/Editor[n1]"
         ).instance
 
-        const schema = yield* ask(agent, "get_message_schema", {
+        const schema = yield* agent.call("get_message_schema", {
           instance: n1,
           tag: "UpdatedDraft"
         })
         assert.include(JSON.stringify(schema), "text")
-        const unknownTag = yield* refused(agent, "get_message_schema", {
+        const unknownTag = yield* agent.fails("get_message_schema", {
           instance: n1,
           tag: "Nope"
         })
         assert.include(unknownTag, "ClickedSave")
 
-        const bad = yield* refused(agent, "dispatch", {
+        const bad = yield* agent.fails("dispatch", {
           instance: n1,
           messages: [{ _tag: "UpdatedDraft", text: "ok" }, {
             _tag: "UpdatedDraft",
@@ -513,9 +465,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
           }]
         })
         assert.include(bad, "Message 1 does not decode")
-        const { last } = yield* ask(agent, "wait", { timeout: 0, instance: n1 })
+        const { last } = yield* agent.call("wait", { timeout: 0, instance: n1 })
 
-        const sent = yield* ask(agent, "dispatch", {
+        const sent = yield* agent.call("dispatch", {
           instance: n1,
           messages: [{ _tag: "UpdatedDraft", text: "From the agent" }, {
             _tag: "ClickedSave"
@@ -528,7 +480,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           ),
           ["Updated", "Updated"]
         )
-        const update = yield* ask(agent, "get_entry", {
+        const update = yield* agent.call("get_entry", {
           seq: sent.outcomes[0].seq
         })
         assert.deepStrictEqual(update.source, { _tag: "Dispatch" })
@@ -539,16 +491,16 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "From the agent"
         )
 
-        const settled = yield* ask(agent, "wait", {
+        const settled = yield* agent.call("wait", {
           since: last,
           instance: n1,
           timeout: 2_000
         })
         assert.isTrue(settled.settled)
-        const state = yield* ask(agent, "get_state", { instance: n1 })
+        const state = yield* agent.call("get_state", { instance: n1 })
         assert.strictEqual(state.model.status, "Saved")
 
-        const pending = yield* ask(agent, "wait", { timeout: 50 })
+        const pending = yield* agent.call("wait", { timeout: 50 })
         assert.isFalse(pending.settled)
         assert.strictEqual(pending.open.length, 1)
       }).pipe(Effect.scoped),
@@ -562,15 +514,14 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const { agent, url } = yield* serve({ port: 47746, keep: 1 })
         yield* open(url, "open").pipe(Effect.scoped)
         yield* wait(100)
-        const [closed] = yield* ask(agent, "list_sessions")
+        const [closed] = yield* agent.call("list_sessions")
         assert.isFalse(closed.connected)
         assert.isFalse(closed.controllable)
-        const instances: ReadonlyArray<any> = yield* ask(
-          agent,
+        const instances: ReadonlyArray<any> = yield* agent.call(
           "list_instances"
         )
         assert.isAbove(instances.length, 0)
-        const message = yield* refused(agent, "show_entry", {
+        const message = yield* agent.fails("show_entry", {
           seq: closed.last
         })
         assert.include(message, "can't be controlled")
@@ -578,7 +529,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         yield* open(url, "open").pipe(Effect.scoped)
         yield* open(url, "open").pipe(Effect.scoped)
         yield* wait(100)
-        const sessions: ReadonlyArray<any> = yield* ask(agent, "list_sessions")
+        const sessions: ReadonlyArray<any> = yield* agent.call("list_sessions")
         assert.strictEqual(sessions.length, 1)
         assert.notStrictEqual(sessions[0].session, closed.session)
       }).pipe(Effect.scoped),
@@ -617,7 +568,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         ]
         for (const frame of frames) socket.send(JSON.stringify(frame))
         yield* wait(100)
-        const state = yield* ask(agent, "get_state", {
+        const state = yield* agent.call("get_state", {
           session: "s",
           instance: 1
         })
@@ -638,12 +589,12 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const older = yield* play("open").pipe(Effect.provide(services))
         const newer = yield* play("open").pipe(Effect.provide(services))
         yield* wait(150)
-        const [first] = yield* ask(agent, "list_sessions")
-        const { rows } = yield* ask(agent, "list_entries", {
+        const [first] = yield* agent.call("list_sessions")
+        const { rows } = yield* agent.call("list_entries", {
           session: first.session,
           tag: "ClickedSave"
         })
-        yield* ask(agent, "show_entry", {
+        yield* agent.call("show_entry", {
           session: first.session,
           seq: rows[0].seq
         })
@@ -666,7 +617,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         slider.value = "0"
         slider.dispatchEvent(new Event("input", { bubbles: true }))
         yield* wait(50)
-        const sessions: ReadonlyArray<any> = yield* ask(agent, "list_sessions")
+        const sessions: ReadonlyArray<any> = yield* agent.call("list_sessions")
         const paused = sessions.find((session) =>
           session.session === first.session
         ).paused
@@ -716,7 +667,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "http://127.0.0.1:47750"
         )
         free.close()
-      }),
+      }).pipe(Effect.scoped),
     30_000
   )
 
@@ -734,7 +685,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
             log.send(propsAt(n + 2))
             return { _tag: "Updated", seq: n + 2 } as const
           }))
-        const sent = yield* ask(agent, "dispatch", {
+        const sent = yield* agent.call("dispatch", {
           session: "s",
           instance: 1,
           messages: go(5)
@@ -780,7 +731,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           })
         )
         yield* wait(100)
-        const message = yield* refused(agent, "dispatch", {
+        const message = yield* agent.fails("dispatch", {
           session: "s",
           instance: 1,
           messages: go(2)
@@ -807,7 +758,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
             log.send(propsAt(3))
             return { _tag: "Updated", seq: 2 } as const
           }))
-        const sent = yield* ask(agent, "dispatch", {
+        const sent = yield* agent.call("dispatch", {
           session: "s",
           instance: 1,
           messages: go(1)
@@ -822,8 +773,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           sent.note,
           "#2 were logged by the page, but the server can't show them"
         )
-        yield* refused(agent, "get_entry", { session: "s", seq: 2 })
-        const shown = yield* ask(agent, "get_entry", { session: "s", seq: 3 })
+        yield* agent.fails("get_entry", { session: "s", seq: 2 })
+        const shown = yield* agent.call("get_entry", { session: "s", seq: 3 })
         assert.strictEqual(shown._tag, "PropsChanged")
       }).pipe(Effect.scoped),
     30_000

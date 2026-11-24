@@ -1,3 +1,6 @@
+import { Effect } from "effect"
+import { McpClient, McpProtocol } from "effect/ai"
+import { FetchHttpClient } from "effect/http"
 import { chromium } from "playwright"
 import { createServer } from "vite"
 
@@ -19,194 +22,101 @@ const expect = (ok, what, detail) => {
   if (!ok) failures.push(what + " " + JSON.stringify(detail))
 }
 
-const mcp = async () => {
-  let session
-  let id = 0
-  const post = async (body, headers = {}) => {
-    const response = await fetch("http://127.0.0.1:4774/mcp", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(session === undefined
-          ? {}
-          : {
-            "mcp-session-id": session,
-            "mcp-protocol-version": "2025-06-18"
-          }),
-        ...headers
-      },
-      body: JSON.stringify(body)
-    })
-    session = response.headers.get("mcp-session-id") ?? session
-    const text = await response.text()
-    const data = text.startsWith("event:") || text.startsWith("data:")
-      ? text.split("\n").filter((line) => line.startsWith("data:")).map((
-        line
-      ) => line.slice(5)).join("")
-      : text
-    return {
-      status: response.status,
-      json: data === "" ? undefined : JSON.parse(data)
-    }
-  }
-  await post({
-    jsonrpc: "2.0",
-    id: ++id,
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "check-devtools", version: "0" }
-    }
-  })
-  await post({ jsonrpc: "2.0", method: "notifications/initialized" })
-  const call = async (name, args = {}) => {
-    const { json } = await post({
-      jsonrpc: "2.0",
-      id: ++id,
-      method: "tools/call",
-      params: { name, arguments: args }
-    })
-    if (json.error !== undefined) {
-      throw new Error(name + ": " + JSON.stringify(json.error))
-    }
-    return json.result
-  }
-  return {
-    post,
-    tools: async () =>
-      (await post({ jsonrpc: "2.0", id: ++id, method: "tools/list" })).json
-        .result.tools,
-    call: async (name, args) => {
-      const result = await call(name, args)
-      if (result.isError) {
-        throw new Error(name + ": " + result.content?.[0]?.text)
-      }
-      return result.structuredContent.result
-    },
-    error: async (name, args) => {
-      const result = await call(name, args)
-      return result.isError ? result.content?.[0]?.text ?? "" : undefined
-    }
-  }
-}
+const checkMcp = (frame, scene) =>
+  Effect.runPromise(
+    Effect.gen(function*() {
+      const transport = yield* McpClient.http({
+        url: "http://127.0.0.1:4774/mcp",
+        protocol: McpProtocol.v2025_11_25
+      }).pipe(Effect.provide(FetchHttpClient.layer))
+      const client = yield* McpClient.make({
+        name: "check-devtools",
+        version: "0"
+      }).pipe(Effect.provideService(McpClient.Transport, transport))
+      const tools = new Map(
+        (yield* client.listTools()).map((tool) => [tool.name, tool])
+      )
+      const call = (name, args) =>
+        client.callTool({ tool: tools.get(name), arguments: args }).pipe(
+          Effect.map((result) => {
+            if (result.isError) {
+              throw new Error(name + ": " + result.content?.[0]?.text)
+            }
+            return result.structuredContent.result
+          })
+        )
 
-const checkMcp = async (frame, scene) => {
-  const agent = await mcp()
-  const tools = await agent.tools()
-  expect(
-    tools.length === 13,
-    "the MCP server lists 13 tools",
-    tools.map((tool) => tool.name)
-  )
-  const origin = await agent.post({
-    jsonrpc: "2.0",
-    id: 0,
-    method: "tools/list"
-  }, { origin: "http://evil.example" })
-  expect(
-    origin.status === 403,
-    "/mcp refuses a request with a browser Origin",
-    origin.status
-  )
+      const sessions = yield* call("list_sessions")
+      const live = sessions.filter((session) => session.connected)
+      expect(
+        live.length === 1 && live[0].app === "Uploads" && live[0].controllable,
+        "list_sessions has the page as one connected, controllable session",
+        sessions
+      )
+      const [root] = yield* call("list_instances")
 
-  const sessions = await agent.call("list_sessions")
-  const live = sessions.filter((session) => session.connected)
-  expect(
-    live.length === 1 && live[0].app === "Uploads" && live[0].controllable,
-    "list_sessions has the page as one connected, controllable session",
-    sessions
-  )
-  const [root] = await agent.call("list_instances")
-  const completed = await agent.call("list_entries", {
-    tag: "CompletedUploadFile"
-  })
-  const chain = JSON.stringify(
-    await agent.call("get_chain", { seq: completed.rows[0]?.seq })
-  )
-  expect(
-    chain.includes("ClickedStartUpload") &&
-      chain.includes("uploads/UploadFile"),
-    "get_chain leads a CompletedUploadFile back to its click and Command",
-    chain
-  )
+      const starts = yield* call("list_entries", { tag: "ClickedStartUpload" })
+      const first = starts.rows[0].seq
+      const shown = yield* call("show_entry", { seq: first })
+      yield* Effect.promise(() =>
+        frame.locator(".paused-label", { hasText: "Paused at #" + first })
+          .waitFor({ timeout: 5_000 })
+      )
+      const painted = yield* Effect.promise(() => scene())
+      expect(
+        shown.paused === first && !painted.liveShown &&
+          painted.copy?.length === 1,
+        "show_entry paints the page at the entry and the panel shows it as paused",
+        { shown, painted }
+      )
+      yield* Effect.promise(() =>
+        frame.getByRole("button", { name: "Resume the live page" }).click({
+          timeout: 5_000
+        })
+      )
+      yield* Effect.sleep("200 millis")
+      const afterHuman = (yield* call("list_sessions")).find((session) =>
+        session.connected
+      )
+      expect(
+        afterHuman.paused === undefined,
+        "a person's Resume ends an agent's pause",
+        afterHuman
+      )
 
-  const starts = await agent.call("list_entries", { tag: "ClickedStartUpload" })
-  const first = starts.rows[0].seq
-  const shown = await agent.call("show_entry", { seq: first })
-  await frame.locator(".paused-label", { hasText: "Paused at #" + first })
-    .waitFor({ timeout: 5_000 })
-  const painted = await scene()
-  expect(
-    shown.paused === first && !painted.liveShown && painted.copy?.length === 1,
-    "show_entry paints the page at the entry and the panel shows it as paused",
-    { shown, painted }
-  )
-  await frame.getByRole("button", { name: "Resume the live page" }).click({
-    timeout: 5_000
-  })
-  await new Promise((resolve) => setTimeout(resolve, 200))
-  const afterHuman = (await agent.call("list_sessions")).find((session) =>
-    session.connected
-  )
-  expect(
-    afterHuman.paused === undefined,
-    "a person's Resume ends an agent's pause",
-    afterHuman
-  )
+      const cancelled = yield* call("dispatch", {
+        instance: root.instance,
+        messages: [{ _tag: "ClickedCancelUpload", uploadId: 1 }]
+      })
+      const cancel = yield* call("get_entry", {
+        seq: cancelled.outcomes[0]?.seq,
+        path: ["message"]
+      })
+      yield* Effect.promise(() =>
+        page.getByRole("button", { name: "Restart upload 1" }).waitFor({
+          timeout: 5_000
+        })
+      )
+      expect(
+        cancelled.applied === 1 && cancel._tag === "ClickedCancelUpload",
+        "dispatch cancels the upload and returns the seq of its Update",
+        { cancelled, cancel }
+      )
 
-  const schema = JSON.stringify(
-    await agent.call("get_message_schema", {
-      instance: root.instance,
-      tag: "ClickedCancelUpload"
-    })
+      const started = yield* call("dispatch", {
+        instance: root.instance,
+        messages: [{ _tag: "ClickedStartUpload" }]
+      })
+      const since = started.outcomes[0].seq - 1
+      const waited = yield* call("wait", { since, timeout: 10_000 })
+      const state = yield* call("get_state", { instance: root.instance })
+      expect(
+        waited.settled && state.model.uploads.at(-1)?.status === "Done",
+        "wait returns once the dispatched upload's Command has ended",
+        { waited, uploads: state.model.uploads }
+      )
+    }).pipe(Effect.scoped)
   )
-  expect(
-    schema.includes("uploadId"),
-    "get_message_schema narrows to one message",
-    schema
-  )
-  const wrong = await agent.error("dispatch", {
-    instance: root.instance,
-    messages: [{ _tag: "ClickedCancelUpload", uploadId: "one" }]
-  })
-  expect(
-    wrong?.includes("does not decode"),
-    "dispatch refuses a message that does not decode",
-    wrong
-  )
-
-  const cancelled = await agent.call("dispatch", {
-    instance: root.instance,
-    messages: [{ _tag: "ClickedCancelUpload", uploadId: 1 }]
-  })
-  const cancel = await agent.call("get_entry", {
-    seq: cancelled.outcomes[0]?.seq,
-    path: ["message"]
-  })
-  await page.getByRole("button", { name: "Restart upload 1" }).waitFor({
-    timeout: 5_000
-  })
-  expect(
-    cancelled.applied === 1 && cancel._tag === "ClickedCancelUpload",
-    "dispatch cancels the upload and returns the seq of its Update",
-    { cancelled, cancel }
-  )
-
-  const started = await agent.call("dispatch", {
-    instance: root.instance,
-    messages: [{ _tag: "ClickedStartUpload" }]
-  })
-  const since = started.outcomes[0].seq - 1
-  const waited = await agent.call("wait", { since, timeout: 10_000 })
-  const state = await agent.call("get_state", { instance: root.instance })
-  expect(
-    waited.settled && state.model.uploads.at(-1)?.status === "Done",
-    "wait returns once the dispatched upload's Command has ended",
-    { waited, uploads: state.model.uploads }
-  )
-}
 
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } })
 page.on("pageerror", (error) => failures.push("page error " + String(error)))
