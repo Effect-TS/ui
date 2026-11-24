@@ -19,6 +19,7 @@ import type * as Renderer from "../../Renderer.ts"
 import * as View from "../../View.ts"
 import { routed } from "../due.ts"
 import * as Executor from "../executor.ts"
+import * as hydrateRun from "../hydrateRun.ts"
 import * as Kernel from "../kernel.ts"
 import * as messageLog from "../messageLog.ts"
 import * as queryCore from "../queryCore.ts"
@@ -212,7 +213,6 @@ export const mount = (
       Effect.uninterruptible(
         Effect.contextWith(
           (ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-            if (options?.state !== undefined) Kernel.notPorted("hydration")
             const root = start(component, props, container, ctx, options)
             return Effect.as(
               Scope.addFinalizer(Context.get(ctx, Scope.Scope), root.close),
@@ -250,10 +250,52 @@ const start = (
     component.definition.name
   )
   let initCommands: ReadonlyArray<unknown> | undefined
+  const state = options?.state
+  const fromStatic = state?.["~static"] === true
+  const waiting = new Map<Kernel.Instance, Parameters<Kernel.Recorder>[1]>()
+  const mountWaiting = (inst: Kernel.Instance) => {
+    const draft = waiting.get(inst)
+    if (draft === undefined) return
+    waiting.delete(inst)
+    if (!inst.closed) recording.record(inst, { ...draft, model: inst.model })
+    checkAdopted()
+  }
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
       draft = { ...draft, commands: initCommands }
       initCommands = undefined
+    }
+    if (hydration !== undefined) {
+      if (draft._tag === "Mounted" && hydration.adopts(inst)) {
+        draft = { ...draft, adopted: true }
+        const env = inst.env
+        const layered =
+          (inst.component as unknown as Component.Any).layer !== undefined &&
+          (state!["~status"] as Record<string, unknown> | undefined)
+              ?.[inst.path] === undefined
+        if (layered || (env.ctx === undefined && env.cause === undefined)) {
+          waiting.set(inst, draft)
+          const bound = queryCore.boundOf(
+            inst.component as unknown as Component.Any
+          )
+          const seq = recording.record(inst, {
+            _tag: "Waiting",
+            props: inst.props,
+            model: draft.model,
+            ...(bound === undefined
+              ? undefined
+              : { queries: inst.results ?? bound.empty })
+          })
+          if (!layered) env.waiting.push(() => mountWaiting(inst))
+          return seq
+        }
+      } else if (draft._tag === "LayerPending" && waiting.has(inst)) {
+        inst.env.waiting.push(() => mountWaiting(inst))
+      } else if (draft._tag === "Unmounted" && waiting.delete(inst)) {
+        const seq = recording.record(inst, draft)
+        checkAdopted()
+        return seq
+      }
     }
     if (
       inst.parent === undefined &&
@@ -281,7 +323,12 @@ const start = (
     context: ctx,
     flush: () => flushes,
     flushing: () => inFlush,
-    buildsPendingSince: building
+    buildsPendingSince: building,
+    hydrated: () =>
+      kernelRoot !== undefined &&
+      hydration?.adopts(kernelRoot.instance) === true,
+    static: fromStatic,
+    navigated: () => closeWindow()
   })
   const ownsHead = options?.head !== false
   // A browser host runs on the kernel's own DOM host. One a test wraps keeps the bridge to it.
@@ -303,6 +350,11 @@ const start = (
     ...base,
     commit: () => {
       base.commit?.()
+      for (const inst of waiting.keys()) {
+        if (inst.env.ctx !== undefined || inst.env.cause !== undefined) {
+          mountWaiting(inst)
+        }
+      }
       routing?.flushed()
       checkIdle()
     },
@@ -332,6 +384,36 @@ const start = (
       report
     }
   }
+  let started = false
+  let firstHeld = 0
+  let adoptedDone = state === undefined
+  let adoptionHead: unknown
+  const adoptedWaiters: Array<() => void> = []
+  let windowClosed = false
+  const closeWindow = () => {
+    windowClosed = true
+    queries.made()?.closeWindow()
+  }
+  const checkAdopted = () => {
+    if (
+      adoptedDone || !started || waiting.size > 0 ||
+      hydration?.settled() === false
+    ) return
+    adoptedDone = true
+    if (firstHeld > 0 || adoptionHead === undefined) adoptionHead = root.head()
+    closeWindow()
+    for (const f of adoptedWaiters.splice(0)) f()
+  }
+  const hydration = state === undefined
+    ? undefined
+    : hydrateRun.make(
+      state,
+      bridged,
+      base,
+      domHost.adopt?.(base, container, "/" + component.definition.name),
+      checkAdopted
+    )
+  const hydratedAt = clock.currentTimeMillisUnsafe()
   const idleWaiters: Array<() => void> = []
   let idleCheck = false
   const checkIdle = () => {
@@ -356,7 +438,13 @@ const start = (
       if (!frozen) recording.tree({ _tag: "FetchStarted", ...event })
     })
     if (server !== undefined) cache.onFetchEnd(checkIdle)
+    const shipped = state?.["~query"]
+    if (shipped !== undefined) {
+      cache.hydrate(shipped, { static: fromStatic, at: hydratedAt })
+      if (windowClosed) cache.closeWindow()
+    }
   })
+  if (state?.["~query"] !== undefined) queries.cache()
   let kernelRoot: Kernel.Root | undefined
   kernelRoot = recording.session(() =>
     Kernel.mount(
@@ -384,6 +472,12 @@ const start = (
             )
           }
           const first = inst.component.init(inst.props)
+          const adopted = hydration?.init(inst, first)
+          if (adopted !== undefined) {
+            return routing === undefined
+              ? adopted
+              : routing.init(inst, adopted, true)
+          }
           if (server !== undefined && first.commands.length > 0) {
             initCommands = first.commands
             return {
@@ -397,6 +491,7 @@ const start = (
           }
           return routing === undefined ? first : routing.init(inst, first)
         },
+        hold: hydration?.hold,
         log: record,
         schedule: (task) => {
           const run = recording.follow()
@@ -429,6 +524,8 @@ const start = (
     )
   )
   inFlush = false
+  firstHeld = hydration?.held().length ?? 0
+  hydration?.end()
   const mounted = kernelRoot
   const instance = mounted.instance
   const tree = instance.tree
@@ -462,9 +559,16 @@ const start = (
           entries: [],
           children: []
         }),
-    adoptionHead: () => undefined,
-    adopted: Effect.void,
-    waiting: () => [],
+    adoptionHead: () => adoptedDone ? adoptionHead : undefined,
+    adopted: Effect.callback<void>((resume) => {
+      if (adoptedDone) resume(Effect.void)
+      else adoptedWaiters.push(() => resume(Effect.void))
+    }),
+    waiting: () => {
+      const out: Array<string> = []
+      for (const inst of waiting.keys()) if (!inst.closed) out.push(inst.path)
+      return hydration === undefined ? out : out.concat(hydration.held())
+    },
     whenIdle: (f: () => void) => {
       idleWaiters.push(f)
       checkIdle()
@@ -480,6 +584,9 @@ const start = (
       return queries.made()
     }
   } satisfies Root & Renderer.Root<any, any>
+  if (firstHeld === 0) adoptionHead = root.head()
+  started = true
+  checkAdopted()
   // Waits until every fiber the tree forked has exited, stopped runs included.
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
     tree.owned === undefined || tree.owned.size === 0

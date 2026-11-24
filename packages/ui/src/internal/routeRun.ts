@@ -34,6 +34,9 @@ export interface Root {
   readonly flush: () => number
   readonly flushing: () => boolean
   readonly buildsPendingSince: (flush: number) => number
+  readonly hydrated?: (() => boolean) | undefined
+  readonly static?: boolean | undefined
+  readonly navigated?: (() => void) | undefined
 }
 
 /**
@@ -44,7 +47,11 @@ export interface Root {
 export interface Routed {
   readonly handle: services.RootHandle
   /** What a new instance starts from: `first`, or the Model history saved for its path, with `init`'s Commands. */
-  readonly init: (inst: Kernel.Instance, first: Kernel.Next) => Kernel.Next
+  readonly init: (
+    inst: Kernel.Instance,
+    first: Kernel.Next,
+    adopted?: boolean
+  ) => Kernel.Next
   /** Whether the instance started from what history saved. */
   readonly restored: (inst: Kernel.Instance) => boolean
   /** Attaches the root to the Router, once it has rendered. */
@@ -305,8 +312,10 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     ;(inst.closers ??= []).push(() => declare(inst, undefined))
   }
   const handle: services.RootHandle = {
-    hydrated: false,
-    static: false,
+    get hydrated() {
+      return root.hydrated?.() ?? false
+    },
+    static: root.static ?? false,
     path: root.path,
     container: root.container,
     flush: root.flush,
@@ -314,21 +323,23 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     snapshot: (out) => {
       if (instance !== undefined) visit(instance, out)
     },
-    navigated: () => {},
+    navigated: () => root.navigated?.(),
     restored: () => {},
     report,
     declare: declare as never
   }
   return {
     handle,
-    init: (inst, first) => {
+    init: (inst, first, adopted) => {
       const view = viewOf(inst)
       if (recording > 0) {
         view.watched = new Set()
         recorded.add(view)
       }
       const component = inst.component as unknown as Component.Any
-      if (component.definition.restore === false) return first
+      if (adopted === true || component.definition.restore === false) {
+        return first
+      }
       const found = hooks.restore(inst.path)
       if (found === undefined) return first
       const exit = Effect.runSyncExit(

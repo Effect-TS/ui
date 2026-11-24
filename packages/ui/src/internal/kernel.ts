@@ -209,6 +209,9 @@ export interface Tree {
     cause: Cause.Cause<unknown>
   ) => void
   readonly init: (inst: Instance) => Next
+  readonly hold:
+    | ((owner: Instance, rec: Rec, path: string, resume: () => void) => boolean)
+    | undefined
   readonly log: Recorder | undefined
   readonly fallback:
     | ((cause: Cause.Cause<unknown>) => View.Node<any, any>)
@@ -930,6 +933,22 @@ const mountChild = (owner: Instance, rec: Rec): void => {
       cause: undefined,
       waiting: []
     }
+  } else if (owner.tree.hold !== undefined) {
+    const at = slot
+    if (
+      owner.tree.hold(
+        owner,
+        rec,
+        (at ?? owner.path) + "/" + segmentOf(component, view.key),
+        () => settle(owner, rec, at)
+      )
+    ) {
+      rec.kids = [create(owner, emptyText)]
+      rec.inst = owner
+      owner.live++
+      born.push(owner, rec)
+      return
+    }
   }
   const child = rec.inst = new Instance(
     owner.tree,
@@ -952,7 +971,10 @@ const settle = (owner: Instance, rec: Rec, at: string | undefined): void => {
   const outer = slot
   slot = at
   try {
-    if (owner.env.ctx === undefined) {
+    if (
+      owner.env.ctx === undefined &&
+      FeatureId in (rec.v as View.Child<any, any>).component
+    ) {
       rec.kids![0] = inFallback(
         owner,
         () =>
@@ -1508,6 +1530,7 @@ export interface Options {
   readonly log?: Recorder | undefined
   readonly fallback?: Tree["fallback"]
   readonly init?: Tree["init"] | undefined
+  readonly hold?: Tree["hold"] | undefined
   readonly schedule?: Tree["schedule"] | undefined
   readonly follow?: Tree["follow"] | undefined
 }
@@ -1526,6 +1549,7 @@ export const mount = (
     host,
     report: options.report,
     init: options.init ?? initOf,
+    hold: options.hold,
     log: options.log,
     fallback: options.fallback,
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".

@@ -7,6 +7,7 @@
  * @internal
  */
 import type * as Renderer from "../../Renderer.ts"
+import type * as hydrateRun from "../hydrateRun.ts"
 import type * as Kernel from "../kernel.ts"
 
 /** @internal */
@@ -23,7 +24,11 @@ export type Make = (
 export let make: Make | undefined
 
 /** @internal */
+export let adopt: hydrateRun.Adopt | undefined
+
+/** @internal */
 // oxlint-disable-next-line effect/no-unused-internal
-export const set = (f: Make): void => {
+export const set = (f: Make, adoptWith?: hydrateRun.Adopt): void => {
   make = f
+  adopt = adoptWith
 }

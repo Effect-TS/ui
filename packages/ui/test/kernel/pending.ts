@@ -74,7 +74,7 @@ export const pending: {
     "Runtime > rejects a different shared owner with the same name at mount":
       "headless components and shared state (step 8)",
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
-      "server rendering and hydration (step 7)"
+      "differs: a malformed `~query` reaches Problems only once a query runner is loaded; this tree loads none, where today's runtime always makes the cache and reports it"
   },
   "SlotStatus.test.ts": {},
   "Slots.test.ts": {
@@ -234,8 +234,6 @@ export const pending: {
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children on the client after hydration > keep the server's Model when the client first hides them":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "scoped children in a receiver that waits for its Layer > keep the server's nodes once the receiver adopts them":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, bare, while the receiver waits":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, by a forwarded builder, while the receiver waits":
@@ -258,11 +256,7 @@ export const pending: {
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > leave the one field drawn after them, which takes an edit once, when moved out of the slot":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "scoped children in a receiver that waits for its Layer > keep the server's nodes of a receiver they draw, when taken out of the document and drawn again while it waits":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > release a receiver that adopted them and was removed, while another still waits":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "scoped children in a receiver that waits for its Layer > let adoption finish when their receiver is removed as they wait for their own Layer in the slot of a scoped child there":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > keep the server's nodes under the predicate their author last wrote them with, when the receiver resumes":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
@@ -282,12 +276,6 @@ export const pending: {
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > start with the order their author last wrote them with, when the receiver resumes (drawn by the server: false)":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "scoped children in a receiver that waits for its Layer > don't start when their author last wrote them out of a headless child's view, as the receiver resumes":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)",
-    "scoped children in a receiver that waits for its Layer > don't start when their author last wrote them out of a slot nobody places, as the receiver resumes":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "scoped children in a receiver that waits for its Layer > start in the order drawn, and only where placed, when the receiver resumes placing neither slot":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > start in the order drawn, and only where placed, when the receiver resumes placing a slot that holds one more":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > start in the order drawn, and only where placed, when the receiver resumes placing its slots the other way around":
@@ -295,8 +283,6 @@ export const pending: {
     "scoped children in a receiver that waits for its Layer > keep the server's Model when first written out of a slot the receiver resumes without":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > are built where the client last drew them, when their state decodes after the receiver resumes":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "scoped children in a receiver that waits for its Layer > don't start when the receiver resumes after a render that wasn't their author's and the predicate is false":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "scoped children in a receiver that waits for its Layer > start from what's left of their state when one made at its key replaces Author, removed as it waited for its Layer":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
@@ -306,28 +292,6 @@ export const pending: {
       "kept children (step 4, blocked on a seam), headless components (step 8)",
     "scoped children of a headless child > a waiting receiver doesn't keep alive the writes its author replaced":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)"
-  },
-  "InfiniteData.test.ts": {
-    "Infinite queries > the server renders the first page, ships the page array, and drops a load more":
-      "server rendering and hydration (step 7)"
-  },
-  "Queries.test.ts": {
-    "a query without onChange > hydrates the server's { model, queries } state without refetching":
-      "server rendering and hydration (step 7)"
-  },
-  "QueryRedacted.test.ts": {
-    "omits reads with Redacted args, success or error schemas from the server cache":
-      "server rendering and hydration (step 7)",
-    "hydrates suspended string according to its schema":
-      "server rendering and hydration (step 7)",
-    "hydrates recursive tree according to its schema":
-      "server rendering and hydration (step 7)",
-    "hydrates suspended secret according to its schema":
-      "server rendering and hydration (step 7)",
-    "hydrates mutual recursion from A according to its schema":
-      "server rendering and hydration (step 7)",
-    "hydrates mutual recursion from B according to its schema":
-      "server rendering and hydration (step 7)"
   },
   "Restore.test.ts": {
     "restore > saves what a function returns, skips false, and restores shared owners with collected reports on Back":
@@ -347,39 +311,17 @@ export const pending: {
     "Router.prefetch > records watches only while a check after a push is outstanding":
       "differs: reads today's runtime's Instance (children, watched), which the kernel's has no equivalent of"
   },
-  "html/BrowserRouter.test.ts": {
-    "BrowserRouter > hydrates a server render when both sides take their props from their own Router":
-      "server rendering and hydration (step 7)",
-    "BrowserRouter > exempts hydrated hash roots, but checks client-only hash roots":
-      "server rendering and hydration (step 7)",
-    "BrowserRouter > exempts roots hydrated from a static render when only the search differs":
-      "server rendering and hydration (step 7)",
-    "BrowserRouter > checks hash roots that cannot adopt a server Model":
-      "server rendering and hydration (step 7)"
-  },
   "html/HistoryRestore.test.ts": {
-    "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a excluded vault a push closed as it waited":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a filtered vault a push closed as it waited":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > a push as a excluded slow form waits writes what its restore keeps into the entry":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > a push as a filtered slow form waits writes what its restore keeps into the entry":
-      "server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > a push as a excluded scoped form waits writes what its restore keeps into the entry":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > a push as a filtered scoped form waits writes what its restore keeps into the entry":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > a push as a filtered late scoped waits writes what its restore keeps into the entry":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back runs a component with restore: false from init while another component waits":
-      "server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a scoped child whose state still decodes after that Back":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores a scoped child drawn by a scoped child":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a slow form a push closed as it waited for its Layer":
-      "server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a scoped form a push closed as it waited for its Layer":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > a scoped child with restore: false the server kept undrawn starts from the server's Model when first drawn":
@@ -388,26 +330,8 @@ export const pending: {
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > a second Back runs a scoped child the server kept undrawn from init, after a push closed its author as it waited":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores what the user typed in a form a push closed as an earlier Back's state decoded":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (open card, whose state still decoded: true)":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (open card, whose state still decoded: false)":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (late contact, whose state still decoded: true)":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form that crossed a push to another entry while its state decoded":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form that crossed a Back to another entry while its state decoded":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores none of a form its parent stopped drawing before a push after an earlier Back":
-      "server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores none of a scoped child a push closed with its waiting author, when its predicate is false at that Back":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores what the user typed, over the server's Model, while another component waits":
-      "server rendering and hydration (step 7)",
-    "history restore of a page whose hydration hasn't settled > Back restores a Model the user set to null":
-      "server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back runs a scoped child an author drew as a push closed it waiting from init, drawn again after the Back settles":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores a scoped child a push closed with its waiting author once: an author made again at its key starts it afresh":
@@ -417,15 +341,31 @@ export const pending: {
     "history restore of a page whose hydration hasn't settled > Back restores no scoped child of an author made after it settled, in a root that still hydrates":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores a scoped child once, in a root that still hydrates: an author made again at its key starts it afresh":
-      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)"
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a excluded vault a push closed as it waited":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a filtered vault a push closed as it waited":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores what the user typed in a form a push closed as an earlier Back's state decoded":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (open card, whose state still decoded: true)":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (open card, whose state still decoded: false)":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (late contact, whose state still decoded: true)":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form that crossed a push to another entry while its state decoded":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form that crossed a Back to another entry while its state decoded":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores none of a form its parent stopped drawing before a push after an earlier Back":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
+    "history restore of a page whose hydration hasn't settled > Back restores a Model the user set to null":
+      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported"
   },
   "html/BrowserHost.test.ts": {
     "BrowserHost > events > a kept scoped child gets the events it fires as it is drawn again":
       "kept children (step 4, blocked on a seam)",
-    "BrowserHost > events > a hydrated instance starts from the server's state, not the history entry's snapshot":
-      "server rendering and hydration (step 7)",
-    "BrowserHost > events > an element hydration rebuilds gets the events it fires as it goes in":
-      "server rendering and hydration (step 7)",
     "BrowserHost > drag and drop > a drag between two elements carries the source's data, and the source hears it was dropped":
       "drag and drop on the kernel DOM host (unscheduled)",
     "BrowserHost > drag and drop > a drag of a type no target accepts is left alone, so the browser refuses the drop":
@@ -461,7 +401,7 @@ export const pending: {
     "BrowserHost > popovers > showing a modal dialog or a popover that takes focus leaves the page's scroll where it was":
       "modal dialogs and popovers on the kernel DOM host (unscheduled)",
     "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
-      "server rendering and hydration (step 7)"
+      "hydration (step 7, unfinished): a style mismatch keeps the server's style text, where today's replaces it (cause not investigated)"
   },
   "html/Composed.test.ts": {
     "p.child > an owned child's event goes through the declaring component's update, and replays from the log":
@@ -475,10 +415,6 @@ export const pending: {
     "p.child on the server > the client adopts the server's render of every owned child":
       "server rendering and hydration (step 7), headless parts (step 8)"
   },
-  "html/Head.test.ts": {
-    "BrowserHost head > validates head tag and document data names before serialization, adoption and updates":
-      "server rendering and hydration (step 7)"
-  },
   "html/Forward.test.ts": {
     "children > a part's children come before the consumer's, in the order the parts were applied":
       "headless parts (step 8)",
@@ -486,8 +422,6 @@ export const pending: {
       "headless parts (step 8)"
   },
   "html/HtmlServer.test.ts": {
-    "HtmlServer > drops unsafe attribute names on the server, fresh client and hydrated client":
-      "hydration (step 7)",
     "HtmlServer > reports across hydration > delivers each report once: the same report, with a Redacted message variant":
       "shared state (step 8), hydration (step 7)",
     "HtmlServer > reports across hydration > delivers each report once: a report that changes on the client":
@@ -498,122 +432,47 @@ export const pending: {
       "shared state (step 8), hydration (step 7)",
     "HtmlServer > reports across hydration > adopts the server's nodes when the last message ships":
       "shared state (step 8), hydration (step 7)",
-    "HtmlServer > folds HTML attribute names with last-write wins, but preserves SVG casing":
-      "hydration (step 7)",
-    "HtmlServer > keeps winning HTML aliases through updates and removals without folding SVG attributes":
-      "hydration (step 7)",
-    "HtmlServer > renders the routed example with its route data, and hydration adopts it":
-      "hydration (step 7)",
-    "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":
-      "hydration (step 7)",
-    "HtmlServer > a hydrated open dialog's close belongs to that showing, not to a modal shown since":
-      "hydration (step 7)",
-    "HtmlServer > renders a popover closed with its mode, and hydration shows it":
-      "hydration (step 7)",
-    "HtmlServer > hydrates what missed the budget: a fetch in flight and a deferred Layer":
-      "hydration (step 7)",
-    "HtmlServer > starts no fetch with a budget of 0, and the client fetches what missed it":
-      "hydration (step 7)",
-    "HtmlServer > reports ServerCommandIssued every time, and fails ssr with it":
-      "hydration (step 7)",
-    "HtmlServer > keeps an instance whose Layer is still building inert until it adopts, then fires onMount":
-      "hydration (step 7)",
-    "HtmlServer > keeps what the user changed before adoption > reports an edit made while the instance waits for its Layer":
-      "hydration (step 7)",
-    "HtmlServer > keeps what the user changed before adoption > reports edits made before the client mounts: a checkbox and a focused field":
-      "hydration (step 7)",
-    "HtmlServer > keeps what the user changed before adoption > initializes untouched radios and a select":
-      "hydration (step 7)",
-    "HtmlServer > keeps what the user changed before adoption > keeps a radio picked outside its form":
-      "hydration (step 7)",
-    "HtmlServer > a keyed provide selects its Layer from the Model the client adopts":
-      "hydration (step 7)",
-    "HtmlServer > rebuilds nothing outside the instance whose nodes don't match":
-      "hydration (step 7)",
-    "HtmlServer > a mismatch after a row's own nodes keeps the rows beside it, and starts nothing twice":
-      "hydration (step 7)",
-    "HtmlServer > places what a child builds fresh among the server's nodes":
-      "hydration (step 7)",
-    "HtmlServer > places what the root's child builds fresh among the server's nodes":
-      "hydration (step 7)",
-    "HtmlServer > places what a child that waited for its Layer builds fresh among the server's nodes":
-      "hydration (step 7)",
-    "HtmlServer > places what a child that waited for its Layer builds fresh in place of the server's nodes":
-      "hydration (step 7)",
-    "HtmlServer > keeps the nodes before a mismatch in the view it's in":
-      "hydration (step 7)",
-    "HtmlServer > keeps the rows before a node the view doesn't render, and builds the rest once":
-      "hydration (step 7)",
-    "HtmlServer > fails the parent whose view has two children at one path when it adopts":
-      "hydration (step 7)",
     "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over nothing inherited":
       "shared state (step 8)",
     "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over a value that can't be written inherited":
       "shared state (step 8)",
     "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over a setter inherited":
       "shared state (step 8)",
-    "HtmlServer > writes only text inside a textarea, and hydration rebuilds just that text":
-      "hydration (step 7)",
-    "HtmlServer > judges adoption when it commits, before onMount updates replace nodes":
-      "hydration (step 7)",
-    "HtmlServer > keeps marker paths through the parser's normalisation of CR, NUL and lone surrogates":
-      "hydration (step 7)",
-    "HtmlServer > compares the client's first fold, so a mount update while an instance waits isn't a mismatch":
-      "hydration (step 7)",
-    "HtmlServer > compares the client's first fold, so a head that mounts while an instance waits isn't a mismatch":
-      "hydration (step 7)",
-    "HtmlServer > compares the head the client evaluated, over the instance tree, not one rebuilt from paths":
-      "hydration (step 7)",
+    "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":
+      "modal dialogs and popovers on KernelDom (blocked seam)",
+    "HtmlServer > a hydrated open dialog's close belongs to that showing, not to a modal shown since":
+      "modal dialogs and popovers on KernelDom (blocked seam)",
+    "HtmlServer > renders a popover closed with its mode, and hydration shows it":
+      "modal dialogs and popovers on KernelDom (blocked seam)",
+    "HtmlServer > keeps what the user changed before adoption > reports an edit made while the instance waits for its Layer":
+      "hydration (step 7, unfinished): form edits made before adoption (value, checked, radios) aren't kept or reported",
+    "HtmlServer > keeps what the user changed before adoption > reports edits made before the client mounts: a checkbox and a focused field":
+      "hydration (step 7, unfinished): form edits made before adoption (value, checked, radios) aren't kept or reported",
+    "HtmlServer > keeps what the user changed before adoption > keeps a radio picked outside its form":
+      "hydration (step 7, unfinished): form edits made before adoption (value, checked, radios) aren't kept or reported",
+    "HtmlServer > places what a child builds fresh among the server's nodes":
+      "hydration (step 7, unfinished): a child built fresh among the server's nodes keeps a stray server node (`[\"go\",\"tail\"]` where today's has `[\"go\"]`; cause not investigated)",
+    "HtmlServer > places what the root's child builds fresh among the server's nodes":
+      "hydration (step 7, unfinished): a child built fresh among the server's nodes keeps a stray server node (`[\"go\",\"tail\"]` where today's has `[\"go\"]`; cause not investigated)",
+    "HtmlServer > places what a child that waited for its Layer builds fresh among the server's nodes":
+      "hydration (step 7, unfinished): a child built fresh among the server's nodes keeps a stray server node (`[\"go\",\"tail\"]` where today's has `[\"go\"]`; cause not investigated)",
     "HtmlServer > compares the head a waiting child's subtree had with the props it was placed with":
-      "hydration (step 7)",
+      "hydration (step 7, unfinished): a child waiting for its Layer adopts with its parent's current props and slots, not those it was placed with (seen in the 'panel b' case; the other two not investigated)",
     "HtmlServer > adopts a waiting child with the slots it was placed with, and applies the new ones after":
-      "hydration (step 7)",
-    "HtmlServer > compares the client's first fold, so removing an instance while another waits isn't a mismatch":
-      "hydration (step 7)",
-    "HtmlServer > an instance removed while it waits logs Waiting, then Unmounted, and nothing once its Layer would be ready":
-      "hydration (step 7)",
+      "hydration (step 7, unfinished): a child waiting for its Layer adopts with its parent's current props and slots, not those it was placed with (seen in the 'panel b' case; the other two not investigated)",
     "HtmlServer > drops the placement held for a waiting instance its parent removes, and never applies it":
-      "hydration (step 7)",
-    "HtmlServer > calls a title template once in the server's fold and once in the client's first fold":
-      "hydration (step 7)",
-    "HtmlServer > leaves an instance its own title template fails out of the client's fold, as the server does":
-      "hydration (step 7)",
-    "HtmlServer > calls a title template once per fold": "hydration (step 7)",
+      "hydration (step 7, unfinished): a child waiting for its Layer adopts with its parent's current props and slots, not those it was placed with (seen in the 'panel b' case; the other two not investigated)",
     "HtmlServer > recovers from mismatches on marker-free single-element children":
-      "hydration (step 7)",
-    "HtmlServer > hydrates single-element children wrapped in legacy marker pairs":
-      "hydration (step 7)",
-    "HtmlServer > ssr() includes the rebuilt node's tag when a marker-free child mismatches":
-      "hydration (step 7)",
-    "HtmlServer queries > fetches each key once per request and ships every settled entry, typed Failures included":
-      "hydration (step 7)",
-    "HtmlServer queries > runs rounds: an onChange message that changes the args fetches the next key":
-      "hydration (step 7)",
-    "HtmlServer queries > ships the k of N keys of a keyed field that settled in budget, and the client fetches the rest":
-      "hydration (step 7)",
-    "HtmlServer queries > fails ssr when an entry doesn't encode, and doesn't ship it":
-      "hydration (step 7)",
-    "HtmlServer queries > fails ssr when the client fetches a hydrated entry inside the window, unless static":
-      "hydration (step 7)",
-    "HtmlServer queries > closes the window at the first navigation, before a waiting instance adopts":
-      "hydration (step 7)",
-    "HtmlServer queries > runs a push's Router.prefetch after the navigation closes the fetch-free window":
-      "hydration (step 7)",
-    "HtmlServer queries > allows a caller-only fetch inside the window: it stores nothing":
-      "hydration (step 7)",
-    "HtmlServer queries > spends the whole budget on the client before failing, for a sleep its clock didn't see":
-      "hydration (step 7)",
-    "HtmlServer queries > fails ssr naming the instances still waiting for their Layer when the budget is spent":
-      "hydration (step 7)"
-  },
-  "html/StateCodec.test.ts": {
-    "state codecs > ships a File in a Model and adopts a Model that decodes asynchronously":
-      "hydration (step 7)",
-    "state codecs > restores a state that encodes later from memory only, and one that decodes later once decoded":
-      "hydration (step 7)"
+      "hydration (step 7, unfinished): a mismatch on a marker-free single-element child replaces a different node than today's (cause not investigated)"
   },
   "html/ViewTransition.test.ts": {
     "view transitions > a mid-flush route transition commits once across callback, freeze, and close":
       "differs: with a route transition held mid-flush the kernel queues no flush task, and a root closed while it holds commits nothing, where today's runtime commits the held update"
+  },
+  "html/StateCodec.test.ts": {
+    "state codecs > ships a File in a Model and adopts a Model that decodes asynchronously":
+      "hydration (step 7, unfinished): a root whose state decodes only asynchronously isn't held; `Options.hold` holds children, and holding the root means deferring `Kernel.mount` behind the root handle",
+    "state codecs > restores a state that encodes later from memory only, and one that decodes later once decoded":
+      "hydration (step 7, unfinished): history restore decodes saved state synchronously only (`routeRun.init`), so state that decodes later isn't restored"
   }
 }

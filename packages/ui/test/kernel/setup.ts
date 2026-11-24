@@ -1,3 +1,4 @@
+import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
 import * as browserHosts from "@effect/ui/html/internal/browserHosts"
 import * as KernelDom from "@effect/ui/html/KernelDom"
 import * as domHost from "@effect/ui/internal/next/domHost"
@@ -7,13 +8,15 @@ import { afterAll, beforeEach, expect } from "vitest"
 import { pending } from "./pending.ts"
 
 // A host `BrowserHost.makeHost` made runs on the kernel's DOM host. One a test wraps keeps the bridge to it.
-domHost.set((host, container, options) =>
-  browserHosts.made.has(host) && (container as Node).nodeType !== undefined
-    ? KernelDom.makeHost(container as Element, {
-      head: options.head ? KernelDom.syncHead : undefined,
-      step: options.step
-    })
-    : undefined
+domHost.set(
+  (host, container, options) =>
+    browserHosts.made.has(host) && (container as Node).nodeType !== undefined
+      ? KernelDom.makeHost(container as Element, {
+        head: options.head ? KernelDom.syncHead : undefined,
+        step: options.step
+      })
+      : undefined,
+  HtmlHydrate.adopt
 )
 
 const nameOf = (task: RunnerTask): string => {
@@ -43,7 +46,11 @@ let file: RunnerTestFile | undefined
 beforeEach((context) => {
   file = context.task.file
   const reason = pendingIn(file)[nameOf(context.task)]
-  if (reason !== undefined) context.skip(`not ported yet: ${reason}`)
+  if (
+    reason !== undefined && globalThis.process?.env.KERNEL_UNPEND === undefined
+  ) {
+    context.skip(`not ported yet: ${reason}`)
+  }
 })
 
 afterAll(() => {
