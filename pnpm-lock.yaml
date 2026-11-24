@@ -301,12 +301,18 @@ importers:
       '@effect/vitest':
         specifier: ^4.1.4
         version: 4.1.4(effect@4.1.4)(vitest@5.1.0)
+      '@tailwindcss/vite':
+        specifier: ^4.3.5
+        version: 4.3.5(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
       foldkit:
         specifier: 0.171.0
         version: 0.171.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
       shiki:
         specifier: ^4.6.0
         version: 4.6.0
+      tailwindcss:
+        specifier: ^4.3.5
+        version: 4.3.5
       vite:
         specifier: ^8.3.6
         version: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)

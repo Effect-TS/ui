@@ -5,25 +5,19 @@ import { Effect } from "effect"
 import { TestClock } from "effect/testing"
 import { Diagram } from "./Diagram.ts"
 
-const classed = (name: string): Locator.Locator => ({
-  description: `.${name}`,
-  all: (root) =>
-    Locator.elements(root).filter((node) =>
-      node.attrs?.class?.split(" ").includes(name)
-    )
-})
+const highlighted = Locator.attr("data-active")
 
 const panel = (name: string) => HtmlLocator.role("group", { name })
 const steps = (name: string) =>
-  Locator.inside(panel(name), classed("diagram-step"))
+  Locator.inside(panel(name), HtmlLocator.role("button"))
 const current = (name: string) =>
   Locator.inside(panel(name), Locator.attr("aria-current", "step"))
 const announced = (name: string) =>
   Locator.inside(panel(name), Locator.attr("aria-live", "polite"))
 const active = (name: string) =>
-  Locator.inside(panel(name), classed("diagram-node-active"))
+  Locator.inside(panel(name), highlighted)
 const activeName = (name: string) =>
-  Locator.inside(active(name), classed("diagram-name"))
+  Locator.inside(active(name), Locator.attr("data-part", "name"))
 const send = HtmlLocator.role("button", { name: "Send Message" })
 
 interface Pointer<E> {
@@ -58,8 +52,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.expect(steps("Effect UI")).toHaveCount(3)
         yield* play.expect(Locator.attr("aria-current", "step"))
           .toBeAbsent()
-        yield* play.expect(classed("diagram-node-active"))
-          .toBeAbsent()
+        yield* play.expect(highlighted).toBeAbsent()
       }))
 
     it.effect("lists fewer Foldkit 0.x steps for a destination nearer the root", () =>
@@ -134,8 +127,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* TestClock.adjust("1 millis")
         yield* play.expect(Locator.attr("aria-current", "step"))
           .toBeAbsent()
-        yield* play.expect(classed("diagram-node-active"))
-          .toBeAbsent()
+        yield* play.expect(highlighted).toBeAbsent()
         yield* play.expect(steps("Foldkit 0.x")).toHaveCount(8)
         yield* play.expect(steps("Effect UI")).toHaveCount(3)
       }))

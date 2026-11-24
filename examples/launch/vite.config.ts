@@ -1,4 +1,5 @@
 import { markdown } from "@effect/ui/html/MarkdownVite"
+import tailwindcss from "@tailwindcss/vite"
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 import { codeToTokens } from "shiki"
@@ -122,6 +123,7 @@ const snippets = (): Plugin => {
 
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     snippets(),
     markdown({ islands: Islands, frontmatter: Frontmatter })
   ]

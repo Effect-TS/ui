@@ -25,6 +25,12 @@ export const DelayReset = Command.make(
     )
 )
 
+export const button = [
+  "min-w-9 cursor-pointer rounded-md border border-border-strong",
+  "bg-background px-3 py-1.5 text-control font-medium",
+  "transition-[border-color] hover:border-foreground"
+].join(" ")
+
 export const Counter = Component.define({
   name: "Counter",
   // Required, with no default. When false, the Model is discarded
@@ -68,17 +74,22 @@ export const Counter = Component.define({
     )
   ],
   view: (h, model) =>
-    h.div.class("counter").children(
-      h.output.class("count").children(String(model.count)),
+    h.div.class("inline-flex flex-wrap items-center gap-2").children(
+      h.output.class(
+        "min-w-[3ch] text-center font-mono text-lg",
+        "font-semibold tabular-nums"
+      ).children(String(model.count)),
       Button(h, { onPress: CounterMessage.ClickedIncrement() })
-        .children("Increment"),
+        .class(button).children("Increment"),
       Button(h, { onPress: CounterMessage.ClickedResetAfterDelay() })
-        .children(
+        .class(button).children(
           // True while a DelayReset Command is running. The runtime
           // tracks that, so the Model doesn't need a flag for it.
           h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
         ),
       Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })
-        .children(model.isAutoCounting ? "Stop" : "Auto-count")
+        .class(button).children(
+          model.isAutoCounting ? "Stop" : "Auto-count"
+        )
     )
 })

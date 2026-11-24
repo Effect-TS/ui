@@ -90,30 +90,72 @@ export const Nav = Component.define({
       props: { orientation: "vertical" },
       view: (menu) =>
         menu.root(
-          h.nav.class("nav").attr("aria-label", "On this page")
+          h.nav.class(
+            "sticky top-0 z-10 leading-[1.4]",
+            "rail:max-h-screen rail:w-(--nav-rail) rail:self-start",
+            "rail:justify-self-end rail:overflow-y-auto",
+            "rail:pt-[clamp(56px,12vh,128px)] rail:pb-6 rail:pl-5"
+          ).attr("aria-label", "On this page")
         )
           .children(
-            h.p.class("nav-title").attr("aria-hidden", "true")
+            h.p.class(
+              "text-sm max-rail:hidden",
+              "rail:mb-3 rail:text-[0.8125rem] rail:font-semibold"
+            ).attr("aria-hidden", "true")
               .children("On this page"),
             Button(h, {
               element: h.button.ref(Toggle),
               onPress: NavMessage.ClickedToggle()
-            }).class("nav-toggle").attrs({
+            }).class(
+              "peer flex h-(--nav-bar) w-full cursor-pointer",
+              "items-center gap-2.5 border-b border-border",
+              "bg-background px-(--nav-inset) text-start",
+              "text-muted-foreground rail:hidden",
+              "focus-visible:-outline-offset-2",
+              "after:ms-auto after:size-[7px] after:flex-none",
+              "after:border-r-[1.5px] after:border-b-[1.5px]",
+              "after:border-current after:content-['']",
+              "after:transform-[translateY(-2px)_rotate(45deg)]",
+              "aria-expanded:after:transform-[translateY(2px)_rotate(-135deg)]",
+              "motion-safe:after:transition-[transform]",
+              "motion-safe:after:ease-out-expo"
+            ).attrs({
               "aria-expanded": String(model.isOpen),
               "aria-controls": list
             }).children(
-              h.span.children("On this page"),
+              h.span.class("text-sm whitespace-nowrap").children(
+                "On this page"
+              ),
               " ",
               current &&
-                h.span.class("nav-current").children(current.label)
+                h.span.class(
+                  "min-w-0 truncate text-sm font-[560] text-foreground"
+                ).children(current.label)
             ),
-            menu.list(h.ul.id(list).class("nav-list")).children(
+            menu.list(
+              h.ul.id(list).class(
+                "max-rail:absolute max-rail:inset-x-0 max-rail:top-full",
+                "max-rail:hidden max-rail:peer-aria-expanded:block",
+                "max-rail:max-h-[calc(100dvh-var(--nav-bar))]",
+                "max-rail:overflow-y-auto max-rail:border-b",
+                "max-rail:border-border max-rail:bg-background",
+                "max-rail:px-(--nav-inset) max-rail:pt-3 max-rail:pb-4",
+                "max-rail:[box-shadow:0_16px_24px_-16px_var(--color-ring)]"
+              )
+            ).children(
               ...sections.map(({ id, label, isNested }) =>
                 menu.item(h.li.key(id)).children(
                   menu.link({
                     element: h.a.class(
-                      "nav-link",
-                      isNested && "nav-nested"
+                      "block border-s-2 border-border text-sm",
+                      "text-muted-foreground hover:text-foreground",
+                      "aria-[current]:border-foreground",
+                      "aria-[current]:text-foreground",
+                      "max-rail:py-2.5 max-rail:pe-3.5",
+                      "rail:py-[5px] rail:text-[0.8125rem]",
+                      isNested
+                        ? "max-rail:ps-[30px] rail:ps-[26px]"
+                        : "max-rail:ps-3.5 rail:ps-3"
                     ).attr("href", `#${id}`).onClick(
                       NavMessage.ClickedSection()
                     ),

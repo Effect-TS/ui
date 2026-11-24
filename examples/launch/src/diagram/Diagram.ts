@@ -1,3 +1,4 @@
+import { srOnly, wide } from "#components/Classes"
 import {
   Component,
   Subscription,
@@ -48,15 +49,27 @@ const Node = <M>(
   name: Name
 ) =>
   h.div.class(
-    "diagram-node",
-    side.plain.includes(name) && "diagram-node-plain",
-    highlighted.includes(name) && "diagram-node-active"
-  )
+    "group/node flex min-w-[min(100%,7.5rem)] flex-col items-center",
+    "self-center rounded-md border border-border-strong",
+    "bg-background px-[3px] py-1.5 text-center",
+    side.plain.includes(name) && "border-dashed",
+    "data-[active]:border-solid data-[active]:border-accent",
+    "data-[active]:bg-accent data-[active]:text-accent-foreground",
+    "motion-safe:transition-[background-color,border-color,color]",
+    "motion-safe:duration-200"
+  ).attr("data-active", highlighted.includes(name) ? "" : undefined)
     .children(
-      h.span.class("diagram-name").children(
+      h.span.class(
+        "font-mono text-[0.8125rem]/[1.4] font-semibold",
+        "font-features-[normal]"
+      ).attr("data-part", "name").children(
         name === "Root" ? side.rootName : name
       ),
-      h.span.class("diagram-role").children(side.roles[name])
+      h.span.class(
+        "text-[0.625rem]/[1.3] text-muted-foreground",
+        "group-data-[active]/node:text-inherit",
+        "motion-safe:transition-[color] motion-safe:duration-200"
+      ).children(side.roles[name])
     )
 
 const Panel = (
@@ -67,23 +80,43 @@ const Panel = (
   const active = model[side.id]
   const steps = side.steps(model.choice)
   const highlighted = active === null ? [] : steps[active].nodes
-  return h.div.class("diagram-panel").attrs({
+  return h.div.class(
+    "@container/diagram-panel flex min-w-0 flex-col rounded-lg",
+    "border border-border bg-muted p-4 diagram-medium:p-3"
+  ).attrs({
     role: "group",
     "aria-label": side.title
   }).children(
-    h.p.class("diagram-title").children(side.title),
-    h.p.class("diagram-subtitle").children(side.subtitle),
-    h.div.class("diagram-tree").attr("aria-hidden", "true").children(
+    h.p.class("text-[0.9375rem]/[1.4] font-semibold text-pretty")
+      .children(side.title),
+    h.p.class(
+      "mt-0.5 text-sm/[1.4] text-pretty text-muted-foreground"
+    ).children(side.subtitle),
+    h.div.class("mt-4 flex min-w-0 flex-col").attr(
+      "aria-hidden",
+      "true"
+    ).children(
       Node(h, side, highlighted, "Root"),
-      h.div.class("diagram-stem"),
+      h.div.class("h-4.5 w-px self-center bg-border-strong"),
       Node(h, side, highlighted, "A"),
-      h.div.class("diagram-fork"),
-      h.div.class("diagram-children").children(
+      h.div.class(
+        "relative mx-[calc((100%-8px)/4)] h-4.5",
+        "before:absolute before:top-0 before:bottom-1/2",
+        "before:left-[calc(50%-0.5px)] before:border-l",
+        "before:border-border-strong before:content-['']",
+        "after:absolute after:inset-x-0 after:top-1/2 after:bottom-0",
+        "after:border-x after:border-t after:border-border-strong",
+        "after:content-['']"
+      ),
+      h.div.class(
+        "grid grid-cols-2 gap-2 *:min-w-0 *:self-stretch",
+        "panel-narrow:gap-1.5"
+      ).children(
         Node(h, side, highlighted, "A1"),
         Node(h, side, highlighted, "A2")
       )
     ),
-    h.ol.class("diagram-steps").children(
+    h.ol.class("mt-4 flex flex-col gap-0.5").children(
       ...steps.map((step, index) =>
         h.li.key(String(index)).children(
           Button(h, {
@@ -91,11 +124,29 @@ const Panel = (
               side: side.id,
               index
             })
-          }).class("diagram-step").attr(
+          }).class(
+            "group/step grid w-full cursor-pointer items-start gap-2",
+            "grid-cols-[1.5rem_minmax(0,1fr)] rounded-md border",
+            "border-transparent px-2 py-1.5 text-start text-sm/[1.5]",
+            "font-features-[normal] hover:border-border-strong",
+            "aria-[current]:border-accent",
+            "aria-[current]:bg-background",
+            "motion-safe:transition-[background-color,border-color]",
+            "motion-safe:duration-200"
+          ).attr(
             "aria-current",
             index === active ? "step" : undefined
           ).children(
-            h.span.class("diagram-step-number").children(
+            h.span.class(
+              "grid h-[1.5rem] place-items-center rounded-[50%]",
+              "border border-border-strong pt-0.5 font-mono",
+              "text-xs/none font-semibold",
+              "group-aria-[current]/step:border-accent",
+              "group-aria-[current]/step:bg-accent",
+              "group-aria-[current]/step:text-accent-foreground",
+              "motion-safe:transition-[background-color,border-color,color]",
+              "motion-safe:duration-200"
+            ).children(
               String(index + 1)
             ),
             h.span.children(step.text)
@@ -103,11 +154,12 @@ const Panel = (
         )
       )
     ),
-    h.p.class("sr-only").attr("aria-live", "polite").children(
-      active === null
-        ? ""
-        : `Step ${active + 1}: ${steps[active].text}`
-    )
+    h.p.class(srOnly, "text-pretty").attr("aria-live", "polite")
+      .children(
+        active === null
+          ? ""
+          : `Step ${active + 1}: ${steps[active].text}`
+      )
   )
 }
 
@@ -172,8 +224,11 @@ export const Diagram = Component.define({
   ],
   view: (h, model) => {
     const scenario = scenarios[h.props.scenario]
-    return h.figure.class("diagram wide").children(
-      h.div.class("diagram-controls").children(
+    return h.figure.class(
+      wide,
+      "@container/diagram flex flex-col gap-4 [--wide:920px]"
+    ).children(
+      h.div.class("flex flex-wrap items-end gap-3").children(
         Select(h, {
           props: {
             open: model.isSelectOpen,
@@ -196,21 +251,55 @@ export const Diagram = Component.define({
             Settled: () => undefined
           },
           view: (select) =>
-            h.div.class("diagram-select").children(
-              select.label(h.div.class("diagram-label")).children(
-                scenario.label
-              ),
-              select.trigger(h.button.class("diagram-trigger"))
+            h.div.class("flex flex-col gap-1.5").children(
+              select.label(h.div.class("text-sm font-medium"))
+                .children(
+                  scenario.label
+                ),
+              select.trigger(
+                h.button.class(
+                  "flex min-w-42 cursor-pointer items-center",
+                  "justify-between gap-3 rounded-md border",
+                  "border-border-strong bg-background px-3 py-1.5",
+                  "font-mono text-control font-medium text-foreground",
+                  "font-features-[normal]",
+                  "hover:border-muted-foreground",
+                  "focus-visible:outline-accent",
+                  "data-[popup-open]:border-muted-foreground",
+                  "motion-safe:transition-[border-color,box-shadow]",
+                  "motion-safe:duration-150"
+                )
+              )
                 .children(
                   select.value(h.span),
-                  select.icon(h.span.class("diagram-chevron"))
+                  select.icon(
+                    h.span.class(
+                      "-mt-[3px] size-[7px] border-r-[1.5px]",
+                      "border-b-[1.5px] border-muted-foreground",
+                      "transform-[rotate(45deg)]"
+                    )
+                  )
                 ),
-              select.positioner(h.div.class("diagram-positioner"))
+              select.positioner(
+                h.div.class("overflow-visible bg-transparent")
+              )
                 .children(
-                  select.popup(h.div.class("diagram-popup")).children(
+                  select.popup(
+                    h.div.class(
+                      "mt-1 min-w-(--anchor-width) rounded-lg border",
+                      "border-border-strong bg-background p-1",
+                      "[box-shadow:0_8px_24px_-8px_oklch(0%_0_0/0.2)]"
+                    )
+                  ).children(
                     ...scenario.choices.map((value) =>
                       select.item({
-                        element: h.div.class("diagram-item"),
+                        element: h.div.class(
+                          "cursor-default rounded-[5px] px-2.5 py-1.5",
+                          "font-mono text-control font-medium",
+                          "text-foreground font-features-[normal]",
+                          "not-first:mt-0.5 data-[highlighted]:bg-muted",
+                          "data-[selected]:bg-wash"
+                        ),
                         value
                       }).children(
                         select.itemText(h.div).children(value)
@@ -221,10 +310,20 @@ export const Diagram = Component.define({
             )
         }),
         Button(h, { onPress: DiagramMessage.ClickedSend() })
-          .class("diagram-send")
+          .class(
+            "cursor-pointer rounded-md border border-foreground",
+            "bg-foreground px-3.5 py-1.5 text-control font-medium",
+            "text-background font-features-[normal]",
+            "hover:border-prose-foreground hover:bg-prose-foreground",
+            "focus-visible:outline-accent active:translate-y-px",
+            "motion-safe:transition-[background-color,border-color]",
+            "motion-safe:duration-150"
+          )
           .children(scenario.action)
       ),
-      h.div.class("diagram-panels").children(
+      h.div.class(
+        "grid grid-cols-2 gap-4 diagram-narrow:grid-cols-1"
+      ).children(
         Panel(h, scenario.sides[0], model),
         Panel(h, scenario.sides[1], model)
       )

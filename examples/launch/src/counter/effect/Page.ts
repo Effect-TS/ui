@@ -21,7 +21,7 @@ export const Page = Component.define({
     })
   },
   view: (h, model) =>
-    h.div.class("counter-page").children(
+    h.div.class("grid justify-items-start gap-3").children(
       h.button
         .onClick(PageMessage.ClickedToggleCounter())
         .children(

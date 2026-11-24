@@ -7,6 +7,12 @@ const CounterMessage = UiSchema.TaggedEnum({
   ClickedIncrement: {}
 })
 
+const button = [
+  "min-w-9 cursor-pointer rounded-md border border-border-strong",
+  "bg-background px-3 py-1.5 text-control font-medium",
+  "transition-[border-color] hover:border-foreground"
+].join(" ")
+
 export const Counter = Component.define({
   name: "Counter",
   scoped: false,
@@ -21,14 +27,19 @@ export const Counter = Component.define({
     ClickedIncrement: ($) => ({ count: $.model.count + 1 })
   },
   view: (h, model) =>
-    h.div.class("counter").children(
-      h.span.class("label").children(h.props.label),
+    h.div.class("inline-flex flex-wrap items-center gap-2").children(
+      h.span.class("font-medium").children(h.props.label),
       h.button
+        .class(button)
         .attr("aria-label", "Decrement")
         .onClick(CounterMessage.ClickedDecrement())
         .children("-"),
-      h.output.class("count").children(String(model.count)),
+      h.output.class(
+        "min-w-[3ch] text-center font-mono text-lg",
+        "font-semibold tabular-nums"
+      ).children(String(model.count)),
       h.button
+        .class(button)
         .attr("aria-label", "Increment")
         .onClick(CounterMessage.ClickedIncrement())
         .children("+")

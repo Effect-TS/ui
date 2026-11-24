@@ -22,8 +22,10 @@
   },
   "devDependencies": {
     "@effect/vitest": "^4.1.4",
+    "@tailwindcss/vite": "^4.3.5",
     "foldkit": "0.171.0",
     "shiki": "^4.6.0",
+    "tailwindcss": "^4.3.5",
     "vite": "^8.3.6"
   }
 }
