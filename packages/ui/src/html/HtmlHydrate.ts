@@ -242,6 +242,7 @@ const between = (
   let missing = false
   const ours = new WeakSet<Node>()
   let made = false
+  let propped: Node | undefined
 
   const scopeOf = (node: Node): Node => {
     const list = node.parentNode!
@@ -363,8 +364,10 @@ const between = (
       element.removeChild(node)
       node = following
     }
-    for (const name of element.getAttributeNames()) {
-      if (!names.includes(name)) element.removeAttribute(name)
+    if (propped === element || element.attributes.length !== names.length) {
+      for (const name of element.getAttributeNames()) {
+        if (!names.includes(name)) element.removeAttribute(name)
+      }
     }
     if (inside) {
       while (
@@ -432,7 +435,7 @@ const between = (
         const element = node as Element
         const normalized = attributeName(name, element.namespaceURI === SVG)
         if (normalized === undefined) return
-        names.push(normalized)
+        if (value !== undefined) names.push(normalized)
         const served = element.getAttribute(normalized)
         if (value === undefined ? served === null : served === value) return
         return base.setAttr(node, name, value, served ?? undefined)
@@ -441,7 +444,10 @@ const between = (
     },
     setProp(node, name, value) {
       const names = written.get(node)
-      if (names !== undefined) names.push(name.toLowerCase())
+      if (names !== undefined) {
+        names.push(name.toLowerCase())
+        propped = node
+      }
       if (edits.keeps(node, name, value)) {
         return keeping(node, name, value, () => base.setProp(node, name, value))
       }
