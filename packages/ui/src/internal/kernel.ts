@@ -401,9 +401,11 @@ const fallbackOf = (
 const inFallback = <A>(owner: Instance, f: () => A): A => {
   const outer = fallen
   fallen = owner
-  const out = f()
-  fallen = outer
-  return out
+  try {
+    return f()
+  } finally {
+    fallen = outer
+  }
 }
 
 const rootFallback = (
