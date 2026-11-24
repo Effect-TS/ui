@@ -40,6 +40,22 @@ const Counter = CounterDef.make({
   view: (h, model) => h.el("p", [String(model.n)])
 })
 
+const Emptying = CounterDef.make({
+  init: () => ({ n: 0, seen: [] }),
+  update: ($, msg) => {
+    if (msg._tag === "Logged") return $.model
+    const updates = [
+      CounterDef.update(($, msg) => {
+        updates.length = 0
+        return bump($, msg)
+      }),
+      bump
+    ]
+    return $.combine(updates)
+  },
+  view: (h, model) => h.el("p", [String(model.n)])
+})
+
 // `$.combine` in a slice runs `bump` with the message the slice was given.
 const onLogged = CounterDef.update("Logged", ($) => $.combine([bump]))
 
@@ -61,6 +77,17 @@ describe("Component.define", () => {
         .emitted([Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 })])
         .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
         .resolve(Log.make({ n: 4 }), Message.Logged({ n: 4 }))
+    }))
+
+  it.effect("$.combine runs every update it was given, even when one empties the array", () =>
+    Effect.gen(function*() {
+      const s = yield* Story.make(Emptying, { by: 1 })
+      s.send(Message.Step())
+      assert.deepStrictEqual(s.model, { n: 2, seen: ["Step", "Step"] })
+      s.expectExact([Log.make({ n: 1 }), Log.make({ n: 2 })])
+        .emitted([Events.Stepped({ n: 1 }), Events.Stepped({ n: 2 })])
+        .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
+        .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
     }))
 
   it.effect("a record update dispatches by _tag", () =>

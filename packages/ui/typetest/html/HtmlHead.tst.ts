@@ -50,7 +50,7 @@ describe("Head and HtmlHead", () => {
       ],
       view: () => content
     })
-    const made = Page.make({ ...base, view: (h) => h.p("Ada") })
+    const made = Page.make({ ...base, view: (h) => h.p(["Ada"]) })
     expect(Renderer.prerender(made, {})).type.toBe<
       Effect.Effect<Renderer.Prerendered<null, HtmlHead.HtmlHead>>
     >()

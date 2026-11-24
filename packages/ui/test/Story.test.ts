@@ -332,6 +332,10 @@ describe("Story", () => {
           .expect(Locator.text("saving")).toExist()
           .expectExact([SaveTodo.make(todo)])
           .expectHas(SaveTodo)
+        assert.throws(
+          () => s.expectExact(new Array(1)),
+          /expectExact: expected undefined; pending:/
+        )
         assert.deepStrictEqual(
           s.pending.map((
             entry

@@ -120,7 +120,7 @@ describe("BrowserHost head", {
         init: () => null,
         update: ($) => $.model,
         head: title === undefined ? undefined : () => [Head.title(title)],
-        view: (h) => h.div(name)
+        view: (h) => h.div([name])
       })
     const empty = {
       title: undefined,
@@ -153,7 +153,7 @@ describe("BrowserHost head", {
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.div("custom")
+      view: (h) => h.div(["custom"])
     })
     expect((await Effect.runPromise(Renderer.prerender(custom, {}))).head).toBe(
       42

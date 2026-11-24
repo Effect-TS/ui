@@ -294,6 +294,7 @@ describe("Component.define", () => {
     >()
     NoteDef.view((h, model) => {
       expect(row).type.not.toBeCallableWith(h, model.body)
+      expect(row).type.not.toBeCallableWith(h, model.body, model.edits, 1)
       return h.ul([row(h, model.body, model.edits)])
     })
   })

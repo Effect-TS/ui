@@ -943,7 +943,7 @@ const UpdateProto = {
     const lists = [...this.lists]
     const sends = [...this.sends]
     let viewTransitionTypes = this.viewTransitionTypes
-    for (const update of updates) {
+    for (const update of Array.from(updates)) {
       const next = toNext(
         update(
           makeUpdate(

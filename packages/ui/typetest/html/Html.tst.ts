@@ -177,6 +177,8 @@ describe("Html", () => {
         expect(h.input).type.not.toBeAssignableTo<(...args: never) => unknown>()
         // A builder is a valid child and a valid view without a terminal call.
         expect(h.ul.children).type.toBeCallableWith([h.li, h.li.key("a")])
+        expect(h.ul.children).type.not.toBeCallableWith(h.li, h.li)
+        expect(h.div).type.not.toBeCallableWith("a", "b")
         return h.div.class(["root"])
       }
     })
@@ -686,9 +688,33 @@ describe("Html", () => {
     expect(button.class).type.not.toBeCallableWith([count && "badge"])
     expect(Html.classNames).type.not.toBeCallableWith(["rounded", true])
     expect(Html.classNames).type.not.toBeCallableWith(["rounded", 1])
+    expect(button.class).type.not.toBeCallableWith("rounded", "shadow")
+    expect(Html.classNames).type.not.toBeCallableWith("rounded", "shadow")
     expect(Html.classNames(["rounded", saving && "opacity-50"])).type.toBe<
       string
     >()
+  })
+
+  it("h.lazy takes the arguments its function declares", () => {
+    const row = (h: View.H<Msg>, label: string, selected: boolean) =>
+      h.el("li", [selected && label])
+    Component.define({
+      name: "Rows",
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => {
+        expect(h.lazy(row, "a", true)).type.toBe<View.Node<Msg, never>>()
+        // @ts-expect-error Expected 3 arguments, but got 4
+        h.lazy(row, "a", true, "extra")
+        // @ts-expect-error Expected 3 arguments, but got 2
+        h.lazy(row, "a")
+        return h.ul([h.lazy(row, "a", true)])
+      }
+    })
   })
 
   it("ref Commands add nothing to a component's requirements", () => {

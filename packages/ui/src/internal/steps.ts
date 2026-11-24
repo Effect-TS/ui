@@ -419,13 +419,19 @@ export abstract class Cursor {
     const pending = this.state.pending
     if (
       pending.length !== targets.length ||
-      !targets.every((target, index) => engine.matches(target, pending[index]))
+      !pending.every((entry, index) => {
+        const target = targets[index]
+        return target !== undefined && engine.matches(target, entry)
+      })
     ) {
       throw new Error(
         `${this.name("expectExact")}: expected ${
           targets.length === 0
             ? "nothing"
-            : targets.map(engine.describeTarget).join(", ")
+            : Array.from(targets, (target) =>
+              target === undefined
+                ? "undefined"
+                : engine.describeTarget(target)).join(", ")
         }; pending: ${engine.describePending(pending)}`
       )
     }
