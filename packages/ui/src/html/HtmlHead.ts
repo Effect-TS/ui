@@ -852,5 +852,5 @@ export const head: View.HeadFold<Entry, HtmlHead> = {
   title: (head) => head.title
 }
 
-heads.register("html", head)
+heads.loadHtml(head)
 documentHead.load(headSync.makeSync)

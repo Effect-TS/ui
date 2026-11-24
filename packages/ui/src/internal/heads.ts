@@ -10,14 +10,11 @@ export const load = (start: (inst: Kernel.Instance) => void): void => {
 }
 
 /** @internal */
-export let fold:
-  | ((elements: View.Vocabulary<any>) => View.HeadFold | undefined)
-  | undefined
+export let html: View.HeadFold | undefined
 
 /** @internal */
-export const register = (name: string, headFold: View.HeadFold): void => {
-  const prev = fold
-  fold = (elements) => (elements.name === name ? headFold : prev?.(elements))
+export const loadHtml = (fold: View.HeadFold): void => {
+  html = fold
 }
 
 /** @internal */
@@ -29,13 +26,3 @@ export const emptyHtml = {
   html: { lang: undefined, dir: undefined, class: [], data: {} },
   body: { class: [], data: {} }
 }
-
-/** @internal */
-export const fallback = (
-  elements: View.Vocabulary<any> | undefined,
-  value: unknown
-): unknown =>
-  elements?.name === "html" &&
-    (value as { readonly meta?: unknown }).meta === undefined
-    ? { ...emptyHtml, ...(value as object) }
-    : value

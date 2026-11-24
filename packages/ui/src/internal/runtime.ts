@@ -951,15 +951,19 @@ export const prerender = (
           options.static === true,
           options.sink ?? serialize.nodeSink(nodes)
         )
-        return {
-          nodes,
-          state,
-          model: root.model(),
-          head: heads.fallback(component.elements(), root.head())
-        }
+        return { nodes, state, model: root.model(), head: headOf(root) }
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))
+
+/** @internal */
+export const headOf = (root: Root): unknown => {
+  const head = root.head() as { readonly meta?: unknown }
+  return root.instance.component.elements()?.name === "html" &&
+      head.meta === undefined
+    ? { ...heads.emptyHtml, ...head }
+    : head
+}
 
 const unmoved: Kernel.Transitions = {
   request: () => {},
