@@ -551,40 +551,31 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
 
 const changesText = (count: number) => count + (count === 1 ? " change" : " changes")
 
-const branchRow = (h: H, row: Read.Row, branch: Read.Branch) => {
-  const hidden = !branch.expanded && branch.changes > 0
-  const kind = row.change?.kind
-  const key = String(row.key)
-  const label = kind !== undefined ? kind : hidden ? changesText(branch.changes) : undefined
-  return h.div.key(row.id).class("tl", (hidden || kind !== undefined) && "chg").attr(
-    "style",
-    "padding-left:" + (row.depth * 16 + 12) + "px"
-  ).attr("data-change", kind).children(
-    h.button.class("k", "toggle").attr("aria-expanded", String(branch.expanded)).attr(
-      "aria-label",
-      label === undefined ? key : key + ", " + label
-    ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path })).children(
-      h.span.class("chev").attr("aria-hidden", "true").children(branch.expanded ? "▾" : "▸"),
-      key
-    ),
-    h.span.class("v").children(
-      branch.expanded ? row.open! : h.span.class("t-punct").children(branch.preview),
-      label === undefined ? null : h.span.class("muted").children(" " + label)
-    )
-  )
-}
-
 const treeRow = (h: H, row: Read.Row) => {
-  if (row.branch !== undefined) return branchRow(h, row, row.branch)
-  const change = row.change
-  const kind = change?.kind === "unknown" ? undefined : change?.kind
-  return h.div.key(row.id).class("tl", kind !== undefined && "chg").attr(
+  const { branch, change } = row
+  const kind = change?.kind
+  const key = row.key === undefined ? "" : String(row.key)
+  const closed = branch !== undefined && !branch.expanded
+  const label = kind === "added" || kind === "removed"
+    ? kind
+    : closed && branch.changes > 0
+    ? changesText(branch.changes)
+    : undefined
+  return h.div.key(row.id).class("tl", (kind ?? label) !== undefined && "chg").attr(
     "style",
     "padding-left:" + (row.depth * 16 + 12) + "px"
   ).attr("data-change", kind).children(
-    h.span.class("k").children(row.key === undefined ? "" : String(row.key)),
+    branch === undefined
+      ? h.span.class("k").children(key)
+      : h.button.class("k", "toggle").attr("aria-expanded", String(branch.expanded)).attr(
+        "aria-label",
+        label === undefined ? key : key + ", " + label
+      ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path })).children(
+        h.span.class("chev").attr("aria-hidden", "true").children(branch.expanded ? "▾" : "▸"),
+        key
+      ),
     h.span.class("v").children(
-      row.open ?? row.close ?? null,
+      closed ? h.span.class("t-punct").children(branch.preview) : row.open ?? row.close ?? null,
       ...(kind === "changed"
         ? [
           h.del.class("old").children(...Json(h, change!.before)),
@@ -594,7 +585,7 @@ const treeRow = (h: H, row: Read.Row) => {
         : row.open === undefined && row.close === undefined
         ? Json(h, row.value)
         : []),
-      kind === "added" || kind === "removed" ? h.span.class("muted").children(" " + kind) : null
+      label === undefined ? null : h.span.class("muted").children(" " + label)
     )
   )
 }

@@ -353,11 +353,11 @@ const previewKeys = 3
 
 const previewOf = (value: Schema.JsonObject | ReadonlyArray<Schema.Json>): string => {
   if (Array.isArray(value)) return "[ " + value.length + (value.length === 1 ? " item ]" : " items ]")
-  const object = value as Schema.JsonObject
-  const tag = typeof object._tag === "string" ? object._tag + " " : ""
-  const keys = Object.keys(object).filter((key) => key !== "_tag")
-  if (keys.length === 0) return tag + "{}"
-  return tag + "{ " + keys.slice(0, previewKeys).join(", ") + (keys.length > previewKeys ? ", … }" : " }")
+  const tag = tagOf(value)
+  const prefix = tag === undefined ? "" : tag + " "
+  const keys = Object.keys(value).filter((key) => key !== "_tag")
+  if (keys.length === 0) return prefix + "{}"
+  return prefix + "{ " + keys.slice(0, previewKeys).join(", ") + (keys.length > previewKeys ? ", … }" : " }")
 }
 
 export const treeOf = (
@@ -388,19 +388,19 @@ export const treeOf = (
     const id = pathKey(path)
     const found = byPath.get(id)
     const change = found?.kind === "unknown" ? undefined : found
-    if (!isBranch(value) || change !== undefined && (expanded === undefined || change.kind === "changed")) {
-      rows.push({ id, depth, key, value, change: found })
+    const nested = depth > 0 || key !== undefined
+    const hidden = changesUnder.get(id) ?? 0
+    if (
+      !isBranch(value) ||
+      change !== undefined && (expanded === undefined || change.kind === "changed") ||
+      expanded !== undefined && nested && hidden === 0 && Object.keys(value).length === 0
+    ) {
+      rows.push({ id, depth, key, value, change })
       return
     }
     const array = Array.isArray(value)
-    const nested = depth > 0 || key !== undefined
-    if (nested && expanded !== undefined) {
-      const hidden = changesUnder.get(id) ?? 0
-      if (hidden === 0 && Object.keys(value).length === 0) {
-        rows.push({ id, depth, key, value, change })
-        return
-      }
-      const open = expanded.has(id)
+    if (nested) {
+      const open = expanded?.has(id) ?? true
       rows.push({
         id: id + "{",
         depth,
@@ -408,11 +408,9 @@ export const treeOf = (
         value: undefined,
         open: array ? "[" : "{",
         change,
-        branch: { path: id, expanded: open, preview: previewOf(value), changes: hidden }
+        branch: expanded && { path: id, expanded: open, preview: previewOf(value), changes: hidden }
       })
       if (!open) return
-    } else if (nested) {
-      rows.push({ id: id + "{", depth, key, value: undefined, open: array ? "[" : "{" })
     }
     const inner = nested ? depth + 1 : depth
     if (array) {
