@@ -24,7 +24,21 @@ export const files: ReadonlyArray<string> = [
   "Shared.test.ts",
   "Scoped.test.ts",
   "ScopedMake.test.ts",
-  "html/Scoped.test.ts"
+  "html/Scoped.test.ts",
+  "Query.test.ts",
+  "QueryRuns.test.ts",
+  "QueryResults.test.ts",
+  "QueryRedacted.test.ts",
+  "Queries.test.ts",
+  "AfterRefetch.test.ts",
+  "InfiniteQuery.test.ts",
+  "InfiniteData.test.ts",
+  "Router.test.ts",
+  "Route.test.ts",
+  "Restore.test.ts",
+  "html/BrowserRouter.test.ts",
+  "html/HistoryRestore.test.ts",
+  "html/LazyQuery.test.ts"
 ]
 
 export const pending: {
@@ -38,84 +52,13 @@ export const pending: {
       "headless components and shared state (step 8)"
   },
   "DuplicatePaths.test.ts": {},
-  "Keyed.test.ts": {
-    "Keyed query fields > N cold keys start N fetches in one batch, and its results are one message with N changes":
-      "queries (step 5)",
-    "Keyed query fields > a typed failure for one key in a batch is one entry of the one message":
-      "queries (step 5)",
-    "Keyed query fields > a mount over N warm keys folds one message with N changes before the first render":
-      "queries (step 5)",
-    "Keyed query fields > a mount over warm keys calls the view once, with the values":
-      "queries (step 5)",
-    "Keyed query fields > a kept child's new props over a warm key send its message before the child's one view":
-      "queries (step 5)",
-    "Keyed query fields > a mount over stale keys sends the stale values, then the waiting ones, in one committed frame":
-      "queries (step 5)",
-    "Keyed query fields > two prunes before one flush are one message":
-      "queries (step 5)",
-    "Keyed query fields > a prune then a patch before one flush are one message, with the patch as its change":
-      "queries (step 5)",
-    "Keyed query fields > patches separated by a prune before one flush are one message with both changes":
-      "queries (step 5)",
-    "Keyed query fields > a prune whose update prunes again is sent in a second round, before the view":
-      "queries (step 5)",
-    "Keyed query fields > each keyed query runs once per Model change":
-      "queries (step 5)",
-    "Keyed query fields > a prune: a removed key leaves the result, and onChange gets no changes":
-      "queries (step 5)",
-    "Keyed query fields > a prune is written once, and not again until the result holds a key the query no longer returns":
-      "queries (step 5)",
-    "Keyed query fields > a reorder or an added duplicate sends nothing, and the view follows the query's order":
-      "queries (step 5)",
-    "Keyed query fields > an added warm key is the only change, and an added cold key sends nothing until it loads":
-      "queries (step 5)",
-    "Keyed query fields > refetchInterval: each of N keys refetches on its own timer, and sends its own message":
-      "queries (step 5)",
-    "Keyed query fields > a resolver with a longer delay batches the N cold keys of one pass into one runAll and one message":
-      "queries (step 5)",
-    "Keyed query fields > an optimistic patch on one key reaches a second keyed field before the flush that renders the issuing update":
-      "queries (step 5)",
-    "Keyed query fields > two patches issued before one flush are one message per field, in that flush's frame":
-      "queries (step 5)",
-    "Keyed query fields > a single field over a key of the batch doesn't split the keyed field's message":
-      "queries (step 5)",
-    "Keyed query fields > a defect on one key fails the instance holding the field, and not one sharing its batch":
-      "queries (step 5)",
-    "Keyed query fields > an empty array is disabled: no fetch, no message, and an empty view":
-      "queries (step 5)",
-    "Keyed query fields > get finds one entry by its args": "queries (step 5)",
-    "Keyed results > encode to the single form's tuples, and a duplicate args key fails to decode":
-      "queries (step 5)",
-    "Keyed results > fails the instance when its queryMany query's args don't return an array":
-      "queries (step 5)",
-    "Keyed redaction > Schema.Redacted in a keyed query's args and success: the log is redacted, the state is not":
-      "queries (step 5)",
-    "Keyed selection repaired by the prune handler > the runtime never renders the selection outside the collection":
-      "queries (step 5)",
-    "Keyed history restore > a membership change and a push in one update save the pruned collection in the entry left":
-      "queries (step 5)",
-    "Keyed history restore > drops each tuple taken under a patch and seeds the rest, stale":
-      "queries (step 5)"
-  },
-  "RenderTiming.test.ts": {
-    "render timing > a query's onChange reads new props before the flush":
-      "queries (step 5)",
-    "render timing > a query fetches the args of every Model before the flush":
-      "queries (step 5)"
-  },
+  "Keyed.test.ts": {},
+  "RenderTiming.test.ts": {},
   "Runtime.test.ts": {
     "Runtime > rejects a different shared owner with the same name at mount":
       "headless components and shared state (step 8)",
     "Runtime > Commands > a ref resolves within the issuing instance after the render is committed":
       "refs and mounts (step 6)",
-    "Runtime > run owners > a save ends with its instance: the running run is interrupted, the queued one never starts":
-      "queries (step 5)",
-    "Runtime > run owners > h.isRunning ends when an interrupted run's fiber exits, and the instance re-renders":
-      "queries (step 5)",
-    "Runtime > run owners > a write lands in its entry without a request, and changes never shows the patch":
-      "queries (step 5)",
-    "Runtime > run owners > the query mount option sets how long an unwatched entry stays":
-      "queries (step 5)",
     "Runtime > vocabularies > controlled properties are re-applied after every patch":
       "controlled properties (full DOM host, step 6)",
     "Runtime > vocabularies > onMount runs with the element's node on hosts that run mounts":
@@ -144,12 +87,8 @@ export const pending: {
       "refs and mounts (step 6)",
     "Runtime > a removed element's mount that was waiting for its Layer never runs":
       "refs and mounts (step 6)",
-    "Runtime > Renderer.mount stopped at any yield point leaves nothing behind once its Scope closes":
-      "queries (step 5)",
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
-      "queries (step 5), server rendering and hydration (step 7)",
-    "Runtime > a keyed provide > a key change keeps the query cache: a query gets the old selection's entry unless the key is in its args":
-      "queries (step 5)",
+      "server rendering and hydration (step 7)",
     "Runtime > prerenders the tree as nodes: an instance's elements and text in a Range under its path":
       "server rendering and hydration (step 7)"
   },
@@ -393,5 +332,206 @@ export const pending: {
       "kept children (step 4, blocked on a seam), headless components (step 8)",
     "scoped children of a headless child > a waiting receiver doesn't keep alive the writes its author replaced":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)"
+  },
+  "InfiniteData.test.ts": {
+    "Infinite queries > the server renders the first page, ships the page array, and drops a load more":
+      "server rendering and hydration (step 7)"
+  },
+  "Queries.test.ts": {
+    "a query without onChange > renders the loaded value, and update reads it through $.queries":
+      "head (step 6)",
+    "a query without onChange > hydrates the server's { model, queries } state without refetching":
+      "server rendering and hydration (step 7)",
+    "a query without onChange > restores the Model and result from history.state, seeding the cold cache, and refetches once":
+      "head (step 6)",
+    "a query without onChange > drops history.state saved as { model, loaded }, rerunning init and fetching afresh":
+      "head (step 6)",
+    "a query without onChange > replays from the MessageLog with Story.fromLog, update reading the logged results as $.queries":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > replays a bounded log whose result writes were evicted":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > replays an update that read a refetch in flight, live and through the Wire":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > replay ends with the results a load wrote after the last message, live and through the Wire":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > replay ends with a load that settled without any message":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > a Mounted entry at the same path starts the results over":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > entries of two instances at one path replay apart, and the result is the later instance's":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > replay follows props from the parent: a new id's load, then disabling the query, live and through the Wire":
+      "head (step 6), Story (step 8)",
+    "a query without onChange > a divergence returns the props and results the diverging update read":
+      "head (step 6), Story (step 8)"
+  },
+  "QueryRedacted.test.ts": {
+    "omits reads with Redacted args, success or error schemas from the server cache":
+      "server rendering and hydration (step 7)",
+    "hydrates suspended string according to its schema":
+      "server rendering and hydration (step 7)",
+    "hydrates recursive tree according to its schema":
+      "server rendering and hydration (step 7)",
+    "hydrates suspended secret according to its schema":
+      "server rendering and hydration (step 7)",
+    "hydrates mutual recursion from A according to its schema":
+      "server rendering and hydration (step 7)",
+    "hydrates mutual recursion from B according to its schema":
+      "server rendering and hydration (step 7)"
+  },
+  "Restore.test.ts": {
+    "restore > saves what a function returns, skips false, and restores shared owners with collected reports on Back":
+      "shared state (step 4, blocked on a seam)",
+    "restore > restores every root on its first mount after a reload, and none on a remount":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)",
+    "restore > a scoped instance with restore: false ignores what an older entry saved of it, and restores its children":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)",
+    "restore > after a reload, a root's first mount takes its kept state and leaves another root's (Office first)":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)",
+    "restore > after a reload, a root's first mount takes its kept state and leaves another root's (App first)":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)"
+  },
+  "Router.test.ts": {
+    "Router > logs a navigation's update, route and outcome before the page it mounts":
+      "head (step 6)",
+    "Router > suppresses the matching initial route and keeps one subscription across navigation":
+      "head (step 6)",
+    "Router > reports an initial mismatch once, but accepts a delayed root after navigation":
+      "head (step 6)",
+    "Router > settles a navigation once the root has its route, not when its message is dropped":
+      "head (step 6)",
+    "Router > navigates by Command, back and forward, and the head follows the route":
+      "head (step 6)",
+    "Router > restores a page's Model on back and forward, and reruns every init Command":
+      "head (step 6)",
+    "Router > restores a Model written into the history entry after the Router is rebuilt, as on a reload":
+      "head (step 6)",
+    "Router > seeds a cold entry from a restored query field, stale, and refetches it once (success)":
+      "head (step 6)",
+    "Router > seeds a cold entry from a restored query field, stale, and refetches it once (failure)":
+      "head (step 6)",
+    "Router > drops a query result taken under a patch from the restored state":
+      "head (step 6)",
+    "Router > keeps the snapshot in memory and reports SnapshotWriteFailed when history.state rejects it":
+      "head (step 6)",
+    "Router > blocks navigation and reverts back and forward while Router.blocked runs":
+      "head (step 6)",
+    "Router > settles a navigation once the new page's Layer is built":
+      "head (step 6)",
+    "Router > canonicalises redirects and trailing slashes, and loads what the routes don't parse":
+      "head (step 6)",
+    "Router > settles with the head of the live tree when a title template fails its layout":
+      "head (step 6)",
+    "Router.prefetch > records watches only while a check after a push is outstanding":
+      "differs: reads today's runtime's Instance (children, watched), which the kernel's has no equivalent of"
+  },
+  "html/BrowserRouter.test.ts": {
+    "BrowserRouter > hydrates a server render when both sides take their props from their own Router":
+      "server rendering and hydration (step 7)",
+    "BrowserRouter > exempts hydrated hash roots, but checks client-only hash roots":
+      "server rendering and hydration (step 7)",
+    "BrowserRouter > exempts roots hydrated from a static render when only the search differs":
+      "server rendering and hydration (step 7)",
+    "BrowserRouter > checks hash roots that cannot adopt a server Model":
+      "server rendering and hydration (step 7)",
+    "BrowserRouter > navigates by link, back and forward, and the head and announcement follow":
+      "head (step 6)",
+    "BrowserRouter > clicking the current route notifies subscribers without scrolling, announcing or adding history":
+      "head (step 6)",
+    "BrowserRouter > repeating Slow after Back preserves the entry's pending scroll restoration":
+      "head (step 6)",
+    "BrowserRouter > a redirect reusing its route object announces only after the new visit settles":
+      "head (step 6)",
+    "BrowserRouter > leaves modified clicks, targets, downloads and other origins to the browser":
+      "head (step 6)",
+    "BrowserRouter > reports link intent after 50 ms of hover or focus, at once on touch, for the links a click follows":
+      "head (step 6)",
+    "BrowserRouter > follows a GET form the app has no submit handler for, and leaves a handled one alone":
+      "head (step 6)",
+    "BrowserRouter > restores the scroll position on back and forward between #hash entries":
+      "head (step 6)",
+    "BrowserRouter > goes to a link's #hash and moves focus there":
+      "head (step 6)",
+    "BrowserRouter > ignores links and reverts back and forward while blocked":
+      "head (step 6)",
+    "BrowserRouter > puts the shell's title back and removes the region when it closes":
+      "head (step 6)",
+    "BrowserRouter > allows one Router per document": "head (step 6)",
+    "BrowserRouter > quiet navigations > a search patch announces nothing and leaves focus and scroll alone":
+      "head (step 6)",
+    "BrowserRouter > quiet navigations > a quiet push scrolls to the top when asked, and back restores the position, both quietly":
+      "head (step 6)",
+    "BrowserRouter > quiet navigations > throttles the search writes of typing to one per 200 ms, writing the latest":
+      "head (step 6)",
+    "BrowserRouter > quiet navigations > writes the pending search on pagehide, and stops listening when its Scope closes":
+      "head (step 6)",
+    "BrowserRouter > quiet navigations > writes the pending search before following an in-page #hash link":
+      "head (step 6)",
+    "BrowserRouter > quiet navigations > a link to its own page's search is loud":
+      "head (step 6)",
+    "BrowserRouter > keeps the route in the fragment with layerHash":
+      "head (step 6)"
+  },
+  "html/HistoryRestore.test.ts": {
+    "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a excluded vault a push closed as it waited":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a filtered vault a push closed as it waited":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a push as a excluded slow form waits writes what its restore keeps into the entry":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a push as a filtered slow form waits writes what its restore keeps into the entry":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a push as a excluded scoped form waits writes what its restore keeps into the entry":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a push as a filtered scoped form waits writes what its restore keeps into the entry":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a push as a filtered late scoped waits writes what its restore keeps into the entry":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back runs a component with restore: false from init while another component waits":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a scoped child whose state still decodes after that Back":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores a scoped child drawn by a scoped child":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a slow form a push closed as it waited for its Layer":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a scoped form a push closed as it waited for its Layer":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a scoped child with restore: false the server kept undrawn starts from the server's Model when first drawn":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back runs a scoped child the server kept undrawn from init when a push closed its author as its state decoded":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > a second Back runs a scoped child the server kept undrawn from init, after a push closed its author as it waited":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores what the user typed in a form a push closed as an earlier Back's state decoded":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (open card, whose state still decoded: true)":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (open card, whose state still decoded: false)":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form a push closed after an earlier Back (late contact, whose state still decoded: true)":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form that crossed a push to another entry while its state decoded":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores all the user typed below a form that crossed a Back to another entry while its state decoded":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores none of a form its parent stopped drawing before a push after an earlier Back":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores none of a scoped child a push closed with its waiting author, when its predicate is false at that Back":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores what the user typed, over the server's Model, while another component waits":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores a Model the user set to null":
+      "server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back runs a scoped child an author drew as a push closed it waiting from init, drawn again after the Back settles":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores a scoped child a push closed with its waiting author once: an author made again at its key starts it afresh":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores a scoped child of an author made before the Back settles":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores no scoped child of an author made after it settled, in a root that still hydrates":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "history restore of a page whose hydration hasn't settled > Back restores a scoped child once, in a root that still hydrates: an author made again at its key starts it afresh":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)"
   }
 }
