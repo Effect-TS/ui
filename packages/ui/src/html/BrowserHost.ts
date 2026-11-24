@@ -172,7 +172,7 @@ const fired = (
  * vocabulary fails as a child when it mounts.
  *
  * The host keeps the document head in sync with the tree's folded head: the
- * `<title>`, and under `HtmlHead.vocabulary` the rest of the `HtmlHead`.
+ * `<title>`, and when `HtmlHead` is imported the rest of the `HtmlHead`.
  * It owns only tags marked `data-eui`, plus `<title>` and
  * `lang` / `dir` on `<html>`, and restores the shell's value once no entry
  * sets one. Static titles, `lang`, classes and `data-*` on `<html>` and
@@ -442,7 +442,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * with `HtmlHydrate.hydrate`.
  *
  * **The head.** The mount owns the document head: `<title>` follows the
- * tree's folded head, and under `HtmlHead.vocabulary` so do the marked head
+ * tree's folded head, and when `HtmlHead` is imported so do the marked head
  * tags and the `<html>` and `<body>` attributes. A mount embedded in a page that another mount, or the
  * server, owns passes `head: false`: it still computes its head, and its
  * Router announces the title, but it leaves the document alone. With two

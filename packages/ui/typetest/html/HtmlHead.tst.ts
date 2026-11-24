@@ -1,7 +1,7 @@
-import { Component, Head, type View } from "@effect/ui"
+import { Component, Head, Renderer, type View } from "@effect/ui"
 import { Html, HtmlHead } from "@effect/ui/html"
 import * as HtmlHeadModule from "@effect/ui/html/HtmlHead"
-import { Schema } from "effect"
+import { type Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 const Neutral = Component.define({
@@ -9,17 +9,17 @@ const Neutral = Component.define({
   model: Schema.Null,
   message: Schema.Never
 })
-const Plain = Component.define({
-  name: "Plain",
-  model: Schema.Null,
-  message: Schema.Never,
-  elements: Html.vocabulary
-})
 const Page = Component.define({
   name: "Page",
   model: Schema.Null,
   message: Schema.Never,
-  elements: HtmlHead.vocabulary
+  elements: Html
+})
+const VocabularyPage = Component.define({
+  name: "VocabularyPage",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html.vocabulary
 })
 
 declare const content: View.Content<never, any>
@@ -46,20 +46,7 @@ describe("Head and HtmlHead", () => {
     })
   })
 
-  it("an Html component takes only Head's entries", () => {
-    expect(Plain.make).type.toBeCallableWith({
-      ...base,
-      head: () => [Head.title("Ada")],
-      view: () => content
-    })
-    expect(Plain.make).type.not.toBeCallableWith({
-      ...base,
-      head: () => [HtmlHead.meta({ name: "description", content: "Ada" })],
-      view: () => content
-    })
-  })
-
-  it("an HtmlHead.vocabulary component takes Head's and HtmlHead's entries", () => {
+  it("an Html component takes Head's and HtmlHead's entries", () => {
     expect(Page.make).type.toBeCallableWith({
       ...base,
       head: () => [
@@ -69,6 +56,19 @@ describe("Head and HtmlHead", () => {
       ],
       view: () => content
     })
+    expect(VocabularyPage.make).type.toBeCallableWith({
+      ...base,
+      head: () => [
+        Head.title("Ada"),
+        HtmlHead.meta({ name: "description", content: "Ada" }),
+        HtmlHead.lang("en")
+      ],
+      view: () => content
+    })
+    const made = Page.make({ ...base, view: (h) => h.p("Ada") })
+    expect(Renderer.prerender(made, {})).type.toBe<
+      Effect.Effect<Renderer.Prerendered<null, HtmlHead.HtmlHead>>
+    >()
   })
 
   it("a reduce's below is typed by its vocabulary", () => {
@@ -124,13 +124,14 @@ describe("Head and HtmlHead", () => {
     })
   })
 
-  it("Head exports only the neutral API", () => {
+  it("Head exports only the neutral API and HtmlHead has no vocabulary", () => {
     expect(Head).type.not.toHaveProperty("meta")
     expect<Head.Entry>().type.toBe<
       Head.Title | Head.TitleTemplate | Head.Reduce
     >()
     expect<Head.Head>().type.toBe<{ readonly title: string | undefined }>()
     expect(HtmlHead).type.not.toHaveProperty("title")
+    expect(HtmlHead).type.not.toHaveProperty("vocabulary")
     expect<HtmlHead.HtmlHead>().type.toBeAssignableTo<Head.Head>()
     expect(HtmlHeadModule).type.toBe(HtmlHead)
   })

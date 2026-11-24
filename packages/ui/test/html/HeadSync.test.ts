@@ -96,4 +96,47 @@ describe("BrowserHost head", {
     expect(document.body.className).toBe("dark")
     expect(warnings).toEqual([])
   })
+
+  it("prerenders an Html component with the full empty HtmlHead shape when HtmlHead is not imported", async () => {
+    vi.resetModules()
+    const [{ Component, Head, Renderer }, Html, { Effect, Schema }] =
+      await Promise.all([
+        import("@effect/ui"),
+        import("@effect/ui/html/Html"),
+        import("effect")
+      ])
+    const Plain = Component.define({
+      name: "Plain",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.div("plain")
+    })
+    const Titled = Component.define({
+      name: "Titled",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      head: () => [Head.title("Ada")],
+      view: (h) => h.div("titled")
+    })
+    const empty = {
+      title: undefined,
+      meta: [],
+      links: [],
+      jsonLd: [],
+      html: { lang: undefined, dir: undefined, class: [], data: {} },
+      body: { class: [], data: {} }
+    }
+    const plain = await Effect.runPromise(Renderer.prerender(Plain, {}))
+    expect(plain.head).toEqual(empty)
+    const titled = await Effect.runPromise(Renderer.prerender(Titled, {}))
+    expect(titled.head).toEqual({ ...empty, title: "Ada" })
+  })
 })

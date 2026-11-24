@@ -18,6 +18,7 @@ import type * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as domHost from "./domHost.ts"
 import * as Executor from "./executor.ts"
+import * as heads from "./heads.ts"
 import type * as hydrateRun from "./hydrateRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
@@ -699,10 +700,16 @@ const start = (
     routing.flushed()
   }
   tree.flush = since
-  const head = () =>
-    tree.head?.value ??
-      component.elements()?.head?.merge({ entries: [], children: [] }) ??
+  const head = () => {
+    const elements = component.elements()
+    const value = tree.head?.value ??
+      heads.foldOf(elements)?.merge({ entries: [], children: [] }) ??
       noHead
+    const fallback = elements && heads.defaults[elements.name]
+    return fallback === undefined
+      ? value
+      : { ...fallback, ...(value as object) }
+  }
   const root = {
     path: instance.path,
     session,

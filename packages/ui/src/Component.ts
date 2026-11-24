@@ -2898,7 +2898,7 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
- * vocabulary, and `HtmlHead`'s on `HtmlHead.vocabulary`. It's a pure function of the
+ * vocabulary, and `HtmlHead`'s on `Html`. It's a pure function of the
  * Model, the props and the queries' results, like a view. On every flush that
  * changed a view, the runtime folds the head of the placed tree, a child's
  * `fallback` content included, with the root vocabulary's merge (see

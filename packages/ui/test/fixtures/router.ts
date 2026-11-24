@@ -43,7 +43,7 @@ export const Home = Component.define({
   name: "Home",
   model: Schema.Struct({}),
   message: Schema.Never,
-  elements: HtmlHead.vocabulary
+  elements: Html
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -114,7 +114,7 @@ export const Person = Component.define({
     visits: Schema.Number
   }),
   message: PersonMessage,
-  elements: HtmlHead.vocabulary,
+  elements: Html,
   queries: {
     person: {
       query: GetPerson,
@@ -210,7 +210,7 @@ export const App = Component.define({
     blocked: Schema.Boolean
   }),
   message: AppMessage,
-  elements: HtmlHead.vocabulary
+  elements: Html
 }).make({
   init: ($) => ({ route: $.props.route, outcomes: [], blocked: false }),
   update: ($, message) =>

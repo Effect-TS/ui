@@ -138,7 +138,7 @@ export interface HostEvents<Node> {
  * of each flush and after mounting, for hosts that apply changes in a batch.
  *
  * `head` receives the head the runtime folded, in the root vocabulary's form
- * (an `HtmlHead` for `HtmlHead.vocabulary`), after the commit of every flush that changed
+ * (an `HtmlHead` for `Html`), after the commit of every flush that changed
  * a view, once every instance has adopted. The host diffs it against what it
  * applied last. A mount with `head: false` never calls it. A host without a
  * document, such as a native one, leaves it out and the head is only
@@ -361,7 +361,7 @@ export interface Prerendered<out Model, out H = unknown> {
   readonly state: State
   /** The root's Model after the server run, or `undefined` if the root failed. */
   readonly model: Model | undefined
-  /** The head folded with the root vocabulary's merge: an `HtmlHead` for `HtmlHead.vocabulary`. */
+  /** The head folded with the root vocabulary's merge: an `HtmlHead` for `Html`. */
   readonly head: H
 }
 
