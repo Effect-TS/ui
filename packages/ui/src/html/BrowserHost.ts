@@ -80,8 +80,8 @@
  * `compositionend`, so a patch or a rejected `input` can't replace the text
  * being composed; it's put back after `compositionend` instead.
  *
- * A server-rendered control the user changed before its instance adopted
- * keeps what it shows, and the host sends its state to the element's
+ * Under `HtmlHydrate.hydrate`, a server-rendered control the user changed
+ * before its instance adopted keeps what it shows, and the host sends its state to the element's
  * `onInput` and `onChange` as if the events had just fired, then puts the
  * Model's value back as above if `update` didn't take it. A control counts as
  * changed when it differs from both the server's HTML and the Model's value,
@@ -171,8 +171,9 @@ const fired = (
  * the `html` vocabulary and host-neutral components. A component of another
  * vocabulary fails as a child when it mounts.
  *
- * The host keeps the document head in sync with the tree's folded
- * `HtmlHead`. It owns only tags marked `data-eui`, plus `<title>` and
+ * The host keeps the document head in sync with the tree's folded head: the
+ * `<title>`, and under `HtmlHead.vocabulary` the rest of the `HtmlHead`.
+ * It owns only tags marked `data-eui`, plus `<title>` and
  * `lang` / `dir` on `<html>`, and restores the shell's value once no entry
  * sets one. Static titles, `lang`, classes and `data-*` on `<html>` and
  * `<body>` belong in the root component's `head`, not in the shell: HTML
@@ -440,9 +441,9 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * To adopt the HTML of `HtmlServer.renderToHtml` instead of building it, mount
  * with `HtmlHydrate.hydrate`.
  *
- * **The head.** The mount owns the document head: `<title>`, the marked
- * head tags and the `<html>` and `<body>` attributes follow the tree's
- * folded `HtmlHead`. A mount embedded in a page that another mount, or the
+ * **The head.** The mount owns the document head: `<title>` follows the
+ * tree's folded head, and under `HtmlHead.vocabulary` so do the marked head
+ * tags and the `<html>` and `<body>` attributes. A mount embedded in a page that another mount, or the
  * server, owns passes `head: false`: it still computes its head, and its
  * Router announces the title, but it leaves the document alone. With two
  * mounts on one document, only the one that owns the head writes it.
