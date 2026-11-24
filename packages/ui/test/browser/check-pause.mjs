@@ -255,6 +255,109 @@ try {
     "after Resume, a light dismiss of the menu and submenu still reports both toggles",
     dismissed
   )
+
+  const beforeDialog = await scene(page)
+  await page.evaluate(() => {
+    const dialog = document.querySelector("#root dialog")
+    const observer = new MutationObserver(() => {
+      observer.disconnect()
+      globalThis.check.pause()
+    })
+    observer.observe(dialog, { attributes: true, attributeFilter: ["open"] })
+    globalThis.check.dialog(true)
+  })
+  await page.waitForTimeout(150)
+  const dialogPending = await scene(page)
+  expect(
+    dialogPending.copy !== null && !dialogPending.blocked && dialogPending.model.dialog &&
+      dialogPending.model.dialogToggles === beforeDialog.model.dialogToggles,
+    "pausing before a live modal's open toggle arrives sends no toggle while paused",
+    dialogPending
+  )
+  await clickAt(page, page.locator("#resume"))
+  const dialogPendingBack = await scene(page)
+  expect(
+    dialogPendingBack.liveModal && dialogPendingBack.model.dialog &&
+      dialogPendingBack.model.dialogToggles === beforeDialog.model.dialogToggles + 1,
+    "Resume delivers the pending modal's open toggle once",
+    dialogPendingBack
+  )
+  await page.evaluate(() => globalThis.check.dialog(false))
+  await page.waitForTimeout(100)
+
+  await clickAt(page, page.locator("#root:not([inert]) .open-menu"))
+  const beforeSub = await scene(page)
+  await page.evaluate(() => {
+    const sub = document.querySelector("#root .sub")
+    const pauseOnOpen = (event) => {
+      if (event.newState !== "open") return
+      sub.removeEventListener("beforetoggle", pauseOnOpen)
+      queueMicrotask(() => globalThis.check.pause())
+    }
+    sub.addEventListener("beforetoggle", pauseOnOpen)
+    globalThis.check.sub(true)
+  })
+  await page.waitForTimeout(150)
+  const subPending = await scene(page)
+  expect(
+    subPending.copy !== null && subPending.model.menu && subPending.model.sub && same(subPending, beforeSub),
+    "pausing before a live submenu's open toggle arrives sends no toggle while paused",
+    subPending
+  )
+  await clickAt(page, page.locator("#resume"))
+  const subPendingBack = await scene(page)
+  expect(
+    subPendingBack.liveMenuOpen && subPendingBack.liveSubOpen && subPendingBack.model.sub &&
+      subPendingBack.model.subToggles === beforeSub.model.subToggles + 1 &&
+      subPendingBack.model.toggles === beforeSub.model.toggles,
+    "Resume delivers the pending submenu's open toggle once",
+    subPendingBack
+  )
+
+  const toggleCounts = async (open) => {
+    const before = await scene(page)
+    await page.evaluate(open)
+    await page.waitForTimeout(150)
+    const after = await scene(page)
+    return [after.model.dialogToggles - before.model.dialogToggles, after.model.subToggles - before.model.subToggles]
+  }
+  await page.evaluate(() => globalThis.check.sub(false))
+  await page.waitForTimeout(100)
+  const baseline = [
+    ...(await toggleCounts(() => globalThis.check.dialog(true))).slice(0, 1),
+    ...(await toggleCounts(() => globalThis.check.sub(true))).slice(1)
+  ]
+  await page.evaluate(() => (globalThis.check.dialog(false), globalThis.check.sub(false)))
+  await page.waitForTimeout(100)
+  const pausedAround = [
+    ...(await toggleCounts(() => {
+      const dialog = document.querySelector("#root dialog")
+      const observer = new MutationObserver(() => {
+        observer.disconnect()
+        globalThis.check.pause()
+        globalThis.check.resume()
+      })
+      observer.observe(dialog, { attributes: true, attributeFilter: ["open"] })
+      globalThis.check.dialog(true)
+    })).slice(0, 1),
+    ...(await toggleCounts(() => {
+      const sub = document.querySelector("#root .sub")
+      const pauseOnOpen = (event) => {
+        if (event.newState !== "open") return
+        sub.removeEventListener("beforetoggle", pauseOnOpen)
+        queueMicrotask(() => (globalThis.check.pause(), globalThis.check.resume()))
+      }
+      sub.addEventListener("beforetoggle", pauseOnOpen)
+      globalThis.check.sub(true)
+    })).slice(1)
+  ]
+  const around = await scene(page)
+  expect(
+    JSON.stringify(baseline) === "[1,1]" && JSON.stringify(pausedAround) === JSON.stringify(baseline) &&
+      around.liveModal && around.model.dialog && around.model.sub,
+    "pausing and resuming before the open toggles arrive delivers the same toggles as no pause",
+    { baseline, pausedAround, around }
+  )
 } catch (error) {
   failures.push(String(error).split("\n")[0])
 } finally {

@@ -820,15 +820,20 @@ export const makeHost = (
       }
       if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
       keepingScroll(() => element.showPopover())
-      if (heldPopovers.has(element) && popoverShowing(element)) expectToggle(element, "open")
     }
   }
 
   const heldDialogs = new Set<globalThis.Node>()
   const heldPopovers = new Set<globalThis.Node>()
-  const hostToggles = new WeakMap<globalThis.Node, "open" | "closed">()
-  const expectToggle = (node: globalThis.Node, state: "open" | "closed") => {
-    if (listening.has("toggle")) hostToggles.set(node, state)
+  const reported = new WeakMap<globalThis.Node, { state: string | undefined }>()
+  const holdNode = (held: Set<globalThis.Node>, node: globalThis.Node) => {
+    held.add(node)
+    if (listening.has("toggle") && !reported.has(node)) reported.set(node, { state: undefined })
+  }
+  const releaseNode = (held: Set<globalThis.Node>, node: globalThis.Node) => {
+    if (!held.delete(node)) return
+    const entry = reported.get(node)
+    if (entry !== undefined) entry.state = "closed"
   }
   const isAuto = (element: globalThis.Element) =>
     element.hasAttribute("popover") && element.getAttribute("popover") !== "manual"
@@ -841,20 +846,15 @@ export const makeHost = (
       for (const dialog of Array.from(shown).reverse()) {
         if (!modals.has(dialog)) continue
         closeDialog(dialog, true)
-        heldDialogs.add(dialog)
-        expectToggle(dialog, "closed")
+        holdNode(heldDialogs, dialog)
       }
       for (const element of popovers.reverse()) {
         if (popoverShowing(element)) element.hidePopover()
-        heldPopovers.add(element)
-        expectToggle(element, "closed")
+        holdNode(heldPopovers, element)
       }
       return
     }
     showModals()
-    for (const dialog of heldDialogs) {
-      if ((dialog as HTMLDialogElement).open) expectToggle(dialog, "open")
-    }
     heldDialogs.clear()
     for (const element of heldPopovers) {
       if (wanted.get(element)?.get("popoverOpen") === true) popoversToShow.add(element as HTMLElement)
@@ -1158,10 +1158,13 @@ export const makeHost = (
   }
 
   const listener = (name: string) => (event: Event) => {
-    if (name === "toggle" && event.target !== null) {
-      const expected = hostToggles.get(event.target as globalThis.Node)
-      hostToggles.delete(event.target as globalThis.Node)
-      if (expected !== undefined && (event as ToggleEvent).newState === expected) return
+    const entry = name === "toggle" && event.target !== null ? reported.get(event.target as globalThis.Node) : undefined
+    if (entry !== undefined) {
+      const target = event.target as globalThis.Node
+      entry.state ??= (event as ToggleEvent).oldState
+      if (heldDialogs.has(target) || heldPopovers.has(target)) return
+      reported.delete(target)
+      if ((event as ToggleEvent).newState === entry.state) return
     }
     if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
     if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
@@ -1346,7 +1349,7 @@ export const makeHost = (
         else manualPopovers.delete(node as HTMLElement)
         // Edge-triggered: an auto popover the browser closed stays closed until the Model's value changes.
         if (mode === "auto" && !modeChanged && previous === want) return
-        heldPopovers.delete(node)
+        releaseNode(heldPopovers, node)
         applyPopover(node as HTMLElement, want)
         return
       }
@@ -1357,8 +1360,8 @@ export const makeHost = (
           values = new Map()
           wanted.set(node, values)
         }
+        if (values.get(name) !== want) releaseNode(heldDialogs, node)
         values.set(name, want)
-        heldDialogs.delete(node)
         if (want === "modal") {
           // Shown at the commit, once it's connected, outer dialogs first.
           modalWanted.add(node)

@@ -97,6 +97,7 @@ Effect.runFork(
         dialog: (open: boolean) => root.send(open ? Message.Opened() : Message.Closed()),
         menu: (open: boolean) => root.send(open ? Message.ClickedMenu() : Message.ClosedMenu()),
         sub: (open: boolean) => root.send(open ? Message.ClickedSub() : Message.ClosedSub()),
+        resume: () => Effect.runSync(pausable.resume),
         pause: () =>
           Effect.runSync(pausable.pause((path) => path === "/Scene" ? { model: { ...initial, count: 5 } } : undefined))
       }
