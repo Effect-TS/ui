@@ -243,13 +243,25 @@ describe("Component queries", () => {
 
   it("type args and onChange by the query", () => {
     Component.define({
-      name: "Typed",
+      name: "TypedArgs",
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({}),
       message: Message,
       queries: {
         // @ts-expect-error Type 'number' is not assignable to type 'string'
-        user: { query: GetUser, args: () => ({ id: 1 }) },
+        user: { query: GetUser, args: () => ({ id: 1 }) }
+      }
+    }).make({
+      init: () => ({}),
+      update: ($) => $.model,
+      view: () => null as never
+    })
+    Component.define({
+      name: "TypedOnChange",
+      props: Schema.Struct({ id: Schema.String }),
+      model: Schema.Struct({}),
+      message: Message,
+      queries: {
         team: {
           query: GetTeam,
           args: ({ props }) => ({ id: props.id }),

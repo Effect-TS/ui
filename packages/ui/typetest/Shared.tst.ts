@@ -365,6 +365,23 @@ describe("shared state", () => {
       update: ($: { readonly model: null }) => $.model,
       parts: () => ({})
     })
+
+    Component.define({
+      name: "Probe",
+      model: Schema.Null,
+      message: Schema.Never,
+      shares: () => 1,
+      // @ts-expect-error Did you mean to write 'restore'
+      resotre: false
+    })
+    Component.define({
+      name: "ProbeObj",
+      model: Schema.Null,
+      message: Schema.Never,
+      shares: { value: () => 1 },
+      // @ts-expect-error Did you mean to write 'restore'
+      resotre: false
+    })
   })
 })
 
