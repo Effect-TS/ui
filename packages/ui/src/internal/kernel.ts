@@ -1432,7 +1432,7 @@ const patchElement = (
     if (next._tag === "Element" && old.v !== next && pairs(old.v, next)) {
       patchElement(inst, old, old.v as View.Element<any, any>, next)
     } else olds[0] = patch(inst, old, next)
-  } else rec.kids = patchList(inst, node, olds, views, null)
+  } else rec.kids = patchList(inst, node, olds, views, null, true)
   // After the children, so a select's value wins over its options'.
   if (
     prev.props !== view.props ||
@@ -1472,7 +1472,8 @@ const patchList = (
   parent: unknown,
   olds: Array<Rec>,
   views: ReadonlyArray<View.Node<any, any>>,
-  after: unknown
+  after: unknown,
+  whole?: boolean
 ): Array<Rec> => {
   const host = inst.tree.host
   const out: Array<Rec> = new Array(views.length)
@@ -1497,7 +1498,7 @@ const patchList = (
   const sources = new Int32Array(count)
   let byKey: Map<unknown, number> | undefined
   let same: Int32Array | undefined
-  for (let index = end; index >= start; index--) {
+  for (let index = start > oldEnd ? -1 : end; index >= start; index--) {
     const key = keyOf(views[index]!)
     if (key === undefined) continue
     const next = (byKey ??= new Map()).get(key)
@@ -1538,7 +1539,14 @@ const patchList = (
       ? create(inst, views[index]!)
       : patch(inst, olds[source - 1]!, views[index]!)
   }
-  if (gone !== undefined) { for (const old of gone) remove(inst, parent, old) }
+  if (gone !== undefined) {
+    if (whole && gone.length === olds.length && host.clear !== undefined) {
+      for (let index = 0; index < olds.length; index++) {
+        release(inst, olds[index]!)
+      }
+      host.clear(parent)
+    } else for (const old of gone) remove(inst, parent, old)
+  }
   for (let index = end + 1; index < views.length; index++) {
     out[index] = patch(
       inst,
@@ -1546,17 +1554,23 @@ const patchList = (
       views[index]!
     )
   }
-  const stay = moved ? increasing(sources) : undefined
-  let at = stay === undefined ? -1 : stay.length - 1
+  if (!moved) {
+    for (let index = start, from = start; index <= end + 1; index++) {
+      if (index > end || sources[index - start] !== 0) {
+        const ref = index < views.length ? nodeOf(out[index]!) : after
+        while (from < index) place(host, parent, out[from++]!, ref)
+        from = index + 1
+      }
+    }
+    return out
+  }
+  const stay = increasing(sources)
+  let at = stay.length - 1
   let ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : after
   for (let offset = count - 1; offset >= 0; offset--) {
     const index = start + offset
-    if (sources[offset] === 0) {
-      place(host, parent, out[index]!, ref)
-    } else if (stay !== undefined) {
-      if (at >= 0 && stay[at] === offset) at--
-      else place(host, parent, out[index]!, ref)
-    }
+    if (sources[offset] !== 0 && at >= 0 && stay[at] === offset) at--
+    else place(host, parent, out[index]!, ref)
     ref = nodeOf(out[index]!)
   }
   return out
