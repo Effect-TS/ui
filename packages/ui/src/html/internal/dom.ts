@@ -635,7 +635,7 @@ export const makeHost = (
     createElement(tag) {
       if (svgTags.has(tag)) return document.createElementNS(SVG, tag)
       const element = document.createElement(tag)
-      if (element.localName === "form") {
+      if (tag.length === 4 && element.localName === "form") {
         forms.add(element)
         listen("submit")
       }

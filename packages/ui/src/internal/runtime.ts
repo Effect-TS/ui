@@ -132,7 +132,7 @@ const bridge = (
 ): Kernel.Host => ({
   createElement: (tag) => {
     const node = host.createElement(tag)
-    if (node?.nodeName === "FORM") {
+    if (tag.length === 4 && node?.nodeName === "FORM") {
       host.setEvents(node, View.noFields, () => false, View.noFields)
     }
     return node
