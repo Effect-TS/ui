@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
+import { Command, Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import * as DevToolsLayer from "@effect/ui-devtools/internal/layer"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -130,6 +130,16 @@ const lifecycle = (root: HTMLElement, kind: string) =>
 
 const PairMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })
 
+class Slot extends Feature.Service<Slot>()("test/Slot", { props: Schema.Struct({}) }) {}
+
+const SlotView = Component.define({
+  name: "SlotView",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({ init: () => null, update: ($) => $.model, view: (h) => h.strong("ready") })
+
 const Shown = Component.define({
   name: "Shown",
   scoped: false,
@@ -151,10 +161,11 @@ const Pair = Component.define({
   view: (h, model) =>
     h.div(
       h.button.onClick(PairMessage.ClickedAdd()).children("Add"),
+      Slot.render(h, { key: "s", props: {}, fallback: () => h.em("fallback") }),
       Shown(h, { key: "a", props: { n: model.n } }),
       Shown(h, { key: "b", props: { n: model.n } })
     )
-})
+}).pipe(Component.provide(Slot.toLayer(SlotView)))
 
 describe("DevTools overlay", { concurrent: false }, () => {
   it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>
@@ -219,7 +230,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNull(root.querySelector(".paused"))
     }))
 
-  it.live("gives each instance the props it had at the entry shown, past the buffer too", () =>
+  it.live("paints each instance's props past the buffer and notes feature slot fallbacks", () =>
     Effect.gen(function*() {
       const memory = MessageLog.makeMemory({ size: 500 })
       const services = yield* Layer.build(
@@ -234,23 +245,22 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.deepStrictEqual(changed.map((entry) => entry.path), ["/Pair/Shown[a]", "/Pair/Shown[b]"])
       assert.strictEqual(memory.entries().at(-1), changed[1])
 
-      const painted: Array<(path: string) => BrowserHost.Recorded | undefined> = []
-      Context.get(services, BrowserHost.Pausables).register({
-        session: changed[0].session,
-        path: "/Pair",
-        pause: (state) => Effect.sync(() => (painted.push(state), { fellBack: [], fallbacks: [] })),
-        resume: Effect.void
-      })
       const root = overlay()
       sized(root)
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Open the Effect UI inspector" }))
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Everything" }))
       yield* click(entry(root, new RegExp("^#" + changed[0].seq + " "))[0]!)
       yield* click(HtmlLocator.getByRole(root, "button", { name: "Show on page" }))
-      const state = painted.at(-1)!
-      assert.deepStrictEqual(state("/Pair"), { model: { n: 1 }, queries: undefined, props: {} })
-      assert.deepStrictEqual(state("/Pair/Shown[a]"), { model: null, queries: undefined, props: { n: 1 } })
-      assert.deepStrictEqual(state("/Pair/Shown[b]"), { model: null, queries: undefined, props: { n: 0 } })
+      const copy = app.nextElementSibling!
+      assert.isTrue(copy.hasAttribute("inert"))
+      assert.strictEqual(Array.from(copy.querySelectorAll("span"), (node) => node.textContent).join(), "1,0")
+      assert.strictEqual(Array.from(app.querySelectorAll("span"), (node) => node.textContent).join(), "1,1")
+      assert.strictEqual(copy.querySelector("em")?.textContent, "fallback")
+      assert.strictEqual(app.querySelector("strong")?.textContent, "ready")
+      const notes = Array.from(root.querySelectorAll(".pause-note"), (node) => text(node))
+      assert.strictEqual(notes.length, 1)
+      assert.include(notes[0], "fallback")
+      assert.isTrue(notes[0].endsWith(": /Pair"))
     }))
 
   it.live("finds Editor[n2]'s Save, follows it to its interruption and back", () =>

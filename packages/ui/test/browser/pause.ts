@@ -8,7 +8,6 @@ const Message = UiSchema.TaggedEnum({
   Opened: {},
   Closed: {},
   ClickedMenu: {},
-  ClosedMenu: {},
   ToggledMenu: { open: Schema.Boolean },
   ToggledDialog: { open: Schema.Boolean },
   ClickedSub: {},
@@ -52,7 +51,6 @@ const Scene = Component.define({
     Opened: ($) => $.evolve({ dialog: true }),
     Closed: ($) => $.evolve({ dialog: false }),
     ClickedMenu: ($) => $.evolve({ menu: true }),
-    ClosedMenu: ($) => $.evolve({ menu: false }),
     ToggledMenu: ($, { open }) => $.evolve({ menu: open, toggles: $.model.toggles + 1 }),
     ToggledDialog: ($, { open }) => $.evolve({ dialog: open, dialogToggles: $.model.dialogToggles + 1 }),
     ClickedSub: ($) => $.evolve({ sub: true }),
@@ -93,9 +91,7 @@ Effect.runFork(
     Object.assign(globalThis, {
       check: {
         model: () => root.model(),
-        open: () => root.send(Message.Opened()),
         dialog: (open: boolean) => root.send(open ? Message.Opened() : Message.Closed()),
-        menu: (open: boolean) => root.send(open ? Message.ClickedMenu() : Message.ClosedMenu()),
         sub: (open: boolean) => root.send(open ? Message.ClickedSub() : Message.ClosedSub()),
         resume: () => Effect.runSync(pausable.resume),
         pause: () =>

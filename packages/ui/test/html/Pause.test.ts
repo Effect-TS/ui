@@ -29,20 +29,21 @@ const Counter = Component.define({
       .children(`clicked ${count}`)
 })
 
+const register = (roots: Array<BrowserHost.Pausable>) =>
+  Effect.provideService(BrowserHost.Pausables, {
+    register: (root) => {
+      roots.push(root)
+      return () => roots.splice(roots.indexOf(root), 1)
+    }
+  })
+
 it.effect("pause paints a frozen copy beside the hidden container, and resume shows the live tree again", () =>
   Effect.gen(function*() {
     const { app, page } = yield* place("main")
     app.className = "app"
     app.style.display = "grid"
     const roots: Array<BrowserHost.Pausable> = []
-    const root = yield* BrowserHost.mountEffect(Counter, {}, app).pipe(
-      Effect.provideService(BrowserHost.Pausables, {
-        register: (root) => {
-          roots.push(root)
-          return () => roots.splice(roots.indexOf(root), 1)
-        }
-      })
-    )
+    const root = yield* BrowserHost.mountEffect(Counter, {}, app).pipe(register(roots))
     expect(roots.map((root) => root.path)).toEqual(["/Counter"])
     const [pausable] = roots
     const mounted = mounts
@@ -127,9 +128,7 @@ it.effect("pause reports the instances whose feature slot shows its fallback in 
   Effect.gen(function*() {
     const { app } = yield* place()
     const roots: Array<BrowserHost.Pausable> = []
-    yield* BrowserHost.mountEffect(Page, {}, app).pipe(
-      Effect.provideService(BrowserHost.Pausables, { register: (root) => (roots.push(root), () => {}) })
-    )
+    yield* BrowserHost.mountEffect(Page, {}, app).pipe(register(roots))
     yield* tick
     expect(app.textContent).toBe("editornotenote")
 
@@ -138,9 +137,6 @@ it.effect("pause reports the instances whose feature slot shows its fallback in 
     expect(painted).toEqual({ fellBack: [], fallbacks: ["/Page/Pane[p]"] })
     yield* roots[0].resume
   }).pipe(Effect.scoped))
-
-const register = (roots: Array<BrowserHost.Pausable>) =>
-  Effect.provideService(BrowserHost.Pausables, { register: (root) => (roots.push(root), () => {}) })
 
 it.effect("a paint that fails removes its copy and leaves the page as it was", () =>
   Effect.gen(function*() {
