@@ -14,7 +14,7 @@ import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
 import { isFailure } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
-import type * as Tools from "./tools.ts"
+import * as Tools from "./tools.ts"
 import * as WebMcp from "./webmcp.ts"
 
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
@@ -81,9 +81,9 @@ export const make = (options: {
         1,
         options.size ?? (typeof page.size === "number" ? page.size : 1_000)
       )
-      const webMcpEnabled = options.webMcp !== false && WebMcp.isAvailable()
-      const webMcpDispatch = typeof options.webMcp === "object" &&
-        options.webMcp !== null && options.webMcp.dispatch === true
+      const modelContext = options.webMcp === false
+        ? undefined
+        : WebMcp.modelContext()
       const isExcluded = InspectorInternal.matchTags(new Set(options.exclude))
       const excluded = new Map<string, Set<number>>()
       const inspector = InspectorInternal.make({
@@ -92,7 +92,7 @@ export const make = (options: {
           excluded.get(entry.session)?.delete(entry.seq) === true
       })
       const history = History.make(size)
-      const wireHistory = webMcpEnabled ? History.make(size) : undefined
+      const wireHistory = modelContext && History.make(size)
       const roots = new Map<string, BrowserHost.Controllable>()
       let paused: {
         readonly root: BrowserHost.Controllable
@@ -101,20 +101,11 @@ export const make = (options: {
       const lock = Semaphore.makeUnsafe(1)
       const origins = new Map<string, number>()
       const latest = new Map<string, number>()
-      const cleared = new Map<string, number>()
-      const meta = new Map<string, Tools.Meta>()
-      const waiters = new Set<() => void>()
-      let closed = 0
+      const { notify, until } = Tools.makeWaiters()
       let failures = 0
       const changes = yield* PubSub.sliding<void>(1)
       const states = yield* PubSub.sliding<void>(1)
-      const notify = () => {
-        const all = Array.from(waiters)
-        waiters.clear()
-        for (const waiter of all) waiter()
-      }
       const changed = () => {
-        notify()
         PubSub.publishUnsafe(changes, undefined)
         PubSub.publishUnsafe(states, undefined)
       }
@@ -192,7 +183,6 @@ export const make = (options: {
           Effect.sync(() => {
             const upTo = latest.get(sessionId)
             if (paused !== undefined || upTo === undefined) return
-            cleared.set(sessionId, upTo)
             inspector.sessions().find((session) => session.id === sessionId)
               ?.clear()
             history.clear(sessionId, upTo)
@@ -204,20 +194,9 @@ export const make = (options: {
       const controllables: BrowserHost.Controllables = {
         register: (root) => {
           roots.set(root.session, root)
-          meta.set(root.session, {
-            host: "browser",
-            connected: true,
-            closed: 0
-          })
-          notify()
           PubSub.publishUnsafe(states, undefined)
           return () => {
             if (roots.get(root.session) === root) roots.delete(root.session)
-            const info = meta.get(root.session)
-            if (info !== undefined) {
-              info.connected = false
-              info.closed = ++closed
-            }
             if (paused?.root === root) {
               paused = undefined
               lower(frame)
@@ -345,19 +324,10 @@ export const make = (options: {
               origins.set(entry.session, entry.at)
             }
             latest.set(entry.session, entry.seq)
-            if (!meta.has(entry.session)) {
-              meta.set(entry.session, {
-                host: "browser",
-                connected: roots.has(entry.session),
-                closed: 0
-              })
-            }
-            if (wireHistory !== undefined) {
-              wireHistory.record(
-                entry,
-                excluded.get(entry.session)?.has(entry.seq) === true
-              )
-            }
+            wireHistory?.record(
+              entry,
+              excluded.get(entry.session)?.has(entry.seq) === true
+            )
           }
           inspector.ingest(batch)
           notify()
@@ -375,78 +345,50 @@ export const make = (options: {
         history.record(entry, hide)
       }
       const logs = [{ enabled: true, record }, encoded]
+      const controller = {
+        roots,
+        size,
+        paused: () => paused?.at,
+        paint,
+        resume
+      }
       if (server !== undefined) {
         const sent = yield* Layer.build(
           MessageLog.socket(socketUrl(server, "/log"), { buffer: size })
         )
         logs.push(Context.get(sent, MessageLog.MessageLog))
         yield* Remote.connect(socketUrl(server, "/control"), {
-          roots,
-          size,
-          paused: () => paused?.at,
-          paint,
-          resume,
+          ...controller,
           changes: Stream.fromPubSub(states)
         })
       }
-      if (wireHistory !== undefined) {
-        const handleControl = Remote.makeHandler({
-          roots,
-          size,
-          paused: () => paused?.at,
-          paint,
-          resume
-        })
-        const next: Effect.Effect<void> = Effect.callback<void>((resume) => {
-          const waiter = () => resume(Effect.void)
-          waiters.add(waiter)
-          return Effect.sync(() => waiters.delete(waiter))
-        })
-        const until = <A>(check: () => A | undefined): Effect.Effect<A> =>
-          Effect.suspend(() => {
-            const found = check()
-            return found !== undefined
-              ? Effect.succeed(found)
-              : Effect.andThen(next, until(check))
-          })
-        const session = (id: string) =>
-          inspector.sessions().find((session) => session.id === id)
-        const arrival = (
-          id: string,
-          seq: number
-        ): Tools.Arrival | undefined => {
-          const s = session(id)
-          if (s !== undefined && s.resolve(seq)._tag !== "Outside") {
-            return "seen"
-          }
-          if ((latest.get(id) ?? -1) < seq) return undefined
-          const entries = s?.entries() ?? []
-          return seq <= (cleared.get(id) ?? -1) ||
-              (entries.length > 0 && seq < entries[0]!.seq)
-            ? "evicted"
-            : "excluded"
-        }
-        yield* WebMcp.register({
-          options: { size, dispatch: webMcpDispatch },
+      if (modelContext !== undefined && wireHistory !== undefined) {
+        const handle = Remote.makeHandler(controller)
+        const request: Tools.Page["request"] = (control) =>
+          Effect.mapError(
+            handle(control),
+            (message) => ({ lost: false, message })
+          )
+        yield* WebMcp.register(modelContext, {
+          options: {
+            size,
+            dispatch: typeof options.webMcp === "object" &&
+              options.webMcp.dispatch === true
+          },
           inspector,
           history: wireHistory,
-          meta,
-          session,
-          pageOf: (id) =>
-            roots.has(id)
-              ? {
-                sessions: new Set(roots.keys()),
-                paused: paused?.at ?? null,
-                request: (request) =>
-                  Effect.mapError(
-                    handleControl(request),
-                    (message) => ({ lost: false, message })
-                  )
-              }
+          meta: (session) => ({
+            host: "browser",
+            connected: roots.has(session)
+          }),
+          pageOf: (session) =>
+            roots.has(session)
+              ? { paused: paused?.at ?? null, request }
               : undefined,
           until,
           within: 8_000,
-          arrival
+          latest: (session) => latest.get(session),
+          gap: "excluded"
         })
       }
       return Context.make(MessageLog.MessageLog, MessageLog.fanoutAll(logs))

@@ -75,7 +75,7 @@ const messageSchema = (
 
 export const makeHandler = (
   controller: Pick<Controller, "roots" | "size" | "paused" | "paint" | "resume">
-): ((request: Control.Request) => Effect.Effect<Json, string>) => {
+): (request: Control.Request) => Effect.Effect<Json, string> => {
   const noRoot = (session: string) =>
     "Session " + session + " has no root on this page."
 

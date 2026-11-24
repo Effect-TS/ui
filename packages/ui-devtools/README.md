@@ -95,7 +95,7 @@ The server listens on loopback only. `/mcp` refuses requests with an `Origin` he
 
 ### WebMCP (experimental)
 
-When the browser exposes the [WebMCP](https://webmachinelearning.github.io/webmcp/) API (`document.modelContext`), `DevTools.layer()` also registers the same tools directly in the page — no Node server, port, or Vite plugin needed:
+When the browser exposes the [WebMCP](https://webmachinelearning.github.io/webmcp/) API (`document.modelContext`), `DevTools.layer()` also registers the same tools directly in the page, with no Node server, port or Vite plugin:
 
 ```ts
 DevTools.layer()
