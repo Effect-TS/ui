@@ -1,10 +1,10 @@
-import type { Component, Mount, View } from "@effect/ui"
+import { type Component, type Mount, UiSchema, type View } from "@effect/ui"
 import { Select, type SelectEvents, type SelectProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { HtmlScene } from "@effect/ui/html/testing"
-import { Locator } from "@effect/ui/testing"
+import { HtmlLocator, HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 type Parts = Component.Headless.Parts<typeof Select>
 type H = View.Helper<never, SelectProps> & View.Tags<Html.Elements, never>
@@ -642,4 +642,56 @@ describe("Select", () => {
         assert.include(String(exit.cause), "a part for")
       }
     }))
+
+  it.effect("picks an option in HtmlPlay with two clicks and no fire", () =>
+    Effect.gen(function*() {
+      const Msg = UiSchema.TaggedEnum({
+        Opened: {},
+        Closed: {},
+        Picked: { value: Schema.String }
+      })
+      const ThemePicker = Html.component({
+        name: "ThemePicker",
+        model: Schema.Struct({ open: Schema.Boolean, value: Schema.String }),
+        message: Msg
+      }).make({
+        init: () => ({ open: false, value: "light" }),
+        update: {
+          Opened: ($) => $.evolve({ open: true }),
+          Closed: ($) => $.evolve({ open: false }),
+          Picked: ($, { value }) => $.evolve({ value })
+        },
+        view: (h, model) =>
+          Select(h, {
+            props: { open: model.open, value: model.value, items },
+            onEmit: {
+              RequestedOpen: () => Msg.Opened(),
+              RequestedClose: () => Msg.Closed(),
+              Picked: ({ value }) => Msg.Picked({ value: String(value) }),
+              Settled: () => undefined
+            },
+            view: (select) =>
+              h.div(
+                select.trigger(h.button).children(select.value(h.span)),
+                model.open
+                  ? select.positioner(h.div).children(
+                    select.popup(h.div).children(
+                      ...items.map(({ label, value }) =>
+                        select.item({ element: h.div, value }).children(
+                          select.itemText(h.div).children(label)
+                        )
+                      )
+                    )
+                  )
+                  : undefined
+              )
+          })
+      })
+      const play = yield* HtmlPlay.make(ThemePicker, {})
+      yield* play.click(HtmlLocator.role("combobox"))
+      yield* play.click(HtmlLocator.role("option", { name: "Dark" }))
+      yield* play.expect(HtmlLocator.role("combobox")).toHaveText("Dark")
+      yield* play.expect(HtmlLocator.role("option", { name: "Dark" }))
+        .toBeAbsent()
+    }).pipe(Effect.provide(TestHost.layer())))
 })

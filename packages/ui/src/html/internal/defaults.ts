@@ -254,30 +254,66 @@ export interface ClickEvent {
 }
 
 /** @internal */
-export const planClick = (
-  root: Locator.Node,
+export const isClickDisabled = (
+  path: ReadonlyArray<Locator.Node>
+): boolean =>
+  path.some((at) =>
+    at.tag !== "fieldset" && isDisabled(at, path.slice(path.indexOf(at)))
+  )
+
+/** @internal */
+export const planClickPress = (
   node: Locator.Node,
   path: ReadonlyArray<Locator.Node>,
   description: string,
   step: string
 ): ReadonlyArray<ClickEvent> => {
-  // A disabled fieldset disables the controls in it, not itself as a target.
-  if (
-    path.some((at) =>
-      at.tag !== "fieldset" && isDisabled(at, path.slice(path.indexOf(at)))
-    )
-  ) {
+  if (isClickDisabled(path)) {
     throw new Error(`${step}: ${description} is disabled`)
   }
-  const events: Array<ClickEvent> = [
+  return [
     {
       node,
       description,
-      event: "click",
+      event: "pointerdown",
+      payload: () => scene.pointer,
+      isDefault: false
+    },
+    {
+      node,
+      description,
+      event: "mousedown",
       payload: () => scene.pointer,
       isDefault: false
     }
   ]
+}
+
+/** @internal */
+export const planClickRelease = (
+  root: Locator.Node,
+  node: Locator.Node,
+  path: ReadonlyArray<Locator.Node>,
+  description: string,
+  includeMouseUp: boolean
+): ReadonlyArray<ClickEvent> => {
+  const events: Array<ClickEvent> = []
+  if (includeMouseUp) {
+    events.push({
+      node,
+      description,
+      event: "mouseup",
+      payload: () => scene.pointer,
+      isDefault: false
+    })
+  }
+  events.push({
+    node,
+    description,
+    event: "click",
+    payload: () => scene.pointer,
+    isDefault: false
+  })
   const later = (
     other: Locator.Node,
     description: string,

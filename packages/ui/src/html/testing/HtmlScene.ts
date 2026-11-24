@@ -4,11 +4,12 @@
  *
  * `HtmlScene.Steps` extends `Scene.Steps`, so every scene step works here.
  * Each payload is typed from the host's own payload types in `Html`, so a
- * test can't send a shape the host never would. `click` runs the browser's
- * defaults: it throws on a disabled control, a submit button submits its
- * form with the fields read from the view, a checkbox or radio button fires
- * `input` and `change`, and a `popovertarget` button toggles its popover.
- * The events of one click are one interaction for the acknowledgement rule.
+ * test can't send a shape the host never would. `click` sends `pointerdown`,
+ * `mousedown`, `mouseup` and `click`, then runs the browser's defaults: it
+ * throws on a disabled control, a submit button submits its form with the
+ * fields read from the view, a checkbox or radio button fires `input` and
+ * `change`, and a `popovertarget` button toggles its popover. The events of
+ * one click are one interaction for the acknowledgement rule.
  *
  * **Example** (A weather lookup)
  *
@@ -72,6 +73,7 @@ import type * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import { handle } from "../../internal/handler.ts"
+import * as match from "../../internal/match.ts"
 import * as internal from "../../internal/scene.ts"
 import * as cursor from "../../internal/steps.ts"
 import * as engine from "../../internal/story.ts"
@@ -128,17 +130,22 @@ export interface Steps<C extends AnyComponent, Parts = never>
   extends Scene.Steps<C, Parts>
 {
   /**
-   * Clicks the one element `target` matches, as a browser does: the `click`
-   * goes to the innermost element that handles it, then the defaults run.
-   * A string means `Locator.text(target)`.
+   * Clicks the one element `target` matches, as a browser does: `pointerdown`,
+   * `mousedown`, `mouseup` and `click` go to the innermost element that
+   * handles each, then the defaults run. A string means `Locator.text(target)`.
    *
    * **Details**
    *
-   * - The payload is a mouse's primary button at the origin with no
-   *   modifier keys. `fire` sends a click with another, such as a tap's
-   *   `pointerType`.
+   * - Each pointer and mouse event carries the mouse's primary button at the
+   *   origin with no modifier keys. `fire` sends an event with another payload,
+   *   such as a tap's `pointerType`.
+   * - Cancelling `pointerdown` skips `mousedown` and `mouseup` but not `click`.
+   *   Cancelling `mousedown` or `mouseup` skips nothing. Only a cancelled
+   *   `click` skips the defaults, and only `click` and its defaults set
+   *   `defaultPrevented`.
    * - A disabled `button`, `input`, `select` or `textarea`, or one inside a
-   *   disabled `fieldset`, throws: the browser sends it nothing.
+   *   disabled `fieldset`, throws: the browser sends it nothing. If the press
+   *   removes or disables the element, the rest of the click isn't sent.
    * - A submit button submits its form: `submit` goes to the form with the
    *   fields read from the view, the button's own name and value included.
    * - A checkbox fires `input` and `change` with `checked` flipped, and an
@@ -146,9 +153,8 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * - A button with `popovertarget` fires `toggle` on the popover with the
    *   state `popovertargetaction` asks for, when that changes it.
    *
-   * Each event goes to the view as the event before it left it. The click
-   * throws when nothing handles any of them, and is ignored when none
-   * produced a message.
+   * Each event goes to the view as the event before it left it. The click is
+   * ignored when none of them produced a message.
    */
   click(target: string | Locator.Locator): this
   /**
@@ -296,16 +302,45 @@ const indexPath = (
   return undefined
 }
 
-/** `node` in `state`'s view: itself while the view is the one it came from, else the node at its place. */
+const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
+  engine.expansionOf.get(node)?.[0] ?? node
+
+const followOptional =
+  (root: Locator.Node, node: Locator.Node) =>
+  (state: engine.State<any, any, any, any>): Locator.Node | undefined => {
+    if (state.root === root) return node
+    const path = indexPath(root, node)
+    if (path === undefined) return undefined
+    let oldAt = root as View.Node<any, any>
+    let newAt = state.root as View.Node<any, any>
+    if (!match.patches(asSibling(oldAt), asSibling(newAt))) return undefined
+    for (const oldIndex of path) {
+      const olds = (oldAt as {
+        readonly children?: ReadonlyArray<View.Node<any, any>>
+      }).children ?? []
+      const news = (newAt as {
+        readonly children?: ReadonlyArray<View.Node<any, any>>
+      }).children ?? []
+      const paired = match.matchSiblings(
+        olds.map(asSibling),
+        news.map(asSibling)
+      )
+      const newIndex = paired.indexOf(oldIndex)
+      if (newIndex < 0) return undefined
+      oldAt = olds[oldIndex]!
+      newAt = news[newIndex]!
+      if (!match.patches(oldAt, newAt)) return undefined
+    }
+    return newAt as Locator.Node
+  }
+
 const follow =
   (root: Locator.Node, node: Locator.Node, description: string) =>
   (
     state: engine.State<any, any, any, any>
   ): Locator.Node => {
-    if (state.root === root) return node
-    let at: Locator.Node | undefined = state.root
-    for (const index of indexPath(root, node) ?? []) at = at?.children?.[index]
-    if (at === undefined || at.tag !== node.tag) {
+    const at = followOptional(root, node)(state)
+    if (at === undefined) {
       throw new Error(
         `HtmlScene.click: ${description} is no longer in the view`
       )
@@ -313,32 +348,140 @@ const follow =
     return at
   }
 
-// ---------------------------------------------------------------------------
-// the cursor
-// ---------------------------------------------------------------------------
-
 class StepsImpl extends internal.SceneCursor {
   override click(target: string | Locator.Locator): this {
     const locator = typeof target === "string" ? Locator.text(target) : target
-    return this.interact("click", (state) => {
-      const step = this.name("click")
-      const node = engine.findOne(state, locator, step)
-      const root = state.root
-      const path = engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
-      return defaults.planClick(root, node, path, locator.description, step)
-        .map((planned) => ({
-          node: follow(root, planned.node, planned.description),
-          description: planned.description,
-          event: planned.event,
-          payload: (at: engine.State<any, any, any, any>) =>
-            planned.payload(
-              at.root,
-              (node, description) => follow(root, node, description)(at)
-            ),
-          optional: true,
-          isDefault: planned.isDefault
-        }))
-    })
+    let prevented = false
+    let handled = false
+    return this.act(
+      "click",
+      "message",
+      (state) => {
+        const step = this.name("click")
+        const initial = engine.findOne(state, locator, step)
+        const initialRoot = state.root
+        const initialPath = engine.ancestry(state, initial) as ReadonlyArray<
+          Locator.Node
+        >
+        const press = defaults.planClickPress(
+          initial,
+          initialPath,
+          locator.description,
+          step
+        )
+        let out = state
+        let reachedOwn = false
+        let childOnly:
+          | {
+            readonly state: engine.State<any, any, any, any>
+            readonly node: Locator.Node
+            readonly event: string
+            readonly description: string
+          }
+          | undefined
+        const runEvent = (
+          target: Locator.Node,
+          event: string,
+          payload: unknown,
+          description: string
+        ): boolean => {
+          const status = engine.handlesOwn(out, target, event)
+          if (status === "none") return false
+          if (status === "child") {
+            if (childOnly === undefined || event === "click") {
+              childOnly = { state: out, node: target, event, description }
+            }
+            return false
+          }
+          reachedOwn = true
+          const fired = engine.fireNode(
+            out,
+            target,
+            event,
+            payload,
+            step,
+            description
+          )
+          handled ||= fired.handled
+          out = fired.story
+          return fired.prevented
+        }
+
+        const followPress = followOptional(initialRoot, initial)
+        let pointerDownCancelled = false
+        for (const planned of press) {
+          if (planned.event === "mousedown" && pointerDownCancelled) continue
+          const target = followPress(out)
+          if (target === undefined) return out
+          const cancelled = runEvent(
+            target,
+            planned.event,
+            planned.payload(out.root, (node) => node),
+            planned.description
+          )
+          if (planned.event === "pointerdown") pointerDownCancelled = cancelled
+        }
+
+        const releaseNode = followPress(out)
+        if (releaseNode !== undefined) {
+          const releaseRoot = out.root
+          const releasePath = engine.ancestry(
+            out,
+            releaseNode
+          ) as ReadonlyArray<Locator.Node>
+          if (!defaults.isClickDisabled(releasePath)) {
+            const release = defaults.planClickRelease(
+              releaseRoot,
+              releaseNode,
+              releasePath,
+              locator.description,
+              !pointerDownCancelled
+            )
+            let clickCancelled = false
+            for (const planned of release) {
+              if (planned.isDefault && clickCancelled) continue
+              const target = followOptional(releaseRoot, planned.node)(out)
+              if (target === undefined) {
+                if (!planned.isDefault) break
+                continue
+              }
+              const cancelled = runEvent(
+                target,
+                planned.event,
+                planned.payload(
+                  out.root,
+                  (node, description) =>
+                    follow(releaseRoot, node, description)(out)
+                ),
+                planned.description
+              )
+              if (planned.event === "click") {
+                clickCancelled = cancelled
+                prevented ||= cancelled
+              } else if (planned.isDefault) {
+                prevented ||= cancelled
+              }
+            }
+          }
+        }
+
+        if (!reachedOwn && childOnly !== undefined) {
+          engine.fireNode(
+            childOnly.state,
+            childOnly.node,
+            childOnly.event,
+            {},
+            step,
+            childOnly.description
+          )
+        }
+        return out
+      },
+      () => ({
+        interaction: handled ? "handled" : "ignored",
+        defaultPrevented: prevented
+      })
+    )
   }
   type(locator: Locator.Locator, value: string, details?: EditDetails): this {
     return this.one(

@@ -216,4 +216,87 @@ describe("HtmlPlay", () => {
       })
       yield* p.expect(log).toHaveText("g:true:false,g:false:true")
     }).pipe(play))
+
+  it.effect("click sends pointerdown, mousedown, mouseup, click in order, settles between press and release, and follows browser cancel rules", () =>
+    Effect.gen(function*() {
+      const Sequence = Html.component({
+        name: "Sequence",
+        model: Schema.Struct({
+          log: Schema.Array(Schema.String),
+          pressed: Schema.Boolean,
+          gone: Schema.Boolean,
+          off: Schema.Boolean
+        }),
+        message: Schema.String
+      }).make({
+        init: () => ({ log: [], pressed: false, gone: false, off: false }),
+        update: ($, message) => ({
+          log: [...$.model.log, message],
+          pressed: $.model.pressed || message === "phase-down",
+          gone: $.model.gone || message === "remove-down",
+          off: $.model.off || message === "disable-down"
+        }),
+        view: (h, model) =>
+          h.div(
+            h.form.onSubmit("submit").children(
+              h.button.on("pointerdown", "pd")
+                .on("mousedown", "md")
+                .on("mouseup", "mu")
+                .onClick("ck")
+                .children("All"),
+              h.button.on("pointerdown", "pd-cancel", { preventDefault: true })
+                .on("mousedown", "md")
+                .on("mouseup", "mu")
+                .onClick("ck")
+                .children("CancelPD"),
+              h.button.on("pointerdown", "pd")
+                .on("mousedown", "md-cancel", { preventDefault: "always" })
+                .on("mouseup", "mu-cancel", { preventDefault: "always" })
+                .onClick("ck")
+                .children("CancelMouse")
+            ),
+            h.button.attr("type", "button")
+              .on("mousedown", "phase-down")
+              .onClick(model.pressed ? "phase-click-down" : "phase-click-up")
+              .children(model.pressed ? "Pressed" : "Press"),
+            model.gone
+              ? undefined
+              : h.div(
+                h.button.attr("type", "button")
+                  .on("mousedown", "remove-down")
+                  .on("mouseup", "remove-up")
+                  .onClick("remove-click")
+                  .children("Remove")
+              ),
+            h.button.attr("type", "button")
+              .disabled(model.off)
+              .on("mousedown", "disable-down")
+              .on("mouseup", "disable-up")
+              .onClick("disable-click")
+              .children("Disable"),
+            h.span("Unhandled"),
+            h.output(model.log.join("|"))
+          )
+      })
+      const p = yield* HtmlPlay.make(Sequence, {})
+      yield* p.click("All")
+      yield* p.expect(log).toHaveText("pd|md|mu|ck|submit")
+      yield* p.click("CancelPD")
+      yield* p.expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|submit")
+      yield* p.click("CancelMouse")
+      yield* p.expect(log).toHaveText(
+        "pd|md|mu|ck|submit|pd-cancel|ck|submit|pd|md-cancel|mu-cancel|ck|submit"
+      )
+      yield* p.click("Press")
+      yield* p.expect(log).toHaveText(/\|phase-down\|phase-click-down$/)
+      yield* p.click("Remove")
+      yield* p.expect(log).toHaveText(/\|remove-down$/)
+      yield* p.click("Disable")
+      yield* p.expect(log).toHaveText(/\|disable-down$/)
+      const exit = yield* Effect.exit(p.click("Unhandled"))
+      assert.match(
+        Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
+        /nothing handles "click"/
+      )
+    }).pipe(play))
 })

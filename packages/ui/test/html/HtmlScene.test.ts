@@ -444,5 +444,131 @@ describe("HtmlScene", () => {
         /^HtmlScene\.click: text "In body" is disabled/
       )
     })
+
+    it.effect("sends pointerdown, mousedown, mouseup, click in order, follows browser cancel rules, and drops release when press removes or disables the element", () =>
+      Effect.gen(function*() {
+        const Sequence = Html.component({
+          name: "Sequence",
+          model: Schema.Struct({
+            log: Schema.Array(Schema.String),
+            gone: Schema.Boolean,
+            off: Schema.Boolean
+          }),
+          message: Schema.String
+        }).make({
+          init: () => ({ log: [], gone: false, off: false }),
+          update: ($, message) => ({
+            log: [...$.model.log, message],
+            gone: $.model.gone || message === "remove-down",
+            off: $.model.off || message === "disable-down"
+          }),
+          view: (h, model) =>
+            h.div(
+              h.form.onSubmit("submit").children(
+                h.button.on("pointerdown", "pd")
+                  .on("mousedown", "md")
+                  .on("mouseup", "mu")
+                  .onClick("ck")
+                  .children("All"),
+                h.button.on("pointerdown", "pd-cancel", {
+                  preventDefault: true
+                })
+                  .on("mousedown", "md")
+                  .on("mouseup", "mu")
+                  .onClick("ck")
+                  .children("CancelPD"),
+                h.button.on("pointerdown", "pd")
+                  .on("mousedown", "md-cancel", { preventDefault: "always" })
+                  .on("mouseup", "mu-cancel", { preventDefault: "always" })
+                  .onClick("ck")
+                  .children("CancelMouse")
+              ),
+              h.button.attr("type", "button")
+                .on("pointerdown", "pd-cancel", { preventDefault: true })
+                .on("mousedown", "md")
+                .on("mouseup", "mu")
+                .onClick("ck")
+                .children("PlainPD"),
+              h.button.attr("type", "button")
+                .on("mousedown", "md-cancel", { preventDefault: "always" })
+                .onClick("ck")
+                .children("PlainMouse"),
+              model.gone
+                ? undefined
+                : h.button.key("remove").attr("type", "button")
+                  .on("mousedown", "remove-down")
+                  .on("mouseup", "remove-up")
+                  .onClick("remove-click")
+                  .children("Remove"),
+              h.button.attr("type", "button")
+                .disabled(model.off)
+                .on("mousedown", "disable-down")
+                .on("mouseup", "disable-up")
+                .onClick("disable-click")
+                .children("Disable"),
+              h.output(model.log.join("|"))
+            )
+        })
+        const scene = yield* HtmlScene.make(Sequence, {})
+        scene.click("All")
+          .expectDefaultPrevented()
+          .expect(log).toHaveText("pd|md|mu|ck|submit")
+          .click("CancelPD")
+          .expectDefaultPrevented()
+          .expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|submit")
+          .click("CancelMouse")
+          .expectDefaultPrevented()
+          .expect(log).toHaveText(
+            "pd|md|mu|ck|submit|pd-cancel|ck|submit|pd|md-cancel|mu-cancel|ck|submit"
+          )
+          .click("PlainPD")
+          .expectDefaultPrevented(false)
+          .click("PlainMouse")
+          .expectDefaultPrevented(false)
+          .click("Remove")
+          .expect(log).toHaveText(/\|remove-down$/)
+          .click("Disable")
+          .expect(log).toHaveText(/\|disable-down$/)
+      }))
+
+    it.effect("skips press events handled only by a headless child when the parent handles click", () =>
+      Effect.gen(function*() {
+        const TooltipLike = Html.component({
+          name: "TooltipLike",
+          model: Schema.Boolean,
+          message: Schema.Literal("Pressed")
+        }).make({
+          init: () => false,
+          update: () => true,
+          parts: (p) => ({
+            trigger: p.part("button", (b) => b.on("mousedown", "Pressed"))
+          })
+        })
+        const Parent = Html.component({
+          name: "Parent",
+          model: Schema.Number,
+          message: Schema.Literal("Saved")
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          view: (h, count) =>
+            h.div(
+              TooltipLike(h, {
+                view: (tip) =>
+                  h.div(
+                    tip.trigger(h.button.onClick("Saved")).children("Save"),
+                    tip.trigger(h.button).children("ChildOnly")
+                  )
+              }),
+              h.output(String(count))
+            )
+        })
+        const scene = yield* HtmlScene.make(Parent, {})
+        scene.click("Save").expect(log).toHaveText("1")
+        assert.throws(
+          () => scene.click("ChildOnly"),
+          /only \/Parent\/TooltipLike\[\] handles "mousedown"/
+        )
+      }))
   })
 })

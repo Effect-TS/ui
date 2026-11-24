@@ -1834,6 +1834,22 @@ export const handles = (
   event: string
 ): boolean => handlerOn(ancestry(story, node), event) !== undefined
 
+/** @internal */
+export const handlesOwn = (
+  story: State<any, any, any, any>,
+  node: Locator.Node,
+  event: string
+): "own" | "child" | "none" => {
+  const handler = handlerOn(ancestry(story, node), event)
+  if (handler === undefined) return "none"
+  const own = "/" + story.component.definition.name
+  const hasOwn = Object.hasOwn(handler.handlers, event) ||
+    (handler.owned ?? []).some((layer) =>
+      layer.owner.path === own && Object.hasOwn(layer.handlers, event)
+    )
+  return hasOwn ? "own" : "child"
+}
+
 /** What one event did: the record after it, whether its default was cancelled, and whether a layer sent a message. */
 export interface Fired<Props, Model, Msg, Events> {
   readonly story: State<Props, Model, Msg, Events>
