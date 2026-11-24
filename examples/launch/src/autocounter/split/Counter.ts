@@ -1,4 +1,5 @@
 import { Component, Subscription } from "@effect/ui"
+import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
 import { CounterMessage, DelayReset } from "../Counter.ts"
@@ -46,16 +47,13 @@ const subscriptions = CounterDef.subscriptions(({ model }) => [
 const view = CounterDef.view((h, model) =>
   h.div.class("counter").children(
     h.output.class("count").children(String(model.count)),
-    h.button
-      .onClick(CounterMessage.ClickedIncrement())
+    Button(h, { onPress: CounterMessage.ClickedIncrement() })
       .children("Increment"),
-    h.button
-      .onClick(CounterMessage.ClickedResetAfterDelay())
+    Button(h, { onPress: CounterMessage.ClickedResetAfterDelay() })
       .children(
         h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
       ),
-    h.button
-      .onClick(CounterMessage.ClickedToggleAutoCount())
+    Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })
       .children(model.isAutoCounting ? "Stop" : "Auto-count")
   )
 )

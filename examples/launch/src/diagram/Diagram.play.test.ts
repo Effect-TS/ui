@@ -203,7 +203,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         )
         yield* TestClock.adjust("900 millis")
         yield* play.expect(announced("Effect UI")).toHaveText(
-          "Step 2: A2's update sends a Message to the provider."
+          "Step 2: A2's update sends a Message to the Provider."
         )
         yield* play.expect(active("Effect UI")).toHaveCount(2)
         yield* TestClock.adjust("2700 millis")

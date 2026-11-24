@@ -1,4 +1,7 @@
-import type { View } from "@effect/ui"
+import { Component, UiSchema, type View } from "@effect/ui"
+import { Collapsible } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
 import {
   format,
   type Framework,
@@ -108,14 +111,43 @@ const Full = <M>(
     )
   )
 
-export const AllResults = <M>(h: View.H<M>) =>
-  h.details.class("perf-all").children(
-    h.summary.children(
-      "Results for all seven frameworks, where lower is better",
-      h.span.class("perf-all-chevron").attr("aria-hidden", "true")
-    ),
-    h.div.class("perf-all-panel").children(
-      Full(h, scriptTitle, script),
-      Full(h, loadTitle, load)
-    )
-  )
+const AllResultsMessage = UiSchema.TaggedEnum({
+  ToggledResults: { open: Schema.Boolean }
+})
+
+export const AllResults = Component.define({
+  name: "AllResults",
+  scoped: false,
+  model: Schema.Struct({ isOpen: Schema.Boolean }),
+  message: AllResultsMessage,
+  elements: Html
+}).make({
+  init: () => ({ isOpen: false }),
+  update: {
+    ToggledResults: ($, { open }) => $.evolve({ isOpen: open })
+  },
+  view: (h, model) =>
+    Collapsible(h, {
+      props: { open: model.isOpen, hiddenUntilFound: true },
+      onEmit: {
+        Toggled: ({ open }) =>
+          AllResultsMessage.ToggledResults({ open }),
+        Settled: () => undefined
+      },
+      view: (collapsible) =>
+        collapsible.root(h.div.class("perf-all")).children(
+          collapsible.trigger(h.button.class("perf-all-trigger"))
+            .children(
+              "Results for all seven frameworks, where lower is better",
+              h.span.class("perf-all-chevron").attr(
+                "aria-hidden",
+                "true"
+              )
+            ),
+          collapsible.panel(h.div.class("perf-all-panel"))?.children(
+            Full(h, scriptTitle, script),
+            Full(h, loadTitle, load)
+          )
+        )
+    })
+})

@@ -434,25 +434,25 @@ a {
   background: var(--card);
 }
 
-.perf-all summary {
+.perf-all-trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   padding: 16px 20px;
+  border: 0;
   border-radius: 6px;
-  list-style: none;
+  background: none;
+  font: inherit;
   font-size: 1rem;
   font-weight: 500;
   line-height: 1.375;
   color: var(--prose-foreground);
+  text-align: start;
   cursor: pointer;
 }
 
-.perf-all summary::-webkit-details-marker {
-  display: none;
-}
-
-.perf-all summary:hover {
+.perf-all-trigger:hover {
   color: var(--foreground);
 }
 
@@ -483,31 +483,23 @@ a {
   transition: transform 0.2s;
 }
 
-.perf-all[open] .perf-all-chevron::before {
+.perf-all[data-open] .perf-all-chevron::before {
   transform: rotate(180deg);
 }
 
 .perf-all-panel {
-  min-height: 0;
+  height: var(--collapsible-panel-height);
   overflow: hidden;
+  transition: height 0.2s cubic-bezier(0, 0, 0.2, 1);
 }
 
-@supports selector(::details-content) {
-  .perf-all::details-content {
-    display: grid;
-    grid-template-rows: 0fr;
-    content-visibility: hidden;
-    transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1), content-visibility 0.2s allow-discrete;
-  }
-
-  .perf-all[open]::details-content {
-    grid-template-rows: 1fr;
-    content-visibility: visible;
-  }
+.perf-all-panel[data-starting-style],
+.perf-all-panel[data-ending-style] {
+  height: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .perf-all::details-content,
+  .perf-all-panel,
   .perf-all-chevron,
   .perf-all-chevron::before {
     transition: none;

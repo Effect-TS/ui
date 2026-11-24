@@ -212,7 +212,7 @@ const sharedState: Scenario = {
     {
       id: "effect",
       title: "Effect UI",
-      subtitle: "The shared value lives in a provider's Model",
+      subtitle: "The shared value lives in a Provider's Model",
       rootName: "Provider",
       roles: {
         Root: "Owns the value",
@@ -225,12 +225,12 @@ const sharedState: Scenario = {
         sent(reader),
         {
           nodes: [reader, "Root"],
-          text: `${reader}'s update sends a Message to the provider.`
+          text: `${reader}'s update sends a Message to the Provider.`
         },
         {
           nodes: ["Root"],
           text:
-            "The provider's update changes the value in its Model."
+            "The Provider's update changes the value in its Model."
         },
         {
           nodes: ["A1", "A2"],

@@ -4,6 +4,7 @@ import {
   Subscription,
   UiSchema
 } from "@effect/ui"
+import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 
@@ -69,18 +70,15 @@ export const Counter = Component.define({
   view: (h, model) =>
     h.div.class("counter").children(
       h.output.class("count").children(String(model.count)),
-      h.button
-        .onClick(CounterMessage.ClickedIncrement())
+      Button(h, { onPress: CounterMessage.ClickedIncrement() })
         .children("Increment"),
-      h.button
-        .onClick(CounterMessage.ClickedResetAfterDelay())
+      Button(h, { onPress: CounterMessage.ClickedResetAfterDelay() })
         .children(
           // True while a DelayReset Command is running. The runtime
           // tracks that, so the Model doesn't need a flag for it.
           h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
         ),
-      h.button
-        .onClick(CounterMessage.ClickedToggleAutoCount())
+      Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })
         .children(model.isAutoCounting ? "Stop" : "Auto-count")
     )
 })

@@ -18,7 +18,7 @@ Key changes:
 Key additions:
 
 - [Built-in queries](#addition-built-in-queries)
-- [Shared state with providers](#addition-shared-state-with-providers)
+- [Shared state with Providers](#addition-shared-state-with-providers)
 - [Play tests](#addition-play-tests)
 
 It also covers what will stay the same.
@@ -94,12 +94,14 @@ A Story test sends Messages to update, and a Scene test does the same through th
 In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, each Component has its own Model, and a Component can read state that is owned elsewhere:
 
 - **Its own Model:** State the Component changes in its update, such as a form draft or whether a dialog is open.
-- **Another Component's Model:** A parent passes state down as props, and a [provider](#addition-shared-state-with-providers) shares state with every Component inside it.
+- **Another Component's Model:** A parent passes state down as props, and a [Provider](#addition-shared-state-with-providers) shares state with every Component inside it.
 - **The query cache:** The runtime keeps the data a [query](#addition-built-in-queries) fetches, with its loading and failure states.
 
-The runtime also tracks which Commands are running. The counter's view checks with `h.isRunning(DelayReset)`, so its Model needs no flag for a reset in progress.
+The runtime also tracks which Commands are running, and a view can check with `h.isRunning`. The auto-counter in [A complete Component](#a-complete-component) shows "Resetting" this way, so its Model needs no flag for a reset in progress.
 
 A Component's Model holds the state it changes through update. It no longer has to hold everything its view shows.
+
+You can still reconstruct a Component's Model from a log of its Messages. With a `MessageLog`, the runtime records each Message in order, along with the props, query results and Provider values its update read. It also records changes to props and query results, and when Commands start and end. Replaying the log reproduces the Model without running Commands, fetches or Subscriptions.
 
 ## Addition: Built-in queries
 
@@ -115,11 +117,11 @@ In Effect UI, you define a query once: its arguments, its result, how long the r
 Both load the same list of posts and show it.
 :::
 
-## Addition: Shared state with providers
+## Addition: Shared state with Providers
 
-In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down to the next through `viewInputs`. A Submodel asked for a change with an OutMessage, which each parent forwarded until it reached the owner.
+In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down, and a Submodel communicated back up the tree with an OutMessage, which each parent forwarded until it reached the owner.
 
-In Effect UI, a provider is a Component that shares part of its Model with every Component rendered inside it, at any depth. A Component lists the provider to read its value and sends it a Message to ask for a change. The Components in between don't pass the value down or forward the Message. The value changes only in the provider's update.
+In Effect UI, a Provider is a Component that shares part of its Model with every Component rendered inside it, at any depth. A Component lists the Provider to read its value and sends it a Message to ask for a change. The Components in between don't pass the value down or forward the Message. The value changes only in the Provider's update.
 
 ::Diagram{scenario="sharedState"}
 

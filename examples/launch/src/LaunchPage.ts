@@ -107,7 +107,7 @@ export const LaunchPage = Component.define({
                 Caption(h, caption)
               ),
             PerformanceChart: (h) => PerformanceChart(h),
-            AllResults: (h) => AllResults(h),
+            AllResults: (h) => AllResults(h, {}),
             Footer: (h, _attributes, content) =>
               h.footer.class("footer").children(content)
           })

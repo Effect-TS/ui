@@ -1,5 +1,6 @@
 import { Section } from "#domain/Section"
 import { Component, Subscription, UiSchema } from "@effect/ui"
+import { Button, NavigationMenu } from "@effect/ui-kit"
 import { Html, HtmlCommand, HtmlSubscription } from "@effect/ui/html"
 import { Array, Option, Schema, Stream } from "effect"
 
@@ -85,33 +86,46 @@ export const Nav = Component.define({
     const list = h.id("sections")
     const { sections } = h.props
     const current = sections.find(({ id }) => id === model.current)
-    return h.nav.class("nav").attr("aria-label", "On this page")
-      .children(
-        h.p.class("nav-title").attr("aria-hidden", "true").children(
-          "On this page"
-        ),
-        h.button.ref(Toggle).class("nav-toggle").attrs({
-          type: "button",
-          "aria-expanded": String(model.isOpen),
-          "aria-controls": list
-        }).onClick(NavMessage.ClickedToggle()).children(
-          h.span.children("On this page"),
-          " ",
-          current &&
-            h.span.class("nav-current").children(current.label)
-        ),
-        h.ol.id(list).class("nav-list").children(
-          ...sections.map(({ id, label, isNested }) =>
-            h.li.key(id).children(
-              h.a.class("nav-link", isNested && "nav-nested").attrs({
-                href: `#${id}`,
-                "aria-current": id === model.current
-                  ? "location"
-                  : undefined
-              }).onClick(NavMessage.ClickedSection()).children(label)
+    return NavigationMenu(h, {
+      props: { orientation: "vertical" },
+      view: (menu) =>
+        menu.root(
+          h.nav.class("nav").attr("aria-label", "On this page")
+        )
+          .children(
+            h.p.class("nav-title").attr("aria-hidden", "true")
+              .children("On this page"),
+            Button(h, {
+              element: h.button.ref(Toggle),
+              onPress: NavMessage.ClickedToggle()
+            }).class("nav-toggle").attrs({
+              "aria-expanded": String(model.isOpen),
+              "aria-controls": list
+            }).children(
+              h.span.children("On this page"),
+              " ",
+              current &&
+                h.span.class("nav-current").children(current.label)
+            ),
+            menu.list(h.ul.id(list).class("nav-list")).children(
+              ...sections.map(({ id, label, isNested }) =>
+                menu.item(h.li.key(id)).children(
+                  menu.link({
+                    element: h.a.class(
+                      "nav-link",
+                      isNested && "nav-nested"
+                    ).attr("href", `#${id}`).onClick(
+                      NavMessage.ClickedSection()
+                    ),
+                    active: id === model.current
+                  }).attr(
+                    "aria-current",
+                    id === model.current ? "location" : undefined
+                  ).children(label)
+                )
+              )
             )
           )
-        )
-      )
+    })
   }
 })

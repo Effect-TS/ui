@@ -4,7 +4,7 @@ import {
   UiSchema,
   type View
 } from "@effect/ui"
-import { Select } from "@effect/ui-kit"
+import { Button, Select } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
 import {
@@ -86,11 +86,14 @@ const Panel = (
     h.ol.class("diagram-steps").children(
       ...steps.map((step, index) =>
         h.li.key(String(index)).children(
-          h.button.class("diagram-step").attrs({
-            type: "button",
-            "aria-current": index === active ? "step" : undefined
-          }).onClick(
-            DiagramMessage.ClickedStep({ side: side.id, index })
+          Button(h, {
+            onPress: DiagramMessage.ClickedStep({
+              side: side.id,
+              index
+            })
+          }).class("diagram-step").attr(
+            "aria-current",
+            index === active ? "step" : undefined
           ).children(
             h.span.class("diagram-step-number").children(
               String(index + 1)
@@ -215,10 +218,8 @@ export const Diagram = Component.define({
                 )
             )
         }),
-        h.button
+        Button(h, { onPress: DiagramMessage.ClickedSend() })
           .class("diagram-send")
-          .attr("type", "button")
-          .onClick(DiagramMessage.ClickedSend())
           .children(scenario.action)
       ),
       h.div.class("diagram-panels").children(
