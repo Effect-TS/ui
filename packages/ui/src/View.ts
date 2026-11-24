@@ -338,13 +338,13 @@ export type MountHint =
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
  * A child dropped from the view unmounts, and its Model goes with it. A
- * component defined with `keepAlive: true` is kept instead, so the user finds it
- * as they left it: a hidden tab with a half-filled form, a wizard step, a row
- * a filter hides. It's written inside `h.keepAlive` with the `s` that passes,
- * `h.keepAlive((s) => Profile(s, { key: "profile" }))`, and it belongs to the
- * component whose view called `h.keepAlive`, its author. Its path is
- * `Name[key]` under the author wherever the view puts it, so moving it to
- * another element or into another child's slot keeps the instance.
+ * component defined with `keepAlive: true` is kept instead, so the user finds
+ * it as they left it: a hidden tab with a half-filled form, a wizard step, a
+ * row a filter hides. It's written inside `h.keepAlive` with the `s` that
+ * passes, `h.keepAlive((s) => Profile(s, { key: "profile" }))`, and it
+ * belongs to the component whose view called `h.keepAlive`, its author. Its
+ * path is `Name[key]` under the author wherever the view puts it, so moving
+ * it to another element or into another child's slot keeps the instance.
  *
  * While no view writes it, the runtime keeps its nodes out of the document,
  * and the child keeps its Model, its Commands in flight, its Subscriptions

@@ -114,12 +114,8 @@ describe("keepAlive", () => {
       false
     >()
     expect(
-      Component.define({ name: "Off", keepAlive: false, ...options }).make({
-        init: () => null,
-        update: ($) => $.model,
-        view: (h) => h.el("p")
-      })
-    ).type.toBeAssignableTo<Component.Any>()
+      Component.define({ name: "Off", keepAlive: false, ...options }).keepAlive
+    ).type.toBe<false>()
     // @ts-expect-error is not assignable to type '{ readonly keepAlive: true; }'
     const kept: { readonly keepAlive: true } = Component.define({
       name: "Kept",
@@ -129,11 +125,10 @@ describe("keepAlive", () => {
   })
 
   it("needs keepAlive: true present, not maybe absent", () => {
-    const enabled = Math.random() > 0.5
     Component.define({
       name: "Maybe",
       // @ts-expect-error Type 'undefined' is not assignable to type 'true'
-      keepAlive: enabled ? true : undefined,
+      keepAlive: condition ? true : undefined,
       model: Schema.Null,
       message: Schema.Never
     })

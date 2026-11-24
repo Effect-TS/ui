@@ -1261,8 +1261,8 @@ export interface KeepAliveComponent<
 {}
 
 /**
- * What a component has, kept alive or not: a `Component` or a `KeepAliveComponent`
- * without its call signature.
+ * What a component has, kept alive or not: a `Component` or a
+ * `KeepAliveComponent` without its call signature.
  *
  * @stability experimental
  * @category models
@@ -2273,9 +2273,9 @@ export type OnChange<S, M, Msg> = M extends Query.Query.Any
   : never
 
 /**
- * Returns `true` if `u` is a component. It narrows to `Any` or `KeepAlive`, which
- * can't be called, even after checking `definition.keepAlive`: render a component
- * through its own type.
+ * Returns `true` if `u` is a component. It narrows to `Any` or `KeepAlive`,
+ * which can't be called, even after checking `definition.keepAlive`: render a
+ * component through its own type.
  *
  * @stability experimental
  * @category guards
@@ -2498,11 +2498,11 @@ export interface Definition<
   SR = {},
   SV = never,
   Rp = never,
-  Sc extends boolean = boolean
+  Ka extends boolean = boolean
 > {
   readonly name: Name
   /** Whether the component is written inside `h.keepAlive`, and lives as its predicate says. */
-  readonly keepAlive: Sc
+  readonly keepAlive: Ka
   readonly props: Schema.Codec<Props, any>
   readonly model: Schema.Codec<Model, any>
   readonly message: Schema.Codec<Msg, any>
@@ -2595,7 +2595,7 @@ export interface Definition<
          * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
          * Nor can a keep-alive one: a headless child lives where its declarer's view writes it.
          */
-        readonly parts: [Sl] extends [never] ? [Sc] extends [false] ? (
+        readonly parts: [Sl] extends [never] ? [Ka] extends [false] ? (
               p:
                 & PartsHelper<Msg, Props, V>
                 & QueryHelpers<L>
@@ -2673,7 +2673,7 @@ export interface Definition<
       & OwnersAreHeadless<SV>
       & SelfShares<SR, SV>
   ): ComponentOf<
-    Sc,
+    Ka,
     Name,
     Props,
     Model,
@@ -2694,7 +2694,7 @@ export interface Definition<
 }
 
 type ComponentOf<
-  Sc extends boolean,
+  Ka extends boolean,
   Name extends string,
   Props,
   Model,
@@ -2704,7 +2704,7 @@ type ComponentOf<
   V extends View.Elements,
   L,
   Sl extends string
-> = [Sc] extends [false] ?
+> = [Ka] extends [false] ?
   Component<Name, Props, Model, Msg, Events, R, V, L, Sl>
   : KeepAliveComponent<Name, Props, Model, Msg, Events, R, V, L, Sl>
 
@@ -2814,7 +2814,7 @@ export type Helper<D> = D extends Definition<
   infer SR,
   infer _SV,
   infer _Rp,
-  infer _Sc
+  infer _Ka
 > ? ViewHelper<M, P, Msg, V, L, Sl, SR>
   : never
 
@@ -2894,9 +2894,9 @@ export interface Current<out Model, out Props, out Queries> {
 }
 
 /**
- * What an `h.keepAlive` predicate is asked with: the current Model, props and query
- * results of the component whose view wrote the block, and the key of the
- * child it is asked about.
+ * What an `h.keepAlive` predicate is asked with: the current Model, props
+ * and query results of the component whose view wrote the block, and the key
+ * of the child it is asked about.
  *
  * @stability experimental
  * @category models
@@ -3190,10 +3190,8 @@ export const define = <
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
-  // Left out, `keepAlive` infers nothing, so it's `false`. The return type is `NoInfer`, so an annotation such as
-  // `{ keepAlive: true }` on the result can't make it `true`. A `true` that may be absent, such as
-  // `enabled ? true : undefined`, must meet the `keepAlive: boolean` that `options` adds for it.
-  Sc extends boolean = false
+  // `false` when `keepAlive` is left out, as at runtime.
+  Ka extends boolean = false
 >(
   options: {
     readonly name: Name
@@ -3204,7 +3202,7 @@ export const define = <
      * writes it. Any other child lives while the view writes it at its place.
      * `false` by default.
      */
-    readonly keepAlive?: Sc | undefined
+    readonly keepAlive?: Ka | undefined
     readonly props?: Schema.Codec<Props, any> | undefined
     readonly model: Schema.Codec<Model, any>
     readonly message: Schema.Codec<Msg, any>
@@ -3325,7 +3323,9 @@ export const define = <
       | false
       | ((model: Model, props: Props) => NoInfer<Model>)
       | undefined
-  } & ([Sc] extends [true] ? { readonly keepAlive: boolean } : unknown)
+    // A `true` must be present: `enabled ? true : undefined` could be `false` at runtime. It's `boolean`, not
+    // `true`, so a wrapper generic in `K extends boolean` can pass `keepAlive: k`.
+  } & ([Ka] extends [true] ? { readonly keepAlive: boolean } : unknown)
 ): Definition<
   Name,
   Props,
@@ -3342,7 +3342,8 @@ export const define = <
   >,
   SV,
   Rp,
-  NoInfer<Sc>
+  // `NoInfer`, so an annotation on the result, such as `{ keepAlive: true }`, can't decide it.
+  NoInfer<Ka>
 > => {
   const shares = options.shares
   const definition: Definition<
@@ -3361,10 +3362,10 @@ export const define = <
     >,
     SV,
     Rp,
-    Sc
+    Ka
   > = {
     name: options.name,
-    keepAlive: (options.keepAlive ?? false) as Sc,
+    keepAlive: (options.keepAlive ?? false) as Ka,
     props: options.props ?? (Schema.Struct({}) as any),
     model: options.model,
     message: options.message,
@@ -4334,9 +4335,9 @@ export declare namespace Lazy {
     | AsyncResult.Failure<never, unknown>
 
   /**
-   * A lazy keep-alive component: it's written inside `h.keepAlive`, with the `s`
-   * it gives, as the keep-alive component is. Once its module has loaded, the
-   * child lives until the block's predicate is false for its key, or the
+   * A lazy keep-alive component: it's written inside `h.keepAlive`, with the
+   * `s` it gives, as the keep-alive component is. Once its module has loaded,
+   * the child lives until the block's predicate is false for its key, or the
    * parent ends.
    *
    * @category models
@@ -4428,8 +4429,8 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy
  *
  * - `load` must resolve to a component that isn't headless. Any other
  *   value fails the load, as does a `load` that throws.
- * - A lazy keep-alive child is kept only once its module has loaded. Until then,
- *   a parent that stops writing it drops its fallback, as it would any
+ * - A lazy keep-alive child is kept only once its module has loaded. Until
+ *   then, a parent that stops writing it drops its fallback, as it would any
  *   child's.
  * - The server waits for the load and renders the component. The client
  *   doesn't load the module before it hydrates, so it replaces the server's

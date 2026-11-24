@@ -147,9 +147,9 @@ export interface HostEvents<Node> {
  * `hydration` lets the renderer read nodes a server rendered, so `mount` with
  * a server `state` adopts them. A host without it builds every node fresh.
  *
- * `createContainer` makes a node that holds the nodes of a kept keep-alive
- * child out of the document, such as a `DocumentFragment`. It is never
- * inserted. A host without it fails the author of a child it keeps.
+ * `createContainer` makes a node that holds the nodes of a kept child out of
+ * the document, such as a `DocumentFragment`. It is never inserted. A host
+ * without it fails the author of a child it keeps.
  *
  * `events`, if given, has the host read an element's events from the
  * renderer when an event fires, so the host stores nothing per element and
