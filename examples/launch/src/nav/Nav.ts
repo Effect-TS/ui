@@ -1,72 +1,13 @@
+import { Section } from "#domain/Section"
 import { Component, Subscription, UiSchema } from "@effect/ui"
-import { HtmlCommand, HtmlSubscription, Html } from "@effect/ui/html"
+import { Html, HtmlCommand, HtmlSubscription } from "@effect/ui/html"
 import { Array, Option, Schema, Stream } from "effect"
-
-export const sections = [
-  { id: "terms", label: "Terms", isNested: false },
-  {
-    id: "architecture",
-    label: "The core change: Component-based architecture",
-    isNested: false
-  },
-  {
-    id: "messages",
-    label: "How Messages travel in Foldkit 0.x vs. Effect UI",
-    isNested: true
-  },
-  {
-    id: "code",
-    label: "Foldkit 0.x vs. Effect UI code comparison",
-    isNested: true
-  },
-  {
-    id: "self-contained",
-    label: "Components are self-contained",
-    isNested: true
-  },
-  {
-    id: "split",
-    label: "Organizing larger Components",
-    isNested: true
-  },
-  {
-    id: "queries",
-    label: "Addition: Built-in queries",
-    isNested: false
-  },
-  {
-    id: "testing",
-    label: "Change: Simpler Story and Scene tests",
-    isNested: false
-  },
-  { id: "play", label: "Addition: Play tests", isNested: false },
-  {
-    id: "performance",
-    label: "Change: Improved performance",
-    isNested: false
-  },
-  { id: "more", label: "More changes", isNested: false },
-  {
-    id: "carries-over",
-    label: "Unchanged: Values, features and guarantees",
-    isNested: false
-  },
-  {
-    id: "next",
-    label: "You can keep building on Foldkit 0.x",
-    isNested: false
-  }
-] as const
-
-const ids = sections.map(({ id }) => id)
-
-const SectionId = Schema.Literals(ids)
 
 export const NavMessage = UiSchema.TaggedEnum({
   ClickedToggle: {},
   ClickedSection: {},
   PressedEscape: {},
-  ChangedSection: { current: Schema.NullOr(SectionId) }
+  ChangedSection: { current: Schema.NullOr(Schema.String) }
 })
 
 const Toggle = Html.ref("Nav.toggle", "button")
@@ -83,31 +24,39 @@ const isAtEnd = () =>
   window.scrollY + window.innerHeight >=
     document.documentElement.scrollHeight - 1
 
-const currentSection = () =>
-  isAtEnd()
-    ? sections[sections.length - 1].id
-    : Option.getOrNull(Array.findLast(ids, hasPassed))
-
-const TrackSection = Subscription.make(
-  "section",
-  Stream.suspend(() =>
-    Stream.merge(
-      Stream.fromEventListener(window, "scroll", { passive: true }),
-      Stream.fromEventListener(window, "resize")
-    )
-  ).pipe(
-    Stream.prepend([undefined]),
-    Stream.map(currentSection),
-    Stream.changes,
-    Stream.map((current) => NavMessage.ChangedSection({ current }))
+const currentSection = (ids: ReadonlyArray<string>) =>
+  Option.getOrNull(
+    isAtEnd() ? Array.last(ids) : Array.findLast(ids, hasPassed)
   )
-)
+
+const TrackSection = (ids: ReadonlyArray<string>) =>
+  Subscription.make(
+    "section",
+    ids,
+    (ids) =>
+      Stream.suspend(() =>
+        Stream.merge(
+          Stream.fromEventListener(window, "scroll", {
+            passive: true
+          }),
+          Stream.fromEventListener(window, "resize")
+        )
+      ).pipe(
+        Stream.prepend([undefined]),
+        Stream.map(() => currentSection(ids)),
+        Stream.changes,
+        Stream.map((current) =>
+          NavMessage.ChangedSection({ current })
+        )
+      )
+  )
 
 export const Nav = Component.define({
   name: "Nav",
   scoped: false,
+  props: Schema.Struct({ sections: Schema.Array(Section) }),
   model: Schema.Struct({
-    current: Schema.NullOr(SectionId),
+    current: Schema.NullOr(Schema.String),
     isOpen: Schema.Boolean
   }),
   message: NavMessage,
@@ -123,8 +72,8 @@ export const Nav = Component.define({
       ),
     ChangedSection: ($, { current }) => $.evolve({ current })
   },
-  subscriptions: ({ model }) => [
-    TrackSection,
+  subscriptions: ({ model, props }) => [
+    TrackSection(props.sections.map(({ id }) => id)),
     model.isOpen &&
     HtmlSubscription.onDocument(
       "keydown",
@@ -134,6 +83,7 @@ export const Nav = Component.define({
   ],
   view: (h, model) => {
     const list = h.id("sections")
+    const { sections } = h.props
     const current = sections.find(({ id }) => id === model.current)
     return h.nav.class("nav").attr("aria-label", "On this page")
       .children(

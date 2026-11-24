@@ -1,10 +1,26 @@
 // @vitest-environment happy-dom
+import { Subscription } from "@effect/ui"
 import { HtmlCommand } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { Nav, NavMessage, sections } from "./Nav.ts"
+import { Nav, NavMessage } from "./Nav.ts"
+
+const sections = [
+  { id: "terms", label: "Terms", isNested: false },
+  {
+    id: "queries",
+    label: "Addition: Built-in queries",
+    isNested: false
+  },
+  { id: "cache", label: "One cache", isNested: true }
+]
+
+const section = Subscription.keyOf(
+  "section",
+  sections.map(({ id }) => id)
+)
 
 const closed = Locator.attr("aria-expanded", "false")
 const opened = Locator.attr("aria-expanded", "true")
@@ -16,7 +32,7 @@ const queries = HtmlLocator.role("link", {
 describe("Nav", () => {
   it.effect("lists every section in order", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, {})
+      const s = yield* HtmlScene.make(Nav, { sections })
       s.expect(
         HtmlLocator.role("navigation", { name: "On this page" })
       ).toExist()
@@ -28,7 +44,7 @@ describe("Nav", () => {
 
   it.effect("opens and closes from the bar", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, {})
+      const s = yield* HtmlScene.make(Nav, { sections })
       s.expect(closed).toHaveText("On this page")
         .click(closed)
         .expect(opened).toExist()
@@ -38,7 +54,7 @@ describe("Nav", () => {
 
   it.effect("closes when a section is chosen", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, {})
+      const s = yield* HtmlScene.make(Nav, { sections })
       s.click(closed)
         .click(queries)
         .expect(closed).toExist()
@@ -46,7 +62,7 @@ describe("Nav", () => {
 
   it.effect("closes on Escape and returns focus to the bar", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, {})
+      const s = yield* HtmlScene.make(Nav, { sections })
       s.click(closed)
         .fireDocument("keydown", { key: "Enter" }).expectIgnored()
         .fireDocument("keydown", { key: "Escape" })
@@ -56,10 +72,10 @@ describe("Nav", () => {
 
   it.effect("marks the current section and names it in the bar", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, {})
+      const s = yield* HtmlScene.make(Nav, { sections })
       s.expect(current).toBeAbsent()
         .subscription(
-          "section",
+          section,
           NavMessage.ChangedSection({ current: "queries" })
         )
         .expect(current).toHaveText("Addition: Built-in queries")
@@ -67,7 +83,7 @@ describe("Nav", () => {
           "On this page Addition: Built-in queries"
         )
         .subscription(
-          "section",
+          section,
           NavMessage.ChangedSection({ current: null })
         )
         .expect(current).toBeAbsent()
