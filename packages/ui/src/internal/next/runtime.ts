@@ -491,7 +491,6 @@ const start = (
           }
           return routing === undefined ? first : routing.init(inst, first)
         },
-        hold: hydration?.hold,
         log: record,
         schedule: (task) => {
           const run = recording.follow()

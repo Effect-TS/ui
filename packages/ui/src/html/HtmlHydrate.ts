@@ -373,8 +373,7 @@ export const hydrateEffect = <Props, Model, Msg, R = never>(
       init: (inst) => {
         const first = inst.component.init(inst.props)
         return hydration.init(inst, first) ?? first
-      },
-      hold: hydration.hold
+      }
     })
     hydration.end()
     return root

@@ -13,6 +13,9 @@ import { segmentOf, slotSegment } from "./paths.ts"
 
 /** @internal */
 export interface Host<N = any> {
+  readonly hold?:
+    | ((owner: Instance, rec: Rec, slot: string | undefined) => boolean)
+    | undefined
   readonly createElement: (tag: string) => N
   readonly createText: (text: string) => N
   readonly setText: (node: N, text: string) => void
@@ -209,9 +212,6 @@ export interface Tree {
     cause: Cause.Cause<unknown>
   ) => void
   readonly init: (inst: Instance) => Next
-  readonly hold:
-    | ((owner: Instance, rec: Rec, path: string, resume: () => void) => boolean)
-    | undefined
   readonly log: Recorder | undefined
   readonly fallback:
     | ((cause: Cause.Cause<unknown>) => View.Node<any, any>)
@@ -929,14 +929,9 @@ const mountChild = (owner: Instance, rec: Rec): void => {
         waiting: []
       }
     }
-  } else if (
-    owner.tree.hold?.(
-      owner,
-      rec,
-      (at ?? owner.path) + "/" + segmentOf(component, view.key),
-      () => settle(owner, rec, at)
-    )
-  ) held = create(owner, emptyText)
+  } else if (owner.tree.host.hold?.(owner, rec, at)) {
+    held = create(owner, emptyText)
+  }
   const child = rec.inst = held === undefined
     ? new Instance(owner.tree, component, owner, rec, view.props, env)
     : owner
@@ -947,7 +942,12 @@ const mountChild = (owner: Instance, rec: Rec): void => {
   else if (owner.closed) close(child)
 }
 
-const settle = (owner: Instance, rec: Rec, at: string | undefined): void => {
+/** @internal */
+export const settle = (
+  owner: Instance,
+  rec: Rec,
+  at: string | undefined
+): void => {
   if (rec.inst !== owner || owner.closed) return
   const host = owner.tree.host
   const old = rec.kids![0]!
@@ -1513,7 +1513,6 @@ export interface Options {
   readonly log?: Recorder | undefined
   readonly fallback?: Tree["fallback"]
   readonly init?: Tree["init"] | undefined
-  readonly hold?: Tree["hold"] | undefined
   readonly schedule?: Tree["schedule"] | undefined
   readonly follow?: Tree["follow"] | undefined
 }
@@ -1532,7 +1531,6 @@ export const mount = (
     host,
     report: options.report,
     init: options.init ?? initOf,
-    hold: options.hold,
     log: options.log,
     fallback: options.fallback,
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".

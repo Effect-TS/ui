@@ -6,7 +6,9 @@ import type * as Fiber from "effect/Fiber"
 import * as Result from "effect/Result"
 import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
+import type * as View from "../View.ts"
 import * as Kernel from "./kernel.ts"
+import { segmentOf } from "./paths.ts"
 import { type Decoded, stateCodecOf } from "./stateCodec.ts"
 
 /** @internal */
@@ -35,7 +37,6 @@ export interface Hydration {
     inst: Kernel.Instance,
     first: Kernel.Next
   ) => Kernel.Next | undefined
-  readonly hold: NonNullable<Kernel.Options["hold"]>
   readonly adopts: (inst: Kernel.Instance) => boolean
   readonly held: () => ReadonlyArray<string>
   readonly end: () => void
@@ -125,6 +126,48 @@ export const make = (
     if (pass || held.size > 0) return
     settled()
   }
+  ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
+    const view = rec.v as View.Child<any, any>
+    const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
+    if (resumed.delete(rec) || !serves(owner, path)) return false
+    const exit = decode(view.component as never, state[path])
+    if (Exit.isExit(exit)) {
+      decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
+      return false
+    }
+    active?.hold(path)
+    held.set(rec, path)
+    exit.addObserver((exit) => {
+      const tree = owner.tree
+      tree.schedule(() => {
+        held.delete(rec)
+        const placeholder = rec.inst === owner && rec.kids !== undefined
+          ? rec.kids[0]!.node
+          : undefined
+        const range = adoption?.resume(placeholder)
+        if (placeholder !== undefined && !owner.closed && !tree.closed) {
+          decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
+          resumed.add(rec)
+          const outer = active
+          active = range
+          if (range !== undefined) use(host, range.host)
+          resuming = true
+          try {
+            Kernel.settle(owner, rec, at)
+          } finally {
+            resuming = false
+            active = outer
+            use(host, outer?.host ?? base)
+            decoded.delete(path)
+          }
+        }
+        range?.done()
+        Kernel.flush(tree)
+        finish()
+      })
+    })
+    return true
+  }
   return {
     init(inst, first) {
       const path = inst.path
@@ -147,46 +190,6 @@ export const make = (
         lists: first.lists,
         sends: first.sends
       }
-    },
-    hold(owner, rec, path, resume) {
-      if (resumed.delete(rec) || !serves(owner, path)) return false
-      const exit = decode((rec.v as any).component, state[path])
-      if (Exit.isExit(exit)) {
-        decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
-        return false
-      }
-      active?.hold(path)
-      held.set(rec, path)
-      exit.addObserver((exit) => {
-        const tree = owner.tree
-        tree.schedule(() => {
-          held.delete(rec)
-          const placeholder = rec.inst === owner && rec.kids !== undefined
-            ? rec.kids[0]!.node
-            : undefined
-          const range = adoption?.resume(placeholder)
-          if (placeholder !== undefined && !owner.closed && !tree.closed) {
-            decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
-            resumed.add(rec)
-            const outer = active
-            active = range
-            if (range !== undefined) use(host, range.host)
-            resuming = true
-            try {
-              resume()
-            } finally {
-              resuming = false
-              active = outer
-              use(host, outer?.host ?? base)
-              decoded.delete(path)
-            }
-          }
-          range?.done()
-          Kernel.flush(tree)
-          finish()
-        })
-      })
-      return true
     },
     adopts: (inst) => adopting.has(inst),
     held: () => [...held.values()],
