@@ -93,6 +93,21 @@ export interface ChildPaths {
   placed: Set<string> | undefined
 }
 
+/** @internal */
+export const heldPaths = (
+  at: At,
+  held: Iterable<View.Child<any, any>>
+): ChildPaths => {
+  const byName = new Map<string, Map<string, View.Child<any, any>>>()
+  for (const child of held) {
+    const name = childName(child.component)
+    let taken = byName.get(name)
+    if (taken === undefined) byName.set(name, taken = new Map())
+    taken.set(child.key, child)
+  }
+  return { at, paths: byName, placed: undefined }
+}
+
 const failure = (at: At, what: string): never => {
   throw new Error(`${pathAt(at)} renders two children ${what}`)
 }

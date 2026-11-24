@@ -2,7 +2,6 @@
 import * as Cause from "effect/Cause"
 import * as Predicate from "effect/Predicate"
 import type * as Component from "../Component.ts"
-import type * as View from "../View.ts"
 import * as child from "./child.ts"
 import * as Kernel from "./kernel.ts"
 
@@ -43,24 +42,6 @@ const ComponentTypeId: Component.TypeId = "~@effect/ui/Component"
 const isRenderable = (u: unknown): u is Component.Any =>
   Predicate.hasProperty(u, ComponentTypeId)
 
-const pendingAlive = new WeakMap<
-  View.Child<any, any>,
-  NonNullable<View.Child<any, any>["alive"]>
->()
-
-/** @internal */
-const keepAliveOnceLoaded = (
-  view: View.Child<any, any>
-): View.Child<any, any> => {
-  if (view.alive !== undefined) return view
-  const alive = pendingAlive.get(view)
-  const state = stateOf(view.component as Component.Lazy.Any)
-  return alive !== undefined && state._tag === "Loaded" &&
-      state.component.definition.keepAlive
-    ? { ...view, alive }
-    : view
-}
-
 const watched = new WeakMap<Kernel.Rec, () => void>()
 
 function loaded(
@@ -79,13 +60,18 @@ function loaded(
       watched.delete(rec)
     }
     if (rec.inst !== owner || owner.closed) return
-    if (loaded) rec.v = keepAliveOnceLoaded(rec.v as View.Child<any, any>)
     Kernel.settle(owner, rec, at)
     Kernel.wake(owner.tree)
   })
   watched.set(rec, unwatch)
   if (state._tag !== "Loading") this.preload()
   return undefined
+}
+
+/** @internal */
+export const unwatch = (rec: Kernel.Rec): void => {
+  watched.get(rec)?.()
+  watched.delete(rec)
 }
 
 function failure(this: Lazy): Cause.Cause<unknown> | undefined {
@@ -103,7 +89,8 @@ const variance = {
 /** @internal */
 export const make = (
   name: string,
-  load: () => Promise<Component.Any>
+  load: () => Promise<Component.Any>,
+  kept: Kernel.Keeper
 ): Component.Lazy.Any => {
   const preload = (): Promise<void> => {
     const state = self.state
@@ -130,33 +117,16 @@ export const make = (
     self.state = { _tag: "Loading", promise }
     return promise
   }
-  const call = (h: any, options: child.Options) => {
-    const state = self.state
-    if (state._tag === "Loaded") {
-      return child.make(
-        self,
-        options,
-        state.component.definition.keepAlive ? h["~alive"] : undefined
-      )
-    }
-    const made = child.make(self, options)
-    const alive = h["~alive"]
-    if (alive !== undefined) pendingAlive.set(made, alive)
-    return made
-  }
+  const call = (h: any, options: child.Options) =>
+    child.make(self, options, h["~alive"])
   const self: Lazy = Object.assign(call, {
     [TypeId]: { ...variance, name },
     state: { _tag: "Idle" } as State,
     listeners: new Set(),
     preload,
     "~load": loaded,
-    "~cause": failure
+    "~cause": failure,
+    "~kept": kept
   }) as any
-  Object.defineProperty(self, "~kept", {
-    get: () =>
-      self.state._tag === "Loaded"
-        ? (self.state.component as any)["~kept"]
-        : undefined
-  })
   return self
 }

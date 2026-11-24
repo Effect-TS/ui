@@ -122,9 +122,15 @@ export interface Keeper {
   readonly patch: (
     inst: Instance,
     old: Rec,
-    view: View.Child<any, any>
+    view: View.Child<any, any>,
+    slot: string | undefined
   ) => Rec | undefined
   readonly release: (owner: Instance, rec: Rec) => boolean
+  readonly shows: (
+    author: Instance,
+    view: View.Child<any, any>,
+    fallback: View.Node<any, any>
+  ) => View.Node<any, any>
 }
 
 /** @internal */
@@ -284,7 +290,12 @@ export class Instance {
   declare look: ((owner: any, optional?: boolean) => unknown) | undefined
   declare owning: unknown
   declare reading: unknown
-  declare kept: { readonly done: () => void } | undefined
+  declare kept:
+    | {
+      readonly done: () => void
+      readonly parked: () => ReadonlyArray<Rec>
+    }
+    | undefined
   writing = 0
   named: string | undefined = undefined
   constructor(
@@ -376,6 +387,27 @@ const fallbackOf = (
   } catch (error) {
     owner.tree.schedule(() => fail(owner, "fallback", Cause.die(error)))
     return emptyText
+  }
+}
+
+const loadingIn = (
+  owner: Instance,
+  view: View.Child<any, any>,
+  cause: Cause.Cause<unknown> | undefined,
+  show: (fallback: View.Node<any, any>) => Rec
+): Rec => {
+  if (view.alive === undefined) {
+    return inFallback(owner, () => show(fallbackOf(owner, view, cause)))
+  }
+  const outer = slot
+  slot = undefined
+  try {
+    return inFallback(owner, () => {
+      const fallback = fallbackOf(owner, view, cause)
+      return show(dev ? keeperOf(view)!.shows(owner, view, fallback) : fallback)
+    })
+  } finally {
+    slot = outer
   }
 }
 
@@ -955,9 +987,11 @@ export const mountChild = (
   const lazy = component["~load"] !== undefined
   if (lazy) component = component["~load"](owner, rec, at) ?? component
   if (lazy && component === view.component) {
-    held = inFallback(
+    held = loadingIn(
       owner,
-      () => create(owner, fallbackOf(owner, view, component["~cause"]()))
+      view,
+      component["~cause"](),
+      (fallback) => create(owner, fallback)
     )
   } else if (FeatureId in component) {
     const ctx = env.ctx
@@ -1103,7 +1137,7 @@ const refresh = (receiver: Instance, placed: Placed): void => {
     )
     if (dev && shown !== fallbacks) {
       try {
-        checkShown(slot, kids)
+        checkShown(slot, kids, true)
       } catch (error) {
         failLater(declarer, error)
       }
@@ -1190,7 +1224,7 @@ const createOutlet = (inst: Instance, view: View.Outlet): Rec => {
     for (let index = 0; index < views.length; index++) {
       kids[index] = create(declarer, views[index]!)
     }
-    if (dev && shown !== fallbacks) checkShown(slot, kids)
+    if (dev && shown !== fallbacks) checkShown(slot, kids, true)
   } catch (error) {
     orphans(from)
     rec.kids = [create(declarer, emptyText)]
@@ -1240,7 +1274,8 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
       patchElement(inst, old, prev as View.Element<any, any>, view)
       return old
     case "Child":
-      return keeperOf(view)?.patch(inst, old, view) ??
+      return (keeperOf(view) ?? keeperOf(prev as View.Child<any, any>))
+        ?.patch(inst, old, view, slot) ??
         patchChild(inst, old, view)
     case "Outlet": {
       const placed = inst.placed!.get(view.name)
@@ -1269,19 +1304,22 @@ export const patchChild = (
   old.v = view
   if (shown !== undefined) {
     shown[0] = child === inst
-      ? inFallback(
-        inst,
-        () =>
-          patch(
-            inst,
-            shown[0]!,
-            fallbackOf(
+      ? (view.component as Runnable)["~load"] === undefined
+        ? inFallback(
+          inst,
+          () =>
+            patch(
               inst,
-              view,
-              (view.component as Runnable)["~cause"]?.() ?? inst.env.cause
+              shown[0]!,
+              fallbackOf(inst, view, inst.env.cause)
             )
-          )
-      )
+        )
+        : loadingIn(
+          inst,
+          view,
+          (view.component as Runnable)["~cause"]!() ?? inst.env.cause,
+          (fallback) => patch(inst, shown[0]!, fallback)
+        )
       : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
     return old
   }

@@ -59,7 +59,6 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
   )
   return Component.define({
     name: "Profile",
-    keepAlive: true,
     model: FormModel,
     message: FormMsg,
     events: FormEvents
@@ -87,7 +86,6 @@ const makeForm = (saving: Deferred.Deferred<void>) => {
 
 const Billing = Component.define({
   name: "Billing",
-  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -241,7 +239,6 @@ describe("keep-alive children", () => {
 
 const Row = Component.define({
   name: "Row",
-  keepAlive: true,
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Number,
   message: Schema.Literal("inc")
@@ -485,7 +482,6 @@ describe("keep-alive lifetimes", () => {
       )
       const Fragile = Component.define({
         name: "Fragile",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -584,7 +580,6 @@ describe("keep-alive lifetimes", () => {
         )()
       const Leaf = Component.define({
         name: "Leaf",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -688,7 +683,6 @@ describe("keep-alive lifetimes", () => {
     const Track = Mount.make("Track", { args: {} }, () => Effect.never)
     const Frame = Component.define({
       name: "Frame",
-      keepAlive: true,
       model: Schema.Null,
       message: Schema.Never,
       slots: ["body"]
@@ -725,15 +719,6 @@ describe("keep-alive lifetimes", () => {
     )
     s.click(Locator.text("toggle")).expectMount(Track())
   })
-
-  it.effect("mounts a keep-alive component as the root, as any other", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Row, { label: "root" })
-      yield* TestHost.settle
-      click(root, "root:0")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "root:1")
-    })))
 })
 
 const withoutContainer = () => {
@@ -743,7 +728,6 @@ const withoutContainer = () => {
 
 const Draft = Component.define({
   name: "Draft",
-  keepAlive: true,
   model: Schema.String,
   message: Schema.Literal("type")
 })
@@ -1041,7 +1025,6 @@ describe("keep-alive children of a headless child", () => {
       })
       const Panel = Component.define({
         name: "Panel",
-        keepAlive: true,
         props: Schema.Struct({ title: Schema.String }),
         model: Schema.Boolean,
         message: Schema.Literal("toggle"),
@@ -1113,7 +1096,6 @@ describe("keep-alive children of a headless child", () => {
       const Inner = owner("Inner")
       const Tree = Component.define({
         name: "Tree",
-        keepAlive: true,
         model: Schema.Boolean,
         message: Schema.Literal("nest")
       }).make({
@@ -1171,7 +1153,6 @@ describe("keep-alive children of a headless child", () => {
 const CounterMsg = UiSchema.TaggedEnum({ Inc: {} })
 const Counter = Component.define({
   name: "Counter",
-  keepAlive: true,
   model: Schema.Number,
   message: CounterMsg
 }).make({
@@ -1183,7 +1164,6 @@ const Counter = Component.define({
 
 const Box = Component.define({
   name: "Box",
-  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   slots: ["body"]
@@ -1215,7 +1195,6 @@ describe("keep-alive children drawn by other children", () => {
     provideHost(Effect.gen(function*() {
       const Room = Component.define({
         name: "Room",
-        keepAlive: true,
         model: Schema.Literals(["a", "b"]),
         message: Schema.Literal("move")
       }).make({
@@ -1348,7 +1327,6 @@ describe("keep-alive children drawn by other children", () => {
     provideHost(Effect.gen(function*() {
       const Fragile = Component.define({
         name: "Fragile",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -1458,7 +1436,6 @@ describe("keep-alive children drawn by other children", () => {
       const running = new Set<string>()
       const Tracked = Component.define({
         name: "Tracked",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -1526,7 +1503,6 @@ describe("keep-alive children drawn by other children", () => {
       const FragileMsg = UiSchema.TaggedEnum({ Break: {} })
       const Fragile = Component.define({
         name: "Fragile",
-        keepAlive: true,
         model: Schema.Null,
         message: FragileMsg
       }).make(
@@ -1608,7 +1584,6 @@ describe("keep-alive children that read shared state", () => {
         })
         const Frame = Component.define({
           name: "Frame",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         }).make(
@@ -1696,7 +1671,6 @@ const Nested = Component.define({
   })
 const Holder = Component.define({
   name: "Holder",
-  keepAlive: true,
   props: Schema.Struct({ bare: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never
@@ -2075,7 +2049,6 @@ describe("keep-alive children whose state encodes after the push that left them"
   const note = (name: string, model: Schema.Codec<string, string>) =>
     Component.define({
       name,
-      keepAlive: true,
       props: Schema.Struct({ label: Schema.String }),
       model,
       message: Schema.Null
@@ -2316,7 +2289,6 @@ describe("keep-alive children written into closed slots", () => {
       })
       const Member = Component.define({
         name: "Member",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never,
         shared: { group: { owner: Group, optional: true, report: () => true } }
@@ -2376,7 +2348,6 @@ describe("keep-alive children written into closed slots", () => {
       let inits = 0
       const Late = Component.define({
         name: "Late",
-        keepAlive: true,
         model: Schema.Number,
         message: CounterMsg
       }).make({
@@ -2417,7 +2388,6 @@ describe("keep-alive children written into closed slots", () => {
       const LabelMsg = UiSchema.TaggedEnum({ Tell: {} })
       const Label = Component.define({
         name: "Label",
-        keepAlive: true,
         props: Schema.Struct({ n: Schema.Number }),
         model: Schema.Null,
         message: LabelMsg,
@@ -2495,7 +2465,6 @@ describe("keep-alive children written into closed slots", () => {
       const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
       const Toggling = Component.define({
         name: "Toggling",
-        keepAlive: true,
         model: Schema.Boolean,
         message: ToggleMsg,
         slots: ["body"]
@@ -2554,7 +2523,6 @@ describe("keep-alive children written into closed slots", () => {
     provideHost(Effect.gen(function*() {
       const Row = Component.define({
         name: "Row",
-        keepAlive: true,
         model: Schema.Number,
         message: Schema.Literal("inc"),
         elements: Html
@@ -2619,7 +2587,6 @@ describe("keep-alive children written into closed slots", () => {
       let starts = 0
       const Probe = Component.define({
         name: "Probe",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2634,7 +2601,6 @@ describe("keep-alive children written into closed slots", () => {
       const ToggleMsg = UiSchema.TaggedEnum({ Toggle: {} })
       const Toggling = Component.define({
         name: "Toggling",
-        keepAlive: true,
         model: Schema.Boolean,
         message: ToggleMsg,
         slots: ["body"]
@@ -2695,7 +2661,6 @@ describe("keep-alive children written into closed slots", () => {
       const define = () =>
         Component.define({
           name: "Row",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -2741,6 +2706,7 @@ describe("keep-alive children written into closed slots", () => {
   it.effect.each(
     [
       "its own view",
+      "the same view",
       "a slot after it",
       "a slot before it",
       "the author's view beside its slot"
@@ -2751,7 +2717,6 @@ describe("keep-alive children written into closed slots", () => {
       provideHost(Effect.gen(function*() {
         const Kept = Component.define({
           name: "Row",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         })
@@ -2790,6 +2755,8 @@ describe("keep-alive children written into closed slots", () => {
                 const slot = () => Plain(h, { key: "o", slots: { body: kept } })
                 return where === "its own view"
                   ? Headless(h, { key: "k", view: () => kept })
+                  : where === "the same view"
+                  ? h.el("div", Plain(h, { key: "k" }), Plain(s, { key: "k" }))
                   : where === "a slot after it"
                   ? h.el("div", Plain(h, { key: "k" }), slot())
                   : where === "a slot before it"
@@ -2814,11 +2781,118 @@ describe("keep-alive children written into closed slots", () => {
       }))
   )
 
+  it.effect("keeps a component written with s, and unmounts it written with h, and a headless one either way", () =>
+    provideHost(Effect.gen(function*() {
+      const Row = Component.define({
+        name: "Row",
+        model: Schema.Null,
+        message: Schema.Never
+      })
+        .make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.el("p", "row")
+        })
+      const Box = Component.define({
+        name: "Box",
+        model: Schema.Null,
+        message: Schema.Never
+      })
+        .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
+      const App = Component.define({
+        name: "App",
+        model: Schema.Boolean,
+        message: Schema.Boolean
+      })
+        .make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (h, shown) =>
+            h.keepAlive((s) =>
+              h.el(
+                "div",
+                shown && [
+                  Row(s, { key: "s" }),
+                  Row(h, { key: "h" }),
+                  Box(s, { key: "b", view: () => h.el("p", "box") })
+                ]
+              )
+            )
+        })
+      const root = yield* TestHost.mount(App, {})
+      root.send(false)
+      yield* TestHost.settle
+      root.send(true)
+      yield* TestHost.settle
+      assert.deepStrictEqual(
+        ["/App/Row[s]", "/App/Row[h]", "/App/Box[b]"].map((path) =>
+          lifecycle(root, path)
+        ),
+        [
+          ["Mounted", "Kept", "Drawn"],
+          ["Mounted", "Unmounted", "Mounted"],
+          ["Mounted", "Unmounted", "Mounted"]
+        ]
+      )
+    })))
+
+  it.effect("keeps a child once its call changes from h to s, and unmounts it once it changes back", () =>
+    provideHost(Effect.gen(function*() {
+      let made = 0
+      const Row = Component.define({
+        name: "Row",
+        model: Schema.Number,
+        message: Schema.Never
+      })
+        .make({
+          init: () => ++made,
+          update: ($) => $.model,
+          view: (h, n) => h.el("p", `row${n}`)
+        })
+      const Msg = UiSchema.TaggedEnum({
+        Kept: { kept: Schema.Boolean },
+        Shown: { shown: Schema.Boolean }
+      })
+      const App = Component.define({
+        name: "App",
+        model: Schema.Struct({ kept: Schema.Boolean, shown: Schema.Boolean }),
+        message: Msg
+      })
+        .make({
+          init: () => ({ kept: false, shown: true }),
+          update: ($, message) => ({ ...$.model, ...message }),
+          view: (h, { kept, shown }) =>
+            h.keepAlive((s) =>
+              h.el(
+                "div",
+                !shown
+                  ? null
+                  : kept
+                  ? Row(s, { key: "r" })
+                  : Row(h, { key: "r" })
+              )
+            )
+        })
+      const root = yield* TestHost.mount(App, {})
+      const show = Effect.fnUntraced(function*(message: typeof Msg.Type) {
+        root.send(message)
+        yield* TestHost.settle
+        return root.text()
+      })
+      assert.deepStrictEqual([
+        yield* show(Msg.Kept({ kept: true })),
+        yield* show(Msg.Shown({ shown: false })),
+        yield* show(Msg.Shown({ shown: true })),
+        yield* show(Msg.Kept({ kept: false })),
+        yield* show(Msg.Shown({ shown: false })),
+        yield* show(Msg.Shown({ shown: true }))
+      ], ["row1", "", "row1", "row1", "", "row2"])
+    })))
+
   it.effect("a keep-alive child takes the path of an ordinary one of its name and key that the same render ends", () =>
     provideHost(Effect.gen(function*() {
       const Kept = Component.define({
         name: "Row",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2927,7 +3001,6 @@ describe("keep-alive children written into closed slots", () => {
     const define = () =>
       Component.define({
         name: "Row",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -2985,7 +3058,6 @@ describe("keep-alive children that report to shared state", () => {
       })
       const Member = Component.define({
         name: "Member",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never,
         shared: { count: { owner: Count, optional: true, report: () => true } }

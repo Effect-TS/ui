@@ -46,14 +46,12 @@ const SlowSide = Component.define({
   .pipe(Component.provide(slow))
 
 let serving = false
-const secret = <KeepAlive extends boolean>(
+const secret = (
   name: string,
-  keepAlive: KeepAlive,
   restore: false | ((model: string) => string)
 ) =>
   Component.define({
     name,
-    keepAlive,
     model: Schema.String,
     message: Schema.Never,
     elements: Html,
@@ -64,8 +62,8 @@ const secret = <KeepAlive extends boolean>(
     view: (h, text) => h.input.value(text)
   })
 const vault = (name: string, restore: false | ((model: string) => string)) => {
-  const Plain = secret(`${name}Plain`, false, restore)
-  const Kept = secret(`${name}Kept`, true, restore)
+  const Plain = secret(`${name}Plain`, restore)
+  const Kept = secret(`${name}Kept`, restore)
   return Component.define({
     name,
     model: Schema.Null,
@@ -103,7 +101,6 @@ const keepAliveForm = (
 ) =>
   Component.define({
     name,
-    keepAlive: true,
     model: Schema.String,
     message: Schema.String,
     elements: Html,
@@ -143,7 +140,6 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
 const draft = (restore?: false) =>
   Component.define({
     name: "Draft",
-    keepAlive: true,
     model: Schema.String,
     message: Schema.Never,
     elements: Html,
@@ -181,7 +177,6 @@ const ExcludedLateSettings = lateSettings(draft(false))
 const lateKeepAlive = (name: string, restore?: (model: string) => string) =>
   Component.define({
     name,
-    keepAlive: true,
     model: Late,
     message: Schema.Never,
     elements: Html,
@@ -211,7 +206,6 @@ const LateHolder = lateHolder(LateKeepAlive)
 const FilteredLateHolder = lateHolder(FilteredLateKeepAlive)
 const Field = Component.define({
   name: "Field",
-  keepAlive: true,
   model: Schema.String,
   message: Schema.String,
   elements: Html
@@ -244,7 +238,6 @@ const LateCard = Component.define({
 })
 const Card = Component.define({
   name: "Card",
-  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -265,7 +258,6 @@ const CardHolder = Component.define({
 })
 const Outer = Component.define({
   name: "Outer",
-  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
