@@ -1,5 +1,5 @@
 import { Component, Subscription, UiSchema } from "@effect/ui"
-import { DomCommand, DomSubscription, Html } from "@effect/ui/html"
+import { HtmlCommand, HtmlSubscription, Html } from "@effect/ui/html"
 import { Array, Option, Schema, Stream } from "effect"
 
 export const sections = [
@@ -119,14 +119,14 @@ export const Nav = Component.define({
     ClickedSection: ($) => $.evolve({ isOpen: false }),
     PressedEscape: ($) =>
       $.evolve({ isOpen: false }).run(
-        DomCommand.focus(Toggle, () => Component.noop)
+        HtmlCommand.focus(Toggle, () => Component.noop)
       ),
     ChangedSection: ($, { current }) => $.evolve({ current })
   },
   subscriptions: ({ model }) => [
     TrackSection,
     model.isOpen &&
-    DomSubscription.onDocument(
+    HtmlSubscription.onDocument(
       "keydown",
       ({ key }) =>
         key === "Escape" ? NavMessage.PressedEscape() : undefined
