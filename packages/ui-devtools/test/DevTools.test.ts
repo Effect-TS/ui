@@ -399,15 +399,21 @@ describe("DevTools overlay", { concurrent: false }, () => {
           form: Schema.Struct({
             name: Schema.Struct({ value: Schema.String, touched: Schema.Boolean }),
             tags: Schema.Array(Schema.String)
-          })
+          }),
+          lists: Schema.Record(Schema.String, Schema.Array(Schema.Number))
         }),
         message: Message,
         elements: Html
       }).make({
-        init: () => ({ title: "Signup", form: { name: { value: "", touched: false }, tags: ["new"] } }),
+        init: () => ({
+          title: "Signup",
+          form: { name: { value: "", touched: false }, tags: ["new"] },
+          lists: { old: [1, 2] }
+        }),
         update: {
           Typed: ($) => $.set({ ...$.model, form: { ...$.model.form, name: { value: "Ada", touched: true } } }),
-          Tagged: ($) => $.set({ ...$.model, form: { ...$.model.form, tags: ["new", "vip"] } })
+          Tagged: ($) =>
+            $.set({ ...$.model, form: { ...$.model.form, tags: ["new", "vip"] }, lists: { fresh: [3, 4] } })
         },
         view: (h) =>
           h.div.children(
@@ -445,6 +451,26 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(toggle("name").getAttribute("aria-expanded"), "true")
       yield* click(toggle("tags, 1 change"))
       assert.strictEqual(text(root.querySelector(".tree .tl[data-change=added]")), "1\"vip\" added")
+
+      yield* click(toggle("lists, 2 changes"))
+      const rows = () => Array.from(root.querySelectorAll(".tree .tl"), (row) => text(row))
+      const lists = () => rows().slice(rows().indexOf("▾lists{"))
+      assert.deepStrictEqual(lists(), ["▾lists{", "▸fresh[ 2 items ] added", "▸old[ 2 items ] removed", "}"])
+      assert.strictEqual(toggle("fresh, added").getAttribute("aria-expanded"), "false")
+      yield* click(toggle("fresh, added"))
+      yield* click(toggle("old, removed"))
+      assert.deepStrictEqual(lists(), [
+        "▾lists{",
+        "▾fresh[ added",
+        "03",
+        "14",
+        "]",
+        "▾old[ removed",
+        "01",
+        "12",
+        "]",
+        "}"
+      ])
     }))
 
   it.live("reads a run whose defect failed its instance as failed, not running", () =>

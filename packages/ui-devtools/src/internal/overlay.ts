@@ -553,21 +553,23 @@ const changesText = (count: number) => count + (count === 1 ? " change" : " chan
 
 const branchRow = (h: H, row: Read.Row, branch: Read.Branch) => {
   const hidden = !branch.expanded && branch.changes > 0
+  const kind = row.change?.kind
   const key = String(row.key)
-  return h.div.key(row.id).class("tl", hidden && "chg").attr(
+  const label = kind !== undefined ? kind : hidden ? changesText(branch.changes) : undefined
+  return h.div.key(row.id).class("tl", (hidden || kind !== undefined) && "chg").attr(
     "style",
     "padding-left:" + (row.depth * 16 + 12) + "px"
-  ).children(
+  ).attr("data-change", kind).children(
     h.button.class("k", "toggle").attr("aria-expanded", String(branch.expanded)).attr(
       "aria-label",
-      hidden ? key + ", " + changesText(branch.changes) : key
+      label === undefined ? key : key + ", " + label
     ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path })).children(
       h.span.class("chev").attr("aria-hidden", "true").children(branch.expanded ? "▾" : "▸"),
       key
     ),
     h.span.class("v").children(
       branch.expanded ? row.open! : h.span.class("t-punct").children(branch.preview),
-      hidden ? h.span.class("muted").children(" " + changesText(branch.changes)) : null
+      label === undefined ? null : h.span.class("muted").children(" " + label)
     )
   )
 }

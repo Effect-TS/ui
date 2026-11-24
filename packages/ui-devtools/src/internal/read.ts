@@ -386,9 +386,10 @@ export const treeOf = (
   const rows: Array<Row> = []
   const visit = (value: Schema.Json, key: string | number | undefined, path: Array<string | number>, depth: number) => {
     const id = pathKey(path)
-    const change = byPath.get(id)
-    if (!isBranch(value) || change !== undefined && change.kind !== "unknown") {
-      rows.push({ id, depth, key, value, change })
+    const found = byPath.get(id)
+    const change = found?.kind === "unknown" ? undefined : found
+    if (!isBranch(value) || change !== undefined && (expanded === undefined || change.kind === "changed")) {
+      rows.push({ id, depth, key, value, change: found })
       return
     }
     const array = Array.isArray(value)
@@ -396,7 +397,7 @@ export const treeOf = (
     if (nested && expanded !== undefined) {
       const hidden = changesUnder.get(id) ?? 0
       if (hidden === 0 && Object.keys(value).length === 0) {
-        rows.push({ id, depth, key, value })
+        rows.push({ id, depth, key, value, change })
         return
       }
       const open = expanded.has(id)
@@ -406,6 +407,7 @@ export const treeOf = (
         key,
         value: undefined,
         open: array ? "[" : "{",
+        change,
         branch: { path: id, expanded: open, preview: previewOf(value), changes: hidden }
       })
       if (!open) return
@@ -419,13 +421,7 @@ export const treeOf = (
       for (const [name, item] of Object.entries(value)) visit(item, name, [...path, name], inner)
     }
     for (const removed of removedUnder.get(id) ?? []) {
-      rows.push({
-        id: pathKey(removed.path),
-        depth: inner,
-        key: removed.path[removed.path.length - 1],
-        value: removed.before,
-        change: removed
-      })
+      visit(removed.before!, removed.path[removed.path.length - 1], [...removed.path], inner)
     }
     if (nested) {
       rows.push({ id: id + "}", depth, key: undefined, value: undefined, close: array ? "]" : "}" })
