@@ -287,11 +287,56 @@ describe("shared state", () => {
       update: ($) => $.model
     })
 
-    expect(Component.define).type.not.toBeCallableWith({
-      name: "MaybeOwnerDef",
+    const base = {
+      name: "ConditionalOwner",
       model: Schema.Null,
-      message: TipMessage,
+      message: TipMessage
+    } as const
+    const MaybeOwnerDef = Component.define({
+      ...base,
       shares: enabled ? () => 1 : undefined
+    })
+    expect(MaybeOwnerDef.make).type.not.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    })
+    expect(MaybeOwnerDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      parts: () => ({})
+    })
+
+    const SpreadOwnerDef = Component.define({
+      ...base,
+      ...(enabled ? { shares: () => 1 } : {})
+    })
+    expect(SpreadOwnerDef.make).type.not.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    })
+    expect(SpreadOwnerDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      parts: () => ({})
+    })
+
+    const UndefinedSharesDef = Component.define({
+      ...base,
+      shares: undefined
+    })
+    expect(UndefinedSharesDef.make).type.not.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    })
+    expect(UndefinedSharesDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      view: (h: any) => h.el("p")
+    })
+    expect(UndefinedSharesDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      parts: () => ({})
     })
   })
 })
