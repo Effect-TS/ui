@@ -152,7 +152,7 @@ What people value in Foldkit 0.x carries over to Effect UI.
 - **The same structure everywhere:** Every Component has a Model, Messages, init and update, with a view or, for a headless Component, parts. You, a new teammate or an AI agent always know where to look.
 - **Explicit state transitions:** Once a Component is running, its Model changes only in its update, in response to a Message.
 - **Side effects as values:** Commands, Subscriptions and Mounts describe work for the runtime to run. update and view don't perform it themselves.
-- **Tests without a browser:** Story tests run update, and Scene tests run update and view. Play tests run the Component on a test host. None of them needs a browser.
+- **Tests that declare what happened:** A Story or Scene test is a list of steps in order: a Message or a click, the Command that update returned and the result that Command came back with. You supply that result in the test, so there is nothing to mock and no waiting for the UI to settle. A test that leaves a Command unresolved fails. Play tests use Scene's steps and run the Commands for real.
 - **A record of what happened:** With a `MessageLog`, the runtime records Messages, query results and lifecycle events in order. You can replay a Component's Model and query results from its log without running its side effects again. The inspector in the corner of this article reads that log, and its time travel shows the article as it was at an earlier entry.
 
 ## You can keep building on Foldkit 0.x
