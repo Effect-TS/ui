@@ -1,5 +1,5 @@
 import { Component, Head, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
 import type { Message as TableMessage, Model as TableModel } from "./harness.ts"
@@ -224,7 +224,7 @@ const hydrateTable = async (
   const start = performance.now()
   const root = await Effect.runPromise(
     Scope.provide(
-      BrowserHost.mountEffect(component, {}, container, { state }),
+      HtmlHydrate.hydrateEffect(component, {}, container, state),
       scope
     )
   )

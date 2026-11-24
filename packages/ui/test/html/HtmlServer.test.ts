@@ -13,7 +13,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -142,9 +142,7 @@ const hydrateRows = Effect.fnUntraced(
       items: [...app.querySelectorAll("li")],
       buttons: [...app.querySelectorAll("button")]
     }
-    const root = yield* BrowserHost.mountEffect(Rows, {}, app, {
-      state: rendered.state
-    })
+    const root = yield* HtmlHydrate.hydrateEffect(Rows, {}, app, rendered.state)
     yield* root.adopted
     yield* tick
     /** Fails if a handler, a mount or a Subscription started twice, on a node that stayed or one that went. */
@@ -226,12 +224,9 @@ describe("HtmlServer", { concurrent: false }, () => {
       for (const hydrate of [false, true]) {
         const app = yield* container(hydrate ? rendered.html : "")
         const before = app.firstElementChild
-        const root = yield* BrowserHost.mountEffect(
-          Page,
-          {},
-          app,
-          hydrate ? { state: rendered.state } : undefined
-        )
+        const root = yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
+          : BrowserHost.mountEffect(Page, {}, app))
         if (hydrate) expect(app.firstElementChild).toBe(before)
         const elements = app.firstElementChild!.children
         const attributeNames = () =>
@@ -351,9 +346,12 @@ describe("HtmlServer", { concurrent: false }, () => {
           )
           const app = yield* container(rendered.html)
           const log = MessageLog.makeMemory({ size: 1000 })
-          yield* BrowserHost.mountEffect(Page, { item: client }, app, {
-            state: rendered.state
-          }).pipe(
+          yield* HtmlHydrate.hydrateEffect(
+            Page,
+            { item: client },
+            app,
+            rendered.state
+          ).pipe(
             Effect.provideService(MessageLog.MessageLog, log)
           )
           yield* tick
@@ -384,9 +382,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         expect(rendered.html).toContain("<p>collected 1</p>")
         const app = yield* container(rendered.html)
         const log = MessageLog.makeMemory({ size: 1000 })
-        const root = yield* BrowserHost.mountEffect(Page, { item: true }, app, {
-          state: rendered.state
-        }).pipe(
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          { item: true },
+          app,
+          rendered.state
+        ).pipe(
           Effect.provideService(MessageLog.MessageLog, log)
         )
         yield* tick
@@ -406,9 +407,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         const rendered = yield* HtmlServer.renderToHtml(Page, { item: true })
         const app = yield* container(rendered.html)
         const p = app.querySelector("p")
-        yield* BrowserHost.mountEffect(Page, { item: true }, app, {
-          state: rendered.state
-        })
+        yield* HtmlHydrate.hydrateEffect(
+          Page,
+          { item: true },
+          app,
+          rendered.state
+        )
         yield* tick
         expect(app.querySelector("p")).toBe(p)
         expect(p!.textContent).toBe("collected 1")
@@ -445,12 +449,9 @@ describe("HtmlServer", { concurrent: false }, () => {
       for (const hydrate of [false, true]) {
         const app = yield* container(hydrate ? rendered.html : "")
         const before = app.firstElementChild
-        yield* BrowserHost.mountEffect(
-          Page,
-          {},
-          app,
-          hydrate ? { state: rendered.state } : undefined
-        )
+        yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
+          : BrowserHost.mountEffect(Page, {}, app))
         if (hydrate) expect(app.firstElementChild).toBe(before)
         const div = app.firstElementChild!
         expect(div.getAttributeNames()).toEqual(["type"])
@@ -617,12 +618,9 @@ describe("HtmlServer", { concurrent: false }, () => {
       for (const hydrate of [false, true]) {
         const app = yield* container(hydrate ? rendered.html : "")
         const before = app.firstElementChild
-        const root = yield* BrowserHost.mountEffect(
-          Page,
-          {},
-          app,
-          hydrate ? { state: rendered.state } : undefined
-        )
+        const root = yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
+          : BrowserHost.mountEffect(Page, {}, app))
         if (hydrate) expect(app.firstElementChild).toBe(before)
         for (let step = 1; step < steps.length; step++) {
           root.send(step)
@@ -797,9 +795,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
       const app = yield* container(modal.html)
       const dialog = app.querySelector("dialog")!
-      yield* BrowserHost.mountEffect(Confirm, props, app, {
-        state: modal.state
-      })
+      yield* HtmlHydrate.hydrateEffect(Confirm, props, app, modal.state)
       yield* tick
       // The server's dialog is adopted and shown as a modal once it's live.
       expect(app.querySelector("dialog")).toBe(dialog)
@@ -813,9 +809,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       const rendered = yield* HtmlServer.renderToHtml(Confirm, props)
       const app = yield* container(rendered.html)
       const dialog = app.querySelector("dialog")!
-      const root = yield* BrowserHost.mountEffect(Confirm, props, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Confirm,
+        props,
+        app,
+        rendered.state
+      )
       expect(app.querySelector("dialog")).toBe(dialog)
       // Browsers report a close a task later; happy-dom reports it at once.
       const pending: Array<() => void> = []
@@ -847,9 +846,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       const stub = yield* popoverStub
       const app = yield* container(rendered.html)
       const menu = app.querySelector("[aria-label=Menu]")!
-      yield* BrowserHost.mountEffect(Menu, props, app, {
-        state: rendered.state
-      })
+      yield* HtmlHydrate.hydrateEffect(Menu, props, app, rendered.state)
       yield* tick
       expect(app.querySelector("[aria-label=Menu]")).toBe(menu)
       expect(stub.calls).toEqual(["showPopover Menu"])
@@ -1177,9 +1174,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       const app = yield* container(rendered.html)
       const button = app.querySelector("button")!
       const log = MessageLog.makeMemory({ size: 1000 })
-      const root = yield* BrowserHost.mountEffect(Panel, {}, app, {
-        state: rendered.state
-      }).pipe(
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Panel,
+        {},
+        app,
+        rendered.state
+      ).pipe(
         Effect.provideService(MessageLog.MessageLog, log)
       )
       button.click()
@@ -1284,9 +1284,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* TestClock.adjust("50 millis")
         const rendered = yield* Fiber.join(fiber)
         const app = yield* container(rendered.html)
-        const root = yield* BrowserHost.mountEffect(Form, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Form,
+          {},
+          app,
+          rendered.state
+        )
         const name = field<HTMLInputElement>(app, "Name")
         const note = field<HTMLTextAreaElement>(app, "Note")
         name.value = "edited"
@@ -1326,9 +1329,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         name.focus()
         name.value = "typed"
 
-        const root = yield* BrowserHost.mountEffect(Form, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Form,
+          {},
+          app,
+          rendered.state
+        )
         yield* root.adopted
         yield* tick
         expect(agree.checked).toBe(true)
@@ -1396,8 +1402,9 @@ describe("HtmlServer", { concurrent: false }, () => {
           if (picked) radios[1].checked = true
           const expected = picked ? [false, true, false] : [false, false, true]
 
-          const root = yield* BrowserHost.mountEffect(Form, {}, app, {
-            state: { ...rendered.state, "/Choice": { choice: "c", pick: "c" } }
+          const root = yield* HtmlHydrate.hydrateEffect(Form, {}, app, {
+            ...rendered.state,
+            "/Choice": { choice: "c", pick: "c" }
           })
           expect(radios.map((radio) => radio.checked)).toEqual(expected)
           yield* root.adopted
@@ -1444,9 +1451,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.html).toContain("<p>server:</p>")
       side = "client"
       const app = yield* container(rendered.html)
-      const root = yield* BrowserHost.mountEffect(Panel, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Panel,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       yield* tick
       expect(app.querySelector("p")!.textContent).toBe("server:server")
@@ -1484,7 +1494,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         rendered.html.replace("<li>A</li>", "<li>changed</li>")
       )
       const second = app.querySelectorAll("li")[1]
-      yield* BrowserHost.mountEffect(List, {}, app, { state: rendered.state })
+      yield* HtmlHydrate.hydrateEffect(List, {}, app, rendered.state)
       const [a, b] = app.querySelectorAll("li")
       expect(a.textContent).toBe("A")
       expect(b).toBe(second)
@@ -1639,9 +1649,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         assert.include(html, "<hr>")
         const app = yield* container(html)
         const server: Array<Node> = [...app.querySelectorAll("*")]
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          rendered.state
+        )
         if (at === "waiting") {
           // Moved while it waits. Once it has adopted, a move would place all its nodes, one left out too.
           root.send(Message.Move())
@@ -1746,7 +1759,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       client = true
       const app = yield* container(rendered.html)
       const log = MessageLog.makeMemory({ size: 1000 })
-      yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+      yield* HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
         .pipe(
           Effect.provideService(MessageLog.MessageLog, log)
         )
@@ -1907,9 +1920,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       serving = false
       const app = yield* container(rendered.html)
       const after = app.querySelector("span")
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       expect(app.querySelector("main")!.innerHTML.replace(/<!--.*?-->/g, ""))
         .toBe("<em>fallback</em><span>after</span>")
@@ -2188,7 +2204,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(parsed).toBe(rendered.html)
       const app = yield* container(parsed)
       const leaf = app.querySelector("p")
-      yield* BrowserHost.mountEffect(Root, {}, app, { state: rendered.state })
+      yield* HtmlHydrate.hydrateEffect(Root, {}, app, rendered.state)
       expect(app.querySelector("p")).toBe(leaf)
       expect(app.innerHTML).toBe("<p>leaf</p>")
     }).pipe(Effect.scoped))
@@ -2608,9 +2624,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       const app = yield* container(rendered.html)
       expect(app.textContent).toBe("panel a")
       const log = MessageLog.makeMemory({ size: 1000 })
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-        state: rendered.state
-      }).pipe(
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      ).pipe(
         Effect.provideService(MessageLog.MessageLog, log),
         Effect.provide(GetText.layer)
       )
@@ -2691,9 +2710,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       const rendered = yield* Fiber.join(fiber)
       const app = yield* container(rendered.html)
       const log = MessageLog.makeMemory({ size: 1000 })
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-        state: rendered.state
-      }).pipe(
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      ).pipe(
         Effect.provideService(MessageLog.MessageLog, log)
       )
       // New props while it waits are held, not applied: the server's nodes stay as they are.
@@ -2979,9 +3001,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         yield* BrowserHost.mountEffect(List, {}, fresh, {})
         const app = yield* container(rendered.html)
         const serverItems = [...app.querySelectorAll("li")]
-        const root = yield* BrowserHost.mountEffect(List, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          List,
+          {},
+          app,
+          rendered.state
+        )
         yield* root.adopted
         yield* tick
         if (exact) assert.strictEqual(app.innerHTML, fresh.innerHTML)
@@ -3039,9 +3064,12 @@ describe("HtmlServer", { concurrent: false }, () => {
         )
       const app = yield* container(legacyHtml)
       const serverItems = [...app.querySelectorAll("li")]
-      const root = yield* BrowserHost.mountEffect(List, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        List,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       yield* tick
       assert.deepStrictEqual([...app.querySelectorAll("li")], serverItems)

@@ -8,7 +8,13 @@ import {
   Router,
   UiSchema
 } from "@effect/ui"
-import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
+import {
+  BrowserHost,
+  BrowserRouter,
+  Html,
+  HtmlHydrate,
+  HtmlServer
+} from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
 import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
@@ -240,14 +246,13 @@ describe("BrowserRouter", { concurrent: false }, () => {
       app.innerHTML = rendered.html
       const heading = app.querySelector("h1")
       yield* Layer.build(
-        BrowserHost.mount(App, Router.props(AppRoute), app, {
-          state: rendered.state
-        }).pipe(
-          Layer.provide([
-            BrowserRouter.layer({ routes: AppRoute }),
-            People.layer
-          ])
-        )
+        HtmlHydrate.hydrate(App, Router.props(AppRoute), app, rendered.state)
+          .pipe(
+            Layer.provide([
+              BrowserRouter.layer({ routes: AppRoute }),
+              People.layer
+            ])
+          )
       )
       yield* tick
       assert.strictEqual(app.querySelector("h1"), heading)
@@ -269,9 +274,12 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const hydrated = yield* Effect.flatMap(
         Router.currentRoute(AppRoute),
         (route) =>
-          BrowserHost.mountEffect(App, { route }, hydratedContainer, {
-            state: rendered.state
-          })
+          HtmlHydrate.hydrateEffect(
+            App,
+            { route },
+            hydratedContainer,
+            rendered.state
+          )
       ).pipe(Effect.provideContext(context))
       assert.strictEqual(hydratedContainer.querySelector("h1"), home)
       yield* tick
@@ -315,9 +323,12 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const root = yield* Effect.flatMap(
         Router.currentRoute(SearchRoute),
         (route) =>
-          BrowserHost.mountEffect(SearchApp, { route }, element, {
-            state: rendered.state
-          })
+          HtmlHydrate.hydrateEffect(
+            SearchApp,
+            { route },
+            element,
+            rendered.state
+          )
       ).pipe(Effect.provideContext(context))
       yield* tick
       return root
@@ -378,11 +389,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
         ] as const
       ) {
         const element = yield* container
-        const root = yield* BrowserHost.mountEffect(
+        const root = yield* HtmlHydrate.hydrateEffect(
           component,
           { route: homeRoute },
           element,
-          { state }
+          state
         ).pipe(
           Effect.provideContext(context)
         )

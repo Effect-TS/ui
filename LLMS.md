@@ -1136,7 +1136,7 @@ Known limits:
   server's entry module. It serves the same `fixtures/App.ts` the browser
   mounts, and the JSON API in `fixtures/server/NotesApi.ts`.
 - **[Hydrating in the browser](./ai-docs/src/10_ui/45_hydration.ts)**:
-  Hydrate what the server rendered with `BrowserHost`. This is the browser
+  Hydrate what the server rendered with `HtmlHydrate`. This is the browser
   entry module of the server-rendered app, served as `/client.js`.
 - **[Markdown content](./ai-docs/src/10_ui/47_markdown.ts)**:
   Write pages in Markdown, compile them at build time with the Vite plugin

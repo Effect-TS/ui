@@ -127,12 +127,12 @@ import type * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as domHost from "../internal/domHost.ts"
+import type * as hydrateRun from "../internal/hydrateRun.ts"
 import type * as Kernel from "../internal/kernel.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as Html from "./Html.ts"
-import * as HtmlHydrate from "./HtmlHydrate.ts"
 import * as HtmlScheduler from "./HtmlScheduler.ts"
 import * as browserHosts from "./internal/browserHosts.ts"
 import * as documentServices from "./internal/documentServices.ts"
@@ -261,11 +261,7 @@ export const makeHost = (
           made.dispose()
         }
       }
-    },
-    adopt: (base, container, path) =>
-      (container as globalThis.Node).nodeType === undefined
-        ? { root: undefined, resume: () => undefined }
-        : HtmlHydrate.adopt(base, container as globalThis.Element, path)
+    }
   })
   browserHosts.holds.set(host, {
     held: () => held > 0,
@@ -390,7 +386,7 @@ export type HtmlRoot<V> = [Renderer.HostOf<V>] extends [Html.Host] ? unknown
   }
 
 /**
- * The options of `mount` and `mountEffect`.
+ * The options of `mount` and `mountEffect`, and of `HtmlHydrate.hydrate`.
  *
  * @stability experimental
  * @category models
@@ -404,8 +400,6 @@ export interface MountOptions<V extends View.Elements, RF = never> {
       h: View.Helper<never, {}> & View.Tags<V, never>
     ) => View.Content<never, RF>)
     | undefined
-  /** The `state` of `HtmlServer.renderToHtml`, to hydrate the server's HTML. */
-  readonly state?: Renderer.State | undefined
   readonly query?: Renderer.QueryOptions | undefined
   /**
    * Whether this mount owns the document head: `true` by default. A mount
@@ -424,7 +418,7 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * **When to use**
  *
  * Use to run an app. Reach for `mountEffect` when the caller needs the root,
- * to send it messages or to wait for `root.adopted`.
+ * to send it messages.
  *
  * **Details**
  *
@@ -443,26 +437,8 @@ export interface MountOptions<V extends View.Elements, RF = never> {
  * provides a `Scheduler`, and the render flush on a microtask. A navigation
  * Command runs in the flush its `update` caused, which renders the new route.
  *
- * **Hydration.** Pass the `state` from `HtmlServer.renderToHtml`, with the
- * server's HTML already in `container` and the same props, to adopt the
- * server's nodes instead of building them. `Router.props` gives the same
- * props on both sides when both Routers are at the same URL. Each instance adopts its server
- * Model and replays `init` only to recover its Commands; server Commands the
- * Model already has the result of are skipped, and those that missed the
- * budget run now. `onMount` fires on adoption. Where an instance's view stops
- * matching the server's nodes, the nodes before stay adopted and the rest is
- * built fresh, and an instance the server deferred is built fresh.
- *
- * An instance the server rendered with its provided Layer ready, whose
- * Layer is still building here, keeps the server's nodes until the Layer is
- * ready, and everything else is live at once. Its `LayerPending` entry says
- * `Awaiting`. One whose Layer was pending or failed on the server adopts at
- * once, and its feature slots keep the server's `fallback` nodes while their
- * status is the one the server shipped. A
- * waiting instance is inert: its buttons do nothing, links still navigate through
- * the Router, and a `<form>` submits natively. What the user types or picks
- * in its fields stays, and reaches the fields' `onInput` and `onChange` when
- * it adopts. Head sync starts once no instance is waiting.
+ * To adopt the HTML of `HtmlServer.renderToHtml` instead of building it, mount
+ * with `HtmlHydrate.hydrate`.
  *
  * **The head.** The mount owns the document head: `<title>`, the marked
  * head tags and the `<html>` and `<body>` attributes follow the tree's
@@ -525,13 +501,12 @@ let defaultScheduler: Scheduler.Scheduler | undefined
  *
  * **When to use**
  *
- * Use when the caller needs the root: to read its Model, send it a message,
- * or wait for `root.adopted`, which completes when no hydrating instance is still
- * waiting. `mount` is the form that runs an app.
+ * Use when the caller needs the root: to read its Model or send it a message.
+ * `mount` is the form that runs an app.
  *
  * **Details**
  *
- * It mounts, checks the root and hydrates exactly as `mount` does.
+ * It mounts and checks the root exactly as `mount` does.
  *
  * @stability experimental
  * @category constructors
@@ -559,6 +534,22 @@ export const mountEffect = <
   never,
   Exclude<R | RF | RP, Html.Host> | Scope.Scope
 > =>
+  mountRoot(
+    component as unknown as Component.Any,
+    props,
+    container,
+    options,
+    undefined
+  ) as any
+
+/** @internal */
+export const mountRoot = (
+  component: Component.Any,
+  props: unknown,
+  container: globalThis.Element,
+  options: MountOptions<any, any> | undefined,
+  hydrate: hydrateRun.Hydrating | undefined
+): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const context = yield* Layer.build(
       layer({ document: container.ownerDocument })
@@ -572,12 +563,17 @@ export const mountEffect = <
           defaultScheduler ??= HtmlScheduler.make()
         )
         : context
-    const root = (yield* Effect.provideContext(
-      Renderer.mount(component, props, container, options),
+    const root = yield* Effect.provideContext(
+      runtime.mount(
+        component,
+        props,
+        container,
+        hydrate === undefined ? options : { ...options, hydrate }
+      ),
       scheduled
-    )) as unknown as runtime.Root
+    )
     const controlled = controllable(
-      component as any,
+      component,
       root,
       container,
       Context.merge(outer, scheduled)
@@ -587,7 +583,7 @@ export const mountEffect = <
       Effect.andThen(Effect.sync(unregister), controlled.resume)
     )
     return root
-  }) as any
+  })
 
 /**
  * An instance's state as a tool recorded it from the `MessageLog`: the
@@ -614,7 +610,7 @@ export interface Recorded {
 }
 
 /**
- * A root mounted with `mount` or `mountEffect`, offered to `Controllables`
+ * A root mounted with `mount`, `mountEffect` or `HtmlHydrate.hydrate`, offered to `Controllables`
  * so a tool such as DevTools can show the page as it was at an earlier state,
  * and send a message to any of its instances.
  *
@@ -751,7 +747,7 @@ export interface Painted {
 }
 
 /**
- * Where `mount` and `mountEffect` offer their roots to be paused and sent
+ * Where `mount`, `mountEffect` and `HtmlHydrate.hydrate` offer their roots to be paused and sent
  * messages.
  *
  * **Details**
@@ -771,7 +767,8 @@ export interface Controllables {
 const unregistered = () => {}
 
 /**
- * The `Controllables` service, read by `mount` and `mountEffect`.
+ * The `Controllables` service, read by `mount`, `mountEffect` and
+ * `HtmlHydrate.hydrate`.
  *
  * @stability experimental
  * @category services

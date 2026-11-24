@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Command, Component, Query, Route, Router, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Context, Deferred, Effect, Layer, Schema, SchemaGetter } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -507,7 +507,7 @@ const visit = Effect.fnUntraced(function*(page: Page, ready = false) {
     HtmlServer.renderToHtml(App, props),
     ready
   )
-  const root = yield* BrowserHost.mountEffect(App, props, app, { state })
+  const root = yield* HtmlHydrate.hydrateEffect(App, props, app, state)
   yield* tick
   return { app, root, open }
 })
@@ -519,7 +519,7 @@ const sit = Effect.fnUntraced(
       HtmlServer.renderToHtml(Desk, props),
       ready
     )
-    const root = yield* BrowserHost.mountEffect(Desk, props, app, { state })
+    const root = yield* HtmlHydrate.hydrateEffect(Desk, props, app, state)
     yield* tick
     return {
       app,
@@ -552,7 +552,7 @@ const aside = Effect.fnUntraced(function*(first: Page) {
     Router.props(Routes),
     other
   )
-  const root = yield* BrowserHost.mountEffect(Panel, {}, app, { state })
+  const root = yield* HtmlHydrate.hydrateEffect(Panel, {}, app, state)
   yield* tick
   return {
     root,

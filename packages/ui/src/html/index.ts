@@ -13,7 +13,7 @@
  * @since 0.1.0
  */
 
-// @barrel(!(register|HtmlServerHttp|MarkdownVite|HtmlHydrate|*.d).ts): Auto-generated exports. Do not edit manually.
+// @barrel(!(register|HtmlServerHttp|MarkdownVite|*.d).ts): Auto-generated exports. Do not edit manually.
 
 /**
  * @stability experimental
@@ -56,6 +56,12 @@ export * as HtmlFiles from "./HtmlFiles.ts"
  * @since 0.1.0
  */
 export * as HtmlHead from "./HtmlHead.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as HtmlHydrate from "./HtmlHydrate.ts"
 
 /**
  * @stability experimental

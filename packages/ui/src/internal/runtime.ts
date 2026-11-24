@@ -21,7 +21,7 @@ import * as View from "../View.ts"
 import * as domHost from "./domHost.ts"
 import { routed } from "./due.ts"
 import * as Executor from "./executor.ts"
-import * as hydrateRun from "./hydrateRun.ts"
+import type * as hydrateRun from "./hydrateRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
@@ -227,7 +227,7 @@ interface Options {
       h: any
     ) => View.Content<never, any>)
     | undefined
-  readonly state?: Renderer.State | undefined
+  readonly hydrate?: hydrateRun.Hydrating | undefined
   readonly query?: Renderer.QueryOptions | undefined
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
@@ -329,11 +329,12 @@ export const mount = (
         )
       )
     // A root whose state decodes asynchronously mounts once it has, and adopts with it.
-    const decoded = options?.state === undefined
+    const hydrate = options?.hydrate
+    const decoded = hydrate === undefined
       ? undefined
-      : hydrateRun.decodeRoot(
+      : hydrate.decodeRoot(
         component as unknown as Kernel.Runnable,
-        options.state,
+        hydrate.state,
         path
       )
     return decoded === undefined || Exit.isExit(decoded)
@@ -369,7 +370,8 @@ const start = (
     component.definition.name
   )
   let initCommands: ReadonlyArray<unknown> | undefined
-  const state = options?.state
+  const hydrate = options?.hydrate
+  const state = hydrate?.state
   const fromStatic = state?.["~static"] === true
   const waiting = new Map<Kernel.Instance, Parameters<Kernel.Recorder>[1]>()
   // The latest placement of each waiting instance that kept the one it had, the server's, which it
@@ -598,13 +600,15 @@ const start = (
     closeWindow()
     for (const f of adoptedWaiters.splice(0)) f()
   }
-  const hydration = state === undefined
+  const hydration = hydrate === undefined
     ? undefined
-    : hydrateRun.make(
-      state,
+    : hydrate.make(
+      hydrate.state,
       bridged,
       base,
-      doms?.adopt(base, container, "/" + component.definition.name),
+      dom === undefined
+        ? undefined
+        : hydrate.adopt?.(base, container, "/" + component.definition.name),
       checkAdopted,
       decodedRoot,
       routing?.heldFor

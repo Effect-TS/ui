@@ -11,6 +11,7 @@ import {
   View
 } from "@effect/ui"
 import { Html, HtmlCommand } from "@effect/ui/html"
+import * as hydrateRun from "@effect/ui/internal/hydrateRun"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -5463,8 +5464,8 @@ describe("Runtime", () => {
             ))
           )
           const mounted = yield* Effect.exit(
-            Renderer.mount(App, {}, container, {
-              state: { "~query": "malformed" }
+            runtime.mount(App, {}, container, {
+              hydrate: hydrateRun.hydrating({ "~query": "malformed" })
             }).pipe(
               Scope.provide(scope),
               Effect.provide(Renderer.layer(host)),

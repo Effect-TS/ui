@@ -39,7 +39,7 @@
 //
 // Server rendering and hydration, in milliseconds, of the same table holding 1,000 rows, on a fresh page
 // per variant and round, with 2 unmeasured and 9 measured runs (the round's figure is their median):
-// `render` is HtmlServer.renderToHtml plus serializeState, `hydrate` is BrowserHost.mountEffect over
+// `render` is HtmlServer.renderToHtml plus serializeState, `hydrate` is HtmlHydrate.hydrateEffect over
 // that HTML with its state until `adopted`. Both run in the page, so they use the browser's engine, not
 // Node's. Separately, first-hydrate measures one mount-to-adopted sample per fresh client page,
 // using HTML and state rendered on another page. Neither DOM parsing nor bundle load is timed.

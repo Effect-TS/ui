@@ -2,7 +2,6 @@
  * @internal
  */
 import type * as Renderer from "../Renderer.ts"
-import type * as hydrateRun from "./hydrateRun.ts"
 import type * as Kernel from "./kernel.ts"
 
 /** @internal */
@@ -14,7 +13,6 @@ export interface Dom {
       readonly step: (f: () => boolean) => boolean
     }
   ) => (Kernel.Host & { readonly dispose: () => void }) | undefined
-  readonly adopt: hydrateRun.Adopt
 }
 
 /** @internal */

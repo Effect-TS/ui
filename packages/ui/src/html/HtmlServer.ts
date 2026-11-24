@@ -1,6 +1,6 @@
 /**
  * Server rendering for `@effect/ui`: renders a component tree to HTML that
- * `BrowserHost.mount` hydrates.
+ * `HtmlHydrate.hydrate` hydrates.
  *
  * `renderToHtml` builds provided Layers and fetches query data once per key
  * in a per-request cache. Rendering waits until nothing is in flight or the
@@ -49,9 +49,9 @@
  * })
  * ```
  *
- * On the client, mount the same component with the same props and the parsed
- * state: `BrowserHost.mount(App, {}, container, { state })`, or
- * `BrowserHost.mountEffect` to wait for `root.adopted`.
+ * On the client, hydrate the same component with the same props and the
+ * parsed state: `HtmlHydrate.hydrate(App, {}, container, state)`, or
+ * `HtmlHydrate.hydrateEffect` to wait for `root.adopted`.
  *
  * A routed app served through `HttpRouter` uses `layerHttp` from
  * `@effect/ui/html/HtmlServerHttp` instead: it resolves each request's URL,

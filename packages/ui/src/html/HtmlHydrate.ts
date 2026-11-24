@@ -1,7 +1,9 @@
 /**
- * Hydration on the kernel's DOM host: mounts a component over what `HtmlServer` rendered of it, adopting the
- * server's nodes and the Model each instance rendered with. An app that only mounts doesn't carry it.
+ * Hydration: mounts a component tree over the HTML `HtmlServer.renderToHtml`
+ * rendered of it, adopting the server's nodes and the Model each instance
+ * rendered with. An app that mounts with `BrowserHost.mount` doesn't carry it.
  *
+ * @stability experimental
  * @since 0.1.0
  */
 import type * as Effect from "effect/Effect"
@@ -9,10 +11,11 @@ import * as Layer from "effect/Layer"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hydrateRun from "../internal/hydrateRun.ts"
-import * as Kernel from "../internal/kernel.ts"
+import type * as Kernel from "../internal/kernel.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
-import * as dom from "./internal/dom.ts"
+import * as BrowserHost from "./BrowserHost.ts"
+import type * as Html from "./Html.ts"
 import { attributeName } from "./internal/elements.ts"
 import * as markers from "./internal/markers.ts"
 
@@ -610,56 +613,145 @@ export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
 }
 
 /**
- * Mounts `component` over what `HtmlServer.renderToHtml` rendered of it in `container` until the Scope
- * closes. `state` is the state it returned: each instance starts from the Model the server rendered it with,
- * and one whose state decodes only asynchronously keeps the server's nodes until it does.
+ * Mounts a component tree over the HTML `HtmlServer.renderToHtml` rendered of
+ * it in `container`, for the life of the current Scope, and returns its root.
+ *
+ * **When to use**
+ *
+ * Use when the caller needs the root: to read its Model, send it a message,
+ * or wait for `root.adopted`, which completes when no hydrating instance is
+ * still waiting. `hydrate` is the form that runs an app.
+ *
+ * **Details**
+ *
+ * It mounts, checks the root and hydrates exactly as `hydrate` does.
  *
  * @stability experimental
+ * @category constructors
  * @since 0.1.0
- * @category mounting
  */
-export const hydrateEffect = <Props, Model, Msg, R = never>(
-  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
-  props: Props,
+export const hydrateEffect = <
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  R,
+  V extends View.Elements,
+  RF = never,
+  RP = never
+>(
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & BrowserHost.HtmlRoot<V>,
+  props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: dom.Options
-): Effect.Effect<dom.Root<Model, Msg>, never, R | Scope.Scope> =>
-  dom.mountWith(component, container, options, (base, kernel) => {
-    const runnable = component as unknown as Kernel.Runnable
-    const host = { ...base }
-    const hydration = hydrateRun.make(
-      state,
-      host,
-      base,
-      adopt(base, container, "/" + runnable.definition.name),
-      () => {}
-    )
-    const root = Kernel.mount(runnable, props, container, host, {
-      ...kernel,
-      init: (inst) => {
-        const first = inst.component.init(inst.props)
-        return hydration.init(inst, first) ?? first
-      }
-    })
-    hydration.end()
-    return root
-  })
+  options?: BrowserHost.MountOptions<V, RF>
+): Effect.Effect<
+  Renderer.Root<Model, Msg>,
+  never,
+  Exclude<R | RF | RP, Html.Host> | Scope.Scope
+> =>
+  BrowserHost.mountRoot(
+    component as unknown as Component.Any,
+    props,
+    container,
+    options,
+    hydrateRun.hydrating(state, adopt)
+  ) as any
 
 /**
- * Hydrates `component` in `container` for as long as the Layer is built.
+ * A Layer that mounts a component tree over the HTML
+ * `HtmlServer.renderToHtml` rendered of it in `container`, for as long as
+ * the Layer is built. It provides no service: launch it with
+ * `Layer.launch`, or merge it into the app's Layer.
+ *
+ * **When to use**
+ *
+ * Use to run a server-rendered app in the browser, in place of
+ * `BrowserHost.mount`. Reach for `hydrateEffect` when the caller needs the
+ * root, to send it messages or to wait for `root.adopted`.
+ *
+ * **Details**
+ *
+ * Pass the `state` from `HtmlServer.renderToHtml`, with the server's HTML
+ * already in `container` and the same props, to adopt the server's nodes
+ * instead of building them. `Router.props` gives the same props on both
+ * sides when both Routers are at the same URL. Everything else, the options
+ * included, is as `BrowserHost.mount`.
+ *
+ * Each instance adopts its server Model and replays `init` only to recover
+ * its Commands; server Commands the Model already has the result of are
+ * skipped, and those that missed the budget run now. `onMount` fires on
+ * adoption. Where an instance's view stops matching the server's nodes, the
+ * nodes before stay adopted and the rest is built fresh, and an instance the
+ * server deferred is built fresh. An instance whose state decodes only
+ * asynchronously keeps the server's nodes until it has.
+ *
+ * An instance the server rendered with its provided Layer ready, whose
+ * Layer is still building here, keeps the server's nodes until the Layer is
+ * ready, and everything else is live at once. Its `LayerPending` entry says
+ * `Awaiting`. One whose Layer was pending or failed on the server adopts at
+ * once, and its feature slots keep the server's `fallback` nodes while their
+ * status is the one the server shipped. A waiting instance is inert: its
+ * buttons do nothing, links still navigate through the Router, and a
+ * `<form>` submits natively. What the user types or picks in its fields
+ * stays, and reaches the fields' `onInput` and `onChange` when it adopts.
+ * Head sync starts once no instance is waiting.
+ *
+ * The cache hydrates from the state's `~query` entries. Until `adopted`
+ * completes or the Router first navigates, a watch, `get` or `prefetch`
+ * over a hydrated entry doesn't fetch, even when it is stale.
+ *
+ * **Example** (Hydrating a server-rendered app)
+ *
+ * ```ts
+ * import { HtmlHydrate, Html } from "@effect/ui/html"
+ * import { Effect, Layer, Schema } from "effect"
+ * import { Component, Renderer } from "@effect/ui"
+ *
+ * const App = Component.define({
+ *   name: "App",
+ *   model: Schema.Struct({}),
+ *   message: Schema.Never,
+ *   elements: Html
+ * }).make({
+ *   init: () => ({}),
+ *   update: ($) => $.model,
+ *   view: (h) => h.h1("Hello")
+ * })
+ *
+ * // The page embeds the state `HtmlServer.renderToHtml` returned.
+ * declare const state: Renderer.State
+ *
+ * // In the browser entry module.
+ * Effect.runFork(Layer.launch(HtmlHydrate.hydrate(App, {}, document.getElementById("app")!, state)))
+ * ```
  *
  * @stability experimental
+ * @category layers
  * @since 0.1.0
- * @category mounting
  */
-export const hydrate = <Props, Model, Msg, R = never>(
-  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
-  props: Props,
+export const hydrate = <
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  R,
+  V extends View.Elements,
+  RF = never,
+  RP = never
+>(
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & BrowserHost.HtmlRoot<V>,
+  props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: dom.Options
-): Layer.Layer<never, never, R> =>
+  options?: BrowserHost.MountOptions<V, RF>
+): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(
     hydrateEffect(component, props, container, state, options)
-  )
+  ) as any

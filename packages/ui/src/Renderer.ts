@@ -144,8 +144,8 @@ export interface HostEvents<Node> {
  * document, such as a native one, leaves it out and the head is only
  * computed.
  *
- * `hydration` lets the renderer read nodes a server rendered, so `mount` with
- * a server `state` adopts them. A host without it builds every node fresh.
+ * `hydration` lets the renderer read nodes a server rendered, so a
+ * hydrating mount adopts them. A host without it builds every node fresh.
  *
  * `createContainer` makes a node that holds the nodes of a kept child out of
  * the document, such as a `DocumentFragment`. It is never inserted. A host
@@ -558,21 +558,8 @@ export type HostOf<V> = [V] extends [never] ? never
  * requirements are added to the mount's. `init` still only sees plain props,
  * so a Story or a test can pass them directly.
  *
- * With `state` from a server render, the tree hydrates: each instance adopts
- * its server Model instead of running `init` and, on a host with
- * `hydration`, adopts the server's nodes inside `container`. `init` is
- * replayed only for its Commands, and every one of them runs. Where an
- * instance's view stops matching its nodes, the nodes before stay adopted and
- * the rest is built fresh, and a deferred instance is built fresh. An
- * instance whose provided Layer is still building
- * keeps the server's nodes, inert, until the Layer is ready; `adopted`
- * completes when none is left waiting.
- *
- * The cache hydrates from the state's `~query` entries. Until `adopted`
- * completes or the Router first navigates, a watch, `get` or `prefetch` over
- * a hydrated entry doesn't fetch, even when it is stale. The first emission
- * of each watch after adoption is delivered to `update`, and the view
- * doesn't change, since it equals the adopted snapshot.
+ * It builds every node fresh. A server render is hydrated with
+ * `HtmlHydrate.hydrate`.
  *
  * The mount owns the head: on every flush that changed a view it folds the
  * placed tree's head with the root vocabulary's merge, and gives it to the
@@ -612,7 +599,6 @@ export const mount: <
         h: View.Helper<never, {}> & View.Tags<V, never>
       ) => View.Content<never, RF>)
       | undefined
-    readonly state?: State | undefined
     readonly query?: QueryOptions | undefined
     readonly head?: boolean | undefined
   }

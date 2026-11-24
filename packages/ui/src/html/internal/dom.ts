@@ -1,16 +1,12 @@
 /**
- * The DOM host `BrowserHost` mounts on, and what `HtmlHydrate` mounts with.
+ * The DOM host `BrowserHost` mounts on.
  *
  * @internal
  */
 import * as Cause from "effect/Cause"
-import * as Effect from "effect/Effect"
-import * as AsyncResult from "effect/reactivity/AsyncResult"
-import type * as Scope from "effect/Scope"
-import type * as Component from "../../Component.ts"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
-import * as View from "../../View.ts"
+import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import { attributeName, svgTags } from "./elements.ts"
 import * as headSync from "./head.ts"
@@ -867,71 +863,3 @@ export const makeHost = (
     }
   }
 }
-
-/** @internal */
-export interface Root<Model, Msg> {
-  readonly path: string
-  readonly model: () => Model | undefined
-  readonly send: (message: Msg) => void
-}
-
-const report: Kernel.Tree["report"] = (path, where, cause) =>
-  globalThis.reportError?.(
-    new Error("[@effect/ui] " + path + " failed in " + where, { cause })
-  )
-
-/** @internal */
-export interface Options extends HostOptions {
-  // oxlint-disable-next-line effect/no-unused-internal
-  readonly log?: Kernel.Recorder | undefined
-  readonly fallback?:
-    | ((
-      failure: AsyncResult.Failure<never, unknown>,
-      h: View.Helper<never, {}>
-    ) => View.Content<never, any>)
-    | undefined
-}
-
-/** @internal */
-export const mountWith = <Props, Model, Msg, R = never>(
-  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
-  container: globalThis.Element,
-  options: Options | undefined,
-  start: (
-    host: Kernel.Host<globalThis.Node>,
-    options: Kernel.Options
-  ) => Kernel.Root
-): Effect.Effect<Root<Model, Msg>, never, R | Scope.Scope> =>
-  Effect.map(
-    Effect.acquireRelease(
-      Effect.contextWith((context) => {
-        const host = makeHost(container, options)
-        const fallback = options?.fallback
-        const root = start(host, {
-          report,
-          context,
-          log: options?.log,
-          fallback: fallback === undefined
-            ? undefined
-            : (cause: Cause.Cause<unknown>) =>
-              View.toNode(
-                fallback(
-                  AsyncResult.failure(cause),
-                  View.makeHelper({}, component.elements()) as any
-                )
-              )
-        })
-        return Effect.succeed({ host, root })
-      }),
-      ({ host, root }) =>
-        Effect.sync(() => {
-          host.dispose()
-          root.close()
-        })
-    ),
-    ({ root }) => ({
-      path: root.instance.path,
-      model: () => root.instance.model as Model | undefined,
-      send: root.send
-    })
-  )

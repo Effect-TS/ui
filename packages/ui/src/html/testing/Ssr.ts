@@ -60,6 +60,7 @@ import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
 import * as domHost from "../../internal/domHost.ts"
+import * as hydrateRun from "../../internal/hydrateRun.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Query from "../../Query.ts"
@@ -69,6 +70,7 @@ import type * as View from "../../View.ts"
 import * as BrowserHost from "../BrowserHost.ts"
 import * as Html from "../Html.ts"
 import * as HtmlHead from "../HtmlHead.ts"
+import * as HtmlHydrate from "../HtmlHydrate.ts"
 import * as HtmlServer from "../HtmlServer.ts"
 import * as markers from "../internal/markers.ts"
 import * as server from "../internal/server.ts"
@@ -539,7 +541,7 @@ export const ssr = <
       }
     })
     const mounted = yield* runtime.mount(component as any, props, container, {
-      state,
+      hydrate: hydrateRun.hydrating(state, HtmlHydrate.adopt),
       query: options?.query,
       adoptionHead: true
     }).pipe(

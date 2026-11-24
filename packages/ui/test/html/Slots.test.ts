@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -119,9 +119,12 @@ describe("slots on the server", () => {
       const article = app.querySelector("article")!
       const title = app.querySelector("h2")!
 
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-        state: rendered.state
-      })
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      )
       yield* root.adopted
       yield* tick
       // Card and the slots that match keep the server's nodes; the body shows the client's content.

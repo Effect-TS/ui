@@ -17,6 +17,7 @@ import {
   BrowserHost,
   Html,
   HtmlCommand,
+  HtmlHydrate,
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
@@ -1458,9 +1459,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         const rendered = yield* HtmlServer.renderToHtml(Login, {})
         const app = yield* container
         app.innerHTML = rendered.html
-        const root = yield* BrowserHost.mountEffect(Login, {}, app, {
-          state: rendered.state
-        }).pipe(
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Login,
+          {},
+          app,
+          rendered.state
+        ).pipe(
           Effect.provide(Router.memory({ routes: LoginRoute, history }))
         )
         yield* tick
@@ -1486,9 +1490,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         app.querySelector("x-clicks-on-connect")!.replaceWith(
           document.createElement("span")
         )
-        const root = yield* BrowserHost.mountEffect(Page, {}, app, {
-          state: rendered.state
-        })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          rendered.state
+        )
         yield* tick
         expect(root.model()).toEqual(["hit"])
       }).pipe(Effect.scoped))
@@ -4031,7 +4038,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         app.innerHTML = rendered.html
         const box = app.firstElementChild as HTMLElement
         box.setAttribute("style", "color: red; font-weight: bold")
-        yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+        yield* HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
         yield* tick
         expect(box.getAttribute("style")).toBe("color: blue")
         expect(box.style.getPropertyValue("font-weight")).toBe("")

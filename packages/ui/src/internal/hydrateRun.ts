@@ -428,3 +428,17 @@ export const make = (
     settled: () => !pass && held.size === 0
   }
 }
+
+/** @internal */
+export interface Hydrating {
+  readonly state: Renderer.State
+  readonly adopt: Adopt | undefined
+  readonly make: typeof make
+  readonly decodeRoot: typeof decodeRoot
+}
+
+/** @internal */
+export const hydrating = (
+  state: Renderer.State,
+  adopt?: Adopt
+): Hydrating => ({ state, adopt, make, decodeRoot })
