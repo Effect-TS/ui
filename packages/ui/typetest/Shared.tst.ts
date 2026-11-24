@@ -338,6 +338,33 @@ describe("shared state", () => {
       update: ($: { readonly model: null }) => $.model,
       parts: () => ({})
     })
+
+    const absent = (): void => {}
+    expect(Component.define).type.not.toBeCallableWith({
+      ...base,
+      shares: enabled ? () => 1 : absent()
+    })
+
+    const extraOpts = { ...base, description: "story metadata" }
+    const ExtraDef = Component.define(extraOpts)
+    expect(ExtraDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      view: (h: any) => h.el("div")
+    })
+    const ExtraOwnerDef = Component.define({
+      ...extraOpts,
+      shares: () => 1
+    })
+    expect(ExtraOwnerDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    })
+    expect(ExtraOwnerDef.make).type.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model,
+      parts: () => ({})
+    })
   })
 })
 

@@ -2300,23 +2300,12 @@ type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
     never
 }
 
-type DefineKeys =
-  | "name"
-  | "props"
-  | "model"
-  | "message"
-  | "events"
-  | "queries"
-  | "elements"
-  | "slots"
-  | "shared"
-  | "shares"
-  | "restore"
+type SharesSentinel = abstract new () => never
 
 type HasDefiniteShares<O, Sh, SV> = [SV] extends [never] ? false
   : "shares" extends keyof O
     ? {} extends Pick<O, "shares"> ? false
-    : [void] extends [Sh] ? true
+    : [SharesSentinel] extends [Sh] ? true
     : false
   : false
 
@@ -3192,8 +3181,8 @@ export const define = <
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
-  O extends { readonly [K in DefineKeys]?: unknown } = {},
-  Sh extends void = void
+  O extends { readonly shares?: unknown } = {},
+  Sh extends undefined | SharesSentinel = undefined | SharesSentinel
 >(
   options:
     & {
@@ -3319,7 +3308,7 @@ export const define = <
         | ((model: Model, props: Props) => NoInfer<Model>)
         | undefined
     }
-    & { readonly [K in keyof O]: K extends DefineKeys ? unknown : never }
+    & { readonly [K in keyof O]: unknown }
 ): Definition<
   Name,
   Props,
@@ -3370,7 +3359,7 @@ export const define = <
     elements: options.elements,
     slots: options.slots ?? [],
     shared: options.shared as any,
-    shares: typeof shares === "function" ? shares : shares?.value,
+    shares: typeof shares === "function" ? shares as any : shares?.value,
     sharesSchema: typeof shares === "function" ? undefined : shares?.schema,
     collects: shares !== undefined && typeof shares !== "function" &&
         "collects" in shares
