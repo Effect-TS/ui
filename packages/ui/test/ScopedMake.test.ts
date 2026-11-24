@@ -16,7 +16,6 @@ const Hello = Mount.make(
 )
 const Greeting = Component.define({
   name: "Greeting",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.String,
   elements: Html

@@ -21,7 +21,6 @@ const RadioGroupHostMessage = UiSchema.TaggedEnum({
 
 const Host = Component.define({
   name: "RadioGroupHost",
-  scoped: false,
   props: Schema.Struct({
     showIndicators: Schema.optional(Schema.Boolean),
     keepMounted: Schema.optional(Schema.Boolean)

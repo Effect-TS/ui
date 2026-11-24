@@ -340,7 +340,6 @@ describe("RadioGroup", () => {
     Effect.gen(function*() {
       const FieldHost = C.define({
         name: "FieldHost",
-        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html

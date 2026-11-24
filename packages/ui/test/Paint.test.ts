@@ -41,7 +41,6 @@ const makeApp = () => {
 
   const Row = Component.define({
     name: "Row",
-    scoped: false,
     props: Schema.Struct({ id: Schema.String }),
     model: Schema.Number,
     message: RowMessage,
@@ -78,7 +77,6 @@ const makeApp = () => {
   const ListMessage = UiSchema.TaggedEnum({ Added: { id: Schema.String } })
   const List = Component.define({
     name: "List",
-    scoped: false,
     model: Schema.Array(Schema.String),
     message: ListMessage
   }).make({
@@ -223,7 +221,6 @@ describe("paint", () => {
       let loads = 0
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -238,7 +235,6 @@ describe("paint", () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })

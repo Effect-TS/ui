@@ -77,7 +77,6 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
- *   scoped: false,
  *   model: Schema.Struct({ align: Schema.Array(Schema.String) }),
  *   message: EditorMessage,
  *   elements: Html
@@ -330,7 +329,6 @@ const tabStopOf = (
  */
 export const ToggleGroup = Component.define({
   name: "ToggleGroup",
-  scoped: false,
   props: ToggleGroupProps,
   model: ToggleGroupModel,
   message: ToggleGroupMessage,

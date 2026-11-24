@@ -96,7 +96,6 @@
  *
  * const Editor = Component.define({
  *   name: "Editor",
- *   scoped: false,
  *   model: Schema.Null,
  *   message: EditorMessage,
  *   elements: Html
@@ -430,7 +429,6 @@ const moveTo = ($: ToolbarUpdate, target: ToolbarItem) =>
  */
 export const Toolbar = Component.define({
   name: "Toolbar",
-  scoped: false,
   props: ToolbarProps,
   model: ToolbarModel,
   message: ToolbarMessage,

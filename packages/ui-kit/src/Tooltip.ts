@@ -118,7 +118,6 @@
  *
  * const Toolbar = Component.define({
  *   name: "Toolbar",
- *   scoped: false,
  *   model: Schema.Struct({ boldTip: Schema.Boolean }),
  *   message: ToolbarMessage,
  *   elements: Html
@@ -521,7 +520,6 @@ const WaitBeforeCooling = Command.make(
  */
 export const TooltipProvider = Component.define({
   name: "TooltipProvider",
-  scoped: false,
   props: TooltipProviderProps,
   model: TooltipProviderModel,
   message: TooltipProviderMessage,
@@ -610,7 +608,6 @@ export const TooltipProvider = Component.define({
  */
 export const Tooltip = Component.define({
   name: "Tooltip",
-  scoped: false,
   props: TooltipProps,
   model: TooltipModel,
   message: TooltipMessage,

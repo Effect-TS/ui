@@ -73,7 +73,6 @@ export interface Shortcut<Msg> {
  *
  * const Rows = Component.define({
  *   name: "Rows",
- *   scoped: false,
  *   model: Schema.Number,
  *   message: Message,
  *   elements: Html

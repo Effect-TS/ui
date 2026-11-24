@@ -80,7 +80,6 @@
  *
  * const Panel = Component.define({
  *   name: "Panel",
- *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -966,7 +965,6 @@ const overflowData = <B extends Attributed<B>>(
  */
 export const ScrollArea = Component.define({
   name: "ScrollArea",
-  scoped: false,
   props: ScrollAreaProps,
   model: ScrollAreaModel,
   message: ScrollAreaMessage,

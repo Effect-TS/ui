@@ -39,7 +39,6 @@ const initial: typeof Model.Type = {
 
 const Scene = Component.define({
   name: "Scene",
-  scoped: false,
   model: Model,
   message: Message,
   elements: Html

@@ -32,7 +32,6 @@
  *
  * const Nav = Component.define({
  *   name: "Nav",
- *   scoped: false,
  *   model: Schema.Null,
  *   message: Schema.Never,
  *   elements: Html

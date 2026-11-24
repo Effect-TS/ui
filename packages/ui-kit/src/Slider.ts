@@ -117,7 +117,6 @@
  *
  * const Player = Component.define({
  *   name: "Player",
- *   scoped: false,
  *   model: Schema.Struct({ volume: Schema.Number }),
  *   message: PlayerMessage,
  *   elements: Html
@@ -871,7 +870,6 @@ const hidden =
  */
 export const Slider = Component.define({
   name: "Slider",
-  scoped: false,
   props: SliderProps,
   model: SliderModel,
   message: SliderMessage,

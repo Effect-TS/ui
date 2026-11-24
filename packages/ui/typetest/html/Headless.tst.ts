@@ -43,7 +43,6 @@ const MarkSeen = Mount.make(
 )
 const Timed = Component.define({
   name: "Timed",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Number,
   elements: Html
@@ -59,7 +58,6 @@ const Timed = Component.define({
 // A part that takes either of two headings.
 const Heading = Component.define({
   name: "Heading",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -75,7 +73,6 @@ describe("headless components", () => {
   it("the consumer calls parts with no annotations", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -126,7 +123,6 @@ describe("headless components", () => {
   it("a part returns the chain type, so the callable shorthand is gone", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -181,7 +177,6 @@ describe("headless components", () => {
       )
     const Marked = Component.define({
       name: "Marked",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html
@@ -205,7 +200,6 @@ describe("headless components", () => {
     >()
     const App = Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -230,7 +224,6 @@ describe("headless components", () => {
   it("wrapped parts keep their requirements and the wrapper's call signature", () => {
     const Wrapped = Component.define({
       name: "Wrapped",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Number,
       elements: Html
@@ -264,7 +257,6 @@ describe("headless components", () => {
     >()
     const App = Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -314,7 +306,6 @@ describe("headless components", () => {
   it("a part for one heading rejects another, and a part may list several tags", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -355,7 +346,6 @@ describe("headless components", () => {
   it("view is required for a headless child, and a normal child takes none", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

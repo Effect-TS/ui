@@ -38,7 +38,6 @@ const Save = Command.make(
 
 const Signup = Component.define({
   name: "Signup",
-  scoped: false,
   model: Schema.Struct({
     form: SignupValidation.State,
     saving: Schema.Boolean

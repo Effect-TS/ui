@@ -33,7 +33,6 @@
  *
  * const TodoItem = Component.define({
  *   name: "TodoItem",
- *   scoped: false,
  *   props: Schema.Struct({ id: Schema.String }),
  *   model: Schema.Struct({ saved: Schema.Boolean }),
  *   message: Message
@@ -172,7 +171,6 @@ type AnyComponent =
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  * const Counter = Component.define({
  *   name: "Counter",
- *   scoped: false,
  *   model: Schema.Struct({ count: Schema.Number }),
  *   message: Message
  * }).make({
@@ -380,7 +378,6 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  *
  * const Person = Component.define({
  *   name: "Person",
- *   scoped: false,
  *   model: Schema.Struct({ name: Schema.String }),
  *   message: Schema.Never
  * }).make({

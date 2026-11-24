@@ -10,7 +10,6 @@ const BigMessage = UiSchema.TaggedEnum({
 
 export const BigDemo = Component.define({
   name: "BigDemo",
-  scoped: false,
   model: Schema.Struct({ index: Schema.Number, jump: Schema.Number }),
   message: BigMessage,
   elements: Html

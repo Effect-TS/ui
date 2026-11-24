@@ -12,7 +12,6 @@ const ProfileMessage = UiSchema.TaggedEnum({
 // A consumer that keeps the value in its Model.
 const Profile = Component.define({
   name: "Profile",
-  scoped: false,
   props: Schema.Struct({ disabled: Schema.optional(Schema.Boolean) }),
   model: Schema.Struct({ name: Schema.String }),
   message: ProfileMessage,

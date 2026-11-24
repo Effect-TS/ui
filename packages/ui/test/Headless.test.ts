@@ -52,7 +52,6 @@ const PickerMessage = UiSchema.TaggedEnum({
 
 const Picker = Component.define({
   name: "Picker",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: PickerMessage,
   elements: Html
@@ -101,7 +100,6 @@ const BellMessage = UiSchema.TaggedEnum({ Ring: {}, Break: {} })
 
 const Bell = Component.define({
   name: "Bell",
-  scoped: false,
   model: Schema.Number,
   message: BellMessage,
   events: Schema.Literal("rang"),
@@ -126,7 +124,6 @@ const BoardMessage = UiSchema.TaggedEnum({ Rang: {}, Failed: {} })
 
 const Board = Component.define({
   name: "Board",
-  scoped: false,
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Array(Schema.String),
   message: BoardMessage,
@@ -163,7 +160,6 @@ class Badge
 {}
 const BadgeImpl = Component.define({
   name: "BadgeImpl",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 })
@@ -174,7 +170,6 @@ const BadgeImpl = Component.define({
   })
 const Bare = Component.define({
   name: "Bare",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -185,7 +180,6 @@ const Bare = Component.define({
 const ConsumerMessage = UiSchema.TaggedEnum({ Break: {} })
 const Consumer = Component.define({
   name: "Consumer",
-  scoped: false,
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
   model: Schema.Boolean,
   message: ConsumerMessage
@@ -216,7 +210,6 @@ const Provided = Component.provide(
 )
 const Waiting = Component.define({
   name: "Waiting",
-  scoped: false,
   props: Schema.Struct({ throwsAt: Schema.Literals(["mount", "re-render"]) }),
   model: Schema.Null,
   message: Schema.Never
@@ -237,7 +230,6 @@ const Waiting = Component.define({
 
 const Field = Component.define({
   name: "Field",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -256,7 +248,6 @@ const Field = Component.define({
 
 const Form = Component.define({
   name: "Form",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -280,7 +271,6 @@ const Form = Component.define({
 
 const Shell = Component.define({
   name: "Shell",
-  scoped: false,
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Null,
   message: Schema.Never,
@@ -362,7 +352,6 @@ describe("headless components", () => {
     provideHost(Effect.gen(function*() {
       const Control = Component.define({
         name: "Control",
-        scoped: false,
         props: Schema.Struct({ active: Schema.Boolean }),
         model: Schema.Null,
         message: Schema.Never,
@@ -382,7 +371,6 @@ describe("headless components", () => {
       })
       const Consumer = Component.define({
         name: "Consumer",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Literal("toggle"),
         elements: Html
@@ -436,7 +424,6 @@ describe("headless components", () => {
     provideHost(Effect.gen(function*() {
       const Hand = Component.define({
         name: "Hand",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Literal("hit")
       }).make({

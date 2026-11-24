@@ -14,7 +14,6 @@ type Received = Extract<EditorMessage, { readonly _tag: "Clear" | "Focus" }>
 
 const Editor = Component.define({
   name: "Editor",
-  scoped: false,
   model: Schema.String,
   message: EditorMessage,
   shares: { value: (text) => ({ text }), receives: ["Clear", "Focus"] }
@@ -31,7 +30,6 @@ const Editor = Component.define({
 
 const Field = Component.define({
   name: "Field",
-  scoped: false,
   model: Schema.String,
   message: EditorMessage
 }).make({
@@ -42,7 +40,6 @@ const Field = Component.define({
 
 const Plain = Component.define({
   name: "Plain",
-  scoped: false,
   model: Schema.Null,
   message: EditorMessage
 }).make({
@@ -53,7 +50,6 @@ const Plain = Component.define({
 
 const Note = Component.define({
   name: "Note",
-  scoped: false,
   model: Schema.String,
   message: EditorMessage
 }).make({
@@ -87,7 +83,6 @@ declare const untrusted: unknown
 const ParentMessage = UiSchema.TaggedEnum({ Go: {} })
 const ParentDef = Component.define({
   name: "Parent",
-  scoped: false,
   model: Schema.Null,
   message: ParentMessage
 })
@@ -152,7 +147,6 @@ type NestMessage = typeof NestMessage.Type
 
 const NestDef = Component.define({
   name: "Nest",
-  scoped: false,
   model: Schema.Number,
   message: NestMessage,
   shares: { value: (picked) => picked, receives: ["Picked"] },
@@ -161,7 +155,6 @@ const NestDef = Component.define({
 
 const FlatDef = Component.define({
   name: "Flat",
-  scoped: false,
   model: Schema.Number,
   message: NestMessage,
   shares: { value: (picked) => picked, receives: ["Picked"] }
@@ -312,7 +305,6 @@ describe("Component.provide", () => {
     const make = () =>
       Component.define({
         name: "Inline",
-        scoped: false,
         props: Schema.Struct({ name: Schema.String }),
         model: Schema.Null,
         message: Schema.String
@@ -336,7 +328,6 @@ describe("Component.provide", () => {
     expect(Component.provide(
       Component.define({
         name: "Inline",
-        scoped: false,
         props: Schema.Struct({ name: Schema.String }),
         model: Schema.Null,
         message: Schema.String
@@ -358,7 +349,6 @@ describe("Component.provide", () => {
     expect(Component.provide(
       Component.define({
         name: "Inline",
-        scoped: false,
         props: Schema.Struct({ name: Schema.String }),
         model: Schema.Null,
         message: Schema.String
@@ -503,7 +493,6 @@ describe("an erased component", () => {
   const any: Component.Any = Plain
   const AnyProps = Component.define({
     name: "AnyProps",
-    scoped: false,
     props: Schema.Any,
     model: Schema.Null,
     message: EditorMessage

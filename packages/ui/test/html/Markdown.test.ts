@@ -92,7 +92,6 @@ const render = (
   HtmlServer.renderToHtml(
     Component.define({
       name: "Doc",
-      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       elements: Html
@@ -282,7 +281,6 @@ it.layer(TestHost.layer())("view", (it) => {
       const html = yield* HtmlServer.renderToHtml(
         Component.define({
           name: "Blocks",
-          scoped: false,
           model: Schema.Struct({}),
           message: Schema.Never,
           elements: Html
@@ -306,7 +304,6 @@ const CounterMessage = UiSchema.TaggedEnum({ Incremented: {} })
 
 const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   props: Schema.Struct({ step: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage,
@@ -352,7 +349,6 @@ const PostMessage = UiSchema.TaggedEnum({ ClickedRefresh: {} })
 
 const Post = Component.define({
   name: "Post",
-  scoped: false,
   model: Schema.Struct({ renders: Schema.Number }),
   message: PostMessage,
   elements: Html
@@ -406,7 +402,6 @@ class Greet extends Command.Service<Greet>()(
 
 const Greeting = Component.define({
   name: "Greeting",
-  scoped: false,
   props: Schema.Struct({ name: Schema.String }),
   model: Schema.String,
   message: Schema.String,
@@ -426,7 +421,6 @@ const greetingPost = parseMarkdown(
 
 const GreetingPost = Component.define({
   name: "GreetingPost",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html

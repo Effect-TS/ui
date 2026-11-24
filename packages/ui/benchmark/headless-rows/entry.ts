@@ -35,7 +35,6 @@ const update = (
   })
 const app = {
   name: "App",
-  scoped: false,
   props: AppProps,
   model: Schema.Array(Row),
   message: AppMessage,
@@ -71,7 +70,6 @@ const Plain = Component.define(app).make({
 /** A normal child per row: it owns the markup, and skips when its props are the same. */
 const NormalRow = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ row: Row }),
   model: Schema.Boolean,
   message: Flip,
@@ -105,7 +103,6 @@ const Normal = Component.define(app).make({
 /** The same disclosure, headless: the list's closure owns the markup. */
 const Disclosure = Component.define({
   name: "Disclosure",
-  scoped: false,
   model: Schema.Boolean,
   message: Flip,
   elements: Html
@@ -149,7 +146,6 @@ const Headless = Component.define(app).make({
 /** The proposal's advice: a normal row component around the headless child, so the skip happens above the closure. */
 const WrappedRow = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,
@@ -189,7 +185,6 @@ const ProviderMessage = UiSchema.TaggedEnum({
 })
 const Provider = Component.define({
   name: "Provider",
-  scoped: false,
   model: Schema.Struct({
     open: Schema.NullOr(Schema.String),
     touches: Schema.Number
@@ -213,7 +208,6 @@ const Provider = Component.define({
 /** Sends to the Provider from inside its closure: a normal component with no props, so it's skipped. */
 const Poker = Component.define({
   name: "Poker",
-  scoped: false,
   model: Schema.Null,
   message: ProviderMessage,
   elements: Html
@@ -284,7 +278,6 @@ const OwnerWrapped = Component.define(app).make({
 /** The guidance: one normal component directly under the Provider, holding the headless rows. */
 const Body = Component.define({
   name: "Body",
-  scoped: false,
   props: Schema.Struct({ rows: Schema.Array(Row) }),
   model: Schema.Null,
   message: Schema.Never,
@@ -316,7 +309,6 @@ const OwnerBoundary = Component.define(app).make({
 /** Wrapped rows that each read the Provider: every row re-renders when what it shares changes. */
 const ReaderRow = Component.define({
   name: "Row",
-  scoped: false,
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,

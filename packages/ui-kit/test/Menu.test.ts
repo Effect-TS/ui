@@ -237,7 +237,6 @@ const PageMessage = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({ route: PageRoute }),
   model: Schema.Struct({ route: PageRoute, open: Schema.Boolean }),
   message: PageMessage,

@@ -188,7 +188,6 @@ describe("Router", { concurrent: false }, () => {
     ) =>
       Component.define({
         name,
-        scoped: false,
         props: Schema.Struct({ route: routes }),
         model: Schema.Struct({ route: routes }),
         message: routes
@@ -237,7 +236,6 @@ describe("Router", { concurrent: false }, () => {
     let onRoute = () => {}
     const Root = Component.define({
       name: "Root",
-      scoped: false,
       props: Schema.Struct({ route: routes }),
       model: Schema.Struct({ route: routes, following: Schema.Boolean }),
       message: Message
@@ -794,7 +792,6 @@ describe("Router", { concurrent: false }, () => {
     const { layer, settled } = setup()
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Number,
       message: Schema.Never
     }).make({
@@ -805,7 +802,6 @@ describe("Router", { concurrent: false }, () => {
     })
     const Layout = Component.define({
       name: "Layout",
-      scoped: false,
       model: Schema.Number,
       message: Schema.Never
     }).make({
@@ -820,7 +816,6 @@ describe("Router", { concurrent: false }, () => {
     })
     const Shell = Component.define({
       name: "Shell",
-      scoped: false,
       props: Schema.Struct({ route: AppRoute }),
       model: AppRoute,
       message: Schema.Struct({ route: AppRoute })
@@ -915,7 +910,6 @@ describe("Router.patchSearch", { concurrent: false }, () => {
   /** Holds its whole route as props, and writes the search with patchSearch. */
   const SearchPage = Component.define({
     name: "SearchPage",
-    scoped: false,
     props: Schema.Struct({ route: SearchOnly }),
     model: Schema.Struct({
       outcomes: Schema.Array(Schema.String),
@@ -962,7 +956,6 @@ describe("Router.patchSearch", { concurrent: false }, () => {
   const makeApp = (key: (route: typeof SearchOnly.Type) => string) =>
     Component.define({
       name: "App",
-      scoped: false,
       props: Schema.Struct({ route: Routes }),
       model: Schema.Struct({ route: Routes }),
       message: AppMessage
@@ -1496,7 +1489,6 @@ describe("Router.prefetch", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Twice = Component.define({
           name: "Twice",
-          scoped: false,
           model: Schema.Struct({}),
           message: Schema.Never
         }).make({

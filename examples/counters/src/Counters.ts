@@ -15,7 +15,6 @@ export const CountersMessage = UiSchema.TaggedEnum({
 
 export const Counters = Component.define({
   name: "Counters",
-  scoped: false,
   model: CountersModel,
   message: CountersMessage
 }).make({

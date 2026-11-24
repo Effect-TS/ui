@@ -63,7 +63,6 @@
  *
  * const Form = Component.define({
  *   name: "Form",
- *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -90,7 +89,6 @@
  *
  * const Composer = Component.define({
  *   name: "Composer",
- *   scoped: false,
  *   model: Schema.String,
  *   message: Message,
  *   elements: Html
@@ -1690,7 +1688,6 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
  *
  * const Label = Component.define({
  *   name: "Label",
- *   scoped: false,
  *   model: Schema.Void,
  *   message: Schema.Never,
  *   elements: Html.vocabulary

@@ -13,7 +13,6 @@ class Store extends Context.Service<Store, { readonly draft: string }>()(
 const PanelMsg = UiSchema.TaggedEnum({ Toggle: {} })
 const PanelDef = Component.define({
   name: "Panel",
-  scoped: false,
   model: Schema.Boolean,
   message: PanelMsg,
   elements: Html,
@@ -27,7 +26,6 @@ const Panel = PanelDef.make({
 
 const Plain = Component.define({
   name: "Plain",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -92,7 +90,6 @@ describe("slots", () => {
     >()
     Component.define({
       name: "None",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never
     }).view((h) => {
@@ -217,7 +214,6 @@ describe("slots", () => {
   it("rejects slots on headless and feature calls, from a variable too", () => {
     const Headless = Component.define({
       name: "Headless",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html

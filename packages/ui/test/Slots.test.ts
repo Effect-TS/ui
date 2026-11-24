@@ -40,7 +40,6 @@ const failures = (root: Root) =>
 const define = <const Name extends string>(name: Name) =>
   Component.define({
     name,
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
@@ -48,7 +47,6 @@ const define = <const Name extends string>(name: Name) =>
 const slotted = <const Name extends string>(name: Name) =>
   Component.define({
     name,
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html,
@@ -65,7 +63,6 @@ let frameViews = 0
 const Toggle = UiSchema.TaggedEnum({ Toggle: {} })
 const Frame = Component.define({
   name: "Frame",
-  scoped: false,
   model: Schema.Boolean,
   message: Toggle,
   elements: Html,
@@ -85,7 +82,6 @@ const Frame = Component.define({
 const EditorMsg = UiSchema.TaggedEnum({ Typed: {}, Break: {} })
 const Editor = Component.define({
   name: "Editor",
-  scoped: false,
   model: Schema.Number,
   message: EditorMsg,
   events: Schema.Number,
@@ -109,7 +105,6 @@ const PageMsg = UiSchema.TaggedEnum({
 })
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.String,
   message: PageMsg,
   elements: Html
@@ -219,7 +214,6 @@ describe("slots", () => {
       const Late = Component.provide(
         Component.define({
           name: "Late",
-          scoped: false,
           model: Schema.Boolean,
           message: LateMsg,
           elements: Html
@@ -276,7 +270,6 @@ describe("slots", () => {
       )
       const Form = Component.define({
         name: "Form",
-        scoped: false,
         model: Schema.optional(Schema.Boolean),
         message: Schema.Boolean,
         elements: Html
@@ -299,7 +292,6 @@ describe("slots", () => {
       })
       const Top = Component.define({
         name: "Top",
-        scoped: false,
         model: Schema.Null,
         message: PageMsg,
         elements: Html
@@ -471,7 +463,6 @@ describe("a mistake in content fails the parent that wrote it", () => {
       const tiny = <const Name extends string>(name: Name) =>
         Component.define({
           name,
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Tiny,
@@ -489,7 +480,6 @@ describe("a mistake in content fails the parent that wrote it", () => {
       })
       const Writer = Component.define({
         name: "Writer",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Tiny
@@ -501,7 +491,6 @@ describe("a mistake in content fails the parent that wrote it", () => {
         })
       const Top = Component.define({
         name: "Top",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Tiny

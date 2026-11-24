@@ -140,7 +140,6 @@
  *
  * const Rows = Component.define({
  *   name: "Rows",
- *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html
@@ -1527,7 +1526,6 @@ type Div = Html.Element<
  */
 export const VirtualList = Component.define({
   name: "VirtualList",
-  scoped: false,
   props: VirtualListProps,
   model: VirtualListModel,
   message: VirtualListMessage,

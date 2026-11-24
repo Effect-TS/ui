@@ -6,7 +6,6 @@ import { Effect, Schema } from "effect"
 
 const Note = Component.define({
   name: "Note",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   events: UiSchema.TaggedEnum({ Saved: { text: Schema.String } }),
@@ -19,7 +18,6 @@ const Note = Component.define({
 
 const Panel = Component.define({
   name: "Panel",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,
@@ -36,7 +34,6 @@ const PageMsg = UiSchema.TaggedEnum({
 })
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Struct({ bumps: Schema.Number, saved: Schema.String }),
   message: PageMsg,
   elements: Html
@@ -129,7 +126,6 @@ describe("View queries", () => {
 describe("headless closures in slot content", () => {
   const Headless = Component.define({
     name: "Headless",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
@@ -140,7 +136,6 @@ describe("headless closures in slot content", () => {
     Effect.gen(function*() {
       const Parent = Component.define({
         name: "Parent",
-        scoped: false,
         model: Schema.String,
         message: Schema.String,
         elements: Html
@@ -170,7 +165,6 @@ describe("headless closures in slot content", () => {
     Effect.gen(function*() {
       const Receiver = Component.define({
         name: "Receiver",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html,

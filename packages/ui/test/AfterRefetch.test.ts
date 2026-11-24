@@ -109,7 +109,6 @@ const makeApp = (options?: {
   }
   const Card = Component.define({
     name: "Card",
-    scoped: false,
     props: Schema.Struct({ id: Schema.String, tag: Schema.String }),
     model: Schema.Struct({ done: Schema.Array(Schema.String) }),
     message: CardMessage,
@@ -168,7 +167,6 @@ const makeApp = (options?: {
   })
   const List = Component.define({
     name: "List",
-    scoped: false,
     props: Schema.Struct({ cards: Schema.Array(Schema.String) }),
     model: Schema.Array(Schema.String),
     message: ListMessage
@@ -458,7 +456,6 @@ describe("Command.afterRefetch", () => {
     const order: Array<string> = []
     const Board = Component.define({
       name: "Board",
-      scoped: false,
       model: Schema.Struct({ renamed: Schema.Boolean }),
       message: BoardMessage,
       queries: {
@@ -922,7 +919,6 @@ describe("Command.afterRefetch", () => {
     })
     const ItemsView = Component.define({
       name: "ItemsView",
-      scoped: false,
       model: Schema.Struct({ touched: Schema.Boolean }),
       message: ItemsMessage,
       queries: { items: { query: ListItems, args: () => ({}) } }

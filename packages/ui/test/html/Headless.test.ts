@@ -36,7 +36,6 @@ const PickerMessage = UiSchema.TaggedEnum({
 
 const Picker = Component.define({
   name: "Picker",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: PickerMessage,
   elements: Html
@@ -91,7 +90,6 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 const Toolbar = Component.define({
   name: "Toolbar",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: ToolbarMessage,
   elements: Html
@@ -149,7 +147,6 @@ const PlaceAnchor = Mount.make(
 
 const Anchor = Component.define({
   name: "Anchor",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Literal("placed"),
   elements: Html
@@ -167,7 +164,6 @@ const Anchor = Component.define({
 
 const Tip = Component.define({
   name: "Tip",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Literal("toggle"),
   elements: Html
@@ -195,7 +191,6 @@ const flaky = { throws: false }
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -237,7 +232,6 @@ const Page = Component.define({
 
 const Keys = Component.define({
   name: "Keys",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -256,7 +250,6 @@ const Keys = Component.define({
 
 const KeysApp = Component.define({
   name: "KeysApp",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -285,7 +278,6 @@ const KeysApp = Component.define({
 
 const Confirm = Component.define({
   name: "Confirm",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Literal("closed"),
   elements: Html
@@ -360,7 +352,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       flaky.throws = true
       const failing = Component.define({
         name: "Shell",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -551,7 +542,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Hit = Component.define({
         name: "Hit",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Literal("hit"),
         elements: Html
@@ -568,7 +558,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -595,7 +584,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Plain = Component.define({
         name: "Plain",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Literal("hit"),
         elements: Html
@@ -606,7 +594,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Literal("own"),
         elements: Html
@@ -634,7 +621,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       let calls = 0
       const Frame = Component.define({
         name: "Frame",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Literal("out"),
         elements: Html
@@ -651,7 +637,6 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Literal("hide"),
         elements: Html

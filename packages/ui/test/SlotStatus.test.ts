@@ -20,7 +20,6 @@ class Editor extends Feature.Service<Editor>()("SlotStatus/Editor", {
 }) {}
 const EditorView = Component.define({
   name: "EditorView",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 })
@@ -55,7 +54,6 @@ const replayed = (
 
 const Doc = Component.define({
   name: "Doc",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -86,7 +84,6 @@ describe("slot status", () => {
       }
       const Room = Component.define({
         name: "Room",
-        scoped: false,
         model: Schema.Literals(["a", "b", "c"]),
         message: Message
       }).make({
@@ -154,7 +151,6 @@ describe("slot status", () => {
       // A component a pending provider's fallback placed renders against the settled services above it.
       const Spinner = Component.define({
         name: "Spinner",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       })
@@ -175,7 +171,6 @@ describe("slot status", () => {
       const Inner = Component.provide(
         Component.define({
           name: "Inner",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         }).make({
@@ -200,7 +195,6 @@ describe("slot status", () => {
       const Outer = Component.provide(
         Component.define({
           name: "Outer",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never
         }).make({
@@ -247,7 +241,6 @@ describe("slot status", () => {
       const Msg = UiSchema.TaggedEnum({ Go: {}, Stop: {} })
       const Jobs = Component.define({
         name: "Jobs",
-        scoped: false,
         model: Schema.Null,
         message: Msg
       }).make({

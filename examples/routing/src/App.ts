@@ -41,7 +41,6 @@ export const AppMessage = UiSchema.TaggedEnum({
 
 const AppDef = Component.define({
   name: "App",
-  scoped: false,
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({
     route: AppRoute,

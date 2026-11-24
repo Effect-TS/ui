@@ -23,7 +23,6 @@ const ProgressModel = Schema.Struct({
 
 export const ProgressDemo = Component.define({
   name: "ProgressDemo",
-  scoped: false,
   model: ProgressModel,
   message: ProgressMessage,
   elements: Html

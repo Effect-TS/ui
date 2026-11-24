@@ -21,7 +21,6 @@ const side = (count: number) => count === 0 ? "server" : "client"
 
 const Avatar = Component.define({
   name: "Avatar",
-  scoped: false,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -33,7 +32,7 @@ const Avatar = Component.define({
 
 const Badge = Component.define({
   name: "Badge",
-  scoped: true,
+  keepAlive: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -45,7 +44,6 @@ const Badge = Component.define({
 
 const Broken = Component.define({
   name: "Broken",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -59,7 +57,7 @@ const Broken = Component.define({
 
 const Pin = Component.define({
   name: "Pin",
-  scoped: true,
+  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -68,7 +66,7 @@ const Pin = Component.define({
 
 const Profile = Component.define({
   name: "Profile",
-  scoped: true,
+  keepAlive: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -80,7 +78,7 @@ const Profile = Component.define({
       h.form(
         h.p(draft),
         Avatar(h, { key: "a" }),
-        h.scoped((s) => Badge(s, { key: "b" })),
+        h.keepAlive((s) => Badge(s, { key: "b" })),
         Broken(h, { key: "x", fallback: () => h.s("down") })
       )
   })
@@ -94,7 +92,6 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
 
 const Settings = Component.define({
   name: "Settings",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Boolean,
   elements: Html,
@@ -107,15 +104,15 @@ const Settings = Component.define({
       h.queries.tab.value === "billing"
     return h.main(
       h.h1(billing ? "billing" : "profile"),
-      h.scoped((s) => Pin(s, {})),
-      shown || !billing ? h.scoped((s) => Profile(s, { key: "p" })) : null
+      h.keepAlive((s) => Pin(s, {})),
+      shown || !billing ? h.keepAlive((s) => Profile(s, { key: "p" })) : null
     )
   }
 }).pipe(Component.provide(GetTab.layer))
 
 const Sketch = Component.define({
   name: "Sketch",
-  scoped: true,
+  keepAlive: true,
   model: Schema.declare((u): u is () => string => typeof u === "function"),
   message: Schema.Never,
   elements: Html
@@ -127,7 +124,6 @@ const Sketch = Component.define({
 
 const Board = Component.define({
   name: "Board",
-  scoped: false,
   model: Schema.Boolean,
   message: Schema.Boolean,
   elements: Html,
@@ -137,14 +133,14 @@ const Board = Component.define({
   update: (_, shown) => shown,
   view: (h, shown) =>
     h.main(
-      h.scoped((s) => Sketch(s, { key: "drawn" })),
+      h.keepAlive((s) => Sketch(s, { key: "drawn" })),
       shown || !AsyncResult.isSuccess(h.queries.tab)
-        ? h.scoped((s) => Sketch(s, { key: "kept" }))
+        ? h.keepAlive((s) => Sketch(s, { key: "kept" }))
         : null
     )
 }).pipe(Component.provide(GetTab.layer))
 
-describe("scoped children on the server", () => {
+describe("keep-alive children on the server", () => {
   it.effect("writes no nodes for a kept child, and the client takes its state once it's written", () =>
     Effect.gen(function*() {
       inits = { avatar: 0, profile: 0, badge: 0 }
@@ -192,7 +188,6 @@ let leafInits = 0
 let noteInits = 0
 const Note = Component.define({
   name: "Note",
-  scoped: false,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -204,7 +199,7 @@ const Note = Component.define({
   })
 const Leaf = Component.define({
   name: "Leaf",
-  scoped: true,
+  keepAlive: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -217,7 +212,6 @@ const Leaf = Component.define({
 
 const Frame = Component.define({
   name: "Frame",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,
@@ -230,7 +224,6 @@ const Frame = Component.define({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({ where: Schema.String }),
   model: Schema.NullOr(Schema.String),
   message: Schema.String,
@@ -240,7 +233,7 @@ const Page = Component.define({
   update: (_, where) => where,
   view: (h, moved) => {
     const where = moved ?? h.props.where
-    return h.scoped((s) =>
+    return h.keepAlive((s) =>
       h.main(
         where === "a"
           ? Frame(h, { key: "a", slots: { body: Leaf(s, { key: "l" }) } })
@@ -272,7 +265,7 @@ const hydrateAt = Effect.fnUntraced(function*(where: string) {
   return { app, root }
 })
 
-describe("scoped children on the client after hydration", () => {
+describe("keep-alive children on the client after hydration", () => {
   it.effect("keep the server's Model when the client draws them somewhere new", () =>
     Effect.gen(function*() {
       const { app } = yield* hydrateAt("b")
@@ -299,7 +292,6 @@ const tick = Effect.promise(() =>
 class Slow extends Context.Service<Slow, string>()("test/Slow") {}
 const SlowFrame = Component.define({
   name: "SlowFrame",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,
@@ -316,7 +308,6 @@ const SlowFrame = Component.define({
   )
 const SlowPage = Component.define({
   name: "SlowPage",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -325,14 +316,14 @@ const SlowPage = Component.define({
     init: () => null,
     update: ($) => $.model,
     view: (h) =>
-      h.scoped((s) =>
+      h.keepAlive((s) =>
         h.main(
           SlowFrame(h, { key: "f", slots: { body: Leaf(s, { key: "l" }) } })
         )
       )
   })
 
-describe("scoped children in a receiver that waits for its Layer", {
+describe("keep-alive children in a receiver that waits for its Layer", {
   concurrent: false
 }, () => {
   it.live("keep the server's nodes once the receiver adopts them", () =>
@@ -361,7 +352,6 @@ describe("scoped children in a receiver that waits for its Layer", {
   let gate: Effect.Effect<void> = Effect.void
   const Gated = Component.define({
     name: "Gated",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html,
@@ -403,7 +393,7 @@ describe("scoped children in a receiver that waits for its Layer", {
 
   const Field = Component.define({
     name: "Field",
-    scoped: true,
+    keepAlive: true,
     model: Schema.String,
     message: Schema.String,
     elements: Html
@@ -414,7 +404,6 @@ describe("scoped children in a receiver that waits for its Layer", {
   })
   const Box = Component.define({
     name: "Box",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html
@@ -429,7 +418,6 @@ describe("scoped children in a receiver that waits for its Layer", {
   ) =>
     Component.define({
       name: "FieldPage",
-      scoped: false,
       model: Schema.Number,
       message: Schema.Null,
       elements: Html
@@ -438,7 +426,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => 0,
         update: ($) => $.model + 1,
         view: (h) =>
-          h.scoped((s) => {
+          h.keepAlive((s) => {
             const field = Field(s, { key: "f" })
             const body = placed === "bare"
               ? field
@@ -475,7 +463,7 @@ describe("scoped children in a receiver that waits for its Layer", {
 
   const Note = Component.define({
     name: "Note",
-    scoped: true,
+    keepAlive: true,
     model: Schema.String,
     message: Schema.String,
     elements: Html
@@ -486,7 +474,6 @@ describe("scoped children in a receiver that waits for its Layer", {
   })
   const Bare = Component.define({
     name: "Bare",
-    scoped: false,
     model: Schema.Null,
     message: Schema.Never,
     elements: Html,
@@ -504,7 +491,7 @@ describe("scoped children in a receiver that waits for its Layer", {
     )
   const Row = Component.define({
     name: "Row",
-    scoped: true,
+    keepAlive: true,
     model: Schema.String,
     message: Schema.Never,
     elements: Html
@@ -519,7 +506,7 @@ describe("scoped children in a receiver that waits for its Layer", {
   const draft = (name: string) =>
     Component.define({
       name,
-      scoped: true,
+      keepAlive: true,
       model: Schema.String,
       message: Schema.Never,
       elements: Html
@@ -539,7 +526,6 @@ describe("scoped children in a receiver that waits for its Layer", {
   const moving = (headless: boolean) =>
     Component.define({
       name: "Moving",
-      scoped: false,
       model: Where,
       message: Where,
       elements: Html
@@ -548,7 +534,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => "slot" as const,
         update: (_, where) => where,
         view: (h, where) =>
-          h.scoped(({ model }) => model !== "ended", (s) => {
+          h.keepAlive(({ model }) => model !== "ended", (s) => {
             const written = Draft(s, { key: "d" })
             const body = where === "slot" || where === "ended" ? written : null
             return h.main(
@@ -567,7 +553,6 @@ describe("scoped children in a receiver that waits for its Layer", {
   const Moving = moving(false)
   const Restarting = Component.define({
     name: "Restarting",
-    scoped: false,
     model: Where,
     message: Where,
     elements: Html
@@ -575,7 +560,7 @@ describe("scoped children in a receiver that waits for its Layer", {
     init: () => start,
     update: (_, where) => where,
     view: (h, where) =>
-      h.scoped((s) => {
+      h.keepAlive((s) => {
         const written = SlowDraft(s, { key: "d" })
         return h.main(
           h.p(where === "slot" ? written : null),
@@ -676,7 +661,6 @@ describe("scoped children in a receiver that waits for its Layer", {
     Effect.gen(function*() {
       const Mixed = Component.define({
         name: "Mixed",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean,
         elements: Html
@@ -684,7 +668,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => false,
         update: (_, moved) => moved,
         view: (h, moved) =>
-          h.scoped((s) => {
+          h.keepAlive((s) => {
             const row = Row(s, { key: "r" })
             return h.main(
               Bare(h, {
@@ -713,7 +697,6 @@ describe("scoped children in a receiver that waits for its Layer", {
     Effect.gen(function*() {
       const Lead = Component.define({
         name: "Lead",
-        scoped: false,
         props: Schema.Struct({ moved: Schema.Boolean }),
         model: Schema.String,
         message: Schema.String,
@@ -722,7 +705,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => "",
         update: ($, typed) => $.model + typed,
         view: (h, text) =>
-          h.scoped((s) => {
+          h.keepAlive((s) => {
             const row = Row(s, { key: "r" })
             return h.main(
               Bare(h, {
@@ -755,7 +738,7 @@ describe("scoped children in a receiver that waits for its Layer", {
 
   const Item = Component.define({
     name: "Item",
-    scoped: true,
+    keepAlive: true,
     props: Schema.Struct({ n: Schema.Number }),
     model: Schema.Null,
     message: Schema.Never,
@@ -770,7 +753,7 @@ describe("scoped children in a receiver that waits for its Layer", {
     Effect.gen(function*() {
       const Card = Component.define({
         name: "Card",
-        scoped: true,
+        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -782,7 +765,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       })
       const Cards = Component.define({
         name: "Cards",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean,
         elements: Html
@@ -790,7 +772,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => true,
         update: (_, shown) => shown,
         view: (h, shown) =>
-          h.scoped((s) => {
+          h.keepAlive((s) => {
             const card = Card(s, { key: "c" })
             return h.main(shown ? card : null)
           })
@@ -819,7 +801,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         let stuck = false
         const Stuck = Component.define({
           name: "Stuck",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -839,7 +820,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         let passed: Array<WeakRef<object>> = []
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -847,7 +827,7 @@ describe("scoped children in a receiver that waits for its Layer", {
           init: () => true,
           update: (_, shown) => shown,
           view: (h, shown) =>
-            h.scoped((s) => {
+            h.keepAlive((s) => {
               const slots = { body: Item(s, { key: "i", props: { n: 0 } }) }
               passed.push(new WeakRef(slots))
               return h.main(
@@ -873,12 +853,12 @@ describe("scoped children in a receiver that waits for its Layer", {
   )
 
   it.effect(
-    "let adoption finish when their receiver is removed as they wait for their own Layer in the slot of a scoped child there",
+    "let adoption finish when their receiver is removed as they wait for their own Layer in the slot of a keep-alive child there",
     () =>
       Effect.gen(function*() {
         const Waits = Component.define({
           name: "Waits",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -893,7 +873,7 @@ describe("scoped children in a receiver that waits for its Layer", {
           )))
         const Shell = Component.define({
           name: "Shell",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html,
@@ -905,7 +885,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -913,7 +892,7 @@ describe("scoped children in a receiver that waits for its Layer", {
           init: () => true,
           update: (_, shown) => shown,
           view: (h, shown) => {
-            const body = h.scoped((s) =>
+            const body = h.keepAlive((s) =>
               Shell(s, { key: "s", slots: { inner: Waits(s, { key: "w" }) } })
             )
             return h.main(
@@ -939,7 +918,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -947,7 +925,7 @@ describe("scoped children in a receiver that waits for its Layer", {
           init: () => false,
           update: (_, changed) => changed,
           view: (h, changed) => {
-            const body = h.scoped(
+            const body = h.keepAlive(
               changed ? ({ model }) => model : ({ model }) => !model,
               (s) => Leaf(s, { key: "l" })
             )
@@ -1015,7 +993,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         let dots = 0
         const Tip = Component.define({
           name: "Tip",
-          scoped: false,
           model: Schema.String,
           message: Schema.Never,
           elements: Html
@@ -1026,7 +1003,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         })
         const Dot = Component.define({
           name: "Dot",
-          scoped: true,
+          keepAlive: true,
           model: Schema.String,
           message: Schema.Never,
           elements: Html
@@ -1037,7 +1014,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         })
         const Mid = Component.define({
           name: "Mid",
-          scoped: false,
           model: stored(mid),
           message: Schema.Never,
           elements: Html
@@ -1045,11 +1021,14 @@ describe("scoped children in a receiver that waits for its Layer", {
           init: () => "mid",
           update: ($) => $.model,
           view: (h) =>
-            h.div(Tip(h, { key: "t" }), h.scoped((s) => Dot(s, { key: "d" })))
+            h.div(
+              Tip(h, { key: "t" }),
+              h.keepAlive((s) => Dot(s, { key: "d" }))
+            )
         })
         const Card = Component.define({
           name: "Card",
-          scoped: true,
+          keepAlive: true,
           model: stored(card),
           message: Schema.Never,
           elements: Html
@@ -1060,7 +1039,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Html
@@ -1072,10 +1050,10 @@ describe("scoped children in a receiver that waits for its Layer", {
               step === 0
                 ? Gated(h, {
                   key: "f",
-                  slots: { body: h.scoped((s) => Card(s, { key: "c" })) }
+                  slots: { body: h.keepAlive((s) => Card(s, { key: "c" })) }
                 })
                 : step === 2
-                ? h.scoped((s) => Card(s, { key: "c" }))
+                ? h.keepAlive((s) => Card(s, { key: "c" }))
                 : null
             )
         })
@@ -1099,7 +1077,7 @@ describe("scoped children in a receiver that waits for its Layer", {
       let decoding = 0
       const Slowly = Component.define({
         name: "Slowly",
-        scoped: true,
+        keepAlive: true,
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.acquireUseRelease(
@@ -1119,7 +1097,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Boolean,
         message: Schema.Boolean,
         elements: Html
@@ -1127,7 +1104,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => true,
         update: (_, shown) => shown,
         view: (h, shown) =>
-          h.main(shown ? h.scoped((s) => Slowly(s, { key: "s" })) : null)
+          h.main(shown ? h.keepAlive((s) => Slowly(s, { key: "s" })) : null)
       })
       const { app, state } = yield* serve(HtmlServer.renderToHtml(Page, {}))
       const root = yield* BrowserHost.mountEffect(Page, {}, app, { state })
@@ -1147,7 +1124,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         let passed: Array<WeakRef<object>> = []
         const Author = Component.define({
           name: "Author",
-          scoped: false,
           props: Schema.Struct({ drawn: Schema.Boolean }),
           model: Schema.Null,
           message: Schema.Never,
@@ -1158,13 +1134,12 @@ describe("scoped children in a receiver that waits for its Layer", {
           view: (h) => {
             passed.push(new WeakRef(h.props))
             return h.article(
-              h.props.drawn ? h.scoped((s) => Leaf(s, { key: "l" })) : null
+              h.props.drawn ? h.keepAlive((s) => Leaf(s, { key: "l" })) : null
             )
           }
         })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           props: Schema.Struct({ drawn: Schema.Boolean }),
           model: Schema.Number,
           message: Schema.Number,
@@ -1212,7 +1187,7 @@ describe("scoped children in a receiver that waits for its Layer", {
   const decoded: Array<string> = []
   const Labelled = Component.define({
     name: "Labelled",
-    scoped: true,
+    keepAlive: true,
     props: Schema.Struct({ label: Schema.String }),
     model: Schema.String.pipe(Schema.decode({
       decode: SchemaGetter.transform((label: string) => {
@@ -1244,7 +1219,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -1255,7 +1229,7 @@ describe("scoped children in a receiver that waits for its Layer", {
             const keys = last === "order"
               ? changed ? ["m", "l"] : ["l", "m"]
               : [changed && last === "key" ? "m" : "l"]
-            const body = h.scoped(
+            const body = h.keepAlive(
               ({ model }) => model || drawn,
               (s) =>
                 keys.map((key) =>
@@ -1297,7 +1271,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       Effect.gen(function*() {
         const Two = Component.define({
           name: "Two",
-          scoped: false,
           props: Schema.Struct({ open: Schema.Boolean }),
           model: Schema.Null,
           message: Schema.Never,
@@ -1314,7 +1287,6 @@ describe("scoped children in a receiver that waits for its Layer", {
           )))
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -1322,7 +1294,7 @@ describe("scoped children in a receiver that waits for its Layer", {
           init: () => false,
           update: (_, moved) => moved,
           view: (h, moved) => {
-            const written = h.scoped((s) =>
+            const written = h.keepAlive((s) =>
               Labelled(s, { key: "l", props: { label: "drawn" } })
             )
             const body = out === "a headless child's view"
@@ -1365,7 +1337,6 @@ describe("scoped children in a receiver that waits for its Layer", {
 
   const Sides = Component.define({
     name: "Sides",
-    scoped: false,
     props: Schema.Struct({ shows: Schema.Array(Schema.Literals(["a", "b"])) }),
     model: Schema.Null,
     message: Schema.Never,
@@ -1398,7 +1369,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       Effect.gen(function*() {
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -1407,7 +1377,7 @@ describe("scoped children in a receiver that waits for its Layer", {
           update: (_, changed) => changed,
           view: (h, changed) => {
             const fields = (keys: ReadonlyArray<string>) =>
-              h.scoped(({ model }) => model, (s) =>
+              h.keepAlive(({ model }) => model, (s) =>
                 keys.map((key) =>
                   Labelled(s, { key, props: { label: key } })
                 ))
@@ -1448,7 +1418,6 @@ describe("scoped children in a receiver that waits for its Layer", {
     Effect.gen(function*() {
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         props: Schema.Struct({ first: Schema.String }),
         model: Schema.Number,
         message: Schema.Number,
@@ -1457,7 +1426,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => 0,
         update: (_, step) => step,
         view: (h, step) => {
-          const a = h.scoped(
+          const a = h.keepAlive(
             ({ model }) => model !== 1,
             (s) =>
               Labelled(s, {
@@ -1498,7 +1467,7 @@ describe("scoped children in a receiver that waits for its Layer", {
       let inits = 0
       const Late = Component.define({
         name: "Late",
-        scoped: true,
+        keepAlive: true,
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.as(Deferred.await(decoding), text)
@@ -1514,7 +1483,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         props: Schema.Struct({ compact: Schema.Boolean }),
         model: Schema.Boolean,
         message: Schema.Boolean,
@@ -1523,7 +1491,7 @@ describe("scoped children in a receiver that waits for its Layer", {
         init: () => false,
         update: (_, drawn) => drawn,
         view: (h) => {
-          const field = h.scoped((s) => Late(s, { key: "l" }))
+          const field = h.keepAlive((s) => Late(s, { key: "l" }))
           return h.main(
             Gated(h, {
               key: "f",
@@ -1557,7 +1525,6 @@ describe("scoped children in a receiver that waits for its Layer", {
       Effect.gen(function*() {
         const Middle = Component.define({
           name: "Middle",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Null,
           elements: Html,
@@ -1573,7 +1540,6 @@ describe("scoped children in a receiver that waits for its Layer", {
         })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           props: Schema.Struct({ allowed: Schema.Boolean }),
           model: Schema.Null,
           message: Schema.Never,
@@ -1586,7 +1552,7 @@ describe("scoped children in a receiver that waits for its Layer", {
               Middle(h, {
                 key: "m",
                 slots: {
-                  passed: h.scoped(
+                  passed: h.keepAlive(
                     ({ props }) => props.allowed,
                     (s) => Leaf(s, { key: "l" })
                   )
@@ -1625,29 +1591,27 @@ describe("scoped children in a receiver that waits for its Layer", {
         )
         const Author = Component.define({
           name: "Author",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.article(h.scoped((s) => Leaf(s, { key: "l" })))
+          view: (h) => h.article(h.keepAlive((s) => Leaf(s, { key: "l" })))
         }).pipe(slow)
         const Outer = Component.define({
           name: "Outer",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.article(h.scoped((s) => Leaf(s, { key: "l" })))
+          view: (h) => h.article(h.keepAlive((s) => Leaf(s, { key: "l" })))
         }).pipe(slow)
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Number,
           elements: Html
@@ -1659,7 +1623,7 @@ describe("scoped children in a receiver that waits for its Layer", {
               removed === "Outer"
                 ? Frame(h, {
                   key: "at" + step,
-                  slots: { body: h.scoped((s) => Outer(s, { key: "o" })) }
+                  slots: { body: h.keepAlive((s) => Outer(s, { key: "o" })) }
                 })
                 : step === 1
                 ? null
@@ -1680,7 +1644,7 @@ describe("scoped children in a receiver that waits for its Layer", {
   )
 })
 
-describe("scoped children of a headless child", () => {
+describe("keep-alive children of a headless child", () => {
   it.effect.skipIf(
     process.versions.bun !== undefined || process.versions.deno !== undefined
   )(
@@ -1689,7 +1653,7 @@ describe("scoped children of a headless child", () => {
       Effect.gen(function*() {
         const Editor = Component.define({
           name: "Editor",
-          scoped: true,
+          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -1700,14 +1664,12 @@ describe("scoped children of a headless child", () => {
         })
         const Pane = Component.define({
           name: "Pane",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
         }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
         const Page = Component.define({
           name: "Page",
-          scoped: false,
           model: Schema.Boolean,
           message: Schema.Boolean,
           elements: Html
@@ -1715,7 +1677,7 @@ describe("scoped children of a headless child", () => {
           init: () => true,
           update: (_, shown) => shown,
           view: (h, shown) =>
-            h.scoped((s) =>
+            h.keepAlive((s) =>
               h.main(
                 shown
                   ? Pane(h, {
@@ -1752,7 +1714,6 @@ describe("scoped children of a headless child", () => {
         let made: Array<WeakRef<object>> = []
         const Stuck = Component.define({
           name: "Stuck",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html,
@@ -1772,7 +1733,7 @@ describe("scoped children of a headless child", () => {
           )
         const Item = Component.define({
           name: "Item",
-          scoped: true,
+          keepAlive: true,
           props: Schema.Struct({ n: Schema.Number }),
           model: Schema.Null,
           message: Schema.Never,
@@ -1784,7 +1745,6 @@ describe("scoped children of a headless child", () => {
         })
         const Rows = Component.define({
           name: "Rows",
-          scoped: false,
           model: Schema.Number,
           message: Schema.Null,
           elements: Html
@@ -1794,7 +1754,7 @@ describe("scoped children of a headless child", () => {
           view: (h, n) => {
             const props = { n }
             made.push(new WeakRef(props))
-            return h.scoped((s) =>
+            return h.keepAlive((s) =>
               h.main(
                 Stuck(h, {
                   key: "f",

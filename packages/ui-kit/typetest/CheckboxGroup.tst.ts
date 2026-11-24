@@ -28,7 +28,6 @@ describe("CheckboxGroup", () => {
   it("the root returns the builder it was given, of any tag, with the consumer's message type and the children's requirements", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

@@ -21,7 +21,6 @@
  *
  * const Dots = Component.define({
  *   name: "Dots",
- *   scoped: false,
  *   model: Schema.Array(Canvas.Point),
  *   message: Message,
  *   elements: Html

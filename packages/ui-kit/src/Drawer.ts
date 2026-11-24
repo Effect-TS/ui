@@ -112,7 +112,6 @@
  *
  * const Page = Component.define({
  *   name: "Page",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean }),
  *   message: PageMessage,
  *   elements: Html
@@ -1727,7 +1726,6 @@ const ReportIndent = Mount.makeStream(
  */
 export const DrawerProvider = Component.define({
   name: "DrawerProvider",
-  scoped: false,
   props: DrawerProviderProps,
   model: DrawerProviderModel,
   message: DrawerProviderMessage,
@@ -1813,7 +1811,6 @@ const dialogPropsOf = Struct.omit([
  */
 export const Drawer = Component.define({
   name: "Drawer",
-  scoped: false,
   props: DrawerProps,
   model: DrawerModel,
   message: DrawerMessage,

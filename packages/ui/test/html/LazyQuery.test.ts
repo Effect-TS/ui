@@ -57,7 +57,6 @@ const lateSave = Effect.gen(function*() {
         ) {}
         const Note = Component.define({
           name: "Note",
-          scoped: false,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html,
@@ -92,7 +91,6 @@ const lateSave = Effect.gen(function*() {
   })
   const App = Component.define({
     name: "App",
-    scoped: false,
     model: Schema.Boolean,
     message: Message,
     elements: Html
@@ -161,7 +159,6 @@ const savedWith = Effect.fnUntraced(
     const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
     const Saver = Component.define({
       name: "Saver",
-      scoped: false,
       model: Schema.String,
       message: Message,
       elements: Html
@@ -176,7 +173,6 @@ const savedWith = Effect.fnUntraced(
     }).pipe(Component.provide(Save.layer))
     const App = Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       elements: Html
@@ -212,7 +208,6 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Opened: {} })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Boolean,
         message: Message,
         elements: Html
@@ -243,7 +238,6 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       ) {}
       const Note = Component.define({
         name: "Note",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html,
@@ -311,7 +305,6 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
             ) {}
             const Note = Component.define({
               name: "Note",
-              scoped: false,
               model: Schema.Null,
               message: Schema.Never,
               elements: Html,
@@ -335,7 +328,6 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
       const App = Component.define({
         name: "App",
-        scoped: false,
         model: Schema.Boolean,
         message: Message,
         elements: Html

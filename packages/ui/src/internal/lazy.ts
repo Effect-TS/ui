@@ -47,14 +47,14 @@ const pendingAlive = new WeakMap<
 >()
 
 /** @internal */
-export const scopedOnceLoaded = (
+export const keepAliveOnceLoaded = (
   view: View.Child<any, any>
 ): View.Child<any, any> => {
   if (view.alive !== undefined) return view
   const alive = pendingAlive.get(view)
   const state = stateOf(view.component as Component.Lazy.Any)
   return alive !== undefined && state._tag === "Loaded" &&
-      state.component.definition.scoped
+      state.component.definition.keepAlive
     ? { ...view, alive }
     : view
 }
@@ -102,7 +102,7 @@ export const make = (
       return child.make(
         self,
         options,
-        state.component.definition.scoped ? h["~alive"] : undefined
+        state.component.definition.keepAlive ? h["~alive"] : undefined
       )
     }
     const made = child.make(self, options)

@@ -272,7 +272,6 @@ describe("Inspector", () => {
         Save.make({ id }).pipe(Command.map(() => Message.Saved()))
       const Editor = Component.define({
         name: "Editor",
-        scoped: false,
         model: Schema.Null,
         message: Message
       }).make({

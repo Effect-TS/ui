@@ -32,7 +32,6 @@ const ChatModel = Schema.Struct({
 
 const ChatDemoNoDeps = Component.define({
   name: "ChatDemo",
-  scoped: false,
   model: ChatModel,
   message: ChatMessage,
   elements: Html

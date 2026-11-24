@@ -14,7 +14,6 @@ class Log extends Command.Service<Log>()(
 
 const CounterDef = Component.define({
   name: "Counter",
-  scoped: false,
   props: Schema.Struct({ by: Schema.Number }),
   model: Schema.Struct({ n: Schema.Number, seen: Schema.Array(Schema.String) }),
   message: Message,

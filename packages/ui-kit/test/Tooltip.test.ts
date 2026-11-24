@@ -61,7 +61,6 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 const Toolbar = Component.define({
   name: "Toolbar",
-  scoped: false,
   model: Schema.Struct({
     open: Schema.Boolean,
     pressed: Schema.Number,
@@ -111,7 +110,6 @@ const GroupedMessage = UiSchema.TaggedEnum({
 
 const Grouped = Component.define({
   name: "Grouped",
-  scoped: false,
   model: Schema.Struct({ tip: Schema.NullOr(Tip) }),
   message: GroupedMessage,
   elements: Html
@@ -164,7 +162,6 @@ const PagesMessage = UiSchema.TaggedEnum({
 
 const Pages = Component.define({
   name: "Pages",
-  scoped: false,
   props: Schema.Struct({ route: PageRoute }),
   model: PageRoute,
   message: PagesMessage,
@@ -206,7 +203,6 @@ const IndependentMessage = UiSchema.TaggedEnum({
 
 const Independent = Component.define({
   name: "Independent",
-  scoped: false,
   props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
   model: Schema.Struct({
     bold: Schema.Boolean,
@@ -272,7 +268,6 @@ const DeferredMessage = UiSchema.TaggedEnum({
 
 const Deferred = Component.define({
   name: "Deferred",
-  scoped: false,
   model: Schema.Struct({
     bold: Schema.Boolean,
     italic: Schema.Boolean,

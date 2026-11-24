@@ -42,7 +42,6 @@ const Message = UiSchema.TaggedEnum({
 
 const Card = Component.define({
   name: "Card",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ n: Schema.Number }),
   message: Message,
@@ -183,7 +182,6 @@ describe("Component queries", () => {
   it("take the queries from the reads when update's $ is annotated", () => {
     const Annotated = Component.define({
       name: "Annotated",
-      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: { name: { query: GetName, args: () => ({ id: "1" }) } }
@@ -201,7 +199,6 @@ describe("Component queries", () => {
   it("add their reads to the requirements, never what the fetchers use", () => {
     const Named = Component.define({
       name: "Named",
-      scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: { name: { query: GetName, args: () => ({ id: "1" }) } }
@@ -222,7 +219,6 @@ describe("Component queries", () => {
   it("a query's queries doesn't have its own name", () => {
     Component.define({
       name: "Self",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -248,7 +244,6 @@ describe("Component queries", () => {
   it("type args and onChange by the query", () => {
     Component.define({
       name: "Typed",
-      scoped: false,
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({}),
       message: Message,
@@ -270,7 +265,6 @@ describe("Component queries", () => {
     })
     Component.define({
       name: "OnChangeMessage",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -293,7 +287,6 @@ describe("debounce", () => {
   it("is an entry option, and types the query as a plain one, single or keyed", () => {
     Component.define({
       name: "Debounced",
-      scoped: false,
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({}),
       message: Message,
@@ -324,7 +317,6 @@ describe("debounce", () => {
   it("takes a Duration input", () => {
     Component.define({
       name: "BadDebounce",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -418,7 +410,6 @@ const ListMessage = UiSchema.TaggedEnum({
 
 const List = Component.define({
   name: "List",
-  scoped: false,
   model: Schema.Struct({
     ids: Schema.Array(Schema.String),
     changed: Schema.Number
@@ -492,7 +483,6 @@ describe("Keyed queries", () => {
   it("a keyed query's results doesn't have its own name", () => {
     Component.define({
       name: "SelfKeyed",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -521,7 +511,7 @@ describe("Keyed queries", () => {
 
   it("take an array of args from the query, and an onChange of entries and changes", () => {
     const model = Schema.Struct({ ids: Schema.Array(Schema.String) })
-    const base = { name: "Keyed", scoped: false, model, message: ListMessage }
+    const base = { name: "Keyed", model, message: ListMessage }
     Component.define({
       ...base,
       queries: {
@@ -549,7 +539,6 @@ describe("Keyed queries", () => {
   it("keep a single and a keyed query apart", () => {
     Component.define({
       name: "SingleArray",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: {
@@ -563,7 +552,6 @@ describe("Keyed queries", () => {
     })
     const Keyed = Component.define({
       name: "Counts",
-      scoped: false,
       model: Schema.Struct({}),
       message: Message,
       queries: { counts: { queryMany: GetCount, args: () => ["a", "b"] } }
@@ -634,7 +622,6 @@ const ChatMessage = UiSchema.TaggedEnum({
 
 const Chat = Component.define({
   name: "Chat",
-  scoped: false,
   props: Schema.Struct({ room: Schema.String }),
   model: Schema.Struct({}),
   message: ChatMessage,
@@ -708,7 +695,6 @@ describe("List queries", () => {
   it("take loadMore and reset for an infinite query only, and not in init", () => {
     Component.define({
       name: "Chat",
-      scoped: false,
       props: Schema.Struct({ room: Schema.String }),
       model: Schema.Struct({}),
       message: ChatMessage,
@@ -736,7 +722,6 @@ describe("List queries", () => {
     })
     Component.define({
       name: "Reset",
-      scoped: false,
       model: Schema.Struct({}),
       message: ChatMessage,
       queries: {
@@ -753,7 +738,6 @@ describe("List queries", () => {
   it("keep an infinite query under query, and one of query and queryMany", () => {
     Component.define({
       name: "ListMany",
-      scoped: false,
       model: Schema.Struct({}),
       message: ChatMessage,
       queries: {
@@ -767,7 +751,6 @@ describe("List queries", () => {
     })
     Component.define({
       name: "Both",
-      scoped: false,
       model: Schema.Struct({}),
       message: ChatMessage,
       queries: {

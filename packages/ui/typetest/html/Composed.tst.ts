@@ -35,7 +35,6 @@ const MarkSeen = Mount.make(
 
 const Timed = Component.define({
   name: "Timed",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Number,
   elements: Html
@@ -52,7 +51,6 @@ type AppMsg = typeof AppMsg.Type
 const define = () =>
   Component.define({
     name: "Combo",
-    scoped: false,
     props: Schema.Struct({
       items: Schema.Array(
         Schema.Struct({ id: Schema.String, label: Schema.String })
@@ -155,7 +153,6 @@ describe("p.child", () => {
   it("a reader of the child's shared state in the consumer's closure leaves no requirement", () => {
     const Tips = Component.define({
       name: "Tips",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       shares: () => ({ open: true })
@@ -163,7 +160,6 @@ describe("p.child", () => {
       .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
     const Tip = Component.define({
       name: "Tip",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       shared: { tips: Tips }
@@ -179,7 +175,6 @@ describe("p.child", () => {
     })
     const App = Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -229,7 +224,6 @@ describe("Scene.childEmit", () => {
   it("takes the events of a headless child", () => {
     const Page = Component.define({
       name: "Page",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

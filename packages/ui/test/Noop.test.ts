@@ -63,7 +63,6 @@ const commands: Record<
 /** Records every message it gets, and runs the Command a `Fire` names. */
 const Recorder = Component.define({
   name: "Recorder",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: Message
 }).make({
@@ -223,7 +222,6 @@ describe("Component.noop", () => {
     Effect.gen(function*() {
       const Silent = Component.define({
         name: "Silent",
-        scoped: false,
         model: Schema.Number,
         message: Schema.Never
       })
@@ -246,7 +244,6 @@ describe("Component.noop", () => {
       let mapped = 0
       const Child = Component.define({
         name: "Child",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never
       }).make({
@@ -264,7 +261,6 @@ describe("Component.noop", () => {
       const Parent = Component.provide(
         Component.define({
           name: "Parent",
-          scoped: false,
           model: Schema.Boolean,
           message: Close
         }).make({

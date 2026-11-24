@@ -9,7 +9,6 @@ const PagedMessage = UiSchema.TaggedEnum({ PickedTotal: { total: Total } })
 
 export const PagedDemo = Component.define({
   name: "PagedDemo",
-  scoped: false,
   model: Schema.Struct({ total: Total }),
   message: PagedMessage,
   elements: Html

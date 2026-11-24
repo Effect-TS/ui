@@ -170,7 +170,6 @@ class Slot
 
 const SlotView = Component.define({
   name: "SlotView",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -182,7 +181,6 @@ const SlotView = Component.define({
 
 const Shown = Component.define({
   name: "Shown",
-  scoped: false,
   props: Schema.Struct({ n: Schema.Number }),
   model: Schema.Null,
   message: Schema.Never,
@@ -195,7 +193,6 @@ const Shown = Component.define({
 
 const Pair = Component.define({
   name: "Pair",
-  scoped: false,
   model: Schema.Struct({ n: Schema.Number }),
   message: PairMessage,
   elements: Html
@@ -228,7 +225,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       ])
       const Encoded = Component.define({
         name: "Encoded",
-        scoped: false,
         model: Schema.Struct({ x: Schema.Number, c: Schema.Number }),
         message: EncodedMessage,
         elements: Html
@@ -295,7 +291,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const PairMoveMessage = UiSchema.TaggedEnum({ Move: {}, Commit: {} })
       const Peer = Component.define({
         name: "Peer",
-        scoped: false,
         props: Schema.Struct({ label: Schema.String }),
         model: Schema.Struct({ v: Schema.Number }),
         message: PairMoveMessage,
@@ -319,7 +314,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       })
       const Two = Component.define({
         name: "Two",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -756,7 +750,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Typed: {}, Replaced: {} })
       const Form = Component.define({
         name: "Form",
-        scoped: false,
         model: Schema.Struct({
           form: Schema.Struct({
             name: Schema.Struct({ value: Schema.String })
@@ -857,7 +850,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const UploaderMessage = UiSchema.TaggedEnum({ ClickedUpload: {} })
       const Uploader = Component.define({
         name: "Uploader",
-        scoped: false,
         model: Schema.Struct({}),
         message: UploaderMessage,
         elements: Html
@@ -869,7 +861,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
       })
       const Page = Component.define({
         name: "Page",
-        scoped: false,
         model: Schema.Struct({}),
         message: Schema.Never,
         elements: Html
@@ -932,7 +923,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
         Save.make({ id }).pipe(Command.map(() => Message.Saved()))
       const Editor = Component.define({
         name: "Editor",
-        scoped: false,
         model: Schema.Null,
         message: Message,
         elements: Html

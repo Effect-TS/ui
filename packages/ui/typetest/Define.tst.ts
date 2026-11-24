@@ -43,7 +43,6 @@ type Model = typeof Model.Type
 
 const NoteDef = Component.define({
   name: "Note",
-  scoped: false,
   props: Schema.Struct({ id: Schema.String }),
   model: Model,
   message: Message,

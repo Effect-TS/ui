@@ -30,7 +30,6 @@ const Message = UiSchema.TaggedEnum({
 
 const Dots = Component.define({
   name: "Dots",
-  scoped: false,
   model: Schema.Struct({
     dots: Schema.Array(Canvas.Point),
     bumps: Schema.Number

@@ -92,7 +92,6 @@ const redirectTo = (route: AppRoute) =>
 
 export const AppNoDeps = Component.define({
   name: "App",
-  scoped: false,
   props: AppProps,
   model: AppModel,
   message: AppMessage

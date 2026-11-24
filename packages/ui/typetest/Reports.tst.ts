@@ -11,7 +11,6 @@ const ProviderMessage = UiSchema.TaggedEnum({
 
 const Provider = Component.define({
   name: "Provider",
-  scoped: false,
   props: Schema.Struct({ timeout: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.Boolean, instant: Schema.Boolean }),
   message: ProviderMessage,
@@ -32,7 +31,6 @@ const Provider = Component.define({
 
 const Plain = Component.define({
   name: "Plain",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   shares: (model) => ({ model })
@@ -46,7 +44,6 @@ const TipMessage = UiSchema.TaggedEnum({ Entered: {}, Completed: {} })
 
 const Tip = Component.define({
   name: "Tip",
-  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ hovered: Schema.Boolean }),
   message: TipMessage,
@@ -78,7 +75,6 @@ const Tip = Component.define({
 
 const Required = Component.define({
   name: "Required",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   shared: { provider: { owner: Provider, report: () => true }, plain: Plain }
@@ -106,14 +102,12 @@ describe("reports", () => {
   it("only makes sends to the optional owner optional", () => {
     const B = Component.define({
       name: "Provider",
-      scoped: false,
       model: Schema.Null,
       message: TipMessage,
       shares: { value: () => 1, receives: ["Entered"] }
     }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
     const sender = Component.define({
       name: "Sender",
-      scoped: false,
       model: Schema.Null,
       message: TipMessage,
       shared: { a: { owner: Provider, optional: true } }
@@ -148,7 +142,6 @@ describe("reports", () => {
     }
     const Indexed = Component.define({
       name: "Indexed",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       shared: reads
@@ -171,7 +164,6 @@ describe("reports", () => {
   it("keeps the required owner of a child below an optional read", () => {
     const Child = Component.define({
       name: "Child",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       shared: { p: Provider }
@@ -183,7 +175,6 @@ describe("reports", () => {
       })
     const Wrapper = Component.define({
       name: "Wrapper",
-      scoped: false,
       model: Schema.Null,
       message: TipMessage,
       shared: { p: { owner: Provider, optional: true } }
@@ -199,7 +190,6 @@ describe("reports", () => {
   it("rejects collects without its onChange", () => {
     Component.define({
       name: "Bad",
-      scoped: false,
       model: Schema.Null,
       message: ProviderMessage,
       shares: {
@@ -212,7 +202,6 @@ describe("reports", () => {
   it("rejects a bad report", () => {
     Component.define({
       name: "Bad",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       shared: {
@@ -225,7 +214,6 @@ describe("reports", () => {
     })
     Component.define({
       name: "Bad",
-      scoped: false,
       model: Schema.Null,
       message: Schema.Never,
       shared: {
@@ -238,7 +226,6 @@ describe("reports", () => {
     })
     Component.define({
       name: "Bad",
-      scoped: false,
       model: Schema.Null,
       message: TipMessage,
       shared: {
@@ -251,7 +238,6 @@ describe("reports", () => {
     })
     Component.define({
       name: "Bad",
-      scoped: false,
       model: Schema.Null,
       message: TipMessage,
       // @ts-expect-error  A component in shared must be a headless component with shares

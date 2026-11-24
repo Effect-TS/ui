@@ -20,7 +20,6 @@ const Message = UiSchema.TaggedEnum({
 // when something cancelled it first.
 const Keys = Component.define({
   name: "Keys",
-  scoped: false,
   model: Schema.Struct({
     listening: Schema.Boolean,
     prefix: Schema.String,
@@ -68,7 +67,6 @@ const PhaseMessage = UiSchema.TaggedEnum({ Heard: { what: Schema.String } })
 // cancels every press, and stops listening after the first.
 const Phases = Component.define({
   name: "Phases",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: PhaseMessage,
   elements: Html
@@ -159,7 +157,6 @@ describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
     Effect.gen(function*() {
       const Throws = Component.define({
         name: "Throws",
-        scoped: false,
         model: Schema.Null,
         message: Message,
         elements: Html
@@ -191,7 +188,6 @@ const ParentMessage = UiSchema.TaggedEnum({
 // at all for `null`. Its handler emits a message for every key but Escape.
 const Listener = Component.define({
   name: "Listener",
-  scoped: false,
   props: Schema.Struct({ preventDefault: PreventDefault }),
   model: Schema.Null,
   message: Message,
@@ -213,7 +209,6 @@ const Listener = Component.define({
 
 const Parent = Component.define({
   name: "Parent",
-  scoped: false,
   model: Schema.NullOr(PreventDefault),
   message: ParentMessage,
   elements: Html
@@ -328,7 +323,6 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Custom = Component.define({
         name: "Custom",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: PhaseMessage,
         elements: Html
@@ -426,7 +420,6 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
     Effect.gen(function*() {
       const Shortcut = Component.define({
         name: "Shortcut",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Schema.String,
         elements: Html
@@ -470,7 +463,6 @@ describe("HtmlSubscription.shortcuts", () => {
         HtmlScene.make(
           Component.define({
             name: "Shortcuts",
-            scoped: false,
             model: Schema.Array(Schema.String),
             message: Schema.String,
             elements: Html
@@ -514,7 +506,6 @@ const FrameMessage = UiSchema.TaggedEnum({
 
 const Frames = Component.define({
   name: "Frames",
-  scoped: false,
   model: Schema.Struct({
     running: Schema.Boolean,
     deltas: Schema.Array(Schema.Number)

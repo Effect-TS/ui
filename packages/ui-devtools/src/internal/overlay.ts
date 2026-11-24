@@ -1358,7 +1358,6 @@ const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
 
 export const Overlay = Component.define({
   name: "DevToolsOverlay",
-  scoped: false,
   props: OverlayProps,
   model: OverlayModel,
   message: OverlayMessage,

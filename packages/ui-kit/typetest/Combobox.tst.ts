@@ -59,7 +59,6 @@ describe("Combobox", () => {
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -105,7 +104,6 @@ describe("Combobox", () => {
   it("the input takes only an input, the trigger only a button, and an item needs its value", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -131,7 +129,6 @@ describe("Combobox", () => {
   it("draws its input with a field's control", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -154,7 +151,6 @@ describe("Combobox", () => {
   it("requires open, inputValue and items, and filter is a literal", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

@@ -15,7 +15,6 @@ describe("Avatar", () => {
   it("each part returns the builder it was given, and children keep their requirements", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -54,7 +53,6 @@ describe("Avatar", () => {
   it("root and fallback take only a span builder, and image only an img builder", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

@@ -9,7 +9,6 @@ import { Settings } from "./fixtures/settings.ts"
 
 const Board = Component.define({
   name: "Board",
-  scoped: false,
   model: Schema.Array(Schema.String),
   message: Schema.String,
   elements: Html
@@ -103,7 +102,6 @@ describe("HtmlScene", () => {
       )
       const Chart = Component.define({
         name: "Chart",
-        scoped: false,
         model: Schema.Struct({
           points: Schema.Array(Schema.Number),
           width: Schema.Number
@@ -157,7 +155,6 @@ describe("HtmlScene", () => {
   it("type, change, compositionEnd and keydown default the edit, the composition and the selection, and take them", () => {
     const Field = Component.define({
       name: "Field",
-      scoped: false,
       model: Schema.Array(Schema.String),
       message: Schema.String,
       elements: Html
@@ -229,7 +226,6 @@ describe("HtmlScene", () => {
       })
       const Upload = Component.define({
         name: "Upload",
-        scoped: false,
         model: Schema.Array(Schema.String),
         message: Message,
         elements: Html
@@ -372,7 +368,6 @@ describe("HtmlScene", () => {
   describe("a click's defaults", () => {
     const Checkout = Component.define({
       name: "Checkout",
-      scoped: false,
       model: Schema.Struct({
         log: Schema.Array(Schema.String),
         zip: Schema.String

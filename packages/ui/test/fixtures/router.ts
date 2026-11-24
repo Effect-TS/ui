@@ -41,7 +41,6 @@ export type AppRoute = typeof AppRoute.Type
 
 export const Home = Component.define({
   name: "Home",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -107,7 +106,6 @@ export const CountVisit = Command.make(
 
 export const Person = Component.define({
   name: "Person",
-  scoped: false,
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({
     id: Schema.Number,
@@ -171,7 +169,6 @@ export class SlowData
 
 export const Slow = Component.define({
   name: "Slow",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html
@@ -206,7 +203,6 @@ const navigated = (outcome: Router.Outcome) => AppMessage.Navigated({ outcome })
 
 export const App = Component.define({
   name: "App",
-  scoped: false,
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({
     route: AppRoute,

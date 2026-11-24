@@ -24,7 +24,6 @@ const PageMessage = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: PageProps,
   model: Schema.Struct({
     config: PageProps,

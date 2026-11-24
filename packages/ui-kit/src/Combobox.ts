@@ -177,7 +177,6 @@
  *
  * const Picker = Component.define({
  *   name: "Picker",
- *   scoped: false,
  *   model: Schema.Struct({ open: Schema.Boolean, fruit: Schema.NullOr(Schema.String), text: Schema.String }),
  *   message: PickerMessage,
  *   elements: Html
@@ -732,7 +731,6 @@ const engine = Engine.make(
  */
 export const Combobox = Component.define({
   name: "Combobox",
-  scoped: false,
   props: ComboboxProps,
   model: Engine.Model,
   message: Engine.Message,

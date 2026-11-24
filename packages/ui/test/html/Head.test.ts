@@ -13,7 +13,6 @@ const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
     HtmlServer.renderToHtml(
       Component.define({
         name: "HeadNames",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html.vocabulary
@@ -357,7 +356,6 @@ const Rename = UiSchema.TaggedEnum({ Rename: { title: Schema.String } })
 
 const Titled = Component.define({
   name: "Titled",
-  scoped: false,
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.String,
   message: Rename,

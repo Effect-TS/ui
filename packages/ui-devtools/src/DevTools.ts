@@ -30,7 +30,6 @@
  *
  * const App = Component.define({
  *   name: "App",
- *   scoped: false,
  *   model: Schema.Struct({}),
  *   message: Schema.Never,
  *   elements: Html

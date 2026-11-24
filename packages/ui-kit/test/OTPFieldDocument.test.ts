@@ -15,7 +15,6 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({
     autoSubmit: Schema.Boolean,
     upper: Schema.Boolean,
@@ -140,7 +139,6 @@ const FrameMessage = UiSchema.TaggedEnum({ Pressed: {} })
 
 const Frame = Component.define({
   name: "Frame",
-  scoped: false,
   model: Schema.Number,
   message: FrameMessage,
   elements: Html
@@ -156,7 +154,6 @@ const Frame = Component.define({
 
 const Labelled = Component.define({
   name: "Labelled",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -399,7 +396,6 @@ describe("OTPField in a document", { concurrent: false }, () => {
       })
       const RedactedPage = Component.define({
         name: "RedactedPage",
-        scoped: false,
         model: Schema.Struct({
           code: Schema.Redacted(Schema.String),
           done: Schema.Boolean

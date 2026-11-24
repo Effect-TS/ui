@@ -193,7 +193,7 @@ const sameKeys = (a: Keys, b: Keys): boolean =>
 // Rendered tree
 // ---------------------------------------------------------------------------
 
-type Rendered = RElement | RText | RChild | RFallback | ROutlet | RScoped
+type Rendered = RElement | RText | RChild | RFallback | ROutlet | RKeepAlive
 
 /**
  * A rendered element. A patch updates it in place, so a node that stays keeps
@@ -368,7 +368,7 @@ interface RFallback {
   readonly status: Status
   /** A failed child, not its feature's Layer, put it here: it stays until the key changes. */
   readonly failedChild: boolean
-  readonly scoped?: undefined
+  readonly keepAlive?: undefined
   readonly lazy?: LazySlot | undefined
 }
 
@@ -377,9 +377,9 @@ interface LazySlot extends Load {
   readonly release: () => void
 }
 
-interface RScoped {
+interface RKeepAlive {
   readonly _tag: "Fallback"
-  readonly scoped: true
+  readonly keepAlive: true
   readonly lazy?: undefined
   v: View.Child<any, any>
   inner: RChild | RFallback | RText
@@ -392,7 +392,7 @@ interface Kept {
   readonly table: KeptTable
   inner: RChild | RFallback
   alive: ((input: Component.Alive<any, any, any>) => boolean) | undefined
-  at: RScoped | undefined
+  at: RKeepAlive | undefined
   drawer: Instance
   container: unknown
   round: number
@@ -1351,15 +1351,15 @@ const serializeTree = (
   const deferredPaths: Array<string> = []
   const statuses: Record<string, Shipped> = {}
   const kept: Saved = {}
-  const drawnScoped: Saved = {}
+  const drawnKeepAlive: Saved = {}
   const homes = new Map<Instance, Saved>()
   let into: Saved = state
-  const noted = (home: Saved, key: "~kept" | "~scoped"): Saved =>
+  const noted = (home: Saved, key: "~kept" | "~keepAlive"): Saved =>
     home !== state
       ? (home[key] ??= {}) as Saved
       : key === "~kept"
       ? kept
-      : drawnScoped
+      : drawnKeepAlive
   /** Ships a status other than `Ready`: the client starts from it. */
   const ship = (path: string, status: Status) => {
     if (status._tag === "Pending" || status._tag === "Failed") {
@@ -1396,7 +1396,7 @@ const serializeTree = (
       } else {
         into[path] = exit.value.state
         if (home !== undefined && !nested) {
-          ;((noted(home, "~scoped")[entry!.author.path] ??= []) as Array<
+          ;((noted(home, "~keepAlive")[entry!.author.path] ??= []) as Array<
             string
           >).push(path)
         }
@@ -1459,7 +1459,7 @@ const serializeTree = (
         return sink.leave(outlet.path)
       }
       case "Fallback": {
-        if (rendered.scoped) return serialize(inst, rendered.inner, under)
+        if (rendered.keepAlive) return serialize(inst, rendered.inner, under)
         // A failed child: the client builds it fresh. A feature whose Layer isn't ready: the client
         // adopts the fallback while its status is the one shipped.
         const path = `${inst.path}/${segment(rendered.v)}`
@@ -1489,7 +1489,7 @@ const serializeTree = (
   add("~query", query)
   if (Object.keys(collected).length > 0) add("~reported", collected)
   if (Object.keys(kept).length > 0) add("~kept", kept)
-  if (Object.keys(drawnScoped).length > 0) add("~scoped", drawnScoped)
+  if (Object.keys(drawnKeepAlive).length > 0) add("~keepAlive", drawnKeepAlive)
   if (isStatic) add("~static", true)
   return state
 }
@@ -1692,20 +1692,22 @@ const setup = (
   let replaced: Instance | undefined
   const lates: Array<() => void> = []
   let supply: Saved | undefined
-  let late: RScoped | undefined
+  let late: RKeepAlive | undefined
   const claimSaved = (author: Instance, from: Saved) => {
     const all = from["~kept"] as
       | Record<string, Record<string, Saved>>
       | undefined
     const kept = all?.[author.path]
     const drawn =
-      (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)
+      (from["~keepAlive"] as Record<string, ReadonlyArray<string>> | undefined)
         ?.[author.path]
     if (kept === undefined && drawn === undefined) return
     const path = author.path
     if (from === popped) delete all![path]
     else if (from === hydrating?.state) {
-      if (hydrating.claimed.has(path) && !author.component.definition.scoped) {
+      if (
+        hydrating.claimed.has(path) && !author.component.definition.keepAlive
+      ) {
         return
       }
       hydrating.claimed.add(path)
@@ -1733,7 +1735,7 @@ const setup = (
   const subtree = (state: Saved, root: string): Saved => {
     const out: Saved = {}
     for (const path in state) if (below(path, root)) out[path] = state[path]
-    for (const key of ["~kept", "~scoped", "~reported"]) {
+    for (const key of ["~kept", "~keepAlive", "~reported"]) {
       const all = state[key] as Saved | undefined
       for (const author in all) {
         if (below(author, root)) {
@@ -7088,13 +7090,13 @@ const setup = (
     range?: Range
   ): Rendered => {
     if (view.alive === undefined) return makeChild(inst, view, env, range)
-    const at: RScoped = {
+    const at: RKeepAlive = {
       _tag: "Fallback",
-      scoped: true,
+      keepAlive: true,
       v: view,
       inner: undefined!
     }
-    at.inner = drawScoped(inst, at, view, env, range) ?? blankText(range)
+    at.inner = drawKeepAlive(inst, at, view, env, range) ?? blankText(range)
     return at
   }
 
@@ -8102,8 +8104,13 @@ const setup = (
         return rendered
       }
       case "Fallback":
-        if (rendered.scoped) {
-          return patchScoped(inst, rendered, view as View.Child<any, any>, env)
+        if (rendered.keepAlive) {
+          return patchKeepAlive(
+            inst,
+            rendered,
+            view as View.Child<any, any>,
+            env
+          )
         }
         return patchChild(inst, rendered, view as View.Child<any, any>, env)
       case "Child":
@@ -8138,12 +8145,12 @@ const setup = (
           // Ready now: the fallback goes, and the feature or the lazy component mounts in its place.
           rendered.lazy?.release()
           destroy(inst, rendered.inner)
-          // A lazy scoped component makes a scoped slot, not a fallback: its parent's next patch sees
-          // `scoped` and goes to `patchScoped`.
+          // A lazy keep-alive component makes a keep-alive slot, not a fallback: its parent's next patch sees
+          // `keepAlive` and goes to `patchKeepAlive`.
           return lazy
             ? createChild(
               inst,
-              lazyOf.scopedOnceLoaded(child),
+              lazyOf.keepAliveOnceLoaded(child),
               env
             ) as RFallback
             : makeChild(inst, child, env)
@@ -8452,16 +8459,16 @@ const setup = (
       const result = alive(input)
       if (!read) {
         throw new Error(
-          `${author.path}: a scope's predicate reads the Model from its argument: ({ model, key }) => key in model.items`
+          `${author.path}: an h.keepAlive predicate reads the Model from its argument: ({ model, key }) => key in model.items`
         )
       }
       return result === true
     }
   }
 
-  const drawScoped = (
+  const drawKeepAlive = (
     inst: Instance,
-    at: RScoped,
+    at: RKeepAlive,
     view: View.Child<any, any>,
     env: Env,
     range?: Range
@@ -8551,7 +8558,7 @@ const setup = (
     if (stale) {
       lates.push(() => {
         if (at.late !== undefined && !at.gone && !inst.closed) {
-          patchScoped(inst, at, at.v, env)
+          patchKeepAlive(inst, at, at.v, env)
         }
       })
     }
@@ -8622,7 +8629,7 @@ const setup = (
   const take = (
     entry: Kept,
     inst: Instance,
-    at: RScoped,
+    at: RKeepAlive,
     view: View.Child<any, any>,
     env: Env,
     range: Range | undefined
@@ -8854,12 +8861,12 @@ const setup = (
     }
   }
 
-  const patchScoped = (
+  const patchKeepAlive = (
     inst: Instance,
-    at: RScoped,
+    at: RKeepAlive,
     view: View.Child<any, any>,
     env: Env
-  ): RScoped => {
+  ): RKeepAlive => {
     at.v = view
     const late = at.late
     at.late = undefined
@@ -8884,7 +8891,7 @@ const setup = (
       placeholder = swapOut(inner).node
       next = entry.inner = failedChild(inst, view, inner.inst.failure!, env)
     } else {
-      const drawn = drawScoped(inst, at, view, env)
+      const drawn = drawKeepAlive(inst, at, view, env)
       if (drawn === undefined) return at
       placeholder = (old as RText).node
       next = drawn
@@ -8955,7 +8962,7 @@ const setup = (
       case "Fallback": {
         const inner = rendered.inner
         rendered.lazy?.release()
-        if (rendered.scoped) {
+        if (rendered.keepAlive) {
           rendered.gone = true
           const entry = entryAt(inst.author, rendered.v)
           if (entry !== undefined && entry.inner === inner) {
@@ -9203,12 +9210,12 @@ const setup = (
         const all = subtree(source, inst.path)
         const {
           "~kept": kept,
-          "~scoped": drawn,
+          "~keepAlive": drawn,
           "~reported": reported,
           ...state
         } = all as {
           readonly "~kept"?: Record<string, Saved>
-          readonly "~scoped"?: Record<string, ReadonlyArray<string>>
+          readonly "~keepAlive"?: Record<string, ReadonlyArray<string>>
           readonly "~reported"?: Saved
         }
         const cut = Object.values(drawn ?? {}).flat()

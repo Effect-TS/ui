@@ -18,7 +18,6 @@ export type CounterMessage = typeof CounterMessage.Type
 
 export const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   props: Schema.Struct({ initial: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage
@@ -80,7 +79,6 @@ export class SaveTodo extends Command.Service<SaveTodo>()(
 
 export const TodoItem = Component.define({
   name: "TodoItem",
-  scoped: false,
   props: Schema.Struct({ todo: Todo }),
   model: Schema.Struct({ saving: Schema.Boolean }),
   message: TodoItemMessage,
@@ -120,7 +118,6 @@ export type TodoListMessage = typeof TodoListMessage.Type
 
 export const TodoList = Component.define({
   name: "TodoList",
-  scoped: false,
   props: Schema.Struct({ initial: Schema.Array(Todo) }),
   model: Schema.Struct({
     todos: Schema.Array(Todo),
@@ -190,7 +187,6 @@ export const Upload = Command.make(
 
 export const SearchBox = Component.define({
   name: "SearchBox",
-  scoped: false,
   model: Schema.Struct({
     text: Schema.String,
     items: Schema.Array(Schema.String),

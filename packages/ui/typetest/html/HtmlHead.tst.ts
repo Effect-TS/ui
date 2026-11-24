@@ -6,13 +6,11 @@ import { describe, expect, it } from "tstyche"
 
 const Neutral = Component.define({
   name: "Neutral",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 })
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html

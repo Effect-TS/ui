@@ -43,7 +43,6 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // `subscriptions`, so omitting the opposite direction updates with `model.heading`.
 export const Snake = Component.define({
   name: "Snake",
-  scoped: false,
   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
   message: SnakeMessage,
   elements: Html

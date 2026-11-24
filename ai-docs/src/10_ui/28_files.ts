@@ -81,7 +81,6 @@ export const ReadCsv = Command.make(
 // runs within it. `opened` is `false` when it refused.
 export const CsvImport = Component.define({
   name: "CsvImport",
-  scoped: false,
   model: ImportModel,
   message: ImportMessage,
   elements: Html

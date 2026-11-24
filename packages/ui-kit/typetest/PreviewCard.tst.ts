@@ -21,7 +21,6 @@ describe("PreviewCard", () => {
   it("each part returns the builder it was given, and the portal may be absent", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -68,7 +67,6 @@ describe("PreviewCard", () => {
   it("the trigger takes only a link, and the events report why the card opened and closed", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html
@@ -106,7 +104,6 @@ describe("PreviewCard", () => {
   it("a trigger drawn elsewhere returns the link it was given", () => {
     Component.define({
       name: "App",
-      scoped: false,
       model: Schema.Null,
       message: Msg,
       elements: Html

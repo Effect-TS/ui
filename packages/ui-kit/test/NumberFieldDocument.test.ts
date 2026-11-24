@@ -32,7 +32,6 @@ const mount = Effect.fnUntraced(function*(
   const log: Array<string> = []
   const Amount = Component.define({
     name: "Amount",
-    scoped: false,
     model: Schema.Struct({ value: Value, committed: Schema.Boolean }),
     message: Message,
     elements: Html

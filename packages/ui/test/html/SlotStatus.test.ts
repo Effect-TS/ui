@@ -14,7 +14,6 @@ class Editor extends Feature.Service<Editor>()("SlotStatus/HtmlEditor", {
 }) {}
 const EditorView = Component.define({
   name: "EditorView",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -31,7 +30,6 @@ const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
 const Message = UiSchema.TaggedEnum({ Failed: {} })
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.String,
   message: Message,
   elements: Html

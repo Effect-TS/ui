@@ -33,7 +33,6 @@ export const NoteBoardMessage = UiSchema.TaggedEnum({
 // layout and animates it itself.
 export const NoteBoardNoDeps = Component.define({
   name: "NoteBoard",
-  scoped: false,
   model: Schema.Struct({ layout: Layout, filter: Schema.String }),
   message: NoteBoardMessage,
   queries: { notes: { query: ListNotes, args: () => ({}) } },
@@ -108,7 +107,6 @@ const TransitionAppMessage = UiSchema.TaggedEnum({
 // caused, and that flush still animates.
 export const TransitionApp = Component.define({
   name: "TransitionApp",
-  scoped: false,
   props: Schema.Struct({ route: AppRoute }),
   model: AppRoute,
   message: TransitionAppMessage,

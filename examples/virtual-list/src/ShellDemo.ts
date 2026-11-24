@@ -7,7 +7,6 @@ const ShellMessage = UiSchema.TaggedEnum({ ClickedJump: {}, ClickedAppend: {} })
 
 export const ShellDemo = Component.define({
   name: "ShellDemo",
-  scoped: false,
   model: Schema.Struct({ count: Schema.Number, jump: Schema.Number }),
   message: ShellMessage,
   elements: Html

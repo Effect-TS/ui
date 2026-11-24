@@ -90,7 +90,6 @@
  *
  * const Settings = Component.define({
  *   name: "Settings",
- *   scoped: false,
  *   model: Schema.Struct({ tab: Schema.String }),
  *   message: SettingsMessage,
  *   elements: Html
@@ -845,7 +844,6 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  */
 export const Tabs = Component.define({
   name: "Tabs",
-  scoped: false,
   props: TabsProps,
   model: TabsModel,
   message: TabsMessage,

@@ -90,7 +90,6 @@ const Steps = Effect.fnUntraced(function*(
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Component.define({
     name: "Demo",
-    scoped: false,
     model: Schema.Struct({ step: Schema.Number }),
     message: Message,
     elements: Html

@@ -47,7 +47,6 @@ class GetFailing extends Query.Service<GetFailing>()(
 /** A Redacted in a query's args, in its error, and in a keyed query's args. */
 const ByArgs = Component.define({
   name: "ByArgs",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: {
@@ -63,7 +62,6 @@ const ByArgs = Component.define({
 })
 const ByError = Component.define({
   name: "ByError",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: { value: { query: GetFailing, args: () => ({}) } }
@@ -74,7 +72,6 @@ const ByError = Component.define({
 })
 const ByKeys = Component.define({
   name: "ByKeys",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: {
@@ -91,7 +88,6 @@ const ByKeys = Component.define({
 
 const Secret = Component.define({
   name: "Secret",
-  scoped: false,
   model: Schema.Struct({
     token: Schema.Redacted(Schema.String),
     n: Schema.Number
@@ -105,7 +101,6 @@ const Secret = Component.define({
 
 const Loaded = Component.define({
   name: "Loaded",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Never,
   queries: { token: { query: GetToken, args: () => ({}) } }
@@ -149,7 +144,6 @@ const legacyState = (component: Component.Any, model: unknown) => {
 
 const Plain = Component.define({
   name: "Plain",
-  scoped: false,
   model: Schema.Number,
   message: Schema.Never
 }).make({
@@ -160,7 +154,6 @@ const Plain = Component.define({
 
 const QueryPage = Component.define({
   name: "QueryPage",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 })
@@ -179,7 +172,6 @@ const QueryPage = Component.define({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -328,7 +320,6 @@ describe("Redacted state", () => {
     Effect.gen(function*() {
       const Lazy = Component.define({
         name: "Lazy",
-        scoped: false,
         model: Schema.suspend(() => Schema.Number),
         message: Schema.Never
       })
@@ -345,7 +336,6 @@ describe("Redacted state", () => {
       const component = (model: Schema.Codec<any, any>) =>
         Component.define({
           name: "Tree",
-          scoped: false,
           model,
           message: Schema.Never
         }).make({

@@ -81,7 +81,6 @@
  *
  * const Signup = Component.define({
  *   name: "Signup",
- *   scoped: false,
  *   model: Schema.Struct({ submitted: Schema.Boolean }),
  *   message: SignupMessage,
  *   elements: Html
@@ -218,7 +217,6 @@ const FocusInvalid = Command.make(
  */
 export const Form = Component.define({
   name: "Form",
-  scoped: false,
   model: Schema.Struct({}),
   message: FormMessage,
   events: FormEvents,

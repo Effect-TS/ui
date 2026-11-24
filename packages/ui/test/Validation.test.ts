@@ -417,7 +417,6 @@ describe("Validation", () => {
       )
     const SignupPage = Component.define({
       name: "SignupPage",
-      scoped: false,
       model: Schema.Struct({ form: Account.State }),
       message: Message,
       queries: {

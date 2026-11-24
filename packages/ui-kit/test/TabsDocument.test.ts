@@ -10,7 +10,6 @@ const Message = UiSchema.TaggedEnum({ Selected: { value: Schema.String } })
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({ activateOnFocus: Schema.optional(Schema.Boolean) }),
   model: Schema.Struct({ tab: Schema.String }),
   message: Message,

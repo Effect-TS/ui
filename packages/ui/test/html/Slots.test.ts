@@ -19,7 +19,6 @@ const container = Effect.acquireRelease(
 const CounterMsg = UiSchema.TaggedEnum({ Add: {} })
 const Counter = Component.define({
   name: "Counter",
-  scoped: false,
   model: Schema.Number,
   message: CounterMsg,
   events: UiSchema.TaggedEnum({ Added: { count: Schema.Number } }),
@@ -32,7 +31,6 @@ const Counter = Component.define({
 
 const Card = Component.define({
   name: "Card",
-  scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html,
@@ -53,7 +51,6 @@ const where = { server: true }
 const PageMsg = UiSchema.TaggedEnum({ Added: { count: Schema.Number } })
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   model: Schema.Number,
   message: PageMsg,
   elements: Html
@@ -141,7 +138,6 @@ describe("slots on the server", () => {
       let renders = 0
       const Flip = Component.define({
         name: "Flip",
-        scoped: false,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html

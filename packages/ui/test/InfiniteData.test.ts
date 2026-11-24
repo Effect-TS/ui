@@ -59,7 +59,6 @@ const makeApp = () => {
   })
   const Chat = Component.define({
     name: "Chat",
-    scoped: false,
     props: Schema.Struct({ room: Schema.String }),
     model: Schema.Struct({}),
     message: ChatMessage,
@@ -205,7 +204,6 @@ describe("Infinite queries", () => {
     const CodesMessage = UiSchema.TaggedEnum({ More: {}, Look: {} })
     const Codes = Component.define({
       name: "Codes",
-      scoped: false,
       model: Schema.String,
       message: CodesMessage,
       elements: Html,
@@ -512,7 +510,6 @@ describe("Infinite queries", () => {
     })
     const Shell = Component.define({
       name: "Shell",
-      scoped: false,
       props: Schema.Struct({ route: ShellRoute }),
       model: ShellRoute,
       message: ShellMessage,

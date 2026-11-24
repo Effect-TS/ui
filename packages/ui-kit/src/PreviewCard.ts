@@ -153,7 +153,6 @@
  *
  * const Article = Component.define({
  *   name: "Article",
- *   scoped: false,
  *   model: Schema.Struct({ preview: Schema.Boolean }),
  *   message: ArticleMessage,
  *   elements: Html
@@ -1094,7 +1093,6 @@ export const PreviewCardTrigger = <Msg, R = never>(
  */
 export const PreviewCard = Component.define({
   name: "PreviewCard",
-  scoped: false,
   props: PreviewCardProps,
   model: PreviewCardModel,
   message: PreviewCardMessage,

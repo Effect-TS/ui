@@ -111,7 +111,6 @@ const BUTTON_CLASS = "min-w-20 px-4 py-2 text-white rounded"
 
 export const CanvasArt = Component.define({
   name: "CanvasArt",
-  scoped: false,
   model: CanvasArtModel,
   message: CanvasArtMessage
 }).make({

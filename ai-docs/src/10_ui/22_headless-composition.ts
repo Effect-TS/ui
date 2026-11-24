@@ -31,7 +31,6 @@ export const TagPickerEvents = UiSchema.TaggedEnum({
 
 export const TagPicker = Component.define({
   name: "TagPicker",
-  scoped: false,
   props: Schema.Struct({
     options: Schema.Array(ListboxOption),
     tags: Schema.Array(Schema.String)
@@ -114,7 +113,6 @@ const options: ReadonlyArray<ListboxOption> = [
 
 export const NoteTags = Component.define({
   name: "NoteTags",
-  scoped: false,
   model: Schema.Struct({ tags: Schema.Array(Schema.String) }),
   message: NoteTagsMessage,
   elements: Html

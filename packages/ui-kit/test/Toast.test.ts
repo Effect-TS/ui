@@ -18,7 +18,6 @@ const PosterMessage = UiSchema.TaggedEnum({
 
 const Poster = Component.define({
   name: "Poster",
-  scoped: false,
   model: Schema.Number,
   message: PosterMessage,
   elements: Html
@@ -60,7 +59,6 @@ const PageMessage = UiSchema.TaggedEnum({ Dismissed: { id: Schema.String } })
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({ timeout: Schema.Number }),
   model: Schema.String,
   message: PageMessage,
@@ -284,7 +282,6 @@ describe("ToastProvider", { concurrent: false }, () => {
 const AboveMessage = UiSchema.TaggedEnum({ Opened: {} })
 const Above = Component.define({
   name: "Above",
-  scoped: false,
   model: Schema.Boolean,
   message: AboveMessage,
   elements: Html

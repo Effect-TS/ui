@@ -172,7 +172,6 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Component.define({
   name: "Page",
-  scoped: false,
   props: Schema.Struct({
     sideOffset: Schema.Number,
     disableAnchorTracking: Schema.Boolean,

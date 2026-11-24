@@ -6,7 +6,6 @@ import { textOf } from "./shared.ts"
 
 export const GridDemo = Component.define({
   name: "GridDemo",
-  scoped: false,
   model: Schema.Struct({}),
   message: Schema.Never,
   elements: Html

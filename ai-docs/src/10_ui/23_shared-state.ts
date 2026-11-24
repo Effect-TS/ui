@@ -29,7 +29,6 @@ const TooltipProviderMessage = UiSchema.TaggedEnum({
 // doesn't reopen a tooltip nobody is focused on.
 export const TooltipProvider = Component.define({
   name: "TooltipProvider",
-  scoped: false,
   // Every prop optional, so a scene of a reader has a default value.
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
@@ -68,7 +67,6 @@ const TooltipMessage = UiSchema.TaggedEnum({
 // the log records what `$.shared` held, so a replay reads the same value.
 export const Tooltip = Component.define({
   name: "Tooltip",
-  scoped: false,
   props: Schema.Struct({ label: Schema.String, tip: Schema.String }),
   model: Schema.Null,
   message: TooltipMessage,
@@ -117,7 +115,6 @@ export const Tooltip = Component.define({
 // change to the Model that leaves the shared value equal re-renders no reader.
 export const Toolbar = Component.define({
   name: "Toolbar",
-  scoped: false,
   model: Schema.Null,
   // No messages, and no no-op variant to stand in for them.
   message: Schema.Never,
@@ -178,7 +175,6 @@ const PanelGroupMessage = UiSchema.TaggedEnum({
 // `Update` with source `Collected`.
 export const PanelGroup = Component.define({
   name: "PanelGroup",
-  scoped: false,
   model: Schema.Struct({ anyOpen: Schema.Boolean }),
   message: PanelGroupMessage,
   shares: {
@@ -229,7 +225,6 @@ const PanelMessage = UiSchema.TaggedEnum({
 // its `fallback` shows.
 export const Panel = Component.define({
   name: "Panel",
-  scoped: false,
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.Struct({ open: Schema.Boolean, groupOpened: Schema.Number }),
   message: PanelMessage,
@@ -302,7 +297,6 @@ const MenuEvents = UiSchema.TaggedEnum({ Picked: { item: Schema.String } })
 // `receives` lists the messages a menu takes from the one nested in it.
 export const Menu = Component.define({
   name: "Menu",
-  scoped: false,
   props: Schema.Struct({ open: Schema.Boolean }),
   // How many menus below this one are open.
   model: Schema.Number,
