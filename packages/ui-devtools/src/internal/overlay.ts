@@ -63,7 +63,8 @@ const OverlayModel = Schema.Struct({
   reveal: Schema.NullOr(Schema.Number),
   pins: Schema.Number,
   pane: Pane,
-  paused: Schema.NullOr(Paused)
+  paused: Schema.NullOr(Paused),
+  expanded: Schema.Array(Schema.String)
 })
 
 type OverlayModel = typeof OverlayModel.Type
@@ -80,6 +81,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedBack: {},
   ScrolledTimeline: { atStart: Schema.Boolean },
   SelectedTab: { value: Schema.String },
+  ToggledModelPath: { path: Schema.String },
   ClickedCopyFrame: { seq: Schema.Number, text: Schema.String },
   SucceededCopyFrame: { seq: Schema.Number },
   FailedCopyFrame: {},
@@ -547,7 +549,31 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
     })
   )
 
+const changesText = (count: number) => count + (count === 1 ? " change" : " changes")
+
+const branchRow = (h: H, row: Read.Row, branch: Read.Branch) => {
+  const hidden = !branch.expanded && branch.changes > 0
+  const key = String(row.key)
+  return h.div.key(row.id).class("tl", hidden && "chg").attr(
+    "style",
+    "padding-left:" + (row.depth * 16 + 12) + "px"
+  ).children(
+    h.button.class("k", "toggle").attr("aria-expanded", String(branch.expanded)).attr(
+      "aria-label",
+      hidden ? key + ", " + changesText(branch.changes) : key
+    ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path })).children(
+      h.span.class("chev").attr("aria-hidden", "true").children(branch.expanded ? "▾" : "▸"),
+      key
+    ),
+    h.span.class("v").children(
+      branch.expanded ? row.open! : h.span.class("t-punct").children(branch.preview),
+      hidden ? h.span.class("muted").children(" " + changesText(branch.changes)) : null
+    )
+  )
+}
+
 const treeRow = (h: H, row: Read.Row) => {
+  if (row.branch !== undefined) return branchRow(h, row, row.branch)
   const change = row.change
   const kind = change?.kind === "unknown" ? undefined : change?.kind
   return h.div.key(row.id).class("tl", kind !== undefined && "chg").attr(
@@ -749,7 +775,12 @@ const Details = (
               ", the previous state of " + name
             )
         ),
-        VirtualTree(h, "Model after #" + entry.seq, String(entry.seq), Read.treeOf(state.model, changes))
+        VirtualTree(
+          h,
+          "Model after #" + entry.seq,
+          String(entry.seq),
+          Read.treeOf(state.model, changes, new Set(model.expanded))
+        )
       ]
     }]),
     ...(entry._tag === "Update"
@@ -973,7 +1004,8 @@ export const Overlay = Component.define({
     reveal: null,
     pins: 0,
     pane: "timeline",
-    paused: null
+    paused: null,
+    expanded: []
   }),
   update: {
     ReceivedFrames: ($) =>
@@ -1005,6 +1037,10 @@ export const Overlay = Component.define({
           : $.evolve({ atStart, pinned: true, pins: increment })
         : $.evolve({ atStart, pinned: false, reveal: null }),
     SelectedTab: ($, { value }) => $.evolve({ tab: value }),
+    ToggledModelPath: ($, { path }) =>
+      $.evolve({
+        expanded: (paths) => paths.includes(path) ? paths.filter((open) => open !== path) : [...paths, path]
+      }),
     ClickedCopyFrame: ($, { seq, text }) => $.evolve({ copied: null }).run(CopyFrame.make({ seq, text })),
     SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
     FailedCopyFrame: ($) => $.evolve({ copied: null }),

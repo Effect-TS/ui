@@ -388,6 +388,65 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }))
     }))
 
+  it.live("collapses Model branches and counts the changes hidden inside them", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({ Typed: {}, Tagged: {} })
+      const Form = Component.define({
+        name: "Form",
+        scoped: false,
+        model: Schema.Struct({
+          title: Schema.String,
+          form: Schema.Struct({
+            name: Schema.Struct({ value: Schema.String, touched: Schema.Boolean }),
+            tags: Schema.Array(Schema.String)
+          })
+        }),
+        message: Message,
+        elements: Html
+      }).make({
+        init: () => ({ title: "Signup", form: { name: { value: "", touched: false }, tags: ["new"] } }),
+        update: {
+          Typed: ($) => $.set({ ...$.model, form: { ...$.model.form, name: { value: "Ada", touched: true } } }),
+          Tagged: ($) => $.set({ ...$.model, form: { ...$.model.form, tags: ["new", "vip"] } })
+        },
+        view: (h) =>
+          h.div.children(
+            h.button.onClick(Message.Typed()).children("Type"),
+            h.button.onClick(Message.Tagged()).children("Tag")
+          )
+      })
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer()).pipe(
+        Effect.flatMap((services) => BrowserHost.mountEffect(Form, {}, app).pipe(Effect.provide(services)))
+      )
+      yield* settle
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Type" }))
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+      yield* click(oldest(root, /Update Typed$/))
+
+      const toggle = (name: string) => HtmlLocator.getByRole(root, "button", { name })
+      assert.isNull(root.querySelector(".tree .tl[data-change]"))
+      assert.strictEqual(toggle("form, 2 changes").getAttribute("aria-expanded"), "false")
+      assert.strictEqual(text(toggle("form, 2 changes").closest(".tl")), "▸form{ name, tags } 2 changes")
+
+      yield* click(toggle("form, 2 changes"))
+      assert.strictEqual(toggle("form").getAttribute("aria-expanded"), "true")
+      assert.strictEqual(text(toggle("tags").closest(".tl")), "▸tags[ 1 item ]")
+      yield* click(toggle("name, 2 changes"))
+      const changed = Array.from(root.querySelectorAll(".tree .tl[data-change=changed]"), (row) => text(row))
+      assert.deepStrictEqual(changed, ["value\"\" → \"Ada\"", "touchedfalse → true"])
+
+      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Tag" }))
+      yield* settle
+      yield* click(oldest(root, /Update Tagged$/))
+      assert.strictEqual(toggle("name").getAttribute("aria-expanded"), "true")
+      yield* click(toggle("tags, 1 change"))
+      assert.strictEqual(text(root.querySelector(".tree .tl[data-change=added]")), "1\"vip\" added")
+    }))
+
   it.live("reads a run whose defect failed its instance as failed, not running", () =>
     Effect.gen(function*() {
       const Upload = Command.make("files/Upload", { args: {} }, () => Effect.die("disk full"))

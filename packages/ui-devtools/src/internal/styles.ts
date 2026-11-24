@@ -141,6 +141,8 @@ html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
 .tl .k { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl .v { overflow-wrap: anywhere; }
 .tl.chg { border-left-color: var(--ink); background: var(--sel); }
+.tl .toggle { display: flex; gap: 2px; min-width: 0; margin-left: -12px; }
+.chev { flex: none; width: 10px; color: var(--faint); }
 .old { color: var(--faint); text-decoration-thickness: 1px; }
 .new { text-decoration: none; }
 .arrow { color: var(--faint); font-family: var(--sans); }

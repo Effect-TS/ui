@@ -334,6 +334,14 @@ export interface Row {
   readonly open?: "{" | "[" | undefined
   readonly close?: "}" | "]" | undefined
   readonly change?: Inspector.Change | undefined
+  readonly branch?: Branch | undefined
+}
+
+export interface Branch {
+  readonly path: string
+  readonly expanded: boolean
+  readonly preview: string
+  readonly changes: number
 }
 
 const pathKey = (path: ReadonlyArray<string | number>) => JSON.stringify(path)
@@ -341,9 +349,25 @@ const pathKey = (path: ReadonlyArray<string | number>) => JSON.stringify(path)
 const isBranch = (value: Schema.Json): value is Schema.JsonObject | ReadonlyArray<Schema.Json> =>
   typeof value === "object" && value !== null && !MessageLog.isPlaceholder(value)
 
-export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Change>): ReadonlyArray<Row> => {
+const previewKeys = 3
+
+const previewOf = (value: Schema.JsonObject | ReadonlyArray<Schema.Json>): string => {
+  if (Array.isArray(value)) return "[ " + value.length + (value.length === 1 ? " item ]" : " items ]")
+  const object = value as Schema.JsonObject
+  const tag = typeof object._tag === "string" ? object._tag + " " : ""
+  const keys = Object.keys(object).filter((key) => key !== "_tag")
+  if (keys.length === 0) return tag + "{}"
+  return tag + "{ " + keys.slice(0, previewKeys).join(", ") + (keys.length > previewKeys ? ", … }" : " }")
+}
+
+export const treeOf = (
+  value: Schema.Json,
+  changes: ReadonlyArray<Inspector.Change>,
+  expanded?: ReadonlySet<string>
+): ReadonlyArray<Row> => {
   const byPath = new Map<string, Inspector.Change>()
   const removedUnder = new Map<string, Array<Inspector.Change>>()
+  const changesUnder = new Map<string, number>()
   for (const change of changes) {
     byPath.set(pathKey(change.path), change)
     if (change.kind === "removed") {
@@ -351,6 +375,12 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
       const list = removedUnder.get(parent) ?? []
       list.push(change)
       removedUnder.set(parent, list)
+    }
+    if (change.kind !== "unknown") {
+      for (let length = 1; length < change.path.length; length++) {
+        const ancestor = pathKey(change.path.slice(0, length))
+        changesUnder.set(ancestor, (changesUnder.get(ancestor) ?? 0) + 1)
+      }
     }
   }
   const rows: Array<Row> = []
@@ -362,10 +392,27 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
       return
     }
     const array = Array.isArray(value)
-    if (depth > 0 || key !== undefined) {
+    const nested = depth > 0 || key !== undefined
+    if (nested && expanded !== undefined) {
+      const hidden = changesUnder.get(id) ?? 0
+      if (hidden === 0 && Object.keys(value).length === 0) {
+        rows.push({ id, depth, key, value })
+        return
+      }
+      const open = expanded.has(id)
+      rows.push({
+        id: id + "{",
+        depth,
+        key,
+        value: undefined,
+        open: array ? "[" : "{",
+        branch: { path: id, expanded: open, preview: previewOf(value), changes: hidden }
+      })
+      if (!open) return
+    } else if (nested) {
       rows.push({ id: id + "{", depth, key, value: undefined, open: array ? "[" : "{" })
     }
-    const inner = depth > 0 || key !== undefined ? depth + 1 : depth
+    const inner = nested ? depth + 1 : depth
     if (array) {
       value.forEach((item, index) => visit(item, index, [...path, index], inner))
     } else {
@@ -380,7 +427,7 @@ export const treeOf = (value: Schema.Json, changes: ReadonlyArray<Inspector.Chan
         change: removed
       })
     }
-    if (depth > 0 || key !== undefined) {
+    if (nested) {
       rows.push({ id: id + "}", depth, key: undefined, value: undefined, close: array ? "]" : "}" })
     }
   }
