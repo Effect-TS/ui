@@ -306,11 +306,20 @@
       stroke-dasharray: 1;
       animation: diagram-draw var(--diagram-travel, 850ms) ease-in-out both;
     }
+
+    /* Hidden while the travelling dot is on its way, then moves up from
+       where that dot stopped, the middle of the node, to the top edge. */
+    .diagram-rest {
+      animation:
+        diagram-arrive 1ms linear var(--diagram-travel, 850ms) both,
+        diagram-rise 220ms var(--ease-out-expo) var(--diagram-travel, 850ms) both;
+    }
   }
 }
 
 /* The dot stays opaque for the whole trip, so it never looks as if it
-   sinks into the node it arrives at. It disappears once it's there. */
+   sinks into the node it arrives at. Once it's there, the dot at rest
+   on that node takes over. */
 @keyframes diagram-travel {
   0% {
     offset-distance: 0%;
@@ -323,6 +332,21 @@
   100% {
     offset-distance: 100%;
     opacity: 0;
+  }
+}
+
+@keyframes diagram-arrive {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes diagram-rise {
+  from {
+    top: 50%;
   }
 }
 

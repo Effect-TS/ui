@@ -1,5 +1,6 @@
 import type { View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
+import { Array, Option } from "effect"
 import {
   type Carries,
   displayName,
@@ -133,8 +134,9 @@ const Link = <M>(
     "stroke-linejoin": "round"
   })
 
-// One dot per packet, travelling the track's path once and fading out
-// at the end. The key restarts it whenever the step changes.
+// One dot per packet, travelling the track's path once. When it
+// arrives, the dot at rest on that node takes over from it. The key
+// restarts it whenever the step changes.
 const Packet = <M>(
   h: View.H<M>,
   track: ReadonlyArray<Move>,
@@ -202,9 +204,62 @@ const buttonClass = [
   "disabled:opacity-45"
 ].join(" ")
 
+interface Rest {
+  readonly name: Name
+  readonly carries: Carries
+}
+
+const ends = (step: Step): ReadonlyArray<Rest> =>
+  tracks(step.moves).flatMap((track) => {
+    const last = track.at(-1)
+    return last ? [{ name: last.to, carries: last.carries }] : []
+  })
+
+// Where the dots are once the step's moves are over. A step that
+// moves nothing leaves them where the last move put them, and before
+// any move the dot is with the node that sent the Message.
+const restsOf = (
+  step: Step | undefined,
+  past: ReadonlyArray<Step>
+): ReadonlyArray<Rest> => {
+  if (step === undefined) return []
+  const moved = Array.findLast(
+    [...past, step],
+    (candidate) => candidate.moves.length > 0
+  )
+  if (Option.isSome(moved)) return ends(moved.value)
+  const sender = [...past, step][0]?.nodes[0]
+  return sender === undefined
+    ? []
+    : [{ name: sender, carries: "message" }]
+}
+
+// A dot at rest sits on the top edge of its node, clear of the label,
+// and is sized in the tree's own units like the dots that travel.
+const Resting = <M>(
+  h: View.H<M>,
+  rest: Rest,
+  arrives: boolean,
+  key: string
+) =>
+  h.span.key(arrives ? `${key}-rest` : "rest").class(
+    "absolute top-0 left-1/2 z-2 -translate-1/2 rounded-full",
+    rest.carries === "render" ? "size-[2.8cqw]" : "size-[3.75cqw]",
+    rest.carries === "value"
+      ? "border-[0.78cqw] border-foreground bg-background"
+      : rest.carries === "render"
+      ? "bg-foreground/70"
+      : "bg-foreground",
+    arrives && "diagram-rest"
+  ).attr("aria-hidden", "true")
+
 // The tree of one side: Root, A under it, A1 and A2 under A.
 export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
   const { side, step, key, compact = false, still = false } = options
+  const rests = restsOf(step, options.past)
+  // The dots arrive at the end of a step that moves them. Otherwise
+  // they are already there.
+  const arrives = !still && (step?.moves.length ?? 0) > 0
   const past = still && step ? [...options.past, step] : options.past
   const moving = still ? undefined : step
   const size = compact
@@ -261,7 +316,9 @@ export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
         ? shown.replace(" runs", "")
         : shown
       const message = options.press?.(name)
+      const rest = rests.find((candidate) => candidate.name === name)
       const content = [
+        rest && Resting(h, rest, arrives, key),
         h.span.class(
           "font-mono font-semibold font-features-[normal]",
           compact
