@@ -30,8 +30,7 @@ const TipsProvider = Component.define({
   }
 }).make({
   init: () => null,
-  update: (_, message) => message.id,
-  parts: () => ({})
+  update: (_, message) => message.id
 })
 
 /** A reader that opens its tip on click. */
@@ -216,6 +215,61 @@ describe("shared state", () => {
         entry._tag === "Failed"
       )
       assert.deepStrictEqual(failed.map((entry) => entry.in), ["shares"])
+    })))
+
+  it.effect("passes an empty parts object to the view closure of an owner without parts", () =>
+    provideHost(Effect.gen(function*() {
+      let received: unknown
+      const Host = Component.define({
+        name: "Host",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          TipsProvider(h, {
+            view: (parts) => {
+              received = parts
+              return h.el("p")
+            }
+          })
+      })
+      yield* TestHost.mount(Host, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual(received, {})
+    })))
+
+  it.effect("finishes a definition without parts when its shares is conditionally absent", () =>
+    provideHost(Effect.gen(function*() {
+      const MaybeOwner = Component.define({
+        name: "MaybeOwner",
+        model: Schema.Null,
+        message: Schema.Never,
+        shares: undefined as (() => number) | undefined
+      }).make({
+        init: () => null,
+        update: ($) => $.model
+      })
+      let received: unknown
+      const Host = Component.define({
+        name: "Host",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          MaybeOwner(h, {
+            view: (parts) => {
+              received = parts
+              return h.el("p")
+            }
+          })
+      })
+      yield* TestHost.mount(Host, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual(received, {})
     })))
 })
 

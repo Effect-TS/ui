@@ -24,9 +24,10 @@ const TooltipProviderMessage = UiSchema.TaggedEnum({
 // The state is the owner's ordinary Model, so every change to it is an
 // `Update` in the log. `shares` picks what the readers below it see. Only a
 // headless component can share state: its `view` closure is the subtree it
-// shares with. An owner restores from history like any other component.
-// `restore: false` starts this one from `init` after Back or a reload, so it
-// doesn't reopen a tooltip nobody is focused on.
+// shares with, and an owner with no parts of its own can leave `parts` out.
+// An owner restores from history like any other component. `restore: false`
+// starts this one from `init` after Back or a reload, so it doesn't reopen a
+// tooltip nobody is focused on.
 export const TooltipProvider = Component.define({
   name: "TooltipProvider",
   // Every prop optional, so a scene of a reader has a default value.
@@ -47,8 +48,7 @@ export const TooltipProvider = Component.define({
     TooltipProviderMessage.match(message, {
       FocusedTooltip: ({ id }) => ({ open: id }),
       BlurredTooltip: ({ id }) => $.model.open === id ? { open: null } : $.model
-    }),
-  parts: () => ({})
+    })
 })
 
 // ---------------------------------------------------------------------------

@@ -17,8 +17,7 @@ const TipsProvider = Component.define({
   shares: { value: (model) => ({ open: model.open }), receives: ["Enter"] }
 }).make({
   init: () => ({ open: null }),
-  update: ($) => $.model,
-  parts: () => ({})
+  update: ($) => $.model
 })
 
 // Not an owner: it shares nothing.
@@ -90,7 +89,10 @@ describe("shared state", () => {
       view: (h) =>
         TipsProvider(h, {
           key: "tips",
-          view: () => Tip(h, { key: "a", props: { id: "a" } })
+          view: (parts) => {
+            expect(parts).type.toBe<{}>()
+            return Tip(h, { key: "a", props: { id: "a" } })
+          }
         })
     })
     const Outside = def.make({
@@ -214,6 +216,44 @@ describe("shared state", () => {
     expect(
       Scene.make(TipsProvider, {}, { elements: Html, view: (_, h) => h.span() })
     ).type.not.toRaiseError()
+  })
+
+  it("allows omitting parts when shares is defined, and rejects omitting both view and parts otherwise", () => {
+    expect<Component.Headless.Parts<typeof TipsProvider>>().type.toBe<{}>()
+
+    const handlers = {
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    }
+    const PlainDef = Component.define({
+      name: "PlainDef",
+      model: Schema.Null,
+      message: TipMessage
+    })
+    expect(PlainDef.make).type.not.toBeCallableWith(handlers)
+
+    const SlottedProvider = Component.define({
+      name: "SlottedProvider",
+      model: Schema.Null,
+      message: TipMessage,
+      slots: ["body"],
+      shares: () => 1
+    })
+    expect(SlottedProvider.make).type.not.toBeCallableWith(handlers)
+
+    const enabled = Math.random() > 0.5
+    const OwnerDef = Component.define({
+      name: "OwnerDef",
+      model: Schema.Null,
+      message: TipMessage,
+      shares: () => 1
+    })
+    expect(OwnerDef.make).type.not.toBeCallableWith({
+      ...handlers,
+      parts: enabled ? () => ({ label: "ok" }) : undefined
+    })
+    // @ts-expect-error Property 'parts' is missing
+    OwnerDef.make<{ label: string }>(handlers)
   })
 })
 
