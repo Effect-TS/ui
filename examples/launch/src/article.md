@@ -8,14 +8,14 @@ If you're building with Foldkit 0.x today, we encourage you to continue. The mig
 
 This article covers a selection of the key changes and additions in Effect UI. It isn't a complete list.
 
-Changes:
+Key changes:
 
 - [Component-based architecture](#the-core-change-component-based-architecture)
 - [Improved performance](#change-improved-performance)
 - [Simpler Story and Scene tests](#change-simpler-story-and-scene-tests)
 - [Where state lives](#change-where-state-lives)
 
-Additions:
+Key additions:
 
 - [Built-in queries](#addition-built-in-queries)
 - [Shared state with providers](#addition-shared-state-with-providers)
