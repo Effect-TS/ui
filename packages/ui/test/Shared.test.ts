@@ -270,6 +270,38 @@ describe("shared state", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "1")
     })))
+
+  it.effect("finishes a definition without parts when its shares is conditionally absent", () =>
+    provideHost(Effect.gen(function*() {
+      const MaybeOwner = Component.define({
+        name: "MaybeOwner",
+        model: Schema.Null,
+        message: Schema.Never,
+        shares: undefined as (() => number) | undefined
+      }).make({
+        init: () => null,
+        update: ($) => $.model
+      })
+      let received: unknown
+      const Host = Component.define({
+        name: "Host",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          MaybeOwner(h, {
+            view: (parts) => {
+              received = parts
+              return h.el("p")
+            }
+          })
+      })
+      yield* TestHost.mount(Host, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual(received, {})
+    })))
 })
 
 describe("shared state in a Scene", () => {
