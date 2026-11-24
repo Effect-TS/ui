@@ -2296,7 +2296,7 @@ export const isHeadless = (u: unknown): u is Headless.Any =>
 
 // Only a headless component can own shared state: it wraps its readers with its `view` closure.
 type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
-  readonly "Only a headless component can share state: finish it with parts in place of view":
+  readonly "Only a headless component can share state: omit view or pass parts":
     never
 }
 
@@ -2516,10 +2516,11 @@ export interface Definition<
   /**
    * Finishes a headless component: `parts` in place of `view`. Whoever
    * declares it, by calling it with `view`, writes the view from what
-   * `parts` returns.
+   * `parts` returns. A definition with `shares` may omit `parts`, in which
+   * case the caller's `view` receives `{}`.
    */
   make<
-    Parts,
+    Parts = {},
     UI extends Model | InitStep<Model, Msg, Events, any> = Model,
     U extends Model | Step<Model, Msg, Events, any, L> = Model,
     UR extends {
@@ -2535,17 +2536,7 @@ export interface Definition<
         readonly update:
           | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
           | UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
-        /**
-         * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
-         */
-        readonly parts: [Sl] extends [never] ? (
-            p:
-              & PartsHelper<Msg, Props, V>
-              & QueryHelpers<L>
-              & SharedHelpers<SR>,
-            model: Model
-          ) => Parts
-          : never
+        readonly view?: never
         readonly subscriptions?:
           | ((
             $: Current<Model, Props, QueryResults<L>>
@@ -2557,6 +2548,32 @@ export interface Definition<
           ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
+      & ([Sl] extends [never] ? [SV] extends [never] ? {
+            readonly parts: (
+              p:
+                & PartsHelper<Msg, Props, V>
+                & QueryHelpers<L>
+                & SharedHelpers<SR>,
+              model: Model
+            ) => Parts
+          }
+          : {
+            readonly parts?:
+              | ((
+                p:
+                  & PartsHelper<Msg, Props, V>
+                  & QueryHelpers<L>
+                  & SharedHelpers<SR>,
+                model: Model
+              ) => Parts)
+              | undefined
+          }
+        : {
+          /**
+           * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
+           */
+          readonly parts: never
+        })
       & SelfShares<SR, SV>
   ): Headless<
     Props,
@@ -3387,7 +3404,10 @@ const finish = (
   const head = options.head
   const elements = definition.elements
   const view = options.view
-  const parts = options.parts
+  const parts = options.parts ??
+    (view === undefined && definition.shares !== undefined
+      ? () => ({})
+      : undefined)
   if (parts !== undefined && definition.slots.length > 0) {
     throw new Error(
       `${definition.name} declares slots, so it needs a view to place them and can't take parts`
@@ -3398,7 +3418,7 @@ const finish = (
   for (const name of definition.slots) outlets[name] = { _tag: "Outlet", name }
   if (definition.shares !== undefined && view !== undefined) {
     throw new Error(
-      `${definition.name}: only a headless component can share state, so finish it with parts in place of view`
+      `${definition.name}: only a headless component can share state, so omit view or pass parts`
     )
   }
   // Read once the component exists, since an entry for `"self"` names it.

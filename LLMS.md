@@ -589,7 +589,8 @@ consumer refuses to, because it doesn't run the component's `update`.
 
 A headless component with `shares: (model, props) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
-value. A reader lists the owners it reads in
+value. An owner with no parts of its own can omit `parts` in `make`; its
+`view` closure receives `{}`. A reader lists the owners it reads in
 `shared: { provider: TooltipProvider }` and reads `h.shared.provider` or
 `p.shared.provider` in `view` or `parts`, and `$.shared.provider` in
 `update`. The long form of an entry, `{ owner: TooltipProvider, ... }`, adds

@@ -215,6 +215,60 @@ describe("shared state", () => {
       Scene.make(TipsProvider, {}, { elements: Html, view: (_, h) => h.span() })
     ).type.not.toRaiseError()
   })
+
+  it("allows omitting parts when shares is defined, and rejects omitting both view and parts otherwise", () => {
+    const PartslessProvider = Component.define({
+      name: "PartslessProvider",
+      model: Schema.Struct({ count: Schema.Number }),
+      message: TipMessage,
+      shares: {
+        value: (model) => ({ count: model.count }),
+        receives: ["Enter"]
+      }
+    }).make({
+      init: () => ({ count: 0 }),
+      update: ($) => $.model
+    })
+    expect(PartslessProvider).type.toBeAssignableTo<Component.Headless.Any>()
+    expect<Component.Headless.Parts<typeof PartslessProvider>>().type.toBe<{}>()
+    expect<Component.Shared.Of<typeof PartslessProvider>>().type.toBe<
+      Component.Shared<"PartslessProvider">
+    >()
+    Component.define({
+      name: "Host",
+      model: Schema.Null,
+      message: Schema.Never
+    }).view((h) =>
+      PartslessProvider(h, {
+        view: (parts) => {
+          expect(parts).type.toBe<{}>()
+          return h.el("div")
+        }
+      })
+    )
+
+    const PlainDef = Component.define({
+      name: "PlainDef",
+      model: Schema.Null,
+      message: TipMessage
+    })
+    expect(PlainDef.make).type.not.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    })
+
+    const SlottedProvider = Component.define({
+      name: "SlottedProvider",
+      model: Schema.Null,
+      message: TipMessage,
+      slots: ["body"],
+      shares: () => 1
+    })
+    expect(SlottedProvider.make).type.not.toBeCallableWith({
+      init: () => null,
+      update: ($: { readonly model: null }) => $.model
+    })
+  })
 })
 
 describe("a component that reads its own kind", () => {

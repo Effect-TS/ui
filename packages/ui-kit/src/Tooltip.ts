@@ -569,8 +569,7 @@ export const TooltipProvider = Component.define({
     CompletedWaitBeforeCooling: (
       $
     ) => ($.model.open ? $.model : $.evolve({ instant: false }))
-  },
-  parts: () => ({})
+  }
 })
 
 /**

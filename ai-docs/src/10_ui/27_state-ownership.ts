@@ -206,8 +206,8 @@ export const ModalProvider = Component.define({
       RequestedOpen: () => ({ open: true }),
       RequestedClose: () => ({ open: false })
     }),
-  // Only `Around`, at the end of this file, reads these parts. Without it
-  // this is `parts: () => ({})`.
+  // Only `Around`, at the end of this file, reads these parts. Without it,
+  // `parts` can be left out.
   parts: (_, model) => ({ open: model.open })
 })
 
