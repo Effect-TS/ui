@@ -89,11 +89,11 @@ describe("benchmark results", () => {
       [
         ["Vanilla JS", "1.00"],
         ["Solid", "1.92"],
-        ["Svelte", "2.46"],
-        ["Vue", "3.74"],
-        ["Effect UI", "4.79"],
-        ["Foldkit 0.x", "6.55"],
-        ["React", "6.57"]
+        ["Svelte", "2.29"],
+        ["Vue", "3.76"],
+        ["Effect UI", "3.98"],
+        ["React", "6.28"],
+        ["Foldkit 0.x", "6.32"]
       ]
     )
   })
