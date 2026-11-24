@@ -50,14 +50,38 @@ export const sync = (inst: Kernel.Instance): void => {
     wanted = (inst.component as unknown as {
       readonly subscriptions: (
         model: unknown,
-        props: unknown
+        props: unknown,
+        results: unknown
       ) => ReadonlyArray<Subscription.Subscription<any, any>>
-    }).subscriptions(inst.model, inst.props)
+    }).subscriptions(inst.model, inst.props, inst.results)
   } catch (error) {
     return inst.tree.ops.fail(inst, "subscription", Cause.die(error))
   }
   const byKey = new Map<string, Subscription.Subscription<any, any>>()
+  let declaration: services.Prefetch | undefined
   for (const subscription of wanted) {
+    const declared =
+      (subscription as { readonly [services.prefetch]?: services.Prefetch })[
+        services.prefetch
+      ]
+    if (declared !== undefined) {
+      if (declaration !== undefined) {
+        return inst.tree.ops.fail(
+          inst,
+          "subscription",
+          Cause.die(
+            new Error(
+              `${inst.path}: subscriptions returned Router.prefetch twice. An instance declares its routes' reads in one map.`
+            )
+          ),
+          undefined,
+          undefined,
+          "@effect/ui/Router/prefetch"
+        )
+      }
+      declaration = declared
+      continue
+    }
     // A key runs one Stream, so the second entry would never start, and nothing would say so.
     if (byKey.has(subscription.key)) {
       return inst.tree.ops.fail(
@@ -70,6 +94,13 @@ export const sync = (inst: Kernel.Instance): void => {
       )
     }
     byKey.set(subscription.key, subscription)
+  }
+  const ctx = servicesOf(inst.env)
+  if (ctx !== undefined) {
+    Context.get(ctx, services.CurrentRoot)()?.declare?.(
+      inst as never,
+      declaration
+    )
   }
   let subscriptions = runningOf.get(inst)
   if (subscriptions === undefined) {

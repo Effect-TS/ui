@@ -100,6 +100,7 @@ import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
 import * as prefetchWalk from "./internal/prefetch.ts"
 import * as queryCore from "./internal/queryCore.ts"
+import * as routeRun from "./internal/routeRun.ts"
 import * as services from "./internal/services.ts"
 import { canonical, pairsWithout, withPairs } from "./internal/url.ts"
 import type * as Query from "./Query.ts"
@@ -1884,6 +1885,7 @@ const build = (
           inst,
           declared
         ),
+      kernel: routeRun.make,
       afterFlush: (root, info) => {
         if (info.buildsPendingSince(0) === 0) forgetRestoring(root)
         if (

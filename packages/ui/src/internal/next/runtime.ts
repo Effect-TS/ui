@@ -13,10 +13,13 @@ import * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import type * as Renderer from "../../Renderer.ts"
 import * as View from "../../View.ts"
+import { routed } from "../due.ts"
 import * as Executor from "../executor.ts"
 import * as Kernel from "../kernel.ts"
 import * as messageLog from "../messageLog.ts"
+import * as queryCore from "../queryCore.ts"
 import * as Recorder from "../recorder.ts"
+import type * as routeRun from "../routeRun.ts"
 import type * as runtime from "../runtime.ts"
 import * as services from "../services.ts"
 
@@ -93,6 +96,39 @@ interface Options {
   readonly adoptionHead?: boolean | undefined
 }
 
+/** The root's query cache, made once `Query` is loaded, and disposed with the root. */
+const makeCell = (
+  ctx: Context.Context<any>,
+  options: Options | undefined,
+  onMake: (cache: queryCore.Cache) => void
+) => {
+  let made: {
+    readonly cache: queryCore.Cache
+    readonly dispose: Effect.Effect<void>
+  } | undefined
+  const get = () => {
+    if (made === undefined) {
+      made = queryCore.loaded!.buildCache(ctx, {
+        visibility: Context.get(ctx, queryCore.Visibility),
+        connectivity: Context.get(ctx, queryCore.Connectivity),
+        report: Context.get(ctx, queryCore.Problems),
+        idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive)
+      })
+      onMake(made.cache)
+    }
+    return made.cache
+  }
+  const cell: queryCore.CacheCell = {
+    [queryCore.CacheTypeId]: queryCore.CacheTypeId,
+    [queryCore.CacheCellTypeId]: get
+  }
+  return {
+    cell,
+    cache: () => queryCore.loaded === undefined ? undefined : get(),
+    dispose: Effect.suspend(() => made?.dispose ?? Effect.void)
+  }
+}
+
 const withProps = <A, E, R>(
   rootProps: unknown,
   f: (props: unknown) => Effect.Effect<A, E, R>
@@ -120,15 +156,17 @@ export const mount = (
   withProps(
     rootProps,
     (props) =>
-      Effect.contextWith(
-        (ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-          if (options?.state !== undefined) Kernel.notPorted("hydration")
-          const root = start(component, props, container, ctx, options)
-          return Effect.as(
-            Scope.addFinalizer(Context.get(ctx, Scope.Scope), root.close),
-            root.root
-          )
-        }
+      Effect.uninterruptible(
+        Effect.contextWith(
+          (ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+            if (options?.state !== undefined) Kernel.notPorted("hydration")
+            const root = start(component, props, container, ctx, options)
+            return Effect.as(
+              Scope.addFinalizer(Context.get(ctx, Scope.Scope), root.close),
+              root.root
+            )
+          }
+        )
       )
   )
 
@@ -166,17 +204,54 @@ const start = (
     ) {
       emitted.push(...(draft.events as ReadonlyArray<unknown>))
     }
+    if (draft._tag === "Mounted" && routing?.restored(inst) === true) {
+      draft = { ...draft, adopted: true }
+    }
     return recording.record(inst, draft)
   }
+  const hooks = Context.getOrUndefined(ctx, services.RootHooks)
+  const building = (flush: number) => {
+    let count = 0
+    const stamps = kernelRoot?.instance.tree.building
+    if (stamps !== undefined) {
+      for (const stamp of stamps) if (stamp.flush >= flush) count++
+    }
+    return count
+  }
+  const routing: routeRun.Routed | undefined = hooks?.kernel?.(hooks, {
+    path: "/" + component.definition.name,
+    container,
+    context: ctx,
+    flush: () => flushes,
+    flushing: () => inFlush,
+    buildsPendingSince: building
+  })
+  const bridged: Kernel.Host = routing === undefined ?
+    bridge(host, recording.step) :
+    {
+      ...bridge(host, recording.step),
+      commit: () => {
+        host.commit?.()
+        routing.flushed()
+      }
+    }
   const fallback = options?.fallback
-  const kernelRoot: Kernel.Root = recording.session(() =>
+  const queries = makeCell(ctx, options, (cache) => {
+    cache.onFetch((event) => recording.tree({ _tag: "FetchStarted", ...event }))
+  })
+  let kernelRoot: Kernel.Root | undefined
+  kernelRoot = recording.session(() =>
     Kernel.mount(
       component as unknown as Kernel.Runnable,
       props,
       container,
-      bridge(host, recording.step),
+      bridged,
       {
-        context: ctx,
+        context: Context.add(
+          Context.add(ctx, queryCore.CacheKey, queries.cell as never),
+          services.CurrentRoot,
+          () => routing?.handle
+        ),
         init: (inst) => {
           const made = inst.component as unknown as Component.Any
           const elements = made.elements()
@@ -190,7 +265,8 @@ const start = (
               }`
             )
           }
-          return inst.component.init(inst.props)
+          const first = inst.component.init(inst.props)
+          return routing === undefined ? first : routing.init(inst, first)
         },
         log: record,
         schedule: (task) => {
@@ -224,8 +300,14 @@ const start = (
     )
   )
   inFlush = false
-  const instance = kernelRoot.instance
+  const mounted = kernelRoot
+  const instance = mounted.instance
   const tree = instance.tree
+  if (routing !== undefined) {
+    routing.attach(instance)
+    routed.add(tree)
+    routing.flushed()
+  }
   tree.flush = () => inFlush ? flushes : flushes + 1
   const root = {
     path: instance.path,
@@ -234,22 +316,17 @@ const start = (
     emitted,
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) =>
-      recording.step(() => kernelRoot.send(message, dispatched)),
+      recording.step(() => mounted.send(message, dispatched)),
     pending: () => pendingOf(instance),
     loads: () => [],
-    cache: {
-      pending: () => [],
-      inspect: () => Kernel.notPorted("queries")
-    } as unknown as Root["cache"],
+    get cache() {
+      return (queries.cache() ?? { pending: () => [] }) as unknown as Root[
+        "cache"
+      ]
+    },
     crashed: () => instance.failure,
     flush: () => flushes,
-    buildsPendingSince: (flush: number) => {
-      let count = 0
-      if (tree.building !== undefined) {
-        for (const stamp of tree.building) if (stamp.flush >= flush) count++
-      }
-      return count
-    },
+    buildsPendingSince: building,
     head: () => Kernel.notPorted("head"),
     adoptionHead: () => undefined,
     adopted: Effect.void,
@@ -263,7 +340,14 @@ const start = (
       ? Effect.void
       : Effect.andThen(Fiber.awaitAll([...tree.owned]), awaitOwned)
   )
-  return { root, close: Effect.suspend(() => (kernelRoot.close(), awaitOwned)) }
+  return {
+    root,
+    close: Effect.suspend(() => {
+      routing?.detach()
+      mounted.close()
+      return Effect.andThen(awaitOwned, queries.dispose)
+    })
+  }
 }
 
 type Pending = ReturnType<Root["pending"]>[number]

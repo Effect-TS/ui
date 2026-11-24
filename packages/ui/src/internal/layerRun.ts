@@ -287,8 +287,10 @@ class Provide {
     const current = () => !inst.closed && inst.env === own
     let pending = false
     let done: (() => void) | undefined
+    const stamp = tree.builds = (tree.builds ?? 0) + 1
     const failed = (cause: Cause.Cause<unknown>) => {
       done?.()
+      tree.failedBuild = Math.max(tree.failedBuild ?? 0, stamp)
       if (current()) this.failed(own, cause)
     }
     const shared = this.shared

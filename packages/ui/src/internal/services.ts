@@ -13,6 +13,7 @@ import type {
 import type * as Route from "../Route.ts"
 import type * as Subscription from "../Subscription.ts"
 import type * as prefetchWalk from "./prefetch.ts"
+import type * as routeRun from "./routeRun.ts"
 
 /** @internal */
 export const Renderer = Context.Service<RendererShape, RendererShape>(
@@ -51,6 +52,10 @@ export interface RootHandle {
   readonly report: (
     problem: { readonly _tag: string; readonly message: string }
   ) => void
+  /** On the kernel: registers, updates or drops an instance's `Router.prefetch` declaration. */
+  readonly declare?:
+    | ((inst: never, declaration: Prefetch | undefined) => void)
+    | undefined
 }
 
 /**
@@ -89,6 +94,8 @@ export interface RootHooks {
     inst: prefetchWalk.Instance,
     declared: { readonly declaration: Prefetch }
   ) => () => void
+  /** What a root on the kernel runs its side with. */
+  readonly kernel?: typeof routeRun.make | undefined
 }
 
 /** @internal */
