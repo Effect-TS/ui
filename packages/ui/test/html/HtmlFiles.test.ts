@@ -254,7 +254,7 @@ describe("HtmlFiles", { concurrent: false }, () => {
       expect(fileClicks).toBe(1)
     }).pipe(Effect.scoped))
 
-  it.effect("direct Files reads resolve the browser document in BrowserHost.mountEffect and honor overrides", () =>
+  it.effect("BrowserHost provides a document-bound Files service outside its context and honors overrides", () =>
     Effect.gen(function*() {
       const picker = yield* pickers
       picker.refuse = true
@@ -271,13 +271,32 @@ describe("HtmlFiles", { concurrent: false }, () => {
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      let acquired: HtmlFiles.Files | undefined
       const readPicked = Effect.gen(function*() {
         const files = yield* HtmlFiles.Files
+        acquired = files
         const picked = yield* files.pick({})
         return { opened: picked.opened }
       })
       const root = yield* BrowserHost.mountEffect(Page, readPicked, app)
       assert.strictEqual(root.model(), false)
+
+      assert.deepStrictEqual(
+        yield* Effect.race(
+          acquired!.pick({}),
+          Effect.as(tick, "timeout" as const)
+        ),
+        { opened: false, files: [] }
+      )
+
+      const layerContext = yield* Layer.build(BrowserHost.layer())
+      assert.deepStrictEqual(
+        yield* Effect.race(
+          Context.get(layerContext, HtmlFiles.Files).pick({}),
+          Effect.as(tick, "timeout" as const)
+        ),
+        { opened: false, files: [] }
+      )
 
       const custom = yield* BrowserHost.mountEffect(
         Page,
@@ -289,18 +308,5 @@ describe("HtmlFiles", { concurrent: false }, () => {
         app
       )
       assert.strictEqual(custom.model(), true)
-    }).pipe(Effect.scoped))
-
-  it.effect("Files acquired from BrowserHost.layer keeps its document when run without that context", () =>
-    Effect.gen(function*() {
-      const picker = yield* pickers
-      picker.refuse = true
-      const context = yield* Layer.build(BrowserHost.layer())
-      const files = Context.get(context, HtmlFiles.Files)
-      const result = yield* Effect.race(
-        files.pick({}),
-        Effect.as(tick, "timeout" as const)
-      )
-      assert.deepStrictEqual(result, { opened: false, files: [] })
     }).pipe(Effect.scoped))
 })

@@ -35,7 +35,7 @@ describe("HtmlImages.Images", () => {
       assert.strictEqual(yield* Fiber.join(fiber), "error")
     }))
 
-  it.effect("direct Images reads resolve the browser document in BrowserHost.mountEffect and honor overrides", () =>
+  it.effect("BrowserHost provides a document-bound Images service outside its context and honors overrides", () =>
     Effect.gen(function*() {
       const Page = Component.define({
         name: "ImagePage",
@@ -50,8 +50,10 @@ describe("HtmlImages.Images", () => {
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      let acquired: HtmlImages.Images | undefined
       const readStatus = Effect.gen(function*() {
         const images = yield* HtmlImages.Images
+        acquired = images
         return {
           status: yield* images.load({
             src: "data:image/gif;base64,R0lGODlhAQABAAAAACw="
@@ -60,6 +62,30 @@ describe("HtmlImages.Images", () => {
       })
       const root = yield* BrowserHost.mountEffect(Page, readStatus, app)
       assert.strictEqual(root.model(), "loaded")
+
+      const timeout = Effect.promise(() =>
+        new Promise<"timeout">((resolve) =>
+          setTimeout(() => resolve("timeout"), 50)
+        )
+      )
+      assert.strictEqual(
+        yield* Effect.race(
+          acquired!.load({ src: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" }),
+          timeout
+        ),
+        "loaded"
+      )
+
+      const layerContext = yield* Layer.build(BrowserHost.layer())
+      assert.strictEqual(
+        yield* Effect.race(
+          Context.get(layerContext, HtmlImages.Images).load({
+            src: "data:image/gif;base64,R0lGODlhAQABAAAAACw="
+          }),
+          timeout
+        ),
+        "loaded"
+      )
 
       const custom = yield* BrowserHost.mountEffect(
         Page,
@@ -71,20 +97,5 @@ describe("HtmlImages.Images", () => {
         app
       )
       assert.strictEqual(custom.model(), "error")
-    }).pipe(Effect.scoped))
-
-  it.effect("Images acquired from BrowserHost.layer keeps its document when run without that context", () =>
-    Effect.gen(function*() {
-      const context = yield* Layer.build(BrowserHost.layer())
-      const images = Context.get(context, HtmlImages.Images)
-      const result = yield* Effect.race(
-        images.load({ src: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" }),
-        Effect.promise(() =>
-          new Promise<"timeout">((resolve) =>
-            setTimeout(() => resolve("timeout"), 50)
-          )
-        )
-      )
-      assert.strictEqual(result, "loaded")
     }).pipe(Effect.scoped))
 })

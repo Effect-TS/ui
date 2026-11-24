@@ -1794,61 +1794,17 @@ describe("Router throttle", { concurrent: false }, () => {
     }).pipe(Effect.provide(Router.memory({ routes: Routes, history })))
   })
 
-  it.effect("changes subscribers see nested navigations in order", () =>
-    Effect.gen(function*() {
-      const router = yield* Router.Router
-      const firstReady = yield* Deferred.make<void>()
-      const secondReady = yield* Deferred.make<void>()
-      const firstSeqs: Array<number> = []
-      const secondSeqs: Array<number> = []
-      const first = yield* router.changes.pipe(
-        Stream.take(3),
-        Stream.runForEach((location) =>
-          Effect.gen(function*() {
-            firstSeqs.push(location.seq)
-            if (location.seq === 0) yield* Deferred.succeed(firstReady, void 0)
-            if (location.seq === 1) {
-              yield* router.navigate("/search?q=c")
-            }
-          })
-        ),
-        Effect.forkChild
-      )
-      const second = yield* router.changes.pipe(
-        Stream.take(3),
-        Stream.runForEach((location) =>
-          Effect.gen(function*() {
-            secondSeqs.push(location.seq)
-            if (location.seq === 0) yield* Deferred.succeed(secondReady, void 0)
-          })
-        ),
-        Effect.forkChild
-      )
-      yield* Deferred.await(firstReady)
-      yield* Deferred.await(secondReady)
-      yield* router.navigate("/search?q=b")
-      yield* Fiber.join(first)
-      yield* Fiber.join(second)
-      assert.deepStrictEqual(firstSeqs, [0, 1, 2])
-      assert.deepStrictEqual(secondSeqs, [0, 1, 2])
-    }).pipe(
-      Effect.provide(
-        Router.memory({
-          routes: Routes,
-          history: Router.memoryHistory("/search")
-        })
-      )
-    ))
-
-  it.effect("a new changes subscriber skips older queued publications and receives same-sequence href emissions", () =>
+  it.effect("changes subscribers see nested navigations in order, new subscribers skip older queued publications, and same-sequence hrefs emit", () =>
     Effect.gen(function*() {
       const router = yield* Router.Router
       const scope = yield* Effect.scope
       const firstReady = yield* Deferred.make<void>()
-      const secondStarted = yield* Deferred.make<void>()
+      const existingReady = yield* Deferred.make<void>()
+      const lateStarted = yield* Deferred.make<void>()
       const firstSeqs: Array<number> = []
-      const secondSeqs: Array<number> = []
-      let second: Fiber.Fiber<void> | undefined
+      const existingSeqs: Array<number> = []
+      const lateSeqs: Array<number> = []
+      let late: Fiber.Fiber<void> | undefined
       const first = yield* router.changes.pipe(
         Stream.take(5),
         Stream.runForEach((location) =>
@@ -1858,13 +1814,13 @@ describe("Router throttle", { concurrent: false }, () => {
             if (location.seq === 1) {
               yield* router.navigate("/search?q=b")
               yield* router.navigate("/search?q=c")
-              second = yield* router.changes.pipe(
+              late = yield* router.changes.pipe(
                 Stream.take(3),
                 Stream.runForEach((loc) =>
                   Effect.gen(function*() {
-                    secondSeqs.push(loc.seq)
-                    if (secondSeqs.length === 1) {
-                      yield* Deferred.succeed(secondStarted, void 0)
+                    lateSeqs.push(loc.seq)
+                    if (lateSeqs.length === 1) {
+                      yield* Deferred.succeed(lateStarted, void 0)
                     }
                   })
                 ),
@@ -1875,7 +1831,20 @@ describe("Router throttle", { concurrent: false }, () => {
         ),
         Effect.forkIn(scope)
       )
+      const existing = yield* router.changes.pipe(
+        Stream.take(6),
+        Stream.runForEach((location) =>
+          Effect.gen(function*() {
+            existingSeqs.push(location.seq)
+            if (location.seq === 0) {
+              yield* Deferred.succeed(existingReady, void 0)
+            }
+          })
+        ),
+        Effect.forkIn(scope)
+      )
       yield* Deferred.await(firstReady)
+      yield* Deferred.await(existingReady)
       yield* Effect.promise(() =>
         new Promise<void>((resolve) => {
           setTimeout(() => {
@@ -1884,13 +1853,15 @@ describe("Router throttle", { concurrent: false }, () => {
           }, 0)
         })
       )
-      yield* Deferred.await(secondStarted)
+      yield* Deferred.await(lateStarted)
       yield* router.navigate("/search?q=d")
       yield* router.navigate("/search?q=d")
       yield* Fiber.join(first)
-      yield* Fiber.join(second!)
+      yield* Fiber.join(existing)
+      yield* Fiber.join(late!)
       assert.deepStrictEqual(firstSeqs, [0, 1, 2, 3, 4])
-      assert.deepStrictEqual(secondSeqs, [3, 4, 4])
+      assert.deepStrictEqual(existingSeqs, [0, 1, 2, 3, 4, 4])
+      assert.deepStrictEqual(lateSeqs, [3, 4, 4])
     }).pipe(
       Effect.scoped,
       Effect.provide(
