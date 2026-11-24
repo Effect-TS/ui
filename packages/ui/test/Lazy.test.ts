@@ -305,6 +305,7 @@ describe("Component.lazy", () => {
     [
       "first shown by its receiver",
       "shown again by its receiver",
+      "shown again by its receiver after its load fails",
       "patched by its author"
     ] as const
   )(
@@ -312,6 +313,8 @@ describe("Component.lazy", () => {
     (when) =>
       provideHost(Effect.gen(function*() {
         let clash = when === "first shown by its receiver"
+        let loads = 0
+        let reject!: () => void
         const Spinner = Component.define({
           name: "Spinner",
           model: Schema.Null,
@@ -321,10 +324,12 @@ describe("Component.lazy", () => {
           update: ($) => $.model,
           view: (h) => h.text("loading")
         })
-        const LazyPage = Component.lazy(
-          "LazyPage",
-          () => new Promise<typeof Page>(() => {})
-        )
+        const LazyPage = Component.lazy("LazyPage", () => {
+          loads++
+          return new Promise<typeof Page>((_, fail) =>
+            reject = () => fail(new Error("offline"))
+          )
+        })
         const Panel = Component.define({
           name: "Panel",
           model: Schema.Boolean,
@@ -356,8 +361,8 @@ describe("Component.lazy", () => {
                     body: LazyPage(s, {
                       key: "p",
                       props: { title: "a" },
-                      fallback: () =>
-                        clash
+                      fallback: (result) =>
+                        clash || AsyncResult.isFailure(result)
                           ? Spinner(h, {})
                           : Spinner(h, { key: "initial" })
                     })
@@ -381,6 +386,13 @@ describe("Component.lazy", () => {
           yield* toggle
           yield* drain
           clash = true
+        } else if (
+          when === "shown again by its receiver after its load fails"
+        ) {
+          yield* toggle
+          yield* drain
+          reject()
+          yield* TestHost.settle
         }
         if (when !== "patched by its author") yield* toggle
         yield* drain
@@ -392,8 +404,67 @@ describe("Component.lazy", () => {
           Cause.pretty(failed[0].cause),
           "/Host renders two children at Spinner[], in the fallback of LazyPage[p]"
         )
+        assert.strictEqual(loads, 1)
       }))
   )
+
+  it.effect("keeps a loading lazy child once its call changes from h to s, with its fallback", () =>
+    provideHost(Effect.gen(function*() {
+      let spun = 0
+      const Spinner = Component.define({
+        name: "Spinner",
+        model: Schema.Number,
+        message: Schema.Never
+      }).make({
+        init: () => ++spun,
+        update: ($) => $.model,
+        view: (h, n) => h.text(`loading${n}`)
+      })
+      const LazyPage = Component.lazy(
+        "LazyPage",
+        () => new Promise<typeof Page>(() => {})
+      )
+      const Msg = UiSchema.TaggedEnum({
+        Kept: {},
+        Shown: { shown: Schema.Boolean }
+      })
+      const Host = Component.define({
+        name: "Host",
+        model: Schema.Struct({ kept: Schema.Boolean, shown: Schema.Boolean }),
+        message: Msg
+      }).make({
+        init: () => ({ kept: false, shown: true }),
+        update: ($, message) =>
+          Msg.match(message, {
+            Kept: () => ({ ...$.model, kept: true }),
+            Shown: ({ shown }) => ({ ...$.model, shown })
+          }),
+        view: (h, { kept, shown }) =>
+          h.keepAlive((s) =>
+            h.el(
+              "main",
+              shown
+                ? LazyPage(kept ? s : h, {
+                  key: "p",
+                  props: { title: "a" },
+                  fallback: () => Spinner(h, {})
+                })
+                : null
+            )
+          )
+      })
+      const root = yield* TestHost.mount(Host, {})
+      const show = Effect.fnUntraced(function*(message: typeof Msg.Type) {
+        root.send(message)
+        yield* TestHost.TestHost.useSync((host) => host.drain(host.budget))
+        return [root.text(), root.pending().length] as const
+      })
+      assert.deepStrictEqual([
+        yield* show(Msg.Kept()),
+        yield* show(Msg.Shown({ shown: false })),
+        yield* show(Msg.Shown({ shown: true }))
+      ], [["loading1", 1], ["", 1], ["loading1", 1]])
+    })))
 
   it.effect("preload loads the module before a child renders", () =>
     provideHost(Effect.gen(function*() {

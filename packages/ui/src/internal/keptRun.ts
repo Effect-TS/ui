@@ -276,7 +276,9 @@ const draw = (
     entry.parked = false
     toggle(fallback, true)
   }
-  ;(view.component as Kernel.Runnable)["~load"]!(author, rec, at)
+  if (lazy.stateOf(view.component as any)._tag !== "Failed") {
+    ;(view.component as Kernel.Runnable)["~load"]!(author, rec, at)
+  }
   Kernel.patchChild(author, rec, view)
 }
 
@@ -419,7 +421,7 @@ export const keeper: Kernel.Keeper = {
     tree.drawn?.(child, true)
     Kernel.patchChild(author, rec, view)
   },
-  patch(inst, old, view) {
+  patch(inst, old, view, at) {
     const named = segment(view)
     let table = inst.kept as Table | undefined
     let entry = table?.kids.get(named)
@@ -432,10 +434,14 @@ export const keeper: Kernel.Keeper = {
         ? undefined
         : Kernel.replace(inst, old, view)
     }
+    const loading = old.inst === inst && old.kids !== undefined
     if (
       (old.v as View.Child<any, any>).alive === undefined &&
-      entry === undefined && old.kids === undefined && !old.inst.closed &&
-      old.inst.parent === inst && old.inst.under === undefined
+      entry === undefined && !old.inst.closed &&
+      (loading
+        ? at === undefined
+        : old.kids === undefined && old.inst.parent === inst &&
+          old.inst.under === undefined)
     ) {
       table = (inst.kept ??= new Table(inst)) as Table
       table.kids.set(
@@ -443,7 +449,7 @@ export const keeper: Kernel.Keeper = {
         entry = {
           inst: old.inst,
           rec: old,
-          loading: undefined,
+          loading: loading ? old : undefined,
           under: undefined,
           parked: false,
           alive: undefined,

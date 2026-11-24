@@ -122,7 +122,8 @@ export interface Keeper {
   readonly patch: (
     inst: Instance,
     old: Rec,
-    view: View.Child<any, any>
+    view: View.Child<any, any>,
+    slot: string | undefined
   ) => Rec | undefined
   readonly release: (owner: Instance, rec: Rec) => boolean
   readonly shows: (
@@ -1274,7 +1275,7 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
       return old
     case "Child":
       return (keeperOf(view) ?? keeperOf(prev as View.Child<any, any>))
-        ?.patch(inst, old, view) ??
+        ?.patch(inst, old, view, slot) ??
         patchChild(inst, old, view)
     case "Outlet": {
       const placed = inst.placed!.get(view.name)
