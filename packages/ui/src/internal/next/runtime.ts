@@ -23,8 +23,10 @@ import * as Executor from "../executor.ts"
 import * as hydrateRun from "../hydrateRun.ts"
 import type * as keptRun from "../keptRun.ts"
 import * as Kernel from "../kernel.ts"
+import * as lazy from "../lazy.ts"
 import * as messageLog from "../messageLog.ts"
 import * as partsRun from "../partsRun.ts"
+import { childName, segment } from "../paths.ts"
 import * as queryCore from "../queryCore.ts"
 import * as Recorder from "../recorder.ts"
 import type * as routeRun from "../routeRun.ts"
@@ -506,6 +508,7 @@ const start = (
       ) return
       const cache = queries.made()
       if (cache !== undefined && cache.pending().length > 0) return
+      if (loadsOf(kernelRoot!.instance).length > 0) return
       for (const f of idleWaiters.splice(0)) f()
     })
   }
@@ -631,7 +634,7 @@ const start = (
         else go()
       }),
     pending: () => pendingOf(instance),
-    loads: () => [],
+    loads: () => loadsOf(instance),
     get cache() {
       return (queries.cache() ?? { pending: () => [] }) as unknown as Root[
         "cache"
@@ -754,6 +757,40 @@ const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
   const kids = rec.kids
   if (kids !== undefined) { for (const kid of kids) pendingIn(kid, out) }
   else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
+}
+
+type Load = ReturnType<Root["loads"]>[number]
+
+/** The slots of `inst` and of the instances it shows that wait for a lazy component's load. */
+const loadsOf = (
+  inst: Kernel.Instance,
+  out: Array<Load> = []
+): Array<Load> => {
+  if (inst.rendered !== undefined) loadsIn(inst, inst.rendered, out)
+  return out
+}
+
+const loadsIn = (
+  inst: Kernel.Instance,
+  rec: Kernel.Rec,
+  out: Array<Load>
+): void => {
+  const view = rec.v
+  const kids = rec.kids
+  if (kids === undefined) {
+    if (view._tag === "Child" && !rec.inst.closed) loadsOf(rec.inst, out)
+    return
+  }
+  if (
+    view._tag === "Child" && rec.inst === inst && lazy.isLazy(view.component) &&
+    lazy.stateOf(view.component)._tag === "Loading"
+  ) {
+    out.push({
+      path: inst.path + "/" + segment(view),
+      name: childName(view.component)
+    })
+  }
+  for (const kid of kids) loadsIn(inst, kid, out)
 }
 
 const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {

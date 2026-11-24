@@ -125,6 +125,19 @@ export interface Runnable {
   readonly "~render"?: ((inst: Instance) => void) | undefined
   /** What runs the component's children written inside `h.keepAlive`, when it's a keep-alive component. */
   readonly "~kept"?: Keeper | undefined
+  /**
+   * A lazy component's: the component it loaded, or `undefined` while it loads or once it failed, when
+   * the slot shows its fallback and `settle` is called for it once the load ends.
+   */
+  readonly "~load"?:
+    | ((
+      owner: Instance,
+      rec: Rec,
+      at: string | undefined
+    ) => Runnable | undefined)
+    | undefined
+  /** A lazy component's: why its load failed. */
+  readonly "~cause"?: (() => Cause.Cause<unknown> | undefined) | undefined
 }
 
 /**
@@ -1038,7 +1051,14 @@ const mountChild = (owner: Instance, rec: Rec, fresh?: boolean): void => {
   }
   const at = slot
   let held: Rec | undefined
-  if (FeatureId in component) {
+  const lazy = component["~load"] !== undefined
+  if (lazy) component = component["~load"](owner, rec, at) ?? component
+  if (lazy && component === view.component) {
+    held = inFallback(
+      owner,
+      () => create(owner, fallbackOf(owner, view, component["~cause"]()))
+    )
+  } else if (FeatureId in component) {
     const ctx = env.ctx
     if (ctx === undefined) {
       if (view.fallback === undefined) {
@@ -1352,7 +1372,16 @@ const patchChild = (
     shown[0] = child === inst
       ? inFallback(
         inst,
-        () => patch(inst, shown[0]!, fallbackOf(inst, view, inst.env.cause))
+        () =>
+          patch(
+            inst,
+            shown[0]!,
+            fallbackOf(
+              inst,
+              view,
+              (view.component as Runnable)["~cause"]?.() ?? inst.env.cause
+            )
+          )
       )
       : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
     return old

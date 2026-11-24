@@ -175,18 +175,6 @@ export const pending: {
     "slot status after SSR > a slot the server rendered whose client Layer isn't ready reports that it awaits the client's Layer":
       "hydration (step 7, unfinished): a server-rendered receiver waiting for its client Layer reports Pending, where today's reports Awaiting"
   },
-  "Lazy.test.ts": {
-    "Component.lazy > shows the fallback until the module loads, which settle waits for, and loads it once":
-      "Component.lazy: the kernel doesn't run it",
-    "Component.lazy > shows the fallback's Failure branch when the load fails, and a retry shows the component in every slot":
-      "Component.lazy: the kernel doesn't run it",
-    "Component.lazy > keeps a lazy keep-alive child once loaded, and closes its Scope when the predicate ends it":
-      "Component.lazy: the kernel doesn't run it",
-    "Component.lazy > preload loads the module before a child renders":
-      "Component.lazy: the kernel doesn't run it",
-    "Component.lazy > the server waits for the load and renders the component":
-      "Component.lazy: the kernel doesn't run it"
-  },
   "html/HtmlServer.test.ts": {
     "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":
       "modal dialogs and popovers on KernelDom (blocked seam)",

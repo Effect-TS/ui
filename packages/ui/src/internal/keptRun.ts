@@ -229,7 +229,8 @@ export const keeper: Kernel.Keeper = {
     if (
       entry !== undefined &&
       (round === entry.round && round >= 0 && entry.rec !== undefined ||
-        entry.inst.component !== view.component)
+        // The component written, as a lazy one's instance runs the one it loaded.
+        (entry.inst.at!.v as View.Child<any, any>).component !== view.component)
     ) {
       failTwice(author, named)
       return blank(author, rec)
