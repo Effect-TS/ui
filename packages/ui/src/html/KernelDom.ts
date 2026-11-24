@@ -360,9 +360,9 @@ export const makeHost = (
     container.addEventListener(name, listener, true)
   }
 
-  // oxlint-disable-next-line no-console
   const sync = options?.head?.(
     document,
+    // oxlint-disable-next-line no-console
     options?.warn ?? ((message) => console.warn(message))
   )
 

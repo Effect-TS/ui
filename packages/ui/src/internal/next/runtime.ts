@@ -57,6 +57,8 @@ const dispatched = { _tag: "Dispatch" } as const
 
 const noCommands: ReadonlyArray<unknown> = []
 
+const ignored: runtime.Dispatched = { _tag: "Ignored", reason: "closed" }
+
 const neutralFold: View.HeadFold = {
   merge: Head.merge,
   title: (head: Head.Head) => head.title
@@ -542,6 +544,8 @@ const start = (
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) =>
       recording.step(() => mounted.send(message, dispatched)),
+    find: () => undefined,
+    dispatch: () => Effect.succeed(ignored),
     pending: () => pendingOf(instance),
     loads: () => [],
     get cache() {
