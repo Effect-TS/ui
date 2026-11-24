@@ -552,6 +552,125 @@ describe("Inspector", () => {
     )
   })
 
+  it("summarizes instances as entries arrive and leave", () => {
+    const base = (seq: number, instance: number, path: string) => ({
+      session: "s",
+      seq,
+      at: seq,
+      path,
+      instance,
+      component: path.slice(path.lastIndexOf("/") + 1).replace(/\[.*$/, "")
+    })
+    const mounted = (
+      seq: number,
+      instance: number,
+      path: string,
+      commands: Array<string> = []
+    ): Entry => ({
+      ...base(seq, instance, path),
+      _tag: "Mounted",
+      props: {},
+      model: null,
+      commands: commands.map((name) => ({
+        _tag: "Effect",
+        name,
+        group: null,
+        args: null
+      })),
+      events: [],
+      adopted: false
+    })
+    const update = (
+      seq: number,
+      instance: number,
+      path: string,
+      tag: string
+    ): Entry => ({
+      ...base(seq, instance, path),
+      _tag: "Update",
+      source: { _tag: "Dispatch" },
+      message: { _tag: tag },
+      props: {},
+      model: null,
+      commands: [],
+      events: [],
+      lists: [],
+      sends: []
+    })
+    const save = { seq: 4, index: 0 }
+    const inspector = Inspector.make({ exclude: ["Moved"] })
+    inspector.ingest([
+      mounted(1, 1, "/App"),
+      mounted(2, 2, "/App/List"),
+      mounted(3, 3, "/App/List/Group[g]"),
+      mounted(4, 4, "/App/List/Group[g]/Row[r1]", ["test/Save"]),
+      {
+        ...base(5, 4, "/App/List/Group[g]/Row[r1]"),
+        _tag: "CommandStarted",
+        name: "test/Save",
+        issued: save,
+        spanId: "",
+        traceId: ""
+      }
+    ])
+    const session = inspector.sessions()[0]
+    const paths = (summaries: ReadonlyArray<Inspector.Summary>) =>
+      summaries.map((summary) => summary.path)
+
+    assert.strictEqual(session.instanceCount(), 4)
+    assert.deepStrictEqual(session.summaryAt("/App")!.below, {
+      instances: 3,
+      failing: 0,
+      running: 1
+    })
+
+    inspector.ingest([
+      update(6, 2, "/App/List", "Clicked"),
+      {
+        ...base(7, 4, "/App/List/Group[g]/Row[r1]"),
+        _tag: "CommandDropped",
+        name: "test/Save",
+        issued: save,
+        reason: "server"
+      },
+      update(8, 3, "/App/List/Group[g]", "Moved")
+    ])
+    const row = session.summary(4)!
+    assert.deepStrictEqual([row.waiting, row.running, row.ended, row.latest], [
+      0,
+      0,
+      [{ reason: "server", count: 1 }],
+      7
+    ])
+    assert.deepStrictEqual(session.summaryAt("/App")!.below, {
+      instances: 3,
+      failing: 1,
+      running: 0
+    })
+    assert.deepStrictEqual(paths(session.active()), [
+      "/App/List/Group[g]/Row[r1]",
+      "/App/List"
+    ])
+    assert.deepStrictEqual(paths(session.children("")), ["/App"])
+    assert.deepStrictEqual(paths(session.children("/App/List")), [
+      "/App/List/Group[g]"
+    ])
+    assert.deepStrictEqual(paths(session.find("row[R")), [
+      "/App/List/Group[g]/Row[r1]"
+    ])
+    assert.deepStrictEqual(paths(session.find("group")), ["/App/List/Group[g]"])
+
+    session.clear()
+    assert.deepStrictEqual(session.active(), [])
+    assert.deepStrictEqual(session.summary(4)!.ended, [])
+    assert.strictEqual(session.summary(4)!.latest, undefined)
+    assert.deepStrictEqual(session.summaryAt("/App")!.below, {
+      instances: 3,
+      failing: 0,
+      running: 0
+    })
+  })
+
   it("diffs nested values by key and by index", () => {
     assert.deepStrictEqual(
       Inspector.diff(

@@ -11,6 +11,7 @@ import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
+import { isFailure } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
 
@@ -89,6 +90,7 @@ export const make = (options: {
       const lock = Semaphore.makeUnsafe(1)
       const origins = new Map<string, number>()
       const latest = new Map<string, number>()
+      let failures = 0
       const changes = yield* PubSub.sliding<void>(1)
       const states = yield* PubSub.sliding<void>(1)
       const changed = () => {
@@ -117,6 +119,7 @@ export const make = (options: {
         paintable: (session, seq) =>
           roots.has(session) && history.holds(session, seq),
         paused: () => paused?.at,
+        failures: () => failures,
         open: load(openKey) === true
       }
       const unpause: Effect.Effect<void> = Effect.suspend(() => {
@@ -198,7 +201,7 @@ export const make = (options: {
         "position:fixed;inset:auto;" + corners[position] +
           ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
           "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
-          "box-shadow:0 8px 28px rgb(0 0 0 / .14)"
+          "box-shadow:0 8px 28px light-dark(rgb(0 0 0 / .14), rgb(0 0 0 / .5))"
       )
       frame.srcdoc =
         "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
@@ -313,6 +316,7 @@ export const make = (options: {
         })
       )
       const record = (entry: MessageLog.Entry) => {
+        if (isFailure(entry)) failures++
         const hide = isExcluded(entry)
         if (hide) {
           let seqs = excluded.get(entry.session)

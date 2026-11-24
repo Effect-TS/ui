@@ -486,9 +486,9 @@ export const layer = (server: Server) => {
           s.instances().map((instance) =>
             omitNull({
               ...instance,
-              status: Read.statusesOf(s, instance).map((status) =>
-                status.text
-              ).join(", ") || undefined
+              status: Read.statusesOf(s.summary(instance.instance)!).map((
+                status
+              ) => status.text).join(", ") || undefined
             })
           )
         )),

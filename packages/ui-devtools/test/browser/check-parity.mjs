@@ -108,11 +108,18 @@ try {
     "Clear empties the timeline",
     afterClear
   )
+  const find = frame.getByRole("searchbox", { name: "Find an instance" })
+  const found = []
+  for (const name of ["counter", "side"]) {
+    await find.fill(name)
+    await page.waitForTimeout(100)
+    found.push(...(await snapshot()).instances)
+  }
+  await find.fill("")
   expect(
-    afterClear.instances.includes("Counter[counter]") &&
-      afterClear.instances.includes("Side[side]"),
-    "Clear keeps mounted instances in the instance list",
-    afterClear.instances
+    found.includes("Counter[counter]") && found.includes("Side[side]"),
+    "Clear keeps mounted instances, so Find still reaches them",
+    { listed: afterClear.instances, found }
   )
 
   await page.getByRole("button", { name: "Count" }).click()
