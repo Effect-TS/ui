@@ -91,6 +91,10 @@
   outline: 0;
 }
 
+.diagram-item + .diagram-item {
+  margin-top: 2px;
+}
+
 .diagram-item[data-highlighted] {
   background: var(--muted);
 }
