@@ -215,6 +215,10 @@ const keep = (tree: Kernel.Tree, entry: Entry): void => {
   }
 }
 
+/** Whether `rec` holds a kept child that hasn't started: drawn by its author, and not left blank. */
+const held = (author: Inst, rec: Rec): boolean =>
+  rec.inst === author && rec.kids![0]!.v !== blankView
+
 const blank = (author: Inst, rec: Rec): void => {
   rec.kids = [author.tree.ops.create(author, blankView)]
 }
@@ -256,6 +260,8 @@ export const keeper: Kernel.Keeper = {
     }
     if (entry === undefined) {
       ops.mountChild(author, rec, true)
+      // Held, or in a fallback: it joins the table once it settles.
+      if (rec.inst === author) return
       table.kids.set(named, {
         inst: rec.inst,
         rec,
@@ -295,6 +301,8 @@ export const keeper: Kernel.Keeper = {
     const table = inst.kept as Table | undefined
     const entry = table?.kids.get(segment(view))
     if (entry === undefined || entry.rec !== old) {
+      // A held one is patched as any held child is.
+      if (held(inst, old)) return undefined
       // A blank, or a Rec whose child moved or ended: it's written again.
       return inst.tree.ops.replace(inst, old, view)
     }
@@ -308,7 +316,8 @@ export const keeper: Kernel.Keeper = {
     return undefined
   },
   release(owner, rec) {
-    if (rec.inst === owner) return true
+    // A held one is released as any held child is.
+    if (rec.inst === owner) return !held(owner, rec)
     const entry = (owner.kept as Table | undefined)?.kids.get(
       segment(rec.v as View.Child<any, any>)
     )

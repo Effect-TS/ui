@@ -48,6 +48,17 @@ export interface Root {
   readonly navigated?: (() => void) | undefined
 }
 
+/** A child held until its state decodes, and what it would start from. */
+interface Held {
+  readonly owner: Kernel.Instance
+  readonly rec: Kernel.Rec
+  readonly path: string
+  /** Its state, the states below it and their `~reported`, as saved. */
+  readonly saved: Saved
+  /** The notes of the kept children below it, by author. */
+  readonly notes: Saved | undefined
+}
+
 /**
  * A root's part in history restore and navigation.
  *
@@ -65,6 +76,13 @@ export interface Routed {
   readonly restored: (inst: Kernel.Instance) => boolean
   /** Holds a child whose saved state decodes asynchronously, until it has. */
   readonly hold: NonNullable<Kernel.Host["hold"]>
+  /** Saves what a child held elsewhere would start from, until the returned function is called. */
+  readonly heldFor: (
+    owner: Kernel.Instance,
+    rec: Kernel.Rec,
+    path: string,
+    found: services.PageState
+  ) => () => void
   /** Attaches the root to the Router, once it has rendered. */
   readonly attach: (instance: Kernel.Instance) => void
   /** Tells the Router a flush committed. */
@@ -246,15 +264,8 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     save(inst, out)
     // Below one whose Layer is building, what's drawn holds the server's state, which isn't saved.
     if (inst.env.ctx === undefined && inst.env.cause === undefined) return
-    for (const [owner, saved, notes] of waitingFor.values()) {
-      if (owner !== inst) continue
-      for (const key in saved) {
-        if (key !== "~reported") out[key] = saved[key]
-      }
-      Object.assign((out["~reported"] ??= {}) as Saved, saved["~reported"])
-      for (const author in notes) {
-        Object.assign(keptIn(out, top, author), notes[author])
-      }
+    for (const held of waitingFor.values()) {
+      if (held.owner === inst) keepHeld(held, out, top)
     }
     for (const child of childrenOf(inst.rendered)) {
       if ((child.at!.v as View.Child<any, any>).alive === undefined) {
@@ -305,10 +316,53 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     return undefined
   }
   // What each held child would restore, under the instance that draws it.
-  const waitingFor = new Map<
-    Kernel.Rec,
-    readonly [Kernel.Instance, Saved, Saved]
-  >()
+  const waitingFor = new Map<Kernel.Rec, Held>()
+  /** Saves a held child as it would start: its own state through its `restore`, and what's below it. */
+  const keepHeld = (held: Held, out: Saved, top: Saved) => {
+    const { path, saved } = held
+    const view = held.rec.v as View.Child<any, any>
+    const to = view.alive === undefined
+      ? out
+      : (keptIn(out, top, held.owner.path)[path] = {}) as Saved
+    const reported = saved["~reported"] as Saved | undefined
+    for (const key in saved) {
+      if (key === path || key[0] === "~") continue
+      to[key] = saved[key]
+      if (reported?.[key] !== undefined) {
+        ;((to["~reported"] ??= {}) as Saved)[key] = reported[key]
+      }
+    }
+    for (const author in held.notes) {
+      Object.assign(keptIn(to, top, author), held.notes[author])
+    }
+    const component = view.component as unknown as Component.Any
+    const restore = component.definition.restore
+    const state = saved[path]
+    if (state === undefined || restore === false) return
+    const found = { state, reported: reported?.[path] }
+    const inst = { path, component } as unknown as Kernel.Instance
+    if (restore === undefined) return write(inst, to, Exit.succeed(found))
+    const codec = stateCodecOf(component)
+    const encoded = runCodec(
+      Effect.flatMapEager(codec.decode(state), (decoded) =>
+        Effect.mapEager(
+          codec.encode(restore(decoded.model, view.props), decoded.results),
+          (state) => ({ state, reported: found.reported })
+        ))
+    )
+    if (Exit.isExit(encoded)) return write(inst, to, encoded as never)
+    encoded.addObserver((exit) => write(inst, to, exit as never))
+  }
+  const heldFor: Routed["heldFor"] = (owner, rec, path, found) => {
+    waitingFor.set(rec, {
+      owner,
+      rec,
+      path,
+      saved: { [path]: found.state, "~reported": { [path]: found.reported } },
+      notes: undefined
+    })
+    return () => waitingFor.delete(rec)
+  }
   // The saved state a hold took for each path, decoded, for the instance that starts there.
   const taken = new Map<
     string,
@@ -317,40 +371,50 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
   const hold: Routed["hold"] = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
     const component = view.component as unknown as Component.Any
-    if (
-      view.alive !== undefined || component.definition?.restore === false
-    ) return false
-    for (let up: Kernel.Instance | undefined = owner; up; up = up.parent) {
-      if (supplies.has(up)) return false
-    }
+    if (component.definition?.restore === false) return false
     const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
-    const found = hooks.restore(path)
+    // Where it restores from, as `init` finds it: a kept child's notes, those of a kept child above, or
+    // the entry.
+    let own: Saved | undefined
+    if (view.alive !== undefined) own = waits.get(owner)?.[path] as Saved
+    for (
+      let up: Kernel.Instance | undefined = owner;
+      !own && up;
+      up = up.parent
+    ) {
+      own = supplies.get(up)
+    }
+    const found = own === undefined
+      ? hooks.restore(path)
+      : own[path] === undefined
+      ? undefined
+      : { state: own[path], reported: (own["~reported"] as Saved)?.[path] }
     if (found === undefined) return false
     const decoded = runCodec(stateCodecOf(component).decode(found.state))
     if (Exit.isExit(decoded)) {
       taken.set(path, [found, decoded])
       return false
     }
-    // Until it starts, a snapshot saves what it would restore: its state and what's saved below it.
-    const entry = hooks.entry() as Saved | undefined
+    // Until it starts, a snapshot saves what it would restore: what's saved at and below it, and the
+    // notes of the kept children below it, by author.
+    const entry = own ?? hooks.entry() as Saved | undefined
+    // Restoring took its own state out of the entry.
     const saved: Saved = { [path]: found.state }
-    const reported: Saved = {}
-    if (found.reported !== undefined) reported[path] = found.reported
     for (const key in entry) {
-      if (!key.startsWith(path + "/")) continue
-      saved[key] = entry[key]
-      const own = (entry["~reported"] as Saved | undefined)?.[key]
-      if (own !== undefined) reported[key] = own
+      if (key.startsWith(path + "/")) saved[key] = entry[key]
     }
-    saved["~reported"] = reported
-    // And the notes of the kept children below it, by author.
+    saved["~reported"] = {
+      ...entry?.["~reported"] as Saved | undefined,
+      [path]: found.reported
+    }
+    const kept = own === undefined ? popped : own["~kept"] as Saved | undefined
     const notes: Saved = {}
-    for (const author in popped) {
+    for (const author in kept) {
       if (author === path || author.startsWith(path + "/")) {
-        notes[author] = popped[author]
+        notes[author] = kept[author]
       }
     }
-    waitingFor.set(rec, [owner, saved, notes])
+    waitingFor.set(rec, { owner, rec, path, saved, notes })
     decoded.addObserver((exit) => {
       const tree = owner.tree
       tree.schedule(() => {
@@ -512,6 +576,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     },
     restored: (inst) => restored.has(inst),
     hold,
+    heldFor,
     attach: (inst) => {
       instance = inst
       inst.tree.watched = (at, query, argsKey) =>

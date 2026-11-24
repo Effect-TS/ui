@@ -107,7 +107,13 @@ export const make = (
   base: Kernel.Host,
   adoption: Adoption | undefined,
   settled: () => void,
-  root?: readonly [string, Exit.Exit<Decoded, unknown>]
+  root?: readonly [string, Exit.Exit<Decoded, unknown>],
+  waits?: (
+    owner: Kernel.Instance,
+    rec: Kernel.Rec,
+    path: string,
+    found: { readonly state: unknown; readonly reported: unknown }
+  ) => () => void
 ): Hydration => {
   const deferred = new Set(state["~deferred"])
   const adopting = new WeakSet<Kernel.Instance>()
@@ -199,9 +205,15 @@ export const make = (
     }
     active?.hold(path)
     held.set(rec, path)
+    // Until it starts, history saves the server's state for it.
+    const unwait = waits?.(owner, rec, path, {
+      state: state[path],
+      reported: state["~reported"]?.[path]
+    })
     exit.addObserver((exit) => {
       const tree = owner.tree
       tree.schedule(() => {
+        unwait?.()
         held.delete(rec)
         const placeholder = rec.inst === owner && rec.kids !== undefined
           ? rec.kids[0]!.node

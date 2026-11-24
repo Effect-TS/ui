@@ -263,6 +263,8 @@ const watch = (
   state: State
 ): ReadonlyArray<() => void> => {
   const bound = boundOf(inst)
+  // Before a query writes, every result is empty, as a kept child's predicate reads it.
+  inst.results ??= bound.empty
   let declared: ReadonlyArray<object & { readonly key: string }>
   try {
     declared = bound.context(

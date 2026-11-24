@@ -560,7 +560,8 @@ const start = (
       base,
       domHost.adopt?.(base, container, "/" + component.definition.name),
       checkAdopted,
-      decodedRoot
+      decodedRoot,
+      routing?.heldFor
     )
   const hydratedAt = clock.currentTimeMillisUnsafe()
   const idleWaiters: Array<() => void> = []
