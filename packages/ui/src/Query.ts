@@ -72,6 +72,7 @@ import type * as Types from "effect/Types"
 import * as componentQueries from "./internal/queries.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
+import * as queryRun from "./internal/queryRun.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 
 /**
@@ -5954,6 +5955,8 @@ queryCore.load({
   buildCache,
   defOf,
   infiniteItems,
+  internals,
+  run: queryRun,
   makeSnapshot,
   makeSnapshotMap,
   sameMore,

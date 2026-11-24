@@ -2298,9 +2298,16 @@ const Proto = Object.assign(Object.create(Function.prototype), {
     return Pipeable.pipeArguments(this, arguments)
   },
   // The kernel calls it as the instance's Model or props change.
-  "~sync"(this: Any, inst: unknown) {
-    if (this.subscriptions !== undefined) {
+  "~sync"(this: Any, inst: unknown, next: unknown) {
+    if (this["~queries"] !== undefined) {
+      queryCore.loaded!.run.sync(inst as never, next as never)
+    } else if (this.subscriptions !== undefined) {
       subscriptionCore.loaded?.(inst as never)
+    }
+  },
+  "~first"(this: Any, inst: unknown) {
+    if (this["~queries"] !== undefined) {
+      queryCore.loaded!.run.first(inst as never)
     }
   }
 })

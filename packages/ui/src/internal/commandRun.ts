@@ -9,6 +9,7 @@
  */
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import type * as Fiber from "effect/Fiber"
@@ -17,12 +18,15 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Command from "../Command.ts"
 import type * as MessageLog from "../MessageLog.ts"
+import type * as Query from "../Query.ts"
 import { going, heldBy, hold } from "./closing.ts"
+import { defer, routed } from "./due.ts"
 import { follow, fork, servicesOf } from "./fork.ts"
 import type * as Kernel from "./kernel.ts"
 import { isNoop } from "./noop.ts"
-import { Problems } from "./queryCore.ts"
+import * as queryCore from "./queryCore.ts"
 import * as schedule from "./schedule.ts"
+import { isNavigation } from "./services.ts"
 
 type Issued =
   | Command.Issued<any, any, never, "Effect">
@@ -46,6 +50,17 @@ interface Run {
   cut: (<A>(f: () => A) => A) | undefined
   /** Its start waits for the next read of a keyed provide's keys: a change keeps it. */
   gated: boolean
+  /** What the query cache knows of it, for a Command service once `Query` is loaded. */
+  handle: Query.RunHandle | undefined
+  /** Under `Command.afterRefetch`: holding its result until its refetches settle. */
+  waiting: boolean
+  waited:
+    | {
+      readonly waitEnded: MessageLog.WaitEnded
+      readonly outstanding: ReadonlyArray<Query.AwaitedEntry>
+    }
+    | undefined
+  cancelWait: (() => void) | undefined
 }
 
 type CleanupFailed = (
@@ -71,6 +86,7 @@ class Runs implements Kernel.Runs {
    */
   close(): void {
     const inst = this.inst
+    queryCore.loaded?.run.closing(inst)
     const waits = heldBy(inst)
     const stopAll = () => {
       for (const run of this.list.slice()) this.stop(run)
@@ -116,6 +132,7 @@ class Runs implements Kernel.Runs {
     this.list.map((run) => ({ name: run.command.name, status: run.status }))
   remove(run: Run): void {
     run.done = true
+    early.get(this.inst.tree)?.delete(run)
     const index = this.list.indexOf(run)
     if (index >= 0) this.list.splice(index, 1)
   }
@@ -138,11 +155,13 @@ class Runs implements Kernel.Runs {
    * holds its group as `stopping` until the fiber exits. An awaiting run delivers at once, unless its
    * instance is gone.
    */
-  stop(run: Run): void {
+  stop(run: Run, by: MessageLog.WaitEnded = "interrupt"): void {
     if (run.done) return
     const inst = this.inst
     if (run.held !== undefined) {
-      if (inst.closed || inst.tree.closed) {
+      const closed = inst.closed || inst.tree.closed
+      endWait(run, closed ? "closed" : by)
+      if (closed) {
         run.held = undefined
         this.remove(run)
         ended(inst, run)
@@ -158,6 +177,7 @@ class Runs implements Kernel.Runs {
       return
     }
     this.remove(run)
+    if (fiber === undefined) run.handle?.finish({ _tag: "Stopped" })
     interrupted(inst, run)
     redraw(inst)
     this.promote(run)
@@ -222,24 +242,63 @@ class Runs implements Kernel.Runs {
           spanId: span.spanId,
           traceId: span.traceId
         }
-        return command._tag === "Effect"
-          ? command.work
-          : Stream.runForEach(
-            command.work,
-            (element) =>
-              Effect.sync(() => send(command.resolve(element as never)))
-          )
+        const work: Effect.Effect<unknown, unknown, any> =
+          command._tag === "Effect"
+            ? command.work
+            : Stream.runForEach(
+              command.work,
+              (element) =>
+                Effect.sync(() => send(command.resolve(element as never)))
+            )
+        const writes = command.writes as
+          | ((success: unknown) => ReadonlyArray<Query.Write>)
+          | undefined
+        if (run.handle !== undefined) return run.handle.run(work, writes)
+        if (writes === undefined) return work
+        return Effect.uninterruptibleMask((restore) =>
+          Effect.flatMap(Effect.exit(restore(work)), (exit) => {
+            let sets: ReadonlyArray<Query.Write> | undefined
+            if (run.handle === undefined && exit._tag === "Success") {
+              try {
+                sets = writes(exit.value)
+              } catch (error) {
+                early.get(tree)?.delete(run)
+                return Effect.die(error)
+              }
+              if (sets.length > 0) {
+                queryCore.loaded!.run.cacheOf(inst)
+                beginEarly(tree)
+              }
+            }
+            const handle = run.handle
+            const made = sets
+            if (handle !== undefined) {
+              return handle.run(
+                exit,
+                made === undefined ? writes : () => made
+              )
+            }
+            early.get(tree)?.delete(run)
+            return exit
+          })
+        )
       }
     )
-    const fiber = fork(
-      tree,
-      Context.add(ctx, Scope.Scope, scope),
-      Effect.onExit(program, (exit) => Scope.close(scope, exit))
-    )
-    run.fiber = fiber
-    fiber.addObserver((exit) => {
-      follow(tree)(() => this.exited(run, exit, source))
-    })
+    const go = (now?: boolean) => {
+      if (run.done || inst.closed) return
+      const fiber = fork(
+        tree,
+        Context.add(ctx, Scope.Scope, scope),
+        Effect.onExit(program, (exit) => Scope.close(scope, exit)),
+        now
+      )
+      run.fiber = fiber
+      fiber.addObserver((exit) => {
+        follow(tree)(() => this.exited(run, exit, source))
+      })
+    }
+    if (routed.has(tree) && isNavigation(command)) defer(tree, () => go(true))
+    else go()
   }
   /** A run's fiber exited: its result is sent, unless the run was stopped or its instance is gone. */
   exited(
@@ -249,13 +308,17 @@ class Runs implements Kernel.Runs {
   ): void {
     const inst = this.inst
     const command = run.command
+    run.handle?.finish({ _tag: "Stopped" })
     if (run.status === "stopping") {
       // A stopped run sends nothing. A defect in its cleanup can't fail the run that replaced it: it's
       // reported.
       this.remove(run)
       run.cut!(() => interrupted(inst, run))
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) {
-        const report = Context.get(inst.env.ctx ?? Context.empty(), Problems)
+        const report = Context.get(
+          inst.env.ctx ?? Context.empty(),
+          queryCore.Problems
+        )
         try {
           report(
             this.cleanupFailed(inst.path, command.name, exit.cause) as never
@@ -271,6 +334,8 @@ class Runs implements Kernel.Runs {
     if (run.done) return
     const stopped = Exit.isFailure(exit) && !Cause.hasDies(exit.cause) &&
       !Cause.hasFails(exit.cause)
+    const waits = command._tag === "Effect" &&
+      command.afterRefetch !== undefined && Exit.isSuccess(exit)
     if (inst.closed || stopped) {
       // It ended while its instance closes, before the close stopped it: its message is dropped.
       this.remove(run)
@@ -285,6 +350,12 @@ class Runs implements Kernel.Runs {
               exit.cause
             )
           )
+        }
+        if (waits) {
+          run.waited = {
+            waitEnded: "closed",
+            outstanding: run.handle?.outstanding() ?? []
+          }
         }
         ended(inst, run)
       }
@@ -341,7 +412,55 @@ class Runs implements Kernel.Runs {
     run.status = "awaiting"
     run.held = { message, source }
     this.promote(run)
+    if (waits) this.wait(run)
     this.release(run)
+  }
+  /**
+   * At fiber exit of a run issued with `Command.afterRefetch`: its result waits for the refetches the
+   * cache fixed when it applied the invalidation, or for the budget.
+   */
+  wait(run: Run): void {
+    const inst = this.inst
+    const handle = run.handle
+    const awaited = handle?.awaited() ?? []
+    if (handle === undefined || awaited.length === 0) {
+      run.waited = { waitEnded: "nothing", outstanding: [] }
+      return
+    }
+    inst.tree.log?.(inst, {
+      _tag: "CommandAwaiting",
+      name: run.command.name,
+      issued: run.issued,
+      entries: awaited
+    })
+    run.waiting = true
+    if (handle.outstanding().length === 0) return endWait(run, "settled")
+    const budget = run.command.afterRefetch!
+    const remaining = Duration.isFinite(budget)
+      ? Math.max(0, Duration.toMillis(budget) - handle.sinceApplied())
+      : Infinity
+    if (remaining === 0) return endWait(run, "budget")
+    const resume = follow(inst.tree)
+    const end = (by: MessageLog.WaitEnded) =>
+      resume(() => {
+        endWait(run, by)
+        defer(inst.tree, () => this.release(run))
+      })
+    const off = handle.onRefetched(() => end("settled"))
+    const timer = Number.isFinite(remaining)
+      ? fork(
+        inst.tree,
+        inst.env.ctx ?? (Context.empty() as Context.Context<any>),
+        Effect.andThen(
+          Effect.sleep(Duration.millis(remaining)),
+          Effect.sync(() => end("budget"))
+        )
+      )
+      : undefined
+    run.cancelWait = () => {
+      off()
+      timer?.interruptUnsafe()
+    }
   }
   /** Delivers the results of `run`'s group that can go now, in issue order under `queue`. */
   release(run: Run): void {
@@ -350,7 +469,7 @@ class Runs implements Kernel.Runs {
       const next = schedule.deliverable(
         entriesOf(this),
         entryOf(run),
-        () => true
+        (other) => !other.waiting
       )
       if (next === undefined) return
       if (this.inst.closed || this.inst.tree.closed) {
@@ -374,6 +493,18 @@ class Runs implements Kernel.Runs {
   }
 }
 
+const endWait = (run: Run, by: MessageLog.WaitEnded): void => {
+  if (!run.waiting) return
+  run.waiting = false
+  run.waited = {
+    waitEnded: by,
+    outstanding: by === "settled" ? [] : run.handle!.outstanding()
+  }
+  const cancel = run.cancelWait
+  run.cancelWait = undefined
+  cancel?.()
+}
+
 /** Renders the instance again, for `h.isRunning`. */
 const redraw = (inst: Kernel.Instance): void => {
   if (!inst.closed) inst.tree.ops.markDirty(inst)
@@ -394,6 +525,28 @@ const entriesOf = (runs: Runs) => runs.list.map(entryOf)
  *
  * @internal
  */
+const early = new WeakMap<Kernel.Tree, Map<Run, Kernel.Instance>>()
+
+const begin = (inst: Kernel.Instance, command: Issued): Query.RunHandle =>
+  queryCore.loaded!.run.cacheOf(inst).beginRun({
+    command: command.name,
+    invalidates: command.invalidates as ReadonlyArray<Query.Target>,
+    optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
+    afterRefetch: command._tag === "Effect" &&
+      command.afterRefetch !== undefined
+  })
+
+const beginEarly = (tree: Kernel.Tree): void => {
+  const runs = early.get(tree)
+  if (runs === undefined) return
+  early.delete(tree)
+  tree.cached = undefined
+  for (const [run, at] of runs) {
+    run.handle = begin(at, run.command)
+    if (run.spanId !== undefined) run.handle.start()
+  }
+}
+
 export const issue = (
   inst: Kernel.Instance,
   command: Command.Command<any, any>,
@@ -407,7 +560,27 @@ export const issue = (
     for (const entry of decision.interrupt) runs.stop(entry.value)
     return
   }
-  for (const entry of decision.interrupt) runs.stop(entry.value)
+  let handle: Query.RunHandle | undefined
+  if (command.service !== undefined && queryCore.loaded !== undefined) {
+    try {
+      queryCore.loaded.run.cacheOf(inst)
+      beginEarly(inst.tree)
+      handle = begin(inst, command)
+    } catch (error) {
+      const where = inst.rendered === undefined && inst.failure === undefined
+        ? "init"
+        : "update"
+      return inst.tree.ops.fail(
+        inst,
+        where,
+        Cause.die(error),
+        undefined,
+        undefined,
+        command.name
+      )
+    }
+  }
+  for (const entry of decision.interrupt) runs.stop(entry.value, "switch")
   const run: Run = {
     command,
     issued,
@@ -419,9 +592,25 @@ export const issue = (
     spanId: undefined,
     traceId: undefined,
     cut: undefined,
-    gated: false
+    gated: false,
+    handle,
+    waiting: false,
+    waited: undefined,
+    cancelWait: undefined
   }
   runs.list.push(run)
+  if (
+    handle === undefined && command.service !== undefined &&
+    command.writes !== undefined
+  ) {
+    let waiting = early.get(inst.tree)
+    if (waiting === undefined) {
+      const tree = inst.tree
+      early.set(tree, waiting = new Map())
+      tree.cached = () => beginEarly(tree)
+    }
+    waiting.set(run, inst)
+  }
   if (run.status === "running") runs.start(run)
   // Queued behind the runs `switch` cut, it starts now if none of them had a fiber to wait for.
   else runs.promote(run)
@@ -435,7 +624,8 @@ const ended = (inst: Kernel.Instance, run: Run): void => {
     issued: run.issued,
     spanId: run.spanId,
     traceId: run.traceId,
-    silent: run.silent === true
+    silent: run.silent === true,
+    ...run.waited
   })
 }
 

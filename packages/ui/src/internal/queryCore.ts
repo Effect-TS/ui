@@ -11,6 +11,7 @@ import * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
+import type * as queryRun from "./queryRun.ts"
 
 // -----------------------------------------------------------------------------
 // The loaded module
@@ -47,6 +48,7 @@ export interface Loaded extends
     typeof Query,
     | "defOf"
     | "infiniteItems"
+    | "internals"
     | "makeSnapshot"
     | "makeSnapshotMap"
     | "sameMore"
@@ -62,6 +64,8 @@ export interface Loaded extends
     options: CacheOptions
   ) => { readonly cache: Cache; readonly dispose: Effect.Effect<void> }
   readonly bind: typeof componentQueries.bind
+  /** What runs a component's queries on the kernel. */
+  readonly run: typeof queryRun
 }
 
 /**

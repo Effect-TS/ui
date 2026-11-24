@@ -7,6 +7,7 @@
 import type * as Clock from "effect/Clock"
 import type * as MessageLog from "../MessageLog.ts"
 import * as Kernel from "./kernel.ts"
+import { boundOf } from "./queryCore.ts"
 
 /** @internal */
 export interface Recording {
@@ -17,6 +18,10 @@ export interface Recording {
   readonly session: <A>(f: () => A) => A
   /** Runs a function later as what follows from the fact running now, or as a fact of its own. */
   readonly follow: NonNullable<Kernel.Tree["follow"]>
+  /** Logs an entry about the tree, such as a fetch that started. */
+  readonly tree: (
+    draft: { readonly _tag: string; readonly [field: string]: unknown }
+  ) => void
 }
 
 const dispatched: MessageLog.Source = { _tag: "Dispatch" }
@@ -129,11 +134,13 @@ export const make = (
     if (draft._tag === "Update" || draft._tag === "Mounted") {
       const boundary = boundaryOf(inst)
       if (boundary !== undefined) entry.boundary = boundary
+      const bound = boundOf(inst.component as never)
+      if (bound !== undefined) entry.queries = inst.results ?? bound.empty
     }
     switch (draft._tag) {
       case "Update": {
         entry.source = sourceOf(draft.source)
-        entry.lists = []
+        entry.lists = draft.lists ?? []
         entry.sends = []
         if (draft.model !== inst.model && origin !== undefined) {
           causes.set(inst, origin)
@@ -184,6 +191,13 @@ export const make = (
     follow: () => {
       const from = origin
       return from === undefined ? step : (f) => under(from, f)
+    },
+    tree: (draft) => {
+      if (!log.enabled) return
+      const cause = origin
+      log.record(
+        { ...draft, ...stamp(cause, number()) } as unknown as MessageLog.Entry
+      )
     }
   }
 }

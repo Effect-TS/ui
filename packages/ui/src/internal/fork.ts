@@ -23,20 +23,21 @@ export const follow = (tree: Kernel.Tree): <A>(f: () => A) => A =>
   tree.follow === undefined ? now : tree.follow()
 
 /**
- * Forks `effect` on the Scheduler the mount's Executor gives, never inside the step that started it, as a
- * fiber the tree's close waits for.
+ * Forks `effect` on the Scheduler the mount's Executor gives, as a fiber the tree's close waits for. Unless
+ * `now`, it never runs inside the step that started it.
  *
  * @internal
  */
 export const fork = <A, E>(
   tree: Kernel.Tree,
   context: Context.Context<any>,
-  effect: Effect.Effect<A, E, any>
+  effect: Effect.Effect<A, E, any>,
+  now?: boolean
 ): Fiber.Fiber<A, E> =>
   owned(
     tree,
     Effect.runForkWith(withScheduler(context))(
-      Effect.andThen(Effect.yieldNow, effect)
+      now ? effect : Effect.andThen(Effect.yieldNow, effect)
     )
   )
 

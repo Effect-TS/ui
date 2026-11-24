@@ -37,14 +37,21 @@ export interface Host<N = any> {
 export interface Runnable {
   readonly definition: { readonly name: string }
   readonly init: (props: any) => Next
-  readonly update: (model: any, message: never, props: any) => Next | undefined
+  readonly update: (
+    model: any,
+    message: never,
+    props: any,
+    results?: unknown
+  ) => Next | undefined
   readonly view: Function
   /** Set by `Component.provide`: the kernel never reads it. */
   readonly layer?: unknown
   /** Called once `Mounted` is logged, before the first view: a provided Layer starts building. */
   readonly boot?: ((inst: Instance) => void) | undefined
-  /** Called after each Model or props change the instance takes, and once it first rendered. */
-  readonly "~sync"?: ((inst: Instance) => void) | undefined
+  /** Called after each Model or props change the instance takes, and once it first rendered, with the Next it applied. */
+  readonly "~sync"?: ((inst: Instance, next?: Next) => void) | undefined
+  /** Called once `init`'s Commands are issued, before the first view. */
+  readonly "~first"?: ((inst: Instance) => void) | undefined
   /** Called before each view after the first. */
   readonly "~render"?: ((inst: Instance) => void) | undefined
 }
@@ -141,6 +148,7 @@ export interface Ops {
   readonly markDirty: typeof markDirty
   readonly renderAbove: typeof renderAbove
   readonly clear: typeof clear
+  readonly flush: typeof flush
 }
 
 /** @internal */
@@ -169,8 +177,23 @@ export interface Tree {
   building?: Set<{ readonly flush: number }> | undefined
   /** The flush a build that begins now belongs to. Without it, the first. */
   flush?: (() => number) | undefined
+  /** How many provided Layer builds have begun, and the number of the last one that failed. */
+  builds?: number | undefined
+  failedBuild?: number | undefined
+  /** Called once the tree's query cache is made. */
+  cached?: (() => void) | undefined
+  /** Told of each watch an instance registers, while something records them. */
+  watched?:
+    | ((inst: Instance, query: string, argsKey: string) => void)
+    | undefined
+  /**
+   * A feature's work in a flush, called before each render pass, and with `idle` once nothing is left to
+   * render. Returns whether it did something, which may have more to render.
+   */
+  work?: ((idle: boolean) => boolean) | undefined
   dirty: Array<Instance>
   scheduled: boolean
+  flushing: boolean
   closed: boolean
 }
 
@@ -214,6 +237,8 @@ export class Instance {
   closers: Array<() => void> | undefined = undefined
   // Set by what runs its Commands, once it issues one.
   declare runs: Runs | undefined
+  /** The query results, set by what runs its queries. */
+  declare results: unknown
   /** Set by a keyed provide: takes `go` and returns `true` when work must wait for the next read of its keys. */
   declare hold: ((go: () => void) => boolean) | undefined
   /** What stops the work started against `env`, when a keyed provide replaces it, adding the fibers still exiting. */
@@ -402,8 +427,10 @@ export const fail = (
     const first = nodeOf(old)
     const parentNode = host.parentOf(first)
     const fallback = stand(inst, cause)
-    place(host, parentNode, fallback, first)
-    unplace(host, parentNode, old)
+    if (parentNode != null) {
+      place(host, parentNode, fallback, first)
+      unplace(host, parentNode, old)
+    }
     if (at === undefined) inst.rendered = fallback
     else {
       inst.rendered = undefined
@@ -449,7 +476,12 @@ export const send = (
   if (inst.closed) return
   let next: Next | undefined
   try {
-    next = inst.component.update(inst.model, message as never, inst.props)
+    next = inst.component.update(
+      inst.model,
+      message as never,
+      inst.props,
+      inst.results
+    )
   } catch (error) {
     return fail(inst, "update", Cause.die(error), { message, source })
   }
@@ -462,7 +494,8 @@ export const send = (
     props: inst.props,
     model: next.model,
     commands: next.commands,
-    events: next.events
+    events: next.events,
+    lists: next.lists
   })
   if (next.model !== inst.model) {
     inst.model = next.model
@@ -487,9 +520,6 @@ const issueAll = (
 ): void => {
   const commands = next.commands
   if (next.sends !== undefined && next.sends.length > 0) notPorted("$.send")
-  if (next.lists !== undefined && next.lists.length > 0) {
-    notPorted("infinite queries")
-  }
   if (next.viewTransition !== undefined) notPorted("view transitions")
   for (let index = 0; index < commands.length; index++) {
     if (inst.closed) return
@@ -500,7 +530,7 @@ const issueAll = (
 /** What follows a Next once its Commands are issued: Subscriptions follow it, and its events are emitted. */
 const applied = (inst: Instance, next: Next): void => {
   if (inst.closed) return
-  inst.component["~sync"]?.(inst)
+  inst.component["~sync"]?.(inst, next)
   const events = next.events
   if (events.length === 0) return
   const parent = inst.parent
@@ -564,9 +594,13 @@ const renderDirty = (inst: Instance): void => {
 
 /** @internal */
 export const flush = (tree: Tree): void => {
-  tree.scheduled = false
-  while (tree.dirty.length > 0 && !tree.closed) {
+  tree.scheduled = true
+  tree.flushing = true
+  for (;;) {
+    if (tree.closed) return
     const batch = tree.dirty
+    if (tree.work?.(batch.length === 0)) continue
+    if (batch.length === 0) break
     tree.dirty = []
     if (batch.length > 1) batch.sort(byDepth)
     for (let index = 0; index < batch.length; index++) {
@@ -574,7 +608,8 @@ export const flush = (tree: Tree): void => {
       if (inst.dirty && !inst.closed) renderDirty(inst)
     }
   }
-  if (!tree.closed) tree.host.commit?.()
+  tree.scheduled = tree.flushing = false
+  tree.host.commit?.()
 }
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
@@ -585,7 +620,7 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
       inst.model,
       inst.props,
       inst.runs?.running,
-      undefined,
+      inst.results,
       View.takesPathSource(view) ? inst : inst.path,
       undefined,
       inst
@@ -603,7 +638,6 @@ const check = (component: any): void => {
   if (component.init === undefined) notPorted("Component.lazy")
   if (component.parts !== undefined) notPorted("headless components")
   if (component.head !== undefined) notPorted("head")
-  if (component["~queries"] !== undefined) notPorted("queries")
   if (definition.shared !== undefined || definition.shares !== undefined) {
     notPorted("shared state")
   }
@@ -638,6 +672,7 @@ const start = (inst: Instance): Rec | undefined => {
     // `init`'s Commands are issued before the first view, so it shows them running: the redraw they
     // ask for is already done by it.
     issueAll(inst, first, seq)
+    component["~first"]?.(inst)
     if (inst.closed) return undefined
     inst.dirty = false
     const tree = viewOf(inst)
@@ -1229,25 +1264,8 @@ const patchList = (
     (olds.length === views.length || keyOf(views[end]!) !== undefined) &&
     pairs(olds[oldEnd]!.v, views[end]!)
   ) {
-    out[end] = patch(inst, olds[oldEnd]!, views[end]!)
     oldEnd--
     end--
-  }
-  if (start > oldEnd) {
-    if (start > end) return out
-    const ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : after
-    for (let index = start; index <= end; index++) {
-      place(host, parent, out[index] = create(inst, views[index]!), ref)
-    }
-    return out
-  }
-  if (start > end) {
-    for (let index = start; index <= oldEnd; index++) {
-      const old = olds[index]!
-      unplace(host, parent, old)
-      release(inst, old)
-    }
-    return out
   }
   const count = end - start + 1
   const sources = new Int32Array(count)
@@ -1287,11 +1305,23 @@ const patchList = (
       sources[to - start] = index + 1
       if (to < last) moved = true
       else last = to
-      out[to] = patch(inst, old, views[to]!)
     } else {
       unplace(host, parent, old)
       release(inst, old)
     }
+  }
+  for (let index = start; index <= end; index++) {
+    const source = sources[index - start]!
+    out[index] = source === 0
+      ? create(inst, views[index]!)
+      : patch(inst, olds[source - 1]!, views[index]!)
+  }
+  for (let index = end + 1; index < views.length; index++) {
+    out[index] = patch(
+      inst,
+      olds[index + olds.length - views.length]!,
+      views[index]!
+    )
   }
   const stay = moved ? increasing(sources) : undefined
   let at = stay === undefined ? -1 : stay.length - 1
@@ -1299,7 +1329,7 @@ const patchList = (
   for (let offset = count - 1; offset >= 0; offset--) {
     const index = start + offset
     if (sources[offset] === 0) {
-      place(host, parent, out[index] = create(inst, views[index]!), ref)
+      place(host, parent, out[index]!, ref)
     } else if (stay !== undefined) {
       if (at >= 0 && stay[at] === offset) at--
       else place(host, parent, out[index]!, ref)
@@ -1369,9 +1399,10 @@ export const mount = (
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
     schedule: options.schedule ?? ((task) => queueMicrotask(task)),
     follow: options.follow,
-    ops: { send, fail, markDirty, renderAbove, clear },
+    ops: { send, fail, markDirty, renderAbove, clear, flush },
     dirty: [],
     scheduled: false,
+    flushing: true,
     closed: false
   }
   const ctx: Context.Context<any> = options.context ??
@@ -1389,7 +1420,7 @@ export const mount = (
     instance.rendered = stand(instance, instance.failure!)
   }
   place(host, container, instance.rendered!, null)
-  host.commit?.()
+  flush(tree)
   return {
     instance,
     send: (message, source) => send(instance, message, source),
