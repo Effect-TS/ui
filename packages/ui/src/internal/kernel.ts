@@ -899,6 +899,8 @@ const mountChild = (owner: Instance, rec: Rec): void => {
   }
   if (view.alive !== undefined) notPorted("kept children")
   if (view.owner !== undefined) notPorted("headless components")
+  const at = slot
+  let held: Rec | undefined
   if (FeatureId in component) {
     const ctx = env.ctx
     if (ctx === undefined) {
@@ -908,59 +910,40 @@ const mountChild = (owner: Instance, rec: Rec): void => {
             " isn't available, because a Layer above it is still building or failed. Pass `fallback`."
         )
       }
-      rec.kids = [
-        inFallback(
-          owner,
-          () => create(owner, fallbackOf(owner, view, env.cause))
-        )
-      ]
-      rec.inst = owner
-      owner.live++
-      born.push(owner, rec)
+      held = inFallback(
+        owner,
+        () => create(owner, fallbackOf(owner, view, env.cause))
+      )
       if (env.cause === undefined) {
-        const at = slot
         env.waiting.push(() => settle(owner, rec, at))
       }
-      return
+    } else {
+      const found = Context.getOrUndefined(ctx, component) as any
+      if (found === undefined) {
+        throw new Error(owner.path + ": nothing provides " + component.key)
+      }
+      component = found.component
+      env = {
+        ctx: Context.merge(ctx, found.context),
+        cause: undefined,
+        waiting: []
+      }
     }
-    const found = Context.getOrUndefined(ctx, component) as any
-    if (found === undefined) {
-      throw new Error(owner.path + ": nothing provides " + component.key)
-    }
-    component = found.component
-    env = {
-      ctx: Context.merge(ctx, found.context),
-      cause: undefined,
-      waiting: []
-    }
-  } else if (owner.tree.hold !== undefined) {
-    const at = slot
-    if (
-      owner.tree.hold(
-        owner,
-        rec,
-        (at ?? owner.path) + "/" + segmentOf(component, view.key),
-        () => settle(owner, rec, at)
-      )
-    ) {
-      rec.kids = [create(owner, emptyText)]
-      rec.inst = owner
-      owner.live++
-      born.push(owner, rec)
-      return
-    }
-  }
-  const child = rec.inst = new Instance(
-    owner.tree,
-    component,
-    owner,
-    rec,
-    view.props,
-    env
-  )
+  } else if (
+    owner.tree.hold?.(
+      owner,
+      rec,
+      (at ?? owner.path) + "/" + segmentOf(component, view.key),
+      () => settle(owner, rec, at)
+    )
+  ) held = create(owner, emptyText)
+  const child = rec.inst = held === undefined
+    ? new Instance(owner.tree, component, owner, rec, view.props, env)
+    : owner
   owner.live++
   born.push(owner, rec)
-  if (start(child) === undefined) rec.kids = [stand(child, child.failure!)]
+  if (held !== undefined) rec.kids = [held]
+  else if (start(child) === undefined) rec.kids = [stand(child, child.failure!)]
   else if (owner.closed) close(child)
 }
 

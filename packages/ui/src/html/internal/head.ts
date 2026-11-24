@@ -348,7 +348,10 @@ const makeSync = (
     }
   }
 
-  const sync = (head: Head.HtmlHead) => {
+  const sync = (given: Head.HtmlHead) => {
+    const head: Head.HtmlHead = given.meta !== undefined
+      ? given
+      : { ...Head.empty, title: given.title }
     if (owned === undefined) {
       checkShell(head)
       owned = index()

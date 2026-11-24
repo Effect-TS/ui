@@ -30,7 +30,6 @@ import {
   payloadOf
 } from "./internal/payload.ts"
 import { pointerTypeOf } from "./internal/pointer.ts"
-import { htmlHead } from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
@@ -445,9 +444,7 @@ export const makeHost = (
     nextOf: (node) => node.nextSibling,
     controlled,
     runsMounts: true,
-    head: sync === undefined
-      ? undefined
-      : (head) => sync.sync(htmlHead(head) as never),
+    head: sync === undefined ? undefined : (head) => sync.sync(head as never),
     transitions: options?.viewTransitions === false
       ? undefined
       : transitionRun.make(start),
