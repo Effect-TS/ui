@@ -2,12 +2,11 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as queryCore from "../../internal/queryCore.ts"
 import * as Html from "../Html.ts"
-import type * as HtmlFiles from "../HtmlFiles.ts"
-import * as HtmlImages from "../HtmlImages.ts"
 import type * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as files from "./files.ts"
 import * as frames from "./frames.ts"
 import * as globalEvents from "./globalEvents.ts"
+import * as images from "./images.ts"
 import { payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
@@ -84,58 +83,6 @@ const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   }
 }
 
-const imagesOf = (document: Document): HtmlImages.Images => ({
-  load: (source) =>
-    Effect.callback((resume) => {
-      const image = document.createElement("img")
-      const settle = (status: "loaded" | "error") =>
-        resume(Effect.succeed(status))
-      if (source.referrerPolicy !== undefined) {
-        image.referrerPolicy = source.referrerPolicy
-      }
-      image.crossOrigin = source.crossOrigin ?? null
-      if (source.sizes !== undefined) image.sizes = source.sizes
-      if (source.srcSet !== undefined) image.srcset = source.srcSet
-      if (source.src !== undefined) image.src = source.src
-      if (image.complete) {
-        return settle(image.naturalWidth > 0 ? "loaded" : "error")
-      }
-      image.onload = () => settle("loaded")
-      image.onerror = () => settle("error")
-      return Effect.sync(() => {
-        image.onload = null
-        image.onerror = null
-      })
-    })
-})
-
-const filesOf = (
-  document: Document,
-  htmlHost: Context.Service.Shape<typeof Html.Host>
-): HtmlFiles.Files => ({
-  pick: (options) =>
-    Effect.callback((resume) => {
-      const input = document.createElement("input")
-      input.type = "file"
-      input.multiple = options.multiple === true
-      if (options.accept !== undefined) input.accept = options.accept.join(",")
-      if (options.capture !== undefined) {
-        input.setAttribute("capture", options.capture)
-      }
-      const settle = (picked: ReadonlyArray<File>) =>
-        resume(Effect.succeed({ opened: true, files: picked }))
-      input.onchange = () => settle(Array.from(input.files ?? []))
-      input.oncancel = () => settle([])
-      if (!htmlHost.showPicker(input)) {
-        return resume(Effect.succeed({ opened: false, files: [] }))
-      }
-      return Effect.sync(() => {
-        input.onchange = null
-        input.oncancel = null
-      })
-    })
-})
-
 const never = () => false
 
 /** @internal */
@@ -152,8 +99,12 @@ export const make = (
         Context.add(queryCore.Connectivity, signal.connectivity),
         Context.add(globalEvents.GlobalEvents, globalEventsOf(document, held)),
         Context.add(frames.AnimationFrames, framesOf(document)),
-        Context.add(HtmlImages.Images, imagesOf(document)),
-        Context.add(files.Files, filesOf(document, htmlHost))
+        Context.add(images.Images, {
+          load: (source) => images.loader!(document, source)
+        }),
+        Context.add(files.Files, {
+          pick: (options) => files.picker!(document, htmlHost, options)
+        })
       )
     return Effect.as(
       Effect.addFinalizer(() => Effect.sync(signal.dispose)),

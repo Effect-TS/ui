@@ -4,8 +4,9 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Context from "effect/Context"
+import type * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as images from "./internal/images.ts"
 
 /**
  * An image to load, as the `<img>` attributes of the same names.
@@ -49,9 +50,28 @@ export interface Images {
  * @category references
  * @since 0.1.0
  */
-export const Images: Context.Reference<Images> = Context.Reference<Images>(
-  "@effect/ui/html/HtmlImages/Images",
-  { defaultValue: () => pending }
-)
+export const Images: Context.Reference<Images> = images.Images
 
-const pending: Images = { load: () => Effect.never }
+images.load((document, source) =>
+  Effect.callback((resume) => {
+    const image = document.createElement("img")
+    const settle = (status: "loaded" | "error") =>
+      resume(Effect.succeed(status))
+    if (source.referrerPolicy !== undefined) {
+      image.referrerPolicy = source.referrerPolicy
+    }
+    image.crossOrigin = source.crossOrigin ?? null
+    if (source.sizes !== undefined) image.sizes = source.sizes
+    if (source.srcSet !== undefined) image.srcset = source.srcSet
+    if (source.src !== undefined) image.src = source.src
+    if (image.complete) {
+      return settle(image.naturalWidth > 0 ? "loaded" : "error")
+    }
+    image.onload = () => settle("loaded")
+    image.onerror = () => settle("error")
+    return Effect.sync(() => {
+      image.onload = null
+      image.onerror = null
+    })
+  })
+)

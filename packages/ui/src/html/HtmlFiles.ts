@@ -193,6 +193,29 @@ export interface Files {
  */
 export const Files: Context.Reference<Files> = files.Files
 
+files.load((document, htmlHost, options) =>
+  Effect.callback((resume) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.multiple = options.multiple === true
+    if (options.accept !== undefined) input.accept = options.accept.join(",")
+    if (options.capture !== undefined) {
+      input.setAttribute("capture", options.capture)
+    }
+    const settle = (picked: ReadonlyArray<File>) =>
+      resume(Effect.succeed({ opened: true, files: picked }))
+    input.onchange = () => settle(Array.from(input.files ?? []))
+    input.oncancel = () => settle([])
+    if (!htmlHost.showPicker(input)) {
+      return resume(Effect.succeed({ opened: false, files: [] }))
+    }
+    return Effect.sync(() => {
+      input.onchange = null
+      input.oncancel = null
+    })
+  })
+)
+
 /**
  * The Command behind `pick`, for a story's `.resolve(HtmlFiles.Pick, { opened, files })`.
  *
