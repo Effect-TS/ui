@@ -561,7 +561,9 @@ export interface Hydrating {
     readonly dom: boolean
     readonly record: Kernel.Recorder
     readonly at: number
-    readonly decodedRoot: readonly [string, Exit.Exit<Decoded, unknown>] | undefined
+    readonly decodedRoot:
+      | readonly [string, Exit.Exit<Decoded, unknown>]
+      | undefined
     readonly heldFor: Parameters<typeof make>[6]
     readonly cache: () => Cache | undefined
   }) => Session
@@ -644,8 +646,13 @@ export const hydrating = (
         checkAdopted()
       },
       adopted: Effect.callback<void>((resume) => {
-        if (adoptedDone) resume(Effect.void)
-        else adoptedWaiters.push(() => resume(Effect.void))
+        if (adoptedDone) return resume(Effect.void)
+        const waiter = () => resume(Effect.void)
+        adoptedWaiters.push(waiter)
+        return Effect.sync(() => {
+          const index = adoptedWaiters.indexOf(waiter)
+          if (index >= 0) adoptedWaiters.splice(index, 1)
+        })
       }),
       adoptionHead: () => adoptedDone ? adoptionHead : undefined,
       waiting: () => waits.paths().concat(hydration.held()),

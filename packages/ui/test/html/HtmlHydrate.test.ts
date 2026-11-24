@@ -3,7 +3,17 @@ import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
 import { assert, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Layer, Option, Schema, SchemaGetter } from "effect"
+import {
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Schema,
+  SchemaGetter
+} from "effect"
+import * as v8 from "node:v8"
+import * as vm from "node:vm"
 
 const tick = Effect.promise(() =>
   new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -563,6 +573,36 @@ describe("HtmlHydrate", () => {
           app.innerHTML,
           "<div><p></p><i>after</i></div>"
         )
+      }).pipe(Effect.scoped))
+
+    it.effect("release a root.adopted wait that is interrupted before they adopt", () =>
+      Effect.gen(function*() {
+        const [rendered, open] = yield* renderLate(
+          HtmlServer.renderToHtml(LateHolder, {})
+        )
+        const app = yield* container(rendered.html)
+        const root = yield* HtmlHydrate.hydrateEffect(
+          LateHolder,
+          {},
+          app,
+          rendered.state
+        )
+        const waiting = yield* Effect.promise(async () => {
+          const fiber = Effect.runFork(root.adopted)
+          const ref = new WeakRef(fiber)
+          await Effect.runPromise(Fiber.interrupt(fiber))
+          return ref
+        })
+        v8.setFlagsFromString("--expose-gc")
+        const gc = vm.runInNewContext("gc") as () => void
+        yield* tick
+        gc()
+        assert.isTrue(
+          waiting.deref() === undefined,
+          "the interrupted fiber is retained"
+        )
+        yield* open
+        yield* root.adopted
       }).pipe(Effect.scoped))
   })
 })
