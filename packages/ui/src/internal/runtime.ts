@@ -29,7 +29,7 @@ import * as messageLog from "./messageLog.ts"
 import type * as partsRun from "./partsRun.ts"
 import { childName, segment } from "./paths.ts"
 import * as queryCore from "./queryCore.ts"
-import * as Recorder from "./recorder.ts"
+import type * as Recorder from "./recorder.ts"
 import type * as routeRun from "./routeRun.ts"
 import { scopeAddFinalizerUnsafe } from "./scope.ts"
 import * as serialize from "./serialize.ts"
@@ -363,12 +363,10 @@ const start = (
   let flushes = 0
   // A build that begins between flushes belongs to the next one, which commits what began it.
   let inFlush = true
-  const recording = Recorder.make(
-    log,
-    clock,
-    session,
-    component.definition.name
-  )
+  // Without `MessageLog` loaded nothing can be logged, so nothing needs building.
+  const recording = messageLog.recorder === undefined
+    ? messageLog.silent
+    : messageLog.recorder(log, clock, session, component.definition.name)
   let initCommands: ReadonlyArray<unknown> | undefined
   const hydrate = options?.hydrate
   const state = hydrate?.state

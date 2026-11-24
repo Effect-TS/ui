@@ -41,6 +41,7 @@ import type * as Component from "./Component.ts"
 import * as messageLog from "./internal/messageLog.ts"
 import type * as componentQueries from "./internal/queries.ts"
 import { canonical } from "./internal/queryCore.ts"
+import * as Recorder from "./internal/recorder.ts"
 import { getIndexSignatureKeys } from "./internal/schemaAST.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
 import * as sharedReads from "./internal/shared.ts"
@@ -85,6 +86,9 @@ export const noop: MessageLog = messageLog.noop
  * @since 0.1.0
  */
 export const MessageLog: Context.Reference<MessageLog> = messageLog.MessageLog
+
+// A mount builds entries with the recorder once this module is loaded, as any log is made here.
+messageLog.load(Recorder.make)
 
 /**
  * Where a failure happened: the code that threw or failed.
