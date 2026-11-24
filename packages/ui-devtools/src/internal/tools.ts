@@ -32,12 +32,22 @@ const Path = Schema.optionalKey(
     "Keys from the root to a subtree, such as [\"model\", \"notes\", 0]. Use it when a result is an outline."
 })
 
-const read = <T extends Tool.Any>(tool: T): T =>
-  tool.annotate(Tool.Readonly, true).annotate(Tool.Destructive, false).annotate(
-    Tool.Idempotent,
-    true
-  )
-    .annotate(Tool.OpenWorld, false) as T
+const hints = (
+  readonly: boolean,
+  destructive: boolean,
+  idempotent: boolean,
+  openWorld: boolean
+) =>
+<T extends Tool.Any>(tool: T): T =>
+  tool.annotate(Tool.Readonly, readonly).annotate(Tool.Destructive, destructive)
+    .annotate(Tool.Idempotent, idempotent).annotate(
+      Tool.OpenWorld,
+      openWorld
+    ) as T
+
+const read = hints(true, false, true, false)
+const control = hints(false, false, true, false)
+const write = hints(false, true, false, true)
 
 const ListSessions = read(Tool.make("list_sessions", {
   description:
@@ -145,7 +155,7 @@ const DiffState = read(Tool.make("diff_state", {
   failure: ToolError
 }))
 
-const ShowEntry = Tool.make("show_entry", {
+const ShowEntry = control(Tool.make("show_entry", {
   description:
     "Pauses the page and paints it as it was at an entry, beside the live page, which keeps running " +
     "hidden. The DevTools panel shows it as paused. fellBack lists instances with no state there, shown from init. " +
@@ -153,23 +163,15 @@ const ShowEntry = Tool.make("show_entry", {
   parameters: Schema.Struct({ session: SessionParam, seq: Schema.Number }),
   success: Result,
   failure: ToolError
-}).annotate(Tool.Readonly, false).annotate(Tool.Destructive, false).annotate(
-  Tool.Idempotent,
-  true
-)
-  .annotate(Tool.OpenWorld, false)
+}))
 
-const Resume = Tool.make("resume", {
+const Resume = control(Tool.make("resume", {
   description:
     "Removes the painted copy and shows the live page, whether an agent or a person paused it.",
   parameters: Schema.Struct({ session: SessionParam }),
   success: Result,
   failure: ToolError
-}).annotate(Tool.Readonly, false).annotate(Tool.Destructive, false).annotate(
-  Tool.Idempotent,
-  true
-)
-  .annotate(Tool.OpenWorld, false)
+}))
 
 const GetMessageSchema = read(Tool.make("get_message_schema", {
   description:
@@ -185,7 +187,7 @@ const GetMessageSchema = read(Tool.make("get_message_schema", {
   failure: ToolError
 }))
 
-const Dispatch = Tool.make("dispatch", {
+const Dispatch = write(Tool.make("dispatch", {
   description:
     "Sends messages to an instance, in order, as if the app had. Each runs update and its real Commands. " +
     "Messages are decoded with the component's message Schema first, and none is sent unless all decode. A " +
@@ -203,11 +205,7 @@ const Dispatch = Tool.make("dispatch", {
   }),
   success: Result,
   failure: ToolError
-}).annotate(Tool.Readonly, false).annotate(Tool.Destructive, true).annotate(
-  Tool.Idempotent,
-  false
-)
-  .annotate(Tool.OpenWorld, true)
+}))
 
 const Wait = read(Tool.make("wait", {
   description:
@@ -280,18 +278,21 @@ const outline = (value: unknown): unknown => {
   if (typeof value !== "object" || value === null) {
     return { type: typeof value, bytes: sizeOf(value) }
   }
-  const children = Object.entries(value).map(([key, child]) => [
-    key,
-    typeof child === "object" && child !== null
-      ? {
-        type: Array.isArray(child) ? "array" : "object",
-        bytes: sizeOf(child),
-        size: Object.keys(child).length
-      }
-      : sizeOf(child) > 200
-      ? { type: typeof child, bytes: sizeOf(child) }
-      : child
-  ])
+  const children = Object.entries(value).map(([key, child]) => {
+    const bytes = sizeOf(child)
+    return [
+      key,
+      typeof child === "object" && child !== null
+        ? {
+          type: Array.isArray(child) ? "array" : "object",
+          bytes,
+          size: Object.keys(child).length
+        }
+        : bytes > 200
+        ? { type: typeof child, bytes }
+        : child
+    ]
+  })
   return Array.isArray(value)
     ? children.map(([, child]) => child)
     : Object.fromEntries(children)
@@ -327,13 +328,13 @@ export const layer = (server: Server) => {
 
   const sessionOf = (id: string | undefined) =>
     Effect.suspend(() => {
-      const sessions = inspector.sessions()
       if (id !== undefined) {
-        const found = sessions.find((session) => session.id === id)
+        const found = server.session(id)
         return found === undefined
           ? fail("No session " + id + ". Call list_sessions.")
           : Effect.succeed(found)
       }
+      const sessions = inspector.sessions()
       const newest = [...sessions].reverse().find((session) =>
         meta.get(session.id)?.connected
       ) ?? sessions.at(-1)
@@ -363,6 +364,13 @@ export const layer = (server: Server) => {
           (error) => new ToolError({ message: error.message })
         )
     )
+
+  const entryOf = (session: Inspector.Session, seq: number) => {
+    const entry = session.resolve(seq)
+    return entry._tag === "Outside"
+      ? fail("Entry #" + seq + " is not in the session's buffer.")
+      : Effect.succeed(entry)
+  }
 
   const row = (session: Inspector.Session, entry: MessageLog.WireEntry) => {
     const label = Read.rowOf(session, entry)
@@ -520,21 +528,12 @@ export const layer = (server: Server) => {
       }),
     get_entry: Effect.fnUntraced(function*({ path, seq, session }) {
       const s = yield* sessionOf(session)
-      const entry = s.resolve(seq)
-      if (entry._tag === "Outside") {
-        return yield* fail("Entry #" + seq + " is not in the session's buffer.")
-      }
-      return ok(yield* fit(entry, path))
+      return ok(yield* fit(yield* entryOf(s, seq), path))
     }),
     get_chain: Effect.fnUntraced(function*({ seq, session }) {
       const s = yield* sessionOf(session)
-      const entry = s.resolve(seq)
-      if (entry._tag === "Outside") {
-        return yield* fail("Entry #" + seq + " is not in the session's buffer.")
-      }
-      return ok(
-        yield* fit(JSON.parse(JSON.stringify(Read.chainOf(s, entry).map(step))))
-      )
+      const entry = yield* entryOf(s, seq)
+      return ok(yield* fit(Read.chainOf(s, entry).map(step)))
     }),
     get_state: Effect.fnUntraced(function*({ at, instance, path, session }) {
       const s = yield* sessionOf(session)
@@ -613,9 +612,7 @@ export const layer = (server: Server) => {
     }),
     show_entry: Effect.fnUntraced(function*({ seq, session }) {
       const s = yield* sessionOf(session)
-      if (s.resolve(seq)._tag === "Outside") {
-        return yield* fail("Entry #" + seq + " is not in the session's buffer.")
-      }
+      yield* entryOf(s, seq)
       const shown = yield* ask(s, { _tag: "Show", session: s.id, seq })
       return ok({ paused: seq, ...(shown as object) })
     }),
@@ -664,17 +661,26 @@ export const layer = (server: Server) => {
           })
         ))
       )
+      const logged = reply.outcomes.flatMap((outcome) =>
+        outcome._tag === "Updated" || outcome._tag === "Failed"
+          ? [outcome.seq]
+          : []
+      )
+      if (logged.length > 0) {
+        const newest = Math.max(...logged)
+        yield* server.until(() => server.arrival(s.id, newest)).pipe(
+          Effect.timeoutOption("2 seconds")
+        )
+      }
       const unseen: Array<number> = []
       const unavailable: Array<{ seq: number; reason: string }> = []
-      for (const outcome of reply.outcomes) {
-        if (outcome._tag !== "Updated" && outcome._tag !== "Failed") continue
-        const arrival = yield* server.arrived(s.id, outcome.seq)
-        if (arrival === "late") unseen.push(outcome.seq)
-        else if (arrival !== "seen") {
-          unavailable.push({ seq: outcome.seq, reason: arrival })
-        }
+      for (const seq of logged) {
+        const arrival = server.arrival(s.id, seq)
+        if (arrival === undefined) unseen.push(seq)
+        else if (arrival !== "seen") unavailable.push({ seq, reason: arrival })
       }
       const sent = reply.outcomes.length
+      const last = reply.outcomes.at(-1)
       const notSent = Array.from(
         { length: messages.length - sent },
         (_, i) => sent + i
@@ -682,15 +688,17 @@ export const layer = (server: Server) => {
       const seqs = (list: ReadonlyArray<number>) =>
         list.map((seq) => "#" + seq).join(", ")
       const notes = [
-        reply.outcomes.at(-1)?._tag === "Unknown"
+        last?._tag === "Unknown"
           ? "Message " + (sent - 1) + " was sent but did not finish in " +
             "time, so it may still be applied. Read before resending it."
           : undefined,
         notSent.length === 0
           ? undefined
           : "Messages " + notSent.join(", ") + " were not sent, " +
-            (reply.expired
+            (last === undefined || last._tag === "Updated"
               ? "because the batch ran out of time."
+              : last._tag === "Unknown"
+              ? "because message " + (sent - 1) + "'s outcome is unknown."
               : "because message " + (sent - 1) + " did not update."),
         unseen.length === 0
           ? undefined
@@ -723,13 +731,9 @@ export const layer = (server: Server) => {
       function*({ instance, run, session, since, timeout }) {
         const s = yield* sessionOf(session)
         const params = { since, instance, run }
-        const settled = Effect.suspend(function loop(): Effect.Effect<void> {
-          return open(s, params).length === 0
-            ? Effect.void
-            : Effect.andThen(server.next, Effect.suspend(loop))
-        })
-        const done = yield* settled.pipe(
-          Effect.as(true),
+        const done = yield* server.until(() =>
+          open(s, params).length === 0 ? true : undefined
+        ).pipe(
           Effect.timeoutOrElse({
             duration: timeout ?? 5_000,
             orElse: () => Effect.succeed(false)

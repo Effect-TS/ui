@@ -18,10 +18,7 @@ export const Request = Schema.Union([
 
 export type Request = typeof Request.Type
 
-export const ToPage = Schema.Union([
-  Schema.TaggedStruct("Config", { dispatch: Schema.Boolean }),
-  Schema.TaggedStruct("Request", { id: Schema.Number, request: Request })
-])
+export const ToPage = Schema.Struct({ id: Schema.Number, request: Request })
 
 export type ToPage = typeof ToPage.Type
 
@@ -37,8 +34,7 @@ export type Paused = typeof Paused.Type
 export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
-    paused: Schema.NullOr(Paused),
-    size: Schema.Number
+    paused: Schema.NullOr(Paused)
   }),
   Schema.TaggedStruct("Reply", {
     id: Schema.Number,
@@ -60,7 +56,6 @@ export type Outcome = typeof Outcome.Type
 
 export const Dispatched = Schema.Struct({
   outcomes: Schema.Array(Outcome),
-  expired: Schema.Boolean,
   paused: Schema.NullOr(Schema.Number)
 })
 

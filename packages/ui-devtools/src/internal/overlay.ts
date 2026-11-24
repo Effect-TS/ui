@@ -19,6 +19,7 @@ import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
+import { Paused } from "./control.ts"
 import * as Read from "./read.ts"
 
 export interface Feed {
@@ -50,13 +51,6 @@ const Filter = Schema.Literals(["messages", "commands", "all"])
 const Pane = Schema.Literals(["timeline", "entry"])
 
 const OverlayProps = Schema.Struct({ feed: FeedSchema })
-
-const Paused = Schema.Struct({
-  session: Schema.String,
-  seq: Schema.Number,
-  fellBack: Schema.Array(Schema.String),
-  fallbacks: Schema.Array(Schema.String)
-})
 
 type OverlayProps = typeof OverlayProps.Type
 

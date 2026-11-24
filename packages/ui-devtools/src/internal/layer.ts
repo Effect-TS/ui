@@ -331,7 +331,6 @@ export const make = (options: {
           roots,
           size,
           paused: () => paused?.at,
-          paintable: feed.paintable,
           paint,
           resume,
           changes: Stream.fromPubSub(states)

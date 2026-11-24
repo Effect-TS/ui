@@ -28,13 +28,12 @@ export interface RequestError {
 export interface Page {
   readonly sessions: Set<string>
   paused: Control.Paused | null
-  size: number
   readonly request: (
     request: Control.Request
   ) => Effect.Effect<Schema.Json, RequestError>
 }
 
-export type Arrival = "seen" | "skipped" | "evicted" | "late"
+export type Arrival = "seen" | "skipped" | "evicted"
 
 export interface Meta {
   host: MessageLog.WireHost | undefined
@@ -47,11 +46,11 @@ export interface Server {
   readonly inspector: Inspector.Inspector
   readonly history: History.History
   readonly meta: Map<string, Meta>
-  readonly pages: Set<Page>
+  readonly session: (id: string) => Inspector.Session | undefined
   readonly pageOf: (session: string) => Page | undefined
-  readonly next: Effect.Effect<void>
+  readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
   readonly within: number
-  readonly arrived: (session: string, seq: number) => Effect.Effect<Arrival>
+  readonly arrival: (session: string, seq: number) => Arrival | undefined
 }
 
 const loopback = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
@@ -81,29 +80,23 @@ export const make = (options: Options) => {
     waiters.add(waiter)
     return Effect.sync(() => waiters.delete(waiter))
   })
-  const timeout = options.timeout ?? 10_000
-  const latest = (session: string) =>
-    inspector.sessions().find((s) => s.id === session)?.entries().at(-1)?.seq ??
-      -1
-  const arrival = (session: string, seq: number): Arrival | undefined => {
-    if (latest(session) < seq) return undefined
-    const s = inspector.sessions().find((s) => s.id === session)
-    if (s === undefined) return "evicted"
-    if (s.resolve(seq)._tag !== "Outside") return "seen"
-    return seq < (s.entries()[0]?.seq ?? Infinity) ? "evicted" : "skipped"
-  }
-  const arrived = (session: string, seq: number): Effect.Effect<Arrival> =>
-    Effect.suspend(function loop(): Effect.Effect<Arrival> {
-      const found = arrival(session, seq)
+  const until = <A>(check: () => A | undefined): Effect.Effect<A> =>
+    Effect.suspend(() => {
+      const found = check()
       return found !== undefined
         ? Effect.succeed(found)
-        : Effect.andThen(next, Effect.suspend(loop))
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: "2 seconds",
-        orElse: () => Effect.succeed("late" as const)
-      })
-    )
+        : Effect.andThen(next, until(check))
+    })
+  const timeout = options.timeout ?? 10_000
+  const session = (id: string) =>
+    inspector.sessions().find((session) => session.id === id)
+  const arrival = (id: string, seq: number): Arrival | undefined => {
+    const s = session(id)
+    const entries = s?.entries() ?? []
+    if ((entries.at(-1)?.seq ?? -1) < seq) return undefined
+    if (s !== undefined && s.resolve(seq)._tag !== "Outside") return "seen"
+    return seq < (entries[0]?.seq ?? Infinity) ? "evicted" : "skipped"
+  }
 
   const prune = () => {
     const gone = Array.from(meta).filter(([, m]) => !m.connected).sort((
@@ -171,20 +164,16 @@ export const make = (options: Options) => {
             batch.push(frame)
           }
           if (batch.length === 0) return
-          const before = new Map(
-            batch.map((frame) => [frame.session, latest(frame.session)])
-          )
           inspector.ingest(batch)
-          for (const frame of batch) {
-            if (frame.seq > before.get(frame.session)!) history.record(frame)
-          }
+          for (const frame of batch) history.record(frame)
           notify()
         }))
       }).pipe(Effect.ensuring(Effect.sync(() => {
         for (const session of sessions) {
           const known = meta.get(session)
           if (known !== undefined) {
-            Object.assign(known, { connected: false, closed: ++closed })
+            known.connected = false
+            known.closed = ++closed
           }
         }
         prune()
@@ -196,93 +185,78 @@ export const make = (options: Options) => {
   const control = HttpRouter.add(
     "GET",
     "/control",
-    upgrade((socket) => {
+    upgrade(Effect.fnUntraced(function*(socket) {
       const pending = new Map<
         number,
         Deferred.Deferred<Schema.Json, RequestError>
       >()
       let id = 0
-      let page: Page | undefined
-      return Effect.gen(function*() {
-        const writer = yield* socket.writer
-        const pull = yield* Socket.readerString(socket)
-        const opened: Page = page = {
-          sessions: new Set(),
-          paused: null,
-          size: options.size,
-          request: (request) => {
-            const at = ++id
-            return Effect.gen(function*() {
-              const deferred = yield* Deferred.make<
-                Schema.Json,
-                RequestError
-              >()
-              pending.set(at, deferred)
-              yield* writer.write(
-                Control.encodeToPage({ _tag: "Request", id: at, request })
-              ).pipe(
-                Effect.mapError(() => ({
-                  lost: false,
-                  message: "the page's control connection is closed"
-                }))
-              )
-              return yield* Deferred.await(deferred).pipe(
-                Effect.timeoutOrElse({
-                  duration: timeout,
-                  orElse: () =>
-                    Effect.fail({
-                      lost: true,
-                      message: "the page did not answer within " + timeout +
-                        "ms"
-                    })
-                })
-              )
-            }).pipe(Effect.ensuring(Effect.sync(() => pending.delete(at))))
-          }
+      const writer = yield* socket.writer
+      const pull = yield* Socket.readerString(socket)
+      const page: Page = {
+        sessions: new Set(),
+        paused: null,
+        request: (request) => {
+          const at = ++id
+          return Effect.gen(function*() {
+            const deferred = yield* Deferred.make<Schema.Json, RequestError>()
+            pending.set(at, deferred)
+            yield* writer.write(Control.encodeToPage({ id: at, request })).pipe(
+              Effect.mapError(() => ({
+                lost: false,
+                message: "the page's control connection is closed"
+              }))
+            )
+            return yield* Deferred.await(deferred).pipe(
+              Effect.timeoutOrElse({
+                duration: timeout,
+                orElse: () =>
+                  Effect.fail({
+                    lost: true,
+                    message: "the page did not answer within " + timeout + "ms"
+                  })
+              })
+            )
+          }).pipe(Effect.ensuring(Effect.sync(() => pending.delete(at))))
         }
-        pages.add(opened)
-        yield* writer.write(
-          Control.encodeToPage({ _tag: "Config", dispatch: options.dispatch })
-        )
-        return yield* Effect.forever(
-          Effect.flatMap(pull, (chunks) =>
-            Effect.forEach(chunks, (chunk) => {
-              const decoded = Control.decodeToServer(chunk)
-              if (decoded._tag === "None") return Effect.void
-              const message = decoded.value
-              if (message._tag === "State") {
-                opened.sessions.clear()
-                for (const session of message.sessions) {
-                  opened.sessions.add(session)
-                }
-                opened.paused = message.paused
-                opened.size = message.size
-                notify()
-                return Effect.void
-              }
-              const deferred = pending.get(message.id)
-              if (deferred === undefined) return Effect.void
-              return message.ok
-                ? Deferred.succeed(deferred, message.value)
-                : Deferred.fail(deferred, {
-                  lost: false,
-                  message: String(message.value)
-                })
-            }, { discard: true }))
-        )
-      }).pipe(Effect.ensuring(Effect.suspend(() => {
-        if (page !== undefined) pages.delete(page)
+      }
+      pages.add(page)
+      yield* Effect.addFinalizer(() => {
+        pages.delete(page)
         notify()
         return Effect.forEach(
           pending.values(),
           (deferred) =>
             Deferred.fail(deferred, { lost: true, message: "the page closed" }),
-          {
-            discard: true
-          }
+          { discard: true }
         )
-      })))
-    })
+      })
+      return yield* Effect.forever(
+        Effect.flatMap(pull, (chunks) =>
+          Effect.forEach(chunks, (chunk) => {
+            const decoded = Control.decodeToServer(chunk)
+            if (decoded._tag === "None") return Effect.void
+            const message = decoded.value
+            if (message._tag === "State") {
+              page.sessions.clear()
+              for (const session of message.sessions) {
+                page.sessions.add(session)
+              }
+              page.paused = message.paused
+              notify()
+              return Effect.void
+            }
+            const deferred = pending.get(message.id)
+            if (deferred === undefined) return Effect.void
+            return message.ok
+              ? Deferred.succeed(deferred, message.value)
+              : Deferred.fail(deferred, {
+                lost: false,
+                message: String(message.value)
+              })
+          }, { discard: true }))
+      )
+    }))
   )
 
   const server: Server = {
@@ -290,12 +264,12 @@ export const make = (options: Options) => {
     inspector,
     history,
     meta,
-    pages,
+    session,
     pageOf: (session) =>
       Array.from(pages).reverse().find((page) => page.sessions.has(session)),
-    next,
+    until,
     within: Math.round(timeout * 0.8),
-    arrived
+    arrival
   }
   return { server, routes: Layer.mergeAll(log, control) }
 }

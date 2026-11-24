@@ -231,7 +231,6 @@ const fakePage = Effect.fnUntraced(function*(
     roots: new Map([["s", root as unknown as BrowserHost.Controllable]]),
     size: 100,
     paused: () => undefined,
-    paintable: () => false,
     paint: () => Effect.succeed(undefined),
     resume: Effect.void,
     changes: Stream.never
@@ -748,7 +747,10 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.strictEqual(sent.applied, 2)
         assert.deepStrictEqual(sent.notSent, [3, 4])
         assert.include(sent.note, "Message 2 was sent but did not finish")
-        assert.include(sent.note, "Messages 3, 4 were not sent")
+        assert.include(
+          sent.note,
+          "Messages 3, 4 were not sent, because message 2's outcome is unknown."
+        )
         assert.isUndefined(sent.unseen)
         yield* wait(500)
         assert.deepStrictEqual(applied, [0, 1])
@@ -774,8 +776,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.stringify({
             _tag: "State",
             sessions: ["s"],
-            paused: null,
-            size: 100
+            paused: null
           })
         )
         yield* wait(100)

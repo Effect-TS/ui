@@ -11,7 +11,6 @@ export interface Controller {
   readonly roots: ReadonlyMap<string, BrowserHost.Controllable>
   readonly size: number
   readonly paused: () => Control.Paused | undefined
-  readonly paintable: (session: string, seq: number) => boolean
   readonly paint: (
     session: string,
     seq: number
@@ -74,23 +73,17 @@ const messageSchema = (
     return Effect.succeed({ schema: member, definitions: document.definitions })
   })
 
-const reasonOf = (error: unknown) =>
-  Schema.isSchemaError(error)
-    ? error.message
-    : error instanceof Error
-    ? error.message
-    : String(error)
-
 export const connect = (
   url: string,
   controller: Controller
 ): Effect.Effect<void, never, Scope.Scope | Socket.WebSocketConstructor> => {
+  const noRoot = (session: string) =>
+    "Session " + session + " has no root on this page."
+
   const target = (session: string, instance: number) =>
     Effect.suspend(() => {
       const root = controller.roots.get(session)
-      if (root === undefined) {
-        return Effect.fail("Session " + session + " has no root on this page.")
-      }
+      if (root === undefined) return Effect.fail(noRoot(session))
       const found = root.instance(instance)
       return found === undefined
         ? Effect.fail(
@@ -99,35 +92,24 @@ export const connect = (
         : Effect.succeed(found)
     })
 
-  const handle = (
-    request: Control.Request,
-    dispatch: boolean
-  ): Effect.Effect<Json, string> => {
+  const handle = (request: Control.Request): Effect.Effect<Json, string> => {
     switch (request._tag) {
       case "Show":
-        return Effect.suspend(() => {
-          if (!controller.roots.has(request.session)) {
-            return Effect.fail(
-              "Session " + request.session + " has no root on this page."
-            )
-          }
-          if (!controller.paintable(request.session, request.seq)) {
-            return Effect.fail(
-              "#" + request.seq + " is not among the last " + controller.size +
-                " entries the page keeps to paint from."
-            )
-          }
-          return Effect.flatMap(
-            controller.paint(request.session, request.seq),
-            (painted) =>
-              painted === undefined
-                ? Effect.fail("#" + request.seq + " can't be painted.")
-                : Effect.succeed({
-                  fellBack: [...painted.fellBack],
-                  fallbacks: [...painted.fallbacks]
-                })
-          )
-        })
+        return Effect.flatMap(
+          controller.paint(request.session, request.seq),
+          (painted) =>
+            painted !== undefined
+              ? Effect.succeed({
+                fellBack: [...painted.fellBack],
+                fallbacks: [...painted.fallbacks]
+              })
+              : Effect.fail(
+                controller.roots.has(request.session)
+                  ? "#" + request.seq + " is not among the last " +
+                    controller.size + " entries the page keeps to paint from."
+                  : noRoot(request.session)
+              )
+        )
       case "Resume":
         return Effect.as(controller.resume, null)
       case "MessageSchema":
@@ -137,7 +119,6 @@ export const connect = (
         )
       case "Dispatch":
         return Effect.gen(function*() {
-          if (!dispatch) return yield* Effect.fail("Dispatch is off.")
           const found = yield* target(request.session, request.instance)
           const decode = Schema.decodeUnknownEffect(
             Schema.toCodecJson(found.message as Schema.Codec<unknown>)
@@ -148,21 +129,17 @@ export const connect = (
               Effect.mapError(
                 decode(message),
                 (error) =>
-                  "Message " + index + " does not decode: " + reasonOf(error)
+                  "Message " + index + " does not decode: " + error.message
               )
           )
           const deadline = Date.now() + request.within
           const outcomes: Array<Control.Outcome> = []
-          let expired = false
           for (const message of messages) {
             const left = deadline - Date.now()
-            if (left <= 0) {
-              expired = true
-              break
-            }
+            if (left <= 0) break
             const outcome = yield* found.dispatch(message).pipe(
               Effect.timeoutOrElse({
-                duration: Math.min(5_000, left),
+                duration: left,
                 orElse: () => Effect.succeed({ _tag: "Unknown" } as const)
               })
             )
@@ -172,7 +149,6 @@ export const connect = (
           const paused = controller.paused()
           return {
             outcomes,
-            expired,
             paused: paused?.session === request.session ? paused.seq : null
           }
         })
@@ -180,7 +156,6 @@ export const connect = (
   }
 
   const connection = Effect.gen(function*() {
-    let dispatch = false
     const socket = yield* Socket.makeWebSocket(url)
     const writer = yield* socket.writer
     const pull = yield* Socket.readerString(socket)
@@ -190,8 +165,7 @@ export const connect = (
       send({
         _tag: "State",
         sessions: Array.from(controller.roots.keys()),
-        paused: controller.paused() ?? null,
-        size: controller.size
+        paused: controller.paused() ?? null
       })
     )
     yield* state
@@ -206,11 +180,7 @@ export const connect = (
           const decoded = Control.decodeToPage(chunk)
           if (decoded._tag === "None") return Effect.void
           const message = decoded.value
-          if (message._tag === "Config") {
-            dispatch = message.dispatch
-            return Effect.void
-          }
-          return handle(message.request, dispatch).pipe(
+          return handle(message.request).pipe(
             Effect.matchEffect({
               onSuccess: (value) =>
                 send({ _tag: "Reply", id: message.id, ok: true, value }),

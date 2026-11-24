@@ -80,6 +80,7 @@ const makeSession = (size: number) => {
   const shown = new Set<number>()
   const coalesced = new Map<number, Entry>()
   let floor = -Infinity
+  let last = -Infinity
   const drop = () => {
     const oldest = entries.shift()!
     floor = oldest.seq
@@ -99,6 +100,8 @@ const makeSession = (size: number) => {
   }
   return {
     record: (entry: Entry, excluded = false) => {
+      if (entry.seq <= last) return
+      last = entry.seq
       if (excluded && entry._tag === "Update") {
         const replaced = coalesced.get(entry.instance)
         if (replaced !== undefined) {
