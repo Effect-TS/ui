@@ -127,27 +127,27 @@ import type * as Schema from "effect/Schema"
 import * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
-import * as queryCore from "../internal/queryCore.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as Html from "./Html.ts"
-import * as HtmlFiles from "./HtmlFiles.ts"
-import * as HtmlImages from "./HtmlImages.ts"
 import * as HtmlScheduler from "./HtmlScheduler.ts"
-import type * as HtmlSubscription from "./HtmlSubscription.ts"
-import { nonTextInputTypes } from "./internal/editable.ts"
+import * as documentServices from "./internal/documentServices.ts"
 import * as elements from "./internal/elements.ts"
-import * as frames from "./internal/frames.ts"
-import * as globalEvents from "./internal/globalEvents.ts"
 import * as headSync from "./internal/head.ts"
 import * as markers from "./internal/markers.ts"
 import { ownEvents } from "./internal/ownEvents.ts"
-import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
+import {
+  controlPayload,
+  type FieldState,
+  fieldStateOf,
+  offsetIn,
+  payloadOf
+} from "./internal/payload.ts"
+import { pointerTypeOf } from "./internal/pointer.ts"
 import * as server from "./internal/server.ts"
 import * as submit from "./internal/submit.ts"
 
-const HTML = "http://www.w3.org/1999/xhtml"
 const SVG = "http://www.w3.org/2000/svg"
 
 /** Events after which a controlled property may differ from what the Model says. */
@@ -326,289 +326,9 @@ const canonicalAttrs = (
   return out
 }
 
-/**
- * The `pointerType` of a click-like event's payload. A click with `detail`
- * 0, or a pointer event with an empty `pointerType`, came from no pointer:
- * the keyboard, or a script. Otherwise the last `pointerdown` says which
- * pointer it was, since a browser may report a tap's `click` as a mouse's,
- * as WebKit does. Without one, the event's own type, and `"mouse"` last.
- */
-const pressedWith = (
-  name: string,
-  event: Event,
-  last: Html.PointerType | undefined
-): Html.PointerType => {
-  const own = pointerTypeOf(event)
-  if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) {
-    return ""
-  }
-  return last ?? own ?? "mouse"
-}
-
-const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
-  let data: FormData
-  try {
-    data = new FormData(form, submitter)
-  } catch {
-    data = new FormData(form)
-  }
-  // No prototype, so fields named `constructor` or `__proto__` are kept like any other.
-  const fields: Record<string, string> = Object.create(null)
-  const entries: Array<readonly [string, string]> = []
-  data.forEach((value, name) => {
-    if (typeof value !== "string") return
-    entries.push([name, value])
-    if (!Object.hasOwn(fields, name)) fields[name] = value
-  })
-  return { fields, entries }
-}
-
-/** The payload of `input` and `change` from `source`, the control that changed. */
-const controlPayload = (
-  source: globalThis.Element,
-  event: Event | undefined
-): unknown => {
-  const control = source as HTMLInputElement
-  const e = event as Partial<InputEvent> | undefined
-  const composing = e?.isComposing === true
-  const inputType = typeof e?.inputType === "string" ? e.inputType : ""
-  return control.localName === "input"
-    ? {
-      value: control.value,
-      checked: control.checked === true,
-      files: control.files ? Array.from(control.files) : noFiles,
-      composing,
-      inputType
-    }
-    : { value: String(control.value ?? ""), composing, inputType }
-}
-
-const noFiles: ReadonlyArray<File> = []
-
 const isFileInput = (node: globalThis.Node): boolean =>
   (node as globalThis.Element).localName === "input" &&
   (node as HTMLInputElement).type === "file"
-
-const noSelection = { selectionStart: null, selectionEnd: null }
-
-const isEditable = (target: EventTarget | null): boolean => {
-  const element = target as HTMLElement | null
-  if (element?.namespaceURI === HTML) {
-    const tag = element.localName
-    if (tag === "textarea" || tag === "select") return true
-    if (tag === "input") {
-      return !nonTextInputTypes.has((element as HTMLInputElement).type)
-    }
-  }
-  return element?.isContentEditable === true
-}
-
-const selectionOf = (target: EventTarget | null) => {
-  const field = target as HTMLInputElement | null
-  const tag = (field as globalThis.Element | null)?.localName
-  if (tag !== "input" && tag !== "textarea") return noSelection
-  try {
-    const start = field!.selectionStart
-    const end = field!.selectionEnd
-    return typeof start === "number" && typeof end === "number"
-      ? { selectionStart: start, selectionEnd: end }
-      : noSelection
-  } catch {
-    // Older browsers throw, rather than return `null`, for an input type without a selection.
-    return noSelection
-  }
-}
-
-interface FieldState {
-  readonly value: string
-  readonly start: number
-  readonly end: number
-  readonly direction: "forward" | "backward" | "none"
-}
-
-const fieldStateOf = (target: EventTarget | null): FieldState | undefined => {
-  const { selectionEnd, selectionStart } = selectionOf(target)
-  if (selectionStart === null || selectionEnd === null) return undefined
-  const field = target as HTMLInputElement
-  return {
-    value: field.value,
-    start: selectionStart,
-    end: selectionEnd,
-    direction: field.selectionDirection ?? "none"
-  }
-}
-
-const offsetIn = (current: string, next: string, offset: number): number => {
-  const max = Math.min(current.length, next.length)
-  let prefix = 0
-  while (
-    prefix < max && current.charCodeAt(prefix) === next.charCodeAt(prefix)
-  ) prefix++
-  if (offset <= prefix) return offset
-  let suffix = 0
-  while (
-    suffix < max - prefix &&
-    current.charCodeAt(current.length - 1 - suffix) ===
-      next.charCodeAt(next.length - 1 - suffix)
-  ) suffix++
-  const fromEnd = current.length - offset
-  return fromEnd <= suffix
-    ? next.length - fromEnd
-    : Math.min(offset, next.length - suffix)
-}
-
-/** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
-const pastedText = (event: Event): string => {
-  try {
-    return (event as ClipboardEvent).clipboardData?.getData("text/plain") ?? ""
-  } catch {
-    return ""
-  }
-}
-
-/**
- * Whether `target`, where focus came from or goes, is inside `element`.
- * `null`, another window or nowhere, is not. An event a script made can name
- * any event target, such as the window, and `contains` throws for one that
- * isn't a node. Only the browser can tell: a node from another realm, such as
- * an iframe's adopted into this document, fails `instanceof Node`, and an
- * object can fake `nodeType`.
- */
-const containsTarget = (
-  element: globalThis.Element,
-  target: EventTarget | null
-): boolean => {
-  try {
-    return element.contains(target as globalThis.Node | null)
-  } catch {
-    return false
-  }
-}
-
-const isDisabled = (target: EventTarget | null): boolean =>
-  typeof (target as globalThis.Element | null)?.matches === "function" &&
-  (target as globalThis.Element).matches(":disabled")
-
-const isFocusVisible = (target: EventTarget | null): boolean => {
-  if (typeof (target as globalThis.Element | null)?.matches !== "function") {
-    return true
-  }
-  try {
-    return (target as globalThis.Element).matches(":focus-visible")
-  } catch {
-    return true
-  }
-}
-
-const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
-  (target !== null && "value" in (target as object)
-    ? target
-    : element) as HTMLInputElement
-
-/**
- * Builds the payload a handler gets: plain data, read from the event and the
- * elements involved.
- */
-const payloadOf = (
-  name: string,
-  event: Event,
-  target: EventTarget | null,
-  element: globalThis.Element,
-  pointer: Html.PointerType | undefined
-): unknown => {
-  switch (name) {
-    case "click":
-    case "dblclick":
-    case "contextmenu":
-    case "mousedown":
-    case "mouseup":
-    case "pointerdown":
-    case "pointerup":
-    case "pointercancel": {
-      const e = event as MouseEvent
-      return {
-        button: e.button ?? 0,
-        x: e.clientX ?? 0,
-        y: e.clientY ?? 0,
-        ...modifiers(event),
-        pointerType: pressedWith(name, event, pointer)
-      }
-    }
-    case "mouseenter":
-    case "mouseleave": {
-      const e = event as MouseEvent
-      return { x: e.clientX ?? 0, y: e.clientY ?? 0 }
-    }
-    case "keydown":
-    case "keyup": {
-      const e = event as KeyboardEvent
-      // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
-      const composing = e.isComposing === true ||
-        (e as { readonly keyCode?: number }).keyCode === 229
-      return {
-        key: e.key ?? "",
-        ...modifiers(event),
-        composing,
-        repeat: e.repeat === true,
-        editable: isEditable(event.composedPath()[0] ?? target),
-        ...selectionOf(target)
-      }
-    }
-    case "input":
-    case "change":
-      return controlPayload(fieldOf(target, element), event)
-    case "compositionend":
-      return { value: String(fieldOf(target, element).value ?? "") }
-    case "paste":
-      return { text: pastedText(event) }
-    case "submit": {
-      const form =
-        (element.localName === "form" ? element : target) as HTMLFormElement
-      return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
-    }
-    case "toggle": {
-      const e = event as Partial<ToggleEvent>
-      // A popover's state is its own; a `details` or `dialog` reads `open`, with states derived where the
-      // browser has no `ToggleEvent`.
-      const open = element.hasAttribute("popover")
-        ? e.newState === "open"
-        : (element as HTMLDetailsElement).open === true
-      const newState = e.newState === "open" || e.newState === "closed"
-        ? e.newState
-        : open
-        ? "open"
-        : "closed"
-      const oldState = e.oldState === "open" || e.oldState === "closed"
-        ? e.oldState
-        : newState === "open"
-        ? "closed"
-        : "open"
-      return { open, newState, oldState }
-    }
-    case "close":
-      return { returnValue: (element as HTMLDialogElement).returnValue ?? "" }
-    case "cancel":
-      return { cancelable: event.cancelable }
-    case "scroll":
-      return { top: element.scrollTop, left: element.scrollLeft }
-    case "focus":
-      return { focusVisible: isFocusVisible(target) }
-    case "blur":
-      // A window listener's `blur` has no element that lost focus.
-      return target === element ? { disabled: isDisabled(target) } : {}
-    case "focusin":
-      return {
-        within: containsTarget(element, (event as FocusEvent).relatedTarget)
-      }
-    case "focusout":
-      return {
-        within: containsTarget(element, (event as FocusEvent).relatedTarget),
-        disabled: isDisabled(target)
-      }
-    default:
-      return {}
-  }
-}
 
 const ignore = () => {}
 
@@ -1843,136 +1563,6 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
   }
 }
 
-// Visibility follows `visibilitychange` only, never the window's `focus`. Connectivity
-// starts true and follows `online` and `offline` on the document's own window.
-const signals = (document: Document) => {
-  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
-  const connectivity = queryCore.makeSignal(true)
-  const view = document.defaultView
-  const onVisibility = () =>
-    visibility.set(document.visibilityState !== "hidden")
-  const onOnline = () => connectivity.set(true)
-  const onOffline = () => connectivity.set(false)
-  document.addEventListener("visibilitychange", onVisibility)
-  view?.addEventListener("online", onOnline)
-  view?.addEventListener("offline", onOffline)
-  return {
-    visibility,
-    connectivity,
-    dispose: () => {
-      document.removeEventListener("visibilitychange", onVisibility)
-      view?.removeEventListener("online", onOnline)
-      view?.removeEventListener("offline", onOffline)
-    }
-  }
-}
-
-// `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
-// removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (
-  document: Document,
-  held: () => boolean
-): HtmlSubscription.GlobalEvents => ({
-  listen: (target, name, { capture, custom }, listener) => {
-    const on = target === "document" ? document : document.defaultView
-    if (on === null) return () => {}
-    const view = document.defaultView
-    const f = (event: Event) =>
-      view !== null && held() && isInput(event, view) ? undefined : listener(
-        {
-          ...(custom === true
-            ? { detail: (event as CustomEvent).detail ?? null }
-            : payloadOf(
-              name,
-              event,
-              event.target,
-              document.documentElement,
-              undefined
-            ) as object),
-          defaultPrevented: event.defaultPrevented
-        },
-        () => event.preventDefault()
-      )
-    on.addEventListener(name, f, { capture })
-    return () => on.removeEventListener(name, f, { capture })
-  }
-})
-
-const isInput = (event: Event, view: Window & typeof globalThis): boolean =>
-  event.isTrusted &&
-  (event instanceof view.MouseEvent || event instanceof view.KeyboardEvent ||
-    (typeof view.TouchEvent === "function" && event instanceof view.TouchEvent))
-
-const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
-  const view = document.defaultView
-  return {
-    now: () => view?.performance.now() ?? 0,
-    listen: (listener) => {
-      if (view === null || typeof view.requestAnimationFrame !== "function") {
-        return () => {}
-      }
-      const frame = (time: number) => {
-        id = view.requestAnimationFrame(frame)
-        listener(time)
-      }
-      let id = view.requestAnimationFrame(frame)
-      return () => view.cancelAnimationFrame(id)
-    }
-  }
-}
-
-// Loads in a detached <img>. A cached image may already be complete.
-const imagesOf = (document: Document): HtmlImages.Images => ({
-  load: (source) =>
-    Effect.callback((resume) => {
-      const image = document.createElement("img")
-      const settle = (status: "loaded" | "error") =>
-        resume(Effect.succeed(status))
-      if (source.referrerPolicy !== undefined) {
-        image.referrerPolicy = source.referrerPolicy
-      }
-      image.crossOrigin = source.crossOrigin ?? null
-      if (source.sizes !== undefined) image.sizes = source.sizes
-      if (source.srcSet !== undefined) image.srcset = source.srcSet
-      if (source.src !== undefined) image.src = source.src
-      if (image.complete) {
-        return settle(
-          image.naturalWidth > 0 ? "loaded" : "error"
-        )
-      }
-      image.onload = () => settle("loaded")
-      image.onerror = () => settle("error")
-      return Effect.sync(() => {
-        image.onload = null
-        image.onerror = null
-      })
-    })
-})
-
-const filesOf = (document: Document): HtmlFiles.Files => ({
-  pick: (options) =>
-    Effect.callback((resume) => {
-      const input = document.createElement("input")
-      input.type = "file"
-      input.multiple = options.multiple === true
-      if (options.accept !== undefined) input.accept = options.accept.join(",")
-      if (options.capture !== undefined) {
-        input.setAttribute("capture", options.capture)
-      }
-      const settle = (files: ReadonlyArray<File>) =>
-        resume(Effect.succeed({ opened: true, files }))
-      input.onchange = () => settle(Array.from(input.files ?? []))
-      input.oncancel = () => settle([])
-      if (!htmlHost.showPicker(input)) {
-        return resume(Effect.succeed({ opened: false, files: [] }))
-      }
-      return Effect.sync(() => {
-        input.onchange = null
-        input.oncancel = null
-      })
-    })
-})
-
 /**
  * Provides the browser host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
@@ -1998,19 +1588,10 @@ export const layer = (options?: {
     const document = options?.document ?? globalThis.document
     const host = makeHost(document)
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
-    const signal = signals(document)
-    yield* Effect.addFinalizer(() => Effect.sync(signal.dispose))
-    return Context.make(Renderer.Renderer, { host }).pipe(
-      Context.add(Html.Host, htmlHost),
-      Context.add(queryCore.Visibility, signal.visibility),
-      Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(
-        globalEvents.GlobalEvents,
-        globalEventsOf(document, holds.get(host)!.held)
-      ),
-      Context.add(frames.AnimationFrames, framesOf(document)),
-      Context.add(HtmlImages.Images, imagesOf(document)),
-      Context.add(HtmlFiles.Files, filesOf(document))
+    return Context.add(
+      yield* documentServices.make(document, htmlHost, holds.get(host)!.held),
+      Renderer.Renderer,
+      { host }
     )
   }))
 
