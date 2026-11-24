@@ -14,20 +14,19 @@ const reset = HtmlLocator.role("button", {
 const autoCount = HtmlLocator.role("button", { name: "Auto-count" })
 const stop = HtmlLocator.role("button", { name: "Stop" })
 
-const delayedReset = Effect.gen(function*() {
-  const play = yield* HtmlPlay.make(Counter, {})
-  yield* play.click(increment)
-  yield* play.click(reset)
-  yield* TestClock.adjust("999 millis")
-  yield* play.expect(count).toHaveText("1")
-  yield* TestClock.adjust("1 millis")
-  yield* play.expect(count).toHaveText("0")
-})
-
 it.layer(TestHost.layer(), { buildPerTest: true })(
   "Counter",
   (it) => {
-    it.effect("resets one second after the click", () => delayedReset)
+    it.effect("resets one second after the click", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(Counter, {})
+        yield* play.click(increment)
+        yield* play.click(reset)
+        yield* TestClock.adjust("999 millis")
+        yield* play.expect(count).toHaveText("1")
+        yield* TestClock.adjust("1 millis")
+        yield* play.expect(count).toHaveText("0")
+      }))
 
     it.effect("counts once a second while auto-counting", () =>
       Effect.gen(function*() {

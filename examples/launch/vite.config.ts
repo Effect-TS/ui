@@ -11,18 +11,23 @@ const resolved = `\0${id}`
 
 type Select = (source: string) => string
 
-const declared = (block: string): string | undefined =>
-  /^(?:export )?(?:const|class|type) (\w+)/.exec(block)?.[1]
-
 const whole: Select = (source) =>
   source.replace(/^(?:\/\/ @vitest[^\n]*\n|import [^]*?"\n|\n)+/, "")
     .trimEnd()
 
-const names =
-  (...wanted: ReadonlyArray<string>): Select => (source) =>
-    source.split("\n\n").filter((block) =>
-      wanted.includes(declared(block) ?? "")
-    ).join("\n\n").trimEnd()
+const test = (title: string): Select => (source) => {
+  const lines = source.split("\n")
+  const start = lines.findIndex((line) =>
+    /^\s*it(\.effect)?\(/.test(line) && line.includes(`"${title}"`)
+  )
+  if (start < 0) throw new Error(`No test named "${title}"`)
+  const indent = lines[start].search(/\S/)
+  const end = lines.findIndex((line, index) =>
+    index > start && line.search(/\S/) === indent
+  )
+  return lines.slice(start, end + 1).map((line) => line.slice(indent))
+    .join("\n")
+}
 
 const sources: {
   readonly [K in keyof Snippets]: ReadonlyArray<
@@ -43,23 +48,23 @@ const sources: {
   queryEffect: [["src/queries/effect/Posts.ts", whole]],
   storyFoldkit: [[
     "src/autocounter/foldkit/counter.story.test.ts",
-    names("delayedReset")
+    test("resets after the delay")
   ]],
   storyEffect: [[
     "src/autocounter/Counter.story.test.ts",
-    names("delayedReset")
+    test("resets after the delay")
   ]],
   sceneFoldkit: [[
     "src/autocounter/foldkit/counter.scene.test.ts",
-    names("delayedReset")
+    test("resets after the delay")
   ]],
   sceneEffect: [[
     "src/autocounter/Counter.scene.test.ts",
-    names("delayedReset")
+    test("resets after the delay")
   ]],
   play: [[
     "src/autocounter/Counter.play.test.ts",
-    names("delayedReset")
+    test("resets one second after the click")
   ]]
 }
 

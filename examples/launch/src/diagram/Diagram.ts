@@ -18,7 +18,7 @@ import {
 
 const DiagramModel = Schema.Struct({
   choice: Name,
-  isOpen: Schema.Boolean,
+  isSelectOpen: Schema.Boolean,
   foldkit: Schema.NullOr(Schema.Number),
   effect: Schema.NullOr(Schema.Number),
   isPlaying: Schema.Boolean,
@@ -27,9 +27,9 @@ const DiagramModel = Schema.Struct({
 type DiagramModel = typeof DiagramModel.Type
 
 export const DiagramMessage = UiSchema.TaggedEnum({
-  RequestedOpen: {},
-  RequestedClose: {},
-  PickedChoice: { choice: Name },
+  RequestedOpenSelect: {},
+  RequestedCloseSelect: {},
+  PickedSelectChoice: { choice: Name },
   ClickedSend: {},
   ClickedStep: { side: SideId, index: Schema.Number },
   Ticked: {}
@@ -121,16 +121,16 @@ export const Diagram = Component.define({
 }).make({
   init: () => ({
     choice: "A1",
-    isOpen: false,
+    isSelectOpen: false,
     foldkit: null,
     effect: null,
     isPlaying: false,
     runs: 0
   }),
   update: {
-    RequestedOpen: ($) => $.evolve({ isOpen: true }),
-    RequestedClose: ($) => $.evolve({ isOpen: false }),
-    PickedChoice: ($, { choice }) =>
+    RequestedOpenSelect: ($) => $.evolve({ isSelectOpen: true }),
+    RequestedCloseSelect: ($) => $.evolve({ isSelectOpen: false }),
+    PickedSelectChoice: ($, { choice }) =>
       $.evolve({
         choice,
         foldkit: null,
@@ -176,7 +176,7 @@ export const Diagram = Component.define({
       h.div.class("diagram-controls").children(
         Select(h, {
           props: {
-            open: model.isOpen,
+            open: model.isSelectOpen,
             value: model.choice,
             items: scenario.choices.map((value) => ({
               value,
@@ -185,11 +185,13 @@ export const Diagram = Component.define({
             alignItemWithTrigger: false
           },
           onEmit: {
-            RequestedOpen: () => DiagramMessage.RequestedOpen(),
-            RequestedClose: () => DiagramMessage.RequestedClose(),
+            RequestedOpen: () => DiagramMessage.RequestedOpenSelect(),
+            RequestedClose: () =>
+              DiagramMessage.RequestedCloseSelect(),
             Picked: ({ value }) => {
               const choice = names.find((name) => name === value)
-              return choice && DiagramMessage.PickedChoice({ choice })
+              return choice &&
+                DiagramMessage.PickedSelectChoice({ choice })
             },
             Settled: () => undefined
           },

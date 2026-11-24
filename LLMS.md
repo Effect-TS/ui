@@ -207,6 +207,14 @@ fails the second: with nothing in its payload the tag reads as the state. Keep
 `Opened`, `Closed` and `Dismissed` for a component that owns that state, as
 `ToastProvider` owns its toasts.
 
+A parent's message for a child's event always names the child, a kit component
+included. The event's name is short because the component it belongs to says
+what it is about, and the parent's message has no such context: it sits in a
+union with the parent's other messages. So `RequestedOpen` and
+`RequestedClose` from a `Select` become `RequestedOpenSelect` and
+`RequestedCloseSelect`, never a bare `RequestedOpen`, and its `Picked` becomes
+`PickedSelectChoice`, which says which control picked what.
+
 A message is one fact. The tag says which fact, and the payload holds what the
 event reported. Two events get two messages, even when their handlers differ
 only by a constant. Focus and blur are `FocusedSearchInput` and
