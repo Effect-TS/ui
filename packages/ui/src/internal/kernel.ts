@@ -280,8 +280,8 @@ export interface Tree {
     cause: Cause.Cause<unknown>
   ) => void
   readonly init: (inst: Instance) => Next
-  readonly log: Recorder | undefined
-  readonly fallback:
+  readonly log?: Recorder | undefined
+  readonly fallback?:
     | ((cause: Cause.Cause<unknown>) => View.Node<any, any>)
     | undefined
   readonly schedule: (task: () => void) => void
@@ -290,7 +290,7 @@ export interface Tree {
    * fact of its own: for what reaches the tree from a fiber. Without it, it runs as it is. `late`: a step
    * that has no entry yet follows from its first.
    */
-  readonly follow: ((late?: boolean) => <A>(f: () => A) => A) | undefined
+  readonly follow?: ((late?: boolean) => <A>(f: () => A) => A) | undefined
   /** The fibers the tree's close waits for, until they exit, once a feature has started one. */
   owned?: Set<Fiber.Fiber<unknown, unknown>> | undefined
   /** The provided Layer builds still pending, each with the flush it began in. */
@@ -341,10 +341,10 @@ export interface Tree {
 
 /** @internal */
 export class Rec {
-  v: View.Node<any, any>
-  node: any
-  kids: Array<Rec> | undefined
-  inst: Instance
+  declare v: View.Node<any, any>
+  declare node: any
+  declare kids: Array<Rec> | undefined
+  declare inst: Instance
   constructor(
     v: View.Node<any, any>,
     node: unknown,
@@ -360,15 +360,15 @@ export class Rec {
 
 /** @internal */
 export class Instance {
-  readonly tree: Tree
-  readonly component: Runnable
-  readonly parent: Instance | undefined
-  readonly at: Rec | undefined
+  declare readonly tree: Tree
+  declare readonly component: Runnable
+  declare readonly parent: Instance | undefined
+  declare readonly at: Rec | undefined
   /** The path of the slot or headless view it's drawn in, if any: a kept child's changes as it's drawn again. */
-  under: string | undefined
-  readonly depth: number
-  props: unknown
-  env: Env
+  declare under: string | undefined
+  declare readonly depth: number
+  declare props: unknown
+  declare env: Env
   model: unknown = undefined
   rendered: Rec | undefined = undefined
   dirty = false
@@ -466,11 +466,6 @@ export const rendering = { _tag: "Render" } as const
 
 /** Recorded after it rendered. @internal */
 export const rendered = { _tag: "Rendered" } as const
-
-/** @internal */
-export const notPorted = (feature: string): never => {
-  throw new Error("not ported yet: " + feature)
-}
 
 const emptyText = View.text("")
 
@@ -677,14 +672,6 @@ export const send = (
   if (next.viewTransition !== undefined) {
     transitions?.request(next.viewTransition)
   }
-  apply(inst, next, seq)
-}
-
-const apply = (
-  inst: Instance,
-  next: Next,
-  seq: number | undefined | void
-): void => {
   issueAll(inst, next, seq)
   applied(inst, next, seq)
 }
@@ -827,10 +814,6 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   }
 }
 
-const check = (component: any): void => {
-  if (component.init === undefined) notPorted("Component.lazy")
-}
-
 const authorOf = (inst: Instance): Instance =>
   inst.at !== undefined &&
     (inst.at.v as View.Child<any, any>).view !== undefined
@@ -848,7 +831,6 @@ const start = (inst: Instance): Rec | undefined => {
   busy++
   try {
     try {
-      check(component)
       inst.tree.drew = true
       first = inst.tree.init(inst)
     } catch (error) {
@@ -1750,14 +1732,11 @@ export const mount = (
   options: Options
 ): Root => {
   const tree: Tree = {
+    ...options,
     host,
-    report: options.report,
     init: options.init ?? initOf,
-    log: options.log,
-    fallback: options.fallback,
     // Wrapped: called as the tree's method, the browser's `queueMicrotask` throws "Illegal invocation".
     schedule: options.schedule ?? ((task) => queueMicrotask(task)),
-    follow: options.follow,
     ops,
     dirty: [],
     scheduled: true,
