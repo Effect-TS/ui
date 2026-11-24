@@ -1260,8 +1260,9 @@ export interface VoidElement<
 }
 
 for (
-  const pair of "Click DoubleClick:dblclick KeyDown KeyUp Focus Blur Paste DragEnd DragEnter DragLeave DragOver Input Change CompositionEnd Submit Toggle Cancel Close"
-    .split(" ")
+  const pair
+    of "Click DoubleClick:dblclick KeyDown KeyUp Focus Blur Paste DragEnd DragEnter DragLeave DragOver Input Change CompositionEnd Submit Toggle Cancel Close"
+      .split(" ")
 ) {
   const [name, event] = pair.split(":")
   const type = event ?? name!.toLowerCase()

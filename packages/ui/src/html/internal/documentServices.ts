@@ -24,8 +24,8 @@ export const register = (provider: Provider): void => {
 }
 
 /** @internal */
-export const Env: Context.Reference<DocumentEnv | undefined> =
-  Context.Reference<DocumentEnv | undefined>(
+export const Env: Context.Reference<DocumentEnv | undefined> = Context
+  .Reference<DocumentEnv | undefined>(
     "@effect/ui/html/internal/DocumentEnv",
     { defaultValue: () => undefined }
   )

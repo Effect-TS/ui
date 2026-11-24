@@ -655,7 +655,10 @@ const framesOf = (document: Document): AnimationFrames => {
 
 documentServices.register((context, env) =>
   context.pipe(
-    Context.add(globalEvents.GlobalEvents, globalEventsOf(env.document, env.held)),
+    Context.add(
+      globalEvents.GlobalEvents,
+      globalEventsOf(env.document, env.held)
+    ),
     Context.add(frames.AnimationFrames, framesOf(env.document))
   )
 )

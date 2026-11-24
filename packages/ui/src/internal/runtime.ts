@@ -1077,7 +1077,14 @@ export const paintDom = (
   },
   never,
   Scope.Scope
-> => paintCore(component, rootProps, container, state, () => fromDom(makeDom, elements))
+> =>
+  paintCore(
+    component,
+    rootProps,
+    container,
+    state,
+    () => fromDom(makeDom, elements)
+  )
 
 const fallbacksIn = (inst: Kernel.Instance, out: Set<string>): void => {
   if (!inst.closed && inst.rendered !== undefined) {

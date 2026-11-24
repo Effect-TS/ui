@@ -1620,7 +1620,9 @@ const build = (
             if (resume !== undefined) {
               const r = resume
               resume = undefined
-              r(Effect.succeed(pending.splice(0) as [Location, ...Array<Location>]))
+              r(Effect.succeed(
+                pending.splice(0) as [Location, ...Array<Location>]
+              ))
             }
           }
           listeners.add(listener)
@@ -1629,17 +1631,22 @@ const build = (
               ? Effect.succeed(
                 pending.splice(0) as [Location, ...Array<Location>]
               )
-              : Effect.callback<readonly [Location, ...Array<Location>]>((r) => {
-                resume = r
-                return Effect.sync(() => {
-                  if (resume === r) resume = undefined
-                })
-              })
+              : Effect.callback<readonly [Location, ...Array<Location>]>(
+                (r) => {
+                  resume = r
+                  return Effect.sync(() => {
+                    if (resume === r) resume = undefined
+                  })
+                }
+              )
           )
           return Effect.as(
-            Scope.addFinalizer(scope, Effect.sync(() => {
-              listeners.delete(listener)
-            })),
+            Scope.addFinalizer(
+              scope,
+              Effect.sync(() => {
+                listeners.delete(listener)
+              })
+            ),
             pull
           )
         })

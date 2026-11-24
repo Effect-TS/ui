@@ -3859,7 +3859,9 @@ const listHasMoreOf = (entry: Entry): boolean => {
 }
 
 const listMoreOf = (entry: Entry): More<any> => {
-  if (entry.target !== undefined && entry.target > listHeldPages(entry).length) {
+  if (
+    entry.target !== undefined && entry.target > listHeldPages(entry).length
+  ) {
     return moreLoading
   }
   if (entry.moreError !== undefined) {
