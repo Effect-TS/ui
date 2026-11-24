@@ -230,7 +230,12 @@ const counted = (
   const done = () => {
     building.delete(stamp)
   }
-  whenSettled(env, done, done)
+  const settled = () => {
+    if (!building.delete(stamp) || tree.flushing || tree.scheduled) return
+    tree.scheduled = true
+    tree.schedule(() => tree.ops.flush(tree))
+  }
+  whenSettled(env, settled, settled)
   addFinalizer(tree, context, scope, Effect.sync(done))
   return done
 }
