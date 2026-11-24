@@ -80,8 +80,14 @@ export const tagOf = (value: unknown): string | undefined =>
     ? value._tag
     : undefined
 
-export const nameOf = (path: string): string =>
-  path.slice(path.lastIndexOf("/") + 1) || path
+export const nameOf = (path: string): string => {
+  const boundary = path.lastIndexOf("]/")
+  if (boundary !== -1) return path.slice(boundary + 2)
+  const bracket = path.indexOf("[")
+  return bracket === -1
+    ? path.slice(1)
+    : path.slice(path.lastIndexOf("/", bracket) + 1)
+}
 
 export interface Label {
   readonly text: string
@@ -193,15 +199,6 @@ export const toneOf = (summary: Inspector.Summary): Tone | undefined =>
     : summary.running + summary.waiting > 0
     ? "open"
     : undefined
-
-export const parentOf = (path: string): string =>
-  path.slice(0, Math.max(0, path.lastIndexOf("/")))
-
-export const pathsOf = (path: string): Array<string> =>
-  path === "" ? [] : [...pathsOf(parentOf(path)), path]
-
-export const isUnder = (path: string, scope: string): boolean =>
-  path === scope || path.startsWith(scope + "/")
 
 export const duration = (ms: number): string =>
   ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s"

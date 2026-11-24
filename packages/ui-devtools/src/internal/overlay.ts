@@ -60,10 +60,10 @@ const OverlayModel = Schema.Struct({
   revision: Schema.Number,
   selected: Schema.NullOr(Schema.Number),
   filter: Filter,
-  scope: Schema.NullOr(Schema.String),
+  scope: Schema.NullOr(Schema.Number),
   browse: Schema.Boolean,
   find: Schema.String,
-  branches: Schema.Array(Schema.String),
+  branches: Schema.Array(Schema.Number),
   failures: Schema.Number,
   tab: Schema.String,
   copied: Schema.NullOr(Schema.Number),
@@ -84,13 +84,13 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedClose: {},
   ClickedEntry: { seq: Schema.Number },
   ClickedLink: { seq: Schema.Number },
-  ClickedScope: { path: Schema.String },
+  ClickedScope: { instance: Schema.Number },
   TypedFind: { text: Schema.String },
   ClickedBrowse: {
     browse: Schema.Boolean,
-    branches: Schema.Array(Schema.String)
+    branches: Schema.Array(Schema.Number)
   },
-  ToggledBranch: { path: Schema.String },
+  ToggledBranch: { instance: Schema.Number },
   ClickedFilter: { filter: Filter },
   ClickedFollowLatest: {},
   ClickedBack: {},
@@ -427,21 +427,29 @@ const activeRows = (
   )
 }
 
-const treeRows = (session: Session, branches: ReadonlySet<string>) => {
+const treeRows = (session: Session, branches: ReadonlySet<number>) => {
   const rows: Array<InstanceRow> = []
-  const walked = new Set<string>()
-  const walk = (path: string, depth: number) => {
-    for (const summary of session.children(path)) {
+  const walk = (instance: number | undefined, depth: number) => {
+    for (const summary of session.children(instance)) {
       const expanded = summary.below.instances > 0 &&
-        branches.has(summary.path) && !walked.has(summary.path)
+        branches.has(summary.instance)
       rows.push({ summary, depth, expanded, split: false })
-      if (!expanded) continue
-      walked.add(summary.path)
-      walk(summary.path, depth + 1)
+      if (expanded) walk(summary.instance, depth + 1)
     }
   }
-  walk("", 0)
+  walk(undefined, 0)
   return rows
+}
+
+const lineage = (session: Session, summary: Inspector.Summary) => {
+  const chain = [summary]
+  for (let at = summary.parent; at !== undefined;) {
+    const up = session.summary(at)
+    if (up === undefined) break
+    chain.unshift(up)
+    at = up.parent
+  }
+  return chain
 }
 
 const Statuses = (h: H, summary: Inspector.Summary) => {
@@ -481,6 +489,7 @@ const instanceMarks = { bad: "bad", open: "start", calm: "message" } as const
 
 const InstanceItem = (
   h: H,
+  session: Session,
   row: InstanceRow,
   model: OverlayModel,
   owner: number | undefined,
@@ -488,15 +497,18 @@ const InstanceItem = (
 ) => {
   const { summary } = row
   const name = Read.nameOf(summary.path)
-  const parent = Read.parentOf(summary.path)
-  const scoped = model.scope === summary.path
+  const parent = tree || summary.parent === undefined
+    ? undefined
+    : session.summary(summary.parent)
+  const scoped = model.scope === summary.instance
   const tone = Read.toneOf(summary)
   return [
     !tree ? null : summary.below.instances === 0
       ? h.span.class("chev").attr("aria-hidden", "true")
       : h.button.class("chev").attr("aria-expanded", String(row.expanded))
         .attr("aria-label", "Instances under " + name)
-        .onClick(OverlayMessage.ToggledBranch({ path: summary.path })).children(
+        .onClick(OverlayMessage.ToggledBranch({ instance: summary.instance }))
+        .children(
           row.expanded ? "▾" : "▸"
         ),
     h.button.class(
@@ -508,16 +520,19 @@ const InstanceItem = (
       .attr("aria-current", owner === summary.instance ? "true" : undefined)
       .attr("data-instance", name)
       .attr("title", "Show only " + name + " and the instances under it")
-      .onClick(OverlayMessage.ClickedScope({ path: summary.path }))
+      .onClick(OverlayMessage.ClickedScope({ instance: summary.instance }))
       .children(
         tree
           ? null
           : Mark(h, instanceMarks[tone ?? "calm"], "imark", toneClass(tone)),
         h.span.class("id").children(
           h.span.class("iname", "code").children(name),
-          tree || parent === ""
+          parent === undefined
             ? null
-            : h.span.class("in").children(" in ", Code(h, Read.nameOf(parent)))
+            : h.span.class("in").children(
+              " in ",
+              Code(h, Read.nameOf(parent.path))
+            )
         ),
         tree && summary.below.instances > 0
           ? Rollup(h, summary.below)
@@ -528,6 +543,7 @@ const InstanceItem = (
 
 const InstanceList = (
   h: H,
+  session: Session,
   rows: ReadonlyArray<InstanceRow>,
   model: OverlayModel,
   owner: number | undefined,
@@ -574,7 +590,9 @@ const InstanceList = (
                   : undefined
               ),
               index
-            }).children(...InstanceItem(h, row, model, owner, mode === "tree"))
+            }).children(
+              ...InstanceItem(h, session, row, model, owner, mode === "tree")
+            )
           })
         )
       )
@@ -596,7 +614,7 @@ const Instances = (
     ? treeRows(session, new Set(model.branches))
     : activeRows(session, [
       owner,
-      model.scope === null ? undefined : session.summaryAt(model.scope)
+      model.scope === null ? undefined : session.summary(model.scope)
     ])
   return h.section.class("instances").attr("aria-label", "Instances").children(
     h.div.class("ihead").children(
@@ -616,13 +634,13 @@ const Instances = (
           ? "No instance matches."
           : "No instance has run a Command or taken a message yet."
       )
-      : InstanceList(h, rows, model, owner?.instance, mode),
+      : InstanceList(h, session, rows, model, owner?.instance, mode),
     mode === "find" ? null : h.button.class("browse").onClick(
       OverlayMessage.ClickedBrowse({
         browse: !model.browse,
         branches: model.browse || owner === undefined
           ? []
-          : Read.pathsOf(Read.parentOf(owner.path))
+          : lineage(session, owner).slice(0, -1).map(({ instance }) => instance)
       })
     ).children(
       model.browse
@@ -1454,12 +1472,15 @@ const Details = (
   })
 }
 
-const Crumbs = (h: H, path: string, scope: string | null) => {
-  const paths = Read.pathsOf(path)
-  return h.nav.class("crumbs").attr("aria-label", "Path of the instance")
+const Crumbs = (
+  h: H,
+  chain: ReadonlyArray<Inspector.Summary>,
+  scope: number | null
+) =>
+  h.nav.class("crumbs").attr("aria-label", "Path of the instance")
     .children(
-      paths.flatMap((at, index) => {
-        const segment = Read.nameOf(at)
+      chain.flatMap(({ instance, path }, index) => {
+        const segment = Read.nameOf(path)
         return [
           index === 0
             ? null
@@ -1467,22 +1488,21 @@ const Crumbs = (h: H, path: string, scope: string | null) => {
           h.button.class(
             "crumb",
             "code",
-            at === path && "here"
+            index === chain.length - 1 && "here"
           ).attr(
             "aria-pressed",
-            String(scope === at)
+            String(scope === instance)
           )
             .attr(
               "title",
               "Show only " + segment + " and the instances under it"
             )
-            .onClick(OverlayMessage.ClickedScope({ path: at })).children(
+            .onClick(OverlayMessage.ClickedScope({ instance })).children(
               segment
             )
         ]
       })
     )
-}
 
 const Inspected = (
   h: H,
@@ -1493,6 +1513,8 @@ const Inspected = (
   steps: ReadonlyArray<Read.Step>,
   model: OverlayModel
 ) => {
+  const at = Read.instanceOf(entry)
+  const self = at === undefined ? undefined : session.summary(at)
   const label = Read.labelOf(entry)
   const origin = feed.origin(entry.session)
   const kind = entry._tag === "Update"
@@ -1534,7 +1556,9 @@ const Inspected = (
           ? ""
           : ", " + Read.position(entry.at - origin) + " after start"
       ),
-      "path" in entry ? Crumbs(h, entry.path, model.scope) : null,
+      self === undefined
+        ? null
+        : Crumbs(h, lineage(session, self), model.scope),
       Chain(h, steps)
     ),
     Details(h, session, entry, info, model)
@@ -1558,11 +1582,21 @@ const Panel = (h: H, model: OverlayModel) => {
   }
   const entries = session.entries()
   const scope = model.scope
-  const scoped = scope === null
-    ? entries
-    : entries.filter((entry) =>
-      "path" in entry && Read.isUnder(entry.path, scope)
-    )
+  const within = new Map<number, boolean>()
+  const isWithin = (instance: number): boolean => {
+    if (instance === scope) return true
+    let known = within.get(instance)
+    if (known === undefined) {
+      const parent = session.summary(instance)?.parent
+      known = parent !== undefined && isWithin(parent)
+      within.set(instance, known)
+    }
+    return known
+  }
+  const scoped = scope === null ? entries : entries.filter((entry) => {
+    const instance = Read.instanceOf(entry)
+    return instance !== undefined && isWithin(instance)
+  })
   const timeline = scoped.filter((entry) => Read.matches(entry, model.filter))
     .reverse()
   const hidden = model.filter === "messages"
@@ -1577,7 +1611,7 @@ const Panel = (h: H, model: OverlayModel) => {
   const steps = entry === undefined ? [] : Read.chainOf(session, entry)
   const at = entry === undefined ? undefined : Read.instanceOf(entry)
   const owner = at === undefined ? undefined : session.summary(at)
-  const shown = scope === null ? owner : session.summaryAt(scope)
+  const shown = scope === null ? owner : session.summary(scope)
   return h.div.class("panel", model.paused !== null && "pausing").attr(
     "role",
     "dialog"
@@ -1737,16 +1771,16 @@ export const Overlay = Component.define({
         pins: increment
       })
         .run(...repaint($.model, $.props.feed, seq)),
-    ClickedScope: ($, { path }) =>
-      $.evolve({ scope: $.model.scope === path ? null : path }),
+    ClickedScope: ($, { instance }) =>
+      $.evolve({ scope: $.model.scope === instance ? null : instance }),
     TypedFind: ($, { text }) => $.evolve({ find: text }),
     ClickedBrowse: ($, { branches, browse }) => $.evolve({ browse, branches }),
-    ToggledBranch: ($, { path }) =>
+    ToggledBranch: ($, { instance }) =>
       $.evolve({
-        branches: (paths) =>
-          paths.includes(path)
-            ? paths.filter((open) => open !== path)
-            : [...paths, path]
+        branches: (open) =>
+          open.includes(instance)
+            ? open.filter((other) => other !== instance)
+            : [...open, instance]
       }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
     ClickedFollowLatest: ($) => {
@@ -1796,7 +1830,7 @@ export const Overlay = Component.define({
     Cleared: ($) => {
       const session = sessionOf($.props.feed, $.model)
       const hasScope = $.model.scope !== null &&
-        session?.summaryAt($.model.scope) !== undefined
+        session?.summary($.model.scope) !== undefined
       return $.evolve({
         revision: increment,
         selected: null,

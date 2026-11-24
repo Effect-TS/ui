@@ -179,7 +179,12 @@ export interface Instance {
  *   `CommandStarted`, `CommandAwaiting`, `CommandEnded`,
  *   `CommandInterrupted` or `CommandDropped` that `entries` holds, absent
  *   when it holds none. An excluded `Update` doesn't count.
- * - `below` counts the instances whose `path` is under this one's: all of
+ * - `parent` is the `instance` this one is under: the closest whose
+ *   `path` this one's is under, and of those at that path the latest that
+ *   came before it. So an instance that mounts again at a path gets its own
+ *   children. It's absent for a root and for an instance whose parent the
+ *   session never held, and a parent stays while it has children.
+ * - `below` counts the instances under this one, at any depth: all of
  *   them, the ones with an ended run whose reason isn't `"ended"` (it
  *   failed, was interrupted or was dropped), and the ones with a run going.
  *
@@ -188,6 +193,7 @@ export interface Instance {
  * @since 0.1.0
  */
 export interface Summary extends Instance {
+  readonly parent?: number
   readonly waiting: number
   readonly running: number
   readonly ended: ReadonlyArray<
@@ -310,12 +316,10 @@ export interface Session {
   readonly instanceCount: () => number
   /** The summary of one instance, by its `instance` number. */
   readonly summary: (instance: number) => Summary | undefined
-  /** The summary of the instance last seen at this `path`. */
-  readonly summaryAt: (path: string) => Summary | undefined
   /** The instances with a Command record or a `latest` entry, latest first, and those with no `latest` last. */
   readonly active: () => ReadonlyArray<Summary>
-  /** The instances whose `path` is `path` and one more segment, in the order they were first seen. `""` gives the roots. */
-  readonly children: (path: string) => ReadonlyArray<Summary>
+  /** The instances whose `parent` is `instance`, in the order they were first seen. With no `instance`, those with no `parent`. */
+  readonly children: (instance?: number) => ReadonlyArray<Summary>
   /** The instances whose name, the last segment of their `path`, or `component` holds `text`, ignoring case, in the order they were first seen. */
   readonly find: (text: string) => ReadonlyArray<Summary>
   /** The records of one instance, or of every instance, oldest first within an instance. */

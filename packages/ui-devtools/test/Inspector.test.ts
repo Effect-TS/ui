@@ -559,7 +559,7 @@ describe("Inspector", () => {
       at: seq,
       path,
       instance,
-      component: path.slice(path.lastIndexOf("/") + 1).replace(/\[.*$/, "")
+      component: /([^/[]+)\[[^\]]*\]$/.exec(path)?.[1] ?? path.slice(1)
     })
     const mounted = (
       seq: number,
@@ -601,11 +601,11 @@ describe("Inspector", () => {
     const inspector = Inspector.make({ exclude: ["Moved"] })
     inspector.ingest([
       mounted(1, 1, "/App"),
-      mounted(2, 2, "/App/List"),
-      mounted(3, 3, "/App/List/Group[g]"),
-      mounted(4, 4, "/App/List/Group[g]/Row[r1]", ["test/Save"]),
+      mounted(2, 2, "/App/List[]"),
+      mounted(3, 3, "/App/List[]/Group[g]"),
+      mounted(4, 4, "/App/List[]/Group[g]/Row[r1]", ["test/Save"]),
       {
-        ...base(5, 4, "/App/List/Group[g]/Row[r1]"),
+        ...base(5, 4, "/App/List[]/Group[g]/Row[r1]"),
         _tag: "CommandStarted",
         name: "test/Save",
         issued: save,
@@ -616,24 +616,26 @@ describe("Inspector", () => {
     const session = inspector.sessions()[0]
     const paths = (summaries: ReadonlyArray<Inspector.Summary>) =>
       summaries.map((summary) => summary.path)
+    const numbers = (summaries: ReadonlyArray<Inspector.Summary>) =>
+      summaries.map((summary) => summary.instance)
 
     assert.strictEqual(session.instanceCount(), 4)
-    assert.deepStrictEqual(session.summaryAt("/App")!.below, {
+    assert.deepStrictEqual(session.summary(1)!.below, {
       instances: 3,
       failing: 0,
       running: 1
     })
 
     inspector.ingest([
-      update(6, 2, "/App/List", "Clicked"),
+      update(6, 2, "/App/List[]", "Clicked"),
       {
-        ...base(7, 4, "/App/List/Group[g]/Row[r1]"),
+        ...base(7, 4, "/App/List[]/Group[g]/Row[r1]"),
         _tag: "CommandDropped",
         name: "test/Save",
         issued: save,
         reason: "server"
       },
-      update(8, 3, "/App/List/Group[g]", "Moved")
+      update(8, 3, "/App/List[]/Group[g]", "Moved")
     ])
     const row = session.summary(4)!
     assert.deepStrictEqual([row.waiting, row.running, row.ended, row.latest], [
@@ -642,33 +644,52 @@ describe("Inspector", () => {
       [{ reason: "server", count: 1 }],
       7
     ])
-    assert.deepStrictEqual(session.summaryAt("/App")!.below, {
+    assert.deepStrictEqual(session.summary(1)!.below, {
       instances: 3,
       failing: 1,
       running: 0
     })
     assert.deepStrictEqual(paths(session.active()), [
-      "/App/List/Group[g]/Row[r1]",
-      "/App/List"
+      "/App/List[]/Group[g]/Row[r1]",
+      "/App/List[]"
     ])
-    assert.deepStrictEqual(paths(session.children("")), ["/App"])
-    assert.deepStrictEqual(paths(session.children("/App/List")), [
-      "/App/List/Group[g]"
-    ])
+    assert.deepStrictEqual(numbers(session.children()), [1])
+    assert.deepStrictEqual(numbers(session.children(2)), [3])
     assert.deepStrictEqual(paths(session.find("row[R")), [
-      "/App/List/Group[g]/Row[r1]"
+      "/App/List[]/Group[g]/Row[r1]"
     ])
-    assert.deepStrictEqual(paths(session.find("group")), ["/App/List/Group[g]"])
+    assert.deepStrictEqual(paths(session.find("group")), [
+      "/App/List[]/Group[g]"
+    ])
 
     session.clear()
     assert.deepStrictEqual(session.active(), [])
     assert.deepStrictEqual(session.summary(4)!.ended, [])
     assert.strictEqual(session.summary(4)!.latest, undefined)
-    assert.deepStrictEqual(session.summaryAt("/App")!.below, {
+    assert.deepStrictEqual(session.summary(1)!.below, {
       instances: 3,
       failing: 0,
       running: 0
     })
+
+    inspector.ingest([
+      mounted(9, 5, "/App/Doc[a/b]"),
+      mounted(10, 6, "/App/Doc[a/b]/[body]/Note[n]"),
+      { ...base(11, 4, "/App/List[]/Group[g]/Row[r1]"), _tag: "Unmounted" },
+      { ...base(12, 3, "/App/List[]/Group[g]"), _tag: "Unmounted" },
+      mounted(13, 7, "/App/List[]/Group[g]"),
+      mounted(14, 8, "/App/List[]/Group[g]/Row[r2]")
+    ])
+    assert.deepStrictEqual(numbers(session.children(1)), [2, 5])
+    assert.deepStrictEqual(numbers(session.children(5)), [6])
+    assert.deepStrictEqual(numbers(session.children(2)), [3, 7])
+    assert.deepStrictEqual(numbers(session.children(3)), [4])
+    assert.deepStrictEqual(numbers(session.children(7)), [8])
+    assert.strictEqual(session.summary(8)!.parent, 7)
+    assert.strictEqual(session.summary(7)!.below.instances, 1)
+    assert.strictEqual(session.summary(1)!.below.instances, 7)
+    assert.deepStrictEqual(numbers(session.find("doc[a/b]")), [5])
+    assert.deepStrictEqual(numbers(session.find("note[")), [6])
   })
 
   it("diffs nested values by key and by index", () => {

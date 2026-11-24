@@ -1,7 +1,7 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
-import { isRun, nameOf, parentOf, reasonTone, tagOf } from "./read.ts"
+import { isRun, nameOf, reasonTone, tagOf } from "./read.ts"
 
 type Entry = MessageLog.WireEntry
 type InstanceEntry = Exclude<
@@ -33,13 +33,9 @@ interface InstanceState {
   lastActive: number | undefined
   failing: boolean
   going: boolean
-}
-
-interface Node {
+  readonly parent: InstanceState | undefined
   readonly children: Set<InstanceState>
-  below: number
-  failing: number
-  running: number
+  readonly below: Mutable<Inspector.Summary["below"]>
 }
 
 const isActivity = (entry: Entry) =>
@@ -159,7 +155,7 @@ const makeSession = (
   const forward = new Map<number, Array<Inspector.Link>>()
   const previous = new Map<number, Inspector.Previous>()
   const ended = new Map<number, Array<Mutable<Inspector.Record>>>()
-  const nodes = new Map<string, Node>()
+  const roots = new Set<InstanceState>()
   const byPath = new Map<string, Array<InstanceState>>()
   const active = new Set<InstanceState>()
   let app: string | undefined
@@ -179,20 +175,26 @@ const makeSession = (
     )
   }
 
-  const node = (path: string) => {
-    let found = nodes.get(path)
-    if (found === undefined) {
-      found = { children: new Set(), below: 0, failing: 0, running: 0 }
-      nodes.set(path, found)
+  const parentFor = (path: string, instance: number) => {
+    for (
+      let end = path.lastIndexOf("/");
+      end > 0;
+      end = path.lastIndexOf("/", end - 1)
+    ) {
+      const there = byPath.get(path.slice(0, end))
+      if (there === undefined) continue
+      for (let index = there.length - 1; index >= 0; index--) {
+        if (there[index].info.instance < instance) return there[index]
+      }
     }
-    return found
+    return undefined
   }
 
-  const ancestors = (path: string, f: (node: Node) => void) => {
-    for (let at = path; at !== "";) {
-      at = parentOf(at)
-      f(node(at))
-    }
+  const ancestors = (
+    inst: InstanceState,
+    f: (below: InstanceState["below"]) => void
+  ) => {
+    for (let at = inst.parent; at !== undefined; at = at.parent) f(at.below)
   }
 
   const tally = (record: Inspector.Record, by: 1 | -1) => {
@@ -216,11 +218,11 @@ const makeSession = (
     const going = inst.running > 0
     if (failing !== inst.failing) {
       inst.failing = failing
-      ancestors(inst.info.path, (node) => node.failing += failing ? 1 : -1)
+      ancestors(inst, (below) => below.failing += failing ? 1 : -1)
     }
     if (going !== inst.going) {
       inst.going = going
-      ancestors(inst.info.path, (node) => node.running += going ? 1 : -1)
+      ancestors(inst, (below) => below.running += going ? 1 : -1)
     }
     if (
       inst.waiting + inst.running + inst.ended.size > 0 ||
@@ -232,9 +234,14 @@ const makeSession = (
   const add = (inst: InstanceState) => {
     instances.set(inst.info.instance, inst)
     push(byPath, inst.info.path, inst)
-    node(parentOf(inst.info.path)).children.add(inst)
-    ancestors(inst.info.path, (node) => node.below++)
+    ;(inst.parent?.children ?? roots).add(inst)
+    ancestors(inst, (below) => below.instances++)
   }
+
+  const droppable = (inst: InstanceState) =>
+    inst.buffered === 0 && inst.records.length === 0 &&
+    inst.children.size === 0 &&
+    (inst.info.unmounted !== undefined || inst.info.mounted === undefined)
 
   const drop = (inst: InstanceState) => {
     const path = inst.info.path
@@ -242,15 +249,9 @@ const makeSession = (
     const same = byPath.get(path)!
     if (same.length === 1) byPath.delete(path)
     else same.splice(same.indexOf(inst), 1)
-    nodes.get(parentOf(path))!.children.delete(inst)
-    for (let at = path;; at = parentOf(at)) {
-      const left = nodes.get(at)
-      if (left !== undefined) {
-        if (at !== path) left.below--
-        if (left.below === 0 && left.children.size === 0) nodes.delete(at)
-      }
-      if (at === "") break
-    }
+    ;(inst.parent?.children ?? roots).delete(inst)
+    ancestors(inst, (below) => below.instances--)
+    if (inst.parent !== undefined && droppable(inst.parent)) drop(inst.parent)
   }
 
   const amend = (
@@ -328,7 +329,10 @@ const makeSession = (
         ended: new Map(),
         lastActive: undefined,
         failing: false,
-        going: false
+        going: false,
+        parent: parentFor(entry.path, entry.instance),
+        children: new Set(),
+        below: { instances: 0, failing: 0, running: 0 }
       }
       add(inst)
     }
@@ -512,29 +516,22 @@ const makeSession = (
       inst.lastActive = undefined
       refresh(inst)
     }
-    if (
-      prune && inst.buffered === 0 && inst.records.length === 0 &&
-      (inst.info.unmounted !== undefined || inst.info.mounted === undefined)
-    ) drop(inst)
+    if (prune && droppable(inst)) drop(inst)
   }
 
-  const summarize = (inst: InstanceState): Inspector.Summary => {
-    const below = nodes.get(inst.info.path)
-    return {
-      ...inst.info,
-      waiting: inst.waiting,
-      running: inst.running,
-      ended: Array.from(inst.ended, ([reason, count]) => ({ reason, count })),
-      ...(inst.lastActive === undefined
-        ? undefined
-        : { latest: inst.lastActive }),
-      below: {
-        instances: below?.below ?? 0,
-        failing: below?.failing ?? 0,
-        running: below?.running ?? 0
-      }
-    }
-  }
+  const summarize = (inst: InstanceState): Inspector.Summary => ({
+    ...inst.info,
+    ...(inst.parent === undefined
+      ? undefined
+      : { parent: inst.parent.info.instance }),
+    waiting: inst.waiting,
+    running: inst.running,
+    ended: Array.from(inst.ended, ([reason, count]) => ({ reason, count })),
+    ...(inst.lastActive === undefined
+      ? undefined
+      : { latest: inst.lastActive }),
+    below: { ...inst.below }
+  })
 
   const session: Inspector.Session = {
     id,
@@ -555,15 +552,17 @@ const makeSession = (
       const inst = instances.get(instance)
       return inst === undefined ? undefined : summarize(inst)
     },
-    summaryAt: (path) => {
-      const inst = byPath.get(path)?.at(-1)
-      return inst === undefined ? undefined : summarize(inst)
-    },
     active: () =>
       Array.from(active, summarize).sort((a, b) =>
         (b.latest ?? -1) - (a.latest ?? -1)
       ),
-    children: (path) => Array.from(nodes.get(path)?.children ?? [], summarize),
+    children: (instance) =>
+      Array.from(
+        instance === undefined
+          ? roots
+          : instances.get(instance)?.children ?? [],
+        summarize
+      ),
     find: (text) => {
       const needle = text.toLowerCase()
       const found: Array<Inspector.Summary> = []

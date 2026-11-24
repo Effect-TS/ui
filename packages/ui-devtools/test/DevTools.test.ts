@@ -763,6 +763,101 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }))
     }))
 
+  it.live("keeps a remounted instance apart from the one it replaced", () =>
+    Effect.gen(function*() {
+      const LeafMessage = UiSchema.TaggedEnum({ Pinged: {} })
+      const Leaf = Component.define({
+        name: "Leaf",
+        scoped: false,
+        model: Schema.Null,
+        message: LeafMessage,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: { Pinged: ($) => $.model },
+        view: (h) => h.button.onClick(LeafMessage.Pinged()).children("Ping")
+      })
+      const Pane = Component.define({
+        name: "Pane",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.div(Leaf(h, { key: "l" }))
+      })
+      const HostMessage = UiSchema.TaggedEnum({ Toggled: {} })
+      const Host = Component.define({
+        name: "Host",
+        scoped: false,
+        model: Schema.Boolean,
+        message: HostMessage,
+        elements: Html
+      }).make({
+        init: () => true,
+        update: { Toggled: ($) => !$.model },
+        view: (h, on) =>
+          h.main(
+            h.button.onClick(HostMessage.Toggled()).children("Toggle"),
+            on ? Pane(h, { key: "p" }) : null
+          )
+      })
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        yield* Layer.build(DevTools.layer()).pipe(
+          Effect.flatMap((services) =>
+            BrowserHost.mountEffect(Host, {}, app).pipe(
+              Effect.provide(services)
+            )
+          )
+        )
+        yield* settle
+        const root = overlay()
+        yield* open(root)
+        const ping = () =>
+          HtmlLocator.getByRole(app, "button", { name: "Ping" })
+        const toggle = HtmlLocator.getByRole(app, "button", { name: "Toggle" })
+        yield* click(ping())
+        yield* click(toggle)
+        yield* click(toggle)
+        yield* click(ping())
+        yield* click(entry(root, /Pinged/)[0])
+
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: /^Browse all/ })
+        )
+        const rows = () =>
+          Array.from(root.querySelectorAll(".iitem"), (item) =>
+            [
+              item.querySelector(".irow")!.getAttribute("data-instance"),
+              item.querySelector(".chev")?.getAttribute("aria-expanded") ??
+                "-",
+              text(item.querySelector(".status"))
+            ].filter(Boolean).join(" "))
+        assert.deepStrictEqual(rows(), [
+          "Host true",
+          "Pane[p] false",
+          "Pane[p] true",
+          "Leaf[l] -"
+        ])
+        yield* click(root.querySelectorAll(".iitem .chev")[1]!)
+        assert.deepStrictEqual(rows().slice(-4), [
+          "Pane[p] true",
+          "Leaf[l] - unmounted",
+          "Pane[p] true",
+          "Leaf[l] -"
+        ])
+
+        yield* click(root.querySelector(".crumbs .crumb")!)
+        assert.strictEqual(entry(root, /Pinged/).length, 2)
+        yield* click(Array.from(root.querySelectorAll(".iitem .irow")).at(-1)!)
+        assert.strictEqual(entry(root, /Pinged/).length, 1)
+      }))
+    }))
+
   it.live("collapses Model branches and counts the changes hidden inside them", () =>
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Typed: {}, Replaced: {} })
