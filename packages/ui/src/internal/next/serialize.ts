@@ -13,9 +13,14 @@ import type * as View from "../../View.ts"
 import type * as Kernel from "../kernel.ts"
 import { segment, slotSegment } from "../paths.ts"
 import type * as services from "../services.ts"
-import { redactedIssue, stateCodecOf } from "../stateCodec.ts"
+import { encodePage, redactedIssue, stateCodecOf } from "../stateCodec.ts"
 
-type Encoded = Exit.Exit<unknown, SchemaIssue.Issue>
+interface Page {
+  readonly state: unknown
+  readonly reported: unknown
+}
+
+type Encoded = Exit.Exit<Page, SchemaIssue.Issue>
 
 type Status = "Pending" | "Failed" | undefined
 
@@ -31,7 +36,7 @@ type Snap =
     readonly inst: Kernel.Instance
     readonly encoded:
       | Encoded
-      | Fiber.Fiber<unknown, SchemaIssue.Issue>
+      | Fiber.Fiber<Page, SchemaIssue.Issue>
       | undefined
     readonly status: Status
     readonly bare: boolean
@@ -83,9 +88,7 @@ export const snapshot = (
       _tag: "Instance",
       inst,
       encoded: shipped
-        ? runCodec(
-          stateCodecOf(component).encode(inst.model, inst.results as never)
-        )
+        ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
         : undefined,
       status: component.layer === undefined ? undefined : statusOf(inst.env),
       bare: inst.parent !== undefined && component.layer === undefined &&
@@ -135,7 +138,7 @@ export const snapshot = (
 }
 
 const awaitEncoded = (snap: Snap): Effect.Effect<void> => {
-  const late: Array<Fiber.Fiber<unknown, SchemaIssue.Issue>> = []
+  const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
   const visit = (snap: Snap): void => {
     if (snap._tag === "Text") return
     if (
@@ -222,6 +225,7 @@ export const write = (
     const state: Record<string, unknown> = {}
     const deferredPaths: Array<string> = []
     const statuses: Record<string, string> = {}
+    const collected: Record<string, unknown> = {}
     const ship = (path: string, status: Status) => {
       if (status !== undefined) statuses[path] = status
     }
@@ -265,7 +269,10 @@ export const write = (
               deferredPaths.push(path)
               inner = true
             } else {
-              state[path] = exit.value
+              state[path] = exit.value.state
+              if (exit.value.reported !== undefined) {
+                collected[path] = exit.value.reported
+              }
               ship(path, snap.status)
             }
           }
@@ -289,6 +296,7 @@ export const write = (
     add("~deferred", deferredPaths)
     if (Object.keys(statuses).length > 0) add("~status", statuses)
     add("~query", query)
+    if (Object.keys(collected).length > 0) add("~reported", collected)
     if (isStatic) add("~static", true)
     return state
   })

@@ -8,6 +8,7 @@ import type * as Clock from "effect/Clock"
 import type * as MessageLog from "../MessageLog.ts"
 import * as Kernel from "./kernel.ts"
 import { boundOf } from "./queryCore.ts"
+import { record as sharedRecord } from "./shared.ts"
 
 /** @internal */
 export interface Recording {
@@ -142,7 +143,10 @@ export const make = (
         entry.source = sourceOf(draft.source)
         if (draft.viewTransition === undefined) delete entry.viewTransition
         entry.lists = draft.lists ?? []
-        entry.sends = []
+        entry.sends = draft.sends ?? []
+        if (inst.look !== undefined) {
+          entry.shared = sharedRecord(inst.component as never, inst.look)
+        }
         if (draft.model !== inst.model && origin !== undefined) {
           causes.set(inst, origin)
         }

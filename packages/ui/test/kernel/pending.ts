@@ -62,18 +62,11 @@ export const pending: {
   readonly [file: string]: { readonly [test: string]: string }
 } = {
   "Noop.test.ts": {},
-  "Send.test.ts": {
-    "$.send to an owner > delivers several sends in the order they were issued, each logged as a Send":
-      "headless components and shared state (step 8)",
-    "Story and sends > fromLog reports a divergence when a send changes, from entries and from the Wire":
-      "headless components and shared state (step 8)"
-  },
+  "Send.test.ts": {},
   "DuplicatePaths.test.ts": {},
   "Keyed.test.ts": {},
   "RenderTiming.test.ts": {},
   "Runtime.test.ts": {
-    "Runtime > rejects a different shared owner with the same name at mount":
-      "headless components and shared state (step 8)",
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
       "differs: a malformed `~query` reaches Problems only once a query runner is loaded; this tree loads none, where today's runtime always makes the cache and reports it",
     "Runtime > Commands > switch interrupts the running run, and results come back as messages":
@@ -98,9 +91,7 @@ export const pending: {
   "SlotStatus.test.ts": {},
   "Slots.test.ts": {
     "placing a slot twice fails the receiver > once in a headless child's closure":
-      "headless components and shared state (step 8)",
-    "placing a slot twice fails the receiver > but not when it forwards the slot through a headless closure in a child's content":
-      "headless components and shared state (step 8)"
+      "headless components (step 8): a slot placed in the author's view and again in a headless child's closure is checked across the author's trees, which the kernel doesn't do"
   },
   "html/Canvas.test.ts": {},
   "html/HtmlFiles.test.ts": {},
@@ -215,34 +206,8 @@ export const pending: {
       "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)"
   },
   "Shared.test.ts": {
-    "shared state > a reader reads its owner's value, and its send reaches the owner as a logged update":
-      "shared state (step 4, blocked on a seam)",
-    "shared state > re-renders the readers when the owner's props change what it shares":
-      "shared state (step 4, blocked on a seam)",
-    "shared state > re-renders the readers only when the shared value changes":
-      "shared state (step 4, blocked on a seam)",
-    "shared state > fails an owner whose shares throws, with source shares":
-      "shared state (step 4, blocked on a seam)",
-    "optional owners, reports and onChange > an optional reader with no owner reads undefined, and its send to the owner is dropped":
-      "shared state (step 4, blocked on a seam)",
-    "optional owners, reports and onChange > an owner reads its readers' reports once the pass settles: a swap in one render sends nothing, an unmount does":
-      "shared state (step 4, blocked on a seam)",
-    "optional owners, reports and onChange > a report's id is the reader's own, in an app and in a Scene":
-      "shared state (step 4, blocked on a seam)",
-    "optional owners, reports and onChange > a reader's onChange gets the new value, pointing at the owner's entry that changed it":
-      "shared state (step 4, blocked on a seam)",
-    "optional owners, reports and onChange > a report and a shared value that answer each other fail the owner":
-      "shared state (step 4, blocked on a seam)",
-    "optional owners, reports and onChange > 150 changes before a render are one onChange message with the last value":
-      "shared state (step 4, blocked on a seam)",
-    "shared state in update > reads the owner's value as update runs, logs it, and replays it from entries and Wire frames":
-      "shared state (step 4, blocked on a seam)",
-    "onChange rounds and declarations > a reader that changes the owner mid-round leaves the next reader's message pointing at its value's entry":
-      "shared state (step 4, blocked on a seam)",
-    "a component that reads its own kind > reads the nearest instance of its own kind above it, and reports to it":
-      "shared state (step 4, blocked on a seam)",
     "a component that reads its own kind > sends to the nearest instance of its own kind above it, and the outermost one's send is dropped":
-      "shared state (step 4, blocked on a seam)"
+      "headless parts (step 8): Menu's parts stamp its button with p.part, and the kernel doesn't apply a part's layers"
   },
   "html/KeepAlive.test.ts": {
     "keep-alive children on the server > writes no nodes for a kept child, and the client takes its state once it's written":
@@ -313,8 +278,6 @@ export const pending: {
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)"
   },
   "Restore.test.ts": {
-    "restore > saves what a function returns, skips false, and restores shared owners with collected reports on Back":
-      "shared state (step 4, blocked on a seam)",
     "restore > restores every root on its first mount after a reload, and none on a remount":
       "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)",
     "restore > a keep-alive instance with restore: false ignores what an older entry saved of it, and restores its children":
@@ -407,22 +370,6 @@ export const pending: {
       "headless parts (step 8)"
   },
   "html/HtmlServer.test.ts": {
-    "HtmlServer > reports across hydration > delivers each report once: the same report, with a Redacted message variant":
-      "shared state (step 8), hydration (step 7)",
-    "HtmlServer > reports across hydration > delivers each report once: a report that changes on the client":
-      "shared state (step 8), hydration (step 7)",
-    "HtmlServer > reports across hydration > delivers each report once: the only reader gone on the client":
-      "shared state (step 8), hydration (step 7)",
-    "HtmlServer > reports across hydration > waits for a reader still building its Layer before comparing, and sends nothing when it reports the same":
-      "shared state (step 8), hydration (step 7)",
-    "HtmlServer > reports across hydration > adopts the server's nodes when the last message ships":
-      "shared state (step 8), hydration (step 7)",
-    "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over nothing inherited":
-      "shared state (step 8)",
-    "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over a value that can't be written inherited":
-      "shared state (step 8)",
-    "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over a setter inherited":
-      "shared state (step 8)",
     "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":
       "modal dialogs and popovers on KernelDom (blocked seam)",
     "HtmlServer > a hydrated open dialog's close belongs to that showing, not to a modal shown since":

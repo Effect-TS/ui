@@ -117,3 +117,63 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
   }
   return found
 }
+
+/**
+ * An instance's page state: its state, and for an owner whose reports sent a message the last one, which
+ * the instance that takes the state compares its reports with. An owner whose message can't be shipped
+ * isn't saved, as one built from its state alone would get that message again.
+ *
+ * @internal
+ */
+export const encodePage = (
+  component: Component.Any,
+  model: unknown,
+  results: unknown,
+  owning: unknown
+): Effect.Effect<
+  { readonly state: unknown; readonly reported: unknown },
+  SchemaIssue.Issue
+> => {
+  const state = stateCodecOf(component).encode(model, results as never)
+  const last = (owning as { collected?: { message: unknown } } | undefined)
+    ?.collected
+  if (last === undefined) {
+    return Effect.mapEager(state, (state) => ({ state, reported: undefined }))
+  }
+  const message = component.definition.message
+  const reported = holdsRedacted(message.ast)
+    ? failRedacted
+    : jsonCodecOf(message).encode(last.message)
+  return Effect.flatMapEager(
+    state,
+    (state) => Effect.mapEager(reported, (reported) => ({ state, reported }))
+  )
+}
+
+/**
+ * What an owner taking saved state is given of its reports' last message: `held` until hydration has
+ * adopted everything below it. `undefined` for no message, or one that doesn't decode.
+ *
+ * @internal
+ */
+export const reportedOf = (
+  component: Component.Any,
+  reported: unknown,
+  held: boolean
+):
+  | {
+    readonly collected: { readonly message: unknown }
+    readonly held: boolean
+  }
+  | undefined =>
+{
+  if (reported === undefined || component.definition.collects === undefined) {
+    return undefined
+  }
+  const exit = Effect.runSyncExit(
+    jsonCodecOf(component.definition.message).decode(reported)
+  )
+  return exit._tag === "Success"
+    ? { collected: { message: exit.value }, held }
+    : undefined
+}

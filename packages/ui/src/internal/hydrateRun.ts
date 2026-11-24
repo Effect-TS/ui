@@ -9,7 +9,8 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as Kernel from "./kernel.ts"
 import { segmentOf } from "./paths.ts"
-import { type Decoded, stateCodecOf } from "./stateCodec.ts"
+import { restored } from "./sharedRun.ts"
+import { type Decoded, reportedOf, stateCodecOf } from "./stateCodec.ts"
 
 /** @internal */
 export interface Adopting<N = any> {
@@ -86,6 +87,8 @@ export const make = (
   const decoded = new Map<string, Decoded | undefined>()
   const resumed = new WeakSet<Kernel.Rec>()
   const held = new Map<Kernel.Rec, string>()
+  // Owners that adopted what their reports sent on the server, compared once nothing below waits to adopt.
+  const owners: Array<Kernel.Instance> = []
   let active = adoption?.root
   let pass = true
   let resuming = false
@@ -124,6 +127,7 @@ export const make = (
   }
   const finish = () => {
     if (pass || held.size > 0) return
+    for (const owner of owners.splice(0)) restored(owner)
     settled()
   }
   ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
@@ -183,6 +187,15 @@ export const make = (
       if (got === undefined) return undefined
       adopting.add(inst)
       inst.results = got.results
+      const owning = reportedOf(
+        inst.component as unknown as Component.Any,
+        state["~reported"]?.[path],
+        true
+      )
+      if (owning !== undefined) {
+        inst.owning = owning
+        owners.push(inst)
+      }
       return {
         model: got.model,
         commands: first.commands,

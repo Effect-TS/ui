@@ -75,6 +75,7 @@ import * as internalLazy from "./internal/lazy.ts"
 import * as internalNoop from "./internal/noop.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import * as sharedReads from "./internal/shared.ts"
+import * as sharedRun from "./internal/sharedRun.ts"
 import * as subscriptionCore from "./internal/subscriptions.ts"
 import type * as Query from "./Query.ts"
 import type * as Subscription from "./Subscription.ts"
@@ -2299,20 +2300,28 @@ const Proto = Object.assign(Object.create(Function.prototype), {
     return Pipeable.pipeArguments(this, arguments)
   },
   // The kernel calls it as the instance's Model or props change.
-  "~sync"(this: Any, inst: unknown, next: unknown) {
+  "~sync"(this: Any, inst: unknown, next: unknown, seq: unknown) {
     if (this["~queries"] !== undefined) {
       queryCore.loaded!.run.sync(inst as never, next as never)
     } else if (this.subscriptions !== undefined) {
       subscriptionCore.loaded?.(inst as never)
     }
+    // A component sends to an owner it doesn't read too.
+    if (sharing(this) || (next as Next<any, any, any, any>)?.sends?.length) {
+      sharedRun.sync(inst as never, next as never, seq as never)
+    }
   },
   "~first"(this: Any, inst: unknown) {
+    if (sharing(this)) sharedRun.first(inst as never)
     if (this["~queries"] !== undefined) {
       queryCore.loaded!.run.first(inst as never)
     }
     if (this.head !== undefined) heads.loaded?.(inst as never)
   }
 })
+
+const sharing = ({ definition }: Any): boolean =>
+  definition.shares !== undefined || definition.shared !== undefined
 
 const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   [HeadlessTypeId]: {
@@ -2325,7 +2334,32 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
     _SV: (_: never) => _,
     _Rp: (_: never) => _
   },
-  pipe: Proto.pipe
+  pipe: Proto.pipe,
+  "~sync": Proto["~sync"],
+  "~first": Proto["~first"],
+  // The kernel's view of a headless instance: the closure its declarer wrote, given its parts.
+  "~content"(
+    this: Headless.Any,
+    model: unknown,
+    props: unknown,
+    running: View.Running | undefined,
+    queries: unknown,
+    _: unknown,
+    shared: SharedLookup | undefined,
+    inst: { readonly at: { readonly v: View.Child<any, any> } } & View.Owner
+  ) {
+    return View.toNode(
+      child.expand(
+        (this as any).parts(model, props, {
+          owner: inst,
+          running,
+          queries,
+          shared
+        }),
+        inst.at.v.view!
+      )
+    )
+  }
 })
 
 // A callable component: calling it declares a child of it. The function's own
@@ -3526,7 +3560,7 @@ const finish = (
         msg: unknown,
         props: unknown,
         results?: Results,
-        shared?: SharedRecord
+        shared?: SharedRecord | SharedLookup
       ) =>
         toNext(
           updateFn(
@@ -3534,7 +3568,11 @@ const finish = (
               model,
               props,
               open(model, props, results),
-              shared ?? unsupplied,
+              shared === undefined
+                ? unsupplied
+                : typeof shared === "function"
+                ? sharedReads.values(definition.name, reads, shared)
+                : shared,
               msg,
               component
             ),

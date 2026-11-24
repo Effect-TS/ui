@@ -20,7 +20,12 @@ import type * as prefetchWalk from "./prefetch.ts"
 import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
-import { redactedIssue, stateCodecOf } from "./stateCodec.ts"
+import {
+  encodePage,
+  redactedIssue,
+  reportedOf,
+  stateCodecOf
+} from "./stateCodec.ts"
 
 /**
  * What the runtime tells it of the root it serves.
@@ -166,10 +171,13 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
   const write = (
     inst: Kernel.Instance,
     out: Saved,
-    exit: Exit.Exit<unknown, SchemaIssue.Issue>
+    exit: Exit.Exit<services.PageState, SchemaIssue.Issue>
   ) => {
     if (Exit.isSuccess(exit)) {
-      out[inst.path] = exit.value
+      out[inst.path] = exit.value.state
+      if (exit.value.reported !== undefined) {
+        ;((out["~reported"] ??= {}) as Saved)[inst.path] = exit.value.reported
+      }
       return
     }
     const error = Cause.findErrorOption(exit.cause)
@@ -207,10 +215,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       }
     }
     const encoded = runCodec(
-      stateCodecOf(component).encode(
-        model,
-        inst.results as componentQueries.Results | undefined
-      )
+      encodePage(component, model, inst.results, inst.owning)
     )
     if (Exit.isExit(encoded)) return write(inst, out, encoded)
     warnOnce(
@@ -348,6 +353,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       if (Exit.isFailure(exit)) return first
       restored.add(inst)
       inst.results = restoreQueries(inst, exit.value.results)
+      inst.owning = reportedOf(component, found.reported, false)
       return {
         model: exit.value.model,
         commands: first.commands,

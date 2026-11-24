@@ -90,7 +90,8 @@ export interface Runnable {
     model: any,
     message: never,
     props: any,
-    results?: unknown
+    results?: unknown,
+    shared?: unknown
   ) => Next | undefined
   readonly view: Function
   /** Set by `Component.provide`: the kernel never reads it. */
@@ -98,7 +99,11 @@ export interface Runnable {
   /** Called once `Mounted` is logged, before the first view: a provided Layer starts building. */
   readonly boot?: ((inst: Instance) => void) | undefined
   /** Called after each Model or props change the instance takes, and once it first rendered, with the Next it applied. */
-  readonly "~sync"?: ((inst: Instance, next?: Next) => void) | undefined
+  readonly "~sync"?:
+    | ((inst: Instance, next?: Next, seq?: number | undefined | void) => void)
+    | undefined
+  /** A headless component's view: its parts, given to the closure whoever declared the instance wrote. */
+  readonly "~content"?: Function | undefined
   /** Called once `init`'s Commands are issued, before the first view. */
   readonly "~first"?: ((inst: Instance) => void) | undefined
   /** Called before each view after the first. */
@@ -129,6 +134,9 @@ export type FailedIn =
   | "subscription"
   | "mount"
   | "head"
+  | "send"
+  | "shares"
+  | "shared"
 
 /** @internal */
 export interface Env {
@@ -249,6 +257,7 @@ export interface Tree {
     | { readonly value: unknown; readonly title: string | undefined }
     | undefined
   transitions?: Transitions | undefined
+  shared?: unknown
   dirty: Array<Instance>
   scheduled: boolean
   flushing: boolean
@@ -303,6 +312,9 @@ export class Instance {
   declare swaps:
     | Array<(waits: Array<Fiber.Fiber<unknown, unknown>>) => void>
     | undefined
+  declare look: ((owner: any, optional?: boolean) => unknown) | undefined
+  declare owning: unknown
+  declare reading: unknown
   named: string | undefined = undefined
   constructor(
     tree: Tree,
@@ -542,7 +554,8 @@ export const send = (
       inst.model,
       message as never,
       inst.props,
-      inst.results
+      inst.results,
+      inst.look
     )
   } catch (error) {
     return fail(inst, "update", Cause.die(error), { message, source })
@@ -558,6 +571,7 @@ export const send = (
     commands: next.commands,
     events: next.events,
     lists: next.lists,
+    sends: next.sends,
     viewTransition: next.viewTransition
   })
   if (next.model !== inst.model) {
@@ -576,7 +590,7 @@ const apply = (
   seq: number | undefined | void
 ): void => {
   issueAll(inst, next, seq)
-  applied(inst, next)
+  applied(inst, next, seq)
 }
 
 const issueAll = (
@@ -585,7 +599,6 @@ const issueAll = (
   seq: number | undefined | void
 ): void => {
   const commands = next.commands
-  if (next.sends !== undefined && next.sends.length > 0) notPorted("$.send")
   for (let index = 0; index < commands.length; index++) {
     if (inst.closed) return
     ;(commands[index] as Issuable)["~run"](inst, seq, index)
@@ -593,9 +606,13 @@ const issueAll = (
 }
 
 /** What follows a Next once its Commands are issued: Subscriptions follow it, and its events are emitted. */
-const applied = (inst: Instance, next: Next): void => {
+const applied = (
+  inst: Instance,
+  next: Next,
+  seq: number | undefined | void
+): void => {
   if (inst.closed) return
-  inst.component["~sync"]?.(inst, next)
+  inst.component["~sync"]?.(inst, next, seq)
   const events = next.events
   if (events.length === 0) return
   const parent = inst.parent
@@ -688,18 +705,22 @@ export const flush = (tree: Tree): void => {
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   const component = inst.component
-  const view = component.view
+  const view = component.view ?? component["~content"]!
   try {
-    const tree: View.Node<any, any> = Reflect.apply(view, component, [
-      inst.model,
-      inst.props,
-      inst.runs?.running,
-      inst.results,
-      View.takesPathSource(view) ? inst : inst.path,
-      undefined,
-      inst
-    ])
-    if (dev) checkPaths(inst.path, tree)
+    const tree: View.Node<any, any> | undefined = Reflect.apply(
+      view,
+      component,
+      [
+        inst.model,
+        inst.props,
+        inst.runs?.running,
+        inst.results,
+        View.takesPathSource(view) ? inst : inst.path,
+        inst.look,
+        inst
+      ]
+    )
+    if (dev && tree !== undefined) checkPaths(inst.path, tree)
     return tree
   } catch (error) {
     fail(inst, "view", Cause.die(error))
@@ -708,13 +729,14 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
 }
 
 const check = (component: any): void => {
-  const definition = component.definition
   if (component.init === undefined) notPorted("Component.lazy")
-  if (component.parts !== undefined) notPorted("headless components")
-  if (definition.shared !== undefined || definition.shares !== undefined) {
-    notPorted("shared state")
-  }
 }
+
+const authorOf = (inst: Instance): Instance =>
+  inst.at !== undefined &&
+    (inst.at.v as View.Child<any, any>).view !== undefined
+    ? inst.parent!
+    : inst
 
 const start = (inst: Instance): Rec | undefined => {
   let first: Next
@@ -722,7 +744,8 @@ const start = (inst: Instance): Rec | undefined => {
   const outer = slot
   const from = born.length
   const fallbacks = shown
-  slot = undefined
+  const by = authorOf(inst)
+  slot = by === inst ? undefined : inst.path
   busy++
   try {
     try {
@@ -752,7 +775,7 @@ const start = (inst: Instance): Rec | undefined => {
     if (tree === undefined) return undefined
     let rendered: Rec
     try {
-      rendered = create(inst, tree)
+      rendered = create(by, tree)
       if (dev && shown !== fallbacks) checkShown(inst.path, [rendered])
     } catch (error) {
       fail(inst, "view", Cause.die(error), undefined, from)
@@ -763,7 +786,7 @@ const start = (inst: Instance): Rec | undefined => {
       return undefined
     }
     inst.rendered = rendered
-    applied(inst, first)
+    applied(inst, first, seq)
     return rendered
   } finally {
     busy--
@@ -777,13 +800,14 @@ const render = (inst: Instance): void => {
   const outer = slot
   const from = born.length
   const fallbacks = shown
-  slot = undefined
+  const by = authorOf(inst)
+  slot = by === inst ? undefined : inst.path
   busy++
   try {
     inst.component["~render"]?.(inst)
     const tree = viewOf(inst)
     if (tree === undefined) return
-    inst.rendered = patch(inst, inst.rendered!, tree)
+    inst.rendered = patch(by, inst.rendered!, tree)
     if (dev && shown !== fallbacks) checkShown(inst.path, [inst.rendered])
   } catch (error) {
     fail(inst, "view", Cause.die(error), undefined, from)
@@ -795,7 +819,7 @@ const render = (inst: Instance): void => {
 }
 
 const clear = (inst: Instance): void => {
-  inst.rendered = patch(inst, inst.rendered!, emptyText)
+  inst.rendered = patch(authorOf(inst), inst.rendered!, emptyText)
 }
 
 const close = (inst: Instance): void => {
@@ -803,7 +827,8 @@ const close = (inst: Instance): void => {
   inst.closed = true
   inst.lazy = undefined
   if (inst.parent !== undefined) inst.parent.live--
-  if (inst.rendered !== undefined && inst.live > 0) release(inst, inst.rendered)
+  const by = authorOf(inst)
+  if (inst.rendered !== undefined && by.live > 0) release(by, inst.rendered)
   const log = inst.tree.log
   if (log !== undefined) log(inst, { _tag: "Unmounted" })
   const closers = inst.closers
@@ -1212,7 +1237,8 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
         return old
       }
       if (child.closed) return old
-      if (!propsEqual(child.props, view.props)) {
+      const changed = !propsEqual(child.props, view.props)
+      if (changed) {
         child.props = view.props
         const log = inst.tree.log
         if (log !== undefined) {
@@ -1220,6 +1246,8 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
         }
         child.component["~sync"]?.(child)
         if (child.closed) return old
+      }
+      if (changed || view.view !== undefined) {
         if (child === receiving) markDirty(child)
         else render(child)
       }
