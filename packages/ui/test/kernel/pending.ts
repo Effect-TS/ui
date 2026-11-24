@@ -115,8 +115,6 @@ export const pending: {
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it"
   },
   "Router.test.ts": {
-    "Router > logs a navigation's update, route and outcome before the page it mounts":
-      "differs: the kernel logs the old page's Unmounted and the new page's Mounted in the other order",
     "Router.prefetch > records watches only while a check after a push is outstanding":
       "differs: reads today's runtime's Instance (children, watched), which the kernel's has no equivalent of"
   },

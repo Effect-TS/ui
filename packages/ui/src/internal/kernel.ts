@@ -1531,6 +1531,8 @@ const patchList = (
   }
   let moved = false
   let last = 0
+  // Released once the new views are made, as `replace` does: what mounts in their place starts first.
+  let gone: Array<Rec> | undefined
   for (let index = start; index <= oldEnd; index++) {
     const old = olds[index]!
     const key = keyOf(old.v)
@@ -1554,7 +1556,7 @@ const patchList = (
       else last = to
     } else {
       unplace(host, parent, old)
-      release(inst, old)
+      ;(gone ??= []).push(old)
     }
   }
   for (let index = start; index <= end; index++) {
@@ -1563,6 +1565,7 @@ const patchList = (
       ? create(inst, views[index]!)
       : patch(inst, olds[source - 1]!, views[index]!)
   }
+  if (gone !== undefined) { for (const old of gone) release(inst, old) }
   for (let index = end + 1; index < views.length; index++) {
     out[index] = patch(
       inst,
