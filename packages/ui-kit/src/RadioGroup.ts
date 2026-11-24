@@ -60,7 +60,7 @@
  * **Example** (A labelled radio group whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { RadioGroup } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -435,11 +435,9 @@ export const RadioGroup = Html.component({
   model: RadioGroupModel,
   message: RadioGroupMessage,
   events: RadioGroupEvents,
-
   shared: {
     provider: { owner: DirectionProvider, optional: true }
   },
-
   restore: false
 }).make({
   init: ({ props }) => ({

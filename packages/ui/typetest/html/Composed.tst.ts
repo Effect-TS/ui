@@ -50,13 +50,11 @@ type AppMsg = typeof AppMsg.Type
 const define = () =>
   Html.component({
     name: "Combo",
-
     props: Schema.Struct({
       items: Schema.Array(
         Schema.Struct({ id: Schema.String, label: Schema.String })
       )
     }),
-
     model: Schema.Number,
     message: Msg
   })

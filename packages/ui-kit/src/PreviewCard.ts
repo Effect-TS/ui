@@ -144,7 +144,7 @@
  * **Example** (A link with a preview whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { PreviewCard } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

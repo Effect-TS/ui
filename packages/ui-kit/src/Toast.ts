@@ -107,7 +107,7 @@
  * **Example** (A save button that shows a toast)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { ToastProvider } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -732,13 +732,11 @@ export const ToastProvider = Html.component({
   model: ToastProviderModel,
   message: ToastProviderMessage,
   events: ToastProviderEvents,
-
   // Senders only post, so there's nothing for them to read.
   shares: {
     value: () => ({}),
     receives: ["RequestedAdd", "RequestedUpdate", "RequestedClose"]
   },
-
   restore: false
 }).make({
   init: () => ({

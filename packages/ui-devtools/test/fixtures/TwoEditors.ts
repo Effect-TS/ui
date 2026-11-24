@@ -50,12 +50,10 @@ const FocusBody = Mount.make(
 
 const EditorNoDeps = Html.component({
   name: "Editor",
-
   props: Schema.Struct({
     noteId: Schema.String,
     token: Schema.Redacted(Schema.String)
   }),
-
   model: Schema.Struct({
     draft: Schema.String,
     saved: Schema.String,
@@ -63,7 +61,6 @@ const EditorNoDeps = Html.component({
     viewers: Schema.Number,
     linkPickerOpen: Schema.Boolean
   }),
-
   message: EditorMessage
 }).make({
   init: () => ({

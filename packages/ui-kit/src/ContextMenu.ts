@@ -65,7 +65,7 @@
  * **Example** (A context menu over a file row)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { ContextMenu } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

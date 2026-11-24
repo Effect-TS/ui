@@ -103,7 +103,7 @@
  * **Example** (A bottom sheet whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Drawer } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -1727,7 +1727,6 @@ export const DrawerProvider = Html.component({
   props: DrawerProviderProps,
   model: DrawerProviderModel,
   message: DrawerProviderMessage,
-
   shares: {
     value: (model) => ({ indent: model.indent }),
     collects: {
@@ -1738,7 +1737,6 @@ export const DrawerProvider = Html.component({
         })
     }
   },
-
   restore: false
 }).make({
   init: () => ({ active: false, indent: null }),
@@ -1814,7 +1812,6 @@ export const Drawer = Html.component({
   model: DrawerModel,
   message: DrawerMessage,
   events: DrawerEvents,
-
   shares: {
     value: (_, props) => ({ open: props.open }),
     collects: {
@@ -1830,7 +1827,6 @@ export const Drawer = Html.component({
         })
     }
   },
-
   shared: {
     parent: {
       owner: "self",
@@ -1847,7 +1843,6 @@ export const Drawer = Html.component({
       report: (_, props) => props.open
     }
   },
-
   restore: false
 }).make({
   init: () => ({

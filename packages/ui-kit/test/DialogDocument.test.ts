@@ -82,7 +82,6 @@ const config = (overrides: Partial<Config>): Config => ({
 const Page = Html.component({
   name: "Page",
   props: Config,
-
   model: Schema.Struct({
     config: Config,
     a: Schema.Boolean,
@@ -94,7 +93,6 @@ const Page = Html.component({
     removed: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-
   message: Message
 }).make({
   init: ($) => ({

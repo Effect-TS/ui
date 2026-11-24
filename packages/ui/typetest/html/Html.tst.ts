@@ -286,8 +286,8 @@ describe("Html", () => {
         expect(input).type.not.toHaveProperty("children")
         // The function returns an element: not text, and not a component's child.
         expect(h.button.forward).type.not.toBeCallableWith(() => "Go")
-        expect(h.button.forward).type.not.toBeCallableWith(
-          () => (({}) as View.Child<Msg, never>)
+        expect(h.button.forward).type.not.toBeCallableWith(() =>
+          ({}) as View.Child<Msg, never>
         )
         return framed
       }

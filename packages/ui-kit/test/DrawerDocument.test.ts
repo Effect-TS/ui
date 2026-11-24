@@ -47,14 +47,12 @@ const Message = UiSchema.TaggedEnum({
 const Page = Html.component({
   name: "Page",
   props: Config,
-
   model: Schema.Struct({
     open: Schema.Boolean,
     snapPoint: Schema.NullOr(Schema.Union([Schema.Number, Schema.String])),
     events: Schema.Array(Schema.String),
     config: Config
   }),
-
   message: Message
 }).make({
   init: ({ props }) => ({

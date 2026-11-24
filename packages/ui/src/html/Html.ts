@@ -1694,33 +1694,15 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
   makeTags()
 
 /**
- * The vocabulary alone: its name and its tags.
+ * The vocabulary alone: its name and its tags. `Html.component` passes it to
+ * `Component.define`.
  *
  * **When to use**
  *
- * Use as a component's `elements` in place of the module, when the size of
- * the bundle matters. A bundler keeps every export of a module that is passed
- * as a value, such as `Host`, `classNames` and `ref`. With
- * `Html.vocabulary` a bundle holds only the exports the app names.
- *
- * **Example** (Naming the vocabulary)
- *
- * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
- * import { Schema } from "effect"
- *
- * const Label = Component.define({
- *   name: "Label",
- *   model: Schema.Void,
- *   message: Schema.Never,
- *   elements: Html.vocabulary
- * }).make({
- *   init: () => undefined,
- *   update: () => undefined,
- *   view: (h) => h.span.children("Ready")
- * })
- * ```
+ * Use wherever `elements` is written by hand, in place of the module. A
+ * bundler keeps every export of a module that is passed as a value, such as
+ * `Host`, `classNames` and `ref`. With `Html.vocabulary` a bundle holds
+ * only the exports the app names.
  *
  * @stability experimental
  * @category vocabulary

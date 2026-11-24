@@ -57,8 +57,8 @@ const stub = (element: Element, values: Record<string, unknown>) => {
     Object.defineProperty(element, key, { configurable: true, value })
   }
 }
-const rect =
-  (left: number, top: number, width: number, height: number) => () => (({
+const rect = (left: number, top: number, width: number, height: number) => () =>
+  ({
     left,
     top,
     width,
@@ -67,7 +67,7 @@ const rect =
     bottom: top + height,
     x: left,
     y: top
-  }) as DOMRect)
+  }) as DOMRect
 
 const observers: Array<() => void> = []
 const fakeResizeObserver = Effect.acquireRelease(

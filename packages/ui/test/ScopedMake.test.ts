@@ -34,7 +34,7 @@ describe("make's end check, in the scope it.effect provides", {
   const record = (ctx: TestContext) =>
     ctx.onTestFinished(({ task }) => {
       // Copied: vitest empties the list once `fails` has turned the failure into a pass.
-      reported.push([...(task.result?.errors ?? [])])
+      reported.push([...task.result?.errors ?? []])
     })
   // The frame under an error's message: where vitest points its report.
   const frame = (error: TestError) => {

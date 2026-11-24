@@ -22,7 +22,7 @@
  * ```ts
  * import { Html, HtmlHead, HtmlServer } from "@effect/ui/html"
  * import { Effect, Schema } from "effect"
- * import { Head } from "@effect/ui";
+ * import { Head } from "@effect/ui"
  *
  * const App = Html.component({
  *   name: "App",

@@ -739,7 +739,7 @@ export const hydrateEffect = <
  * ```ts
  * import { HtmlHydrate, Html } from "@effect/ui/html"
  * import { Effect, Layer, Schema } from "effect"
- * import { Renderer } from "@effect/ui";
+ * import { Renderer } from "@effect/ui"
  *
  * const App = Html.component({
  *   name: "App",

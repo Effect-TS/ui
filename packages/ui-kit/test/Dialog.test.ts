@@ -70,10 +70,8 @@ const tracked = (scene: Rendered): TrackDialog =>
   )
     ?.mount as unknown as TrackDialog
 // A message the mount sends, as its Stream would.
-const sent = (tag: string, fields: object = {}) => (({
-  _tag: tag,
-  ...fields
-}) as never)
+const sent = (tag: string, fields: object = {}) =>
+  ({ _tag: tag, ...fields }) as never
 
 // The plain values the parts carry now.
 const partsOf = (
@@ -86,10 +84,8 @@ const partsOf = (
   return parts!
 }
 
-const dismissed = (reason: string) => (({
-  _tag: "RequestedClose",
-  reason
-}) as DialogEvents)
+const dismissed = (reason: string) =>
+  ({ _tag: "RequestedClose", reason }) as DialogEvents
 
 describe("Dialog", () => {
   it.effect("remembers the trigger that opened it, and only that one asks to close it", () =>

@@ -109,7 +109,7 @@
  * **Example** (A toolbar button with a tooltip whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Tooltip } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -522,7 +522,6 @@ export const TooltipProvider = Html.component({
   props: TooltipProviderProps,
   model: TooltipProviderModel,
   message: TooltipProviderMessage,
-
   shares: {
     value: (model) => ({
       open: model.open,
@@ -541,7 +540,6 @@ export const TooltipProvider = Html.component({
         })
     }
   },
-
   restore: false
 }).make({
   init: () => ({ open: false, instant: false, turns: [], next: 1 }),
@@ -611,7 +609,6 @@ export const Tooltip = Html.component({
   model: TooltipModel,
   message: TooltipMessage,
   events: TooltipEvents,
-
   // A TooltipProvider above, if there is one. Each tooltip tells it its turn
   // while it shows, and hears when the shown tooltips change.
   shared: {
@@ -626,7 +623,6 @@ export const Tooltip = Html.component({
         })
     }
   },
-
   restore: false
 }).make({
   init: () => ({

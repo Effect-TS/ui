@@ -49,10 +49,8 @@ const trackedOn = (locator: Locator.Locator) => (scene: Rendered): Track =>
 const tracked = trackedOn(popup)
 const trackedArea = trackedOn(area)
 const argsOf = (mount: Track) => mount.args as Record<string, unknown>
-const sent = (tag: string, fields: object = {}) => (({
-  _tag: tag,
-  ...fields
-}) as never)
+const sent = (tag: string, fields: object = {}) =>
+  ({ _tag: tag, ...fields }) as never
 
 const release = (fields: object) =>
   sent("ReleasedSwipe", {
@@ -76,10 +74,8 @@ const opened = {
   triggerId: null,
   reason: "swipe"
 } as DrawerEvents
-const snapped = (snapPoint: number) => (({
-  _tag: "Snapped",
-  snapPoint
-}) as DrawerEvents)
+const snapped = (snapPoint: number) =>
+  ({ _tag: "Snapped", snapPoint }) as DrawerEvents
 const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
 const openedByArea = Effect.gen(function*() {

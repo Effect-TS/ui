@@ -62,7 +62,6 @@ const makeApp = () => {
     props: Schema.Struct({ room: Schema.String }),
     model: Schema.Struct({}),
     message: ChatMessage,
-
     queries: {
       messages: {
         query: ListMessages,

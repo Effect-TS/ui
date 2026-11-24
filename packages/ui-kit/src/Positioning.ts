@@ -1719,7 +1719,7 @@ export const trackPosition = (
  * **Example** (A hint that stays next to its button)
  *
  * ```ts import.meta.vitest
- * import { Mount, UiSchema, UiStruct } from "@effect/ui";
+ * import { Mount, UiSchema, UiStruct } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Positioning } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

@@ -65,7 +65,6 @@ const activeIn = (
 const MenuDef = Html.component({
   name: "Menu",
   props: Schema.Struct({ items: Schema.Array(Item) }),
-
   model: Schema.Struct({
     open: Schema.Boolean,
     query: Schema.String,
@@ -73,7 +72,6 @@ const MenuDef = Html.component({
     typed: Schema.String,
     focused: Schema.Array(Schema.String)
   }),
-
   message: MenuMessage,
   events: MenuEvents
 })

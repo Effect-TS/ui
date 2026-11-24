@@ -22,13 +22,11 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
-
   props: Schema.Struct({
     modal: Schema.optional(Schema.Boolean),
     holdHoverExit: Schema.optional(Schema.Boolean),
     anchor: Schema.optional(Schema.String)
   }),
-
   model: Schema.Struct({
     open: Schema.Boolean,
     triggerId: Schema.NullOr(Schema.String),
@@ -36,7 +34,6 @@ const Page = Html.component({
     third: Third,
     log: Schema.Array(Schema.String)
   }),
-
   message: Message
 }).make({
   init: () => ({

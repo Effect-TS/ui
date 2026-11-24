@@ -289,13 +289,11 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const Form = Html.component({
       name: "Form",
-
       model: Schema.Struct({
         text: Schema.String,
         checked: Schema.Boolean,
         open: Schema.Boolean
       }),
-
       message: Message
     }).make({
       init: () => ({ text: "fixed", checked: false, open: true }),
@@ -432,13 +430,11 @@ describe("BrowserHost", { concurrent: false }, () => {
       })
       const Fields = Html.component({
         name: "Fields",
-
         model: Schema.Struct({
           upper: Schema.String,
           card: Schema.String,
           pushed: Schema.String
         }),
-
         message: Edited
       }).make({
         init: () => ({ upper: "ABCDEF", card: "1234", pushed: "hello world" }),
@@ -940,13 +936,11 @@ describe("BrowserHost", { concurrent: false }, () => {
     })
     const ItemsDef = Html.component({
       name: "Items",
-
       model: Schema.Struct({
         items: Schema.Array(Item),
         selected: Schema.Number,
         ticks: Schema.Number
       }),
-
       message: LazyMessage
     })
     const built: Array<string> = []
@@ -3358,12 +3352,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         )
         const Rows = Html.component({
           name: "Rows",
-
           model: Schema.Struct({
             rows: Schema.Number,
             seen: Schema.Array(Schema.Number)
           }),
-
           message: UiSchema.TaggedEnum({
             Add: {},
             Saw: { count: Schema.Number }
@@ -4015,17 +4007,14 @@ describe("BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       const Page = Html.component({
         name: "DirectContext",
-
         props: Schema.Struct({
           hasBrowserRenderer: Schema.Boolean,
           heard: Schema.Boolean
         }),
-
         model: Schema.Struct({
           hasBrowserRenderer: Schema.Boolean,
           heard: Schema.Boolean
         }),
-
         message: Schema.Never
       }).make({
         init: ($) => $.props,

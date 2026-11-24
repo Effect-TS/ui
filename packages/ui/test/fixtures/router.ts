@@ -106,16 +106,13 @@ export const CountVisit = Command.make(
 export const Person = Html.component({
   name: "Person",
   props: Schema.Struct({ id: Schema.Number }),
-
   model: Schema.Struct({
     id: Schema.Number,
     name: Schema.String,
     count: Schema.Number,
     visits: Schema.Number
   }),
-
   message: PersonMessage,
-
   queries: {
     person: {
       query: GetPerson,
@@ -204,13 +201,11 @@ const navigated = (outcome: Router.Outcome) => AppMessage.Navigated({ outcome })
 export const App = Html.component({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
-
   model: Schema.Struct({
     route: AppRoute,
     outcomes: Schema.Array(Schema.String),
     blocked: Schema.Boolean
   }),
-
   message: AppMessage
 }).make({
   init: ($) => ({ route: $.props.route, outcomes: [], blocked: false }),

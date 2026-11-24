@@ -82,7 +82,7 @@
  * **Example** (A labelled checkbox whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Checkbox } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -341,7 +341,6 @@ export const Checkbox = Html.component({
   model: Schema.Struct({}),
   message: CheckboxMessage,
   events: CheckboxEvents,
-
   shared: {
     group: {
       owner: CheckboxGroup,

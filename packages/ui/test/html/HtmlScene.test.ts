@@ -106,12 +106,10 @@ describe("HtmlScene", () => {
       )
       const Chart = Html.component({
         name: "Chart",
-
         model: Schema.Struct({
           points: Schema.Array(Schema.Number),
           width: Schema.Number
         }),
-
         message: Message
       }).make({
         init: () => ({ points: [1, 2], width: 0 }),
@@ -371,12 +369,10 @@ describe("HtmlScene", () => {
   describe("a click's defaults", () => {
     const Checkout = Html.component({
       name: "Checkout",
-
       model: Schema.Struct({
         log: Schema.Array(Schema.String),
         zip: Schema.String
       }),
-
       message: Schema.String
     }).make({
       init: () => ({ log: [], zip: "old" }),

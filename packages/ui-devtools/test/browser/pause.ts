@@ -13,13 +13,11 @@ const SceneMessage = UiSchema.TaggedEnum({
 
 const Scene = Html.component({
   name: "Scene",
-
   model: Schema.Struct({
     count: Schema.Number,
     menu: Schema.Boolean,
     dialog: Schema.Boolean
   }),
-
   message: SceneMessage
 }).make({
   init: () => ({ count: 0, menu: false, dialog: false }),

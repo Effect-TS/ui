@@ -11,7 +11,7 @@
  * **Example** (Pressing Escape in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { TestGlobalEvents } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"

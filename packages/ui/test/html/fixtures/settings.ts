@@ -4,13 +4,11 @@ import { Schema } from "effect"
 /** A form whose every event is logged, as `event:detail`. */
 export const Settings = Html.component({
   name: "Settings",
-
   model: Schema.Struct({
     log: Schema.Array(Schema.String),
     agree: Schema.Boolean,
     zip: Schema.String
   }),
-
   message: Schema.String
 }).make({
   init: () => ({ log: [], agree: false, zip: "" }),

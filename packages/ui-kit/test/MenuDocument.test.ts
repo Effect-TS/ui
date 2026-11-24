@@ -98,7 +98,6 @@ const Message = UiSchema.TaggedEnum({
 const Page = Html.component({
   name: "Page",
   props: Config,
-
   model: Schema.Struct({
     open: Schema.Boolean,
     modal: Schema.Boolean,
@@ -107,7 +106,6 @@ const Page = Html.component({
     query: Schema.String,
     log: Schema.Array(Schema.String)
   }),
-
   message: Message
 }).make({
   init: () => ({

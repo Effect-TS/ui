@@ -25,14 +25,12 @@ const PageMessage = UiSchema.TaggedEnum({
 const Page = Html.component({
   name: "Page",
   props: PageProps,
-
   model: Schema.Struct({
     config: PageProps,
     open: Schema.Boolean,
     holdExit: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-
   message: PageMessage
 }).make({
   init: ($) => ({
@@ -85,9 +83,10 @@ const Page = Html.component({
 const layout = Effect.acquireRelease(
   Effect.sync(() => {
     const proto = window.HTMLElement.prototype
-    const sized = (value: number) => (function(this: HTMLElement) {
-      return this.id === "panel" ? value : 0
-    })
+    const sized = (value: number) =>
+      function(this: HTMLElement) {
+        return this.id === "panel" ? value : 0
+      }
     Object.defineProperty(proto, "scrollHeight", {
       configurable: true,
       get: sized(120)

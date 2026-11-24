@@ -153,7 +153,7 @@
  * **Example** (A settings dialog whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Dialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -1250,7 +1250,6 @@ export const Dialog = Html.component({
   model: DialogModel,
   message: DialogMessage,
   events: DialogEvents,
-
   shares: {
     value: (_, props) => ({ open: props.open }),
     collects: {
@@ -1261,7 +1260,6 @@ export const Dialog = Html.component({
         })
     }
   },
-
   shared: {
     parent: {
       owner: "self",
@@ -1272,7 +1270,6 @@ export const Dialog = Html.component({
       ) => (props.open && props.nested !== false ? 1 + model.nestedOpen : 0)
     }
   },
-
   restore: false
 }).make({
   init: () => ({

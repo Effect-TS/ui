@@ -11,7 +11,7 @@ import { report } from "./queryCore.ts"
 const none: ReadonlyArray<never> = []
 
 const foldOf = (inst: Kernel.Instance): View.HeadFold | undefined => {
-  const elements = (inst.component as unknown as Component.Any).elements()
+  const elements = (inst.component as unknown as Component.Any).elements
   return elements?.head ??
     (heads.html !== undefined && elements?.name === "html"
       ? heads.html

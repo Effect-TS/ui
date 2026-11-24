@@ -679,7 +679,7 @@ export interface Step<
    * **Example** (Animating a layout switch)
    *
    * ```ts
-   * import { UiSchema } from "@effect/ui";
+   * import { UiSchema } from "@effect/ui"
    * import { Html } from "@effect/ui/html"
    * import { Schema } from "effect"
    *
@@ -1121,7 +1121,7 @@ export declare namespace Mountable {
       ) => ReadonlyArray<unknown>)
       | undefined
     /** The component's vocabulary, if one was supplied. */
-    readonly elements: () => View.Vocabulary<any> | undefined
+    readonly elements: View.Vocabulary<any> | undefined
     /**
      * Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services.
      * `keys` is what `layerKeys` read, one value per keyed provide, and empty without one.
@@ -1476,7 +1476,7 @@ export interface Headless<
       queries?: Results | undefined
     ) => ReadonlyArray<unknown>)
     | undefined
-  readonly elements: () => View.Vocabulary<any> | undefined
+  readonly elements: View.Vocabulary<any> | undefined
   readonly "~queries": unknown
 }
 
@@ -3034,6 +3034,44 @@ export interface DefineOptions<
     | undefined
 }
 
+type QueryEntries<S, M> = {
+  readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ?
+    QueryMany<M[K & keyof M]>
+    : S[K] extends Query.Query.Any ? QueryOne<S[K]>
+    : never
+}
+
+type Defined<
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  V extends View.Elements,
+  L,
+  Tags,
+  Sl extends string,
+  SR,
+  SV,
+  Rp
+> = Definition<
+  Name,
+  Props,
+  Model,
+  Msg,
+  Events,
+  V,
+  L,
+  Tagged<Msg, Tags>,
+  Sl,
+  ResolveSelf<
+    Listed<SR>,
+    SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
+  >,
+  SV,
+  Rp
+>
+
 /**
  * The call signature of a vocabulary-bound component constructor such as
  * `Html.component` or `OpenTui.component`, supplying vocabulary `V`
@@ -3052,12 +3090,7 @@ export interface Define<V extends View.Elements> {
     Events = never,
     S = {},
     M = {},
-    L = {
-      readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ?
-        QueryMany<M[K & keyof M]>
-        : S[K] extends Query.Query.Any ? QueryOne<S[K]>
-        : never
-    },
+    L = QueryEntries<S, M>,
     const Tags extends TagOf<Msg> = never,
     const Sl extends string = never,
     SR extends SharedReads = SharedReads,
@@ -3081,23 +3114,7 @@ export interface Define<V extends View.Elements> {
       Rp,
       SO
     >
-  ): Definition<
-    Name,
-    Props,
-    Model,
-    Msg,
-    Events,
-    V,
-    L,
-    Tagged<Msg, Tags>,
-    Sl,
-    ResolveSelf<
-      Listed<SR>,
-      SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
-    >,
-    SV,
-    Rp
-  >
+  ): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp>
 }
 
 /**
@@ -3366,12 +3383,7 @@ export const define = <
   S = {},
   M = {},
   // The queries as `QueryOne` and `QueryMany` entries, by name. Nothing infers it, so it's always this default.
-  L = {
-    readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ?
-      QueryMany<M[K & keyof M]>
-      : S[K] extends Query.Query.Any ? QueryOne<S[K]>
-      : never
-  },
+  L = QueryEntries<S, M>,
   V extends View.Elements = never,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
@@ -3403,25 +3415,9 @@ export const define = <
     & {
       readonly elements?: View.Vocabulary<V> | undefined
     }
-): Definition<
-  Name,
-  Props,
-  Model,
-  Msg,
-  Events,
-  V,
-  L,
-  Tagged<Msg, Tags>,
-  Sl,
-  ResolveSelf<
-    Listed<SR>,
-    SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
-  >,
-  SV,
-  Rp
-> => {
+): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp> => {
   const shares = options.shares
-  const definition: Definition<
+  const definition: Defined<
     Name,
     Props,
     Model,
@@ -3429,12 +3425,9 @@ export const define = <
     Events,
     V,
     L,
-    Tagged<Msg, Tags>,
+    Tags,
     Sl,
-    ResolveSelf<
-      Listed<SR>,
-      SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
-    >,
+    SR,
     SV,
     Rp
   > = {
@@ -3698,7 +3691,7 @@ const finish = (
         ? undefined
         : (model: unknown, props: unknown, results?: Results) =>
           head({ model, props, queries: open(model, props, results) }),
-      elements: () => elements,
+      elements,
       layer: undefined,
       layerKeys: undefined,
       layerFailure: undefined,

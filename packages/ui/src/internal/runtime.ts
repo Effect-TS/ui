@@ -632,7 +632,7 @@ const start = (
         ),
         init: (inst) => {
           const made = inst.component as unknown as Component.Any
-          const elements = made.elements()
+          const elements = made.elements
           if (
             elements !== undefined && hostInput.elements !== "any" &&
             !hostInput.elements.includes(elements.name)
@@ -684,7 +684,7 @@ const start = (
             View.toNode(
               fallback(
                 AsyncResult.failure(cause),
-                View.makeHelper({}, component.elements())
+                View.makeHelper({}, component.elements)
               )
             )
       }
@@ -702,7 +702,7 @@ const start = (
   tree.flush = since
   const head = () =>
     tree.head?.value ??
-      component.elements()?.head?.merge({ entries: [], children: [] }) ??
+      component.elements?.head?.merge({ entries: [], children: [] }) ??
       noHead
   const root = {
     path: instance.path,
@@ -958,7 +958,7 @@ export const prerender = (
 
 /** @internal */
 export const headOf = (root: Root): unknown => {
-  const elements = root.instance.component.elements()
+  const elements = root.instance.component.elements
   const head = root.head()
   return elements?.name === "html" &&
       elements.head === undefined &&

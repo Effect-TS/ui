@@ -439,8 +439,8 @@ export const make: {
    * A scene of a component with slots: `slots` stands in for what a parent
    * passes. Its `h` has no messages of its own, as a parent's content in a
    * scene has nothing to send them to. `h` builds elements from
-   * `elements`, then the component's own vocabulary, then the registered
-   * one, and is typed with `elements`, or else the component's vocabulary.
+   * `elements`, or else the component's own vocabulary, and is typed the
+   * same way.
    * The content shows where the view places each slot, at the path the
    * runtime gives it, such as `/Panel/[body]/Editor[e]`.
    */
@@ -462,8 +462,8 @@ export const make: {
    * A scene of a headless component: `view` stands in for a consumer's
    * closure. Its `h` has no messages of its own, so every handler in the
    * scene is one of the component's parts'. `h` builds elements from
-   * `elements`, then the component's own vocabulary, then the registered
-   * one. An event runs every part layer on its element, in the runtime's
+   * `elements`, or else the component's own vocabulary. An event runs
+   * every part layer on its element, in the runtime's
    * order, and each layer's `preventDefault` applies to its own message.
    */
   <Props, Events, Parts, R, Rcv, V extends View.Elements = never, Rp = never>(

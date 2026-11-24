@@ -30,12 +30,10 @@ const Message = UiSchema.TaggedEnum({
 
 const Dots = Html.component({
   name: "Dots",
-
   model: Schema.Struct({
     dots: Schema.Array(Canvas.Point),
     bumps: Schema.Number
   }),
-
   message: Message
 }).make({
   init: () => ({ dots: [], bumps: 0 }),
@@ -102,12 +100,8 @@ describe("Canvas", { concurrent: false }, () => {
 
       const captured: Array<number> = []
       canvas.setPointerCapture = (id) => void captured.push(id)
-      canvas.getBoundingClientRect = () => (({
-        left: 10,
-        top: 20,
-        width: 150,
-        height: 100
-      }) as DOMRect)
+      canvas.getBoundingClientRect = () =>
+        ({ left: 10, top: 20, width: 150, height: 100 }) as DOMRect
       canvas.dispatchEvent(
         new PointerEvent("pointerdown", {
           clientX: 85,

@@ -144,13 +144,11 @@ export const MenuMessage = UiSchema.TaggedEnum({
 /** A menu popover. With `follow`, its Model follows the browser's toggles. */
 export const Menu = Html.component({
   name: "Menu",
-
   props: Schema.Struct({
     mode: Mode,
     open: Schema.Boolean,
     follow: Schema.Boolean
   }),
-
   model: Schema.Struct({
     mode: Mode,
     open: Schema.Boolean,
@@ -158,7 +156,6 @@ export const Menu = Html.component({
     shown: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-
   message: MenuMessage
 }).make({
   init: ($) => ({ ...$.props, shown: true, log: [] }),

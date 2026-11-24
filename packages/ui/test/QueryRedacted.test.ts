@@ -41,7 +41,6 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     name: "Secrets",
     model: Schema.Struct({}),
     message: Schema.Never,
-
     queries: {
       args: {
         query: Args,

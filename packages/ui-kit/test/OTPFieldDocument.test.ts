@@ -15,18 +15,15 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
-
   props: Schema.Struct({
     autoSubmit: Schema.Boolean,
     upper: Schema.Boolean,
     locked: Schema.Boolean
   }),
-
   model: Schema.Struct({
     code: Schema.Redacted(Schema.String),
     log: Schema.Array(Schema.String)
   }),
-
   message: Message
 }).make({
   init: () => ({ code: Redacted.make(""), log: [] }),
@@ -396,12 +393,10 @@ describe("OTPField in a document", { concurrent: false }, () => {
       })
       const RedactedPage = Html.component({
         name: "RedactedPage",
-
         model: Schema.Struct({
           code: Schema.Redacted(Schema.String),
           done: Schema.Boolean
         }),
-
         message: Msg
       }).make({
         init: () => ({ code: Redacted.make(""), done: false }),

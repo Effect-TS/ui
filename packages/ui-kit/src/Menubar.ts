@@ -74,7 +74,7 @@
  * **Example** (A File and an Edit menu, with the open one in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Menu, Menubar } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -321,7 +321,6 @@ export const Menubar = Html.component({
   props: MenubarProps,
   model: MenubarModel,
   message: MenubarMessage,
-
   shares: {
     value: (model, props) => ({
       ...stateOf(model, props),
@@ -337,7 +336,6 @@ export const Menubar = Html.component({
       onChange: (menus) => MenubarMessage.ChangedMenus({ menus })
     }
   },
-
   restore: false
 }).make({
   init: () => ({

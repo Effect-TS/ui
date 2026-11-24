@@ -45,7 +45,6 @@ const Card = Html.component({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ n: Schema.Number }),
   message: Message,
-
   queries: {
     user: {
       query: GetUser,
@@ -410,14 +409,11 @@ const ListMessage = UiSchema.TaggedEnum({
 
 const List = Html.component({
   name: "List",
-
   model: Schema.Struct({
     ids: Schema.Array(Schema.String),
     changed: Schema.Number
   }),
-
   message: ListMessage,
-
   queries: {
     users: {
       queryMany: GetUser,
@@ -627,7 +623,6 @@ const Chat = Html.component({
   props: Schema.Struct({ room: Schema.String }),
   model: Schema.Struct({}),
   message: ChatMessage,
-
   queries: {
     messages: {
       query: ListMessages,
@@ -700,7 +695,6 @@ describe("List queries", () => {
       props: Schema.Struct({ room: Schema.String }),
       model: Schema.Struct({}),
       message: ChatMessage,
-
       queries: {
         messages: {
           query: ListMessages,

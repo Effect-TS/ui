@@ -126,7 +126,7 @@
  * **Example** (A theme picker in a field, with the open state and the value in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Select } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -1365,7 +1365,6 @@ export const Select = Html.component({
   message: SelectMessage,
   events: SelectEvents,
   restore: false,
-
   shared: {
     toolbar: { owner: Toolbar, optional: true }
   }

@@ -55,7 +55,7 @@
  * **Example** (Fruit with a parent checkbox)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Checkbox, CheckboxGroup } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -264,7 +264,6 @@ export const CheckboxGroup = Html.component({
   model: CheckboxGroupModel,
   message: CheckboxGroupMessage,
   events: CheckboxGroupEvents,
-
   shares: {
     value: (model, props) => ({
       value: props.value,

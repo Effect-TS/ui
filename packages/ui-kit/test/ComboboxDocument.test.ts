@@ -101,14 +101,12 @@ const Message = UiSchema.TaggedEnum({
 const Page = Html.component({
   name: "Page",
   props: Config,
-
   model: Schema.Struct({
     open: Schema.Boolean,
     value: Schema.Array(Schema.String),
     inputValue: Schema.String,
     log: Schema.Array(Schema.String)
   }),
-
   message: Message
 }).make({
   init: () => ({ open: false, value: [], inputValue: "", log: [] }),

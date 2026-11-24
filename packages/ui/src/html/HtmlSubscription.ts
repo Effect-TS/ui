@@ -247,7 +247,7 @@ const listenFor = (
  * **Example** (Steering with the arrow keys while the game runs)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -315,7 +315,7 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  * **Example** (Document shortcuts from a table)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -411,7 +411,7 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  * **Example** (Listening for a custom document event)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -513,7 +513,7 @@ export const AnimationFrames: Context.Reference<AnimationFrames> =
  * **Example** (A clock that runs while the Model says so)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"

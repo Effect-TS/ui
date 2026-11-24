@@ -30,7 +30,7 @@
  * ```ts import.meta.vitest
  * import { BrowserHost, BrowserRouter, Html } from "@effect/ui/html"
  * import { Effect, Layer, Schema } from "effect"
- * import { Route, Router, UiSchema } from "@effect/ui";
+ * import { Route, Router, UiSchema } from "@effect/ui"
  * import { TestHost } from "@effect/ui/testing"
  *
  * const AppRoute = Route.union({

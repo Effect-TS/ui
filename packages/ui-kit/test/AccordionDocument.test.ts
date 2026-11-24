@@ -24,13 +24,11 @@ const items = ["a", "b", "c"]
 const Page = Html.component({
   name: "Page",
   props: PageProps,
-
   model: Schema.Struct({
     open: Schema.Array(Schema.String),
     order: Schema.Array(Schema.String),
     log: Schema.Array(Schema.String)
   }),
-
   message: PageMessage
 }).make({
   init: ($) => ({ open: $.props.initial, order: items, log: [] }),

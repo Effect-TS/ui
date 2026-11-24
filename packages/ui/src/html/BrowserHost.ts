@@ -95,7 +95,7 @@
  * ```ts
  * import { BrowserHost, Html } from "@effect/ui/html"
  * import { Layer, Schema } from "effect"
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  *
  * const Message = UiSchema.TaggedEnum({ ClickedIncrement: {} })
  *

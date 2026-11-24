@@ -20,13 +20,11 @@ const Message = UiSchema.TaggedEnum({
 // when something cancelled it first.
 const Keys = Html.component({
   name: "Keys",
-
   model: Schema.Struct({
     listening: Schema.Boolean,
     prefix: Schema.String,
     log: Schema.Array(Schema.String)
   }),
-
   message: Message
 }).make({
   init: () => ({ listening: true, prefix: "a", log: [] }),
@@ -503,12 +501,10 @@ const FrameMessage = UiSchema.TaggedEnum({
 
 const Frames = Html.component({
   name: "Frames",
-
   model: Schema.Struct({
     running: Schema.Boolean,
     deltas: Schema.Array(Schema.Number)
   }),
-
   message: FrameMessage
 }).make({
   init: () => ({ running: true, deltas: [] }),

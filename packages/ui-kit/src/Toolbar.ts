@@ -87,7 +87,7 @@
  * **Example** (A formatting toolbar)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Button, Toolbar } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -432,7 +432,6 @@ export const Toolbar = Html.component({
   model: ToolbarModel,
   message: ToolbarMessage,
   restore: false,
-
   shares: {
     value: (_model, props) => ({
       disabled: props.disabled === true,
@@ -447,7 +446,6 @@ export const Toolbar = Html.component({
       disabledItems: Schema.Array(Schema.String)
     })
   },
-
   shared: {
     provider: { owner: DirectionProvider, optional: true }
   }

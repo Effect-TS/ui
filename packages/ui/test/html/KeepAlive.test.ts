@@ -1034,7 +1034,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       let decoding = 0
       const Slowly = Html.component({
         name: "Slowly",
-
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.acquireUseRelease(
@@ -1045,7 +1044,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           ),
           encode: SchemaGetter.passthrough()
         })),
-
         message: Schema.Never
       }).make({
         init: () => "slowly",
@@ -1142,7 +1140,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   const Labelled = Html.component({
     name: "Labelled",
     props: Schema.Struct({ label: Schema.String }),
-
     model: Schema.String.pipe(Schema.decode({
       decode: SchemaGetter.transform((label: string) => {
         decoded.push(label)
@@ -1150,7 +1147,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       }),
       encode: SchemaGetter.passthrough()
     })),
-
     message: Schema.Never
   }).make({
     init: ($) => {
@@ -1415,14 +1411,12 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       let inits = 0
       const Late = Html.component({
         name: "Late",
-
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.as(Deferred.await(decoding), text)
           ),
           encode: SchemaGetter.passthrough()
         })),
-
         message: Schema.Never
       }).make({
         init: () => side(inits++),

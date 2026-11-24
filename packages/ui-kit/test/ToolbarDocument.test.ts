@@ -25,7 +25,6 @@ const Config = Schema.Struct({
 const Page = Html.component({
   name: "Page",
   props: Config,
-
   model: Schema.Struct({
     clicks: Schema.Number,
     align: Schema.Array(Schema.String),
@@ -33,7 +32,6 @@ const Page = Html.component({
     select: Schema.Boolean,
     zoom: Schema.String
   }),
-
   message: Message
 }).make({
   init: () => ({

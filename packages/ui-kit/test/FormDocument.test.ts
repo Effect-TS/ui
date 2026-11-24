@@ -38,12 +38,10 @@ const Save = Command.make(
 
 const Signup = Html.component({
   name: "Signup",
-
   model: Schema.Struct({
     form: SignupValidation.State,
     saving: Schema.Boolean
   }),
-
   message: Message
 }).make({
   init: () => ({

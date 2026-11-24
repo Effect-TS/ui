@@ -66,7 +66,7 @@
  * **Example** (Text alignment, one choice at a time)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { ToggleGroup } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -332,7 +332,6 @@ export const ToggleGroup = Html.component({
   message: ToggleGroupMessage,
   events: ToggleGroupEvents,
   restore: false,
-
   shared: {
     provider: { owner: DirectionProvider, optional: true },
     toolbar: { owner: Toolbar, optional: true }

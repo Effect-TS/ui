@@ -41,7 +41,6 @@ const PageMessage = UiSchema.TaggedEnum({
 const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ route: PageRoute }),
-
   model: Schema.Struct({
     route: PageRoute,
     popoverOpen: Schema.Boolean,
@@ -50,7 +49,6 @@ const Page = Html.component({
     selectValue: Schema.NullOr(Schema.String),
     sliderValue: Schema.Number
   }),
-
   message: PageMessage
 }).make({
   init: ($) => ({

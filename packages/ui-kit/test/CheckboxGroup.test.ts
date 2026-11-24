@@ -36,14 +36,12 @@ const Sender = Html.component({
 
 const Basket = Html.component({
   name: "Basket",
-
   model: Schema.Struct({
     fruits: Schema.Array(Schema.String),
     pearToggled: Schema.NullOr(Schema.Boolean),
     locked: Schema.Boolean,
     frozen: Schema.Boolean
   }),
-
   message: BasketMessage
 }).make({
   init: () => ({

@@ -132,11 +132,9 @@ const Message = UiSchema.TaggedEnum({
 
 const Sheet = Html.component({
   name: "Sheet",
-
   model: Schema.Struct({
     bands: Schema.Array(Schema.NullOr(VirtualKeyboard.Band))
   }),
-
   message: Message
 }).make({
   init: () => ({ bands: [] }),

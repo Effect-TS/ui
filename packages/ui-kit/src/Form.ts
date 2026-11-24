@@ -72,7 +72,7 @@
  * **Example** (A sign-up form whose email field is invalid)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Form } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

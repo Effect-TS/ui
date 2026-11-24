@@ -17,14 +17,12 @@ export const ConfirmMessage = UiSchema.TaggedEnum({
 export const Confirm = Html.component({
   name: "Confirm",
   props: Schema.Struct({ state: State, acceptEscape: Schema.Boolean }),
-
   model: Schema.Struct({
     state: State,
     acceptEscape: Schema.Boolean,
     shown: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-
   message: ConfirmMessage
 }).make({
   init: ($) => ({

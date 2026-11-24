@@ -294,12 +294,10 @@ describe("forward on BrowserHost", { concurrent: false }, () => {
   )
   const Rows = Html.component({
     name: "Rows",
-
     model: Schema.Struct({
       ids: Schema.Array(Schema.String),
       log: Schema.Array(Schema.String)
     }),
-
     message: Message
   }).make({
     init: () => ({ ids: ["a", "b", "c"], log: [] as ReadonlyArray<string> }),

@@ -28,14 +28,12 @@ describe("OpenTui FFI-free testing", () => {
 
       const App = OpenTui.component({
         name: "UnitApp",
-
         model: Schema.Struct({
           ups: Schema.Number,
           pasted: Schema.String,
           size: Schema.String,
           measured: Schema.Number
         }),
-
         message: Message
       }).make({
         init: () => ({ ups: 0, pasted: "", size: "", measured: 0 }),

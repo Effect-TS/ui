@@ -184,7 +184,6 @@ export const UserCard = Html.component({
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({}),
   message: UserCardMessage,
-
   queries: {
     user: { query: GetUser, args: ({ props }) => ({ id: props.id }) }
   }
@@ -232,14 +231,11 @@ export const RenameFormMessage = UiSchema.TaggedEnum({
 export const RenameForm = Html.component({
   name: "RenameForm",
   props: Schema.Struct({ id: Schema.String }),
-
   model: Schema.Struct({
     draft: Schema.Option(Schema.String),
     error: Schema.Option(Schema.String)
   }),
-
   message: RenameFormMessage,
-
   queries: {
     user: { query: GetUser, args: ({ props }) => ({ id: props.id }) }
   }
@@ -336,7 +332,6 @@ export const ListPage = Html.component({
   name: "ListPage",
   model: Schema.Struct({ page: Schema.Number }),
   message: ListPageMessage,
-
   queries: {
     users: { query: ListUsers, args: ({ model }) => ({ page: model.page }) }
   }

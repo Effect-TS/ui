@@ -13,7 +13,7 @@
  * **Example** (A weather lookup)
  *
  * ```ts import.meta.vitest
- * import { Command, UiSchema } from "@effect/ui";
+ * import { Command, UiSchema } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
  * import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
  * import { Effect, Schema } from "effect"

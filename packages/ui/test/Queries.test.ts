@@ -57,7 +57,6 @@ const makeApp = () => {
     props: Schema.Struct({ id: Schema.String }),
     model: Schema.Struct({ clicks: Schema.Number, last: Schema.String }),
     message: NoteMessage,
-
     queries: {
       // An empty id disables the query.
       note: {

@@ -1528,7 +1528,6 @@ export const VirtualList = Html.component({
   model: VirtualListModel,
   message: VirtualListMessage,
   events: VirtualListEvents,
-
   restore: (model) =>
     UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false })
 }).make({

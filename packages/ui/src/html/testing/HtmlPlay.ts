@@ -23,7 +23,7 @@
  * **Example** (Signing in)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
  * import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
  * import { Locator, TestHost } from "@effect/ui/testing"

@@ -12,7 +12,7 @@
  * **Example** (Dots where the user clicks)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Canvas, Html } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Effect, Schema } from "effect"

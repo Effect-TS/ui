@@ -29,13 +29,11 @@ const Bumped = UiSchema.TaggedEnum({ Bumped: {} })
 
 const Upload = Html.component({
   name: "Upload",
-
   model: Schema.Struct({
     file: Schema.Option(Schema.File),
     label: Label,
     count: Schema.Number
   }),
-
   message: Bumped
 }).make({
   init: () => ({

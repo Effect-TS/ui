@@ -85,13 +85,11 @@ describe("OpenTuiHost", () => {
 
       const App = OpenTui.component({
         name: "ShortcutPreventDefault",
-
         model: Schema.Struct({
           value: Schema.String,
           shortcuts: Schema.Array(Schema.String),
           blockX: Schema.Boolean
         }),
-
         message: Message
       }).make({
         init: () => ({ value: "", shortcuts: [], blockX: true }),
@@ -149,7 +147,6 @@ describe("OpenTuiHost", () => {
 
       const Form = OpenTui.component({
         name: "ControlledForm",
-
         model: Schema.Struct({
           digits: Schema.String,
           notes: Schema.String,
@@ -158,7 +155,6 @@ describe("OpenTuiHost", () => {
           focusTarget: Target,
           tick: Schema.Number
         }),
-
         message: Message
       }).make({
         init: () => ({
@@ -249,7 +245,6 @@ describe("OpenTuiHost", () => {
 
       const App = OpenTui.component({
         name: "FocusAndCommands",
-
         model: Schema.Struct({
           active: Schema.Literals(["first", "second"]),
           firstText: Schema.String,
@@ -257,7 +252,6 @@ describe("OpenTuiHost", () => {
           measuredWidth: Schema.Number,
           scrolled: Schema.Boolean
         }),
-
         message: Message
       }).make({
         init: () => ({
@@ -476,7 +470,6 @@ describe("OpenTuiHost", () => {
 
       const Root = OpenTui.component({
         name: "Root",
-
         model: Schema.Struct({
           mounted: Schema.Boolean,
           showTab: Schema.Boolean,
@@ -486,7 +479,6 @@ describe("OpenTuiHost", () => {
           showFragile: Schema.Boolean,
           keepFragile: Schema.Boolean
         }),
-
         message: RootMsg
       }).make({
         init: () => ({
@@ -663,12 +655,10 @@ describe("OpenTuiHost", () => {
 
       const App = OpenTui.component({
         name: "PropagationAndStyleReset",
-
         model: Schema.Struct({
           outerClicks: Schema.Number,
           bordered: Schema.Boolean
         }),
-
         message: Message
       }).make({
         init: () => ({ outerClicks: 0, bordered: true }),

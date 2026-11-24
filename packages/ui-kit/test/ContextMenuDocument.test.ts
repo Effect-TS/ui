@@ -16,18 +16,15 @@ const PageMessage = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
-
   props: Schema.Struct({
     disabled: Schema.Boolean,
     refuseClose: Schema.Boolean
   }),
-
   model: Schema.Struct({
     outer: Schema.Boolean,
     inner: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-
   message: PageMessage
 }).make({
   init: () => ({ outer: false, inner: false, log: [] }),

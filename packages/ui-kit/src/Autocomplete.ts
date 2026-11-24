@@ -142,7 +142,7 @@
  * **Example** (A search box whose text is in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Autocomplete } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

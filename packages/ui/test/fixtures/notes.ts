@@ -66,7 +66,6 @@ export const FollowNotes = Command.make(
 export const Note = Html.component({
   name: "Note",
   props: Schema.Struct({ author: Schema.optional(Schema.String) }),
-
   model: Schema.Struct({
     text: Schema.String,
     saved: Schema.Boolean,
@@ -74,10 +73,8 @@ export const Note = Html.component({
     lines: Schema.Number,
     author: Schema.optional(Schema.String)
   }),
-
   message: NoteMessage,
   events: NoteEvents,
-
   queries: {
     author: {
       query: users.GetUser,

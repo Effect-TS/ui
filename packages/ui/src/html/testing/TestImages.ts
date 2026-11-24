@@ -9,7 +9,7 @@
  * **Example** (Loading a photo in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { Subscription, UiSchema } from "@effect/ui";
+ * import { Subscription, UiSchema } from "@effect/ui"
  * import { Html, HtmlImages } from "@effect/ui/html"
  * import { TestImages } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"

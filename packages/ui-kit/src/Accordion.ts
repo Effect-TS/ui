@@ -64,7 +64,7 @@
  * **Example** (A FAQ whose open question lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Accordion, AccordionItem } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -301,7 +301,6 @@ export const Accordion = Html.component({
   model: Schema.Struct({}),
   message: AccordionMessage,
   events: AccordionEvents,
-
   shares: {
     value: (_model, props) => resolved(props),
     schema: AccordionShared,

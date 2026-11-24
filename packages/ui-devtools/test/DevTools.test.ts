@@ -845,14 +845,12 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Typed: {}, Replaced: {} })
       const Form = Html.component({
         name: "Form",
-
         model: Schema.Struct({
           form: Schema.Struct({
             name: Schema.Struct({ value: Schema.String })
           }),
           lists: Schema.Record(Schema.String, Schema.Array(Schema.Number))
         }),
-
         message: Message
       }).make({
         init: () => ({ form: { name: { value: "" } }, lists: { old: [1] } }),

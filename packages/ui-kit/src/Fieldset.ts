@@ -165,7 +165,6 @@ export const Fieldset = Html.component({
   props: FieldsetProps,
   model: Schema.Struct({}),
   message: Schema.Never,
-
   shares: {
     value: (_model, props) => ({ disabled: props.disabled === true }),
     schema: Schema.Struct({ disabled: Schema.Boolean })

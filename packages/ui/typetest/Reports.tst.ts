@@ -47,7 +47,6 @@ const Tip = Html.component({
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ hovered: Schema.Boolean }),
   message: TipMessage,
-
   shared: {
     provider: {
       owner: Provider,

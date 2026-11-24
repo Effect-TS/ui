@@ -922,7 +922,6 @@ describe("HtmlServer", { concurrent: false }, () => {
         model: Schema.Struct({ status: Schema.String }),
         message: ChildMessage,
         events: Schema.Literal("loaded"),
-
         queries: {
           text: {
             query: GetText,
@@ -1126,12 +1125,10 @@ describe("HtmlServer", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Mounted: {}, Clicked: {} })
       const Panel = Html.component({
         name: "Panel",
-
         model: Schema.Struct({
           mounted: Schema.Boolean,
           clicks: Schema.Number
         }),
-
         message: Message
       }).make({
         init: () => ({ mounted: false, clicks: 0 }),
@@ -1203,14 +1200,12 @@ describe("HtmlServer", { concurrent: false }, () => {
     const makeForm = (seen: Array<string>) =>
       Html.component({
         name: "Form",
-
         model: Schema.Struct({
           name: Schema.String,
           other: Schema.String,
           note: Schema.String,
           agree: Schema.Boolean
         }),
-
         message: Message
       }).make({
         init: () => ({
@@ -3067,7 +3062,6 @@ const makeItems = () => {
     model: Schema.Struct({}),
     message: Schema.Never,
     props: Schema.Struct({ id: Schema.Number }),
-
     queries: {
       item: { query: GetItem, args: ({ props }) => ({ id: props.id }) }
     }
@@ -3126,7 +3120,6 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         name: "Pager",
         model: Schema.Struct({ page: Schema.Number }),
         message: Message,
-
         queries: {
           item: {
             query: GetItem,
@@ -3184,7 +3177,6 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         name: "List",
         model: Schema.Struct({}),
         message: Schema.Never,
-
         queries: {
           items: {
             queryMany: GetSlowItem,
@@ -3391,7 +3383,6 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         props: Schema.Struct({ id: Schema.Number }),
         model: Schema.Struct({}),
         message: Schema.Never,
-
         queries: {
           now: { query: GetNow, args: ({ props }) => ({ id: props.id }) }
         }
@@ -3616,7 +3607,6 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           name: "Page",
           model: Schema.Struct({}),
           message: Schema.Never,
-
           queries: {
             first: { query: GetText, args: () => ({ id: 1 }) },
             second: { query: GetText, args: () => ({ id: 2 }) },

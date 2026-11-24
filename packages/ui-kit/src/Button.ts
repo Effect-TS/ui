@@ -44,7 +44,7 @@
  * **Example** (A save button that stays focusable while it saves)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Button } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

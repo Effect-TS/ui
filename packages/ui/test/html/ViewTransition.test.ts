@@ -45,13 +45,11 @@ const Card = Html.component({
 const Gallery = Html.component({
   name: "Gallery",
   props: Schema.Struct({ route: GalleryRoute }),
-
   model: Schema.Struct({
     route: GalleryRoute,
     layout: Layout,
     filter: Schema.String
   }),
-
   message: Message
 }).make({
   init: ($) => ({ route: $.props.route, layout: "grid" as const, filter: "" }),

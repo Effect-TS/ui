@@ -154,7 +154,7 @@
  * **Example** (A popover whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Popover } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

@@ -68,13 +68,11 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 const Toolbar = Html.component({
   name: "Toolbar",
-
   model: Schema.Struct({
     open: Schema.Boolean,
     pressed: Schema.Number,
     dismissed: Schema.Number
   }),
-
   message: ToolbarMessage
 }).make({
   init: () => ({ open: true, pressed: 0, dismissed: 0 }),
@@ -210,13 +208,11 @@ const IndependentMessage = UiSchema.TaggedEnum({
 const Independent = Html.component({
   name: "Independent",
   props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
-
   model: Schema.Struct({
     bold: Schema.Boolean,
     italic: Schema.Boolean,
     requests: Schema.Number
   }),
-
   message: IndependentMessage
 }).make({
   init: () => ({ bold: false, italic: false, requests: 0 }),
@@ -275,14 +271,12 @@ const DeferredMessage = UiSchema.TaggedEnum({
 
 const Deferred = Html.component({
   name: "Deferred",
-
   model: Schema.Struct({
     bold: Schema.Boolean,
     italic: Schema.Boolean,
     underline: Schema.Boolean,
     requests: Schema.Number
   }),
-
   message: DeferredMessage
 }).make({
   init: () => ({ bold: false, italic: false, underline: false, requests: 0 }),
@@ -345,9 +339,7 @@ const opened = (props: TooltipProps) =>
 // The message a wait would have produced: the Command's own result.
 const completed = (
   tag: "CompletedWaitBeforeOpening" | "CompletedWaitBeforeClosing"
-) => (({
-  _tag: tag
-}) as never)
+) => ({ _tag: tag }) as never
 
 describe("Tooltip", () => {
   it.effect("hover opens after the delay and stays open across the offset until the pointer leaves", () =>

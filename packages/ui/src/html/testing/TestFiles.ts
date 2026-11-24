@@ -9,7 +9,7 @@
  * **Example** (Choosing a file in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlFiles } from "@effect/ui/html"
  * import { TestFiles } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"

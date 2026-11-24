@@ -68,7 +68,7 @@
  * **Example** (Confirming that a draft is discarded)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { AlertDialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"

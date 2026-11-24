@@ -3,11 +3,10 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
 
 const define = <const Name extends string>(name: Name) =>
-  Component.define({
+  Html.component({
     name,
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   })
 
 class Badge
@@ -19,11 +18,10 @@ const BadgeView = define("BadgeView").make({
   view: (h) => h.b("badge")
 })
 
-const Frame = Component.define({
+const Frame = Html.component({
   name: "Frame",
   model: Schema.Null,
   message: Schema.Never,
-  elements: Html,
   slots: ["body"]
 }).make({
   init: () => null,
@@ -32,11 +30,10 @@ const Frame = Component.define({
 })
 
 const BreakerMessage = UiSchema.TaggedEnum({ Break: {} })
-const Breaker = Component.define({
+const Breaker = Html.component({
   name: "Breaker",
   model: Schema.Null,
-  message: BreakerMessage,
-  elements: Html
+  message: BreakerMessage
 }).make({
   init: () => null,
   update: () => {
@@ -46,11 +43,10 @@ const Breaker = Component.define({
 })
 
 const AppMessage = UiSchema.TaggedEnum({ Failed: {} })
-const App = Component.define({
+const App = Html.component({
   name: "App",
   model: Schema.Number,
-  message: AppMessage,
-  elements: Html
+  message: AppMessage
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,

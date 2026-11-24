@@ -10,12 +10,10 @@ import { Settings } from "./fixtures/settings.ts"
 
 const Checkout = Html.component({
   name: "Checkout",
-
   model: Schema.Struct({
     log: Schema.Array(Schema.String),
     zip: Schema.String
   }),
-
   message: Schema.String
 }).make({
   init: () => ({ log: [], zip: "old" }),

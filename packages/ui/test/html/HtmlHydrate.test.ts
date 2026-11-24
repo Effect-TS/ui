@@ -297,12 +297,10 @@ describe("HtmlHydrate", () => {
     Effect.gen(function*() {
       const Picked = Html.component({
         name: "Picked",
-
         model: Schema.Struct({
           pick: Schema.Option(Schema.String),
           at: Schema.Date
         }),
-
         message: Schema.Never
       }).make({
         init: () => ({ pick: Option.some("server"), at: new Date(0) }),

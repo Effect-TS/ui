@@ -2365,7 +2365,7 @@ export const withView = (
     ) => {
       const h = View.makeHelper(
         props,
-        elements ?? component.elements(),
+        elements ?? component.elements,
         running,
         owner.path
       )
@@ -2395,7 +2395,7 @@ export const withSlots = (
     slots(
       View.makeHelper(
         {},
-        elements ?? component.elements(),
+        elements ?? component.elements,
         undefined,
         "/" + component.definition.name
       )

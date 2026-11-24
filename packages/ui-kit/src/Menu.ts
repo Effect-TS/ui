@@ -151,7 +151,7 @@
  * **Example** (An edit menu with a checkbox item and a submenu, with the open states in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Menu } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -2488,7 +2488,6 @@ export const Menu = Html.component({
   model: MenuModel,
   message: MenuMessage,
   events: MenuEvents,
-
   shares: {
     value: shares,
     receives: ["RequestedCloseByChild"],
@@ -2500,7 +2499,6 @@ export const Menu = Html.component({
         })
     }
   },
-
   shared: {
     parent: {
       owner: "self",
@@ -2524,7 +2522,6 @@ export const Menu = Html.component({
     },
     toolbar: { owner: Toolbar, optional: true }
   },
-
   restore: false
 }).make({
   init: () => ({

@@ -10,12 +10,10 @@ const CounterMessage = UiSchema.TaggedEnum({
 
 const Counter = Html.component({
   name: "Counter",
-
   model: Schema.Struct({
     moves: Schema.Number,
     count: Schema.Number
   }),
-
   message: CounterMessage
 }).make({
   init: () => ({ moves: 0, count: 0 }),

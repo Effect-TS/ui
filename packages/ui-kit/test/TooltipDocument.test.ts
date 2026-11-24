@@ -172,13 +172,11 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
-
   props: Schema.Struct({
     sideOffset: Schema.Number,
     disableAnchorTracking: Schema.Boolean,
     anchor: Schema.optional(Schema.String)
   }),
-
   model: Schema.Struct({ open: Schema.Boolean, tinted: Schema.Boolean }),
   message: Message
 }).make({

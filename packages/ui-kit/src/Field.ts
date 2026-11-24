@@ -122,7 +122,7 @@
  * **Example** (A labelled, described name field)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Input } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -362,7 +362,6 @@ export const Field = Html.component({
   props: FieldProps,
   model: FieldModel,
   message: FieldMessage,
-
   shared: {
     fieldset: {
       owner: Fieldset,
@@ -371,7 +370,6 @@ export const Field = Html.component({
         FieldMessage.ChangedFieldset({ disabled: value.disabled })
     }
   },
-
   restore: (model) => UiStruct.evolve(model, { focused: false })
 }).make({
   init: () => ({ focused: false, touched: false }),

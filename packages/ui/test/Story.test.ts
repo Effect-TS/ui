@@ -843,7 +843,6 @@ describe("Story", () => {
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({ changes: Schema.Number }),
       message: TeamMessage,
-
       queries: {
         // Declared before the query it depends on, so the order of the record doesn't matter.
         friend: {
@@ -966,7 +965,6 @@ describe("Story", () => {
           props: Schema.Struct({ id: Schema.String }),
           model: Schema.Struct({ changes: Schema.Number }),
           message: Message,
-
           queries: {
             user: {
               query: users.GetUser,
@@ -1021,7 +1019,6 @@ describe("Story", () => {
           props: Schema.Struct({}),
           model: Schema.Struct({ id: Schema.String, changes: Schema.Number }),
           message: Message,
-
           queries: {
             // Declared before the query it reads, so a first pass sees the old user at the new Model's args.
             friends: {
@@ -1094,12 +1091,10 @@ describe("Story", () => {
       const App = Html.component({
         name: "SecretOutputs",
         model: Schema.Null,
-
         message: Schema.Struct({
           kind: Schema.Literals(["emit", "send"]),
           at: Schema.Number
         }),
-
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),
         shared: { receiver: Receiver }
       }).make({

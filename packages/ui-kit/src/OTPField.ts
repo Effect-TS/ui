@@ -113,7 +113,7 @@
  * **Example** (A six-digit code)
  *
  * ```ts import.meta.vitest
- * import { UiSchema } from "@effect/ui";
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { OTPField } from "@effect/ui-kit"
  * import { Effect, Redacted, Schema } from "effect"
@@ -884,11 +884,9 @@ export const OTPField = Html.component({
   model: OTPFieldModel,
   message: OTPFieldMessage,
   events: OTPFieldEvents,
-
   shared: {
     provider: { owner: DirectionProvider, optional: true }
   },
-
   restore: false
 }).make({
   init: () => ({

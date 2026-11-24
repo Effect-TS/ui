@@ -176,14 +176,12 @@ const NestedMessage = UiSchema.TaggedEnum({
 
 const Nested = Html.component({
   name: "Nested",
-
   model: Schema.Struct({
     outer: Schema.Boolean,
     inner: Schema.Boolean,
     picker: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-
   message: NestedMessage
 }).make({
   init: () => ({ outer: true, inner: true, picker: false, log: [] }),
