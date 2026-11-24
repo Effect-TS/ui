@@ -984,7 +984,6 @@ const makeUpdate = (
     "~self": self
   })
 
-// An `update` as a function: a record dispatches on the message's `_tag`.
 const toUpdateFn = (
   update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
 ): AnyUpdate =>
@@ -2423,15 +2422,12 @@ type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
     : UnknownTag<T>
 }
 
-// The tags no record key stands for: `string` and template literals, which a mapped type turns into an
-// index signature.
+// `{}` extends `Record<T, unknown>` only for open tags (`string`, template literals) that map to an index signature.
 type OpenTag<T extends string> = T extends unknown
   ? {} extends Record<T, unknown> ? T : never
   : never
 
-// What a record given to `Def.update` is besides an `UpdateRecord`. It is dispatched on `_tag`, so this is
-// `never` unless every member of `Msg` has one and no tag is open. Every function has `Symbol.hasInstance`,
-// so it also rules out a function with handlers for properties, which is called as a function.
+// `{ readonly [Symbol.hasInstance]?: never }` excludes callables with handler properties, which dispatch as functions.
 type DispatchedByTag<Msg> = [Msg] extends [{ readonly _tag: string }]
   ? [OpenTag<TagOf<Msg>>] extends [never]
     ? { readonly [Symbol.hasInstance]?: never }

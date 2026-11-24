@@ -111,11 +111,10 @@ describe("Component.define", () => {
           .emitted(Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 }))
           .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
           .resolve(Log.make({ n: 4 }), Message.Logged({ n: 4 }))
+        assert.deepStrictEqual(story.model, {
+          n: 4,
+          seen: ["Step", "Step", "logged 2", "logged 4"]
+        })
       }
-      assert.deepStrictEqual(extractedStory.model, inlineStory.model)
-      assert.deepStrictEqual(extractedStory.model, {
-        n: 4,
-        seen: ["Step", "Step", "logged 2", "logged 4"]
-      })
     }))
 })

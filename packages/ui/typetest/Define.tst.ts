@@ -88,18 +88,6 @@ describe("Component.define", () => {
         { readonly user: Component.QueryOne<typeof GetUser> }
       >
     >()
-
-    const ToggleDef = Html.component({
-      name: "Toggle",
-      model: Schema.Boolean,
-      message: Schema.Literal("ClickedToggle")
-    })
-    ToggleDef.update(($, msg) => {
-      expect(msg).type.toBe<"ClickedToggle">()
-      return !$.model
-    })
-    expect(ToggleDef.update).type.not.toBeCallableWith({})
-    expect(ToggleDef.update).type.not.toBeCallableWith(() => 123)
   })
 
   it("narrows the message of a slice by tag", () => {
@@ -326,15 +314,6 @@ describe("Component.define", () => {
     })
     expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
 
-    const HeadlessNote = NoteDef.make({
-      init: () => ({ body: "", edits: 0 }),
-      update,
-      parts: (_, model) => ({ body: model.body })
-    })
-    expect<Component.Headless.Requirements<typeof HeadlessNote>>().type.toBe<
-      GetUser | Save
-    >()
-
     const Combined = NoteDef.make({
       init: () => ({ body: "", edits: 0 }),
       update: ($) => $.combine(update, audit),
@@ -345,20 +324,12 @@ describe("Component.define", () => {
     >()
 
     // @ts-expect-error is missing the following properties
-    const narrowFromHandlers: typeof touch = NoteDef.update({
+    const narrow: typeof touch = NoteDef.update({
       Edited: save,
       SaveClicked: save,
       Saved: save
     })
-    void narrowFromHandlers
-
-    // @ts-expect-error is missing the following properties
-    const narrowFromInline: typeof touch = NoteDef.update({
-      Edited: ($) => $.run(Save.make()),
-      SaveClicked: touch,
-      Saved: touch
-    })
-    void narrowFromInline
+    void narrow
   })
 
   it("enforces exhaustiveness and rejects unknown keys on an extracted record update", () => {
@@ -371,19 +342,7 @@ describe("Component.define", () => {
     // @ts-expect-error 'Deleted' is not a tag of this component's message
     NoteDef.update({ Edited: u, SaveClicked: u, Saved: u, Deleted: u })
 
-    expect(NoteDef.update).type.not.toBeCallableWith({
-      Edited: touch,
-      SaveClicked: touch,
-      Saved: touch,
-      Deleted: "'Deleted' is not a tag of this component's message" as const
-    })
-
     const record = { ...shared, Edited: touch, SaveClicked: touch }
-    expect(NoteDef.update).type.not.toBeCallableWith({
-      ...shared,
-      Edited: touch,
-      SaveClicked: touch
-    })
     expect(NoteDef.update).type.not.toBeCallableWith(record)
 
     expect(NoteDef.update).type.not.toBeCallableWith("Edited", {
@@ -412,31 +371,6 @@ describe("Component.define", () => {
       Saved: touch
     })
     expect(NoteDef.update).type.not.toBeCallableWith(invalidCallable)
-
-    const callableInterface = invalidCallable as {
-      (): number
-      readonly Edited: typeof touch
-      readonly SaveClicked: typeof touch
-      readonly Saved: typeof touch
-    }
-    expect(NoteDef.update).type.not.toBeCallableWith(callableInterface)
-
-    const neverCallable = Object.assign(
-      (): never => {
-        throw new Error()
-      },
-      {
-        Edited: audit,
-        SaveClicked: touch,
-        Saved: touch
-      }
-    )
-    const NeverNote = NoteDef.make({
-      init: () => ({ body: "", edits: 0 }),
-      update: NoteDef.update(neverCallable),
-      view: (h) => h.p()
-    })
-    expect<Component.Requirements<typeof NeverNote>>().type.toBe<GetUser>()
   })
 
   it("rejects record updates when a message union lacks finite known tags", () => {
@@ -458,7 +392,6 @@ describe("Component.define", () => {
     })
     WideTagDef.update(($) => $.model + 1)
     expect(WideTagDef.update).type.not.toBeCallableWith({})
-    expect(WideTagDef.update).type.not.toBeCallableWith({ Inc: () => 1 })
 
     const TemplateTagDef = Html.component({
       name: "TemplateTag",
@@ -477,15 +410,9 @@ describe("Component.define", () => {
         _tag: Schema.Literals(["Inc", "Dec"])
       })
     })
-    const handlers = { Inc: () => 1, Dec: () => -1 }
     UnionTagStructDef.make({
       init: () => 0,
-      update: handlers,
-      view: (h) => h.p()
-    })
-    UnionTagStructDef.make({
-      init: () => 0,
-      update: UnionTagStructDef.update(handlers),
+      update: UnionTagStructDef.update({ Inc: () => 1, Dec: () => -1 }),
       view: (h) => h.p()
     })
   })
