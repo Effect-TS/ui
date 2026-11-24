@@ -32,8 +32,9 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as MessageLog from "@effect/ui/MessageLog"
+import type * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
+import * as internal from "./internal/inspector.ts"
 
 /**
  * What `Session.resolve` gives for a `seq` the session doesn't hold: the
@@ -208,6 +209,11 @@ export interface Link {
  * nothing says whether it differed. An answer already there stays when the
  * earlier entry leaves the buffer after it.
  *
+ * When the earlier entry left through `Session.clear`, the mounted instance
+ * kept its last Wire Model and props as a baseline, so `changed`, `model`
+ * and `props` are present even though `Session.resolve` returns `Outside`
+ * for `seq`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -215,6 +221,8 @@ export interface Link {
 export interface Previous {
   readonly seq: number
   readonly changed?: boolean | "unknown"
+  readonly model?: Schema.Json
+  readonly props?: Schema.Json
 }
 
 /**
@@ -271,9 +279,10 @@ export interface Session {
   /** For a `Waiting`, `Mounted` or `Update`: the instance's state entry before it, when there is one. */
   readonly previous: (seq: number) => Previous | undefined
   /**
-   * Empties the buffer, as if every entry had been dropped from the ring.
-   * Open records and mounted instances stay, and no entry does: a mounted
-   * instance keeps the `seq` of its last state entry, not its Model.
+   * Empties the buffer. Open records and mounted instances stay, and no entry
+   * remains in `entries` or `resolve`. Each mounted instance keeps the `seq`,
+   * Model and props of its last state entry as a baseline so the next entry
+   * can still be diffed against the state before the clear.
    */
   readonly clear: () => void
 }
@@ -294,72 +303,6 @@ export interface Inspector {
   readonly ingest: (batch: ReadonlyArray<MessageLog.WireEntry>) => void
   /** The sessions, in the order they were first seen. */
   readonly sessions: () => ReadonlyArray<Session>
-}
-
-type Entry = MessageLog.WireEntry
-type InstanceEntry = Exclude<Entry, { readonly _tag: "SessionStarted" | "FetchStarted" }>
-type Source = Extract<Entry, { readonly _tag: "Update" }>["source"]
-type Mutable<A> = { -readonly [K in keyof A]: A[K] }
-
-interface InstanceState {
-  readonly info: Mutable<Instance>
-  readonly records: Array<Mutable<Record>>
-  readonly subscriptions: Map<string, Mutable<Record>>
-  layer: Mutable<Record> | undefined
-  state: number | undefined
-  buffered: number
-}
-
-type Emit = (kind: Change["kind"], before: Schema.Json | undefined, after: Schema.Json | undefined) => boolean
-
-const isObject = (value: Schema.Json): value is Schema.JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
-const walk = (before: Schema.Json, after: Schema.Json, path: Array<string | number>, emit: Emit): boolean => {
-  if (MessageLog.isPlaceholder(before) || MessageLog.isPlaceholder(after)) return emit("unknown", before, after)
-  if (Array.isArray(before) && Array.isArray(after)) {
-    const length = Math.max(before.length, after.length)
-    for (let index = 0; index < length; index++) {
-      path.push(index)
-      const stop = index >= before.length
-        ? emit("added", undefined, after[index])
-        : index >= after.length
-        ? emit("removed", before[index], undefined)
-        : walk(before[index], after[index], path, emit)
-      path.pop()
-      if (stop) return true
-    }
-    return false
-  }
-  if (isObject(before) && isObject(after)) {
-    for (const key of Object.keys(before)) {
-      path.push(key)
-      const stop = Object.hasOwn(after, key)
-        ? walk(before[key], after[key], path, emit)
-        : emit("removed", before[key], undefined)
-      path.pop()
-      if (stop) return true
-    }
-    for (const key of Object.keys(after)) {
-      if (Object.hasOwn(before, key)) continue
-      path.push(key)
-      const stop = emit("added", undefined, after[key])
-      path.pop()
-      if (stop) return true
-    }
-    return false
-  }
-  return before !== after && emit("changed", before, after)
-}
-
-const compare = (before: Schema.Json, after: Schema.Json): boolean | "unknown" => {
-  let unknown = false
-  const changed = walk(before, after, [], (kind) => {
-    if (kind !== "unknown") return true
-    unknown = true
-    return false
-  })
-  return changed || (unknown ? "unknown" : false)
 }
 
 /**
@@ -395,277 +338,30 @@ const compare = (before: Schema.Json, after: Schema.Json): boolean | "unknown" =
  * @category diffing
  * @since 0.1.0
  */
-export const diff = (before: Schema.Json, after: Schema.Json): ReadonlyArray<Change> => {
-  const changes: Array<Change> = []
-  const path: Array<string | number> = []
-  walk(before, after, path, (kind, from, to) => {
-    changes.push({
-      kind,
-      path: path.slice(),
-      ...(from === undefined ? undefined : { before: from }),
-      ...(to === undefined ? undefined : { after: to })
-    })
-    return false
-  })
-  return changes
-}
-
-const runKey = (issued: MessageLog.Issued) => `${issued.seq}:${issued.index}`
-
-const push = <K, V>(map: Map<K, Array<V>>, key: K, value: V) => {
-  const list = map.get(key)
-  if (list === undefined) map.set(key, [value])
-  else list.push(value)
-}
-
-const makeSession = (id: string, size: number) => {
-  const entries = new Map<number, Entry>()
-  const instances = new Map<number, InstanceState>()
-  const runs = new Map<string, Mutable<Record>>()
-  const mounts = new Map<number, Mutable<Record>>()
-  const back = new Map<number, Array<Link>>()
-  const forward = new Map<number, Array<Link>>()
-  const previous = new Map<number, Previous>()
-  const ended = new Map<number, Array<Mutable<Record>>>()
-  let app: string | undefined
-  let last = -Infinity
-
-  const link = (from: number, rel: Link["rel"], seq: number, index?: number) => {
-    push(back, from, index === undefined ? { rel, seq } : { rel, seq, index })
-    push(forward, seq, index === undefined ? { rel, seq: from } : { rel, seq: from, index })
-  }
-
-  const open = (inst: InstanceState, record: Mutable<Record>) => {
-    inst.records.push(record)
-    return record
-  }
-
-  const close = (record: Mutable<Record>, seq: number, reason: Reason) => {
-    record.end = seq
-    record.reason = reason
-    push(ended, seq, record)
-  }
-
-  const end = (seq: number, issued: MessageLog.Issued, reason: Reason) => {
-    link(seq, "issued", issued.seq, issued.index)
-    const run = runs.get(runKey(issued))
-    if (run !== undefined && run.end === undefined) close(run, seq, reason)
-  }
-
-  const linkSource = (inst: InstanceState, from: number, source: Source) => {
-    switch (source._tag) {
-      case "Command":
-        return link(from, "source", source.issued.seq, source.issued.index)
-      case "Subscription": {
-        const start = inst.subscriptions.get(source.key)?.start
-        return start === undefined ? undefined : link(from, "source", start)
-      }
-      case "Query":
-      case "Emit":
-      case "Failure":
-      case "Send":
-      case "Shared":
-      case "Mount":
-        return link(from, "source", source.seq)
-    }
-  }
-
-  const track = (entry: InstanceEntry) => {
-    let inst = instances.get(entry.instance)
-    if (inst === undefined) {
-      inst = {
-        info: { instance: entry.instance, path: entry.path, component: entry.component },
-        records: [],
-        subscriptions: new Map(),
-        layer: undefined,
-        state: undefined,
-        buffered: 0
-      }
-      instances.set(entry.instance, inst)
-    }
-    inst.buffered++
-    const { instance, seq } = entry
-    switch (entry._tag) {
-      case "Waiting":
-      case "Mounted":
-      case "Update": {
-        if (inst.state !== undefined) {
-          const before = entries.get(inst.state)
-          previous.set(
-            seq,
-            before !== undefined && "model" in before
-              ? { seq: inst.state, changed: compare(before.model, entry.model) }
-              : { seq: inst.state }
-          )
-        }
-        inst.state = seq
-        if (entry._tag === "Waiting") return
-        if (entry._tag === "Mounted") inst.info.mounted = seq
-        else linkSource(inst, seq, entry.source)
-        for (let index = 0; index < entry.commands.length; index++) {
-          const command = entry.commands[index]
-          if (command._tag === "Interrupt") continue
-          const issued = { seq, index }
-          runs.set(runKey(issued), open(inst, { kind: "command", instance, name: command.name, issued }))
-        }
-        return
-      }
-      case "Failed": {
-        if (entry.update !== undefined) linkSource(inst, seq, entry.update.source)
-        if (entry.issued !== undefined) end(seq, entry.issued, "failed")
-        return
-      }
-      case "Unmounted": {
-        inst.info.unmounted = seq
-        if (inst.layer !== undefined) close(inst.layer, seq, "unmount")
-        inst.layer = undefined
-        for (const record of inst.subscriptions.values()) close(record, seq, "unmount")
-        inst.subscriptions.clear()
-        return
-      }
-      case "LayerPending": {
-        inst.layer ??= open(inst, { kind: "layer", instance, name: entry.component, start: seq })
-        return
-      }
-      case "LayerReady":
-      case "LayerFailed": {
-        if (inst.layer !== undefined) close(inst.layer, seq, entry._tag === "LayerReady" ? "ready" : "failed")
-        inst.layer = undefined
-        return
-      }
-      case "SubscriptionStarted": {
-        const record = open(inst, { kind: "subscription", instance, name: entry.name, key: entry.key, start: seq })
-        inst.subscriptions.set(entry.key, record)
-        return
-      }
-      case "SubscriptionStopped": {
-        const record = inst.subscriptions.get(entry.key)
-        if (record === undefined) return
-        close(record, seq, "stopped")
-        inst.subscriptions.delete(entry.key)
-        return
-      }
-      case "MountStarted": {
-        mounts.set(seq, open(inst, { kind: "mount", instance, name: entry.name, start: seq }))
-        return
-      }
-      case "MountEnded": {
-        link(seq, "started", entry.started)
-        const record = mounts.get(entry.started)
-        if (record === undefined) return
-        close(record, seq, entry.reason)
-        mounts.delete(entry.started)
-        return
-      }
-      case "CommandStarted": {
-        link(seq, "issued", entry.issued.seq, entry.issued.index)
-        const key = runKey(entry.issued)
-        let run = runs.get(key)
-        if (run === undefined) {
-          run = open(inst, { kind: "command", instance, name: entry.name, issued: entry.issued })
-          runs.set(key, run)
-        }
-        run.start = seq
-        return
-      }
-      case "CommandAwaiting":
-      case "SendDropped":
-        return link(seq, "issued", entry.issued.seq, entry.issued.index)
-      case "CommandEnded":
-      case "CommandInterrupted":
-      case "CommandDropped":
-        return end(seq, entry.issued, entry._tag === "CommandEnded" ? "ended" : entry.reason)
-    }
-  }
-
-  const evict = (seq: number, entry: Entry) => {
-    entries.delete(seq)
-    previous.delete(seq)
-    for (const named of back.get(seq) ?? []) {
-      const kept = forward.get(named.seq)?.filter((naming) => naming.seq !== seq)
-      if (kept === undefined) continue
-      if (kept.length === 0) forward.delete(named.seq)
-      else forward.set(named.seq, kept)
-    }
-    back.delete(seq)
-    for (const record of ended.get(seq) ?? []) {
-      const records = instances.get(record.instance)!.records
-      records.splice(records.indexOf(record), 1)
-      if (record.issued !== undefined) runs.delete(runKey(record.issued))
-    }
-    ended.delete(seq)
-    if (entry._tag === "SessionStarted" || entry._tag === "FetchStarted") return
-    const inst = instances.get(entry.instance)!
-    inst.buffered--
-    if (
-      inst.buffered === 0 && inst.records.length === 0 &&
-      (inst.info.unmounted !== undefined || inst.info.mounted === undefined)
-    ) instances.delete(entry.instance)
-  }
-
-  const session: Session = {
-    id,
-    get app() {
-      return app
-    },
-    entries: () => Array.from(entries.values()),
-    resolve: (seq) => entries.get(seq) ?? { _tag: "Outside", seq },
-    instances: () => Array.from(instances.values(), (inst) => ({ ...inst.info })),
-    records: (instance) =>
-      (instance === undefined
-        ? Array.from(instances.values()).flatMap((inst) => inst.records)
-        : instances.get(instance)?.records ?? []).map((record) => ({ ...record })),
-    run: (issued) => {
-      const record = runs.get(runKey(issued))
-      return record === undefined ? undefined : { ...record }
-    },
-    back: (seq) => back.get(seq)?.slice() ?? [],
-    forward: (seq) => forward.get(seq)?.slice() ?? [],
-    previous: (seq) => previous.get(seq),
-    clear: () => {
-      for (const [seq, entry] of Array.from(entries)) evict(seq, entry)
-    }
-  }
-
-  return {
-    session,
-    ingest: (entry: Entry) => {
-      if (entry.seq <= last) return
-      last = entry.seq
-      entries.set(entry.seq, entry)
-      if (entry.causedBy !== undefined) link(entry.seq, "causedBy", entry.causedBy)
-      if (entry._tag === "SessionStarted") app = entry.app
-      else if (entry._tag !== "FetchStarted") track(entry)
-      for (const [seq, oldest] of entries) {
-        if (entries.size <= size) break
-        evict(seq, oldest)
-      }
-    }
-  }
-}
+export const diff: (before: Schema.Json, after: Schema.Json) => ReadonlyArray<Change> = internal.diff
 
 /**
- * Makes an inspector whose sessions each hold their last `size` entries
+ * Makes an inspector whose sessions each hold their last `size` shown entries
  * (1,000 by default).
+ *
+ * **Details**
+ *
+ * `exclude` lists message `_tag` values, matched across every component. An
+ * `Update` whose message has one of those tags is omitted from `entries`, and
+ * a run of them takes one slot per instance: each replaces the instance's
+ * earlier excluded entry while no shown entry of any instance sits between
+ * them. Links to a replaced entry resolve to `Outside`. The next shown entry
+ * is still compared with the latest excluded state.
+ *
+ * `exclude` is not a way to hide sensitive data: later entries still carry
+ * whatever an excluded message changed in the Model. Use `Schema.Redacted`
+ * for sensitive values.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const make = (options?: { readonly size?: number | undefined }): Inspector => {
-  const size = Math.max(1, options?.size ?? 1_000)
-  const sessions = new Map<string, ReturnType<typeof makeSession>>()
-  return {
-    ingest: (batch) => {
-      for (const entry of batch) {
-        let state = sessions.get(entry.session)
-        if (state === undefined) {
-          state = makeSession(entry.session, size)
-          sessions.set(entry.session, state)
-        }
-        state.ingest(entry)
-      }
-    },
-    sessions: () => Array.from(sessions.values(), (state) => state.session)
-  }
-}
+export const make = (options?: {
+  readonly size?: number | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
+}): Inspector => internal.make({ size: options?.size, isExcluded: internal.matchTags(new Set(options?.exclude)) })

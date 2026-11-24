@@ -24,11 +24,14 @@ export interface Feed {
   readonly changes: Stream.Stream<void>
   readonly paintable: (session: string, seq: number) => boolean
   readonly pausing: () => boolean
+  readonly open: boolean
 }
 
 export class Pages extends Context.Service<Pages, {
   readonly paint: (session: string, seq: number) => Effect.Effect<BrowserHost.Painted | undefined>
   readonly resume: Effect.Effect<void>
+  readonly clear: (session: string) => Effect.Effect<void>
+  readonly setOpen: (open: boolean) => Effect.Effect<void>
 }>()("@effect/ui-devtools/Pages") {}
 
 const FeedSchema = Schema.declare(
@@ -88,6 +91,8 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedTimeTravel: { session: Schema.String, seq: Schema.Number },
   ScrubbedPage: { seq: Schema.Number },
   ClickedResume: {},
+  ClickedClear: {},
+  Cleared: {},
   Painted: Paused.fields
 })
 
@@ -128,6 +133,24 @@ export class Paint extends Command.Service<Paint>()(
   })
 ) {}
 
+export class Clear extends Command.Service<Clear>()(
+  "devtools/Clear",
+  { args: { session: Schema.String } },
+  Effect.gen(function*() {
+    const pages = yield* Pages
+    return ({ session }) => Effect.as(pages.clear(session), OverlayMessage.Cleared())
+  })
+) {}
+
+export class SaveOpen extends Command.Service<SaveOpen>()(
+  "devtools/SaveOpen",
+  { args: { open: Schema.Boolean } },
+  Effect.gen(function*() {
+    const pages = yield* Pages
+    return ({ open }) => Effect.as(pages.setOpen(open), Component.noop)
+  })
+) {}
+
 type Children = View.Children<OverlayMessage, never>
 type H = View.Helper<OverlayMessage, OverlayProps> & View.Tags<Html.Elements, OverlayMessage>
 type Session = Inspector.Session
@@ -141,6 +164,7 @@ const filters: ReadonlyArray<readonly [Read.Filter, string]> = [
 ]
 
 const increment = (n: number) => n + 1
+const following = { pinned: true, reveal: null, pins: increment, pane: "timeline" } as const
 
 const ms = (value: number) => Math.round(value) + " ms"
 
@@ -239,6 +263,7 @@ const PausedBar = (h: H, paused: typeof Paused.Type, timeline: ReadonlyArray<Ent
 
 const Header = (h: H, session: Session | undefined, count: number, model: OverlayModel) => {
   const following = model.selected === null && model.pinned
+  const canClear = session !== undefined && count > 0 && model.paused === null
   return h.header.class("bar").children(
     h.span.class("logo").attr("aria-hidden", "true"),
     h.h2.class("title").children("Effect UI inspector"),
@@ -246,6 +271,9 @@ const Header = (h: H, session: Session | undefined, count: number, model: Overla
     h.span.class("spacer"),
     model.paused === null ? null : PausedBadge(h, model.paused.seq),
     h.span.class("count").children(count === 1 ? "1 entry" : count + " entries"),
+    h.button.class("clear").disabled(!canClear)
+      .attr("title", model.paused !== null ? "Resume before clearing" : "Clear the timeline")
+      .onClick(OverlayMessage.ClickedClear()).children("Clear"),
     h.button.class("follow", following && "on").attr("aria-pressed", String(following))
       .onClick(OverlayMessage.ClickedFollowLatest()).children("Follow latest"),
     h.button.class("close").attr("aria-label", "Close the inspector").onClick(OverlayMessage.ClickedClose())
@@ -722,7 +750,11 @@ const Details = (
   const state = entry._tag === "Update" || entry._tag === "Mounted" || entry._tag === "Waiting" ? entry : undefined
   const previous = state === undefined ? undefined : session.previous(entry.seq)
   const resolved = previous === undefined ? undefined : session.resolve(previous.seq)
-  const before = resolved !== undefined && resolved._tag !== "Outside" && "model" in resolved ? resolved : undefined
+  const before = resolved !== undefined && resolved._tag !== "Outside" && "model" in resolved
+    ? resolved
+    : previous?.model !== undefined && previous.props !== undefined
+    ? { seq: previous.seq, model: previous.model, props: previous.props }
+    : undefined
   const unavailable = previous !== undefined && before === undefined
   const changes = state === undefined || before === undefined ? [] : Inspector.diff(before.model, state.model)
   const changed = changes.filter((change) => change.kind !== "unknown").length
@@ -984,8 +1016,8 @@ export const Overlay = Component.define({
   message: OverlayMessage,
   elements: Html
 }).make({
-  init: () => ({
-    open: false,
+  init: ($) => ({
+    open: $.props.feed.open,
     revision: 0,
     selected: null,
     filter: "messages",
@@ -1007,9 +1039,8 @@ export const Overlay = Component.define({
         ...($.model.reveal === null ? {} : { reveal: null, pinned: $.model.atStart, pins: increment }),
         ...($.model.paused === null || $.props.feed.pausing() ? {} : { paused: null })
       }),
-    ClickedOpen: ($) =>
-      $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: increment, pane: "timeline" }),
-    ClickedClose: ($) => $.evolve({ open: false }),
+    ClickedOpen: ($) => $.evolve({ open: true, atStart: true, ...following }).run(SaveOpen.make({ open: true })),
+    ClickedClose: ($) => $.evolve({ open: false }).run(SaveOpen.make({ open: false })),
     ClickedEntry: ($, { seq }) =>
       $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: increment } : {}) })
         .run(...repaint($.model, $.props.feed, seq)),
@@ -1019,7 +1050,7 @@ export const Overlay = Component.define({
     ClickedInstance: ($, { instance }) => $.evolve({ instance: $.model.instance === instance ? null : instance }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
     ClickedFollowLatest: ($) => {
-      const next = $.evolve({ selected: null, pinned: true, reveal: null, pins: increment, pane: "timeline" })
+      const next = $.evolve({ selected: null, ...following })
       return $.model.paused === null ? next : next.evolve({ paused: null }).run(resumePage())
     },
     ClickedBack: ($) => $.evolve({ pane: "timeline" }),
@@ -1045,6 +1076,22 @@ export const Overlay = Component.define({
       $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment })
         .run(Paint.make({ session: sessionOf($.props.feed)?.id ?? "", seq })),
     ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
+    ClickedClear: ($) => {
+      const session = sessionOf($.props.feed)
+      return $.model.paused !== null || session === undefined ? $.model : $.run(Clear.make({ session: session.id }))
+    },
+    Cleared: ($) => {
+      const session = sessionOf($.props.feed)
+      const hasInstance = $.model.instance !== null &&
+        session?.instances().some((instance) => instance.instance === $.model.instance) === true
+      return $.evolve({
+        revision: increment,
+        selected: null,
+        instance: hasInstance ? $.model.instance : null,
+        atStart: true,
+        ...following
+      })
+    },
     Painted: ($, paused) => $.evolve({ paused })
   },
   subscriptions: ({ props }) => [

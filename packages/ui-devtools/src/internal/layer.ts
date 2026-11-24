@@ -5,14 +5,15 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
 import * as Stream from "effect/Stream"
-import * as Inspector from "../Inspector.ts"
 import * as History from "./history.ts"
-import { type Feed, Overlay, Pages, Paint } from "./overlay.ts"
+import * as InspectorInternal from "./inspector.ts"
+import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
 import { styles } from "./styles.ts"
 
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
 
 const sizeKey = "@effect/ui-devtools/size"
+const openKey = "@effect/ui-devtools/open"
 
 const corners: { readonly [P in Position]: string } = {
   TopLeft: "top:12px;left:12px",
@@ -38,23 +39,46 @@ const lower = (frame: HTMLIFrameElement) => {
 
 export const make = (options: {
   readonly position?: Position | undefined
-  readonly buffer?: number | undefined
+  readonly size?: number | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
 }): Layer.Layer<never> =>
   Layer.effectContext(
     Effect.gen(function*() {
-      const size = Math.max(1, options.buffer ?? 1_000)
-      const inspector = Inspector.make({ size })
+      const size = Math.max(1, options.size ?? 1_000)
+      const isExcluded = InspectorInternal.matchTags(new Set(options.exclude))
+      const excluded = new Map<string, Set<number>>()
+      const inspector = InspectorInternal.make({
+        size,
+        isExcluded: (entry) => excluded.get(entry.session)?.delete(entry.seq) === true
+      })
       const history = History.make(size)
       const roots = new Map<string, BrowserHost.Pausable>()
       let paused: BrowserHost.Pausable | undefined
       const origins = new Map<string, number>()
+      const latest = new Map<string, number>()
       const changes = yield* PubSub.sliding<void>(1)
+      const view = document.defaultView
+      const load = (key: string): unknown => {
+        try {
+          return JSON.parse(view?.localStorage.getItem(key) ?? "null")
+        } catch {
+          return null
+        }
+      }
+      const save = (key: string, value: unknown) => {
+        try {
+          view?.localStorage.setItem(key, JSON.stringify(value))
+        } catch {
+          return
+        }
+      }
       const feed: Feed = {
         inspector,
         origin: (session) => origins.get(session),
         changes: Stream.fromPubSub(changes),
         paintable: (session, seq) => roots.has(session) && history.holds(session, seq),
-        pausing: () => paused !== undefined
+        pausing: () => paused !== undefined,
+        open: load(openKey) === true
       }
       const resume: Effect.Effect<void> = Effect.suspend(() => {
         const root = paused
@@ -77,7 +101,15 @@ export const make = (options: {
               })
             )
           }),
-        resume
+        resume,
+        clear: (sessionId) =>
+          Effect.sync(() => {
+            const upTo = latest.get(sessionId)
+            if (paused !== undefined || upTo === undefined) return
+            inspector.sessions().find((session) => session.id === sessionId)?.clear()
+            history.clear(sessionId, upTo)
+          }),
+        setOpen: (open) => Effect.sync(() => save(openKey, open))
       })
       const pausables: BrowserHost.Pausables = {
         register: (root) => {
@@ -113,20 +145,13 @@ export const make = (options: {
       const inner = frame.contentDocument!
       const container = inner.getElementById("root")!
 
-      const view = document.defaultView
       const root = inner.documentElement
       root.setAttribute("data-position", position)
       const resize = (width: number, height: number) => {
         root.style.setProperty("--panel-w", Math.max(480, Math.round(width)) + "px")
         root.style.setProperty("--panel-h", Math.max(300, Math.round(height)) + "px")
       }
-      const saved = ((): unknown => {
-        try {
-          return JSON.parse(view?.localStorage.getItem(sizeKey) ?? "null")
-        } catch {
-          return null
-        }
-      })()
+      const saved = load(sizeKey)
       if (Array.isArray(saved) && typeof saved[0] === "number" && typeof saved[1] === "number") {
         resize(saved[0], saved[1])
       }
@@ -145,11 +170,7 @@ export const make = (options: {
         const end = () => {
           grip.removeEventListener("pointermove", move)
           const rect = panel.getBoundingClientRect()
-          try {
-            view?.localStorage.setItem(sizeKey, JSON.stringify([rect.width, rect.height]))
-          } catch {
-            return
-          }
+          save(sizeKey, [rect.width, rect.height])
         }
         grip.setPointerCapture(event.pointerId)
         grip.addEventListener("pointermove", move)
@@ -178,19 +199,31 @@ export const make = (options: {
 
       yield* BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
         Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
-        Effect.provide(Paint.layer.pipe(Layer.provide(Layer.succeed(Pages, pages))))
+        Effect.provide(
+          Layer.mergeAll(Paint.layer, Clear.layer, SaveOpen.layer).pipe(Layer.provide(Layer.succeed(Pages, pages)))
+        )
       )
 
       const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {
           for (const entry of batch) {
             if (!origins.has(entry.session)) origins.set(entry.session, entry.at)
+            latest.set(entry.session, entry.seq)
           }
           inspector.ingest(batch)
           return PubSub.publish(changes, undefined)
         })
       )
-      const log = MessageLog.fanoutAll([{ enabled: true, record: history.record }, encoded])
+      const record = (entry: MessageLog.Entry) => {
+        const hide = isExcluded(entry)
+        if (hide) {
+          let seqs = excluded.get(entry.session)
+          if (seqs === undefined) excluded.set(entry.session, seqs = new Set())
+          seqs.add(entry.seq)
+        }
+        history.record(entry, hide)
+      }
+      const log = MessageLog.fanoutAll([{ enabled: true, record }, encoded])
       return Context.make(MessageLog.MessageLog, log).pipe(Context.add(BrowserHost.Pausables, pausables))
     })
   )

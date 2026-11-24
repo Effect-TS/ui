@@ -280,8 +280,123 @@ describe("Inspector", () => {
     assert.deepStrictEqual(small.session.previous(31), { seq: 30, changed: false })
 
     full.session.clear()
+    assert.deepStrictEqual(full.session.resolve(last.seq), { _tag: "Outside", seq: last.seq })
     full.inspector.ingest([later(30)])
-    assert.deepStrictEqual(full.session.previous(30), { seq: last.seq })
+    assert.deepStrictEqual(full.session.previous(30), {
+      seq: last.seq,
+      changed: false,
+      model: last.model,
+      props: last.props
+    })
+  })
+
+  it("coalesces excluded updates per instance without evicting shown entries", () => {
+    const base = (instance: number, path: string, component: string) => ({
+      session: "s",
+      path,
+      instance,
+      component
+    })
+    const mounted = (seq: number, instance: number, path: string, component: string, model: Schema.Json): Entry => ({
+      ...base(instance, path, component),
+      _tag: "Mounted",
+      seq,
+      at: seq,
+      props: {},
+      model,
+      commands: [],
+      events: [],
+      adopted: false
+    })
+    const update = (
+      seq: number,
+      instance: number,
+      path: string,
+      component: string,
+      tag: string,
+      model: Schema.Json,
+      causedBy?: number
+    ): Entry => ({
+      ...base(instance, path, component),
+      _tag: "Update",
+      seq,
+      at: seq,
+      ...(causedBy === undefined ? {} : { causedBy }),
+      source: { _tag: "Dispatch" },
+      message: { _tag: tag },
+      props: {},
+      model,
+      commands: [],
+      events: [],
+      lists: [],
+      sends: []
+    })
+
+    const inspector = Inspector.make({ size: 3, exclude: ["Moved"] })
+    inspector.ingest([
+      mounted(1, 1, "/A", "A", { x: 0, n: 0 }),
+      mounted(2, 2, "/B", "B", { y: 0 }),
+      update(3, 1, "/A", "A", "Clicked", { x: 0, n: 1 })
+    ])
+    const session = inspector.sessions()[0]
+    assert.deepStrictEqual(session.entries().map((entry) => entry.seq), [1, 2, 3])
+
+    for (let i = 1; i <= 20; i++) {
+      inspector.ingest([update(3 + i, 1, "/A", "A", "Moved", { x: i, n: 1 })])
+    }
+    inspector.ingest([update(24, 2, "/B", "B", "Moved", { y: 5 }, 4)])
+    assert.deepStrictEqual(session.entries().map((entry) => entry.seq), [1, 2, 3])
+    assert.deepStrictEqual(session.resolve(4), { _tag: "Outside", seq: 4 })
+    assert.strictEqual(session.resolve(23)._tag, "Update")
+    assert.deepStrictEqual(session.back(24), [{ rel: "causedBy", seq: 4 }])
+
+    inspector.ingest([update(25, 2, "/B", "B", "Clicked", { y: 6 })])
+    inspector.ingest([update(26, 1, "/A", "A", "Moved", { x: 99, n: 1 })])
+    assert.strictEqual(session.resolve(23)._tag, "Update")
+    assert.strictEqual(session.resolve(26)._tag, "Update")
+    assert.deepStrictEqual(session.entries().map((entry) => entry.seq), [2, 3, 25])
+
+    inspector.ingest([update(27, 1, "/A", "A", "Clicked", { x: 99, n: 2 })])
+    assert.deepStrictEqual(session.entries().map((entry) => entry.seq), [3, 25, 27])
+    assert.deepStrictEqual(session.previous(27), { seq: 26, changed: true })
+    assert.deepStrictEqual((session.resolve(26) as Update).model, { x: 99, n: 1 })
+
+    inspector.ingest([update(28, 1, "/A", "A", "Moved", { x: 100, n: 2 })])
+    session.clear()
+    assert.deepStrictEqual(session.entries(), [])
+    inspector.ingest([update(29, 1, "/A", "A", "Clicked", { x: 100, n: 3 })])
+    assert.deepStrictEqual(session.previous(29), {
+      seq: 28,
+      changed: true,
+      model: { x: 100, n: 2 },
+      props: {}
+    })
+
+    const quiet = Inspector.make({ size: 2 })
+    quiet.ingest([
+      mounted(1, 1, "/A", "A", { a: 0 }),
+      mounted(2, 2, "/B", "B", { b: 0 }),
+      update(3, 2, "/B", "B", "Clicked", { b: 1 })
+    ])
+    const quietSession = quiet.sessions()[0]
+    assert.deepStrictEqual(quietSession.resolve(1), { _tag: "Outside", seq: 1 })
+    quietSession.clear()
+    assert.deepStrictEqual(quietSession.resolve(1), { _tag: "Outside", seq: 1 })
+    quiet.ingest([update(4, 1, "/A", "A", "Clicked", { a: 1 })])
+    assert.deepStrictEqual(quietSession.previous(4), {
+      seq: 1,
+      changed: true,
+      model: { a: 0 },
+      props: {}
+    })
+
+    const late = Inspector.make({ exclude: ["Moved"] })
+    late.ingest([
+      update(10, 1, "/A", "A", "Moved", { a: 1 }),
+      update(11, 2, "/B", "B", "Moved", { b: 1 }),
+      update(12, 1, "/A", "A", "Moved", { a: 2 })
+    ])
+    assert.deepStrictEqual(late.sessions()[0].instances().map((instance) => instance.path), ["/A", "/B"])
   })
 
   it("diffs nested values by key and by index", () => {

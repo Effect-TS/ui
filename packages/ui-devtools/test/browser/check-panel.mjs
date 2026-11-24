@@ -136,14 +136,20 @@ const desktop = async () => {
   )
   await page.reload()
   await page.waitForSelector("body[data-ready]", { state: "attached" })
-  await frame.getByRole("button", { name: "Open the Effect UI inspector" }).click()
+  await panel.waitFor()
   await page.waitForTimeout(150)
   const reopened = await panel.boundingBox()
   expect(
     Math.round(reopened.width) === 1020 && Math.round(reopened.height) === 620,
-    "the panel keeps its size after a reload",
+    "reloading with the panel open keeps it open at its saved size",
     reopened
   )
+  await frame.getByRole("button", { name: "Close the inspector" }).click()
+  await frame.getByRole("button", { name: "Open the Effect UI inspector" }).waitFor()
+  await page.reload()
+  await page.waitForSelector("body[data-ready]", { state: "attached" })
+  await frame.getByRole("button", { name: "Open the Effect UI inspector" }).waitFor()
+  expect(!(await panel.isVisible()), "reloading with the panel closed keeps it closed", {})
   await context.close()
 }
 
