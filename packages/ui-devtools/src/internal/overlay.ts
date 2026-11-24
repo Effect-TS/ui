@@ -213,9 +213,6 @@ const Code = (h: H, text: string) => h.span.class("code").children(text)
 const Name = (h: H, entry: Entry, text: string) =>
   text === entry._tag ? text : Code(h, text)
 
-const plural = (count: number, one: string, many: string) =>
-  count.toLocaleString("en-US") + (count === 1 ? one : many)
-
 const SeqLink = (h: H, ref: Ref) =>
   ref.entry._tag === "Outside"
     ? h.span.class("ref", "outside").attr(
@@ -398,37 +395,36 @@ interface InstanceRow {
   readonly split: boolean
 }
 
-const rankOf = (summary: Inspector.Summary) => {
-  const tone = Read.toneOf(summary)
-  return tone === "bad" ? 0 : tone === "open" ? 1 : 2
-}
-
-const flat = (
-  summaries: ReadonlyArray<Inspector.Summary>
-): Array<InstanceRow> =>
-  summaries.map((summary, index) => ({
-    summary,
-    depth: 0,
-    expanded: false,
-    split: index > 0 && rankOf(summaries[index - 1]!) < 2 &&
-      rankOf(summary) === 2
-  }))
+const flatRow = (summary: Inspector.Summary, split = false): InstanceRow => ({
+  summary,
+  depth: 0,
+  expanded: false,
+  split
+})
 
 const activeRows = (
   session: Session,
   extra: ReadonlyArray<Inspector.Summary | undefined>
 ) => {
-  const active = session.active()
-  const listed = [0, 1, 2].flatMap((rank) =>
-    active.filter((summary) => rankOf(summary) === rank)
-  )
+  const groups = {
+    bad: [] as Array<Inspector.Summary>,
+    open: [] as Array<Inspector.Summary>,
+    calm: [] as Array<Inspector.Summary>
+  }
+  for (const summary of session.active()) {
+    groups[Read.toneOf(summary) ?? "calm"].push(summary)
+  }
+  const loud = groups.bad.length + groups.open.length
+  const listed = [...groups.bad, ...groups.open, ...groups.calm]
   for (const summary of extra) {
     if (
       summary !== undefined &&
       !listed.some((other) => other.instance === summary.instance)
     ) listed.push(summary)
   }
-  return flat(listed)
+  return listed.map((summary, index) =>
+    flatRow(summary, loud > 0 && index === loud)
+  )
 }
 
 const treeRows = (session: Session, branches: ReadonlySet<string>) => {
@@ -446,14 +442,6 @@ const treeRows = (session: Session, branches: ReadonlySet<string>) => {
   }
   walk("", 0)
   return rows
-}
-
-const ancestorsOf = (path: string) => {
-  const paths: Array<string> = []
-  for (let at = Read.parentOf(path); at !== ""; at = Read.parentOf(at)) {
-    paths.push(at)
-  }
-  return paths
 }
 
 const Statuses = (h: H, summary: Inspector.Summary) => {
@@ -489,10 +477,7 @@ const Rollup = (h: H, below: Inspector.Summary["below"]) =>
     )
   )
 
-const instanceMark = (summary: Inspector.Summary): Read.Mark => {
-  const tone = Read.toneOf(summary)
-  return tone === "bad" ? "bad" : tone === "open" ? "start" : "message"
-}
+const instanceMarks = { bad: "bad", open: "start", calm: "message" } as const
 
 const InstanceItem = (
   h: H,
@@ -525,7 +510,9 @@ const InstanceItem = (
       .attr("title", "Show only " + name + " and the instances under it")
       .onClick(OverlayMessage.ClickedScope({ path: summary.path }))
       .children(
-        tree ? null : Mark(h, instanceMark(summary), "imark", toneClass(tone)),
+        tree
+          ? null
+          : Mark(h, instanceMarks[tone ?? "calm"], "imark", toneClass(tone)),
         h.span.class("id").children(
           h.span.class("iname", "code").children(name),
           tree || parent === ""
@@ -604,7 +591,7 @@ const Instances = (
   const find = model.find.trim()
   const mode = find !== "" ? "find" : model.browse ? "tree" : "active"
   const rows = mode === "find"
-    ? flat(session.find(find))
+    ? session.find(find).map((summary) => flatRow(summary))
     : mode === "tree"
     ? treeRows(session, new Set(model.branches))
     : activeRows(session, [
@@ -635,7 +622,7 @@ const Instances = (
         browse: !model.browse,
         branches: model.browse || owner === undefined
           ? []
-          : ancestorsOf(owner.path)
+          : Read.pathsOf(Read.parentOf(owner.path))
       })
     ).children(
       model.browse
@@ -678,13 +665,6 @@ const scrollOf = (model: OverlayModel, keys: ReadonlyArray<string>) =>
     }
     : {}
 
-const holdsCommand = (steps: ReadonlyArray<Read.Step>) =>
-  steps.some((step) =>
-    step._tag === "Command"
-      ? step.command._tag !== "Interrupt"
-      : step._tag === "Started"
-  )
-
 const Timeline = (
   h: H,
   session: Session,
@@ -700,7 +680,7 @@ const Timeline = (
   const railed = timeline.map((entry) => chain.has(entry.seq))
   const first = railed.indexOf(true)
   const last = railed.lastIndexOf(true)
-  return h.div.class("timeline-box", holdsCommand(steps) && "cmd").attr(
+  return h.div.class("timeline-box", steps.some(Read.inRun) && "cmd").attr(
     "style",
     "--seq-digits:" + String(newest).length
   ).children(
@@ -876,10 +856,13 @@ const Step = (
   step: Read.Step,
   body: Children,
   tone?: Tone,
-  extra?: Children,
-  run = false
+  extra?: Children
 ) =>
-  h.li.class("step", tone === undefined ? null : "step-" + tone, run && "run")
+  h.li.class(
+    "step",
+    tone === undefined ? null : "step-" + tone,
+    Read.inRun(step) && "run"
+  )
     .attr("data-step", step._tag).attr(
       "data-index",
       step._tag === "Command" ? String(step.index) : undefined
@@ -909,27 +892,9 @@ const linkText: { readonly [R in Inspector.Link["rel"]]: string } = {
   started: "Started from"
 }
 
-const runSteps = (steps: ReadonlyArray<Read.Step>) => {
-  const inRun = new Set<number>()
-  let open = false
-  steps.forEach((step, index) => {
-    if (step._tag === "Command") open = step.command._tag !== "Interrupt"
-    else if (
-      step._tag === "End" || step._tag === "Running" ||
-      step._tag === "Source" || step._tag === "Entry"
-    ) {
-      open = false
-    }
-    if (open) inRun.add(index)
-  })
-  return inRun
-}
-
-const Chain = (h: H, steps: ReadonlyArray<Read.Step>) => {
-  const inRun = runSteps(steps)
-  return h.ol.class("chain").attr("aria-label", "Causal chain").children(
+const Chain = (h: H, steps: ReadonlyArray<Read.Step>) =>
+  h.ol.class("chain").attr("aria-label", "Causal chain").children(
     steps.map((step, index) => {
-      const run = inRun.has(index)
       switch (step._tag) {
         case "Source":
           return Step(h, step, [
@@ -970,35 +935,27 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) => {
               step,
               ["Issued ", Code(h, step.command.name)],
               undefined,
-              Json(h, step.command.args),
-              run
+              Json(h, step.command.args)
             )
         case "Started":
           return Step(
             h,
             step,
             ["Started ", SeqLink(h, step.ref)],
-            step.selected ? "this" : undefined,
-            undefined,
-            run
+            step.selected ? "this" : undefined
           )
         case "NotStarted":
           return Step(
             h,
             step,
             [step.ended ? "Stopped before it started" : "Waiting to start"],
-            step.ended ? undefined : "open",
-            undefined,
-            run
+            step.ended ? undefined : "open"
           )
         case "Result":
           return Step(
             h,
             step,
-            ["Result ", ...RefSummary(h, step.ref)],
-            undefined,
-            undefined,
-            run
+            ["Result ", ...RefSummary(h, step.ref)]
           )
         case "Running":
           return Step(
@@ -1061,7 +1018,6 @@ const Chain = (h: H, steps: ReadonlyArray<Read.Step>) => {
       }
     })
   )
-}
 
 const changesText = (count: number) =>
   count + (count === 1 ? " change" : " changes")
@@ -1499,11 +1455,11 @@ const Details = (
 }
 
 const Crumbs = (h: H, path: string, scope: string | null) => {
-  const segments = path.split("/").slice(1)
+  const paths = Read.pathsOf(path)
   return h.nav.class("crumbs").attr("aria-label", "Path of the instance")
     .children(
-      segments.flatMap((segment, index) => {
-        const at = "/" + segments.slice(0, index + 1).join("/")
+      paths.flatMap((at, index) => {
+        const segment = Read.nameOf(at)
         return [
           index === 0
             ? null
@@ -1511,7 +1467,7 @@ const Crumbs = (h: H, path: string, scope: string | null) => {
           h.button.class(
             "crumb",
             "code",
-            index === segments.length - 1 && "here"
+            at === path && "here"
           ).attr(
             "aria-pressed",
             String(scope === at)
@@ -1680,6 +1636,7 @@ const synced = (model: OverlayModel, feed: Feed) => {
 
 const Launcher = (h: H, model: OverlayModel) => {
   const failures = h.props.feed.failures() - model.failures
+  const noun = failures === 1 ? " failure" : " failures"
   return h.div.class("launch").children(
     h.button.class("launcher").attr(
       "aria-label",
@@ -1696,13 +1653,13 @@ const Launcher = (h: H, model: OverlayModel) => {
       null :
       h.span.class("alert").attr(
         "title",
-        plural(failures, " failure", " failures") +
+        failures.toLocaleString("en-US") + noun +
           " since the inspector was closed"
       )
         .children(
           Mark(h, "bad"),
           String(failures),
-          h.span.class("sr").children(failures === 1 ? " failure" : " failures")
+          h.span.class("sr").children(noun)
         ),
     model.paused === null ? null : PausedBadge(h, model.paused.seq)
   )

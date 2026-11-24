@@ -1,3 +1,5 @@
+import type { Mark } from "./read.ts"
+
 const effectMark =
   "M32.579,704.971c10.261,-17.288 32.954,-23.125 50.689,-13.25l413.97,235.225l415.187,-234.383c17.738,-9.884 42.721,-2.905 50.692,13.25c7.537,19.758 4.008,39.483 -13.779,49.387l-431.055,240c-8.996,5.017 -19.254,5.975 -28.508,3.462c-1.138,-0.183 -2.271,-0.42 -3.4,-0.712c-3.067,-0.788 -6.083,-1.987 -8.958,-3.583l-431.042,-239.996c-17.805,-9.917 -24.08,-32.025 -13.796,-49.4Zm961.875,-410.403c0.433,13.963 -5.354,26.383 -18.525,33.721l-129.975,72.362l118.058,66.482c13.321,7.5 20.409,21.667 19.301,35.813c1.029,14.579 -4.551,27.692 -18.017,35.287l-446.267,251.284c-9.316,5.254 -19.937,6.258 -29.512,3.625c-4.392,-0.713 -8.729,-2.2 -12.804,-4.5l-446.249,-251.284c-13.322,-7.5 -20.406,-21.687 -19.294,-35.837c-1.031,-14.575 4.543,-27.667 18.009,-35.263l119.356,-67.204l-128.679,-71.65c-3.83,-2.137 -7.143,-4.791 -9.922,-7.834c-1.203,-1.155 -2.309,-2.396 -3.296,-3.723c-1.025,-1.37 -1.926,-2.816 -2.682,-4.349c-0.367,-0.96 -0.707,-1.921 -1.025,-2.881l-0.685,-1.748l-0.48,-1.403c-0.227,-0.701 -0.427,-1.413 -0.61,-2.136l-0.302,-1.295c-0.648,-2.978 -0.928,-6.043 -0.831,-9.118c-0.437,-13.963 5.352,-26.384 18.522,-33.721l456.405,-254.111c3.829,-2.136 7.875,-3.572 11.983,-4.359c6.109,-1.176 12.346,-0.907 18.204,0.69c4.488,0.734 8.925,2.234 13.092,4.554l456.392,254.11c0.683,0.378 1.346,0.777 1.996,1.198c0.612,0.389 1.212,0.788 1.795,1.198c0.538,0.389 1.067,0.788 1.58,1.198c1.654,1.306 3.175,2.73 4.558,4.251c1.075,1.036 2.063,2.126 2.962,3.281c1.163,1.489 2.171,3.086 3.009,4.78c0.366,0.961 0.7,1.91 1.016,2.871c2.08,4.953 3.088,10.316 2.917,15.711Zm-873.974,206.978l376.758,216.512l376.758,-215.112l-104.208,-59.888l-250.263,139.342c-9.533,5.308 -20.387,6.333 -30.187,3.667c-4.488,-0.734 -8.921,-2.234 -13.092,-4.555l-251.031,-139.77l-104.735,59.804Z"
 
@@ -14,22 +16,23 @@ const glyph = (body: string) =>
       body + "</svg>"
   ) + "\")"
 
-const marks: ReadonlyArray<readonly [string, string, string]> = [
-  [
-    "message",
+const marks: {
+  readonly [M in Mark]: readonly [color: string, body: string]
+} = {
+  message: [
     "var(--ink)",
     "<circle cx='6' cy='6' r='2.6' fill='black' stroke='none'/>"
   ],
-  ["issue", "var(--cmd)", "<path d='M6 1.6 10.4 6 6 10.4 1.6 6z'/>"],
-  ["start", "var(--cmd)", "<path d='M3.5 2.5 9.5 6l-6 3.5z'/>"],
-  ["end", "var(--cmd)", "<path d='M2.5 6.4 5 8.8l4.6-5.4'/>"],
-  ["bad", "var(--bad)", "<path d='M3 3l6 6M9 3l-6 6'/>"],
-  ["mount", "var(--faint)", "<path d='M6 2.5v7M2.5 6h7'/>"],
-  ["unmount", "var(--faint)", "<path d='M2.5 6h7'/>"],
-  ["ring", "var(--faint)", "<circle cx='6' cy='6' r='3.2'/>"]
-]
+  issue: ["var(--cmd)", "<path d='M6 1.6 10.4 6 6 10.4 1.6 6z'/>"],
+  start: ["var(--cmd)", "<path d='M3.5 2.5 9.5 6l-6 3.5z'/>"],
+  end: ["var(--cmd)", "<path d='M2.5 6.4 5 8.8l4.6-5.4'/>"],
+  bad: ["var(--bad)", "<path d='M3 3l6 6M9 3l-6 6'/>"],
+  mount: ["var(--faint)", "<path d='M6 2.5v7M2.5 6h7'/>"],
+  unmount: ["var(--faint)", "<path d='M2.5 6h7'/>"],
+  ring: ["var(--faint)", "<circle cx='6' cy='6' r='3.2'/>"]
+}
 
-const markRules = marks.map(([name, color, body]) =>
+const markRules = Object.entries(marks).map(([name, [color, body]]) =>
   ".mk-" + name + " { color: " + color + "; -webkit-mask-image: " +
   glyph(body) + "; mask-image: " + glyph(body) + "; }"
 ).join("\n")
@@ -63,8 +66,6 @@ html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .mk { display: inline-block; flex: none; width: 12px; height: 12px; background: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
 ${markRules}
-.mk.tone-bad { color: var(--bad); }
-.mk.tone-open { color: var(--open); }
 .t-str { color: var(--str); }
 .t-num { color: var(--num); }
 .tone-bad { color: var(--bad); }
@@ -118,7 +119,6 @@ ${markRules}
 .instances { padding: 10px 0 6px; border-bottom: 1px solid var(--line); min-width: 0; }
 .ihead { display: flex; align-items: center; gap: 8px; padding: 0 20px 6px; }
 .heading { font-size: 12px; color: var(--muted); }
-.ihead .heading { padding: 0; }
 .icount { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .find { flex: 1; min-width: 0; height: 24px; margin-left: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 12px var(--sans); }
 .find::placeholder { color: var(--faint); }
@@ -147,7 +147,8 @@ ${markRules}
 .filter, .tab { padding: 8px 0 7px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .filter:hover, .tab:hover { color: var(--ink); }
 .filter.on, .tab[data-active] { color: var(--ink); border-bottom-color: var(--ink); }
-.timeline-box { display: grid; min-height: 0; }
+.timeline-box { --chain: var(--ink); display: grid; min-height: 0; }
+.timeline-box.cmd { --chain: var(--cmd); }
 .timeline { overflow: auto; min-height: 0; }
 .row { display: grid; grid-template-columns: 14px minmax(0, 1fr); height: 28px; white-space: nowrap; }
 .row-button { display: grid; grid-template-columns: calc(var(--seq-digits, 3) * 1ch + 10px) 22px minmax(0, 1fr); align-items: center; padding: 0 20px 0 0; height: 28px; }
@@ -166,8 +167,7 @@ ${markRules}
 .row.selected .label { font-weight: 600; }
 .row .who { color: var(--muted); font-size: 12px; padding-left: 12px; }
 .rail { position: relative; }
-.rail.top::before, .rail.mid::before, .rail.bot::before { content: ""; position: absolute; left: 8px; width: 2px; background: var(--ink); }
-.cmd .rail.top::before, .cmd .rail.mid::before, .cmd .rail.bot::before { background: var(--cmd); }
+.rail.top::before, .rail.mid::before, .rail.bot::before { content: ""; position: absolute; left: 8px; width: 2px; background: var(--chain); }
 .rail.top::before { top: 6px; bottom: 0; }
 .rail.mid::before { top: 0; bottom: 0; }
 .rail.bot::before { top: 0; bottom: 6px; }

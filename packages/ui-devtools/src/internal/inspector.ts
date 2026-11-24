@@ -1,7 +1,7 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
-import { nameOf, parentOf, tagOf } from "./read.ts"
+import { isRun, nameOf, parentOf, reasonTone, tagOf } from "./read.ts"
 
 type Entry = MessageLog.WireEntry
 type InstanceEntry = Exclude<
@@ -30,8 +30,7 @@ interface InstanceState {
   waiting: number
   running: number
   readonly ended: Map<Inspector.Reason, number>
-  shown: number
-  active: number | undefined
+  lastActive: number | undefined
   failing: boolean
   going: boolean
 }
@@ -43,15 +42,8 @@ interface Node {
   running: number
 }
 
-const activityTags: ReadonlySet<string> = new Set([
-  "Update",
-  "Failed",
-  "CommandStarted",
-  "CommandAwaiting",
-  "CommandEnded",
-  "CommandInterrupted",
-  "CommandDropped"
-])
+const isActivity = (entry: Entry) =>
+  entry._tag === "Update" || entry._tag === "Failed" || isRun(entry)
 
 type Emit = (
   kind: Inspector.Change["kind"],
@@ -168,7 +160,7 @@ const makeSession = (
   const previous = new Map<number, Inspector.Previous>()
   const ended = new Map<number, Array<Mutable<Inspector.Record>>>()
   const nodes = new Map<string, Node>()
-  const byPath = new Map<string, InstanceState>()
+  const byPath = new Map<string, Array<InstanceState>>()
   const active = new Set<InstanceState>()
   let app: string | undefined
   let last = -Infinity
@@ -219,7 +211,7 @@ const makeSession = (
   const refresh = (inst: InstanceState) => {
     let failing = false
     for (const reason of inst.ended.keys()) {
-      if (reason !== "ended") failing = true
+      if (reasonTone[reason] === "bad") failing = true
     }
     const going = inst.running > 0
     if (failing !== inst.failing) {
@@ -232,14 +224,14 @@ const makeSession = (
     }
     if (
       inst.waiting + inst.running + inst.ended.size > 0 ||
-      inst.active !== undefined
+      inst.lastActive !== undefined
     ) active.add(inst)
     else active.delete(inst)
   }
 
   const add = (inst: InstanceState) => {
     instances.set(inst.info.instance, inst)
-    byPath.set(inst.info.path, inst)
+    push(byPath, inst.info.path, inst)
     node(parentOf(inst.info.path)).children.add(inst)
     ancestors(inst.info.path, (node) => node.below++)
   }
@@ -247,24 +239,28 @@ const makeSession = (
   const drop = (inst: InstanceState) => {
     const path = inst.info.path
     instances.delete(inst.info.instance)
-    active.delete(inst)
-    if (inst.failing) ancestors(path, (node) => node.failing--)
-    if (inst.going) ancestors(path, (node) => node.running--)
-    ancestors(path, (node) => node.below--)
-    node(parentOf(path)).children.delete(inst)
+    const same = byPath.get(path)!
+    if (same.length === 1) byPath.delete(path)
+    else same.splice(same.indexOf(inst), 1)
+    nodes.get(parentOf(path))!.children.delete(inst)
     for (let at = path;; at = parentOf(at)) {
       const left = nodes.get(at)
-      if (left !== undefined && left.below === 0 && left.children.size === 0) {
-        nodes.delete(at)
+      if (left !== undefined) {
+        if (at !== path) left.below--
+        if (left.below === 0 && left.children.size === 0) nodes.delete(at)
       }
       if (at === "") break
     }
-    if (byPath.get(path) === inst) {
-      byPath.delete(path)
-      for (const sibling of nodes.get(parentOf(path))?.children ?? []) {
-        if (sibling.info.path === path) byPath.set(path, sibling)
-      }
-    }
+  }
+
+  const amend = (
+    record: Mutable<Inspector.Record>,
+    patch: Partial<Inspector.Record>
+  ) => {
+    tally(record, -1)
+    Object.assign(record, patch)
+    tally(record, 1)
+    refresh(instances.get(record.instance)!)
   }
 
   const open = (inst: InstanceState, record: Mutable<Inspector.Record>) => {
@@ -278,11 +274,7 @@ const makeSession = (
     seq: number,
     reason: Inspector.Reason
   ) => {
-    tally(record, -1)
-    record.end = seq
-    record.reason = reason
-    tally(record, 1)
-    refresh(instances.get(record.instance)!)
+    amend(record, { end: seq, reason })
     push(ended, seq, record)
   }
 
@@ -334,17 +326,15 @@ const makeSession = (
         waiting: 0,
         running: 0,
         ended: new Map(),
-        shown: 0,
-        active: undefined,
+        lastActive: undefined,
         failing: false,
         going: false
       }
       add(inst)
     }
     inst.buffered++
-    if (activityTags.has(entry._tag) && !hidden.has(entry.seq)) {
-      inst.shown++
-      inst.active = entry.seq
+    if (isActivity(entry) && !hidden.has(entry.seq)) {
+      inst.lastActive = entry.seq
     }
     change(inst, entry)
     refresh(inst)
@@ -477,10 +467,7 @@ const makeSession = (
           })
           runs.set(key, run)
         }
-        tally(run, -1)
-        run.start = seq
-        tally(run, 1)
-        refresh(instances.get(run.instance)!)
+        amend(run, { start: seq })
         return
       }
       case "CommandAwaiting":
@@ -498,7 +485,6 @@ const makeSession = (
   }
 
   const evict = (seq: number, entry: Entry, prune = true) => {
-    const shown = !hidden.has(seq)
     entries.delete(seq)
     hidden.delete(seq)
     previous.delete(seq)
@@ -522,8 +508,8 @@ const makeSession = (
     if (entry._tag === "SessionStarted" || entry._tag === "FetchStarted") return
     const inst = instances.get(entry.instance)!
     inst.buffered--
-    if (shown && activityTags.has(entry._tag) && --inst.shown === 0) {
-      inst.active = undefined
+    if (seq === inst.lastActive) {
+      inst.lastActive = undefined
       refresh(inst)
     }
     if (
@@ -539,7 +525,9 @@ const makeSession = (
       waiting: inst.waiting,
       running: inst.running,
       ended: Array.from(inst.ended, ([reason, count]) => ({ reason, count })),
-      ...(inst.active === undefined ? undefined : { latest: inst.active }),
+      ...(inst.lastActive === undefined
+        ? undefined
+        : { latest: inst.lastActive }),
       below: {
         instances: below?.below ?? 0,
         failing: below?.failing ?? 0,
@@ -568,7 +556,7 @@ const makeSession = (
       return inst === undefined ? undefined : summarize(inst)
     },
     summaryAt: (path) => {
-      const inst = byPath.get(path)
+      const inst = byPath.get(path)?.at(-1)
       return inst === undefined ? undefined : summarize(inst)
     },
     active: () =>

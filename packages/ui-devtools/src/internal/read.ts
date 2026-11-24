@@ -197,6 +197,9 @@ export const toneOf = (summary: Inspector.Summary): Tone | undefined =>
 export const parentOf = (path: string): string =>
   path.slice(0, Math.max(0, path.lastIndexOf("/")))
 
+export const pathsOf = (path: string): Array<string> =>
+  path === "" ? [] : [...pathsOf(parentOf(path)), path]
+
 export const isUnder = (path: string, scope: string): boolean =>
   path === scope || path.startsWith(scope + "/")
 
@@ -204,7 +207,7 @@ export const duration = (ms: number): string =>
   ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s"
 
 export const position = (ms: number): string => {
-  if (ms < 1000) return Math.round(ms) + " ms"
+  if (ms < 1000) return duration(ms)
   const total = Math.round(ms)
   const minutes = Math.floor(total / 60_000)
   const seconds = Math.floor(total / 1000) % 60
@@ -223,6 +226,7 @@ export type Mark =
   | "ring"
 
 export const markOf = (entry: Entry | Inspector.Outside): Mark => {
+  if (entry._tag !== "Outside" && isFailure(entry)) return "bad"
   switch (entry._tag) {
     case "Update":
       return "message"
@@ -233,12 +237,8 @@ export const markOf = (entry: Entry | Inspector.Outside): Mark => {
       return "end"
     case "CommandInterrupted":
     case "CommandDropped":
-    case "Failed":
-    case "LayerFailed":
     case "SendDropped":
       return "bad"
-    case "MountEnded":
-      return entry.reason === "failed" ? "bad" : "ring"
     case "Mounted":
       return "mount"
     case "Unmounted":
@@ -473,6 +473,12 @@ export const chainOf = (
   if (named.length > 0) steps.push({ _tag: "Names", links: named })
   return steps
 }
+
+export const inRun = (step: Step): boolean =>
+  step._tag === "Command"
+    ? step.command._tag !== "Interrupt"
+    : step._tag === "Started" || step._tag === "NotStarted" ||
+      step._tag === "Result"
 
 export const chainSeqs = (steps: ReadonlyArray<Step>): ReadonlySet<number> => {
   const seqs = new Set<number>()
