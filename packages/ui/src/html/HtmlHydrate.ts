@@ -481,20 +481,21 @@ const between = (
       if (freshDepth > 0 && fresh.delete(node)) freshDepth--
     },
     insert(into, node, before) {
-      if (before !== null) return base.insert(into, node, before)
       let index = stack.length
       let own = 0
       while (--index > 0 && stack[index]!.node !== into) {
         if (stack[index]!.node === node) own = index
       }
       const list = stack[index]!.node === into ? stack[index] : undefined
-      const held = holds.size > 0 ? holds.get(node) : undefined
+      const held = holds.size > 0 && before === null
+        ? holds.get(node)
+        : undefined
       if (held !== undefined && held.first.parentNode === into) {
         into.insertBefore(node, held.first)
         if (list !== undefined) list.last = held.last
         return
       }
-      if (list === undefined) base.insert(into, node, null)
+      if (before !== null || list === undefined) base.insert(into, node, before)
       else {
         const previous = list.last
         let ref = previous === undefined

@@ -3,7 +3,7 @@ import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
 import { assert, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Layer, Option, Schema } from "effect"
+import { Deferred, Effect, Layer, Option, Schema, SchemaGetter } from "effect"
 
 const tick = Effect.promise(() =>
   new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -127,6 +127,54 @@ const sameElements = (app: Element, server: ReadonlyArray<Element>) => {
 
 const texts = (app: Element, selector: string) =>
   [...app.querySelectorAll(selector)].map((node) => node.textContent)
+
+let serving = false
+let lateGate: Effect.Effect<void> = Effect.void
+const LateLabel = Schema.String.pipe(Schema.decode({
+  decode: SchemaGetter.transformEffect((label: string) =>
+    Effect.andThen(Effect.suspend(() => lateGate), Effect.succeed(label))
+  ),
+  encode: SchemaGetter.passthrough()
+}))
+
+const Late = Component.define({
+  name: "Late",
+  model: LateLabel,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => "late",
+  update: ($) => $.model,
+  view: (h) => serving ? h.p.class("server").children("extra") : h.p()
+})
+
+const LateHolder = Component.define({
+  name: "LateHolder",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.div(Late(h, { key: "l" }), h.i("after"))
+})
+
+const renderLate = Effect.fnUntraced(function*<A, E>(
+  render: Effect.Effect<A, E>
+) {
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      serving = false
+      lateGate = Effect.void
+    })
+  )
+  serving = true
+  const rendered = yield* render
+  serving = false
+  const latch = yield* Deferred.make<void>()
+  lateGate = Deferred.await(latch)
+  return [rendered, Deferred.succeed(latch, undefined)] as const
+})
 
 describe("HtmlHydrate", () => {
   it.effect("reuses the server's nodes, starts from the shipped Model and handles events", () =>
@@ -495,6 +543,26 @@ describe("HtmlHydrate", () => {
           "<div><b>before</b>hello<i>after</i></div>"
         )
         sameElements(app, server.filter((node) => node.localName !== "s"))
+      }).pipe(Effect.scoped))
+  })
+
+  describe("children whose state decodes asynchronously", () => {
+    it.effect("drop the server's attributes and children the view doesn't render once they adopt", () =>
+      Effect.gen(function*() {
+        const [rendered, open] = yield* renderLate(
+          HtmlServer.renderToHtml(LateHolder, {})
+        )
+        assert.include(rendered.html, "<p class=\"server\">extra</p>")
+        const app = yield* container(rendered.html)
+        const served = app.querySelector("p")
+        yield* HtmlHydrate.hydrateEffect(LateHolder, {}, app, rendered.state)
+        yield* open
+        yield* tick
+        assert.strictEqual(app.querySelector("p"), served)
+        assert.strictEqual(
+          app.innerHTML,
+          "<div><p></p><i>after</i></div>"
+        )
       }).pipe(Effect.scoped))
   })
 })
