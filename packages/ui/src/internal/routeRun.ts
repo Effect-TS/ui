@@ -244,6 +244,18 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     queryCore.loaded?.run.drain(inst)
     if (inst.closed || inst.failure !== undefined) return
     save(inst, out)
+    // Below one whose Layer is building, what's drawn holds the server's state, which isn't saved.
+    if (inst.env.ctx === undefined && inst.env.cause === undefined) return
+    for (const [owner, saved, notes] of waitingFor.values()) {
+      if (owner !== inst) continue
+      for (const key in saved) {
+        if (key !== "~reported") out[key] = saved[key]
+      }
+      Object.assign((out["~reported"] ??= {}) as Saved, saved["~reported"])
+      for (const author in notes) {
+        Object.assign(keptIn(out, top, author), notes[author])
+      }
+    }
     for (const child of childrenOf(inst.rendered)) {
       if ((child.at!.v as View.Child<any, any>).alive === undefined) {
         visit(child, out, top)
@@ -292,6 +304,11 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     }
     return undefined
   }
+  // What each held child would restore, under the instance that draws it.
+  const waitingFor = new Map<
+    Kernel.Rec,
+    readonly [Kernel.Instance, Saved, Saved]
+  >()
   // The saved state a hold took for each path, decoded, for the instance that starts there.
   const taken = new Map<
     string,
@@ -314,9 +331,30 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       taken.set(path, [found, decoded])
       return false
     }
+    // Until it starts, a snapshot saves what it would restore: its state and what's saved below it.
+    const entry = hooks.entry() as Saved | undefined
+    const saved: Saved = { [path]: found.state }
+    const reported: Saved = {}
+    if (found.reported !== undefined) reported[path] = found.reported
+    for (const key in entry) {
+      if (!key.startsWith(path + "/")) continue
+      saved[key] = entry[key]
+      const own = (entry["~reported"] as Saved | undefined)?.[key]
+      if (own !== undefined) reported[key] = own
+    }
+    saved["~reported"] = reported
+    // And the notes of the kept children below it, by author.
+    const notes: Saved = {}
+    for (const author in popped) {
+      if (author === path || author.startsWith(path + "/")) {
+        notes[author] = popped[author]
+      }
+    }
+    waitingFor.set(rec, [owner, saved, notes])
     decoded.addObserver((exit) => {
       const tree = owner.tree
       tree.schedule(() => {
+        waitingFor.delete(rec)
         taken.set(path, [found, exit])
         Kernel.settle(owner, rec, at)
         taken.delete(path)
