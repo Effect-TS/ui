@@ -71,14 +71,7 @@ const track = (
   fiber.addObserver(() => fibers.delete(fiber))
 }
 
-const releasing = new Set<Fiber.Fiber<any, any>>()
-
 const interrupter = -0x4c41
-
-const released = Effect.andThen(
-  Effect.yieldNow,
-  Effect.suspend(() => Fiber.awaitAll([...releasing]))
-)
 
 const runNow = (
   tree: Kernel.Tree,
@@ -89,7 +82,7 @@ const runNow = (
     uninterruptible: true
   })
   if (fiber.pollUnsafe() !== undefined) return undefined
-  track(releasing, fiber)
+  track(tree.closing ??= new Set(), fiber)
   return owned(tree, fiber)
 }
 
@@ -127,7 +120,12 @@ const build = (
     const fiber = Effect.runForkWith(withScheduler(context))(
       again
         ? Effect.andThen(
-          released,
+          Effect.andThen(
+            Effect.yieldNow,
+            Effect.suspend(() =>
+              Fiber.awaitAll([...(tree.closing ??= new Set())])
+            )
+          ),
           Effect.suspend(() => {
             waiting = false
             return made
@@ -156,7 +154,7 @@ const build = (
       buildScope,
       Effect.sync(() => {
         if (fiber.pollUnsafe() !== undefined) return
-        track(releasing, fiber)
+        track(tree.closing ??= new Set(), fiber)
         track(cleanups, fiber)
         fiber.interruptUnsafe(interrupter)
       })
@@ -198,9 +196,7 @@ const counted = (
   const stamp = { flush: tree.flush?.() ?? 0 }
   const building = tree.building ??= new Set()
   building.add(stamp)
-  const done = () => {
-    building.delete(stamp)
-  }
+  const done = () => building.delete(stamp)
   const settled = () => {
     if (!building.delete(stamp) || tree.flushing || tree.scheduled) return
     tree.scheduled = true

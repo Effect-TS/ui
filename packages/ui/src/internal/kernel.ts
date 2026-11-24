@@ -228,6 +228,7 @@ export interface Tree {
   readonly schedule: (task: () => void) => void
   readonly follow?: ((late?: boolean) => <A>(f: () => A) => A) | undefined
   owned?: Set<Fiber.Fiber<unknown, unknown>> | undefined
+  closing?: Set<Fiber.Fiber<any, any>> | undefined
   building?: Set<{ readonly flush: number }> | undefined
   flush?: (() => number) | undefined
   builds?: number | undefined

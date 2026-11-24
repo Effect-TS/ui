@@ -484,9 +484,8 @@ const start = (
   const hooks = Context.getOrUndefined(ctx, services.RootHooks)
   const building = (flush: number) => {
     let count = 0
-    const stamps = kernelRoot?.instance.tree.building
-    if (stamps !== undefined) {
-      for (const stamp of stamps) if (stamp.flush >= flush) count++
+    for (const stamp of kernelRoot?.instance.tree.building ?? []) {
+      if (stamp.flush >= flush) count++
     }
     return count
   }

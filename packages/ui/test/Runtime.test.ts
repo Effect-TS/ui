@@ -3016,6 +3016,67 @@ describe("Runtime", () => {
           }
         })))
 
+      it.effect("its users build again without waiting for another root's release", () =>
+        provideHost(Effect.gen(function*() {
+          const otherGate = yield* Deferred.make<void>()
+          const otherReleasing = yield* Deferred.make<void>()
+          const Other = Component.provide(
+            StoreId,
+            ReadStore.layer.pipe(Layer.provide(Layer.effect(
+              Store,
+              Effect.never.pipe(Effect.onInterrupt(() =>
+                Effect.andThen(
+                  Deferred.succeed(otherReleasing, undefined),
+                  Deferred.await(otherGate)
+                )
+              ))
+            )))
+          )
+          const other = yield* TestHost.mount(Siblings({ a: Other }), {})
+          yield* TestHost.settle
+          drop(other, "a")
+          yield* TestHost.settle
+          yield* Deferred.await(otherReleasing)
+          const cleanupStarted = yield* Deferred.make<void>()
+          const finishCleanup = yield* Deferred.make<void>()
+          let builds = 0
+          const slow = Layer.effect(
+            Store,
+            Effect.gen(function*() {
+              yield* Effect.acquireRelease(
+                Effect.void,
+                () =>
+                  Effect.andThen(
+                    Deferred.succeed(cleanupStarted, undefined),
+                    Deferred.await(finishCleanup)
+                  )
+              )
+              yield* Effect.sleep("1 second")
+              return { id: ++builds }
+            })
+          )
+          const A = Component.provide(
+            StoreId,
+            ReadStore.layer.pipe(Layer.provide(slow))
+          )
+          const B = Component.provide(
+            StoreId,
+            ReadStore.layer.pipe(Layer.provide(slow))
+          )
+          const root = yield* TestHost.mount(Siblings({ a: A, b: B }), {})
+          yield* TestHost.settle
+          drop(root, "a")
+          yield* TestHost.settle
+          yield* Deferred.await(cleanupStarted)
+          yield* Deferred.succeed(finishCleanup, undefined)
+          yield* TestHost.settle
+          yield* TestClock.adjust("1 second")
+          yield* TestHost.settle
+          const text = root.text()
+          yield* Deferred.succeed(otherGate, undefined)
+          assert.strictEqual(text, "[1]")
+        })))
+
       it.effect("a build whose users unmount while it waits to start again ends there, and isn't started", () =>
         provideHost(Effect.gen(function*() {
           let starts = 0
