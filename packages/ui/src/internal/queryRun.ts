@@ -65,8 +65,7 @@ const cacheIn = (ctx: Context.Context<any>): Cache => {
   return loaded().buildCache(ctx, {
     visibility: Context.get(ctx, queryCore.Visibility),
     connectivity: Context.get(ctx, queryCore.Connectivity),
-    report: Context.get(ctx, queryCore.Problems),
-    idleMs: queryCore.cacheIdleMs(undefined)
+    report: Context.get(ctx, queryCore.Problems)
   }).cache
 }
 

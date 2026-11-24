@@ -9,8 +9,10 @@ import * as Result from "effect/Result"
 import * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../Component.ts"
 import type * as View from "../View.ts"
+import { routed } from "./due.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
+import * as log from "./log.ts"
 import { segmentOf } from "./paths.ts"
 import type * as prefetchWalk from "./prefetch.ts"
 import type * as componentQueries from "./queries.ts"
@@ -104,9 +106,7 @@ const warnOnce = (
   if (kinds === undefined) warned.set(component, kinds = new Set())
   if (kinds.has(kind)) return
   kinds.add(kind)
-  Effect.runForkWith(ctx)(
-    Effect.logWarning(`${component.definition.name}: ${message()}`)
-  )
+  log.warn(ctx, `${component.definition.name}: ${message()}`)
 }
 
 const formatIssue = SchemaIssue.makeFormatterDefault()
@@ -536,6 +536,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     heldFor,
     attach: (inst) => {
       instance = inst
+      routed.add(inst.tree)
       inst.tree.watched = (at, query, argsKey) =>
         views.get(at)?.watched?.add(entryKey(query, argsKey))
       const ended = inst.tree.ended

@@ -742,6 +742,7 @@ export type ValueNode =
  * @category models
  * @since 0.1.0
  */
+// oxlint-disable-next-line typescript/no-unsafe-declaration-merging
 export class VoidElement<
   out Msg,
   out R = never,
@@ -998,80 +999,6 @@ export class VoidElement<
     return this.attr("popover", mode).prop("popoverOpen", open)
   }
   /**
-   * Sugar for `on("click", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onClick(
-    handler: View.Handler<Msg, PointerPayload>,
-    options?: View.EventOptions | undefined
-  ): this {
-    return this.on("click" as any, handler as any, options)
-  }
-  /**
-   * Sugar for `on("dblclick", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onDoubleClick(
-    handler: View.Handler<Msg, PointerPayload>,
-    options?: View.EventOptions | undefined
-  ): this {
-    return this.on("dblclick" as any, handler as any, options)
-  }
-  /**
-   * Sugar for `on("keydown", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onKeyDown(
-    handler: View.Handler<Msg, KeyPayload>,
-    options?: View.EventOptions | undefined
-  ): this {
-    return this.on("keydown" as any, handler as any, options)
-  }
-  /**
-   * Sugar for `on("keyup", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onKeyUp(
-    handler: View.Handler<Msg, KeyPayload>,
-    options?: View.EventOptions | undefined
-  ): this {
-    return this.on("keyup" as any, handler as any, options)
-  }
-  /**
-   * Sugar for `on("focus", handler)`.
-   *
-   * @since 0.1.0
-   */
-  onFocus(handler: View.Handler<Msg, FocusPayload>): this {
-    return this.on("focus" as any, handler as any)
-  }
-  /**
-   * Sugar for `on("blur", handler)`.
-   *
-   * @since 0.1.0
-   */
-  onBlur(handler: View.Handler<Msg, BlurPayload>): this {
-    return this.on("blur" as any, handler as any)
-  }
-  /**
-   * Sugar for `on("paste", handler, options)`. The handler gets the
-   * clipboard's plain text. With `{ preventDefault: true }` a handler that
-   * returns a message cancels the paste, so the element's text stays as it
-   * is and the Model decides what the pasted text does.
-   *
-   * @since 0.1.0
-   */
-  onPaste(
-    handler: View.Handler<Msg, PastePayload>,
-    options?: View.EventOptions | undefined
-  ): this {
-    return this.on("paste" as any, handler as any, options)
-  }
-  /**
    * Makes this element a drag source carrying `data`, strings by type such
    * as `{ "application/x-todo": id }`, and sets `draggable="true"`. The host
    * puts the data on the drag when it starts. Calling it again replaces the
@@ -1106,15 +1033,6 @@ export class VoidElement<
       handler as any,
       this.eventOptions.dragstart
     )
-  }
-  /**
-   * Sugar for `on("dragend", handler)`, on the drag's source: `dropped` is
-   * false when the drag was cancelled.
-   *
-   * @since 0.1.0
-   */
-  onDragEnd(handler: View.Handler<Msg, DragEndPayload>): this {
-    return this.on("dragend" as any, handler as any)
   }
   /**
    * Makes this element a drop target for drags carrying one of the
@@ -1153,6 +1071,89 @@ export class VoidElement<
     const target: DropTargetOptions = { ...options, preventDefault: "always" }
     return this.on("drop" as any, handler as any, target)
   }
+}
+
+/**
+ * Event handler sugar methods on `VoidElement`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface VoidElement<
+  out Msg,
+  out R = never,
+  in out E = Record<string, unknown>,
+  in out Node = unknown,
+  out Tag extends string = string
+> {
+  /**
+   * Sugar for `on("click", handler, options)`.
+   *
+   * @since 0.1.0
+   */
+  onClick(
+    handler: View.Handler<Msg, PointerPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  /**
+   * Sugar for `on("dblclick", handler, options)`.
+   *
+   * @since 0.1.0
+   */
+  onDoubleClick(
+    handler: View.Handler<Msg, PointerPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  /**
+   * Sugar for `on("keydown", handler, options)`.
+   *
+   * @since 0.1.0
+   */
+  onKeyDown(
+    handler: View.Handler<Msg, KeyPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  /**
+   * Sugar for `on("keyup", handler, options)`.
+   *
+   * @since 0.1.0
+   */
+  onKeyUp(
+    handler: View.Handler<Msg, KeyPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  /**
+   * Sugar for `on("focus", handler)`.
+   *
+   * @since 0.1.0
+   */
+  onFocus(handler: View.Handler<Msg, FocusPayload>): this
+  /**
+   * Sugar for `on("blur", handler)`.
+   *
+   * @since 0.1.0
+   */
+  onBlur(handler: View.Handler<Msg, BlurPayload>): this
+  /**
+   * Sugar for `on("paste", handler, options)`. The handler gets the
+   * clipboard's plain text. With `{ preventDefault: true }` a handler that
+   * returns a message cancels the paste, so the element's text stays as it
+   * is and the Model decides what the pasted text does.
+   *
+   * @since 0.1.0
+   */
+  onPaste(
+    handler: View.Handler<Msg, PastePayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  /**
+   * Sugar for `on("dragend", handler)`, on the drag's source: `dropped` is
+   * false when the drag was cancelled.
+   *
+   * @since 0.1.0
+   */
+  onDragEnd(handler: View.Handler<Msg, DragEndPayload>): this
   /**
    * Sugar for `on("dragenter", handler)`. Sent when this drop target becomes
    * the active one, as `onDrop` describes; it does nothing on an element
@@ -1160,18 +1161,14 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onDragEnter(handler: View.Handler<Msg, {}>): this {
-    return this.on("dragenter" as any, handler as any)
-  }
+  onDragEnter(handler: View.Handler<Msg, {}>): this
   /**
    * Sugar for `on("dragleave", handler)`. Sent when this drop target stops
    * being the active one, as `onDrop` describes.
    *
    * @since 0.1.0
    */
-  onDragLeave(handler: View.Handler<Msg, {}>): this {
-    return this.on("dragleave" as any, handler as any)
-  }
+  onDragLeave(handler: View.Handler<Msg, {}>): this
   /**
    * Sugar for `on("dragover", handler)`, for an active drop target that
    * needs the pointer's position, such as a list reordered by halves of its
@@ -1183,9 +1180,7 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onDragOver(handler: View.Handler<Msg, DragOverPayload>): this {
-    return this.on("dragover" as any, handler as any)
-  }
+  onDragOver(handler: View.Handler<Msg, DragOverPayload>): this
   /**
    * Sugar for `on("input", handler)`, on the elements that have it.
    *
@@ -1194,9 +1189,7 @@ export class VoidElement<
   onInput<E2 extends E & { readonly input: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["input"]>
-  ): this {
-    return this.on("input", handler) as any
-  }
+  ): this
   /**
    * Sugar for `on("change", handler)`, on the elements that have it.
    *
@@ -1205,9 +1198,7 @@ export class VoidElement<
   onChange<E2 extends E & { readonly change: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["change"]>
-  ): this {
-    return this.on("change", handler) as any
-  }
+  ): this
   /**
    * Sugar for `on("compositionend", handler)`, on an `input` or
    * `textarea`: an input method committed the text it composed. The
@@ -1219,9 +1210,7 @@ export class VoidElement<
   onCompositionEnd<E2 extends E & { readonly compositionend: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["compositionend"]>
-  ): this {
-    return this.on("compositionend", handler) as any
-  }
+  ): this
   /**
    * Sugar for `on("submit", handler)`, on a `form`. The browser host always
    * cancels the native submission of a form the app renders, so it takes no
@@ -1232,9 +1221,7 @@ export class VoidElement<
   onSubmit<E2 extends E & { readonly submit: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["submit"]>
-  ): this {
-    return this.on("submit", handler) as any
-  }
+  ): this
   /**
    * Sugar for `on("toggle", handler)`: a `details`, a `dialog` or a popover
    * opened or closed.
@@ -1244,9 +1231,7 @@ export class VoidElement<
   onToggle<E2 extends E & { readonly toggle: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["toggle"]>
-  ): this {
-    return this.on("toggle", handler) as any
-  }
+  ): this
   /**
    * Sugar for `on("cancel", handler)`, on a `dialog`: a close request, such
    * as Escape. For a modal the browser host cancels it, and the Model
@@ -1259,9 +1244,7 @@ export class VoidElement<
   onCancel<E2 extends E & { readonly cancel: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["cancel"]>
-  ): this {
-    return this.on("cancel", handler) as any
-  }
+  ): this
   /**
    * Sugar for `on("close", handler)`, on a `dialog`: sent after every close,
    * the Model's included, except the close the browser host makes to switch
@@ -1273,8 +1256,21 @@ export class VoidElement<
   onClose<E2 extends E & { readonly close: unknown }>(
     this: VoidElement<Msg, R, E2, Node>,
     handler: View.Handler<Msg, E2["close"]>
-  ): this {
-    return this.on("close", handler) as any
+  ): this
+}
+
+for (
+  const pair of "Click DoubleClick:dblclick KeyDown KeyUp Focus Blur Paste DragEnd DragEnter DragLeave DragOver Input Change CompositionEnd Submit Toggle Cancel Close"
+    .split(" ")
+) {
+  const [name, event] = pair.split(":")
+  const type = event ?? name!.toLowerCase()
+  ;(VoidElement.prototype as any)["on" + name] = function(
+    this: VoidElement<any>,
+    handler: any,
+    options?: View.EventOptions
+  ) {
+    return this.on(type, handler, options)
   }
 }
 

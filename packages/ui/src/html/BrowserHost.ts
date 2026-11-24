@@ -552,8 +552,14 @@ export const mountRoot = (
   hydrate: hydrateRun.Hydrating | undefined
 ): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const context = yield* Layer.build(
-      layer({ document: container.ownerDocument })
+    let held = 0
+    let live: ReturnType<typeof dom.makeHost> | undefined
+    // oxlint-disable-next-line no-console
+    const warn = (message: string) => console.warn(message)
+    const context = yield* documentServices.make(
+      container.ownerDocument,
+      htmlHost,
+      () => held > 0
     )
     const outer = yield* Effect.context<Scope.Scope>()
     const scheduled =
@@ -561,14 +567,39 @@ export const mountRoot = (
         ? Context.add(
           context,
           Scheduler.Scheduler,
-          defaultScheduler ??= HtmlScheduler.make()
+          defaultScheduler ??= HtmlScheduler.makeDefault()
         )
         : context
+    const makeDom: runtime.MakeDom = (target, domOptions) => {
+      const made = dom.makeHost(target as globalThis.Element, {
+        head: domOptions.head ? dom.syncHead : undefined,
+        warn,
+        step: domOptions.step
+      })
+      live = made
+      return {
+        ...made,
+        dispose: () => {
+          if (live === made) live = undefined
+          made.dispose()
+        }
+      }
+    }
+    const makePaintDom: runtime.MakeDom = (target, domOptions) =>
+      painting(
+        dom.makeHost(target as globalThis.Element, {
+          head: domOptions.head ? dom.syncHead : undefined,
+          warn,
+          step: domOptions.step
+        })
+      )
     const root = yield* Effect.provideContext(
-      runtime.mount(
+      runtime.mountDom(
         component,
         props,
         container,
+        makeDom,
+        [Html.name],
         hydrate === undefined ? options : { ...options, hydrate }
       ),
       scheduled
@@ -577,7 +608,16 @@ export const mountRoot = (
       component,
       root,
       container,
-      Context.merge(outer, scheduled)
+      Context.merge(outer, scheduled),
+      makePaintDom,
+      () => {
+        held++
+        live?.pause(true)
+      },
+      () => {
+        held--
+        live?.pause(false)
+      }
     )
     const unregister = Context.get(outer, Controllables).register(controlled)
     yield* Effect.addFinalizer(() =>
@@ -805,34 +845,16 @@ const painting = <
   }
 })
 
-const paintHost = (
-  host: Renderer.Host<globalThis.Node>
-): Renderer.Host<globalThis.Node> => {
-  const painted = painting(host)
-  const dom = domHost.doms.get(host)
-  if (dom !== undefined) {
-    domHost.doms.set(painted, {
-      ...dom,
-      make: (container, options) => {
-        const made = dom.make(container, options)
-        return made === undefined ? undefined : painting(made)
-      }
-    })
-  }
-  return painted
-}
-
 const controllable = (
   component: Component.Any,
   root: runtime.Root,
   container: globalThis.Element,
-  context: Context.Context<Scope.Scope | Renderer.Renderer>
+  context: Context.Context<Scope.Scope>,
+  makePaintDom: runtime.MakeDom,
+  hold: () => void,
+  release: () => void
 ): Controllable => {
   const owner = Context.get(context, Scope.Scope)
-  const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<
-    globalThis.Node
-  >
-  const holding = browserHosts.holds.get(host)!
   const style = (container as HTMLElement).style
   let painted:
     | { readonly scope: Scope.Closeable; readonly copy: HTMLElement }
@@ -858,7 +880,7 @@ const controllable = (
       style.getPropertyValue("display"),
       style.getPropertyPriority("display")
     ]
-    holding.hold(container)
+    hold()
     style.setProperty("display", "none", "important")
     return shown
   }
@@ -866,7 +888,7 @@ const controllable = (
     if (shown === undefined) return
     show(style, shown)
     shown = undefined
-    holding.release(container)
+    release()
   })
   const resume = Effect.suspend(() => {
     const was = painted
@@ -883,16 +905,15 @@ const controllable = (
         show(copy.style, hide())
         copy.setAttribute("inert", "")
         ;(painted?.copy ?? container).after(copy)
-        const result = yield* runtime.paint(
+        const result = yield* runtime.paintDom(
           component,
           root.instance.props,
           copy,
-          state
+          state,
+          makePaintDom,
+          [Html.name]
         ).pipe(
-          Effect.provideContext(context.pipe(
-            Context.add(Renderer.Renderer, { host: paintHost(host) }),
-            Context.add(Scope.Scope, scope)
-          )),
+          Effect.provideContext(Context.add(context, Scope.Scope, scope)),
           Effect.onError(() =>
             Effect.andThen(
               unpaint({ scope, copy }),

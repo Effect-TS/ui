@@ -53,6 +53,8 @@ import * as Base64 from "effect/encoding/Base64"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Command from "../Command.ts"
+import type * as Html from "./Html.ts"
+import * as documentServices from "./internal/documentServices.ts"
 
 /**
  * A read of a `Blob` failed, such as for a file deleted or changed after the
@@ -197,6 +199,37 @@ export const Files: Context.Reference<Files> = Context.Reference<Files>(
 
 const pending: Files = { pick: () => Effect.never }
 
+const filesOf = (
+  document: Document,
+  htmlHost: Context.Service.Shape<typeof Html.Host>
+): Files => ({
+  pick: (options) =>
+    Effect.callback((resume) => {
+      const input = document.createElement("input")
+      input.type = "file"
+      input.multiple = options.multiple === true
+      if (options.accept !== undefined) input.accept = options.accept.join(",")
+      if (options.capture !== undefined) {
+        input.setAttribute("capture", options.capture)
+      }
+      const settle = (files: ReadonlyArray<File>) =>
+        resume(Effect.succeed({ opened: true, files }))
+      input.onchange = () => settle(Array.from(input.files ?? []))
+      input.oncancel = () => settle([])
+      if (!htmlHost.showPicker(input)) {
+        return resume(Effect.succeed({ opened: false, files: [] }))
+      }
+      return Effect.sync(() => {
+        input.onchange = null
+        input.oncancel = null
+      })
+    })
+})
+
+documentServices.register((context, env) =>
+  Context.add(context, Files, filesOf(env.document, env.htmlHost))
+)
+
 /**
  * The Command behind `pick`, for a story's `.resolve(HtmlFiles.Pick, { opened, files })`.
  *
@@ -213,7 +246,15 @@ export const Pick: Command.Factory<PickOptions, Picked> = Command.make(
       capture: Schema.optional(Schema.Literals(["user", "environment"]))
     }
   },
-  (options) => Files.use((files) => files.pick(options))
+  (options) =>
+    Effect.contextWith((context: Context.Context<never>) => {
+      const explicit = Context.getOrUndefined(context, Files)
+      if (explicit !== undefined) return explicit.pick(options)
+      const env = Context.get(context, documentServices.Env)
+      return env === undefined
+        ? pending.pick(options)
+        : filesOf(env.document, env.htmlHost).pick(options)
+    })
 )
 
 /**

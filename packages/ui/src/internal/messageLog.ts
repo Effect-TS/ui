@@ -2,7 +2,6 @@
  * The `MessageLog` service and its no-op default, apart from `MessageLog`: a runtime reads the service
  * from here, so an app that provides no log doesn't ship that module's wire schema and encoder.
  */
-import type * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import type * as Log from "../MessageLog.ts"
 import type * as Recorder from "./recorder.ts"
@@ -34,7 +33,7 @@ export const silent: Recorder.Recording = {
 export let recorder:
   | ((
     log: Log.MessageLog,
-    clock: Clock.Clock,
+    nowMs: () => number,
     session: string,
     app: string
   ) => Recorder.Recording)

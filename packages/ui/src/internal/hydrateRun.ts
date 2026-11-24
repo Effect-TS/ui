@@ -1,14 +1,14 @@
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
-import type * as Fiber from "effect/Fiber"
+import * as Fiber from "effect/Fiber"
 import * as Result from "effect/Result"
 import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as Kernel from "./kernel.ts"
 import { segmentOf } from "./paths.ts"
-import { boundOf } from "./queryCore.ts"
+import { boundOf, type Cache } from "./queryCore.ts"
 import { restored } from "./sharedRun.ts"
 import { type Decoded, reportedOf, stateCodecOf } from "./stateCodec.ts"
 
@@ -522,16 +522,135 @@ export class Waits {
 }
 
 /** @internal */
+export interface Session {
+  readonly static: boolean
+  readonly hasQuery: boolean
+  readonly record: (
+    inst: Kernel.Instance,
+    draft: Draft
+  ) => Draft | { readonly done: true; readonly seq: number | undefined | void }
+  readonly commit: () => void
+  readonly init: (
+    inst: Kernel.Instance,
+    first: Kernel.Next
+  ) => Kernel.Next | undefined
+  readonly onCache: (cache: Cache) => void
+  readonly closeWindow: () => void
+  readonly end: () => void
+  readonly finish: (head: () => unknown) => void
+  readonly adopted: Effect.Effect<void>
+  readonly adoptionHead: () => unknown
+  readonly waiting: () => ReadonlyArray<string>
+  readonly adopts: (inst: Kernel.Instance) => boolean
+  readonly isWaiting: (inst: Kernel.Instance) => boolean
+}
+
+/** @internal */
 export interface Hydrating {
-  readonly state: Renderer.State
-  readonly adopt: Adopt | undefined
-  readonly make: typeof make
-  readonly decodeRoot: typeof decodeRoot
-  readonly Waits: typeof Waits
+  readonly static: boolean
+  readonly decode: <A, E, R>(
+    component: Kernel.Runnable,
+    path: string,
+    go: (decoded?: Exit.Exit<Decoded, unknown>) => Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E, R>
+  readonly open: (input: {
+    readonly path: string
+    readonly container: unknown
+    readonly bridged: Kernel.Host
+    readonly base: Kernel.Host
+    readonly dom: boolean
+    readonly record: Kernel.Recorder
+    readonly at: number
+    readonly decodedRoot: readonly [string, Exit.Exit<Decoded, unknown>] | undefined
+    readonly heldFor: Parameters<typeof make>[6]
+    readonly cache: () => Cache | undefined
+  }) => Session
 }
 
 /** @internal */
 export const hydrating = (
   state: Renderer.State,
   adopt?: Adopt
-): Hydrating => ({ state, adopt, make, decodeRoot, Waits })
+): Hydrating => ({
+  static: state["~static"] === true,
+  decode: (component, path, go) => {
+    const decoded = decodeRoot(component, state, path)
+    return decoded === undefined || Exit.isExit(decoded)
+      ? go(decoded)
+      : Effect.flatMap(Fiber.await(decoded), go)
+  },
+  open: (input) => {
+    const fromStatic = state["~static"] === true
+    let started = false
+    let firstHeld = 0
+    let adoptedDone = false
+    let adoptionHead: unknown
+    let headOf: (() => unknown) | undefined
+    const adoptedWaiters: Array<() => void> = []
+    let windowClosed = false
+    const closeWindow = () => {
+      windowClosed = true
+      input.cache()?.closeWindow()
+    }
+    const checkAdopted = () => {
+      if (adoptedDone || !started || !hydration.settled()) return
+      if (!waits.parked(hydration)) return
+      adoptedDone = true
+      if (firstHeld > 0 || adoptionHead === undefined) adoptionHead = headOf!()
+      closeWindow()
+      for (const f of adoptedWaiters.splice(0)) f()
+    }
+    const waits = new Waits(input.record, checkAdopted, state)
+    const hydration = make(
+      state,
+      input.bridged,
+      input.base,
+      !input.dom ? undefined : adopt?.(input.base, input.container, input.path),
+      checkAdopted,
+      input.decodedRoot,
+      input.heldFor
+    )
+    return {
+      static: fromStatic,
+      hasQuery: state["~query"] !== undefined,
+      record: (inst, draft) => {
+        const next = waits.step(inst, draft, hydration)
+        return next === undefined ? { done: true, seq: waits.seq } : next
+      },
+      commit: () => waits.commit(),
+      init: (inst, first) => {
+        if (inst.tree.holds === undefined) {
+          inst.tree.holds = waits.holds
+          inst.tree.held = waits.heldAt
+        }
+        return hydration.init(inst, first)
+      },
+      onCache: (cache) => {
+        const shipped = state["~query"]
+        if (shipped !== undefined) {
+          cache.hydrate(shipped, { static: fromStatic, at: input.at })
+          if (windowClosed) cache.closeWindow()
+        }
+      },
+      closeWindow,
+      end: () => {
+        firstHeld = hydration.held().length
+        hydration.end()
+      },
+      finish: (head) => {
+        headOf = head
+        if (firstHeld === 0) adoptionHead = head()
+        started = true
+        checkAdopted()
+      },
+      adopted: Effect.callback<void>((resume) => {
+        if (adoptedDone) resume(Effect.void)
+        else adoptedWaiters.push(() => resume(Effect.void))
+      }),
+      adoptionHead: () => adoptedDone ? adoptionHead : undefined,
+      waiting: () => waits.paths().concat(hydration.held()),
+      adopts: (inst) => hydration.adopts(inst),
+      isWaiting: (inst) => waits.waiting.has(inst)
+    }
+  }
+})

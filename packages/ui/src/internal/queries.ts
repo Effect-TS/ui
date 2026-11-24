@@ -153,7 +153,7 @@ const lists = new WeakMap<
 const listOf = (def: QueryDef, pages: ReadonlyArray<unknown>) => {
   let out = lists.get(pages)
   if (out === undefined) {
-    out = { items: queryModule().infiniteItems(def, pages), pages }
+    out = { items: def.list!.ops.itemsOf(def, pages), pages }
     lists.set(pages, out)
   }
   return out

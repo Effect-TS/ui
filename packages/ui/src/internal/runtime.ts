@@ -2,13 +2,12 @@
  * @internal
  */
 import * as Cause from "effect/Cause"
-import * as Clock from "effect/Clock"
+import type * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
-import * as Exit from "effect/Exit"
+import type * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
-import * as Latch from "effect/Latch"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
@@ -18,12 +17,12 @@ import type * as Query from "../Query.ts"
 import type * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as domHost from "./domHost.ts"
-import { routed } from "./due.ts"
 import * as Executor from "./executor.ts"
 import type * as hydrateRun from "./hydrateRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
+import * as log from "./log.ts"
 import * as messageLog from "./messageLog.ts"
 import type * as partsRun from "./partsRun.ts"
 import { childName, segment } from "./paths.ts"
@@ -308,7 +307,7 @@ const makeCell = (
         visibility: Context.get(ctx, queryCore.Visibility),
         connectivity: Context.get(ctx, queryCore.Connectivity),
         report: Context.get(ctx, queryCore.Problems),
-        idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
+        idleTimeToLive: options?.query?.idleTimeToLive,
         settleOnce: server !== undefined,
         fetches: server === undefined || server.fetches
       })
@@ -339,6 +338,115 @@ const withProps = <A, E, R>(
     : f(rootProps)
 
 /** @internal */
+export type MakeDom = (
+  container: unknown,
+  options: {
+    readonly head: boolean
+    readonly step: (f: () => boolean) => boolean
+  }
+) => Kernel.Host & { readonly dispose: () => void }
+
+interface HostInput {
+  readonly elements: ReadonlyArray<string> | "any"
+  readonly make: (
+    container: unknown,
+    ownsHead: boolean,
+    step: Recorder.Recording["step"]
+  ) => {
+    readonly base: Kernel.Host
+    readonly dom: (Kernel.Host & { readonly dispose: () => void }) | undefined
+  }
+}
+
+const fromRenderer = (ctx: Context.Context<any>): HostInput => {
+  const host = Context.get(ctx, services.Renderer).host
+  return {
+    elements: host.elements,
+    make: (container, ownsHead, step) => {
+      const dom = domHost.doms.get(host)?.make(container, {
+        head: ownsHead,
+        step
+      })
+      return { base: dom ?? bridge(host, step, ownsHead), dom }
+    }
+  }
+}
+
+const fromDom = (
+  makeDom: MakeDom,
+  elements: ReadonlyArray<string> | "any"
+): HostInput => ({
+  elements,
+  make: (container, ownsHead, step) => {
+    const dom = makeDom(container, { head: ownsHead, step })
+    return { base: dom, dom }
+  }
+})
+
+const mountCore = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  hostOf: (ctx: Context.Context<any>) => HostInput,
+  options?: Options
+): Effect.Effect<
+  Root & Renderer.Root<any, any>,
+  never,
+  Scope.Scope
+> =>
+  withProps(rootProps, (props) => {
+    const path = "/" + component.definition.name
+    const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
+      Effect.uninterruptible(
+        Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
+          const owner = Context.get(ctx, Scope.Scope)
+          if (isClosed(owner)) return Effect.interrupt
+          let made: ReturnType<typeof start> | undefined
+          let ready = false
+          let waiters: Array<() => void> | undefined
+          scopeAddFinalizerUnsafe(owner, {}, () => {
+            const close = Effect.suspend(() => made?.close ?? Effect.void)
+            return Effect.suspend(() =>
+              ready
+                ? close
+                : Effect.flatMap(
+                  Effect.callback<void>((resume) => {
+                    if (ready) resume(Effect.void)
+                    else (waiters ??= []).push(() => resume(Effect.void))
+                  }),
+                  () => close
+                )
+            )
+          })
+          try {
+            made = start(
+              component,
+              props,
+              container,
+              ctx,
+              options,
+              hostOf(ctx),
+              undefined,
+              decoded && [path, decoded]
+            )
+          } finally {
+            ready = true
+            if (waiters !== undefined) {
+              for (const wake of waiters) wake()
+            }
+          }
+          return isClosed(owner)
+            ? Effect.interrupt
+            : Effect.succeed(made.root)
+        })
+      )
+    const hydrate = options?.hydrate
+    return hydrate === undefined
+      ? go(undefined)
+      : hydrate.decode(component as unknown as Kernel.Runnable, path, go)
+  })
+
+/** @internal */
 export const mount = (
   component: Component.Any,
   rootProps: unknown,
@@ -348,54 +456,24 @@ export const mount = (
   Root & Renderer.Root<any, any>,
   never,
   Scope.Scope | Renderer.Renderer
-> =>
-  withProps(rootProps, (props) => {
-    const path = "/" + component.definition.name
-    const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
-      Effect.uninterruptible(
-        Effect.contextWith(
-          (ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-            const owner = Context.get(ctx, Scope.Scope)
-            if (isClosed(owner)) return Effect.interrupt
-            let made: ReturnType<typeof start> | undefined
-            const setUp = Latch.makeUnsafe(false)
-            scopeAddFinalizerUnsafe(
-              owner,
-              {},
-              () =>
-                setUp.whenOpen(Effect.suspend(() => made?.close ?? Effect.void))
-            )
-            try {
-              made = start(
-                component,
-                props,
-                container,
-                ctx,
-                options,
-                undefined,
-                decoded && [path, decoded]
-              )
-            } finally {
-              setUp.openUnsafe()
-            }
-            return isClosed(owner)
-              ? Effect.interrupt
-              : Effect.succeed(made.root)
-          }
-        )
-      )
-    const hydrate = options?.hydrate
-    const decoded = hydrate === undefined
-      ? undefined
-      : hydrate.decodeRoot(
-        component as unknown as Kernel.Runnable,
-        hydrate.state,
-        path
-      )
-    return decoded === undefined || Exit.isExit(decoded)
-      ? go(decoded)
-      : Effect.flatMap(Fiber.await(decoded), go)
-  })
+> => mountCore(component, rootProps, container, fromRenderer, options)
+
+/** @internal */
+export const mountDom = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  makeDom: MakeDom,
+  elements: ReadonlyArray<string> | "any",
+  options?: Options
+): Effect.Effect<Root & Renderer.Root<any, any>, never, Scope.Scope> =>
+  mountCore(
+    component,
+    rootProps,
+    container,
+    () => fromDom(makeDom, elements),
+    options
+  )
 
 const start = (
   component: Component.Any,
@@ -403,38 +481,35 @@ const start = (
   container: unknown,
   caller: Context.Context<any>,
   options: Options | undefined,
+  hostInput: HostInput,
   server?: Server,
   decodedRoot?: readonly [string, Exit.Exit<Decoded, unknown>]
 ) => {
   const ctx = onScheduler(caller)
-  const host = server?.host ?? Context.get(ctx, services.Renderer).host
-  const log = Context.get(ctx, messageLog.MessageLog)
+  const logService = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
-  const clock = Context.get(ctx, Clock.Clock)
-  const session = `${clock.currentTimeMillisUnsafe().toString(36)}-k${
-    (sessions++).toString(36)
-  }`
+  // Read Clock via `mapUnsafe` so mounts without a custom Clock don't bundle `ClockImpl`.
+  const clock = ctx.mapUnsafe.get("effect/Clock") as Clock.Clock | undefined
+  const nowMs = clock === undefined
+    ? Date.now
+    : () => clock.currentTimeMillisUnsafe()
+  const session = `${nowMs().toString(36)}-k${(sessions++).toString(36)}`
   const emitted: Array<unknown> = []
   let flushes = 0
   let inFlush = true
   const recording = messageLog.recorder === undefined
     ? messageLog.silent
-    : messageLog.recorder(log, clock, session, component.definition.name)
+    : messageLog.recorder(logService, nowMs, session, component.definition.name)
   let initCommands: ReadonlyArray<unknown> | undefined
   const hydrate = options?.hydrate
-  const state = hydrate?.state
-  const fromStatic = state?.["~static"] === true
-  const waits = hydrate === undefined
-    ? undefined
-    : new hydrate.Waits(recording.record, () => checkAdopted(), state!)
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
       draft = { ...draft, commands: initCommands }
       initCommands = undefined
     }
-    if (hydration !== undefined) {
-      const next = waits!.step(inst, draft, hydration)
-      if (next === undefined) return waits!.seq
+    if (hydrating !== undefined) {
+      const next = hydrating.record(inst, draft)
+      if (!("_tag" in next)) return next.seq
       draft = next
     }
     if (
@@ -466,7 +541,7 @@ const start = (
   ): Dispatched => {
     const reason = inst.closed
       ? "closed"
-      : waits?.waiting.has(inst) === true
+      : hydrating?.isWaiting(inst) === true
       ? "waiting"
       : frozen
       ? "frozen"
@@ -489,6 +564,10 @@ const start = (
     }
     return count
   }
+  const ownsHead = options?.head !== false
+  const { base, dom } = hostInput.make(container, ownsHead, recording.step)
+  const deferred = new Set<Kernel.Instance>()
+  let hydrating: hydrateRun.Session | undefined
   const routing: routeRun.Routed | undefined = hooks?.kernel?.(hooks, {
     path: "/" + component.definition.name,
     container,
@@ -498,58 +577,33 @@ const start = (
     buildsPendingSince: building,
     hydrated: () =>
       kernelRoot !== undefined &&
-      hydration?.adopts(kernelRoot.instance) === true,
-    static: fromStatic,
-    navigated: () => closeWindow()
+      hydrating?.adopts(kernelRoot.instance) === true,
+    static: hydrate?.static === true,
+    navigated: () => hydrating?.closeWindow()
   })
-  const ownsHead = options?.head !== false
-  const doms = domHost.doms.get(host)
-  const dom = doms?.make(container, { head: ownsHead, step: recording.step })
-  const deferred = new Set<Kernel.Instance>()
-  const base = dom ?? bridge(host, recording.step, ownsHead)
   const bridged: Kernel.Host = {
     ...base,
     hold: routing?.hold,
     commit: () => {
       base.commit?.()
-      waits?.commit()
+      hydrating?.commit()
       routing?.flushed()
       idle?.check()
     },
     server: server?.hooks(ctx, record, deferred)
   }
-  let started = false
-  let firstHeld = 0
-  let adoptedDone = state === undefined
-  let adoptionHead: unknown
-  const adoptedWaiters: Array<() => void> = []
-  let windowClosed = false
-  const closeWindow = () => {
-    windowClosed = true
-    queries.made()?.closeWindow()
-  }
-  const checkAdopted = () => {
-    if (adoptedDone || !started || hydration?.settled() === false) return
-    if (waits !== undefined && !waits.parked(hydration!)) return
-    adoptedDone = true
-    if (firstHeld > 0 || adoptionHead === undefined) adoptionHead = root.head()
-    closeWindow()
-    for (const f of adoptedWaiters.splice(0)) f()
-  }
-  const hydration = hydrate === undefined
-    ? undefined
-    : hydrate.make(
-      hydrate.state,
-      bridged,
-      base,
-      dom === undefined
-        ? undefined
-        : hydrate.adopt?.(base, container, "/" + component.definition.name),
-      checkAdopted,
-      decodedRoot,
-      routing?.heldFor
-    )
-  const hydratedAt = clock.currentTimeMillisUnsafe()
+  hydrating = hydrate?.open({
+    path: "/" + component.definition.name,
+    container,
+    bridged,
+    base,
+    dom: dom !== undefined,
+    record: recording.record,
+    at: nowMs(),
+    decodedRoot,
+    heldFor: routing?.heldFor,
+    cache: () => queries.made()
+  })
   const idle = server?.idle(
     executor,
     () => kernelRoot?.instance,
@@ -562,13 +616,9 @@ const start = (
       if (!frozen) recording.tree({ _tag: "FetchStarted", ...event })
     })
     if (idle !== undefined) cache.onFetchEnd(idle.check)
-    const shipped = state?.["~query"]
-    if (shipped !== undefined) {
-      cache.hydrate(shipped, { static: fromStatic, at: hydratedAt })
-      if (windowClosed) cache.closeWindow()
-    }
+    hydrating?.onCache(cache)
   })
-  if (state?.["~query"] !== undefined) queries.cache()
+  if (hydrating?.hasQuery) queries.cache()
   let kernelRoot: Kernel.Root | undefined
   kernelRoot = recording.session(() =>
     Kernel.mount(
@@ -586,21 +636,17 @@ const start = (
           const made = inst.component as unknown as Component.Any
           const elements = made.elements()
           if (
-            elements !== undefined && host.elements !== "any" &&
-            !host.elements.includes(elements.name)
+            elements !== undefined && hostInput.elements !== "any" &&
+            !hostInput.elements.includes(elements.name)
           ) {
             throw new Error(
               `${made.definition.name} renders ${elements.name} elements, and this host shows ${
-                host.elements.join(", ")
+                hostInput.elements.join(", ")
               }`
             )
           }
           const first = inst.component.init(inst.props)
-          if (hydration !== undefined && inst.tree.holds === undefined) {
-            inst.tree.holds = waits!.holds
-            inst.tree.held = waits!.heldAt
-          }
-          const adopted = hydration?.init(inst, first)
+          const adopted = hydrating?.init(inst, first)
           if (adopted !== undefined) {
             return routing === undefined
               ? adopted
@@ -634,9 +680,7 @@ const start = (
         },
         follow: recording.follow,
         report: (path, where, cause) => {
-          Effect.runForkWith(ctx)(
-            Effect.logError(`${path} failed in ${where}`, cause)
-          )
+          log.error(ctx, `${path} failed in ${where}`, cause)
         },
         fallback: fallback === undefined ?
           undefined :
@@ -651,17 +695,19 @@ const start = (
     )
   )
   inFlush = false
-  firstHeld = hydration?.held().length ?? 0
-  hydration?.end()
+  hydrating?.end()
   const mounted = kernelRoot
   const instance = mounted.instance
   const tree = instance.tree
   if (routing !== undefined) {
     routing.attach(instance)
-    routed.add(tree)
     routing.flushed()
   }
   tree.flush = () => inFlush ? flushes : flushes + 1
+  const head = () =>
+    tree.head?.value ??
+      component.elements()?.head?.merge({ entries: [], children: [] }) ??
+      noHead
   const root = {
     path: instance.path,
     session,
@@ -687,17 +733,14 @@ const start = (
     crashed: () => instance.failure,
     flush: () => flushes,
     buildsPendingSince: building,
-    head: () =>
-      tree.head?.value ??
-        component.elements()?.head?.merge({ entries: [], children: [] }) ??
-        noHead,
-    adoptionHead: () => adoptedDone ? adoptionHead : undefined,
-    adopted: Effect.callback<void>((resume) => {
-      if (adoptedDone) resume(Effect.void)
-      else adoptedWaiters.push(() => resume(Effect.void))
-    }),
+    head,
+    adoptionHead: () =>
+      hydrating === undefined ? head() : hydrating.adoptionHead(),
+    adopted: hydrating === undefined ? Effect.void : hydrating.adopted,
     waiting: () =>
-      waits === undefined ? [] : waits.paths().concat(hydration!.held()),
+      hydrating === undefined
+        ? (noCommands as ReadonlyArray<string>)
+        : hydrating.waiting(),
     freeze: () => {
       if (!frozen) {
         tree.transitions?.settle()
@@ -709,9 +752,7 @@ const start = (
       return queries.made()
     }
   } satisfies Root & Renderer.Root<any, any>
-  if (firstHeld === 0) adoptionHead = root.head()
-  started = true
-  checkAdopted()
+  hydrating?.finish(root.head)
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
     tree.owned === undefined || tree.owned.size === 0
       ? Effect.void
@@ -878,6 +919,13 @@ export const prerender = (
           host.createElement("#root"),
           ctx,
           undefined,
+          {
+            elements: host.elements,
+            make: (_container, ownsHead, step) => ({
+              base: bridge(host, step, ownsHead),
+              dom: undefined
+            })
+          },
           { host, fetches: started, hooks: serverHooks, idle: idleOf }
         )
         yield* Scope.addFinalizer(scope, made.close)
@@ -920,7 +968,86 @@ const unmoved: Kernel.Transitions = {
 
 const noFacts = <A>(f: () => A): A => f()
 
+const paintCore = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  state: (path: string) => PaintState | undefined,
+  hostOf: (ctx: Context.Context<any>) => HostInput
+): Effect.Effect<
+  {
+    readonly fellBack: ReadonlyArray<string>
+    readonly fallbacks: ReadonlyArray<string>
+  },
+  never,
+  Scope.Scope
+> =>
+  Effect.contextWith((caller: Context.Context<Scope.Scope>) => {
+    const ctx = onScheduler(caller)
+    const executor = Context.get(ctx, Executor.CurrentExecutor)
+    const fellBack: Array<string> = []
+    let broke: { readonly error: unknown } | undefined
+    const { base, dom } = hostOf(ctx).make(container, false, noFacts)
+    const close = () => {
+      painted.close()
+      dom?.dispose()
+    }
+    const painted = Kernel.mount(
+      component as unknown as Kernel.Runnable,
+      rootProps,
+      container,
+      {
+        ...base,
+        setEvents: () => {},
+        transitions: () => unmoved,
+        inert: true
+      },
+      {
+        context: ctx,
+        init: (inst) => {
+          let recorded: PaintState | undefined
+          try {
+            recorded = state(inst.path)
+          } catch (error) {
+            broke = { error }
+            throw error
+          }
+          if (recorded === undefined) {
+            fellBack.push(inst.path)
+            recorded = inst.component.init(inst.props)
+          } else {
+            if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
+            inst.results = recorded.queries
+          }
+          return {
+            model: recorded!.model,
+            commands: noCommands,
+            events: noCommands
+          }
+        },
+        schedule: (task) => executor.schedule(task),
+        report: (path, where, cause) => {
+          log.error(ctx, `${path} failed in ${where}`, cause)
+        }
+      }
+    )
+    if (broke !== undefined) {
+      close()
+      return Effect.die(broke.error)
+    }
+    const fallbacks = new Set<string>()
+    fallbacksIn(painted.instance, fallbacks)
+    return Effect.as(
+      Scope.addFinalizer(
+        Context.get(ctx, Scope.Scope),
+        Effect.sync(close)
+      ),
+      { fellBack, fallbacks: Array.from(fallbacks) }
+    )
+  })
+
 /** @internal */
+// oxlint-disable-next-line effect/no-unused-internal
 export const paint = (
   component: Component.Any,
   rootProps: unknown,
@@ -933,78 +1060,24 @@ export const paint = (
   },
   never,
   Scope.Scope | Renderer.Renderer
-> =>
-  Effect.contextWith(
-    (caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-      const ctx = onScheduler(caller)
-      const executor = Context.get(ctx, Executor.CurrentExecutor)
-      const fellBack: Array<string> = []
-      let broke: { readonly error: unknown } | undefined
-      const host = Context.get(ctx, services.Renderer).host
-      const dom = domHost.doms.get(host)?.make(container, {
-        head: false,
-        step: noFacts
-      })
-      const close = () => {
-        painted.close()
-        dom?.dispose()
-      }
-      const painted = Kernel.mount(
-        component as unknown as Kernel.Runnable,
-        rootProps,
-        container,
-        {
-          ...(dom ?? bridge(host, noFacts, false)),
-          setEvents: () => {},
-          transitions: () => unmoved,
-          inert: true
-        },
-        {
-          context: ctx,
-          init: (inst) => {
-            let recorded: PaintState | undefined
-            try {
-              recorded = state(inst.path)
-            } catch (error) {
-              broke = { error }
-              throw error
-            }
-            if (recorded === undefined) {
-              fellBack.push(inst.path)
-              recorded = inst.component.init(inst.props)
-            } else {
-              if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
-              inst.results = recorded.queries
-            }
-            return {
-              model: recorded!.model,
-              commands: noCommands,
-              events: noCommands
-            }
-          },
-          schedule: (task) => executor.schedule(task),
-          report: (path, where, cause) => {
-            Effect.runForkWith(ctx)(
-              Effect.logError(`${path} failed in ${where}`, cause)
-            )
-          }
-        }
-      )
-      if (broke !== undefined) {
-        close()
-        return Effect.die(broke.error)
-      }
-      const fallbacks = new Set<string>()
-      fallbacksIn(painted.instance, fallbacks)
-      return Effect.as(
-        Scope.addFinalizer(
-          Context.get(ctx, Scope.Scope),
-          Effect.sync(close)
-        ),
-        { fellBack, fallbacks: Array.from(fallbacks) }
-      )
-    }
-  )
+> => paintCore(component, rootProps, container, state, fromRenderer)
+
+/** @internal */
+export const paintDom = (
+  component: Component.Any,
+  rootProps: unknown,
+  container: unknown,
+  state: (path: string) => PaintState | undefined,
+  makeDom: MakeDom,
+  elements: ReadonlyArray<string> | "any"
+): Effect.Effect<
+  {
+    readonly fellBack: ReadonlyArray<string>
+    readonly fallbacks: ReadonlyArray<string>
+  },
+  never,
+  Scope.Scope
+> => paintCore(component, rootProps, container, state, () => fromDom(makeDom, elements))
 
 const fallbacksIn = (inst: Kernel.Instance, out: Set<string>): void => {
   if (!inst.closed && inst.rendered !== undefined) {
