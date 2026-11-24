@@ -10,7 +10,7 @@ import {
   UiSchema,
   View
 } from "@effect/ui"
-import { HtmlCommand } from "@effect/ui/html"
+import { Html, HtmlCommand } from "@effect/ui/html"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -198,6 +198,51 @@ describe("Runtime", () => {
     })))
 
   describe("keyed list", () => {
+    it.effect("tells an element's key from a child's", () =>
+      provideHost(Effect.gen(function*() {
+        const Leaf = Component.define({
+          name: "Leaf",
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Html
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.p("leaf")
+        })
+        // An element and a child with one key, and an unkeyed sibling first, so the list's middle is diffed.
+        const Mixed = Component.define({
+          name: "Mixed",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html
+        }).make({
+          init: () => false,
+          update: (_, flipped) => flipped,
+          view: (h, flipped) =>
+            h.ul(
+              flipped
+                ? [Leaf(h, { key: "x" }), h.li.key("x").children("row")]
+                : [
+                  h.li("first"),
+                  h.li.key("x").children("row"),
+                  Leaf(h, { key: "x" })
+                ]
+            )
+        })
+        const root = yield* TestHost.mount(Mixed, {})
+        const row = root.get(Locator.text("row", { exact: true }))
+        const leaf = root.get(Locator.text("leaf", { exact: true }))
+        root.send(true)
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "leafrow")
+        assert.strictEqual(root.get(Locator.text("row", { exact: true })), row)
+        assert.strictEqual(
+          root.get(Locator.text("leaf", { exact: true })),
+          leaf
+        )
+      })))
+
     it.effect("adds, removes and reorders children, closing the Scopes of the removed ones", () =>
       provideHost(Effect.gen(function*() {
         const root = yield* TestHost.mount(List, { ids: ["a", "b", "c"] })
@@ -804,6 +849,46 @@ describe("Runtime", () => {
   })
 
   describe("failures", () => {
+    it.effect("a view that throws partway closes the children it had started", () =>
+      provideHost(Effect.gen(function*() {
+        const Leaf = Component.define({
+          name: "Leaf",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.text("leaf")
+        })
+        // Its view starts a child, then places a slot, which a root has no content for: placing it throws.
+        const Half = Component.define({
+          name: "Half",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Html,
+          slots: ["body"]
+        }).make({
+          init: () => false,
+          update: (_, broken) => broken,
+          view: (h, broken) =>
+            broken ? h.div(Leaf(h, {}), h.slots.body) : h.p("whole")
+        })
+        const root = yield* TestHost.mount(Half, {})
+        yield* TestHost.settle
+        root.send(true)
+        yield* Effect.exit(TestHost.settle)
+        assert.deepStrictEqual(tags(root, "/Half"), [
+          "Mounted",
+          "Update",
+          "Failed",
+          "Unmounted"
+        ])
+        assert.deepStrictEqual(tags(root, "/Half/Leaf[]"), [
+          "Mounted",
+          "Unmounted"
+        ])
+      })))
+
     const BombMessage = UiSchema.TaggedEnum({ Explode: {} })
     const Bomb = Component.define({
       name: "Bomb",
