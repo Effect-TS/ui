@@ -837,6 +837,9 @@ const loadsOf = (
   out: Array<Load> = []
 ): Array<Load> => {
   if (inst.rendered !== undefined) loadsIn(inst, inst.rendered, out)
+  if (inst.kept !== undefined) {
+    for (const rec of inst.kept.parked()) loadsIn(inst, rec, out)
+  }
   return out
 }
 

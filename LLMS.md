@@ -52,19 +52,30 @@ can't start a save. See **Who owns the state** below.
 
 ### Keep-alive children
 
-A child that the view stops declaring unmounts and loses its Model. Set
-`keepAlive: true` on `Component.define` when the user should find the
-component as they left it after it goes out of view: a tab with a
-half-filled form, a wizard step, a list row that a filter hides. It's
-`false` by default. A headless component can't be kept alive.
+A child that the view stops declaring unmounts and loses its Model. When
+the user should find it as they left it after it goes out of view (a tab
+with a half-filled form, a wizard step, a list row that a filter hides),
+write it inside `h.keepAlive` and call it with the `s` that passes instead
+of `h`. Keeping is decided where the child is written, not where the
+component is defined, so one component can be kept in a tab panel and
+unmount as usual somewhere else.
 
-A view writes keep-alive children inside `h.keepAlive`, calling them with
-the `s` it passes instead of `h`. A keep-alive child belongs to the
-component whose view called `h.keepAlive`, its author, and its path is
-`Name[key]` under the author wherever the view puts it. Moving it to another element, or into
-another child's slot, keeps the instance. Placing one `Name[key]` twice in
-a render fails the author. So do an ordinary child and a keep-alive child
-of the same name and key that resolve to one path.
+Every component called with `s` is kept. Pass `h` to anything in the block
+that should unmount when the view drops it. A headless component, or a
+feature's `render`, takes `s` as it takes `h`, and isn't kept. A helper
+whose parameter is typed `View.Helper` drops the mark that `s` carries, so
+a component it calls with the `s` it's handed is kept, and its key isn't
+checked.
+
+A keep-alive child belongs to the component whose view called
+`h.keepAlive`, its author, and its path is `Name[key]` under the author
+wherever the view puts it. Moving it to another element, or into another
+child's slot, keeps the instance. Placing one `Name[key]` twice in a render
+fails the author. So does one component written with `h` and with `s` at
+one key in one render, or any ordinary child and keep-alive child that
+resolve to one path. A child whose call changes from `h` to `s` between
+renders keeps its instance and is kept from then on. Changed back, it's an
+ordinary child again.
 
 ```ts
 const view = (h: H, model: SettingsModel) =>
@@ -118,8 +129,7 @@ predicate holds. One written into a slot that nothing places, such as a
 closed Collapsible's, or into the slot of a component still waiting for its
 Layer, hasn't started: it runs nothing.
 
-A keep-alive component mounted as the root needs no `h.keepAlive` and
-behaves like any other. Saved state from the server or from a history entry holds the Model
+Saved state from the server or from a history entry holds the Model
 of a child that hasn't started, with everything below it. The state belongs
 to the author it arrived with, the child takes it when it starts, and it's
 dropped when the author ends or the predicate is false as the child is
@@ -132,6 +142,8 @@ Known limits:
 - The guard also fails a predicate that returns from `key` alone, and it
   misses one that reads `$.model` and also the view's `model`.
 - A kept child has stale props and `onEmit`.
+- Written into another child's slot, a child whose call changes between `h`
+  and `s` mounts again.
 - Saved state for a child that hasn't started has no predicate to end it, so
   a later child at that key takes it. That includes a row deleted before its
   child ever started.
@@ -1043,9 +1055,6 @@ Known limits:
 
 - A headless component or a view function can't be loaded lazily. Make a
   page written as a view function a component first.
-- A lazy keep-alive component is written with the `s` of `h.keepAlive`, as the
-  component is, but it's kept only once its module has loaded. A parent that
-  stops writing it while it loads drops its fallback.
 - The server waits for the module and renders the page. The client doesn't
   load the module before it hydrates, so it replaces the server's nodes with
   the fallback, then with the page once the module has loaded.

@@ -1383,7 +1383,6 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         const Counter = Component.define({
           name: "Counter",
-          keepAlive: true,
           model: Schema.Number,
           message: Schema.String
         }).make({
@@ -1397,7 +1396,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         })
         const Outer = Component.define({
           name: "Outer",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never
         })

@@ -338,10 +338,11 @@ export type MountHint =
  * key changes, and the parent's optional `onFailure` is also messaged.
  *
  * A child dropped from the view unmounts, and its Model goes with it. A
- * component defined with `keepAlive: true` is kept instead, so the user finds
- * it as they left it: a hidden tab with a half-filled form, a wizard step, a
- * row a filter hides. It's written inside `h.keepAlive` with the `s` that
- * passes, `h.keepAlive((s) => Profile(s, { key: "profile" }))`, and it
+ * child written inside `h.keepAlive` with the `s` it passes is kept instead,
+ * so the user finds it as they left it: a hidden tab with a half-filled form,
+ * a wizard step, a row a filter hides. Keeping is decided where the child is
+ * written, `h.keepAlive((s) => Profile(s, { key: "profile" }))`, so the same
+ * component can be kept in one view and unmount in another. A kept child
  * belongs to the component whose view called `h.keepAlive`, its author. Its
  * path is `Name[key]` under the author wherever the view puts it, so moving
  * it to another element or into another child's slot keeps the instance.
@@ -381,6 +382,13 @@ export type MountHint =
  * `onEmit` it has are those of the last render that placed it: write it
  * inside a `hidden` element instead when it needs fresh ones.
  *
+ * Every component called with `s` is kept, so a child of an `h.keepAlive`
+ * block that should unmount is called with `h`. A child whose call changes
+ * from `h` to `s` from one render to the next keeps its instance, and is
+ * kept from then on. Changed back, it's an ordinary child again. One
+ * component written with `h` and with `s` at one key in one render is one
+ * path claimed twice, which fails the author.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -413,8 +421,8 @@ export interface Child<out Msg, out R = never> {
   /** What the parent passed for each of the child's slots. */
   readonly slots: Readonly<Record<string, Input<any, any>>> | undefined
   /**
-   * Set when the child is a keep-alive component written with the `s` of
-   * `h.keepAlive`: the block's predicate, or `true` for a block without one.
+   * Set when the child is written with the `s` of `h.keepAlive`: the block's
+   * predicate, or `true` for a block without one.
    */
   readonly alive?: ((input: any) => boolean) | true | undefined
   /** The headless instance that declared the child with `p.child`, which takes its events and failures. */
@@ -485,17 +493,19 @@ export declare namespace Child {
     : never
 
   /**
-   * The options of a keep-alive child: `Options`, with the key checked
-   * against the `h.keepAlive` block. `K` is the key as written, and `Ends`
-   * is `true` in a block with a predicate. Without one, the key's type must be
-   * a literal, so the source fixes how many children the block can keep.
+   * The options a component call takes: `Options`, with the key checked
+   * against the `h.keepAlive` block when the call is given its `s`. `K` is
+   * the key as written, and `Ends` is `true` in a block with a predicate,
+   * and `never` for a call given `h`. In a block without a predicate, the
+   * key's type must be a literal, so the source fixes how many children the
+   * block can keep.
    *
    * @category models
    * @since 0.1.0
    */
   export type KeepAliveOptions<Props, Events, Msg, K, Ends extends boolean> =
     & {
-      /** The child's identity among the keep-alive children of one component. The empty string by default. */
+      /** The child's identity among its parent's children of one component, or a kept child's among its author's. The empty string by default. */
       readonly key?: KeepAliveKey<K, Ends> | undefined
       /**
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
@@ -533,12 +543,19 @@ export type KeepAliveKeyHint =
 
 /**
  * `s`, what `h.keepAlive` gives its content: `h`, marked as written in an
- * `h.keepAlive` block. A keep-alive component is called with it, and any
- * other component takes it as it takes `h`. `Ends` is `true` in a block
- * with a predicate. A function that takes `s` types it
+ * `h.keepAlive` block. A component called with it is kept alive. `Ends` is
+ * `true` in a block with a predicate. A function that takes `s` types it
  * `KeepAlive<Msg, true>` to write children whose keys aren't literals,
  * `KeepAlive<Msg, false>` for a block without a predicate, or
  * `KeepAlive<Msg>` for either, where keys must be literals.
+ *
+ * **Gotchas**
+ *
+ * Every component called with `s` is kept, so pass `h` to any child in the
+ * block that shouldn't be. A headless component, or a feature's `render`,
+ * takes `s` as it takes `h`, and its child isn't kept. A function whose
+ * parameter is typed `View.Helper` drops the brand: a component it calls with
+ * the `s` it's handed is kept, with no check on its key.
  *
  * @stability experimental
  * @category models
@@ -547,8 +564,8 @@ export type KeepAliveKeyHint =
 export interface KeepAlive<Msg, out Ends extends boolean = boolean>
   extends HelperBase<Msg, unknown>
 {
-  /** Phantom: the brand only `h.keepAlive` gives. Its name is the error a keep-alive component called with `h` shows. */
-  readonly "written inside h.keepAlive((s) => ...)": Ends
+  /** Phantom: the brand only `h.keepAlive` gives. */
+  readonly "~keepAlive": Ends
 }
 
 type EventTag<Events> = Events extends { readonly _tag: infer T extends string }

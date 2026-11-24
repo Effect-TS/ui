@@ -21,7 +21,7 @@ The script exits non-zero when a keep-alive shape goes over its ceiling.
 
 ## Fixtures
 
-The fixtures are written to `tmp`. Each shape is written twice: with children written with `h`, as on `main`, and as keep-alive components written with the `s` of `h.keepAlive`.
+The fixtures are written to `tmp`. `owner` and `deep` are written twice: with children written with `h`, as on `main`, and with children written with the `s` of `h.keepAlive`.
 
 | Shape    | What it is                                                                                                                                                                                                                                                                                      |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

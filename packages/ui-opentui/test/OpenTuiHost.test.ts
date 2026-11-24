@@ -331,8 +331,7 @@ describe("OpenTuiHost", () => {
         name: "Tab",
         model: Schema.Number,
         message: TabMsg,
-        elements: OpenTui,
-        keepAlive: true
+        elements: OpenTui
       }).make({
         init: () => 0,
         update: { Incremented: ($) => $.model + 1 },

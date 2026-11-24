@@ -32,7 +32,6 @@ const Avatar = Component.define({
 
 const Badge = Component.define({
   name: "Badge",
-  keepAlive: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -57,7 +56,6 @@ const Broken = Component.define({
 
 const Pin = Component.define({
   name: "Pin",
-  keepAlive: true,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
@@ -66,7 +64,6 @@ const Pin = Component.define({
 
 const Profile = Component.define({
   name: "Profile",
-  keepAlive: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -112,7 +109,6 @@ const Settings = Component.define({
 
 const Sketch = Component.define({
   name: "Sketch",
-  keepAlive: true,
   model: Schema.declare((u): u is () => string => typeof u === "function"),
   message: Schema.Never,
   elements: Html
@@ -199,7 +195,6 @@ const Note = Component.define({
   })
 const Leaf = Component.define({
   name: "Leaf",
-  keepAlive: true,
   model: Schema.String,
   message: Schema.Never,
   elements: Html
@@ -399,7 +394,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   const Field = Component.define({
     name: "Field",
-    keepAlive: true,
     model: Schema.String,
     message: Schema.String,
     elements: Html
@@ -469,7 +463,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   const Note = Component.define({
     name: "Note",
-    keepAlive: true,
     model: Schema.String,
     message: Schema.String,
     elements: Html
@@ -497,7 +490,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     )
   const Row = Component.define({
     name: "Row",
-    keepAlive: true,
     model: Schema.String,
     message: Schema.Never,
     elements: Html
@@ -512,7 +504,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   const draft = (name: string) =>
     Component.define({
       name,
-      keepAlive: true,
       model: Schema.String,
       message: Schema.Never,
       elements: Html
@@ -750,7 +741,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
 
   const Item = Component.define({
     name: "Item",
-    keepAlive: true,
     props: Schema.Struct({ n: Schema.Number }),
     model: Schema.Null,
     message: Schema.Never,
@@ -765,7 +755,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
     Effect.gen(function*() {
       const Card = Component.define({
         name: "Card",
-        keepAlive: true,
         model: Schema.Null,
         message: Schema.Never,
         elements: Html
@@ -870,7 +859,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       Effect.gen(function*() {
         const Waits = Component.define({
           name: "Waits",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -885,7 +873,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           )))
         const Shell = Component.define({
           name: "Shell",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html,
@@ -1015,7 +1002,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         })
         const Dot = Component.define({
           name: "Dot",
-          keepAlive: true,
           model: Schema.String,
           message: Schema.Never,
           elements: Html
@@ -1040,7 +1026,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         })
         const Card = Component.define({
           name: "Card",
-          keepAlive: true,
           model: stored(card),
           message: Schema.Never,
           elements: Html
@@ -1089,7 +1074,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       let decoding = 0
       const Slowly = Component.define({
         name: "Slowly",
-        keepAlive: true,
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.acquireUseRelease(
@@ -1199,7 +1183,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   const decoded: Array<string> = []
   const Labelled = Component.define({
     name: "Labelled",
-    keepAlive: true,
     props: Schema.Struct({ label: Schema.String }),
     model: Schema.String.pipe(Schema.decode({
       decode: SchemaGetter.transform((label: string) => {
@@ -1479,7 +1462,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
       let inits = 0
       const Late = Component.define({
         name: "Late",
-        keepAlive: true,
         model: Schema.String.pipe(Schema.decode({
           decode: SchemaGetter.transformEffect((text: string) =>
             Effect.as(Deferred.await(decoding), text)
@@ -1613,7 +1595,6 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         }).pipe(slow)
         const Outer = Component.define({
           name: "Outer",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -1665,7 +1646,6 @@ describe("keep-alive children of a headless child", () => {
       Effect.gen(function*() {
         const Editor = Component.define({
           name: "Editor",
-          keepAlive: true,
           model: Schema.Null,
           message: Schema.Never,
           elements: Html
@@ -1745,7 +1725,6 @@ describe("keep-alive children of a headless child", () => {
           )
         const Item = Component.define({
           name: "Item",
-          keepAlive: true,
           props: Schema.Struct({ n: Schema.Number }),
           model: Schema.Null,
           message: Schema.Never,
@@ -1821,7 +1800,6 @@ const Late = Schema.String.pipe(Schema.decode({
 }))
 const LateDraft = Component.define({
   name: "LateDraft",
-  keepAlive: true,
   model: Late,
   message: Schema.String,
   elements: Html

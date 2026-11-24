@@ -20,8 +20,7 @@ describe("OpenTui vocabulary types", () => {
       name: "Kept",
       model: Schema.Void,
       message: Schema.Never,
-      elements: OpenTui,
-      keepAlive: true
+      elements: OpenTui
     }).make({
       init: () => undefined,
       update: () => undefined,

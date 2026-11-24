@@ -79,20 +79,27 @@ export const checkContent = (
   checkContentPaths(path, views)
 }
 
-export const checkShown = (path: string, recs: ReadonlyArray<Rec>): void => {
+export const checkShown = (
+  path: string,
+  recs: ReadonlyArray<Rec>,
+  content?: boolean
+): void => {
   const paths = checkContentPaths(path, recs.map((rec) => rec.v))
-  for (let index = 0; index < recs.length; index++) shownIn(paths, recs[index]!)
+  for (let index = 0; index < recs.length; index++) {
+    shownIn(paths, recs[index]!, content === true)
+  }
 }
 
-const shownIn = (paths: ChildPaths, rec: Rec): void => {
+const shownIn = (paths: ChildPaths, rec: Rec, content: boolean): void => {
   const view = rec.v
   const kids = rec.kids
   if (kids === undefined || view._tag === "Outlet") return
   if (view._tag === "Child") {
+    if (content && view.alive !== undefined) return
     checkFallbackPaths(paths, view, kids[0]!.v)
-    shownIn(paths, kids[0]!)
+    shownIn(paths, kids[0]!, content)
   } else {for (let index = 0; index < kids.length; index++) {
-      shownIn(paths, kids[index]!)
+      shownIn(paths, kids[index]!, content)
     }}
 }
 

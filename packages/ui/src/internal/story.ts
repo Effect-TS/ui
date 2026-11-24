@@ -2459,7 +2459,7 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
 export const findChild = (
   view: View.Node<any, any>,
   component:
-    | Component.AnyRoot
+    | Component.Any
     | Component.Headless.Any
     | Component.Lazy.Any
     | Feature.Any,

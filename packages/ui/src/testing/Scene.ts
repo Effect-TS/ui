@@ -250,7 +250,7 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
    */
   childEmit<
     Child extends
-      | Component.AnyRoot
+      | Component.Any
       | Component.Headless.Any
       | Component.Lazy.Any
       | Feature.Any
@@ -264,7 +264,7 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
    */
   childEmit<
     Child extends
-      | Component.AnyRoot
+      | Component.Any
       | Component.Headless.Any
       | Component.Lazy.Any
       | Feature.Any
@@ -578,7 +578,7 @@ export const fallback: {
 } = <Msg>(
   view: View.Node<Msg, any>,
   component:
-    | Component.AnyRoot
+    | Component.Any
     | Component.Headless.Any
     | Component.Lazy.Any
     | Feature.Any,
