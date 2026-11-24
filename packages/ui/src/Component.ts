@@ -3190,7 +3190,6 @@ export const define = <
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
-  // `false` when `keepAlive` is left out, as at runtime.
   Ka extends boolean = false
 >(
   options: {
@@ -3342,7 +3341,6 @@ export const define = <
   >,
   SV,
   Rp,
-  // `NoInfer`, so an annotation on the result, such as `{ keepAlive: true }`, can't decide it.
   NoInfer<Ka>
 > => {
   const shares = options.shares

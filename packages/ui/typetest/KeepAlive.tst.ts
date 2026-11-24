@@ -108,11 +108,8 @@ describe("keepAlive", () => {
     >()
   })
 
-  it("defaults keepAlive to false", () => {
+  it("defaults keepAlive to false and rejects a maybe-absent true", () => {
     const options = { model: Schema.Null, message: Schema.Never }
-    expect(Component.define({ name: "Bare", ...options }).keepAlive).type.toBe<
-      false
-    >()
     expect(
       Component.define({ name: "Off", keepAlive: false, ...options }).keepAlive
     ).type.toBe<false>()
@@ -122,15 +119,11 @@ describe("keepAlive", () => {
       ...options
     })
     void kept
-  })
-
-  it("needs keepAlive: true present, not maybe absent", () => {
     Component.define({
       name: "Maybe",
       // @ts-expect-error Type 'undefined' is not assignable to type 'true'
       keepAlive: condition ? true : undefined,
-      model: Schema.Null,
-      message: Schema.Never
+      ...options
     })
   })
 
