@@ -103,7 +103,9 @@ export const snapshot = (
         ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
         : undefined,
       status: component.layer === undefined ? undefined : statusOf(inst.env),
+      // A kept child has its markers, which say where the server drew it.
       bare: inst.parent !== undefined && component.layer === undefined &&
+        (inst.at!.v as View.Child<any, any>).alive === undefined &&
         rendered?.v._tag === "Element",
       kids: inst.failure === undefined && rendered !== undefined
         ? [rec(inst, rendered, inst.path)]

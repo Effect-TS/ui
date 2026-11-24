@@ -240,6 +240,8 @@ const between = (
   // The element a child the server rendered without markers starts at: it's that child's, matched or not.
   let bare: Node | undefined
   const missed = new WeakSet<Node>()
+  // What the client made here: inserted among the server's nodes, it's none of theirs.
+  const ours = new WeakSet<Node>()
 
   const scopeOf = (node: Node): Node => {
     const list = node.parentNode!
@@ -269,6 +271,8 @@ const between = (
         return null
       } else if (at.nodeType === COMMENT) {
         pass(at)
+        at = at.nextSibling
+      } else if (ours.has(at)) {
         at = at.nextSibling
       } else {
         return at
@@ -380,10 +384,11 @@ const between = (
         node.nodeType === ELEMENT && (node as Element).localName === tag
       )
       if (node === null) {
-        const made = base.createElement(tag)
-        fresh.add(made)
+        const element = base.createElement(tag)
+        fresh.add(element)
+        ours.add(element)
         freshDepth++
-        return made
+        return element
       }
       written.set(node, new Set())
       edits.take(node)
@@ -395,13 +400,18 @@ const between = (
       if (text === "" && holding !== undefined) {
         const node = base.createText(text)
         holds.set(node, holding)
+        ours.add(node)
         holding = undefined
         return node
       }
       if (bare !== undefined && next() === bare) drop(bare)
       bare = undefined
       const node = text === "" ? null : take(isText) as Text | null
-      if (node === null) return base.createText(text)
+      if (node === null) {
+        const fresh = base.createText(text)
+        ours.add(fresh)
+        return fresh
+      }
       const data = node.data
       if (data !== text) {
         if (data.startsWith(text)) node.splitText(text.length)
@@ -482,6 +492,14 @@ const between = (
       const scope = scopeOf(node)
       if (!served) missed.add(scope)
       else if (!missed.has(scope)) bare = node
+    },
+    has(path) {
+      for (
+        let node = freshDepth > 0 ? null : at;
+        node !== null && node !== end && node.nodeType === COMMENT;
+        node = node.nextSibling
+      ) if (isOpen(node, path)) return true
+      return false
     },
     hold(path) {
       holding = undefined

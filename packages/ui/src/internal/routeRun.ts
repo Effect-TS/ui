@@ -372,7 +372,8 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     const view = rec.v as View.Child<any, any>
     const component = view.component as unknown as Component.Any
     if (component.definition?.restore === false) return false
-    const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
+    const path = (view.alive === undefined && at || owner.path) + "/" +
+      segmentOf(view.component, view.key)
     // Where it restores from, as `init` finds it: a kept child's notes, those of a kept child above, or
     // the entry.
     let own: Saved | undefined

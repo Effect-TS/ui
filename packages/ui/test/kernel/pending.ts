@@ -92,21 +92,7 @@ export const pending: {
   "html/KeepAlive.test.ts": {
     "keep-alive children in a receiver that waits for its Layer > don't start when their author last wrote them out of a headless child's view, as the receiver resumes":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > don't start when their author last wrote them out of a slot nobody places, as the receiver resumes":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > take the server's Model and new nodes when moved out of the receiver while it waits":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
     "keep-alive children in a receiver that waits for its Layer > that wait for their own Layer in the slot keep the server's Model when next placed in the aside":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > leave the one field drawn after them, which takes an edit once, when moved out of the slot":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > stop decoding their state when they're no longer written as it decodes":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > start with the props their author last wrote them with, when the receiver resumes (drawn by the server: true)":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > start with the key their author last wrote them with, when the receiver resumes (drawn by the server: true)":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > are built where the client last drew them, when their state decodes after the receiver resumes":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it"
   },
   "Router.test.ts": {

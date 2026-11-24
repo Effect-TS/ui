@@ -18,6 +18,8 @@ export interface Adopting<N = any> {
   readonly hold: (path: string) => void
   /** A child starts at `path`: `served` when the server's state has it. */
   readonly child: (path: string, served: boolean) => void
+  /** Whether the server drew the kept child at `path` here. */
+  readonly has: (path: string) => boolean
   readonly done: () => void
 }
 
@@ -122,7 +124,12 @@ export const make = (
     decoded.set(root[0], Exit.isSuccess(root[1]) ? root[1].value : undefined)
   }
   const resumed = new WeakSet<Kernel.Rec>()
+  // The instances that adopt the server's nodes, by path, as receivers of the slots kept children are
+  // drawn in.
+  const started = new Map<string, Kernel.Instance>()
   const held = new Map<Kernel.Rec, string>()
+  // How each held child stops waiting once it's no longer drawn, by its owner.
+  const drops = new Map<Kernel.Rec, readonly [Kernel.Instance, () => void]>()
   // Owners that adopted what their reports sent on the server, compared once nothing below waits to adopt.
   const owners: Array<Kernel.Instance> = []
   // The state each instance that started from the server's without its nodes gives its children: a kept
@@ -130,11 +137,15 @@ export const make = (
   const supplies = new WeakMap<Kernel.Instance, Saved>()
   const claimed = new Set<string>()
   const parked = new Set<Kernel.Instance>()
-  const supplyOf = (inst: Kernel.Instance): Saved | undefined => {
-    const parent = inst.parent!
+  // What each child that starts from a supply was given, by path, from its hold to its init.
+  const given = new Map<string, Saved>()
+  const supplyOf = (
+    parent: Kernel.Instance,
+    path: string,
+    kept: boolean
+  ): Saved | undefined => {
     const from = supplies.get(parent)
-    const path = inst.path
-    if ((inst.at!.v as View.Child<any, any>).alive === undefined) return from
+    if (!kept) return from
     if (claimed.has(path)) return undefined
     claimed.add(path)
     const base = from ?? (adopting.has(parent) ? state as Saved : undefined)
@@ -187,40 +198,64 @@ export const make = (
   const finish = () => {
     if (pass || held.size > 0) return
     for (const owner of owners.splice(0)) restored(owner)
+    started.clear()
     settled()
   }
   // A child the server's state doesn't have is held as history restore holds it.
   const fallback = host.hold
   ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
-    const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
+    // A kept child's path is under its author's, wherever it's drawn.
+    const path = (view.alive === undefined && at || owner.path) + "/" +
+      segmentOf(view.component, view.key)
     if (resumed.delete(rec)) return false
     const served = serves(owner, path)
     if (view.alive === undefined) active?.child(path, served)
-    if (!served) return fallback?.(owner, rec, at) === true
-    const exit = decode(view.component as never, state[path])
-    if (Exit.isExit(exit)) {
+    // One that starts from what its parent was given decodes it as one the server drew decodes its own.
+    const from = served
+      ? state as Saved
+      : supplyOf(owner, path, view.alive !== undefined)
+    if (from?.[path] === undefined) return fallback?.(owner, rec, at) === true
+    // A kept child drawn in the slot of a receiver whose Layer builds starts once it has, with what its
+    // author last wrote: until then it holds the server's nodes, and its state isn't decoded.
+    const receiver = view.alive === undefined || at === undefined
+      ? undefined
+      : started.get(at.slice(0, at.lastIndexOf("/")))
+    const env = receiver?.env
+    const behind = env !== undefined && env.ctx === undefined &&
+      env.cause === undefined
+    // One the server drew elsewhere starts once the pass ends, from its state, with nodes of its own.
+    const away = served && view.alive !== undefined &&
+      active?.has(path) === false
+    const exit = behind
+      ? undefined
+      : decode(view.component as never, from[path])
+    if (exit !== undefined && Exit.isExit(exit) && !away) {
+      if (!served && Exit.isFailure(exit)) {
+        return fallback?.(owner, rec, at) === true
+      }
+      if (!served) given.set(path, from)
       decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
       return false
     }
-    active?.hold(path)
+    if (served && !away) active?.hold(path)
     held.set(rec, path)
     // Until it starts, history saves the server's state for it.
     const unwait = waits?.(owner, rec, path, {
-      state: state[path],
-      reported: state["~reported"]?.[path]
+      state: from[path],
+      reported: from["~reported"]?.[path]
     })
-    exit.addObserver((exit) => {
+    const go = (exit: Exit.Exit<Decoded, unknown>) => {
       const tree = owner.tree
+      drops.delete(rec)
       tree.schedule(() => {
         unwait?.()
-        held.delete(rec)
-        const placeholder = rec.inst === owner && rec.kids !== undefined
-          ? rec.kids[0]!.node
-          : undefined
+        // One no longer drawn leaves the server's nodes it held.
+        const placeholder = rec.kids?.[0]!.node
         const range = adoption?.resume(placeholder)
-        if (placeholder !== undefined && !owner.closed && !tree.closed) {
+        if (rec.inst === owner && !owner.closed && !tree.closed) {
           decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
+          if (!served) given.set(path, from)
           resumed.add(rec)
           const outer = active
           active = range
@@ -233,13 +268,35 @@ export const make = (
             active = outer
             use(host, outer?.host ?? base)
             decoded.delete(path)
+            given.delete(path)
           }
         }
         range?.done()
         Kernel.flush(tree)
+        // Only now, as what settling draws can ask whether adoption has.
+        held.delete(rec)
         finish()
       })
-    })
+    }
+    if (exit !== undefined && Exit.isExit(exit)) go(exit)
+    else if (exit !== undefined) {
+      exit.addObserver(go)
+      drops.set(rec, [owner, () => exit.interruptUnsafe()])
+    } else {
+      let waiting = true
+      const wake = () => {
+        if (!waiting) return
+        waiting = false
+        // One no longer drawn, or in a receiver that closed, isn't decoded.
+        if (rec.inst !== owner || receiver!.closed) return go(Exit.interrupt())
+        const exit = decode(view.component as never, from[path])
+        if (Exit.isExit(exit)) go(exit)
+        else exit.addObserver(go)
+      }
+      env!.waiting.push(wake)
+      ;(receiver!.closers ??= []).push(wake)
+      drops.set(rec, [owner, wake])
+    }
     return true
   }
   return {
@@ -253,6 +310,13 @@ export const make = (
           ended?.(author, at)
           claimed.add(at)
         }
+        const work = tree.work
+        tree.work = (idle) => {
+          for (const [rec, [owner, drop]] of drops) {
+            if (rec.inst !== owner) drop()
+          }
+          return work?.(idle) === true
+        }
         const drawn = tree.drawn
         tree.drawn = (kept, on) => {
           drawn?.(kept, on)
@@ -263,14 +327,15 @@ export const make = (
       }
       let got: Decoded | undefined
       if (!serves(inst.parent, path)) {
-        const from = inst.parent === undefined ? undefined : supplyOf(inst)
-        if (from?.[path] === undefined) return undefined
-        const exit = decode(inst.component, from[path])
-        if (!Exit.isExit(exit) || Exit.isFailure(exit)) return undefined
+        const from = given.get(path)
+        got = decoded.get(path)
+        given.delete(path)
+        decoded.delete(path)
+        if (from === undefined || got === undefined) return undefined
         supplies.set(inst, from)
-        inst.results = exit.value.results
+        inst.results = got.results
         return {
-          model: exit.value.model,
+          model: got.model,
           commands: first.commands,
           events: noEvents,
           lists: first.lists,
@@ -291,6 +356,7 @@ export const make = (
       }
       if (got === undefined) return undefined
       adopting.add(inst)
+      started.set(path, inst)
       inst.results = got.results
       const owning = reportedOf(
         inst.component as unknown as Component.Any,
