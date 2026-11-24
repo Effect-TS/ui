@@ -51,7 +51,8 @@ export type ToServer = typeof ToServer.Type
 export const Outcome = Schema.Union([
   Schema.TaggedStruct("Updated", { seq: Schema.Number }),
   Schema.TaggedStruct("Failed", { seq: Schema.Number }),
-  Schema.TaggedStruct("Ignored", { reason: Schema.String })
+  Schema.TaggedStruct("Ignored", { reason: Schema.String }),
+  Schema.TaggedStruct("Unknown", {})
 ])
 
 export type Outcome = typeof Outcome.Type

@@ -85,8 +85,6 @@ export const connect = (
   url: string,
   controller: Controller
 ): Effect.Effect<void, never, Scope.Scope | Socket.WebSocketConstructor> => {
-  let dispatch = false
-
   const target = (session: string, instance: number) =>
     Effect.suspend(() => {
       const root = controller.roots.get(session)
@@ -101,7 +99,10 @@ export const connect = (
         : Effect.succeed(found)
     })
 
-  const handle = (request: Control.Request): Effect.Effect<Json, string> => {
+  const handle = (
+    request: Control.Request,
+    dispatch: boolean
+  ): Effect.Effect<Json, string> => {
     switch (request._tag) {
       case "Show":
         return Effect.suspend(() => {
@@ -155,10 +156,7 @@ export const connect = (
             const outcome = yield* found.dispatch(message).pipe(
               Effect.timeoutOrElse({
                 duration: "5 seconds",
-                orElse: () =>
-                  Effect.succeed(
-                    { _tag: "Ignored", reason: "timeout" } as const
-                  )
+                orElse: () => Effect.succeed({ _tag: "Unknown" } as const)
               })
             )
             outcomes.push(outcome)
@@ -174,6 +172,7 @@ export const connect = (
   }
 
   const connection = Effect.gen(function*() {
+    let dispatch = false
     const socket = yield* Socket.makeWebSocket(url)
     const writer = yield* socket.writer
     const pull = yield* Socket.readerString(socket)
@@ -203,7 +202,7 @@ export const connect = (
             dispatch = message.dispatch
             return Effect.void
           }
-          return handle(message.request).pipe(
+          return handle(message.request, dispatch).pipe(
             Effect.matchEffect({
               onSuccess: (value) =>
                 send({ _tag: "Reply", id: message.id, ok: true, value }),

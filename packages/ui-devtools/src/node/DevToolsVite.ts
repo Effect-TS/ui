@@ -43,7 +43,7 @@ export interface Plugin {
     env: { readonly command: string; readonly isPreview?: boolean }
   ) => boolean
   readonly configureServer: (server: DevServer) => void
-  readonly transformIndexHtml: () => ReadonlyArray<HtmlTag>
+  readonly transformIndexHtml: () => Promise<ReadonlyArray<HtmlTag>>
 }
 
 /**
@@ -94,7 +94,8 @@ const reasonOf = (error: unknown): string =>
  * Vite serves, and `DevTools.layer` reads it, so the page sends its frames
  * there and takes the server's requests. Without `DevTools.layer` on the
  * page the plugin does nothing more. When the port is taken the plugin
- * warns and `vite dev` runs on without the server.
+ * warns, adds no tag, and `vite dev` runs on without the server, so a page
+ * never connects to a server another project started.
  *
  * @stability experimental
  * @category constructors
@@ -103,6 +104,7 @@ const reasonOf = (error: unknown): string =>
 export const plugin = (options?: DevToolsServer.Options): Plugin => {
   const url = DevToolsServer.url(options)
   const size = Math.max(1, options?.size ?? 1_000)
+  let bound = Promise.resolve(false)
   return {
     name: "effect-ui-devtools",
     apply: (_, env) =>
@@ -110,24 +112,25 @@ export const plugin = (options?: DevToolsServer.Options): Plugin => {
       !("VITEST" in process.env),
     configureServer: (server) => {
       const { logger } = server.config
+      let settle: (ok: boolean) => void = () => {}
+      bound = new Promise((resolve) => settle = resolve)
       const fiber = Layer.build(DevToolsServer.layer(options)).pipe(
-        Effect.andThen(
-          Effect.sync(() =>
-            logger.info("Effect UI DevTools MCP server: " + url + "/mcp")
-          )
-        ),
+        Effect.andThen(Effect.sync(() => {
+          settle(true)
+          logger.info("Effect UI DevTools MCP server: " + url + "/mcp")
+        })),
         Effect.andThen(Effect.never),
         Effect.scoped,
         Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause) ?
-            Effect.void :
-            Effect.sync(() =>
-              logger.warn(
-                "Effect UI DevTools could not start on " + url + ": " +
-                  reasonOf(Cause.squash(cause)) +
-                  ". Give DevToolsVite.plugin another port."
-              )
+          Effect.sync(() => {
+            settle(false)
+            if (Cause.hasInterruptsOnly(cause)) return
+            logger.warn(
+              "Effect UI DevTools could not start on " + url + ": " +
+                reasonOf(Cause.squash(cause)) +
+                ". Give DevToolsVite.plugin another port."
             )
+          })
         ),
         Effect.runFork
       )
@@ -135,10 +138,13 @@ export const plugin = (options?: DevToolsServer.Options): Plugin => {
         Effect.runFork(Fiber.interrupt(fiber))
       })
     },
-    transformIndexHtml: () => [{
-      tag: "meta",
-      attrs: { name: metaName, content: JSON.stringify({ url, size }) },
-      injectTo: "head"
-    }]
+    transformIndexHtml: async () =>
+      (await bound)
+        ? [{
+          tag: "meta",
+          attrs: { name: metaName, content: JSON.stringify({ url, size }) },
+          injectTo: "head"
+        }]
+        : []
   }
 }

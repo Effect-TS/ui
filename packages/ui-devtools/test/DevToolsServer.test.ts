@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { DevTools } from "@effect/ui-devtools"
-import { DevToolsServer } from "@effect/ui-devtools/node"
+import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
@@ -508,6 +508,141 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.strictEqual(sessions.length, 1)
         assert.notStrictEqual(sessions[0].session, closed.session)
       }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "keeps a truncated query map opaque when a query changes",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve({ port: 47747, size: 3 })
+        const socket = new WebSocket(url.replace("http", "ws") + "/log")
+        yield* Effect.callback<void>((resume) =>
+          socket.addEventListener("open", () => resume(Effect.void))
+        )
+        const base = { session: "s", at: 0 }
+        const at = { ...base, path: "/App", instance: 1, component: "App" }
+        const frames = [
+          { _tag: "Hello", version: 1, host: "test" },
+          { _tag: "SessionStarted", ...base, seq: 0, app: "App" },
+          {
+            _tag: "Mounted",
+            ...at,
+            seq: 1,
+            props: {},
+            model: 0,
+            queries: { "~truncated": 9000 },
+            commands: [],
+            events: [],
+            adopted: false
+          },
+          { _tag: "QueryChanged", ...at, seq: 2, name: "todos", result: [1] },
+          { _tag: "PropsChanged", ...at, seq: 3, props: { a: 1 } },
+          { _tag: "PropsChanged", ...at, seq: 4, props: { a: 2 } },
+          { _tag: "PropsChanged", ...at, seq: 5, props: { a: 3 } }
+        ]
+        for (const frame of frames) socket.send(JSON.stringify(frame))
+        yield* wait(100)
+        const state = yield* ask(agent, "get_state", {
+          session: "s",
+          instance: 1
+        })
+        assert.deepStrictEqual(state.queries, { "~truncated": 9000 })
+        assert.deepStrictEqual(state.props, { a: 3 })
+        socket.close()
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "scrubs the root an agent paused when the page has two",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve({ port: 47748 })
+        localStorage.clear()
+        const services = yield* Layer.build(DevTools.layer({ server: url }))
+        const older = yield* play("open").pipe(Effect.provide(services))
+        const newer = yield* play("open").pipe(Effect.provide(services))
+        yield* wait(150)
+        const [first] = yield* ask(agent, "list_sessions")
+        const { rows } = yield* ask(agent, "list_entries", {
+          session: first.session,
+          tag: "ClickedSave"
+        })
+        yield* ask(agent, "show_entry", {
+          session: first.session,
+          seq: rows[0].seq
+        })
+        assert.strictEqual(older.style.display, "none")
+
+        const root = overlay()
+        HtmlLocator.click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Open the Effect UI inspector"
+          })
+        )
+        yield* wait(20)
+        const slider = root.querySelector<HTMLInputElement>(
+          "input[type=range]"
+        )!
+        assert.strictEqual(
+          slider.getAttribute("aria-valuetext"),
+          "#" + rows[0].seq
+        )
+        slider.value = "0"
+        slider.dispatchEvent(new Event("input", { bubbles: true }))
+        yield* wait(50)
+        const sessions: ReadonlyArray<any> = yield* ask(agent, "list_sessions")
+        const paused = sessions.find((session) =>
+          session.session === first.session
+        ).paused
+        assert.isBelow(paused, rows[0].seq)
+        assert.strictEqual(older.style.display, "none")
+        assert.notStrictEqual(newer.style.display, "none")
+        assert.strictEqual(document.querySelectorAll("[inert]").length, 1)
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "adds no meta tag when the plugin's port is taken",
+    () =>
+      Effect.gen(function*() {
+        yield* serve({ port: 47749 })
+        const start = (port: number) => {
+          let close = () => {}
+          const warnings: Array<string> = []
+          const plugin = DevToolsVite.plugin({ port })
+          plugin.configureServer({
+            config: {
+              logger: {
+                info: () => {},
+                warn: (message) => warnings.push(message)
+              }
+            },
+            httpServer: { once: (_, listener) => close = listener }
+          })
+          return { plugin, warnings, close: () => close() }
+        }
+        const taken = start(47749)
+        assert.deepStrictEqual(
+          yield* Effect.promise(() => taken.plugin.transformIndexHtml()),
+          []
+        )
+        assert.match(
+          taken.warnings[0]!,
+          /could not start on http:\/\/127\.0\.0\.1:47749/
+        )
+        const free = start(47750)
+        const tags = yield* Effect.promise(() =>
+          free.plugin.transformIndexHtml()
+        )
+        assert.strictEqual(
+          JSON.parse(tags[0]!.attrs.content!).url,
+          "http://127.0.0.1:47750"
+        )
+        free.close()
+      }),
     30_000
   )
 })

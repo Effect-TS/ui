@@ -73,8 +73,6 @@ export const defaultPort = 4774
 export interface Options {
   /** The port, `defaultPort` by default. */
   readonly port?: number | undefined
-  /** The interface to listen on, `127.0.0.1` by default. */
-  readonly host?: string | undefined
   /**
    * The entries kept per session, 1,000 by default. Give pages the same
    * `size` in `DevTools.layer`, or `show_entry` lists entries a page can no
@@ -91,10 +89,11 @@ export interface Options {
 }
 
 /**
- * Serves `/mcp`, `/log` and `/control` on `host` and `port`.
+ * Serves `/mcp`, `/log` and `/control` on `127.0.0.1` at `port`.
  *
  * **Details**
  *
+ * It listens on loopback only, and has no option to listen elsewhere.
  * `/mcp` rejects requests that carry an `Origin` header, and the WebSocket
  * routes accept only loopback origins, so a web page cannot reach the tools
  * or pose as an app. There is no token: any local user can connect, as they
@@ -124,7 +123,7 @@ export const layer = (
       Layer.provide(
         NodeHttpServer.layer(createServer, {
           port: options?.port ?? defaultPort,
-          host: options?.host ?? "127.0.0.1"
+          host: "127.0.0.1"
         })
       )
     )
@@ -138,8 +137,5 @@ export const layer = (
  * @category constructors
  * @since 0.1.0
  */
-export const url = (options?: Pick<Options, "host" | "port">): string => {
-  const host = options?.host ?? "127.0.0.1"
-  return "http://" + (host.includes(":") ? "[" + host + "]" : host) + ":" +
-    (options?.port ?? defaultPort)
-}
+export const url = (options?: Pick<Options, "port">): string =>
+  "http://127.0.0.1:" + (options?.port ?? defaultPort)

@@ -6,7 +6,7 @@ import { parseArgs } from "node:util"
 import * as DevToolsServer from "../DevToolsServer.ts"
 
 const usage =
-  `Usage: effect-ui-devtools [--port <n>] [--host <host>] [--size <n>] [--keep <n>] [--dispatch]
+  `Usage: effect-ui-devtools [--port <n>] [--size <n>] [--keep <n>] [--dispatch]
 
 Runs the Effect UI DevTools MCP server. Pages connect with
 DevTools.layer({ server: "<url>" }), agents with <url>/mcp.`
@@ -14,7 +14,6 @@ DevTools.layer({ server: "<url>" }), agents with <url>/mcp.`
 const { values } = parseArgs({
   options: {
     port: { type: "string" },
-    host: { type: "string" },
     size: { type: "string" },
     keep: { type: "string" },
     dispatch: { type: "boolean" },
@@ -40,7 +39,6 @@ if (values.help === true) {
 } else {
   const options = {
     port: number("port", values.port),
-    host: values.host,
     size: number("size", values.size),
     keep: number("keep", values.keep),
     dispatch: values.dispatch === true

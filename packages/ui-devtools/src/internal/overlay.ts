@@ -257,9 +257,12 @@ const Placeholder = (h: H, value: MessageLog.Placeholder) =>
       "unserialisable " + value["~unserialisable"]
     )
 
-const sessionOf = (feed: Feed): Session | undefined => {
+const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
   const sessions = feed.inspector.sessions()
-  return sessions[sessions.length - 1]
+  const paused = model.paused?.session
+  return (paused === undefined
+    ? undefined
+    : sessions.find((session) => session.id === paused)) ?? sessions.at(-1)
 }
 
 const shows = (model: OverlayModel, session: string, seq: number) =>
@@ -1254,7 +1257,7 @@ const Inspected = (
 
 const Panel = (h: H, model: OverlayModel) => {
   const feed = h.props.feed
-  const session = sessionOf(feed)
+  const session = sessionOf(feed, model)
   if (session === undefined) {
     return h.div.class("panel", "empty").attr("role", "dialog").attr(
       "aria-label",
@@ -1352,7 +1355,7 @@ const synced = (model: OverlayModel, feed: Feed) => {
 const resumePage = () => Paint.make({ session: "", seq: null })
 
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
-  const session = sessionOf(feed)
+  const session = sessionOf(feed, model)
   return model.paused !== null && session !== undefined &&
       feed.paintable(session.id, seq)
     ? [Paint.make({ session: session.id, seq })]
@@ -1449,16 +1452,21 @@ export const Overlay = Component.define({
         : $.run(Paint.make({ session, seq })),
     ScrubbedPage: ($, { seq }) =>
       $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment })
-        .run(Paint.make({ session: sessionOf($.props.feed)?.id ?? "", seq })),
+        .run(
+          Paint.make({
+            session: sessionOf($.props.feed, $.model)?.id ?? "",
+            seq
+          })
+        ),
     ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
     ClickedClear: ($) => {
-      const session = sessionOf($.props.feed)
+      const session = sessionOf($.props.feed, $.model)
       return $.model.paused !== null || session === undefined
         ? $.model
         : $.run(Clear.make({ session: session.id }))
     },
     Cleared: ($) => {
-      const session = sessionOf($.props.feed)
+      const session = sessionOf($.props.feed, $.model)
       const hasInstance = $.model.instance !== null &&
         session?.instances().some((instance) =>
             instance.instance === $.model.instance
@@ -1492,7 +1500,7 @@ export const Overlay = Component.define({
           ).children(
             "Effect UI",
             h.span.class("launcher-count").children(
-              String(sessionOf(h.props.feed)?.entries().length ?? 0)
+              String(sessionOf(h.props.feed, model)?.entries().length ?? 0)
             )
           ),
           model.paused === null ? null : PausedBadge(h, model.paused.seq)

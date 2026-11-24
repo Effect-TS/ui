@@ -189,8 +189,9 @@ const Dispatch = Tool.make("dispatch", {
   description:
     "Sends messages to an instance, in order, as if the app had. Each runs update and its real Commands. " +
     "Messages are decoded with the component's message Schema first, and none is sent unless all decode. A " +
-    "redacted field needs a real value. Stops at the first message that does not update. Off unless the server " +
-    "was started with dispatch on. Use wait to let the Commands finish.",
+    "redacted field needs a real value. Stops at the first message that does not update. An Unknown outcome " +
+    "means the page did not answer in time and the message may still be applied, so read before resending. " +
+    "Off unless the server was started with dispatch on. Use wait to let the Commands finish.",
   parameters: Schema.Struct({
     session: SessionParam,
     instance: Schema.Number,
@@ -645,9 +646,28 @@ export const layer = (server: Server) => {
       const reply = Schema.decodeUnknownSync(Control.Dispatched)(
         yield* ask(s, { _tag: "Dispatch", session: s.id, instance, messages })
       )
+      const unseen: Array<number> = []
       for (const outcome of reply.outcomes) {
-        if (outcome._tag !== "Ignored") yield* server.arrived(s.id, outcome.seq)
+        if (
+          (outcome._tag === "Updated" || outcome._tag === "Failed") &&
+          !(yield* server.arrived(s.id, outcome.seq))
+        ) {
+          unseen.push(outcome.seq)
+        }
       }
+      const notes = [
+        reply.outcomes.at(-1)?._tag === "Unknown"
+          ? "The page did not answer in time: the last message may still be applied. Read before resending."
+          : undefined,
+        unseen.length === 0
+          ? undefined
+          : "Entries " + unseen.map((seq) => "#" + seq).join(", ") +
+            " were logged by the page but have not reached " +
+            "the server yet, so a read may not show them.",
+        reply.paused === null
+          ? undefined
+          : "The page is paused: resume to see the live page."
+      ].filter((note) => note !== undefined)
       return ok(omitNull({
         outcomes: reply.outcomes,
         applied: reply.outcomes.filter((outcome) =>
@@ -655,9 +675,8 @@ export const layer = (server: Server) => {
         ).length,
         of: messages.length,
         paused: reply.paused,
-        note: reply.paused === null
-          ? undefined
-          : "The page is paused: resume to see the live page."
+        unseen: unseen.length === 0 ? undefined : unseen,
+        note: notes.length === 0 ? undefined : notes.join(" ")
       }))
     }),
     wait: Effect.fnUntraced(

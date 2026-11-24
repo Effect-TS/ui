@@ -738,9 +738,7 @@ export interface Root {
   readonly emitted: ReadonlyArray<unknown>
   readonly model: () => unknown
   readonly send: (message: unknown) => void
-  /** The instance with this `born` number, while it is in the tree. An outlet isn't one. */
   readonly find: (born: number) => Instance | undefined
-  /** Sends a message to `inst` as a dispatch, and tells what happened once its step ran. */
   readonly dispatch: (
     inst: Instance,
     message: unknown
@@ -778,7 +776,6 @@ export interface Root {
   readonly freeze: () => queryCore.Cache | undefined
 }
 
-/** What a dispatch to an instance did: the seq of the `Update` or `Failed` entry it logged, or why it didn't run. */
 export type Dispatched =
   | { readonly _tag: "Updated"; readonly seq: number }
   | { readonly _tag: "Failed"; readonly seq: number }
