@@ -739,14 +739,16 @@ interface Options {
 }
 
 /** @internal */
-export interface PaintState extends Decoded {
+export interface PaintState {
+  readonly model: unknown
+  readonly queries?: componentQueries.Results | undefined
   readonly props?: unknown
 }
 
 interface Inert {
   readonly state: (path: string) => PaintState | undefined
-  readonly fellBack: (path: string) => void
-  readonly fallback: (path: string) => void
+  readonly fellBack: Array<string>
+  readonly fallbacks: Set<string>
 }
 
 interface ServerOptions {
@@ -799,8 +801,7 @@ interface StateCodec {
   ) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly decode: (encoded: unknown) => Effect.Effect<Decoded, SchemaIssue.Issue>
 }
-/** @internal */
-export interface Decoded {
+interface Decoded {
   readonly model: unknown
   readonly results: componentQueries.Results | undefined
 }
@@ -982,19 +983,18 @@ export const paint = (
   Scope.Scope | Renderer.Renderer
 > =>
   Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-    const ctx = onScheduler(caller)
-    const fellBack: Array<string> = []
-    const fallbacks = new Set<string>()
-    const options: Options = {
-      head: false,
-      inert: { state, fellBack: (path) => fellBack.push(path), fallback: (path) => fallbacks.add(path) }
-    }
+    const ctx = onScheduler(caller.pipe(
+      Context.omit(services.RootHooks),
+      Context.add(messageLog.MessageLog, messageLog.noop)
+    ))
+    const inert: Inert = { state, fellBack: [], fallbacks: new Set() }
+    const options: Options = { head: false, inert }
     return Effect.flatMap(
       makeQueryCache(ctx, options),
       (cell) =>
         Effect.map(
           start(component, rootProps, container, ctx, cell, options),
-          () => ({ fellBack, fallbacks: Array.from(fallbacks) })
+          () => ({ fellBack: inert.fellBack, fallbacks: Array.from(inert.fallbacks) })
         )
     )
   })
@@ -1411,7 +1411,7 @@ const setup = (
   const server = options?.server
   const inert = options?.inert
   const host: Renderer.Host<any> = server !== undefined ? server.host : Context.get(ctx, services.Renderer).host
-  const log = inert === undefined ? Context.get(ctx, messageLog.MessageLog) : messageLog.noop
+  const log = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
   const rootScope = Context.get(ctx, Scope.Scope)
@@ -1419,7 +1419,7 @@ const setup = (
   const controlled = host.controlled
   const rootEmitted: Array<unknown> = []
   const sharedBuilds = new WeakMap<Env, Map<Layer.Layer<any, any, any>, SharedBuild>>()
-  const hooks = inert === undefined ? Option.getOrUndefined(Context.getOption(ctx, services.RootHooks)) : undefined
+  const hooks = Option.getOrUndefined(Context.getOption(ctx, services.RootHooks))
 
   // The problems sink, read once. A throw from it is swallowed: a check only reports.
   const problems = Context.get(ctx, queryCore.Problems)
@@ -2081,7 +2081,7 @@ const setup = (
   // Set when `merged` holds a head the host hasn't been given.
   let headChanged = false
   /** Whether this mount gives its head to the host. An embedded mount computes it and leaves the document alone. */
-  const ownsHead = options?.head !== false && inert === undefined
+  const ownsHead = options?.head !== false
   let rootInstance: Instance | undefined
   let handle: services.RootHandle | undefined
 
@@ -3262,10 +3262,10 @@ const setup = (
     if (inert !== undefined) {
       const recorded = inert.state(inst.path)
       if (recorded === undefined) {
-        inert.fellBack(inst.path)
+        inert.fellBack.push(inst.path)
       } else {
         if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
-        restoredState.set(inst, recorded)
+        restoredState.set(inst, { model: recorded.model, results: recorded.queries })
       }
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
       return inst
@@ -5143,7 +5143,7 @@ const setup = (
     env: Env,
     renderer: Instance = inst
   ): RunningMount | undefined => {
-    if (!host.runsMounts || inert !== undefined) return undefined
+    if (!host.runsMounts) return undefined
     const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
     const causedBy = origin
     const running: RunningMount = { scope: mountScope, mount, args: undefined, cutBy: undefined }
@@ -5930,7 +5930,7 @@ const setup = (
         }
         whenReady(env, rerender, rerender)
       }
-      inert?.fallback(inst.path)
+      inert?.fallbacks.add(inst.path)
       return fallbackSlot(inst, view, status, false, env, range)
     }
     let component: Component.Any
@@ -7387,7 +7387,7 @@ const setup = (
 
   const toggleMounts = (inst: Instance, rendered: Rendered, env: Env, start: boolean): void => {
     // No mount ever started.
-    if (!host.runsMounts || inert !== undefined) return
+    if (!host.runsMounts) return
     switch (rendered._tag) {
       case "Element": {
         stopMounts(inst, rendered)

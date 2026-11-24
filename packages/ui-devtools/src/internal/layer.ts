@@ -65,12 +65,12 @@ export const make = (options: {
         paint: (session, seq) =>
           Effect.suspend(() => {
             const root = roots.get(session)
-            const painting = history.at(session, seq)
-            if (root === undefined || painting === undefined) return Effect.undefined
+            const state = history.at(session, seq)
+            if (root === undefined || state === undefined) return Effect.undefined
             const previous = paused
             paused = root
             return (previous === undefined || previous === root ? Effect.void : previous.resume).pipe(
-              Effect.andThen(root.pause(painting.state)),
+              Effect.andThen(root.pause(state)),
               Effect.map((painted) => {
                 raise(frame)
                 return painted
@@ -190,13 +190,7 @@ export const make = (options: {
           return PubSub.publish(changes, undefined)
         })
       )
-      const log: MessageLog.MessageLog = {
-        enabled: true,
-        record: (entry) => {
-          history.record(entry)
-          encoded.record(entry)
-        }
-      }
+      const log = MessageLog.fanoutAll([{ enabled: true, record: history.record }, encoded])
       return Context.make(MessageLog.MessageLog, log).pipe(Context.add(BrowserHost.Pausables, pausables))
     })
   )

@@ -991,9 +991,7 @@ export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any
   Layer.effectContext(
     Effect.forEach(layers, (layer) => Layer.build(layer)).pipe(
       Effect.map((built) =>
-        built.reduce((all, context) => Context.merge(all, context), Context.empty()).pipe(
-          Context.add(MessageLog, fanoutAll(built.map(Context.get(MessageLog))))
-        )
+        Context.add(Context.mergeAll(...built), MessageLog, fanoutAll(built.map(Context.get(MessageLog))))
       )
     )
   ) as any

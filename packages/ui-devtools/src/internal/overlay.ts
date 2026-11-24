@@ -2,6 +2,7 @@ import { Tabs } from "@effect/ui-kit/Tabs"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit/VirtualList"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
+import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as Html from "@effect/ui/html/Html"
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Renderer from "@effect/ui/Renderer"
@@ -25,13 +26,8 @@ export interface Feed {
   readonly pausing: () => boolean
 }
 
-export interface Painted {
-  readonly fellBack: ReadonlyArray<string>
-  readonly fallbacks: ReadonlyArray<string>
-}
-
 export class Pages extends Context.Service<Pages, {
-  readonly paint: (session: string, seq: number) => Effect.Effect<Painted | undefined>
+  readonly paint: (session: string, seq: number) => Effect.Effect<BrowserHost.Painted | undefined>
   readonly resume: Effect.Effect<void>
 }>()("@effect/ui-devtools/Pages") {}
 
@@ -90,12 +86,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedShowOnPage: { session: Schema.String, seq: Schema.Number },
   ScrubbedPage: { seq: Schema.Number },
   ClickedResume: {},
-  Painted: {
-    session: Schema.String,
-    seq: Schema.Number,
-    fellBack: Schema.Array(Schema.String),
-    fallbacks: Schema.Array(Schema.String)
-  }
+  Painted: Paused.fields
 })
 
 type OverlayMessage = typeof OverlayMessage.Type
@@ -204,6 +195,9 @@ const sessionOf = (feed: Feed): Session | undefined => {
   const sessions = feed.inspector.sessions()
   return sessions[sessions.length - 1]
 }
+
+const shows = (model: OverlayModel, session: string, seq: number) =>
+  model.paused?.session === session && model.paused.seq === seq
 
 const PausedBadge = (h: H, seq: number) =>
   h.span.class("paused").children(
@@ -875,7 +869,7 @@ const Inspected = (
   const origin = feed.origin(entry.session)
   const kind = entry._tag === "Update" ? "Update" : label.text === entry._tag ? "Entry" : entry._tag
   const paintable = feed.paintable(entry.session, entry.seq)
-  const shown = model.paused?.session === entry.session && model.paused.seq === entry.seq
+  const shown = shows(model, entry.session, entry.seq)
   return [
     h.section.class("ehead").children(
       h.div.class("ehead-top").children(
@@ -946,13 +940,13 @@ const Panel = (h: H, model: OverlayModel) => {
   )
 }
 
-const paintAt = (feed: Feed, seq: number) => Paint.make({ session: sessionOf(feed)?.id ?? "", seq })
-
 const resumePage = () => Paint.make({ session: "", seq: null })
 
-const repaints = (model: OverlayModel, feed: Feed, seq: number) => {
+const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
   const session = sessionOf(feed)
   return model.paused !== null && session !== undefined && feed.paintable(session.id, seq)
+    ? [Paint.make({ session: session.id, seq })]
+    : []
 }
 
 export const Overlay = Component.define({
@@ -988,21 +982,12 @@ export const Overlay = Component.define({
     ClickedOpen: ($) =>
       $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: increment, pane: "timeline" }),
     ClickedClose: ($) => $.evolve({ open: false }),
-    ClickedEntry: ($, { seq }) => {
-      const next = $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: increment } : {}) })
-      return repaints($.model, $.props.feed, seq) ? next.run(paintAt($.props.feed, seq)) : next
-    },
-    ClickedLink: ($, { seq }) => {
-      const next = $.evolve({
-        selected: seq,
-        filter: "all",
-        instance: null,
-        pinned: false,
-        reveal: seq,
-        pins: increment
-      })
-      return repaints($.model, $.props.feed, seq) ? next.run(paintAt($.props.feed, seq)) : next
-    },
+    ClickedEntry: ($, { seq }) =>
+      $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: increment } : {}) })
+        .run(...repaint($.model, $.props.feed, seq)),
+    ClickedLink: ($, { seq }) =>
+      $.evolve({ selected: seq, filter: "all", instance: null, pinned: false, reveal: seq, pins: increment })
+        .run(...repaint($.model, $.props.feed, seq)),
     ClickedInstance: ($, { instance }) => $.evolve({ instance: $.model.instance === instance ? null : instance }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
     ClickedFollowLatest: ($) => {
@@ -1021,11 +1006,12 @@ export const Overlay = Component.define({
     SucceededCopyFrame: ($, { seq }) => $.evolve({ copied: seq }),
     FailedCopyFrame: ($) => $.evolve({ copied: null }),
     ClickedShowOnPage: ($, { session, seq }) =>
-      $.model.paused?.session === session && $.model.paused.seq === seq
+      shows($.model, session, seq)
         ? $.evolve({ paused: null }).run(resumePage())
         : $.run(Paint.make({ session, seq })),
     ScrubbedPage: ($, { seq }) =>
-      $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment }).run(paintAt($.props.feed, seq)),
+      $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment })
+        .run(Paint.make({ session: sessionOf($.props.feed)?.id ?? "", seq })),
     ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
     Painted: ($, paused) => $.evolve({ paused })
   },

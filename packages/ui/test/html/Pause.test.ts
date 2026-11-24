@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Feature, UiSchema } from "@effect/ui"
+import { Component, Feature, Mount, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
@@ -13,6 +13,8 @@ const place = Effect.fnUntraced(function*(tag: string = "div") {
 })
 
 const CounterMessage = UiSchema.TaggedEnum({ Clicked: {} })
+let mounts = 0
+const Seen = Mount.make("Seen", { args: {} }, () => Effect.sync(() => mounts++))
 const Counter = Component.define({
   name: "Counter",
   scoped: false,
@@ -22,7 +24,9 @@ const Counter = Component.define({
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,
-  view: (h, count) => h.button.onClick(CounterMessage.Clicked()).children(`clicked ${count}`)
+  view: (h, count) =>
+    h.button.onClick(CounterMessage.Clicked()).onMount(Seen().pipe(Mount.map(() => Component.noop)))
+      .children(`clicked ${count}`)
 })
 
 it.effect("pause paints a frozen copy beside the hidden container, and resume shows the live tree again", () =>
@@ -41,6 +45,7 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     )
     expect(roots.map((root) => root.path)).toEqual(["/Counter"])
     const [pausable] = roots
+    const mounted = mounts
 
     const painted = yield* pausable.pause((path) => path === "/Counter" ? { model: 7 } : undefined)
     expect(painted).toEqual({ fellBack: [], fallbacks: [] })
@@ -49,6 +54,7 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
       "<main class=\"app\" style=\"display: grid;\" inert=\"\"><button>clicked 7</button></main>"
     )
     expect(app.style.getPropertyValue("display")).toBe("none")
+    expect(mounts).toBe(mounted)
 
     root.send(CounterMessage.Clicked())
     copy.querySelector("button")!.click()

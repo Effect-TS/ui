@@ -826,34 +826,34 @@ export const makeHost = (
   const heldDialogs = new Set<globalThis.Node>()
   const heldPopovers = new Set<globalThis.Node>()
   const reported = new WeakMap<globalThis.Node, { state: string | undefined }>()
-  const holdNode = (held: Set<globalThis.Node>, node: globalThis.Node) => {
-    held.add(node)
+  const holdNode = (nodes: Set<globalThis.Node>, node: globalThis.Node) => {
+    nodes.add(node)
     if (listening.has("toggle") && !reported.has(node)) reported.set(node, { state: undefined })
   }
-  const releaseNode = (held: Set<globalThis.Node>, node: globalThis.Node) => {
-    if (!held.delete(node)) return
+  const releaseNode = (nodes: Set<globalThis.Node>, node: globalThis.Node) => {
+    if (!nodes.delete(node)) return
     const entry = reported.get(node)
     if (entry !== undefined) entry.state = "closed"
   }
   const isAuto = (element: globalThis.Element) =>
     element.hasAttribute("popover") && element.getAttribute("popover") !== "manual"
-  const hold = (container: globalThis.Element | undefined) => {
-    held = container !== undefined
-    if (container !== undefined) {
-      const popovers = Array.from(container.querySelectorAll<HTMLElement>("[popover]")).filter((element) =>
-        wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)
-      )
-      for (const dialog of Array.from(shown).reverse()) {
-        if (!modals.has(dialog)) continue
-        closeDialog(dialog, true)
-        holdNode(heldDialogs, dialog)
-      }
-      for (const element of popovers.reverse()) {
-        if (popoverShowing(element)) element.hidePopover()
-        holdNode(heldPopovers, element)
-      }
-      return
+  const hold = (container: globalThis.Element) => {
+    held = true
+    const popovers = Array.from(container.querySelectorAll<HTMLElement>("[popover]")).filter((element) =>
+      wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)
+    )
+    for (const dialog of Array.from(shown).reverse()) {
+      if (!modals.has(dialog)) continue
+      closeDialog(dialog, true)
+      holdNode(heldDialogs, dialog)
     }
+    for (const element of popovers.reverse()) {
+      if (popoverShowing(element)) element.hidePopover()
+      holdNode(heldPopovers, element)
+    }
+  }
+  const release = () => {
+    held = false
     showModals()
     heldDialogs.clear()
     for (const element of heldPopovers) {
@@ -1493,11 +1493,17 @@ export const makeHost = (
       active = undefined
     }
   }
-  holds.set(host, hold)
+  holds.set(host, { held: () => held, hold, release })
   return host
 }
 
-const holds = new WeakMap<Renderer.Host<globalThis.Node>, (container: globalThis.Element | undefined) => void>()
+interface Holding {
+  readonly held: () => boolean
+  readonly hold: (container: globalThis.Element) => void
+  readonly release: () => void
+}
+
+const holds = new WeakMap<Renderer.Host<globalThis.Node>, Holding>()
 
 /**
  * The element operations behind `HtmlCommand.focus`, `blur`,
@@ -1579,13 +1585,13 @@ const signals = (document: Document) => {
 
 // `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document, muted?: () => boolean): HtmlSubscription.GlobalEvents => ({
+const globalEventsOf = (document: Document, held: () => boolean): HtmlSubscription.GlobalEvents => ({
   listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
     const view = document.defaultView
     const f = (event: Event) =>
-      view !== null && muted?.() === true && isInput(event, view) ? undefined : listener(
+      view !== null && held() && isInput(event, view) ? undefined : listener(
         {
           ...(custom === true
             ? { detail: (event as CustomEvent).detail ?? null }
@@ -1691,7 +1697,7 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document)),
+      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document, holds.get(host)!.held)),
       Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
       Context.add(HtmlImages.Images, imagesOf(document)),
       Context.add(HtmlFiles.Files, filesOf(document))
@@ -1873,13 +1879,7 @@ export const mountEffect = <
   options?: MountOptions<V, RF>
 ): Effect.Effect<Renderer.Root<Model, Msg>, never, Exclude<R | RF | RP, Html.Host> | Scope.Scope> =>
   Effect.gen(function*() {
-    const document = container.ownerDocument
-    const muted = { input: false }
-    const context = Context.add(
-      yield* Layer.build(layer({ document })),
-      HtmlSubscription.GlobalEvents,
-      globalEventsOf(document, () => muted.input)
-    )
+    const context = yield* Layer.build(layer({ document: container.ownerDocument }))
     const outer = yield* Effect.context<Scope.Scope>()
     const scheduled = Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
       ? Context.add(context, Scheduler.Scheduler, defaultScheduler ??= HtmlScheduler.make())
@@ -1888,7 +1888,7 @@ export const mountEffect = <
       Renderer.mount(component, props, container, options),
       scheduled
     )) as unknown as runtime.Root
-    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled), muted)
+    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled))
     const unregister = Context.get(outer, Pausables).register(paused)
     yield* Effect.addFinalizer(() => Effect.andThen(Effect.sync(unregister), paused.resume))
     return root
@@ -2030,6 +2030,7 @@ export const Pausables: Context.Reference<Pausables> = Context.Reference<Pausabl
 // shown as manual popovers: in the top layer, with no effect on the rest of the page.
 const paintHost = (host: Renderer.Host<globalThis.Node>): Renderer.Host<globalThis.Node> => ({
   ...host,
+  runsMounts: false,
   setAttr: (node, name, value, previous) =>
     host.setAttr(node, name, name === "popover" && value !== undefined ? "manual" : value, previous),
   setProp: (node, name, value) => {
@@ -2043,13 +2044,11 @@ const pausable = (
   component: Component.Any,
   root: runtime.Root,
   container: globalThis.Element,
-  context: Context.Context<Scope.Scope | Renderer.Renderer>,
-  muted: { input: boolean }
+  context: Context.Context<Scope.Scope | Renderer.Renderer>
 ): Pausable => {
   const owner = Context.get(context, Scope.Scope)
   const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<globalThis.Node>
-  const painting = Context.add(context, Renderer.Renderer, { host: paintHost(host) })
-  const hold = holds.get(host)
+  const holding = holds.get(host)!
   const style = (container as HTMLElement).style
   let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
   let shown: readonly [value: string, priority: string] | undefined
@@ -2064,8 +2063,7 @@ const pausable = (
   const hide = (): readonly [string, string] => {
     if (shown !== undefined) return shown
     shown = [style.getPropertyValue("display"), style.getPropertyPriority("display")]
-    muted.input = true
-    hold?.(container)
+    holding.hold(container)
     style.setProperty("display", "none", "important")
     return shown
   }
@@ -2073,8 +2071,7 @@ const pausable = (
     if (shown === undefined) return
     show(style, shown)
     shown = undefined
-    muted.input = false
-    hold?.(undefined)
+    holding.release()
   })
   const resume = Effect.suspend(() => {
     const was = painted
@@ -2091,13 +2088,11 @@ const pausable = (
         show(copy.style, hide())
         copy.setAttribute("inert", "")
         ;(painted?.copy ?? container).after(copy)
-        const result = yield* runtime.paint(component, root.instance.props, copy, (path) => {
-          const recorded = state(path)
-          if (recorded === undefined) return undefined
-          const adopted = { model: recorded.model, results: recorded.queries }
-          return Object.hasOwn(recorded, "props") ? { ...adopted, props: recorded.props } : adopted
-        }).pipe(
-          Effect.provideContext(Context.add(painting, Scope.Scope, scope)),
+        const result = yield* runtime.paint(component, root.instance.props, copy, state).pipe(
+          Effect.provideContext(context.pipe(
+            Context.add(Renderer.Renderer, { host: paintHost(host) }),
+            Context.add(Scope.Scope, scope)
+          )),
           Effect.onError(() => Effect.andThen(unpaint({ scope, copy }), painted === undefined ? reveal : Effect.void))
         )
         const was = painted

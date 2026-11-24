@@ -74,13 +74,13 @@ const makeApp = () => {
 }
 
 const fold = (entries: ReadonlyArray<MessageLog.Entry>) => {
-  const state = new Map<string, { model: unknown; results: Record<string, unknown> | undefined }>()
+  const state = new Map<string, runtime.PaintState>()
   for (const entry of entries) {
     if (entry._tag === "Mounted" || entry._tag === "Update") {
-      state.set(entry.path, { model: entry.model, results: entry.queries })
+      state.set(entry.path, { model: entry.model, queries: entry.queries })
     } else if (entry._tag === "QueryChanged") {
       const at = state.get(entry.path)!
-      state.set(entry.path, { ...at, results: { ...at.results, [entry.name]: entry.result } })
+      state.set(entry.path, { ...at, queries: { ...at.queries, [entry.name]: entry.result } })
     } else if (entry._tag === "Unmounted") state.delete(entry.path)
   }
   return state
@@ -140,7 +140,7 @@ describe("paint", () => {
           List,
           {},
           container,
-          (path) => path === "/List" ? { model: ["a", "b"], results: undefined } : undefined
+          (path) => path === "/List" ? { model: ["a", "b"] } : undefined
         )
         yield* load
         assert.deepStrictEqual(painted.fellBack, ["/List/Row[a]", "/List/Row[b]"])
@@ -158,9 +158,9 @@ describe("paint", () => {
         const testHost = yield* TestHost.TestHost
         const container = testHost.host.createElement("div")
         const recorded: Record<string, runtime.PaintState> = {
-          "/List": { model: ["a", "b"], results: undefined },
-          "/List/Row[a]": { model: 1, results: undefined, props: { id: "before" } },
-          "/List/Row[b]": { model: 2, results: undefined }
+          "/List": { model: ["a", "b"] },
+          "/List/Row[a]": { model: 1, props: { id: "before" } },
+          "/List/Row[b]": { model: 2 }
         }
         yield* runtime.paint(List, {}, container, (path) => recorded[path])
         assert.strictEqual(Locator.textOf(container), "before:?=1;b:?=2;")
@@ -185,7 +185,7 @@ describe("paint", () => {
         })
       const testHost = yield* TestHost.TestHost
       const container = testHost.host.createElement("div")
-      yield* runtime.paint(App, {}, container, () => ({ model: null, results: undefined }))
+      yield* runtime.paint(App, {}, container, () => ({ model: null }))
       yield* TestHost.settle
       assert.strictEqual(Locator.textOf(container), "loading")
       assert.strictEqual(loads, 0)

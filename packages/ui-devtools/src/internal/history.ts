@@ -1,22 +1,16 @@
-import type * as Component from "@effect/ui/Component"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import type * as MessageLog from "@effect/ui/MessageLog"
 
-interface Held {
+interface Held extends BrowserHost.Recorded {
   readonly path: string
-  readonly props: unknown
-  readonly model: unknown
-  readonly queries: Component.Results | undefined
 }
 
-export interface Painting {
-  readonly state: (path: string) => BrowserHost.Recorded | undefined
-}
+type State = (path: string) => BrowserHost.Recorded | undefined
 
 export interface History {
   readonly record: (entry: MessageLog.Entry) => void
   readonly holds: (session: string, seq: number) => boolean
-  readonly at: (session: string, seq: number) => Painting | undefined
+  readonly at: (session: string, seq: number) => State | undefined
 }
 
 const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
@@ -61,23 +55,18 @@ const makeSession = (size: number) => {
       evicted = true
     },
     holds: (seq: number) => entries.length > 0 && (!evicted || seq >= entries[0]!.seq),
-    at: (seq: number): Painting => {
+    at: (seq: number): State => {
       const states = new Map(base)
       for (const entry of entries) {
         if (entry.seq > seq) break
         apply(states, entry)
       }
-      const byPath = new Map<string, Held>()
+      const byPath = new Map<string, BrowserHost.Recorded>()
       for (const instance of Array.from(states.keys()).sort((a, b) => a - b)) {
-        const held = states.get(instance)!
-        byPath.set(held.path, held)
+        const { path, ...recorded } = states.get(instance)!
+        byPath.set(path, recorded)
       }
-      return {
-        state: (path) => {
-          const held = byPath.get(path)
-          return held === undefined ? undefined : { model: held.model, queries: held.queries, props: held.props }
-        }
-      }
+      return (path) => byPath.get(path)
     }
   }
 }
