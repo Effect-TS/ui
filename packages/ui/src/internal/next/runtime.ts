@@ -25,6 +25,7 @@ import type * as routeRun from "../routeRun.ts"
 import type * as runtime from "../runtime.ts"
 import * as services from "../services.ts"
 import * as transitionRun from "../transitionRun.ts"
+import * as domHost from "./domHost.ts"
 
 /** @internal */
 export type Root = runtime.Root
@@ -264,15 +265,19 @@ const start = (
     buildsPendingSince: building
   })
   const ownsHead = options?.head !== false
-  const bridged: Kernel.Host = routing === undefined ?
-    bridge(host, recording.step, ownsHead) :
-    {
-      ...bridge(host, recording.step, ownsHead),
-      commit: () => {
-        host.commit?.()
-        routing.flushed()
-      }
+  // A browser host runs on the kernel's own DOM host. One a test wraps keeps the bridge to it.
+  const dom = domHost.make?.(host, container, {
+    head: ownsHead,
+    step: recording.step
+  })
+  const base = dom ?? bridge(host, recording.step, ownsHead)
+  const bridged: Kernel.Host = routing === undefined ? base : {
+    ...base,
+    commit: () => {
+      base.commit?.()
+      routing.flushed()
     }
+  }
   const fallback = options?.fallback
   const queries = makeCell(ctx, options, (cache) => {
     cache.onFetch((event) => recording.tree({ _tag: "FetchStarted", ...event }))
@@ -387,6 +392,7 @@ const start = (
     root,
     close: Effect.suspend(() => {
       routing?.detach()
+      dom?.dispose()
       mounted.close()
       return Effect.andThen(awaitOwned, queries.dispose)
     })

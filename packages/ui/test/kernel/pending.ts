@@ -38,7 +38,19 @@ export const files: ReadonlyArray<string> = [
   "Restore.test.ts",
   "html/BrowserRouter.test.ts",
   "html/HistoryRestore.test.ts",
-  "html/LazyQuery.test.ts"
+  "html/LazyQuery.test.ts",
+  "html/BrowserHost.test.ts",
+  "html/Html.test.ts",
+  "Head.test.ts",
+  "html/HtmlHead.test.ts",
+  "html/ViewTransition.test.ts",
+  "html/HtmlImages.test.ts",
+  "html/HeadSync.test.ts",
+  "html/Head.test.ts",
+  "html/Forward.test.ts",
+  "html/Composed.test.ts",
+  "html/register.test.ts",
+  "html/HtmlLocator.test.ts"
 ]
 
 export const pending: {
@@ -57,36 +69,6 @@ export const pending: {
   "Runtime.test.ts": {
     "Runtime > rejects a different shared owner with the same name at mount":
       "headless components and shared state (step 8)",
-    "Runtime > Commands > a ref resolves within the issuing instance after the render is committed":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > controlled properties are re-applied after every patch":
-      "controlled properties (full DOM host, step 6)",
-    "Runtime > vocabularies > onMount runs with the element's node on hosts that run mounts":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > TestHost never runs onMount":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > two elements running the same mount link their own silent and failed ends":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a mount runs once, sees each new args by their Schema, and its Scope closes with the element":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a reader of a mount's args that outlives the mount ends when the element is removed":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a mount returning during scope closure logs one closed end caused by removal":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a mount's result goes through the Mount.map of the latest render":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a mount that is busy while two args arrive gets the latest one":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a mount that reads its args again starts from the latest ones":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a reader of a mount's args that starts while new ones arrive gets them once":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a render that adds, swaps or drops an element's mount starts and stops it":
-      "refs and mounts (step 6)",
-    "Runtime > vocabularies > a stream mount sends each value through the Mount.map of the latest render":
-      "refs and mounts (step 6)",
-    "Runtime > a removed element's mount that was waiting for its Layer never runs":
-      "refs and mounts (step 6)",
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
       "server rendering and hydration (step 7)",
     "Runtime > prerenders the tree as nodes: an instance's elements and text in a Range under its path":
@@ -94,23 +76,13 @@ export const pending: {
   },
   "SlotStatus.test.ts": {},
   "Slots.test.ts": {
-    "slots > a DOM ref in content resolves for the parent that wrote it":
-      "refs and mounts (step 6)",
     "placing a slot twice fails the receiver > once in a headless child's closure":
       "headless components and shared state (step 8)",
     "placing a slot twice fails the receiver > but not when it forwards the slot through a headless closure in a child's content":
       "headless components and shared state (step 8)"
   },
-  "html/Canvas.test.ts": {
-    "Canvas > paints at the pixel ratio, repaints only a changed scene, and reports pointers in scene coordinates":
-      "refs and mounts (step 6)"
-  },
-  "html/HtmlFiles.test.ts": {
-    "HtmlFiles > HtmlCommand.showPicker opens a rendered input's picker, whose files arrive in its change":
-      "refs and mounts (step 6)",
-    "HtmlFiles > without showPicker, HtmlCommand.showPicker falls back to click only on an enabled file input and never submits a form":
-      "refs and mounts (step 6)"
-  },
+  "html/Canvas.test.ts": {},
+  "html/HtmlFiles.test.ts": {},
   "Scoped.test.ts": {
     "scoped children > a hidden tab keeps its draft and its save, gets messages, and emits through the last onEmit":
       "kept children (step 4, blocked on a seam), head (step 6)",
@@ -338,32 +310,8 @@ export const pending: {
       "server rendering and hydration (step 7)"
   },
   "Queries.test.ts": {
-    "a query without onChange > renders the loaded value, and update reads it through $.queries":
-      "head (step 6)",
     "a query without onChange > hydrates the server's { model, queries } state without refetching":
-      "server rendering and hydration (step 7)",
-    "a query without onChange > restores the Model and result from history.state, seeding the cold cache, and refetches once":
-      "head (step 6)",
-    "a query without onChange > drops history.state saved as { model, loaded }, rerunning init and fetching afresh":
-      "head (step 6)",
-    "a query without onChange > replays from the MessageLog with Story.fromLog, update reading the logged results as $.queries":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > replays a bounded log whose result writes were evicted":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > replays an update that read a refetch in flight, live and through the Wire":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > replay ends with the results a load wrote after the last message, live and through the Wire":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > replay ends with a load that settled without any message":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > a Mounted entry at the same path starts the results over":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > entries of two instances at one path replay apart, and the result is the later instance's":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > replay follows props from the parent: a new id's load, then disabling the query, live and through the Wire":
-      "head (step 6), Story (step 8)",
-    "a query without onChange > a divergence returns the props and results the diverging update read":
-      "head (step 6), Story (step 8)"
+      "server rendering and hydration (step 7)"
   },
   "QueryRedacted.test.ts": {
     "omits reads with Redacted args, success or error schemas from the server cache":
@@ -393,35 +341,7 @@ export const pending: {
   },
   "Router.test.ts": {
     "Router > logs a navigation's update, route and outcome before the page it mounts":
-      "head (step 6)",
-    "Router > suppresses the matching initial route and keeps one subscription across navigation":
-      "head (step 6)",
-    "Router > reports an initial mismatch once, but accepts a delayed root after navigation":
-      "head (step 6)",
-    "Router > settles a navigation once the root has its route, not when its message is dropped":
-      "head (step 6)",
-    "Router > navigates by Command, back and forward, and the head follows the route":
-      "head (step 6)",
-    "Router > restores a page's Model on back and forward, and reruns every init Command":
-      "head (step 6)",
-    "Router > restores a Model written into the history entry after the Router is rebuilt, as on a reload":
-      "head (step 6)",
-    "Router > seeds a cold entry from a restored query field, stale, and refetches it once (success)":
-      "head (step 6)",
-    "Router > seeds a cold entry from a restored query field, stale, and refetches it once (failure)":
-      "head (step 6)",
-    "Router > drops a query result taken under a patch from the restored state":
-      "head (step 6)",
-    "Router > keeps the snapshot in memory and reports SnapshotWriteFailed when history.state rejects it":
-      "head (step 6)",
-    "Router > blocks navigation and reverts back and forward while Router.blocked runs":
-      "head (step 6)",
-    "Router > settles a navigation once the new page's Layer is built":
-      "head (step 6)",
-    "Router > canonicalises redirects and trailing slashes, and loads what the routes don't parse":
-      "head (step 6)",
-    "Router > settles with the head of the live tree when a title template fails its layout":
-      "head (step 6)",
+      "differs: the kernel logs the old page's Unmounted and the new page's Mounted in the other order",
     "Router.prefetch > records watches only while a check after a push is outstanding":
       "differs: reads today's runtime's Instance (children, watched), which the kernel's has no equivalent of"
   },
@@ -433,44 +353,7 @@ export const pending: {
     "BrowserRouter > exempts roots hydrated from a static render when only the search differs":
       "server rendering and hydration (step 7)",
     "BrowserRouter > checks hash roots that cannot adopt a server Model":
-      "server rendering and hydration (step 7)",
-    "BrowserRouter > navigates by link, back and forward, and the head and announcement follow":
-      "head (step 6)",
-    "BrowserRouter > clicking the current route notifies subscribers without scrolling, announcing or adding history":
-      "head (step 6)",
-    "BrowserRouter > repeating Slow after Back preserves the entry's pending scroll restoration":
-      "head (step 6)",
-    "BrowserRouter > a redirect reusing its route object announces only after the new visit settles":
-      "head (step 6)",
-    "BrowserRouter > leaves modified clicks, targets, downloads and other origins to the browser":
-      "head (step 6)",
-    "BrowserRouter > reports link intent after 50 ms of hover or focus, at once on touch, for the links a click follows":
-      "head (step 6)",
-    "BrowserRouter > follows a GET form the app has no submit handler for, and leaves a handled one alone":
-      "head (step 6)",
-    "BrowserRouter > restores the scroll position on back and forward between #hash entries":
-      "head (step 6)",
-    "BrowserRouter > goes to a link's #hash and moves focus there":
-      "head (step 6)",
-    "BrowserRouter > ignores links and reverts back and forward while blocked":
-      "head (step 6)",
-    "BrowserRouter > puts the shell's title back and removes the region when it closes":
-      "head (step 6)",
-    "BrowserRouter > allows one Router per document": "head (step 6)",
-    "BrowserRouter > quiet navigations > a search patch announces nothing and leaves focus and scroll alone":
-      "head (step 6)",
-    "BrowserRouter > quiet navigations > a quiet push scrolls to the top when asked, and back restores the position, both quietly":
-      "head (step 6)",
-    "BrowserRouter > quiet navigations > throttles the search writes of typing to one per 200 ms, writing the latest":
-      "head (step 6)",
-    "BrowserRouter > quiet navigations > writes the pending search on pagehide, and stops listening when its Scope closes":
-      "head (step 6)",
-    "BrowserRouter > quiet navigations > writes the pending search before following an in-page #hash link":
-      "head (step 6)",
-    "BrowserRouter > quiet navigations > a link to its own page's search is loud":
-      "head (step 6)",
-    "BrowserRouter > keeps the route in the fragment with layerHash":
-      "head (step 6)"
+      "server rendering and hydration (step 7)"
   },
   "html/HistoryRestore.test.ts": {
     "history restore of a page whose hydration hasn't settled > no snapshot holds the server's Model of the children of a excluded vault a push closed as it waited":
@@ -533,5 +416,99 @@ export const pending: {
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
     "history restore of a page whose hydration hasn't settled > Back restores a scoped child once, in a root that still hydrates: an author made again at its key starts it afresh":
       "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)"
+  },
+  "html/BrowserHost.test.ts": {
+    "BrowserHost > events > a kept scoped child gets the events it fires as it is drawn again":
+      "kept children (step 4, blocked on a seam)",
+    "BrowserHost > events > a hydrated instance starts from the server's state, not the history entry's snapshot":
+      "server rendering and hydration (step 7)",
+    "BrowserHost > events > an element hydration rebuilds gets the events it fires as it goes in":
+      "server rendering and hydration (step 7)",
+    "BrowserHost > drag and drop > a drag between two elements carries the source's data, and the source hears it was dropped":
+      "drag and drop on the kernel DOM host (unscheduled)",
+    "BrowserHost > drag and drop > a drag of a type no target accepts is left alone, so the browser refuses the drop":
+      "drag and drop on the kernel DOM host (unscheduled)",
+    "BrowserHost > drag and drop > a file drop sends the files, and the log's wire encoding replaces a message it can't encode":
+      "drag and drop on the kernel DOM host (unscheduled)",
+    "BrowserHost > drag and drop > enter and leave follow the active target, not its children, and a window exit leaves":
+      "drag and drop on the kernel DOM host (unscheduled)",
+    "BrowserHost > drag and drop > dragover is sent once per frame when the position changed, and a queued one is dropped":
+      "drag and drop on the kernel DOM host (unscheduled)",
+    "BrowserHost > modal dialogs > a modal opens once it's in the document and closes from the Model, and its form is the app's":
+      "modal dialogs on the kernel DOM host (unscheduled)",
+    "BrowserHost > modal dialogs > Escape is the Model's: rejected stays open, a forced close reopens, accepted closes":
+      "modal dialogs on the kernel DOM host (unscheduled)",
+    "BrowserHost > modal dialogs > a modal removed while open is forgotten, and switching mode closes without telling the app":
+      "modal dialogs on the kernel DOM host (unscheduled)",
+    "BrowserHost > modal dialogs > nested modals open outer first, so the inner one is on top":
+      "modal dialogs on the kernel DOM host (unscheduled)",
+    "BrowserHost > modal dialogs > a shown dialog is closed before it's removed, latest shown first, without telling the app":
+      "modal dialogs on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > a manual popover is controlled: shown and hidden by the Model, and put back after other changes":
+      "popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > an auto popover is followed: a light dismiss is reported and never reverted":
+      "popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > a coalesced toggle with equal states still reaches the Model, which converges on the latest":
+      "popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > a keyed move closes the popover in it: a manual one is shown again, an auto one isn't":
+      "popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > a mode change applies the Model's state under the new mode":
+      "popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > a detached or removed popover is never shown, and a popover in a modal opens after it":
+      "popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > popovers > showing a modal dialog or a popover that takes focus leaves the page's scroll where it was":
+      "modal dialogs and popovers on the kernel DOM host (unscheduled)",
+    "BrowserHost > renders once for the Commands of one flush that end together":
+      "differs: the results of Commands that end together are flushed one at a time, where today's runtime renders once for them",
+    "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
+      "server rendering and hydration (step 7)"
+  },
+  "html/Composed.test.ts": {
+    "p.child > an owned child's event goes through the declaring component's update, and replays from the log":
+      "headless parts (step 8)",
+    "p.child > an event the child emits from init goes to the declaring component":
+      "headless parts (step 8)",
+    "p.child > a failed owned child stays blank, and the declaring component hears of it without failing":
+      "headless parts (step 8)",
+    "p.child > a throw in p.child's parts, or a refused option, fails the declaring component with the source view":
+      "headless parts (step 8)",
+    "p.child on the server > the client adopts the server's render of every owned child":
+      "server rendering and hydration (step 7), headless parts (step 8)"
+  },
+  "html/Forward.test.ts": {
+    "children > a part's children come before the consumer's, in the order the parts were applied":
+      "server rendering (step 7)",
+    "forward > renders around the element, and what the caller chains and its children land on the element":
+      "server rendering (step 7)"
+  },
+  "html/Head.test.ts": {
+    "BrowserHost head > validates head tag and document data names before serialization, adoption and updates":
+      "server rendering and hydration (step 7)",
+    "BrowserHost head > merges links by their normalized rel and href before rendering":
+      "server rendering (step 7)",
+    "BrowserHost head > escapes data names in the serialized ownership marker":
+      "server rendering (step 7)"
+  },
+  "html/Html.test.ts": {
+    "Html > builder > renders the example the same as the children-first form did":
+      "server rendering (step 7)",
+    "Html > builder > style sets, replaces and removes inline CSS without changing the original builder":
+      "server rendering (step 7)",
+    "Html > Element.class > renders the same classes on the server":
+      "server rendering (step 7)"
+  },
+  "html/HtmlHead.test.ts": {
+    "HtmlHead > keeps an Html child's entries under a host-neutral root":
+      "server rendering (step 7)"
+  },
+  "html/ViewTransition.test.ts": {
+    "view transitions > a mid-flush route transition commits once across callback, freeze, and close":
+      "freeze (server rendering, step 7)",
+    "view transitions > freezing settles a requested transition's update at once, without starting one":
+      "freeze (server rendering, step 7)"
+  },
+  "html/register.test.ts": {
+    "@effect/ui/html/register > registers Html when imported, without a DOM":
+      "server rendering (step 7)"
   }
 }
