@@ -24,13 +24,13 @@ type Encoded = Exit.Exit<Page, SchemaIssue.Issue>
 
 type Status = "Pending" | "Failed" | undefined
 
+interface ElementSnap extends Array<Snap | View.Element<any, any>> {
+  0: View.Element<any, any>
+}
+
 type Snap =
-  | { readonly _tag: "Text"; readonly text: string }
-  | {
-    readonly _tag: "Element"
-    readonly view: View.Element<any, any>
-    readonly kids: ReadonlyArray<Snap>
-  }
+  | string
+  | ElementSnap
   | {
     readonly _tag: "Instance"
     readonly inst: Kernel.Instance
@@ -76,11 +76,19 @@ const runCodec = <A, E>(
   return exit
 }
 
+const noKids: ReadonlyArray<Snap> = []
+
+interface Snapshot {
+  readonly root: Snap
+  readonly late: ReadonlyArray<Fiber.Fiber<Page, SchemaIssue.Issue>>
+}
+
 /** @internal */
 export const snapshot = (
   root: Kernel.Instance,
   deferred: ReadonlySet<Kernel.Instance>
-): Snap => {
+): Snapshot => {
+  const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
   const instance = (inst: Kernel.Instance): Snap => {
     const component = inst.component as unknown as Component.Any
     const shipped = inst.failure === undefined && !deferred.has(inst)
@@ -94,12 +102,14 @@ export const snapshot = (
         kept.push(instance(entry.inst))
       }
     }
+    const encoded = shipped
+      ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
+      : undefined
+    if (encoded !== undefined && !Exit.isExit(encoded)) late.push(encoded)
     return {
       _tag: "Instance",
       inst,
-      encoded: shipped
-        ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
-        : undefined,
+      encoded,
       status: component.layer === undefined ? undefined : statusOf(inst.env),
       bare: inst.parent !== undefined && component.layer === undefined &&
         (inst.at!.v as View.Child<any, any>).alive === undefined &&
@@ -110,25 +120,39 @@ export const snapshot = (
       kept
     }
   }
+  const kidsOf = (
+    owner: Kernel.Instance,
+    kids: ReadonlyArray<Kernel.Rec> | undefined,
+    base: string
+  ): ReadonlyArray<Snap> => {
+    if (kids === undefined) return noKids
+    const out: Array<Snap> = new Array(kids.length)
+    for (let index = 0; index < kids.length; index++) {
+      out[index] = rec(owner, kids[index]!, base)
+    }
+    return out
+  }
   const rec = (owner: Kernel.Instance, at: Kernel.Rec, base: string): Snap => {
     const view = at.v
     switch (view._tag) {
       case "Text":
-        return { _tag: "Text", text: view.text }
-      case "Element":
-        return {
-          _tag: "Element",
-          view,
-          kids: at.kids === undefined
-            ? []
-            : at.kids.map((kid) => rec(owner, kid, base))
+        return view.text
+      case "Element": {
+        const kids = at.kids
+        if (kids === undefined) return [view]
+        const out = new Array(kids.length + 1) as ElementSnap
+        out[0] = view
+        for (let index = 0; index < kids.length; index++) {
+          out[index + 1] = rec(owner, kids[index]!, base)
         }
+        return out
+      }
       case "Outlet": {
         const path = at.inst.path + "/" + slotSegment(view.name)
         return {
           _tag: "Range",
           path,
-          kids: at.kids!.map((kid) => rec(at.inst.parent!, kid, path))
+          kids: kidsOf(at.inst.parent!, at.kids, path)
         }
       }
       case "Child": {
@@ -141,35 +165,24 @@ export const snapshot = (
             : base + "/" + segment(view as View.Child<any, any>),
           failedChild,
           status: failedChild ? undefined : statusOf(owner.env),
-          kids: at.kids.map((kid) => rec(owner, kid, base))
+          kids: kidsOf(owner, at.kids, base)
         }
       }
     }
   }
-  return instance(root)
+  return { root: instance(root), late }
 }
 
-const awaitEncoded = (snap: Snap): Effect.Effect<void> => {
-  const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
-  const visit = (snap: Snap): void => {
-    if (snap._tag === "Text") return
-    if (
-      snap._tag === "Instance" && snap.encoded !== undefined &&
-      !Exit.isExit(snap.encoded)
-    ) late.push(snap.encoded)
-    for (const kid of snap.kids) visit(kid)
-    if (snap._tag === "Instance") { for (const kid of snap.kept) visit(kid) }
-  }
-  visit(snap)
-  if (late.length === 0) return Effect.void
-  return Effect.onInterrupt(
+const awaitEncoded = (
+  late: ReadonlyArray<Fiber.Fiber<Page, SchemaIssue.Issue>>
+): Effect.Effect<void> =>
+  late.length === 0 ? Effect.void : Effect.onInterrupt(
     Effect.forEach(late, Fiber.await, { discard: true }),
     () => Fiber.interruptAll(late)
   )
-}
 
 const encodedOf = (
-  snap: Snap & { readonly _tag: "Instance" }
+  snap: Extract<Snap, { readonly _tag: "Instance" }>
 ): Encoded | undefined => {
   const encoded = snap.encoded
   if (encoded === undefined || Exit.isExit(encoded)) return encoded
@@ -237,13 +250,13 @@ const mute: services.ServerSink = {
 
 /** @internal */
 export const write = (
-  snap: Snap,
+  { late, root }: Snapshot,
   query: unknown,
   ctx: Context.Context<any>,
   isStatic: boolean,
   to: services.ServerSink
 ): Effect.Effect<Renderer.State> =>
-  Effect.map(awaitEncoded(snap), () => {
+  Effect.map(awaitEncoded(late), () => {
     const state: Record<string, unknown> = {}
     const kept: Record<string, unknown> = {}
     let into = state
@@ -255,15 +268,16 @@ export const write = (
       if (status !== undefined) statuses[path] = status
     }
     const visit = (snap: Snap, under: boolean): void => {
-      switch (snap._tag) {
-        case "Text":
-          return sink.text(snap.text)
-        case "Element": {
-          const view = snap.view
-          sink.open(view.tag, view.attrs, view.props)
-          for (const kid of snap.kids) visit(kid, under)
-          return sink.close(view.tag)
+      if (typeof snap === "string") return sink.text(snap)
+      if (Array.isArray(snap)) {
+        const view = snap[0]
+        sink.open(view.tag, view.attrs, view.props)
+        for (let index = 1; index < snap.length; index++) {
+          visit(snap[index] as Snap, under)
         }
+        return sink.close(view.tag)
+      }
+      switch (snap._tag) {
         case "Range": {
           sink.enter(snap.path)
           for (const kid of snap.kids) visit(kid, under)
@@ -323,7 +337,7 @@ export const write = (
         }
       }
     }
-    visit(snap, false)
+    visit(root, false)
     const add = (key: string, value: unknown) =>
       Object.defineProperty(state, key, {
         value,
