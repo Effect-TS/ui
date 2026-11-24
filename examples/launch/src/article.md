@@ -2,9 +2,9 @@
 title: Foldkit 0.x is becoming Effect UI
 ---
 
-Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect). Feature work on Foldkit 0.x has moved to Effect UI.
+Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
 
-If you're building with Foldkit 0.x today, we encourage you to continue. The migration to Effect UI will be an upgrade, not a rewrite.
+If you're building with Foldkit 0.x today, we encourage you to continue. The migration to Effect UI will be an upgrade, not a rewrite. Feature work on Foldkit 0.x has moved to Effect UI.
 
 This article covers a selection of the key changes and additions in Effect UI. It isn't a complete list.
 
@@ -21,8 +21,6 @@ Key additions:
 - [Shared state with Providers](#addition-shared-state-with-providers)
 - [Play tests](#addition-play-tests)
 
-It also covers what will stay the same.
-
 ## Terms
 
 - **Foldkit 0.x:** The existing frontend framework at [foldkit.dev](https://foldkit.dev).
@@ -36,6 +34,14 @@ Foldkit 0.x used the Elm Architecture. The architecture has many benefits, but i
 Effect UI addresses these drawbacks with Components. Each Component is an Elm Architecture program of its own, and you build an app by composing Components.
 
 A Component is self-contained. Its parent doesn't store its state or forward its Messages, so you can write, test and reuse it on its own. A Component can also bring its own services, load from a chunk of its own and fail while the rest of the app keeps running.
+
+### A complete Component
+
+This counter is a complete Component. One definition holds its Model, Messages, init, update, subscriptions and view, with a delayed reset Command and an auto-count Subscription. It runs live next to its code.
+
+:::Counter{code="intro" label="Live auto-counter"}
+Click "Increment", then turn "Auto-count" on and off.
+:::
 
 ### How Messages travel in Foldkit 0.x vs. Effect UI
 
@@ -57,20 +63,12 @@ What the parent does pass is props. A Component declares its props with a Schema
 
 ::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter"}
 
-### A complete Component
-
-This counter is a complete Component. One definition holds its Model, Messages, init, update, subscriptions and view, with a delayed reset Command and an auto-count Subscription. It runs live next to its code.
-
-:::Counter{code="intro" label="Live auto-counter"}
-Click "Increment", then turn "Auto-count" on and off.
-:::
-
 ### Organizing larger Components
 
 As a Component grows, you can still move init, update, subscriptions and view into functions of their own to keep it readable. The Component definition's helpers supply their types, so you don't have to annotate them.
 
 :::Listing{code="split"}
-The same counter with each function extracted.
+The auto-counter from [A complete Component](#a-complete-component) with each function extracted.
 :::
 
 ## Change: Improved performance
