@@ -16,7 +16,10 @@ domHost.set(
         step: options.step
       })
       : undefined,
-  HtmlHydrate.adopt
+  (base, container, path) =>
+    (container as Node).nodeType === undefined
+      ? { root: undefined, resume: () => undefined }
+      : HtmlHydrate.adopt(base, container, path)
 )
 
 const nameOf = (task: RunnerTask): string => {

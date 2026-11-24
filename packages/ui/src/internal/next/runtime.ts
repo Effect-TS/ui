@@ -9,6 +9,7 @@ import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
+import * as Latch from "effect/Latch"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
@@ -26,6 +27,7 @@ import * as queryCore from "../queryCore.ts"
 import * as Recorder from "../recorder.ts"
 import type * as routeRun from "../routeRun.ts"
 import type * as runtime from "../runtime.ts"
+import { scopeAddFinalizerUnsafe } from "../scope.ts"
 import * as serverHost from "../serverHost.ts"
 import * as services from "../services.ts"
 import * as transitionRun from "../transitionRun.ts"
@@ -188,6 +190,8 @@ const makeCell = (
   }
 }
 
+const isClosed = (scope: Scope.Scope): boolean => scope.state._tag === "Closed"
+
 const withProps = <A, E, R>(
   rootProps: unknown,
   f: (props: unknown) => Effect.Effect<A, E, R>
@@ -218,11 +222,24 @@ export const mount = (
       Effect.uninterruptible(
         Effect.contextWith(
           (ctx: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-            const root = start(component, props, container, ctx, options)
-            return Effect.as(
-              Scope.addFinalizer(Context.get(ctx, Scope.Scope), root.close),
-              root.root
+            const owner = Context.get(ctx, Scope.Scope)
+            if (isClosed(owner)) return Effect.interrupt
+            let made: ReturnType<typeof start> | undefined
+            const setUp = Latch.makeUnsafe(false)
+            scopeAddFinalizerUnsafe(
+              owner,
+              {},
+              () =>
+                setUp.whenOpen(Effect.suspend(() => made?.close ?? Effect.void))
             )
+            try {
+              made = start(component, props, container, ctx, options)
+            } finally {
+              setUp.openUnsafe()
+            }
+            return isClosed(owner)
+              ? Effect.interrupt
+              : Effect.succeed(made.root)
           }
         )
       )

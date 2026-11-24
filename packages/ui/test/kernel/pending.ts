@@ -66,10 +66,7 @@ export const pending: {
   "DuplicatePaths.test.ts": {},
   "Keyed.test.ts": {},
   "RenderTiming.test.ts": {},
-  "Runtime.test.ts": {
-    "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
-      "differs: a malformed `~query` reaches Problems only once a query runner is loaded; this tree loads none, where today's runtime always makes the cache and reports it"
-  },
+  "Runtime.test.ts": {},
   "SlotStatus.test.ts": {},
   "Slots.test.ts": {
     "placing a slot twice fails the receiver > once in a headless child's closure":
