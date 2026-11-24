@@ -6,38 +6,16 @@ import * as path from "node:path"
 import { codeToTokens } from "shiki"
 import { defineConfig, type Plugin } from "vite"
 import { toMarkdown } from "./src/domain/ArticleText.ts"
+import { type Excerpt, test, whole } from "./src/domain/Excerpt.ts"
 import { Frontmatter, Islands } from "./src/domain/Island.ts"
 import { type Snippet, Snippets } from "./src/domain/Snippet.ts"
 
 const id = "virtual:snippets"
 const resolved = `\0${id}`
 
-type Select = (source: string) => string
-
-const whole: Select = (source) =>
-  source.replace(
-    /^(?:\/\/ (?:@vitest|oxlint)[^\n]*\n|import [^]*?"\n|\n)+/,
-    ""
-  )
-    .trimEnd()
-
-const test = (title: string): Select => (source) => {
-  const lines = source.split("\n")
-  const start = lines.findIndex((line) =>
-    /^\s*it(\.effect)?\(/.test(line) && line.includes(`"${title}"`)
-  )
-  if (start < 0) throw new Error(`No test named "${title}"`)
-  const indent = lines[start].search(/\S/)
-  const end = lines.findIndex((line, index) =>
-    index > start && line.search(/\S/) === indent
-  )
-  return lines.slice(start, end + 1).map((line) => line.slice(indent))
-    .join("\n")
-}
-
 const sources: {
   readonly [K in keyof Snippets]: ReadonlyArray<
-    readonly [string, Select]
+    readonly [string, Excerpt]
   >
 } = {
   intro: [["src/autocounter/Counter.ts", whole]],
@@ -87,10 +65,11 @@ const sources: {
 
 const tokenize = async (
   file: string,
-  select: Select
+  select: Excerpt
 ): Promise<Snippet> => {
-  const source = await readFile(file, "utf8")
-  const result = await codeToTokens(select(source), {
+  const code = select(await readFile(file, "utf8"))
+  if (code === "") throw new Error(`Nothing to show from ${file}`)
+  const result = await codeToTokens(code, {
     lang: "ts",
     themes: { light: "github-light", dark: "github-dark" },
     defaultColor: "light-dark()"

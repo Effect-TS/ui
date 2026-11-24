@@ -16,12 +16,12 @@ export const Disclosure = Component.define({
   },
   parts: (p, model) => ({
     isOpen: model.isOpen,
-    trigger: p.part("button", (b) =>
-      b.attrs({
+    trigger: p.part("button", (button) =>
+      button.attrs({
         type: "button",
         "aria-expanded": String(model.isOpen),
         "aria-controls": p.id("panel")
       }).onClick(Message.ClickedTrigger())),
-    panel: p.part("div", (b) => b.id(p.id("panel")))
+    panel: p.part("div", (div) => div.id(p.id("panel")))
   })
 })

@@ -109,7 +109,7 @@ You can still reconstruct a Component's Model from a log of its Messages. When y
 
 The components in Foldkit UI were headless: each one managed behavior, keyboard handling and ARIA, and you wrote the markup. Your `toView` callback received bundles of attributes, and you spread each bundle onto the element it belonged to.
 
-In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, as in `collapsible.trigger(h.button)`, then add your own classes and children. TypeScript reports an error if you apply this trigger part to a `div`.
+In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, as in `collapsible.trigger(h.button)`, then add your own classes and children.
 
 ::Compare{foldkit="partsFoldkit" foldkitTitle="Foldkit 0.x: spread the attribute bundles from toView" effect="partsEffect" effectTitle="Effect UI: apply each part to an element"}
 
