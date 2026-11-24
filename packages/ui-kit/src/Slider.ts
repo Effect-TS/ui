@@ -108,18 +108,17 @@
  * **Example** (A labelled volume slider whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Slider } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const PlayerMessage = UiSchema.TaggedEnum({ MovedVolume: { value: Schema.Number } })
  *
- * const Player = Component.define({
+ * const Player = Html.component({
  *   name: "Player",
  *   model: Schema.Struct({ volume: Schema.Number }),
- *   message: PlayerMessage,
- *   elements: Html
+ *   message: PlayerMessage
  * }).make({
  *   init: () => ({ volume: 40 }),
  *   update: {
@@ -163,7 +162,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -868,14 +867,13 @@ const hidden =
  * @category components
  * @since 0.1.0
  */
-export const Slider = Component.define({
+export const Slider = Html.component({
   name: "Slider",
   props: SliderProps,
   model: SliderModel,
   message: SliderMessage,
   events: SliderEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => released,
   update: {

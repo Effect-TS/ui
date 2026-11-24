@@ -41,16 +41,14 @@
  * **Example** (A user's picture, with their initials until it loads)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Avatar } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Profile = Component.define({
+ * const Profile = Html.component({
  *   name: "Profile",
  *   model: Schema.Null,
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => null,
  *   update: ($) => $.model,
@@ -75,7 +73,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlImages from "@effect/ui/html/HtmlImages"
 import * as Subscription from "@effect/ui/Subscription"
@@ -268,12 +265,11 @@ export type AvatarImg<Msg, R = never> = Html.VoidElement<
  * @category components
  * @since 0.1.0
  */
-export const Avatar = Component.define({
+export const Avatar = Html.component({
   name: "Avatar",
   props: AvatarProps,
   model: AvatarModel,
-  message: AvatarMessage,
-  elements: Html
+  message: AvatarMessage
 }).make({
   init: ({ props }) => ({
     report: null,

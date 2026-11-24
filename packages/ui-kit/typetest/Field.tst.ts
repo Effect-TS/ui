@@ -1,4 +1,9 @@
-import { Component, UiSchema, type Validation, type View } from "@effect/ui"
+import {
+  type Component,
+  UiSchema,
+  type Validation,
+  type View
+} from "@effect/ui"
 import {
   Checkbox,
   Field,
@@ -29,11 +34,10 @@ type Element<K extends keyof HTMLElementTagNameMap, R = never> = Html.Element<
 
 describe("Field", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -73,11 +77,10 @@ describe("Field", () => {
   })
 
   it("the control is another kit call's element", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -106,11 +109,10 @@ describe("Field", () => {
   })
 
   it("the label takes only a label, and the control only a form control", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

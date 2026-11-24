@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { Avatar, type AvatarImg, type AvatarSpan } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -13,11 +13,10 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Avatar", () => {
   it("each part returns the builder it was given, and children keep their requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -51,11 +50,10 @@ describe("Avatar", () => {
   })
 
   it("root and fallback take only a span builder, and image only an img builder", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

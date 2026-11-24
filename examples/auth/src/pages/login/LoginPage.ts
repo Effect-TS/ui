@@ -1,5 +1,5 @@
 import { Session } from "#domain/Session"
-import { Command, Component, UiSchema, Validation, type View } from "@effect/ui"
+import { Command, Component, UiSchema, Validation } from "@effect/ui"
 import { Button, Field, fieldValidationProps, Input } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Duration, Effect, Option, Redacted, Schema } from "effect"
@@ -57,7 +57,7 @@ export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   Effect.succeed((args) => runSimulateAuthRequest(args))
 ) {}
 
-const FormField = <M>(h: View.H<M>, options: {
+const FormField = <M>(h: Html.H<M>, options: {
   readonly key: string
   readonly label: string
   readonly type: "email" | "password"
@@ -98,16 +98,17 @@ const FormField = <M>(h: View.H<M>, options: {
   })
 }
 
-export const LoginPageNoDeps = Component.define({
+export const LoginPageNoDeps = Html.component({
   name: "LoginPage",
+
   model: Schema.Struct({
     form: LoginValidation.State,
     submitting: Schema.Boolean
   }),
+
   message: LoginPageMessage,
   events: LoginPageEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     form: LoginValidation.init({ email: "", password: Redacted.make("") }),

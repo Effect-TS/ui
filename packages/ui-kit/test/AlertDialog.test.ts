@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { AlertDialog } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, it } from "@effect/vitest"
@@ -8,12 +8,11 @@ import { click, container, popovers, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({ RequestedClose: {} })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({}),
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ open: true }),
   update: { RequestedClose: () => ({ open: false }) },

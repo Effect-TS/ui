@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema } from "@effect/ui"
 import {
   Combobox,
   type ComboboxEvents,
@@ -57,11 +57,10 @@ describe("Combobox", () => {
   })
 
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -102,11 +101,10 @@ describe("Combobox", () => {
   })
 
   it("the input takes only an input, the trigger only a button, and an item needs its value", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -127,11 +125,10 @@ describe("Combobox", () => {
   })
 
   it("draws its input with a field's control", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -149,11 +146,10 @@ describe("Combobox", () => {
   })
 
   it("requires open, inputValue and items, and filter is a literal", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

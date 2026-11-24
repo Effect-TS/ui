@@ -4,7 +4,7 @@
  * Listen for keys on the document while a game runs, test it in a scene,
  * and press a key in a whole-app test.
  */
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -41,11 +41,10 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // combos, and `editable` (keys typed into a field); `whileTyping: true` lets
 // `Escape` through. The listener runs the declaration from the latest
 // `subscriptions`, so omitting the opposite direction updates with `model.heading`.
-export const Snake = Component.define({
+export const Snake = Html.component({
   name: "Snake",
   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
-  message: SnakeMessage,
-  elements: Html
+  message: SnakeMessage
 }).make({
   init: () => ({ running: false, heading: "right" as const }),
   update: {

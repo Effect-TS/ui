@@ -1,7 +1,5 @@
 import { Router } from "@effect/ui"
 import { BrowserHost, BrowserRouter } from "@effect/ui/html"
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 import { Effect, Layer } from "effect"
 import { App } from "./App.ts"
 import { AppRoute } from "./routes.ts"

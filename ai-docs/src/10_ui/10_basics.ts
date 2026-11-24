@@ -2,7 +2,7 @@
  * @title Building a component with @effect/ui
  *
  * Build a note editor from Schemas and pure functions, with its update split
- * into slices on a `Component.define` definition. It saves through a
+ * into slices on an `Html.component` definition. It saves through a
  * `Command.Service` and autosaves with a Subscription. This is the browser
  * entry module, which mounts it with `BrowserHost`. The editor is in
  * `fixtures/notes/components/NoteEditor.ts`.
@@ -12,13 +12,6 @@ import { Effect, Layer } from "effect"
 // `@effect/ui/testing` are host-neutral.
 import { BrowserHost } from "@effect/ui/html"
 import { FetchHttpClient } from "effect/http"
-// Registers the HTML elements once for the app, so every `view` has
-// `h.form`, `h.button` and so on. Importing `@effect/ui/html` alone doesn't
-// do it. The import has to run before the first render, so each entry module
-// has it: this one, the server's and the tests'. A component that can't rely
-// on it sets `elements: Html` instead.
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 // An entry module defines no components. The editor and its `SaveNote`
 // command are in the notes feature, next to the service they use. Read them
 // in this order:

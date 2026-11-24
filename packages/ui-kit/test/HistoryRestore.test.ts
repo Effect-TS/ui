@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, Route, Router, UiSchema } from "@effect/ui"
+import { Command, Route, Router, UiSchema } from "@effect/ui"
 import {
   Autocomplete,
   Combobox,
@@ -38,7 +38,7 @@ const PageMessage = UiSchema.TaggedEnum({
   Navigated: {}
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ route: PageRoute }),
   model: Schema.Struct({
@@ -49,8 +49,7 @@ const Page = Component.define({
     selectValue: Schema.NullOr(Schema.String),
     sliderValue: Schema.Number
   }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: ($) => ({
     route: $.props.route,

@@ -62,16 +62,14 @@
  * **Example** (Two fields under one legend)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Fieldset } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Billing = Component.define({
+ * const Billing = Html.component({
  *   name: "Billing",
  *   model: Schema.Struct({ locked: Schema.Boolean }),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({ locked: true }),
  *   update: ($) => $.model,
@@ -104,7 +102,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
 import { flag } from "./internal/attributes.ts"
@@ -163,7 +160,7 @@ export type FieldsetProps = typeof FieldsetProps.Type
  * @category components
  * @since 0.1.0
  */
-export const Fieldset = Component.define({
+export const Fieldset = Html.component({
   name: "Fieldset",
   props: FieldsetProps,
   model: Schema.Struct({}),
@@ -171,8 +168,7 @@ export const Fieldset = Component.define({
   shares: {
     value: (_model, props) => ({ disabled: props.disabled === true }),
     schema: Schema.Struct({ disabled: Schema.Boolean })
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({}),
   update: ($) => $.model,

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { NavigationMenu } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
@@ -9,12 +9,11 @@ import { container, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({ ClickedTurn: {}, PressedRight: {} })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ rtl: Schema.Boolean, claimsRight: Schema.Boolean }),
   model: Schema.Struct({ vertical: Schema.Boolean }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ vertical: false }),
   update: {

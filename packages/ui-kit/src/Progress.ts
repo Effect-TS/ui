@@ -48,16 +48,14 @@
  * **Example** (A labelled upload bar)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Progress } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Upload = Component.define({
+ * const Upload = Html.component({
  *   name: "Upload",
  *   model: Schema.Struct({ sent: Schema.Number }),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({ sent: 40 }),
  *   update: ($) => $.model,
@@ -84,7 +82,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
 import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
@@ -197,12 +194,11 @@ const resolve = (props: ProgressProps) => {
  * @category components
  * @since 0.1.0
  */
-export const Progress = Component.define({
+export const Progress = Html.component({
   name: "Progress",
   props: ProgressProps,
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,

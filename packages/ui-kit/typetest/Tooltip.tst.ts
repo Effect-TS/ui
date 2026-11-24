@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema } from "@effect/ui"
 import { Tooltip, type TooltipProvider } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -25,11 +25,10 @@ describe("Tooltip", () => {
   })
 
   it("each part returns the builder it was given, with the consumer's message type", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -57,11 +56,10 @@ describe("Tooltip", () => {
   })
 
   it("the trigger takes only a button, and the other parts only a div", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

@@ -37,18 +37,17 @@
  * **Example** (A labelled name field whose value lives in the caller's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Input } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const ProfileMessage = UiSchema.TaggedEnum({ UpdatedName: { value: Schema.String } })
  *
- * const Profile = Component.define({
+ * const Profile = Html.component({
  *   name: "Profile",
  *   model: Schema.Struct({ name: Schema.String }),
- *   message: ProfileMessage,
- *   elements: Html
+ *   message: ProfileMessage
  * }).make({
  *   init: () => ({ name: "Ada" }),
  *   update: {

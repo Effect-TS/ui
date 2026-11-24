@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import {
   Switch,
   type SwitchButton,
@@ -18,7 +18,7 @@ const SettingsMessage = UiSchema.TaggedEnum({
 // A consumer that keeps the value in its Model and draws the least markup
 // the parts need: a labelled root with a thumb. The form field comes with
 // the root. The row around it counts the clicks the switch leaves alone.
-const Settings = Component.define({
+const Settings = Html.component({
   name: "Settings",
   props: Schema.Struct({
     disabled: Schema.optional(Schema.Boolean),
@@ -26,8 +26,7 @@ const Settings = Component.define({
     required: Schema.optional(Schema.Boolean)
   }),
   model: Schema.Struct({ notify: Schema.Boolean, rowClicks: Schema.Number }),
-  message: SettingsMessage,
-  elements: Html
+  message: SettingsMessage
 }).make({
   init: () => ({ notify: false, rowClicks: 0 }),
   update: {

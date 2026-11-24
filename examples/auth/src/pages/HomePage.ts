@@ -1,13 +1,13 @@
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 import { AppRoute, LoggedOutRoute } from "../routes.ts"
 
-const FeatureCard = <M>(h: View.H<M>, title: string, description: string) =>
+const FeatureCard = <M>(h: Html.H<M>, title: string, description: string) =>
   h.div.class("bg-white rounded-lg shadow-md p-6").children(
     h.h2.class("text-xl font-semibold text-gray-800 mb-3").children(title),
     h.p.class("text-gray-600").children(description)
   )
 
-export const HomePage = <M>(h: View.H<M>) =>
+export const HomePage = <M>(h: Html.H<M>) =>
   h.div.class("max-w-4xl mx-auto px-4").children(
     h.div.class("text-center py-16").children(
       h.h1.class("text-5xl font-bold text-gray-800 mb-6").children(

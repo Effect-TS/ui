@@ -12,18 +12,17 @@
  * **Example** (Dots where the user clicks)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Canvas, Html } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Effect, Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ PressedCanvas: { x: Schema.Number, y: Schema.Number } })
  *
- * const Dots = Component.define({
+ * const Dots = Html.component({
  *   name: "Dots",
  *   model: Schema.Array(Canvas.Point),
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: (): ReadonlyArray<Canvas.Point> => [],
  *   update: { PressedCanvas: ($, { x, y }) => [...$.model, { x, y }] },

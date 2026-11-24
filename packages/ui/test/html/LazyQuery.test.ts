@@ -55,11 +55,10 @@ const lateSave = Effect.gen(function*() {
           },
           Effect.succeed(() => Effect.never)
         ) {}
-        const Note = Component.define({
+        const Note = Html.component({
           name: "Note",
           model: Schema.Null,
           message: Schema.Never,
-          elements: Html,
           queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
         }).make({
           init: () => null,
@@ -89,11 +88,10 @@ const lateSave = Effect.gen(function*() {
     Show: {},
     Saved: {}
   })
-  const App = Component.define({
+  const App = Html.component({
     name: "App",
     model: Schema.Boolean,
-    message: Message,
-    elements: Html
+    message: Message
   })
     .make({
       init: () => false,
@@ -157,11 +155,10 @@ const savedWith = Effect.fnUntraced(
       Effect.succeed(() => Effect.succeed("saved"))
     ) {}
     const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
-    const Saver = Component.define({
+    const Saver = Html.component({
       name: "Saver",
       model: Schema.String,
-      message: Message,
-      elements: Html
+      message: Message
     }).make({
       init: () => "idle",
       update: ($, message) =>
@@ -171,11 +168,10 @@ const savedWith = Effect.fnUntraced(
         }),
       view: (h, model) => h.button.onClick(Message.Clicked()).children(model)
     }).pipe(Component.provide(Save.layer))
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -206,11 +202,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       )
       let child: ((h: any) => any) | undefined
       const Message = UiSchema.TaggedEnum({ Opened: {} })
-      const App = Component.define({
+      const App = Html.component({
         name: "App",
         model: Schema.Boolean,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => false,
         update: () => true,
@@ -236,11 +231,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         },
         Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
       ) {}
-      const Note = Component.define({
+      const Note = Html.component({
         name: "Note",
         model: Schema.Null,
         message: Schema.Never,
-        elements: Html,
         queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
       }).make({
         init: () => null,
@@ -303,11 +297,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
                 })
               )
             ) {}
-            const Note = Component.define({
+            const Note = Html.component({
               name: "Note",
               model: Schema.Null,
               message: Schema.Never,
-              elements: Html,
               queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
             }).make({
               init: () => null,
@@ -326,11 +319,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         )
       ) {}
       const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
-      const App = Component.define({
+      const App = Html.component({
         name: "App",
         model: Schema.Boolean,
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => false,
         update: ($, message) =>

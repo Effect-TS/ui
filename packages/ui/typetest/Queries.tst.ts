@@ -40,12 +40,11 @@ const Message = UiSchema.TaggedEnum({
   Bump: {}
 })
 
-const Card = Component.define({
+const Card = Html.component({
   name: "Card",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Struct({ n: Schema.Number }),
   message: Message,
-  elements: Html,
   queries: {
     user: {
       query: GetUser,
@@ -408,14 +407,13 @@ const ListMessage = UiSchema.TaggedEnum({
   Show: { ids: Schema.Array(Schema.String) }
 })
 
-const List = Component.define({
+const List = Html.component({
   name: "List",
   model: Schema.Struct({
     ids: Schema.Array(Schema.String),
     changed: Schema.Number
   }),
   message: ListMessage,
-  elements: Html,
   queries: {
     users: {
       queryMany: GetUser,
@@ -620,12 +618,11 @@ const ChatMessage = UiSchema.TaggedEnum({
   Refresh: {}
 })
 
-const Chat = Component.define({
+const Chat = Html.component({
   name: "Chat",
   props: Schema.Struct({ room: Schema.String }),
   model: Schema.Struct({}),
   message: ChatMessage,
-  elements: Html,
   queries: {
     messages: {
       query: ListMessages,
@@ -693,12 +690,11 @@ describe("List queries", () => {
   })
 
   it("take loadMore and reset for an infinite query only, and not in init", () => {
-    Component.define({
+    Html.component({
       name: "Chat",
       props: Schema.Struct({ room: Schema.String }),
       model: Schema.Struct({}),
       message: ChatMessage,
-      elements: Html,
       queries: {
         messages: {
           query: ListMessages,

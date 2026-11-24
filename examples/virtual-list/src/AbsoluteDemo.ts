@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -11,14 +11,15 @@ const AbsoluteMessage = UiSchema.TaggedEnum({
 const heightOf = (index: number, grown: ReadonlyArray<number>) =>
   32 + (index % 4) * 10 + (grown.includes(index) ? 80 : 0)
 
-export const AbsoluteDemo = Component.define({
+export const AbsoluteDemo = Html.component({
   name: "AbsoluteDemo",
+
   model: Schema.Struct({
     absolute: Schema.Boolean,
     grown: Schema.Array(Schema.Number)
   }),
-  message: AbsoluteMessage,
-  elements: Html
+
+  message: AbsoluteMessage
 }).make({
   init: () => ({ absolute: true, grown: [] }),
   update: {

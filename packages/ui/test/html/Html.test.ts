@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -11,12 +11,11 @@ const TodoMessage = UiSchema.TaggedEnum({
 })
 type TodoMessage = typeof TodoMessage.Type
 const NewTodo = Html.ref("NewTodo", "input")
-const Item = Component.define({
+const Item = Html.component({
   name: "Item",
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.String,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: ($) => $.props.title,
   update: ($) => $.model,
@@ -77,11 +76,10 @@ describe("Html", () => {
 
     it.effect("renders the example the same as the children-first form did", () =>
       Effect.gen(function*() {
-        const Todos = Component.define({
+        const Todos = Html.component({
           name: "Todos",
           model: Schema.String,
-          message: TodoMessage,
-          elements: Html
+          message: TodoMessage
         }).make({
           init: () => "draft",
           update: ($) => $.model,
@@ -357,11 +355,10 @@ describe("Html", () => {
           }).elementAttrs.style,
           "-webkit-line-clamp:2;float:left;--Accent:red"
         )
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Styled",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -541,11 +538,10 @@ describe("Html", () => {
 
     it.effect("renders the same classes on the server", () =>
       Effect.gen(function*() {
-        const Classes = Component.define({
+        const Classes = Html.component({
           name: "Classes",
           model: Schema.Struct({ saving: Schema.Boolean }),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => ({ saving: false }),
           update: ($) => $.model,

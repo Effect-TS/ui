@@ -9,11 +9,9 @@
 import { BrowserHost } from "@effect/ui/html"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/http"
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 // Read them in this order:
 //
-// - `fixtures/kit/Listbox.ts`: the headless component. `Component.define`
+// - `fixtures/kit/Listbox.ts`: the headless component. `Html.component`
 //   finished with `parts` instead of `view` makes a `Component.Headless`.
 //   It has its own Model, `update` and Commands, and `parts` returns plain
 //   values and parts for whoever draws it.

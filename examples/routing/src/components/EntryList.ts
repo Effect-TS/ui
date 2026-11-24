@@ -1,5 +1,5 @@
 import { FileTreeEntry, formatFileSize } from "#domain/FileTree"
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 import { AppRoute } from "../routes.ts"
 
 export const filesUrl = (path: ReadonlyArray<string>) =>
@@ -9,7 +9,7 @@ const entryCountLabel = (count: number): string =>
   count === 1 ? "1 item" : `${count} items`
 
 export const EntryList = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   parentPath: ReadonlyArray<string>,
   entries: ReadonlyArray<FileTreeEntry>
 ) =>

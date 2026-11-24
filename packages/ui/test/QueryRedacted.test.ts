@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Query } from "@effect/ui"
+import { Query } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -37,11 +37,10 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     error: Schema.Never,
     staleTime: Infinity
   }, Effect.succeed(() => Effect.succeed("ok"))) {}
-  const App = Component.define({
+  const App = Html.component({
     name: "Secrets",
     model: Schema.Struct({}),
     message: Schema.Never,
-    elements: Html,
     queries: {
       args: {
         query: Args,
@@ -109,11 +108,10 @@ const hydrationCase = <A>(
       error: Schema.Never,
       staleTime: Infinity
     }, Effect.succeed(() => Effect.succeed(value))) {}
-    const App = Component.define({
+    const App = Html.component({
       name: "App",
       model: Schema.Struct({ value: schema }),
       message: Schema.Never,
-      elements: Html,
       queries: { value: { query: Read, args: () => ({}) } }
     }).make({
       init: () => ({ value }),

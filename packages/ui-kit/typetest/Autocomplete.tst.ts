@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema } from "@effect/ui"
 import {
   Autocomplete,
   type AutocompleteEvents,
@@ -59,11 +59,10 @@ describe("Autocomplete", () => {
   })
 
   it("each part returns the builder it was given, and clear can return undefined", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -96,11 +95,10 @@ describe("Autocomplete", () => {
   })
 
   it("draws its input with a field's control", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -118,11 +116,10 @@ describe("Autocomplete", () => {
   })
 
   it("requires open, value and items, and has no selection props", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

@@ -7,7 +7,7 @@
  * Command stops the browser reading the file. A story resolves the picker
  * and the read, and a scene chooses a file in the input.
  */
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, UiSchema } from "@effect/ui"
 import { Html, HtmlFiles, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
@@ -79,11 +79,10 @@ export const ReadCsv = Command.make(
 // `HtmlFiles.pick`, which needs no input in the view. The browser opens a
 // picker only during a user's action, and a Command issued from a key press
 // runs within it. `opened` is `false` when it refused.
-export const CsvImport = Component.define({
+export const CsvImport = Html.component({
   name: "CsvImport",
   model: ImportModel,
-  message: ImportMessage,
-  elements: Html
+  message: ImportMessage
 }).make({
   init: () => ImportModel.Idle(),
   update: {

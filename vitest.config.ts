@@ -31,8 +31,7 @@ const project = (
 const example = (name: string) =>
   project(name, path.join("examples", name), true, {
     test: {
-      include: ["src/**/*.test.ts"],
-      setupFiles: ["@effect/ui/html/register"]
+      include: ["src/**/*.test.ts"]
     }
   })
 

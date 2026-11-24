@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Dialog, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { TestGlobalEvents } from "@effect/ui/html/testing"
@@ -16,11 +16,10 @@ const PosterMessage = UiSchema.TaggedEnum({
   CompletedUpload: {}
 })
 
-const Poster = Component.define({
+const Poster = Html.component({
   name: "Poster",
   model: Schema.Number,
-  message: PosterMessage,
-  elements: Html
+  message: PosterMessage
 })
   .make({
     init: () => 0,
@@ -57,12 +56,11 @@ const Poster = Component.define({
 
 const PageMessage = UiSchema.TaggedEnum({ Dismissed: { id: Schema.String } })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ timeout: Schema.Number }),
   model: Schema.String,
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: () => "",
   update: {
@@ -280,11 +278,10 @@ describe("ToastProvider", { concurrent: false }, () => {
 })
 
 const AboveMessage = UiSchema.TaggedEnum({ Opened: {} })
-const Above = Component.define({
+const Above = Html.component({
   name: "Above",
   model: Schema.Boolean,
-  message: AboveMessage,
-  elements: Html
+  message: AboveMessage
 }).make({
   init: () => false,
   update: { Opened: () => true },

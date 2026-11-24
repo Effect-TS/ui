@@ -37,16 +37,14 @@
  * **Example** (A right-to-left region)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { DirectionProvider } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Page = Component.define({
+ * const Page = Html.component({
  *   name: "Page",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
@@ -65,7 +63,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
 
@@ -126,7 +123,7 @@ export type DirectionProviderProps = typeof DirectionProviderProps.Type
  * @category components
  * @since 0.1.0
  */
-export const DirectionProvider = Component.define({
+export const DirectionProvider = Html.component({
   name: "DirectionProvider",
   props: DirectionProviderProps,
   model: Schema.Struct({}),
@@ -134,8 +131,7 @@ export const DirectionProvider = Component.define({
   shares: {
     value: (_model, props) => ({ direction: props.direction ?? "ltr" }),
     schema: Schema.Struct({ direction: DirectionProviderDirection })
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({}),
   update: ($) => $.model,

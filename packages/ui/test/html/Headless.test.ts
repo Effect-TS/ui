@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, Mount, UiSchema } from "@effect/ui"
+import { Mount, UiSchema } from "@effect/ui"
 import {
   BrowserHost,
   Html,
@@ -40,11 +40,10 @@ const PickerMessage = UiSchema.TaggedEnum({
   Clicked: { id: Schema.String }
 })
 
-const Picker = Component.define({
+const Picker = Html.component({
   name: "Picker",
   model: Schema.Array(Schema.String),
-  message: PickerMessage,
-  elements: Html
+  message: PickerMessage
 }).make({
   init: () => [],
   update: ($, message) => [
@@ -94,11 +93,10 @@ const ToolbarMessage = UiSchema.TaggedEnum({
   Focused: { found: Schema.Boolean }
 })
 
-const Toolbar = Component.define({
+const Toolbar = Html.component({
   name: "Toolbar",
   model: Schema.Array(Schema.String),
-  message: ToolbarMessage,
-  elements: Html
+  message: ToolbarMessage
 }).make({
   init: () => [],
   update: ($, message) =>
@@ -151,11 +149,10 @@ const PlaceAnchor = Mount.make(
     )
 )
 
-const Anchor = Component.define({
+const Anchor = Html.component({
   name: "Anchor",
   model: Schema.Number,
-  message: Schema.Literal("placed"),
-  elements: Html
+  message: Schema.Literal("placed")
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,
@@ -168,11 +165,10 @@ const Anchor = Component.define({
   })
 })
 
-const Tip = Component.define({
+const Tip = Html.component({
   name: "Tip",
   model: Schema.Boolean,
-  message: Schema.Literal("toggle"),
-  elements: Html
+  message: Schema.Literal("toggle")
 }).make({
   init: () => true,
   update: ($) => !$.model,
@@ -195,11 +191,10 @@ const Tip = Component.define({
 
 const flaky = { throws: false }
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -236,11 +231,10 @@ const Page = Component.define({
 // A key handler on a container part, and one on the part that has focus
 // ---------------------------------------------------------------------------
 
-const Keys = Component.define({
+const Keys = Html.component({
   name: "Keys",
   model: Schema.Array(Schema.String),
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => [],
   update: ($, message) => [...$.model, message],
@@ -254,11 +248,10 @@ const Keys = Component.define({
   })
 })
 
-const KeysApp = Component.define({
+const KeysApp = Html.component({
   name: "KeysApp",
   model: Schema.Array(Schema.String),
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => [],
   update: ($, message) => [...$.model, message],
@@ -282,11 +275,10 @@ const KeysApp = Component.define({
 // A Dialog on its own
 // ---------------------------------------------------------------------------
 
-const Confirm = Component.define({
+const Confirm = Html.component({
   name: "Confirm",
   model: Schema.Number,
-  message: Schema.Literal("closed"),
-  elements: Html
+  message: Schema.Literal("closed")
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,
@@ -356,11 +348,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
     Effect.gen(function*() {
       // The closure throws once: on the server, which renders before the client mounts.
       flaky.throws = true
-      const failing = Component.define({
+      const failing = Html.component({
         name: "Shell",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       })
         .make({
           init: () => null,
@@ -549,11 +540,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
 
   it.effect("a layer's preventDefault false leaves another layer's prevention in place", () =>
     Effect.gen(function*() {
-      const Hit = Component.define({
+      const Hit = Html.component({
         name: "Hit",
         model: Schema.Number,
-        message: Schema.Literal("hit"),
-        elements: Html
+        message: Schema.Literal("hit")
       })
         .make({
           init: () => 0,
@@ -565,11 +555,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
             )
           })
         })
-      const App = Component.define({
+      const App = Html.component({
         name: "App",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -591,21 +580,19 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
 
   it.effect("the author's own preventDefault holds on an element a part decorated", () =>
     Effect.gen(function*() {
-      const Plain = Component.define({
+      const Plain = Html.component({
         name: "Plain",
         model: Schema.Null,
-        message: Schema.Literal("hit"),
-        elements: Html
+        message: Schema.Literal("hit")
       }).make({
         init: () => null,
         update: ($) => $.model,
         parts: (p) => ({ button: p.part("button", (b) => b.onClick("hit")) })
       })
-      const App = Component.define({
+      const App = Html.component({
         name: "App",
         model: Schema.Null,
-        message: Schema.Literal("own"),
-        elements: Html
+        message: Schema.Literal("own")
       })
         .make({
           init: () => null,
@@ -628,11 +615,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
   it.effect("synchronous focusout during removal of a headless part does not throw or invoke the closed owner", () =>
     Effect.gen(function*() {
       let calls = 0
-      const Frame = Component.define({
+      const Frame = Html.component({
         name: "Frame",
         model: Schema.Null,
-        message: Schema.Literal("out"),
-        elements: Html
+        message: Schema.Literal("out")
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -644,11 +630,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
             }))
         })
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Boolean,
-        message: Schema.Literal("hide"),
-        elements: Html
+        message: Schema.Literal("hide")
       }).make({
         init: () => true,
         update: () => false,

@@ -1,4 +1,4 @@
-import { Component, Head, UiSchema } from "@effect/ui"
+import { type Component, Head, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { init, install, update } from "./harness.ts"
@@ -32,10 +32,9 @@ const Message = UiSchema.TaggedEnum({
 const app = {
   name: "Table",
   model: Model,
-  message: Message,
-  elements: Html
+  message: Message
 } as const
-const TableDef = Component.define(app)
+const TableDef = Html.component(app)
 
 const lazyRow = (
   h: Component.Helper<typeof TableDef>,
@@ -59,13 +58,12 @@ const lazyRow = (
   )
 
 const RowMessage = UiSchema.TaggedEnum({ Select: {}, Remove: {} })
-const RowView = Component.define({
+const RowView = Html.component({
   name: "Row",
   props: Schema.Struct({ row: Row, selected: Schema.Boolean }),
   model: Schema.Null,
   message: RowMessage,
-  events: Message,
-  elements: Html
+  events: Message
 }).make({
   init: () => null,
   update: ($, message) =>
@@ -113,7 +111,7 @@ const tableUpdate = (
 
 /** The variants' table components, starting from `start`'s Model. */
 const tables = (start: () => TableModel) => ({
-  plain: Component.define(app).make({
+  plain: Html.component(app).make({
     init: start,
     update: tableUpdate,
     view: (h, model) =>

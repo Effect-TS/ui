@@ -1,5 +1,6 @@
 import { ListNotes } from "#queries/ListNotes"
 import { Component, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Listbox } from "../../kit/Listbox.ts"
@@ -24,7 +25,7 @@ const excerpt = (
 // editor, which renders on every keystroke, the closure and every row in it
 // would run on every keystroke. A normal child renders only when its props,
 // Model or loaded data change, and `{ noteId }` doesn't change while typing.
-export const NoteLinkPickerNoDeps = Component.define({
+export const NoteLinkPickerNoDeps = Html.component({
   name: "NoteLinkPicker",
   // The note being edited, which can't link to itself.
   props: Schema.Struct({ noteId: Schema.String }),

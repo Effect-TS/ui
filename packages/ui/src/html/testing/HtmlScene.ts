@@ -13,7 +13,7 @@
  * **Example** (A weather lookup)
  *
  * ```ts import.meta.vitest
- * import { Command, Component, UiSchema } from "@effect/ui"
+ * import { Command, UiSchema } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
  * import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
  * import { Effect, Schema } from "effect"
@@ -30,11 +30,10 @@
  *   Effect.succeed(() => Effect.succeed(Message.CompletedFetchWeather({ forecast: "sun" })))
  * ) {}
  *
- * const Weather = Component.define({
+ * const Weather = Html.component({
  *   name: "Weather",
  *   model: Schema.Struct({ zip: Schema.String, forecast: Schema.String }),
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => ({ zip: "", forecast: "" }),
  *   update: ($, message) =>

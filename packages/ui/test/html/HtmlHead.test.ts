@@ -177,12 +177,11 @@ describe("HtmlHead", () => {
         title: Schema.String,
         description: Schema.String
       })
-      const BlogPost = Component.define({
+      const BlogPost = Html.component({
         name: "BlogPost",
         props: Schema.Struct({ post: Post }),
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -193,12 +192,11 @@ describe("HtmlHead", () => {
         ],
         view: (h) => h.article(h.props.post.title)
       })
-      const Blog = Component.define({
+      const Blog = Html.component({
         name: "Blog",
         props: Schema.Struct({ post: Schema.optional(Post) }),
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -220,11 +218,10 @@ describe("HtmlHead", () => {
         Opened: { post: Post },
         Closed: {}
       })
-      const Site = Component.define({
+      const Site = Html.component({
         name: "Site",
         model: Schema.Struct({ post: Schema.optional(Post) }),
-        message: Message,
-        elements: Html
+        message: Message
       }).make({
         init: () => ({}),
         update: (_, message) =>
@@ -324,11 +321,10 @@ describe("HtmlHead", () => {
     head: () => [Head.reduce(() => ({ title: "Neutral" }))],
     view: (h) => h.text("neutral")
   })
-  const Page = Component.define({
+  const Page = Html.component({
     name: "Page",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,

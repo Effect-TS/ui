@@ -3,7 +3,7 @@
  * Command, an event, a child, a query, and a handler that can produce no
  * message.
  */
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import * as users from "./users.ts"
@@ -12,12 +12,11 @@ export const BadgeEvents = UiSchema.TaggedEnum({
   Opened: { count: Schema.Number }
 })
 
-export const Badge = Component.define({
+export const Badge = Html.component({
   name: "Badge",
   model: Schema.Number,
   message: Schema.Never,
-  events: BadgeEvents,
-  elements: Html
+  events: BadgeEvents
 }).make({
   init: () => 0,
   update: () => 0,
@@ -64,7 +63,7 @@ export const FollowNotes = Command.make(
   () => Stream.make(NoteMessage.Line({ line: "a" }))
 )
 
-export const Note = Component.define({
+export const Note = Html.component({
   name: "Note",
   props: Schema.Struct({ author: Schema.optional(Schema.String) }),
   model: Schema.Struct({
@@ -76,7 +75,6 @@ export const Note = Component.define({
   }),
   message: NoteMessage,
   events: NoteEvents,
-  elements: Html,
   queries: {
     author: {
       query: users.GetUser,

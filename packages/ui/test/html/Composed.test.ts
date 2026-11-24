@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
@@ -36,13 +36,12 @@ const items: ReadonlyArray<Item> = [{ id: "a", label: "Archive" }, {
   label: "Copy"
 }]
 
-const WrappedDialog = Component.define({
+const WrappedDialog = Html.component({
   name: "WrappedDialog",
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Null,
   message: DialogEvents,
-  events: DialogEvents,
-  elements: Html
+  events: DialogEvents
 }).make({
   init: () => null,
   update: ($, event) => $.emit(event),
@@ -60,13 +59,12 @@ const ComboMessage = UiSchema.TaggedEnum({
 })
 const ComboEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
 
-const Combo = Component.define({
+const Combo = Html.component({
   name: "Combo",
   props: Schema.Struct({ items: Schema.Array(Item) }),
   model: Schema.Array(Schema.String),
   message: ComboMessage,
-  events: ComboEvents,
-  elements: Html
+  events: ComboEvents
 }).make({
   init: () => [],
   update: ($, message) =>
@@ -99,11 +97,10 @@ const AppMessage = UiSchema.TaggedEnum({
   Clicked: { id: Schema.String }
 })
 
-const App = Component.define({
+const App = Html.component({
   name: "App",
   model: Schema.Array(Schema.String),
-  message: AppMessage,
-  elements: Html
+  message: AppMessage
 })
   .make({
     init: () => [],
@@ -133,22 +130,20 @@ const App = Component.define({
   })
 
 const ChildFailed = UiSchema.TaggedEnum({ Said: {}, Failed: {} })
-const Hello = Component.define({
+const Hello = Html.component({
   name: "Hello",
   model: Schema.Null,
   message: Schema.Never,
-  events: UiSchema.TaggedEnum({ Said: {} }),
-  elements: Html
+  events: UiSchema.TaggedEnum({ Said: {} })
 }).make({
   init: ($) => $.set(null).emit({ _tag: "Said" }),
   update: ($) => $.model,
   parts: () => ({})
 })
-const Broken = Component.define({
+const Broken = Html.component({
   name: "Broken",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -162,12 +157,11 @@ const owning = (
   parts: (heard: ReadonlyArray<string>) => unknown = (heard) => ({ heard }),
   extra?: Record<string, unknown>
 ) => {
-  const Owner = Component.define({
+  const Owner = Html.component({
     name: "Owner",
     model: Schema.Array(Schema.String),
     message: ChildFailed,
-    events: UiSchema.TaggedEnum({ Lost: {} }),
-    elements: Html
+    events: UiSchema.TaggedEnum({ Lost: {} })
   }).make({
     init: () => [],
     update: ($, message) =>
@@ -183,11 +177,10 @@ const owning = (
         parts: () => parts(heard) as { readonly heard: ReadonlyArray<string> }
       })
   })
-  return Component.define({
+  return Html.component({
     name: "App",
     model: Schema.Array(Schema.String),
-    message: Schema.String,
-    elements: Html
+    message: Schema.String
   })
     .make({
       init: () => [],
@@ -321,11 +314,10 @@ describe("p.child in a Scene", () => {
     scene.givenChild(Dialog, { open: true }).expect(Locator.tag("dialog"))
       .toExist()
 
-    const Twice = Component.define({
+    const Twice = Html.component({
       name: "Twice",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => null,
       update: ($) => $.model,

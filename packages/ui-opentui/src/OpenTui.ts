@@ -3,14 +3,14 @@
  * typed plain-data event payloads, controlled properties, the `OpenTui.Host`
  * marker, and refs typed by renderable.
  *
- * Register the vocabulary once for an app by importing
- * `@effect/ui-opentui/register`, or pass `elements: OpenTui` (or
- * `elements: OpenTui.vocabulary`) to `Component.define`.
+ * Define OpenTUI components with `OpenTui.component`, which supplies the
+ * OpenTUI vocabulary automatically, and type reusable pure OpenTUI view
+ * functions with `OpenTui.H<Msg>`.
  *
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Component from "@effect/ui/Component"
+import * as Component from "@effect/ui/Component"
 import type * as Mount from "@effect/ui/Mount"
 import * as Renderer from "@effect/ui/Renderer"
 import * as View from "@effect/ui/View"
@@ -974,7 +974,7 @@ export type Tags<Msg> =
   }
 
 /**
- * The type-level OpenTUI vocabulary for `View.Register`.
+ * The type-level OpenTUI vocabulary.
  *
  * @stability experimental
  * @category vocabulary
@@ -984,6 +984,16 @@ export interface Elements extends View.Elements {
   readonly Tags: Tags<this["Msg"]>
   readonly Host: Host
 }
+
+/**
+ * The view helper for reusable pure OpenTUI view functions, without a
+ * component definition.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type H<Msg> = View.WithTags<Msg, unknown, Elements>
 
 /**
  * Phantom type carrier so the `OpenTui` module namespace satisfies
@@ -1043,6 +1053,17 @@ export const vocabulary: View.Vocabulary<Elements> = {
   tags,
   textParents
 }
+
+/**
+ * Defines a component with the OpenTUI element vocabulary already supplied,
+ * equivalent to `Component.define({ ...options, elements: OpenTui.vocabulary })`.
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const component: Component.Define<Elements> = (options) =>
+  Component.define({ ...options, elements: vocabulary }) as any
 
 /**
  * Declares a ref typed to the OpenTUI renderable of `tag`.

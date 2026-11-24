@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import {
   VirtualList,
   type VirtualListEvents,
@@ -88,11 +88,10 @@ const Steps = Effect.fnUntraced(function*(
   const geometry = yield* layout
   const events: Array<VirtualListEvents> = []
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
-  const Demo = Component.define({
+  const Demo = Html.component({
     name: "Demo",
     model: Schema.Struct({ step: Schema.Number }),
-    message: Message,
-    elements: Html
+    message: Message
   }).make({
     init: () => ({ step: 0 }),
     update: { Advanced: ($) => ({ step: $.model.step + 1 }) },

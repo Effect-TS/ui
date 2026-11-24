@@ -79,22 +79,24 @@ const silent = () => Component.noop
  * keys are handled on the element that has focus. A key handler on the popup
  * around them would also catch keys meant for the consumer's own controls.
  */
-export const Listbox = Component.define({
+export const Listbox = Html.component({
   name: "Listbox",
+
   props: Schema.Struct({
     options: Schema.Array(ListboxOption),
     // The consumer owns the value. The Listbox reads it to start from it.
     selected: Schema.NullOr(Schema.String)
   }),
+
   model: Schema.Struct({
     open: Schema.Boolean,
     query: Schema.String,
     active: Schema.NullOr(Schema.String),
     typed: Schema.String
   }),
+
   message: ListboxMessage,
-  events: ListboxEvents,
-  elements: Html
+  events: ListboxEvents
 }).make({
   init: () => ({ open: false, query: "", active: null, typed: "" }),
   update: ($, message) =>

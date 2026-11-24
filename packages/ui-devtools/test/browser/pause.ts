@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
@@ -11,15 +11,14 @@ const SceneMessage = UiSchema.TaggedEnum({
   ClickedCloseDialog: {}
 })
 
-const Scene = Component.define({
+const Scene = Html.component({
   name: "Scene",
   model: Schema.Struct({
     count: Schema.Number,
     menu: Schema.Boolean,
     dialog: Schema.Boolean
   }),
-  message: SceneMessage,
-  elements: Html
+  message: SceneMessage
 }).make({
   init: () => ({ count: 0, menu: false, dialog: false }),
   update: {

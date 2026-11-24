@@ -64,11 +64,10 @@ export const guides = markdown({
 // plain JSON, and `frontmatter` holds the checked fields.
 // `decodeDocument` turns it into the document `view` renders. It caches
 // by module, so calling it in `view` decodes once.
-export const GuidePageNoDeps = Component.define({
+export const GuidePageNoDeps = Html.component({
   name: "GuidePage",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,

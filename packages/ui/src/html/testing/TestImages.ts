@@ -9,7 +9,7 @@
  * **Example** (Loading a photo in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { Component, Subscription, UiSchema } from "@effect/ui"
+ * import { Subscription, UiSchema } from "@effect/ui"
  * import { Html, HtmlImages } from "@effect/ui/html"
  * import { TestImages } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
@@ -17,11 +17,10 @@
  *
  * const Message = UiSchema.TaggedEnum({ Settled: { status: Schema.Literals(["loaded", "error"]) } })
  *
- * const Photo = Component.define({
+ * const Photo = Html.component({
  *   name: "Photo",
  *   model: Schema.String,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => "loading",
  *   update: { Settled: (_, { status }) => status },

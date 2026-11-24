@@ -424,10 +424,9 @@ returns a valid instance.
 
 Name view functions in CapitalCase, like components (for example, `Card` and `Field`).
 
-Use `View.H<M>` with `@effect/ui/html/register` for an application's HTML
-view functions. No separate HTML helper type is needed. A view function
-published in a library types `h` by what it needs instead, so its callers
-need not register a vocabulary: `@effect/ui-kit`'s `Input` takes
+Use `Html.H<M>` (or `OpenTui.H<M>` in a terminal app) for an application's
+reusable view functions. A view function published in a library types `h` by
+what it needs instead: `@effect/ui-kit`'s `Input` takes
 `{ readonly input: ... }`. When the root is the hole, return its builder
 and let the caller add children: `Card(h).children(...)`.
 This needs no children generic. `children` returns the builder and a second
@@ -436,12 +435,12 @@ still return the builder. For a nested hole, use an options object
 and keep its children inferred through `C`:
 
 ```ts
-import "@effect/ui/html/register"
 import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 
-const Card = <M>(h: View.H<M>) => h.section.class("card")
+const Card = <M>(h: Html.H<M>) => h.section.class("card")
 
-const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
+const Field = <M, C extends View.Children<M>>(h: Html.H<M>, options: {
   readonly label: string
   readonly children: C
 }) =>
@@ -461,7 +460,7 @@ and children land on an element below the root: the function returns the
 inner builder, and `forward` says what goes around it when it is built.
 
 ```ts
-const Framed = <M>(h: View.H<M>) =>
+const Framed = <M>(h: Html.H<M>) =>
   h.div.class("control").forward((control) =>
     h.div.class("frame").children(control)
   )
@@ -843,10 +842,10 @@ restores like any other component. One whose `shares` has `collects` also
 saves the message its readers' reports last sent, and compares their reports
 with it after Back.
 
-The `restore` option of `Component.define` changes what is saved:
+The `restore` option of `Html.component` (or `Component.define`) changes what is saved:
 
 ```ts
-const LoginPage = Component.define({
+const LoginPage = Html.component({
   name: "LoginPage",
   model: Schema.Struct({
     email: Schema.String,
@@ -992,8 +991,7 @@ such as a session or a sync engine, is provided by the component that owns its
 lifetime, usually the root component. The components below keep naming it in
 their own provides and get that instance.
 
-Entry modules sit beside these folders. Each one imports
-`@effect/ui/html/register` before it renders anything, and provides only
+Entry modules sit beside these folders. Each one provides only
 platform Layers such as the Router, the HTTP client and logging. Domain Layers
 are never provided there. The server and a test of the whole app swap the HTTP
 client, not the services.
@@ -1064,7 +1062,7 @@ Known limits:
 
 - **[Building a component with @effect/ui](./ai-docs/src/10_ui/10_basics.ts)**:
   Build a note editor from Schemas and pure functions, with its update split
-  into slices on a `Component.define` definition. It saves through a
+  into slices on an `Html.component` definition. It saves through a
   `Command.Service` and autosaves with a Subscription. This is the browser
   entry module, which mounts it with `BrowserHost`. The editor is in
   `fixtures/notes/components/NoteEditor.ts`.

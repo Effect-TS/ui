@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 
@@ -37,11 +37,10 @@ const initial: typeof Model.Type = {
   subToggles: 0
 }
 
-const Scene = Component.define({
+const Scene = Html.component({
   name: "Scene",
   model: Model,
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => initial,
   update: {

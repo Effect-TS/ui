@@ -287,15 +287,14 @@ describe("BrowserHost", { concurrent: false }, () => {
       Typed: { value: Schema.String },
       Checked: { checked: Schema.Boolean }
     })
-    const Form = Component.define({
+    const Form = Html.component({
       name: "Form",
       model: Schema.Struct({
         text: Schema.String,
         checked: Schema.Boolean,
         open: Schema.Boolean
       }),
-      message: Message,
-      elements: Html
+      message: Message
     }).make({
       init: () => ({ text: "fixed", checked: false, open: true }),
       // Every change is rejected.
@@ -361,11 +360,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("a form reset is put back to what the Model says", () =>
       Effect.gen(function*() {
-        const Resettable = Component.define({
+        const Resettable = Html.component({
           name: "Resettable",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -430,15 +428,14 @@ describe("BrowserHost", { concurrent: false }, () => {
         Push: {},
         ResetUpper: {}
       })
-      const Fields = Component.define({
+      const Fields = Html.component({
         name: "Fields",
         model: Schema.Struct({
           upper: Schema.String,
           card: Schema.String,
           pushed: Schema.String
         }),
-        message: Edited,
-        elements: Html
+        message: Edited
       }).make({
         init: () => ({ upper: "ABCDEF", card: "1234", pushed: "hello world" }),
         update: ($, message) =>
@@ -621,12 +618,11 @@ describe("BrowserHost", { concurrent: false }, () => {
       Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
     })
     // The search is the only copy of the text: the page's Model holds none. Digits are rejected.
-    const SearchPage = Component.define({
+    const SearchPage = Html.component({
       name: "SearchPage",
       props: Schema.Struct({ route: SearchRoute.subset(["Search"]) }),
       model: Schema.Struct({}),
-      message: SearchMessage,
-      elements: Html
+      message: SearchMessage
     }).make({
       init: () => ({}),
       update: ($, message) =>
@@ -650,12 +646,11 @@ describe("BrowserHost", { concurrent: false }, () => {
     const AppMessage = UiSchema.TaggedEnum({
       ChangedRoute: { route: SearchRoute }
     })
-    const SearchApp = Component.define({
+    const SearchApp = Html.component({
       name: "SearchApp",
       props: Schema.Struct({ route: SearchRoute }),
       model: Schema.Struct({ route: SearchRoute }),
-      message: AppMessage,
-      elements: Html
+      message: AppMessage
     }).make({
       init: ($) => ({ route: $.props.route }),
       update: (_, { route }) => ({ route }),
@@ -801,23 +796,21 @@ describe("BrowserHost", { concurrent: false }, () => {
       Set: { rows: Schema.Array(Schema.String) }
     })
     // A child's nodes are a list of their own, among the parent's other nodes.
-    const Shown = Component.define({
+    const Shown = Html.component({
       name: "Shown",
       props: Schema.Struct({ rows: Schema.Array(Schema.String) }),
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
         h.props.rows.length === 0 ? h.span("none") : h.em(h.props.rows.join(""))
     })
-    const Lists = Component.define({
+    const Lists = Html.component({
       name: "Lists",
       model: Schema.Array(Schema.String),
-      message: ListMessage,
-      elements: Html
+      message: ListMessage
     }).make({
       init: (): ReadonlyArray<string> => ["a", "b", "c"],
       update: (_, message) => message.rows,
@@ -862,11 +855,10 @@ describe("BrowserHost", { concurrent: false }, () => {
     it.effect("an element's only child keeps its node until its key or its tag changes", () =>
       Effect.gen(function*() {
         // The rows are the child's tag, its key and its text.
-        const Only = Component.define({
+        const Only = Html.component({
           name: "Only",
           model: Schema.Array(Schema.String),
-          message: ListMessage,
-          elements: Html
+          message: ListMessage
         }).make({
           init: (): ReadonlyArray<string> => ["p", "a", "one"],
           update: (_, message) => message.rows,
@@ -911,11 +903,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         if (customElements.get("x-classed") === undefined) {
           customElements.define("x-classed", Classed)
         }
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Classed",
           model: Schema.Array(Schema.String),
-          message: ListMessage,
-          elements: Html
+          message: ListMessage
         }).make({
           init: (): ReadonlyArray<string> => ["a"],
           update: (_, message) => message.rows,
@@ -943,15 +934,14 @@ describe("BrowserHost", { concurrent: false }, () => {
       Remove: { id: Schema.Number },
       Tick: {}
     })
-    const ItemsDef = Component.define({
+    const ItemsDef = Html.component({
       name: "Items",
       model: Schema.Struct({
         items: Schema.Array(Item),
         selected: Schema.Number,
         ticks: Schema.Number
       }),
-      message: LazyMessage,
-      elements: Html
+      message: LazyMessage
     })
     const built: Array<string> = []
     const row = (
@@ -1051,11 +1041,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           class Leaf extends Feature.Service<Leaf>()("Leaf", {
             props: Schema.Struct({})
           }) {}
-          const LeafImpl = Component.define({
+          const LeafImpl = Html.component({
             name: "LeafImpl",
             model: Schema.Null,
-            message: Schema.Never,
-            elements: Html
+            message: Schema.Never
           })
             .make({
               init: () => null,
@@ -1063,11 +1052,10 @@ describe("BrowserHost", { concurrent: false }, () => {
               view: (h) => h.p("ready")
             })
           const ready = yield* Deferred.make<void>()
-          const FrameDef = Component.define({
+          const FrameDef = Html.component({
             name: "Frame",
             model: Schema.Null,
-            message: Schema.Never,
-            elements: Html
+            message: Schema.Never
           })
           const frame = (h: Component.Helper<typeof FrameDef>, title: string) =>
             h.section(
@@ -1108,11 +1096,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("puts controlled properties back under a node it gives again, as under one the view keeps or builds", () =>
       Effect.gen(function*() {
-        const FieldsDef = Component.define({
+        const FieldsDef = Html.component({
           name: "Fields",
           model: Schema.Number,
-          message: LazyMessage,
-          elements: Html
+          message: LazyMessage
         })
         // The option asks for `a` and the select for `b`: the select is set after its options, so `b` wins.
         const field = (h: Component.Helper<typeof FieldsDef>, label: string) =>
@@ -1204,11 +1191,10 @@ describe("BrowserHost", { concurrent: false }, () => {
       Focused: { where: Schema.String },
       FocusMoved: { event: Schema.String, within: Schema.Boolean }
     })
-    const Events = Component.define({
+    const Events = Html.component({
       name: "Events",
       model: Schema.Array(Schema.String),
-      message: Message,
-      elements: Html
+      message: Message
     }).make({
       init: (): ReadonlyArray<string> => [],
       update: ($, message) =>
@@ -1440,11 +1426,10 @@ describe("BrowserHost", { concurrent: false }, () => {
     it.effect("a hydrated instance starts from the server's state, not the history entry's snapshot", () =>
       Effect.gen(function*() {
         const LoginRoute = Route.union({ Login: Route.make("/") })
-        const Login = Component.define({
+        const Login = Html.component({
           name: "Login",
           model: Schema.Struct({ email: Schema.String }),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => ({ email: "server" }),
           update: ($) => $.model,
@@ -1633,11 +1618,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("a handler a render takes away no longer gets the event: the next element out does", () =>
       Effect.gen(function*() {
-        const Toggle = Component.define({
+        const Toggle = Html.component({
           name: "Toggle",
           model: Schema.Array(Schema.String),
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: (): ReadonlyArray<string> => [],
           update: ($, message) =>
@@ -1708,11 +1692,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Left = UiSchema.TaggedEnum({
           Left: { event: Schema.String, disabled: Schema.Boolean }
         })
-        const Leaving = Component.define({
+        const Leaving = Html.component({
           name: "Leaving",
           model: Schema.Array(Schema.String),
-          message: Left,
-          elements: Html
+          message: Left
         }).make({
           init: (): ReadonlyArray<string> => [],
           update: (
@@ -1766,11 +1749,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Seen = UiSchema.TaggedEnum({
           Focused: { focusVisible: Schema.Boolean }
         })
-        const Focusing = Component.define({
+        const Focusing = Html.component({
           name: "Focusing",
           model: Schema.Array(Schema.Boolean),
-          message: Seen,
-          elements: Html
+          message: Seen
         }).make({
           init: (): ReadonlyArray<boolean> => [],
           update: ($, { focusVisible }) => [...$.model, focusVisible],
@@ -1813,11 +1795,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     describe("input methods and selections", () => {
       const Seen = UiSchema.TaggedEnum({ Saw: { entry: Schema.String } })
-      const Typing = Component.define({
+      const Typing = Html.component({
         name: "Typing",
         model: Schema.Array(Schema.String),
-        message: Seen,
-        elements: Html
+        message: Seen
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, { entry }) => [...$.model, entry],
@@ -1971,11 +1952,10 @@ describe("BrowserHost", { concurrent: false }, () => {
             "reset",
             "submit"
           ] as const
-          const KeyTargets = Component.define({
+          const KeyTargets = Html.component({
             name: "KeyTargets",
             model: Schema.Array(Schema.String),
-            message: Schema.String,
-            elements: Html
+            message: Schema.String
           }).make({
             init: (): ReadonlyArray<string> => [],
             update: ($, entry) => [...$.model, entry],
@@ -2093,11 +2073,10 @@ describe("BrowserHost", { concurrent: false }, () => {
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
         Effect.gen(function*() {
           const Typed = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
-          const Upper = Component.define({
+          const Upper = Html.component({
             name: "Upper",
             model: Schema.String,
-            message: Typed,
-            elements: Html
+            message: Typed
           }).make({
             init: () => "",
             update: (_, { value }) => value.toUpperCase(),
@@ -2214,11 +2193,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         outside.innerHTML = "<form></form>"
         // `Events` handles submit on its own form, so the document listener is already there.
         yield* BrowserHost.mountEffect(Events, {}, app)
-        const Bare = Component.define({
+        const Bare = Html.component({
           name: "Bare",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -2234,11 +2212,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(submitted(bare.querySelector("form")!)).toBe(true)
         expect(submitted(outside.querySelector("form")!)).toBe(false)
         // The tag as the author wrote it isn't what makes it a form.
-        const Upper = Component.define({
+        const Upper = Html.component({
           name: "Upper",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         })
           .make({
             init: () => null,
@@ -2254,11 +2231,10 @@ describe("BrowserHost", { concurrent: false }, () => {
       Effect.gen(function*() {
         let event: Event | undefined
         const seen: Array<string> = []
-        const Composer = Component.define({
+        const Composer = Html.component({
           name: "Composer",
           model: Schema.Number,
-          message: Schema.Literals(["Send", "Menu"]),
-          elements: Html
+          message: Schema.Literals(["Send", "Menu"])
         }).make({
           init: () => 0,
           update: ($, message) => {
@@ -2306,11 +2282,10 @@ describe("BrowserHost", { concurrent: false }, () => {
     it.effect("fields named like Object.prototype members are kept", () =>
       Effect.gen(function*() {
         const seen: Array<Html.SubmitPayload> = []
-        const Prototype = Component.define({
+        const Prototype = Html.component({
           name: "Prototype",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -2399,11 +2374,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("puts a drag source's data on the drag, though it has no handler, once a patch makes it one", () =>
       Effect.gen(function*() {
-        const Cards = Component.define({
+        const Cards = Html.component({
           name: "Cards",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, draggable) => draggable,
@@ -2427,11 +2401,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.deepStrictEqual(dragged, ["first", "second"])
       }).pipe(Effect.scoped))
 
-    const Board = Component.define({
+    const Board = Html.component({
       name: "Board",
       model: Schema.Array(Schema.String),
-      message: Schema.String,
-      elements: Html
+      message: Schema.String
     }).make({
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
@@ -2532,11 +2505,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Message = UiSchema.TaggedEnum({
           Dropped: { files: Schema.Array(Schema.instanceOf(File)) }
         })
-        const Uploader = Component.define({
+        const Uploader = Html.component({
           name: "Uploader",
           model: Schema.Array(Schema.String),
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: (): ReadonlyArray<string> => [],
           // Plain facts about the files go in the Model; the files themselves would go on to a Command.
@@ -2868,11 +2840,10 @@ describe("BrowserHost", { concurrent: false }, () => {
     it.effect("a file input in a modal keeps its cancel to itself, and is never given a non-empty value", () =>
       Effect.gen(function*() {
         const Message = UiSchema.TaggedEnum({ Cancelled: {} })
-        const Upload = Component.define({
+        const Upload = Html.component({
           name: "Upload",
           model: Schema.Number,
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: () => 0,
           update: ($) => $.model + 1,
@@ -3068,11 +3039,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         // A drawer: a child component mounted only while it's open.
         calls.length = 0
         const DrawerMessage = UiSchema.TaggedEnum({ Close: {} })
-        const Drawer = Component.define({
+        const Drawer = Html.component({
           name: "Drawer",
           model: Schema.Boolean,
-          message: DrawerMessage,
-          elements: Html
+          message: DrawerMessage
         }).make({
           init: () => true,
           update: () => false,
@@ -3097,11 +3067,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
         // Siblings shown later one before the other: the stack, not the document, sets the order.
         calls.length = 0
-        const Stack = Component.define({
+        const Stack = Html.component({
           name: "Stack",
           model: Schema.Number,
-          message: Schema.Number,
-          elements: Html
+          message: Schema.Number
         }).make({
           init: () => 0,
           update: (_, step) => step,
@@ -3381,7 +3350,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           (list: HTMLElement, _args, changes) =>
             Stream.map(changes, () => list.querySelectorAll("li").length)
         )
-        const Rows = Component.define({
+        const Rows = Html.component({
           name: "Rows",
           model: Schema.Struct({
             rows: Schema.Number,
@@ -3390,8 +3359,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           message: UiSchema.TaggedEnum({
             Add: {},
             Saw: { count: Schema.Number }
-          }),
-          elements: Html
+          })
         }).make({
           init: () => ({ rows: 1, seen: [] }),
           update: {
@@ -3513,11 +3481,10 @@ describe("BrowserHost", { concurrent: false }, () => {
       Submitted: { submitted: Schema.Boolean },
       Sent: { code: Schema.String }
     })
-    const Entry = Component.define({
+    const Entry = Html.component({
       name: "Entry",
       model: Schema.Array(Schema.String),
-      message: EntryMessage,
-      elements: Html
+      message: EntryMessage
     }).make({
       init: (): ReadonlyArray<string> => [],
       update: ($, message) =>
@@ -3595,11 +3562,10 @@ describe("BrowserHost", { concurrent: false }, () => {
   describe("hosts", () => {
     it.effect("writes attributes under their HTML names, keeps SVG's case, and owns a form's submission", () =>
       Effect.gen(function*() {
-        const Shapes = Component.define({
+        const Shapes = Html.component({
           name: "Shapes",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -3637,11 +3603,10 @@ describe("BrowserHost", { concurrent: false }, () => {
       update: ($) => $.model,
       view: (h) => h.view
     })
-    const Page = Component.define({
+    const Page = Html.component({
       name: "Page",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -3843,11 +3808,10 @@ describe("BrowserHost", { concurrent: false }, () => {
         { args: {} },
         () => Effect.onExit(Effect.never, record)
       )
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -3876,11 +3840,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           Effect.succeed(() => Effect.succeed(Message.Loaded()))
         ) {}
         let renders = 0
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.Number,
-          message: Message,
-          elements: Html
+          message: Message
         }).make({
           init: ($) =>
             $.set(0).run(
@@ -3918,11 +3881,10 @@ describe("BrowserHost", { concurrent: false }, () => {
                 return Component.noop
               })
           )
-          const Page = Component.define({
+          const Page = Html.component({
             name: "StyledPositioner",
             model: Schema.Number,
-            message: Schema.Number,
-            elements: Html
+            message: Schema.Number
           }).make({
             init: () => 0,
             update: (_, next) => next,
@@ -3993,11 +3955,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("an untouched element lets the later style alias win on mount and keeps the view's exact style text after a patch", () =>
       Effect.gen(function*() {
-        const Page = Component.define({
+        const Page = Html.component({
           name: "UntouchedStyle",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, next) => next,
@@ -4021,11 +3982,10 @@ describe("BrowserHost", { concurrent: false }, () => {
 
     it.effect("a hydration style mismatch replaces the server's style text", () =>
       Effect.gen(function*() {
-        const Page = Component.define({
+        const Page = Html.component({
           name: "HydrateStyle",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
@@ -4045,7 +4005,7 @@ describe("BrowserHost", { concurrent: false }, () => {
 
   it.effect("mountEffect provides its browser Renderer and direct GlobalEvents/AnimationFrames to app effects", () =>
     Effect.gen(function*() {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "DirectContext",
         props: Schema.Struct({
           hasBrowserRenderer: Schema.Boolean,
@@ -4055,8 +4015,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           hasBrowserRenderer: Schema.Boolean,
           heard: Schema.Boolean
         }),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props,
         update: ($) => $.model,

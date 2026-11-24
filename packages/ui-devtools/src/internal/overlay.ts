@@ -1740,12 +1740,11 @@ const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
     : []
 }
 
-export const Overlay = Component.define({
+export const Overlay = Html.component({
   name: "DevToolsOverlay",
   props: OverlayProps,
   model: OverlayModel,
-  message: OverlayMessage,
-  elements: Html
+  message: OverlayMessage
 }).make({
   init: ($) => ({
     open: $.props.feed.open,

@@ -1,4 +1,4 @@
-import { Component, type Mount, UiSchema, type View } from "@effect/ui"
+import { type Component, type Mount, UiSchema, type View } from "@effect/ui"
 import {
   Dialog,
   Drawer,
@@ -379,11 +379,10 @@ describe("Drawer", () => {
 })
 
 const PageMessage = UiSchema.TaggedEnum({ Toggled: { open: Schema.Boolean } })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: () => ({ open: false }),
   update: {
@@ -453,11 +452,10 @@ describe("DrawerProvider", () => {
 })
 
 // A drawer in a dialog's popup, and a dialog in the drawer's, all open.
-const Mixed = Component.define({
+const Mixed = Html.component({
   name: "Mixed",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

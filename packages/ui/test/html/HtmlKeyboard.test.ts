@@ -1,4 +1,3 @@
-import { Component } from "@effect/ui"
 import { Html, HtmlKeyboard, HtmlSubscription } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
@@ -64,11 +63,10 @@ describe("HtmlKeyboard.shortcuts", () => {
 
   it.effect("works with both element onKeyDown and HtmlSubscription.onDocument", () =>
     Effect.gen(function*() {
-      const Panel = Component.define({
+      const Panel = Html.component({
         name: "Panel",
         model: Schema.Array(Schema.String),
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       }).make({
         init: (): ReadonlyArray<string> => [],
         update: ($, entry) => [...$.model, entry],

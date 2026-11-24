@@ -203,21 +203,19 @@ describe("Runtime", () => {
   describe("keyed list", () => {
     it.effect("tells an element's key from a child's", () =>
       provideHost(Effect.gen(function*() {
-        const Leaf = Component.define({
+        const Leaf = Html.component({
           name: "Leaf",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.p("leaf")
         })
-        const Mixed = Component.define({
+        const Mixed = Html.component({
           name: "Mixed",
           model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Html
+          message: Schema.Boolean
         }).make({
           init: () => false,
           update: (_, flipped) => flipped,
@@ -862,11 +860,10 @@ describe("Runtime", () => {
           update: ($) => $.model,
           view: (h) => h.text("leaf")
         })
-        const Half = Component.define({
+        const Half = Html.component({
           name: "Half",
           model: Schema.Boolean,
           message: Schema.Boolean,
-          elements: Html,
           slots: ["body"]
         }).make({
           init: () => false,

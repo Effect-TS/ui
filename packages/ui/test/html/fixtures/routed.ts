@@ -17,11 +17,10 @@ export const AppRoute = Route.union({
 })
 export type AppRoute = typeof AppRoute.Type
 
-export const Home = Component.define({
+export const Home = Html.component({
   name: "Home",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -49,12 +48,11 @@ export class GetBio extends Query.Service<GetBio>()("GetBio", {
   staleTime: "30 seconds"
 }, Effect.map(People, (people) => ({ id }) => people.bio(id))) {}
 
-export const Person = Component.define({
+export const Person = Html.component({
   name: "Person",
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({ id: Schema.Number }),
   message: Schema.Never,
-  elements: Html,
   queries: { bio: { query: GetBio, args: ({ props }) => ({ id: props.id }) } }
 }).make({
   init: ($) => ({ id: $.props.id }),
@@ -78,11 +76,10 @@ export class SlowData
 {}
 
 /** A page whose provided Layer takes a second of the TestClock to build. */
-export const Slow = Component.define({
+export const Slow = Html.component({
   name: "Slow",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -100,12 +97,11 @@ export const Message = UiSchema.TaggedEnum({
   Filter: {}
 })
 
-export const App = Component.define({
+export const App = Html.component({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({ route: AppRoute, blocked: Schema.Boolean }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: ($) => ({ route: $.props.route, blocked: false }),
   update: ($, message) =>

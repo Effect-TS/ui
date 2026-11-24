@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import {
   Checkbox,
   CheckboxGroup,
@@ -26,11 +26,10 @@ type Element<K extends keyof HTMLElementTagNameMap, R = never> = Html.Element<
 
 describe("CheckboxGroup", () => {
   it("the root returns the builder it was given, of any tag, with the consumer's message type and the children's requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

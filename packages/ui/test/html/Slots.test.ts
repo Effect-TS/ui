@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator, ssr } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
@@ -17,23 +17,21 @@ const container = Effect.acquireRelease(
 )
 
 const CounterMsg = UiSchema.TaggedEnum({ Add: {} })
-const Counter = Component.define({
+const Counter = Html.component({
   name: "Counter",
   model: Schema.Number,
   message: CounterMsg,
-  events: UiSchema.TaggedEnum({ Added: { count: Schema.Number } }),
-  elements: Html
+  events: UiSchema.TaggedEnum({ Added: { count: Schema.Number } })
 }).make({
   init: () => 0,
   update: ($) => $.set($.model + 1).emit({ _tag: "Added", count: $.model + 1 }),
   view: (h, n) => h.button.onClick(CounterMsg.Add()).children("add " + n)
 })
 
-const Card = Component.define({
+const Card = Html.component({
   name: "Card",
   model: Schema.Null,
   message: Schema.Never,
-  elements: Html,
   slots: ["title", "body", "aside"]
 }).make({
   init: () => null,
@@ -49,11 +47,10 @@ const Card = Component.define({
 
 const where = { server: true }
 const PageMsg = UiSchema.TaggedEnum({ Added: { count: Schema.Number } })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Number,
-  message: PageMsg,
-  elements: Html
+  message: PageMsg
 }).make({
   init: () => 0,
   update: (_, msg) => msg.count,
@@ -164,11 +161,10 @@ describe("slots on the server", () => {
     Effect.gen(function*() {
       // The view reads `where` on each side: the server's render, then the client's.
       let renders = 0
-      const Flip = Component.define({
+      const Flip = Html.component({
         name: "Flip",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Command, Component, UiSchema, Validation } from "@effect/ui"
+import { Command, UiSchema, Validation } from "@effect/ui"
 import { Field, Form, RadioGroup } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -36,14 +36,13 @@ const Save = Command.make(
       )
 )
 
-const Signup = Component.define({
+const Signup = Html.component({
   name: "Signup",
   model: Schema.Struct({
     form: SignupValidation.State,
     saving: Schema.Boolean
   }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({
     form: SignupValidation.init({

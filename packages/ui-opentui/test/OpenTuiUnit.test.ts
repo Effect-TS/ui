@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
@@ -26,7 +26,7 @@ describe("OpenTui FFI-free testing", () => {
         Done: {}
       })
 
-      const App = Component.define({
+      const App = OpenTui.component({
         name: "UnitApp",
         model: Schema.Struct({
           ups: Schema.Number,
@@ -34,8 +34,7 @@ describe("OpenTui FFI-free testing", () => {
           size: Schema.String,
           measured: Schema.Number
         }),
-        message: Message,
-        elements: OpenTui
+        message: Message
       }).make({
         init: () => ({ ups: 0, pasted: "", size: "", measured: 0 }),
         update: {
@@ -116,11 +115,10 @@ describe("OpenTui FFI-free testing", () => {
       const h = View.makeHelper<never, {}, OpenTui.Elements>({}, OpenTui)
       expect(() => h.el("box", "stray")).toThrow(/can't hold text/)
 
-      const Frame = Component.define({
+      const Frame = OpenTui.component({
         name: "Frame",
         model: Schema.Void,
         message: Schema.Never,
-        elements: OpenTui,
         slots: ["body"]
       }).make({
         init: () => undefined,
@@ -128,22 +126,20 @@ describe("OpenTui FFI-free testing", () => {
         view: (h) => h.box.children(h.slots.body)
       })
 
-      const BadParent = Component.define({
+      const BadParent = OpenTui.component({
         name: "BadParent",
         model: Schema.Void,
-        message: Schema.Never,
-        elements: OpenTui
+        message: Schema.Never
       }).make({
         init: () => undefined,
         update: () => undefined,
         view: (h) => Frame(h, { slots: { body: "stray text" } })
       })
 
-      const Root = Component.define({
+      const Root = OpenTui.component({
         name: "Root",
         model: Schema.Void,
-        message: Schema.Never,
-        elements: OpenTui
+        message: Schema.Never
       }).make({
         init: () => undefined,
         update: () => undefined,

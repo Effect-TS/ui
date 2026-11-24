@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -9,11 +9,11 @@ import { Schema } from "effect"
 
 export const CollapsibleMessage = UiSchema.TaggedEnum({ ClickedToggle: {} })
 
-export const Collapsible = Component.define({
+export const Collapsible = Html.component({
   name: "Collapsible",
   model: Schema.Struct({ open: Schema.Boolean }),
   message: CollapsibleMessage,
-  elements: Html,
+
   // The slot names. A parent can pass content for any of them, and a slot
   // it leaves out shows nothing.
   slots: ["summary", "body"]

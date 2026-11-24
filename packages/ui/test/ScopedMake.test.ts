@@ -14,11 +14,10 @@ const Hello = Mount.make(
   { args: {} },
   () => Effect.succeed(Component.noop)
 )
-const Greeting = Component.define({
+const Greeting = Html.component({
   name: "Greeting",
   model: Schema.Struct({}),
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => ({}),
   update: ($) => $.model,

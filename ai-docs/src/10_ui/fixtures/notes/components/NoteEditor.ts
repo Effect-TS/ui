@@ -6,6 +6,7 @@ import {
   UiSchema,
   UiStruct
 } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { Notes } from "../services/Notes.ts"
 
@@ -64,15 +65,15 @@ export class SaveNote extends Command.Service<SaveNote>()(
   })
 ) {}
 
-// The editor is large, so it is written in pieces. `Component.define`
+// The editor is large, so it is written in pieces. `Html.component`
 // takes what nothing is inferred from: the name and the Schemas, plus
-// `queries` and `elements` when a component has them. The update slices
-// and the view below are typed against it, and `make` finishes the
-// component. Typing them against the finished component instead is circular,
-// because its requirements are read off what `update` returns. The
-// definition takes a `Def` suffix and isn't exported. A component that
+// `queries` when a component has them, and supplies the HTML vocabulary.
+// The update slices and the view below are typed against it, and `make`
+// finishes the component. Typing them against the finished component instead
+// is circular, because its requirements are read off what `update` returns.
+// The definition takes a `Def` suffix and isn't exported. A component that
 // fits in one piece chains the two calls, like `NotePage`.
-const NoteEditorDef = Component.define({
+const NoteEditorDef = Html.component({
   name: "NoteEditor",
   props: Schema.Struct({ note: Note }),
   model: Schema.Struct({
@@ -156,7 +157,7 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 // fragment, a child call and `h.lazy`.
 //
 // `h.form`, `h.button` and the other HTML elements are on `h` because the
-// entry module imports `@effect/ui/html/register`. Attributes and handlers
+// component is defined with `Html.component`. Attributes and handlers
 // chain on the tag, then `.children(...)` ends the element; `h.h2(title)`
 // is short for `h.h2.children(title)`. `false`, `null` and `undefined`
 // children render nothing. A handler is a message, or a function from a plain payload such

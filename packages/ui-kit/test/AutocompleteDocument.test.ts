@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Autocomplete, Combobox, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -60,11 +60,10 @@ const formUpdate = {
   })
 }
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: FormModel,
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
@@ -115,11 +114,10 @@ const Page = Component.define({
     )
 })
 
-const InPopup = Component.define({
+const InPopup = Html.component({
   name: "InPopup",
   model: FormModel,
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
@@ -176,7 +174,7 @@ const NestedMessage = UiSchema.TaggedEnum({
   }
 })
 
-const Nested = Component.define({
+const Nested = Html.component({
   name: "Nested",
   model: Schema.Struct({
     outer: Schema.Boolean,
@@ -184,8 +182,7 @@ const Nested = Component.define({
     picker: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: NestedMessage,
-  elements: Html
+  message: NestedMessage
 }).make({
   init: () => ({ outer: true, inner: true, picker: false, log: [] }),
   update: {

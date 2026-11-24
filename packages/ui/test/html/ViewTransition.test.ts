@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import {
   Command,
-  Component,
   MessageLog,
   Renderer,
   Route,
@@ -31,12 +30,11 @@ const Message = UiSchema.TaggedEnum({
 
 const CardMessage = UiSchema.TaggedEnum({ ClickedLike: {} })
 
-const Card = Component.define({
+const Card = Html.component({
   name: "Card",
   props: Schema.Struct({ layout: Layout }),
   model: Schema.Struct({ likes: Schema.Number }),
-  message: CardMessage,
-  elements: Html
+  message: CardMessage
 }).make({
   init: () => ({ likes: 0 }),
   update: { ClickedLike: ($) => $.evolve({ likes: $.model.likes + 1 }) },
@@ -44,7 +42,7 @@ const Card = Component.define({
     h.button.onClick(CardMessage.ClickedLike()).children(`Like ${model.likes}`)
 })
 
-const Gallery = Component.define({
+const Gallery = Html.component({
   name: "Gallery",
   props: Schema.Struct({ route: GalleryRoute }),
   model: Schema.Struct({
@@ -52,8 +50,7 @@ const Gallery = Component.define({
     layout: Layout,
     filter: Schema.String
   }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: ($) => ({ route: $.props.route, layout: "grid" as const, filter: "" }),
   update: {

@@ -1,5 +1,5 @@
-import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
-import { HtmlHead } from "@effect/ui/html"
+import { Command, Head, Router, UiSchema } from "@effect/ui"
+import { Html, HtmlHead } from "@effect/ui/html"
 import { Schema } from "effect"
 import { NotePage } from "./pages/notes/NotePage.ts"
 import { NotesIndex } from "./pages/NotesIndex.ts"
@@ -20,7 +20,7 @@ export const AppMessage = UiSchema.TaggedEnum({
 
 // The root needs no domain Layers of its own, because each page provides
 // what it uses. Only the Router is left, so there is no `AppNoDeps`.
-export const App = Component.define({
+export const App = Html.component({
   name: "App",
   // The root holds the route. The first one arrives through props and every
   // later change arrives as a message, which puts navigation in the message

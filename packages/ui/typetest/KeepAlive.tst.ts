@@ -12,13 +12,12 @@ const EditorMessage = UiSchema.TaggedEnum({
 })
 const EditorEvents = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 
-const NoteEditor = Component.define({
+const NoteEditor = Html.component({
   name: "NoteEditor",
   props: Schema.Struct({ noteId: Schema.String }),
   model: Schema.String,
   message: EditorMessage,
-  events: EditorEvents,
-  elements: Html
+  events: EditorEvents
 }).make({
   init: () => "",
   update: ($, message) => message._tag === "Typed" ? message.text : $.model,
@@ -53,12 +52,11 @@ const Model = Schema.Struct({
   order: Schema.Array(Schema.String)
 })
 
-const AppDef = Component.define({
+const AppDef = Html.component({
   name: "App",
   props: Schema.Struct({ projectId: Schema.String }),
   model: Model,
-  message: Message,
-  elements: Html
+  message: Message
 })
 type H = Component.Helper<typeof AppDef>
 

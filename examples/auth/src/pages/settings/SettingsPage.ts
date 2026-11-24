@@ -1,15 +1,15 @@
 import type { Session } from "#domain/Session"
-import type { View } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
+import type { Html } from "@effect/ui/html"
 
-const InfoRow = <M>(h: View.H<M>, label: string, value: string) =>
+const InfoRow = <M>(h: Html.H<M>, label: string, value: string) =>
   h.div.class("flex justify-between items-center py-2 border-b border-gray-100")
     .children(
       h.p.class("text-gray-600").children(label),
       h.p.class("font-medium text-gray-800").children(value)
     )
 
-export const SettingsPage = <M>(h: View.H<M>, options: {
+export const SettingsPage = <M>(h: Html.H<M>, options: {
   readonly session: Session
   readonly onSignOut: M
 }) =>

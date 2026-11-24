@@ -9,11 +9,10 @@ const Neutral = Component.define({
   model: Schema.Null,
   message: Schema.Never
 })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
 
 declare const content: View.Content<never, any>

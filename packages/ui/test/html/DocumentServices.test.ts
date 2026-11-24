@@ -27,20 +27,18 @@ describe("BrowserHost document services", { concurrent: false }, () => {
       yield* refusePicker
       vi.resetModules()
 
-      const [Component, BrowserHost, Html] = yield* Effect.promise(() =>
+      const [BrowserHost, Html] = yield* Effect.promise(() =>
         Promise.all([
-          import("@effect/ui/Component"),
           import("@effect/ui/html/BrowserHost"),
           import("@effect/ui/html/Html")
         ])
       )
 
-      const Page = Component.define({
+      const Page = Html.component({
         name: "LateServicePage",
         props: Schema.Struct({ summary: Schema.String }),
         model: Schema.String,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: ($) => $.props.summary,
         update: ($) => $.model,

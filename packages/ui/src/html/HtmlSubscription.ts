@@ -247,7 +247,7 @@ const listenFor = (
  * **Example** (Steering with the arrow keys while the game runs)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -256,11 +256,10 @@ const listenFor = (
  * const Direction = Schema.Literals(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
  * const Message = UiSchema.TaggedEnum({ PressedArrow: { key: Direction } })
  *
- * const Snake = Component.define({
+ * const Snake = Html.component({
  *   name: "Snake",
  *   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => ({ running: true, heading: "ArrowRight" as const }),
  *   update: { PressedArrow: ($, { key }) => $.evolve({ heading: key }) },
@@ -316,7 +315,7 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  * **Example** (Document shortcuts from a table)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -324,11 +323,10 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  *
  * const Message = UiSchema.TaggedEnum({ OpenedHelp: {}, ClosedHelp: {} })
  *
- * const Shortcuts = Component.define({
+ * const Shortcuts = Html.component({
  *   name: "Shortcuts",
  *   model: Schema.Boolean,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => false,
  *   update: { OpenedHelp: () => true, ClosedHelp: () => false },
@@ -413,7 +411,7 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  * **Example** (Listening for a custom document event)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -421,11 +419,10 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
  *
  * const Message = UiSchema.TaggedEnum({ Received: { text: Schema.String } })
  *
- * const Banner = Component.define({
+ * const Banner = Html.component({
  *   name: "Banner",
  *   model: Schema.String,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => "",
  *   update: { Received: (_, { text }) => text },
@@ -516,7 +513,7 @@ export const AnimationFrames: Context.Reference<AnimationFrames> =
  * **Example** (A clock that runs while the Model says so)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { HtmlScene } from "@effect/ui/html/testing"
  * import { Locator } from "@effect/ui/testing"
@@ -524,11 +521,10 @@ export const AnimationFrames: Context.Reference<AnimationFrames> =
  *
  * const Message = UiSchema.TaggedEnum({ TickedFrame: { delta: Schema.Number } })
  *
- * const Stopwatch = Component.define({
+ * const Stopwatch = Html.component({
  *   name: "Stopwatch",
  *   model: Schema.Struct({ running: Schema.Boolean, elapsed: Schema.Number }),
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => ({ running: true, elapsed: 0 }),
  *   update: {

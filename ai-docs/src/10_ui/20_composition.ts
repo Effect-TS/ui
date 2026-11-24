@@ -10,8 +10,6 @@
 import { BrowserHost } from "@effect/ui/html"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/http"
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 // A page is one file under `pages/`, in the folder for its URL. It imports
 // what it is composed from out of the features:
 //

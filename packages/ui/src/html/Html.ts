@@ -4,9 +4,9 @@
  * The Commands that use those refs are in `HtmlCommand`, and document and
  * window events in `HtmlSubscription`.
  *
- * The module is itself a vocabulary. Register it once for the app by
- * importing `@effect/ui/html/register`, or set it on one component with
- * `elements: Html`.
+ * Define HTML components with `Html.component`, which supplies the HTML
+ * vocabulary automatically, and type reusable pure HTML view functions with
+ * `Html.H<Msg>`. The module is also a `View.Vocabulary<Html.Elements>`.
  *
  * Event handlers get plain data, never a DOM event: `input` has the field's
  * `value`, `keydown` the `key` and the modifier keys, and `submit` the
@@ -44,28 +44,21 @@
  * reports it, and the Model must follow. Position a popover next to its
  * trigger with CSS anchor positioning.
  *
- * **Example** (Registering the vocabulary for the app)
- *
- * ```ts
- * import "@effect/ui/html/register"
- * ```
- *
  * **Example** (A controlled text field)
  *
  * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
  * import { Schema } from "effect"
- * import { Component, UiSchema } from "@effect/ui"
  *
  * const Message = UiSchema.TaggedEnum({ UpdatedDraft: { value: Schema.String }, SubmittedForm: {} })
  *
  * const NewTodo = Html.ref("NewTodo", "input")
  *
- * const Form = Component.define({
+ * const Form = Html.component({
  *   name: "Form",
  *   model: Schema.String,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => "",
  *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
@@ -81,17 +74,16 @@
  * **Example** (Sending on Enter, keeping Shift+Enter's new line)
  *
  * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
  * import { Schema } from "effect"
- * import { Component, UiSchema } from "@effect/ui"
  *
  * const Message = UiSchema.TaggedEnum({ UpdatedDraft: { value: Schema.String }, PressedEnter: {} })
  *
- * const Composer = Component.define({
+ * const Composer = Html.component({
  *   name: "Composer",
  *   model: Schema.String,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => "",
  *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
@@ -111,7 +103,7 @@
  * @since 0.1.0
  */
 import * as Context from "effect/Context"
-import type * as Component from "../Component.ts"
+import * as Component from "../Component.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
@@ -1608,7 +1600,7 @@ export type Tags<Msg> =
   }
 
 /**
- * The type-level vocabulary, for `View.Register`.
+ * The type-level HTML vocabulary.
  *
  * @stability experimental
  * @category vocabulary
@@ -1620,6 +1612,46 @@ export interface Elements extends View.Elements {
   readonly Head: HtmlHead.Entry
   readonly HeadValue: HtmlHead.HtmlHead
 }
+
+/**
+ * The view helper for reusable pure HTML view functions, without a component
+ * definition.
+ *
+ * **Details**
+ *
+ * A shared view function takes the message as a type parameter,
+ * `<M>(h: Html.H<M>, ...)`, whether or not it sends a message. `Html.H<never>`
+ * only accepts the `h` of a component with `message: Schema.Never`.
+ *
+ * Props remain `unknown` and component-specific queries are not included. Use
+ * `Component.Helper<D>` instead when a function needs a definition's props,
+ * queries or custom elements.
+ *
+ * **Example** (A reusable button)
+ *
+ * ```ts import.meta.vitest
+ * import { Html } from "@effect/ui/html"
+ * import { Schema } from "effect"
+ *
+ * const Button = <Msg>(h: Html.H<Msg>, label: string, message: Msg) =>
+ *   h.button.onClick(message).children(label)
+ *
+ * export const Counter = Html.component({
+ *   name: "Counter",
+ *   model: Schema.Number,
+ *   message: Schema.Literal("ClickedIncrement")
+ * }).make({
+ *   init: () => 0,
+ *   update: ($) => $.model + 1,
+ *   view: (h, count) => Button(h, String(count), "ClickedIncrement")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type H<Msg> = View.WithTags<Msg, unknown, Elements>
 
 /**
  * Phantom: carries `Elements` on the module, so the module namespace is a
@@ -1662,39 +1694,49 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
   makeTags()
 
 /**
- * The vocabulary alone: its name and its tags.
+ * The vocabulary alone: its name and its tags. `Html.component` passes it to
+ * `Component.define`.
  *
  * **When to use**
  *
- * Use as a component's `elements` in place of the module, when the size of
- * the bundle matters. A bundler keeps every export of a module that is passed
- * as a value, such as `Host`, `classNames` and `ref`. With
- * `Html.vocabulary` a bundle holds only the exports the app names.
- *
- * **Example** (Naming the vocabulary)
- *
- * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
- * import { Html } from "@effect/ui/html"
- * import { Schema } from "effect"
- *
- * const Label = Component.define({
- *   name: "Label",
- *   model: Schema.Void,
- *   message: Schema.Never,
- *   elements: Html.vocabulary
- * }).make({
- *   init: () => undefined,
- *   update: () => undefined,
- *   view: (h) => h.span.children("Ready")
- * })
- * ```
+ * Use wherever `elements` is written by hand, in place of the module. A
+ * bundler keeps every export of a module that is passed as a value, such as
+ * `Host`, `classNames` and `ref`. With `Html.vocabulary` a bundle holds
+ * only the exports the app names.
  *
  * @stability experimental
  * @category vocabulary
  * @since 0.1.0
  */
 export const vocabulary: View.Vocabulary<Elements> = { name, tags }
+
+/**
+ * Defines a component with the HTML element vocabulary already supplied,
+ * equivalent to `Component.define({ ...options, elements: Html.vocabulary })`.
+ *
+ * **Example** (A counter component)
+ *
+ * ```ts import.meta.vitest
+ * import { Html } from "@effect/ui/html"
+ * import { Schema } from "effect"
+ *
+ * const Counter = Html.component({
+ *   name: "Counter",
+ *   model: Schema.Number,
+ *   message: Schema.Literal("ClickedIncrement")
+ * }).make({
+ *   init: () => 0,
+ *   update: ($) => $.model + 1,
+ *   view: (h, count) => h.button.onClick("ClickedIncrement").children(String(count))
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const component: Component.Define<Elements> = (options) =>
+  Component.define({ ...options, elements: vocabulary }) as any
 
 // ---------------------------------------------------------------------------
 // refs

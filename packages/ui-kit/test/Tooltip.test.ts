@@ -1,4 +1,11 @@
-import { Command, Component, Route, Router, UiSchema, View } from "@effect/ui"
+import {
+  Command,
+  type Component,
+  Route,
+  Router,
+  UiSchema,
+  View
+} from "@effect/ui"
 import {
   Positioning,
   Tooltip,
@@ -59,15 +66,14 @@ const ToolbarMessage = UiSchema.TaggedEnum({
   RequestedCloseBoldTip: {}
 })
 
-const Toolbar = Component.define({
+const Toolbar = Html.component({
   name: "Toolbar",
   model: Schema.Struct({
     open: Schema.Boolean,
     pressed: Schema.Number,
     dismissed: Schema.Number
   }),
-  message: ToolbarMessage,
-  elements: Html
+  message: ToolbarMessage
 }).make({
   init: () => ({ open: true, pressed: 0, dismissed: 0 }),
   update: {
@@ -108,11 +114,10 @@ const GroupedMessage = UiSchema.TaggedEnum({
   RequestedCloseTip: { tip: Tip }
 })
 
-const Grouped = Component.define({
+const Grouped = Html.component({
   name: "Grouped",
   model: Schema.Struct({ tip: Schema.NullOr(Tip) }),
-  message: GroupedMessage,
-  elements: Html
+  message: GroupedMessage
 }).make({
   init: () => ({ tip: null }),
   update: {
@@ -160,12 +165,11 @@ const PagesMessage = UiSchema.TaggedEnum({
   Navigated: {}
 })
 
-const Pages = Component.define({
+const Pages = Html.component({
   name: "Pages",
   props: Schema.Struct({ route: PageRoute }),
   model: PageRoute,
-  message: PagesMessage,
-  elements: Html
+  message: PagesMessage
 }).make({
   init: ($) => $.props.route,
   update: {
@@ -201,7 +205,7 @@ const IndependentMessage = UiSchema.TaggedEnum({
   RequestedCloseTip: { tip: Tip }
 })
 
-const Independent = Component.define({
+const Independent = Html.component({
   name: "Independent",
   props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
   model: Schema.Struct({
@@ -209,8 +213,7 @@ const Independent = Component.define({
     italic: Schema.Boolean,
     requests: Schema.Number
   }),
-  message: IndependentMessage,
-  elements: Html
+  message: IndependentMessage
 }).make({
   init: () => ({ bold: false, italic: false, requests: 0 }),
   update: {
@@ -266,7 +269,7 @@ const DeferredMessage = UiSchema.TaggedEnum({
   AcceptedClose: { tip: Mark }
 })
 
-const Deferred = Component.define({
+const Deferred = Html.component({
   name: "Deferred",
   model: Schema.Struct({
     bold: Schema.Boolean,
@@ -274,8 +277,7 @@ const Deferred = Component.define({
     underline: Schema.Boolean,
     requests: Schema.Number
   }),
-  message: DeferredMessage,
-  elements: Html
+  message: DeferredMessage
 }).make({
   init: () => ({ bold: false, italic: false, underline: false, requests: 0 }),
   update: {

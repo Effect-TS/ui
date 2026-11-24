@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Add View.Children for reusable options-object view wrappers that preserve child requirements, using the canonical View.H helper.
+Add View.Children for reusable options-object view wrappers that preserve child requirements, using `Html.H` / `OpenTui.H`.

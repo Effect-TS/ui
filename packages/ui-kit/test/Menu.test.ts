@@ -1,6 +1,6 @@
 import {
   Command,
-  Component,
+  type Component,
   type Mount,
   Route,
   Router,
@@ -235,12 +235,11 @@ const PageMessage = UiSchema.TaggedEnum({
   Navigated: {}
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ route: PageRoute }),
   model: Schema.Struct({ route: PageRoute, open: Schema.Boolean }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: ($) => ({ route: $.props.route, open: false }),
   update: {

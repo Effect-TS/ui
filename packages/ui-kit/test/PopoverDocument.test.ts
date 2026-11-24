@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Popover, PopoverTrigger } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -20,7 +20,7 @@ const Message = UiSchema.TaggedEnum({
   Settled: { open: Schema.Boolean }
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({
     modal: Schema.optional(Schema.Boolean),
@@ -34,8 +34,7 @@ const Page = Component.define({
     third: Third,
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({
     open: false,

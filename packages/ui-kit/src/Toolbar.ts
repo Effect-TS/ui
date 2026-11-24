@@ -87,18 +87,17 @@
  * **Example** (A formatting toolbar)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Button, Toolbar } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const EditorMessage = UiSchema.TaggedEnum({ PressedBold: {}, PressedItalic: {} })
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Null,
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => null,
  *   update: ($) => $.model,
@@ -427,7 +426,7 @@ const moveTo = ($: ToolbarUpdate, target: ToolbarItem) =>
  * @category components
  * @since 0.1.0
  */
-export const Toolbar = Component.define({
+export const Toolbar = Html.component({
   name: "Toolbar",
   props: ToolbarProps,
   model: ToolbarModel,
@@ -449,8 +448,7 @@ export const Toolbar = Component.define({
   },
   shared: {
     provider: { owner: DirectionProvider, optional: true }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({ active: null }),
   update: {

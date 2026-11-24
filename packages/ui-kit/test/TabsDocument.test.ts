@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Tabs } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -8,12 +8,11 @@ import { container, tick } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({ Selected: { value: Schema.String } })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Schema.Struct({ activateOnFocus: Schema.optional(Schema.Boolean) }),
   model: Schema.Struct({ tab: Schema.String }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ tab: "a" }),
   update: { Selected: ($, { value }) => ({ ...$.model, tab: value }) },
