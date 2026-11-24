@@ -115,8 +115,7 @@ export type HeadSync = documentHead.HeadSync
 /** @internal */
 export const syncHead: HeadSync = documentHead.make
 
-/** @internal */
-export interface HostOptions {
+interface HostOptions {
   readonly head?: HeadSync | undefined
   readonly viewTransitions?: boolean | undefined
   readonly warn?: ((message: string) => void) | undefined

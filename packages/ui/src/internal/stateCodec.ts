@@ -7,8 +7,7 @@ import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import { holdsRedacted } from "./schemaRedact.ts"
 
-/** @internal */
-export interface JsonCodec {
+interface JsonCodec {
   readonly encode: (value: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly decode: (
     encoded: unknown
@@ -29,8 +28,7 @@ const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
 }
 
 const stateCodecs = new WeakMap<object, StateCodec>()
-/** @internal */
-export interface StateCodec {
+interface StateCodec {
   readonly redacted: boolean
   readonly encode: (
     model: unknown,

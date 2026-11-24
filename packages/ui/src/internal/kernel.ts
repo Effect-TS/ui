@@ -174,8 +174,7 @@ export interface Issued {
   readonly index: number
 }
 
-/** @internal */
-export interface Issuable {
+interface Issuable {
   readonly "~run": (
     inst: Instance,
     seq: number | undefined | void,
@@ -191,8 +190,7 @@ export interface Runs {
   >
 }
 
-/** @internal */
-export interface Ops {
+interface Ops {
   readonly send: typeof send
   readonly fail: typeof fail
   readonly markDirty: typeof markDirty
