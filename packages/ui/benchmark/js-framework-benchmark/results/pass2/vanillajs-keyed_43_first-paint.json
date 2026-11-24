@@ -5,12 +5,12 @@
   "type": "size",
   "values": {
     "DEFAULT": {
-      "min": 79.7,
-      "max": 79.7,
-      "median": 79.7,
-      "mean": 79.7,
+      "min": 63.7,
+      "max": 63.7,
+      "median": 63.7,
+      "mean": 63.7,
       "stddev": null,
-      "values": [79.7]
+      "values": [63.7]
     }
   }
 }

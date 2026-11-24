@@ -1,0 +1,16 @@
+{
+  "framework": "effect-ui-v0.0.0-9f24dbe-keyed",
+  "keyed": true,
+  "benchmark": "43_first-paint",
+  "type": "size",
+  "values": {
+    "DEFAULT": {
+      "min": 389.3,
+      "max": 389.3,
+      "median": 389.3,
+      "mean": 389.3,
+      "stddev": null,
+      "values": [389.3]
+    }
+  }
+}
