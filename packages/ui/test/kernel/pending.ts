@@ -50,7 +50,11 @@ export const files: ReadonlyArray<string> = [
   "html/Forward.test.ts",
   "html/Composed.test.ts",
   "html/register.test.ts",
-  "html/HtmlLocator.test.ts"
+  "html/HtmlLocator.test.ts",
+  "html/HtmlServer.test.ts",
+  "html/HtmlServerHttp.test.ts",
+  "QueryHydration.test.ts",
+  "html/StateCodec.test.ts"
 ]
 
 export const pending: {
@@ -70,8 +74,6 @@ export const pending: {
     "Runtime > rejects a different shared owner with the same name at mount":
       "headless components and shared state (step 8)",
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
-      "server rendering and hydration (step 7)",
-    "Runtime > prerenders the tree as nodes: an instance's elements and text in a Range under its path":
       "server rendering and hydration (step 7)"
   },
   "SlotStatus.test.ts": {},
@@ -458,8 +460,6 @@ export const pending: {
       "popovers on the kernel DOM host (unscheduled)",
     "BrowserHost > popovers > showing a modal dialog or a popover that takes focus leaves the page's scroll where it was":
       "modal dialogs and popovers on the kernel DOM host (unscheduled)",
-    "BrowserHost > renders once for the Commands of one flush that end together":
-      "differs: the results of Commands that end together are flushed one at a time, where today's runtime renders once for them",
     "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
       "server rendering and hydration (step 7)"
   },
@@ -475,40 +475,145 @@ export const pending: {
     "p.child on the server > the client adopts the server's render of every owned child":
       "server rendering and hydration (step 7), headless parts (step 8)"
   },
-  "html/Forward.test.ts": {
-    "children > a part's children come before the consumer's, in the order the parts were applied":
-      "server rendering (step 7)",
-    "forward > renders around the element, and what the caller chains and its children land on the element":
-      "server rendering (step 7)"
-  },
   "html/Head.test.ts": {
     "BrowserHost head > validates head tag and document data names before serialization, adoption and updates":
-      "server rendering and hydration (step 7)",
-    "BrowserHost head > merges links by their normalized rel and href before rendering":
-      "server rendering (step 7)",
-    "BrowserHost head > escapes data names in the serialized ownership marker":
-      "server rendering (step 7)"
+      "server rendering and hydration (step 7)"
   },
-  "html/Html.test.ts": {
-    "Html > builder > renders the example the same as the children-first form did":
-      "server rendering (step 7)",
-    "Html > builder > style sets, replaces and removes inline CSS without changing the original builder":
-      "server rendering (step 7)",
-    "Html > Element.class > renders the same classes on the server":
-      "server rendering (step 7)"
+  "html/Forward.test.ts": {
+    "children > a part's children come before the consumer's, in the order the parts were applied":
+      "headless parts (step 8)",
+    "forward > renders around the element, and what the caller chains and its children land on the element":
+      "headless parts (step 8)"
   },
-  "html/HtmlHead.test.ts": {
-    "HtmlHead > keeps an Html child's entries under a host-neutral root":
-      "server rendering (step 7)"
+  "html/HtmlServer.test.ts": {
+    "HtmlServer > drops unsafe attribute names on the server, fresh client and hydrated client":
+      "hydration (step 7)",
+    "HtmlServer > reports across hydration > delivers each report once: the same report, with a Redacted message variant":
+      "shared state (step 8), hydration (step 7)",
+    "HtmlServer > reports across hydration > delivers each report once: a report that changes on the client":
+      "shared state (step 8), hydration (step 7)",
+    "HtmlServer > reports across hydration > delivers each report once: the only reader gone on the client":
+      "shared state (step 8), hydration (step 7)",
+    "HtmlServer > reports across hydration > waits for a reader still building its Layer before comparing, and sends nothing when it reports the same":
+      "shared state (step 8), hydration (step 7)",
+    "HtmlServer > reports across hydration > adopts the server's nodes when the last message ships":
+      "shared state (step 8), hydration (step 7)",
+    "HtmlServer > folds HTML attribute names with last-write wins, but preserves SVG casing":
+      "hydration (step 7)",
+    "HtmlServer > keeps winning HTML aliases through updates and removals without folding SVG attributes":
+      "hydration (step 7)",
+    "HtmlServer > renders the routed example with its route data, and hydration adopts it":
+      "hydration (step 7)",
+    "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":
+      "hydration (step 7)",
+    "HtmlServer > a hydrated open dialog's close belongs to that showing, not to a modal shown since":
+      "hydration (step 7)",
+    "HtmlServer > renders a popover closed with its mode, and hydration shows it":
+      "hydration (step 7)",
+    "HtmlServer > hydrates what missed the budget: a fetch in flight and a deferred Layer":
+      "hydration (step 7)",
+    "HtmlServer > starts no fetch with a budget of 0, and the client fetches what missed it":
+      "hydration (step 7)",
+    "HtmlServer > reports ServerCommandIssued every time, and fails ssr with it":
+      "hydration (step 7)",
+    "HtmlServer > keeps an instance whose Layer is still building inert until it adopts, then fires onMount":
+      "hydration (step 7)",
+    "HtmlServer > keeps what the user changed before adoption > reports an edit made while the instance waits for its Layer":
+      "hydration (step 7)",
+    "HtmlServer > keeps what the user changed before adoption > reports edits made before the client mounts: a checkbox and a focused field":
+      "hydration (step 7)",
+    "HtmlServer > keeps what the user changed before adoption > initializes untouched radios and a select":
+      "hydration (step 7)",
+    "HtmlServer > keeps what the user changed before adoption > keeps a radio picked outside its form":
+      "hydration (step 7)",
+    "HtmlServer > a keyed provide selects its Layer from the Model the client adopts":
+      "hydration (step 7)",
+    "HtmlServer > rebuilds nothing outside the instance whose nodes don't match":
+      "hydration (step 7)",
+    "HtmlServer > a mismatch after a row's own nodes keeps the rows beside it, and starts nothing twice":
+      "hydration (step 7)",
+    "HtmlServer > places what a child builds fresh among the server's nodes":
+      "hydration (step 7)",
+    "HtmlServer > places what the root's child builds fresh among the server's nodes":
+      "hydration (step 7)",
+    "HtmlServer > places what a child that waited for its Layer builds fresh among the server's nodes":
+      "hydration (step 7)",
+    "HtmlServer > places what a child that waited for its Layer builds fresh in place of the server's nodes":
+      "hydration (step 7)",
+    "HtmlServer > keeps the nodes before a mismatch in the view it's in":
+      "hydration (step 7)",
+    "HtmlServer > keeps the rows before a node the view doesn't render, and builds the rest once":
+      "hydration (step 7)",
+    "HtmlServer > fails the parent whose view has two children at one path when it adopts":
+      "hydration (step 7)",
+    "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over nothing inherited":
+      "shared state (step 8)",
+    "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over a value that can't be written inherited":
+      "shared state (step 8)",
+    "HtmlServer > returns the state as a plain record: each path in document order, then the reserved keys, over a setter inherited":
+      "shared state (step 8)",
+    "HtmlServer > writes only text inside a textarea, and hydration rebuilds just that text":
+      "hydration (step 7)",
+    "HtmlServer > judges adoption when it commits, before onMount updates replace nodes":
+      "hydration (step 7)",
+    "HtmlServer > keeps marker paths through the parser's normalisation of CR, NUL and lone surrogates":
+      "hydration (step 7)",
+    "HtmlServer > compares the client's first fold, so a mount update while an instance waits isn't a mismatch":
+      "hydration (step 7)",
+    "HtmlServer > compares the client's first fold, so a head that mounts while an instance waits isn't a mismatch":
+      "hydration (step 7)",
+    "HtmlServer > compares the head the client evaluated, over the instance tree, not one rebuilt from paths":
+      "hydration (step 7)",
+    "HtmlServer > compares the head a waiting child's subtree had with the props it was placed with":
+      "hydration (step 7)",
+    "HtmlServer > adopts a waiting child with the slots it was placed with, and applies the new ones after":
+      "hydration (step 7)",
+    "HtmlServer > compares the client's first fold, so removing an instance while another waits isn't a mismatch":
+      "hydration (step 7)",
+    "HtmlServer > an instance removed while it waits logs Waiting, then Unmounted, and nothing once its Layer would be ready":
+      "hydration (step 7)",
+    "HtmlServer > drops the placement held for a waiting instance its parent removes, and never applies it":
+      "hydration (step 7)",
+    "HtmlServer > calls a title template once in the server's fold and once in the client's first fold":
+      "hydration (step 7)",
+    "HtmlServer > leaves an instance its own title template fails out of the client's fold, as the server does":
+      "hydration (step 7)",
+    "HtmlServer > calls a title template once per fold": "hydration (step 7)",
+    "HtmlServer > recovers from mismatches on marker-free single-element children":
+      "hydration (step 7)",
+    "HtmlServer > hydrates single-element children wrapped in legacy marker pairs":
+      "hydration (step 7)",
+    "HtmlServer > ssr() includes the rebuilt node's tag when a marker-free child mismatches":
+      "hydration (step 7)",
+    "HtmlServer queries > fetches each key once per request and ships every settled entry, typed Failures included":
+      "hydration (step 7)",
+    "HtmlServer queries > runs rounds: an onChange message that changes the args fetches the next key":
+      "hydration (step 7)",
+    "HtmlServer queries > ships the k of N keys of a keyed field that settled in budget, and the client fetches the rest":
+      "hydration (step 7)",
+    "HtmlServer queries > fails ssr when an entry doesn't encode, and doesn't ship it":
+      "hydration (step 7)",
+    "HtmlServer queries > fails ssr when the client fetches a hydrated entry inside the window, unless static":
+      "hydration (step 7)",
+    "HtmlServer queries > closes the window at the first navigation, before a waiting instance adopts":
+      "hydration (step 7)",
+    "HtmlServer queries > runs a push's Router.prefetch after the navigation closes the fetch-free window":
+      "hydration (step 7)",
+    "HtmlServer queries > allows a caller-only fetch inside the window: it stores nothing":
+      "hydration (step 7)",
+    "HtmlServer queries > spends the whole budget on the client before failing, for a sleep its clock didn't see":
+      "hydration (step 7)",
+    "HtmlServer queries > fails ssr naming the instances still waiting for their Layer when the budget is spent":
+      "hydration (step 7)"
+  },
+  "html/StateCodec.test.ts": {
+    "state codecs > ships a File in a Model and adopts a Model that decodes asynchronously":
+      "hydration (step 7)",
+    "state codecs > restores a state that encodes later from memory only, and one that decodes later once decoded":
+      "hydration (step 7)"
   },
   "html/ViewTransition.test.ts": {
     "view transitions > a mid-flush route transition commits once across callback, freeze, and close":
-      "freeze (server rendering, step 7)",
-    "view transitions > freezing settles a requested transition's update at once, without starting one":
-      "freeze (server rendering, step 7)"
-  },
-  "html/register.test.ts": {
-    "@effect/ui/html/register > registers Html when imported, without a DOM":
-      "server rendering (step 7)"
+      "differs: with a route transition held mid-flush the kernel queues no flush task, and a root closed while it holds commits nothing, where today's runtime commits the held update"
   }
 }

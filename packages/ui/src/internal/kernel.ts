@@ -43,6 +43,18 @@ export interface Host<N = any> {
   readonly head?: ((head: unknown) => void) | undefined
   /** Makes what runs the view transitions updates ask for. Without it, they're ignored. */
   readonly transitions?: ((tree: Tree) => Transitions) | undefined
+  readonly server?: Server | undefined
+}
+
+/** @internal */
+export interface Server {
+  readonly drop: (
+    inst: Instance,
+    name: string,
+    issued: Issued | undefined
+  ) => void
+  readonly defer: (inst: Instance) => void
+  readonly report: (problem: any) => void
 }
 
 /** @internal */
@@ -53,6 +65,7 @@ export interface Transitions {
   readonly wait: (f: () => void) => void
   /** At the start of a flush: whether it waits for a transition to start. */
   readonly hold: () => boolean
+  readonly settle: () => void
 }
 
 /**

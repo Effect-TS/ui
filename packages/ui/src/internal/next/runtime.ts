@@ -6,11 +6,13 @@
 import * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
+import * as Command from "../../Command.ts"
 import type * as Component from "../../Component.ts"
 import * as Head from "../../Head.ts"
 import type * as Renderer from "../../Renderer.ts"
@@ -23,9 +25,11 @@ import * as queryCore from "../queryCore.ts"
 import * as Recorder from "../recorder.ts"
 import type * as routeRun from "../routeRun.ts"
 import type * as runtime from "../runtime.ts"
+import * as serverHost from "../serverHost.ts"
 import * as services from "../services.ts"
 import * as transitionRun from "../transitionRun.ts"
 import * as domHost from "./domHost.ts"
+import * as serialize from "./serialize.ts"
 
 /** @internal */
 export type Root = runtime.Root
@@ -49,6 +53,8 @@ export const eventOwners = (
 ): Readonly<Record<string, ReadonlyArray<string>>> => View.noFields
 
 const dispatched = { _tag: "Dispatch" } as const
+
+const noCommands: ReadonlyArray<unknown> = []
 
 const neutralFold: View.HeadFold = {
   merge: Head.merge,
@@ -121,6 +127,11 @@ const bridge = (
     : transitionRun.make(host.viewTransition)
 })
 
+interface Server {
+  readonly host: Renderer.Host<any>
+  readonly fetches: boolean
+}
+
 interface Options {
   readonly fallback?:
     | ((
@@ -138,6 +149,7 @@ interface Options {
 const makeCell = (
   ctx: Context.Context<any>,
   options: Options | undefined,
+  server: Server | undefined,
   onMake: (cache: queryCore.Cache) => void
 ) => {
   let made: {
@@ -150,7 +162,9 @@ const makeCell = (
         visibility: Context.get(ctx, queryCore.Visibility),
         connectivity: Context.get(ctx, queryCore.Connectivity),
         report: Context.get(ctx, queryCore.Problems),
-        idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive)
+        idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
+        settleOnce: server !== undefined,
+        fetches: server === undefined || server.fetches
       })
       onMake(made.cache)
     }
@@ -163,6 +177,7 @@ const makeCell = (
   return {
     cell,
     cache: () => queryCore.loaded === undefined ? undefined : get(),
+    made: () => made?.cache,
     dispose: Effect.suspend(() => made?.dispose ?? Effect.void)
   }
 }
@@ -212,16 +227,15 @@ const start = (
   component: Component.Any,
   props: unknown,
   container: unknown,
-  ctx: Context.Context<any>,
-  options: Options | undefined
+  caller: Context.Context<any>,
+  options: Options | undefined,
+  server?: Server
 ) => {
-  const host = Context.get(ctx, services.Renderer).host
+  const ctx = onScheduler(caller)
+  const host = server?.host ?? Context.get(ctx, services.Renderer).host
   const log = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
-  const forkContext = executor.scheduler === undefined
-    ? ctx
-    : Context.add(ctx, Scheduler.Scheduler, executor.scheduler)
   const session = `${clock.currentTimeMillisUnsafe().toString(36)}-k${
     (sessions++).toString(36)
   }`
@@ -235,7 +249,12 @@ const start = (
     session,
     component.definition.name
   )
+  let initCommands: ReadonlyArray<unknown> | undefined
   const record: Kernel.Recorder = (inst, draft) => {
+    if (initCommands !== undefined && draft._tag === "Mounted") {
+      draft = { ...draft, commands: initCommands }
+      initCommands = undefined
+    }
     if (
       inst.parent === undefined &&
       (draft._tag === "Update" || draft._tag === "Mounted")
@@ -270,17 +289,73 @@ const start = (
     head: ownsHead,
     step: recording.step
   })
+  const problems = Context.get(ctx, queryCore.Problems)
+  const report = (problem: unknown) => {
+    try {
+      problems(problem as never)
+    } catch {
+      // A sink can't change what the runtime does.
+    }
+  }
+  const deferred = new Set<Kernel.Instance>()
   const base = dom ?? bridge(host, recording.step, ownsHead)
-  const bridged: Kernel.Host = routing === undefined ? base : {
+  const bridged: Kernel.Host = {
     ...base,
     commit: () => {
       base.commit?.()
-      routing.flushed()
+      routing?.flushed()
+      checkIdle()
+    },
+    server: server === undefined ? undefined : {
+      drop: (inst, name, issued) => {
+        if (issued !== undefined) {
+          record(inst, {
+            _tag: "CommandDropped",
+            name,
+            issued,
+            reason: "server"
+          })
+        }
+        report(
+          new Command.ServerCommandIssued({
+            path: inst.path,
+            command: name,
+            message: issued === undefined
+              ? `[@effect/ui] ${inst.path}'s update issued ${name} during server rendering, and it was dropped. The server renders a list's first page only.`
+              : `[@effect/ui] ${inst.path}'s update issued ${name} during server rendering, and it was dropped. No Command runs on the server: read data with a query.`
+          })
+        )
+      },
+      defer: (inst) => {
+        deferred.add(inst)
+      },
+      report
     }
   }
+  const idleWaiters: Array<() => void> = []
+  let idleCheck = false
+  const checkIdle = () => {
+    if (idleWaiters.length === 0 || idleCheck) return
+    idleCheck = true
+    executor.schedule(() => {
+      idleCheck = false
+      const tree = kernelRoot?.instance.tree
+      if (
+        tree === undefined || tree.scheduled || tree.dirty.length > 0 ||
+        (tree.building?.size ?? 0) > 0
+      ) return
+      const cache = queries.made()
+      if (cache !== undefined && cache.pending().length > 0) return
+      for (const f of idleWaiters.splice(0)) f()
+    })
+  }
   const fallback = options?.fallback
-  const queries = makeCell(ctx, options, (cache) => {
-    cache.onFetch((event) => recording.tree({ _tag: "FetchStarted", ...event }))
+  let frozen = false
+  const queries = makeCell(ctx, options, server, (cache) => {
+    cache.onFetch((event) => {
+      if (!frozen) recording.tree({ _tag: "FetchStarted", ...event })
+    })
+    if (server !== undefined) cache.onFetchEnd(checkIdle)
   })
   let kernelRoot: Kernel.Root | undefined
   kernelRoot = recording.session(() =>
@@ -309,6 +384,17 @@ const start = (
             )
           }
           const first = inst.component.init(inst.props)
+          if (server !== undefined && first.commands.length > 0) {
+            initCommands = first.commands
+            return {
+              model: first.model,
+              commands: noCommands,
+              events: first.events,
+              lists: first.lists,
+              sends: first.sends,
+              viewTransition: first.viewTransition
+            }
+          }
           return routing === undefined ? first : routing.init(inst, first)
         },
         log: record,
@@ -326,7 +412,7 @@ const start = (
         },
         follow: recording.follow,
         report: (path, where, cause) => {
-          Effect.runForkWith(forkContext)(
+          Effect.runForkWith(ctx)(
             Effect.logError(`${path} failed in ${where}`, cause)
           )
         },
@@ -379,8 +465,20 @@ const start = (
     adoptionHead: () => undefined,
     adopted: Effect.void,
     waiting: () => [],
-    whenIdle: () => Kernel.notPorted("server rendering"),
-    freeze: () => Kernel.notPorted("server rendering")
+    whenIdle: (f: () => void) => {
+      idleWaiters.push(f)
+      checkIdle()
+    },
+    freeze: () => {
+      if (!frozen) {
+        tree.transitions?.settle()
+        if (!tree.closed && (tree.scheduled || tree.dirty.length > 0)) {
+          Kernel.flush(tree)
+        }
+        frozen = tree.closed = true
+      }
+      return queries.made()
+    }
   } satisfies Root & Renderer.Root<any, any>
   // Waits until every fiber the tree forked has exited, stopped runs included.
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
@@ -390,9 +488,11 @@ const start = (
   )
   return {
     root,
+    deferred,
     close: Effect.suspend(() => {
       routing?.detach()
       dom?.dispose()
+      if (frozen) tree.closed = false
       mounted.close()
       return Effect.andThen(awaitOwned, queries.dispose)
     })
@@ -422,15 +522,87 @@ const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
   else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
 }
 
+const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
+  const callers = Context.get(ctx, Scheduler.Scheduler)
+  let dispatcher: Scheduler.SchedulerDispatcher | undefined
+  return Context.add(
+    ctx,
+    Scheduler.Scheduler,
+    Context.get(ctx, Executor.CurrentExecutor).scheduler ?? {
+      executionMode: callers.executionMode,
+      shouldYield: (fiber) => callers.shouldYield(fiber),
+      makeDispatcher: () => dispatcher ??= callers.makeDispatcher()
+    }
+  )
+}
+
 /**
+ * Renders a tree on the server: on a host that only keeps the node tree, waiting for provided Layers
+ * and the per-request cache's fetches until nothing is in flight or the budget runs out, then writing
+ * it once.
+ *
  * Only the kernel test project calls it, through its alias for `internal/runtime.ts`.
  *
  * @internal
  */
 // oxlint-disable-next-line effect/no-unused-internal
 export const prerender = (
-  _component: Component.Any,
-  _rootProps: unknown,
-  _options: unknown
+  component: Component.Any,
+  rootProps: unknown,
+  options: {
+    readonly budget: Duration.Input
+    readonly elements: ReadonlyArray<string> | "any"
+    readonly static?: boolean | undefined
+    readonly sink?: services.ServerSink | undefined
+    readonly onFinish?: ((cache: queryCore.Cache) => void) | undefined
+  }
 ): Effect.Effect<Renderer.Prerendered<any>> =>
-  Effect.sync(() => Kernel.notPorted("server rendering"))
+  withProps(rootProps, (props) =>
+    Effect.acquireUseRelease(
+      Scope.make("sequential"),
+      Effect.fnUntraced(function*(scope) {
+        const budget = Duration.fromInputUnsafe(options.budget)
+        const started = !Duration.isZero(budget)
+        const host = serverHost.make(options.elements)
+        const ctx = Context.add(
+          yield* Effect.context<never>(),
+          Scope.Scope,
+          scope
+        )
+        const made = start(
+          component,
+          props,
+          host.createElement("#root"),
+          ctx,
+          undefined,
+          { host, fetches: started }
+        )
+        yield* Scope.addFinalizer(scope, made.close)
+        const root = made.root
+        if (started) {
+          yield* Effect.raceFirst(
+            Effect.callback<void>((resume) => {
+              root.whenIdle(() => resume(Effect.void))
+            }),
+            Effect.sleep(budget)
+          )
+        }
+        const cache = root.freeze()
+        const snap = serialize.snapshot(
+          root.instance as unknown as Kernel.Instance,
+          made.deferred
+        )
+        if (cache !== undefined) options.onFinish?.(cache)
+        const query = cache === undefined ? {} : cache.dehydrate()
+        const nodes: Array<Renderer.ServerNode> = []
+        const state = yield* serialize.write(
+          snap,
+          query,
+          ctx,
+          options.static === true,
+          options.sink ?? serialize.nodeSink(nodes)
+        )
+        return { nodes, state, model: root.model(), head: root.head() }
+      }),
+      (scope, exit) => Scope.close(scope, exit)
+    ))

@@ -45,6 +45,11 @@ const stop = (running: Running): void => {
  */
 export const sync = (inst: Kernel.Instance): void => {
   if (inst.closed) return
+  const server = inst.tree.host.server
+  if (
+    server !== undefined &&
+    (inst.parent !== undefined || checked.has(inst.tree))
+  ) return
   let wanted: ReadonlyArray<Subscription.Subscription<any, any>>
   try {
     wanted = (inst.component as unknown as {
@@ -55,6 +60,7 @@ export const sync = (inst: Kernel.Instance): void => {
       ) => ReadonlyArray<Subscription.Subscription<any, any>>
     }).subscriptions(inst.model, inst.props, inst.results)
   } catch (error) {
+    if (server !== undefined) throw error
     return inst.tree.ops.fail(inst, "subscription", Cause.die(error))
   }
   const byKey = new Map<string, Subscription.Subscription<any, any>>()
@@ -95,6 +101,7 @@ export const sync = (inst: Kernel.Instance): void => {
     }
     byKey.set(subscription.key, subscription)
   }
+  if (server !== undefined) return checkOnServer(inst, server, byKey)
   const ctx = servicesOf(inst.env)
   if (ctx !== undefined) {
     Context.get(ctx, services.CurrentRoot)()?.declare?.(
@@ -157,6 +164,24 @@ export const sync = (inst: Kernel.Instance): void => {
     subscriptions.set(key, running)
     log?.(inst, { _tag: "SubscriptionStarted", key, name, deps })
     start(inst, subscriptions, key, running)
+  }
+}
+
+const checked = new WeakSet<Kernel.Tree>()
+
+const checkOnServer = (
+  inst: Kernel.Instance,
+  server: Kernel.Server,
+  byKey: Map<string, Subscription.Subscription<any, any>>
+): void => {
+  checked.add(inst.tree)
+  for (const subscription of byKey.values()) {
+    const hook = (subscription as services.OnServer)[services.onServer]
+    if (hook === undefined) continue
+    const env = inst.env
+    const run = () => env.ctx !== undefined && hook(env.ctx, server.report)
+    if (env.cause === undefined && env.ctx === undefined) env.waiting.push(run)
+    else run()
   }
 }
 

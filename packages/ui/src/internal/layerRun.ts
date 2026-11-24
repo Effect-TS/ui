@@ -18,6 +18,7 @@ import { heldBy, hold } from "./closing.ts"
 import { follow, owned, servicesOf, withScheduler } from "./fork.ts"
 import type * as Kernel from "./kernel.ts"
 import { scopeAddFinalizerUnsafe } from "./scope.ts"
+import { serverFailure } from "./slotStatus.ts"
 
 type Draft = Parameters<Kernel.Recorder>[1]
 type Built = Exit.Exit<Context.Context<any>, unknown>
@@ -248,6 +249,8 @@ interface Retired {
 
 const dispatched = { _tag: "Dispatch" } as const
 
+const offServer = new WeakSet<Kernel.Env>()
+
 const provides = new WeakMap<Kernel.Instance, Provide>()
 
 /** An instance's provided Layer. */
@@ -344,8 +347,13 @@ class Provide {
     const inst = this.inst
     const tree = inst.tree
     this.ready = false
-    this.log({ _tag: "LayerFailed", cause })
     const handle = this.component.layerFailure
+    const server = tree.host.server !== undefined && handle !== undefined
+    this.log(
+      server
+        ? { _tag: "LayerFailed", cause, redacted: true }
+        : { _tag: "LayerFailed", cause }
+    )
     if (handle === undefined) {
       if (this.booting) this.failedEarly = cause
       else {tree.schedule(() =>
@@ -353,7 +361,9 @@ class Provide {
         )}
       return
     }
-    if (own.cause === undefined) settle(own, undefined, cause)
+    if (own.cause === undefined) {
+      settle(own, undefined, server ? serverFailure() : cause)
+    }
     tree.schedule(() => {
       if (inst.env === own) {
         inst.fire(handle, AsyncResult.failure(cause), dispatched, "onFailure")
@@ -533,9 +543,18 @@ const releaseShared = (
  * @internal
  */
 export const boot = (inst: Kernel.Instance): void => {
+  const tree = inst.tree
+  const server = tree.host.server
+  if (
+    server !== undefined &&
+    (!(inst.component as unknown as Component.Any).layerOnServer ||
+      offServer.has(inst.env))
+  ) {
+    offServer.add(inst.env = envOf(inst.env))
+    return server.defer(inst)
+  }
   const provide = new Provide(inst)
   const component = provide.component
-  const tree = inst.tree
   ;(inst.closers ??= []).push(() => provide.close())
   if (component.layerKeys !== undefined) {
     provide.model = inst.model

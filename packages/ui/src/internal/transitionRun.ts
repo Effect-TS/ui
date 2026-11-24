@@ -46,6 +46,10 @@ class Running implements Kernel.Transitions {
     this.starting = false
     return this.holding
   }
+  settle(): void {
+    this.types = undefined
+    this.resume()
+  }
   resume(): void {
     if (!this.holding) return
     this.holding = false

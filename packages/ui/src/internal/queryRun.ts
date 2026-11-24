@@ -406,6 +406,7 @@ const watch = (
     const start = () => against(inst, go)
     if (
       marker.debounce === undefined || !state.synced ||
+      inst.tree.host.server !== undefined ||
       !wouldFetch(inst, def, marker.args)
     ) {
       start()
@@ -587,6 +588,14 @@ const issueList = (
     return failWith(inst, error)
   }
   if (args === undefined) return
+  const server = inst.tree.host.server
+  if (server !== undefined) {
+    return server.drop(
+      inst,
+      `$.${list.op}(${JSON.stringify(list.name)})`,
+      undefined
+    )
+  }
   const def = loaded().defOf(field.query)
   const cache = rootOf(inst).cache
   if (list.op === "reset") return cache.reset(def, args)

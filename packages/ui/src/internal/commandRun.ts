@@ -555,6 +555,8 @@ export const issue = (
   cleanupFailed: CleanupFailed
 ): void => {
   if (inst.closed) return
+  const server = inst.tree.host.server
+  if (server !== undefined) return server.drop(inst, command.name, issued)
   const runs = (inst.runs ??= new Runs(inst, cleanupFailed)) as Runs
   const decision = schedule.schedule(entriesOf(runs), command)
   if (command._tag === "Interrupt") {
