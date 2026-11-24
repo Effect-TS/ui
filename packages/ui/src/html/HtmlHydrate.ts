@@ -43,6 +43,11 @@ const closeOf = (open: Node, path: string): Node | null => {
 
 const isText = (node: Node): boolean => node.nodeType === 3
 
+let wantedTag = ""
+
+const isWanted = (node: Node): boolean =>
+  node.nodeType === ELEMENT && (node as Element).localName === wantedTag
+
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
 /** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
@@ -115,9 +120,13 @@ class Edits {
   readonly defaults = new WeakMap<Node, string>()
   readonly edited = new Set<Element>()
   readonly changedBefore = new Map<Node, boolean>()
-  take(node: Node): void {
+  take(node: Node, tag: string): void {
+    if (
+      tag !== "input" && tag !== "textarea" && tag !== "select" &&
+      tag !== "option"
+    ) return
     this.adopted.add(node)
-    if ((node as Element).localName === "textarea") {
+    if (tag === "textarea") {
       this.defaults.set(node, (node as HTMLTextAreaElement).defaultValue)
       this.changedBefore.set(node, this.changed(node as Element))
     }
@@ -222,7 +231,7 @@ const between = (
   ) span.push(node)
   const last = new WeakMap<Node, Node>()
   if (edges.length > 0) last.set(container, edges[0]!)
-  const written = new WeakMap<Node, Set<string>>()
+  const written = new WeakMap<Node, Array<string>>()
   const fresh = new WeakSet<Node>()
   const taken = new WeakSet<Node>()
   const kept = new WeakSet<Node>()
@@ -230,7 +239,9 @@ const between = (
   let holding: Held | undefined
   let bare: Node | undefined
   const missed = new WeakSet<Node>()
+  let missing = false
   const ours = new WeakSet<Node>()
+  let made = false
 
   const scopeOf = (node: Node): Node => {
     const list = node.parentNode!
@@ -261,7 +272,7 @@ const between = (
       } else if (at.nodeType === COMMENT) {
         pass(at)
         at = at.nextSibling
-      } else if (ours.has(at)) {
+      } else if (made && ours.has(at)) {
         at = at.nextSibling
       } else {
         return at
@@ -321,25 +332,26 @@ const between = (
         drop(node)
         return null
       }
-      taken.add(node)
+      if (parent === container) taken.add(node)
       return node
     }
-    const scope = scopeOf(node)
-    if (missed.has(scope) || !matches(node)) {
+    if ((missing && missed.has(scopeOf(node))) || !matches(node)) {
+      const scope = scopeOf(node)
       node = resync(node, matches)
       if (node === null) {
         missed.add(scope)
+        missing = true
         return null
       }
       next()
     }
-    taken.add(node)
+    if (parent === container) taken.add(node)
     return node
   }
 
-  const complete = (element: Element, names: Set<string>): void => {
+  const complete = (element: Element, names: Array<string>): void => {
     written.delete(element)
-    const inside = element.contains(parent)
+    const inside = parent === element || element.contains(parent)
     const previous = last.get(element)
     for (
       let node = previous === undefined
@@ -351,10 +363,8 @@ const between = (
       element.removeChild(node)
       node = following
     }
-    const attributes = element.attributes
-    for (let index = attributes.length - 1; index >= 0; index--) {
-      const name = attributes[index]!.name
-      if (!names.has(name)) element.removeAttribute(name)
+    for (const name of element.getAttributeNames()) {
+      if (!names.includes(name)) element.removeAttribute(name)
     }
     if (inside) {
       while (
@@ -368,18 +378,18 @@ const between = (
   const host: Kernel.Host<Node> = {
     ...base,
     createElement(tag) {
-      const node = take((node) =>
-        node.nodeType === ELEMENT && (node as Element).localName === tag
-      )
+      wantedTag = tag
+      const node = take(isWanted)
       if (node === null) {
         const element = base.createElement(tag)
         fresh.add(element)
         ours.add(element)
+        made = true
         freshDepth++
         return element
       }
-      written.set(node, new Set())
-      edits.take(node)
+      written.set(node, [])
+      edits.take(node, tag)
       parent = node
       at = node.firstChild
       return node
@@ -389,6 +399,7 @@ const between = (
         const node = base.createText(text)
         holds.set(node, holding)
         ours.add(node)
+        made = true
         holding = undefined
         return node
       }
@@ -398,6 +409,7 @@ const between = (
       if (node === null) {
         const fresh = base.createText(text)
         ours.add(fresh)
+        made = true
         return fresh
       }
       const data = node.data
@@ -406,6 +418,7 @@ const between = (
           drop(node)
           const fresh = base.createText(text)
           ours.add(fresh)
+          made = true
           return fresh
         }
         node.splitText(text.length)
@@ -419,7 +432,7 @@ const between = (
         const element = node as Element
         const normalized = attributeName(name, element.namespaceURI === SVG)
         if (normalized === undefined) return
-        names.add(normalized)
+        names.push(normalized)
         const served = element.getAttribute(normalized)
         if (value === undefined ? served === null : served === value) return
         return base.setAttr(node, name, value, served ?? undefined)
@@ -428,7 +441,7 @@ const between = (
     },
     setProp(node, name, value) {
       const names = written.get(node)
-      if (names !== undefined) names.add(name.toLowerCase())
+      if (names !== undefined) names.push(name.toLowerCase())
       if (edits.keeps(node, name, value)) {
         return keeping(node, name, value, () => base.setProp(node, name, value))
       }
@@ -478,9 +491,10 @@ const between = (
         after !== null && after.nodeType === COMMENT;
         after = after.nextSibling
       ) if (isOpen(after, path)) return
-      const scope = scopeOf(node)
-      if (!served) missed.add(scope)
-      else if (!missed.has(scope)) bare = node
+      if (!served) {
+        missed.add(scopeOf(node))
+        missing = true
+      } else if (!missing || !missed.has(scopeOf(node))) bare = node
     },
     has(path) {
       for (
