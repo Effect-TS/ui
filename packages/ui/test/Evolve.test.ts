@@ -72,9 +72,9 @@ const Checkout = Component.define({
 
 describe("evolve", () => {
   it("changes the given fields of the Model and of the structs in it, and chains with the step", () => {
-    const s = Story.start(Checkout, {})
-    s.send(Message.ClickedIncrement({ id: "a" }))
-    assert.deepStrictEqual(s.model, {
+    const story = Story.start(Checkout, {})
+    story.send(Message.ClickedIncrement({ id: "a" }))
+    assert.deepStrictEqual(story.model, {
       lines: [{ id: "a", quantity: 2 }, { id: "b", quantity: 2 }],
       coupon: { code: "TEN", status: "Idle" },
       submitting: false,
@@ -82,27 +82,27 @@ describe("evolve", () => {
       notice: null
     })
 
-    s.send(Message.SubmittedOrder())
-    assert.strictEqual(s.model.submitting, true)
-    assert.strictEqual(s.model.attempts, 1)
+    story.send(Message.SubmittedOrder())
+    assert.strictEqual(story.model.submitting, true)
+    assert.strictEqual(story.model.attempts, 1)
     assert.deepStrictEqual(
-      s.pending.map((entry) => [entry.command.name, entry.command.args]),
+      story.pending.map((entry) => [entry.command.name, entry.command.args]),
       [
         ["PlaceOrder", { lines: 2 }]
       ]
     )
 
-    s.resolve(PlaceOrder, Message.FailedPlaceOrder())
-    assert.strictEqual(s.model.submitting, false)
-    const after = s.model
-    s.send(Message.FailedPlaceOrder())
-    assert.strictEqual(s.model, after)
+    story.resolve(PlaceOrder, Message.FailedPlaceOrder())
+    assert.strictEqual(story.model.submitting, false)
+    const after = story.model
+    story.send(Message.FailedPlaceOrder())
+    assert.strictEqual(story.model, after)
 
-    s.send(Message.ClickedRemove({ id: "a" })).send(
+    story.send(Message.ClickedRemove({ id: "a" })).send(
       Message.ClickedRemove({ id: "b" })
     ).emitted(Events.Emptied())
-    assert.deepStrictEqual(s.model.lines, [])
-    assert.strictEqual(s.model.notice, "Your basket is empty")
+    assert.deepStrictEqual(story.model.lines, [])
+    assert.strictEqual(story.model.notice, "Your basket is empty")
   })
 
   it("changes a field under a symbol key", () => {

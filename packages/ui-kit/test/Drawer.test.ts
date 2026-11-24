@@ -41,10 +41,10 @@ const area = Locator.attr("class", "area")
 
 type Track = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const trackedOn = (locator: Locator.Locator) => (s: Rendered): Track =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const trackedOn = (locator: Locator.Locator) => (scene: Rendered): Track =>
+  (scene.get(locator) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Track
 const tracked = trackedOn(popup)
 const trackedArea = trackedOn(area)
@@ -79,24 +79,24 @@ const snapped = (snapPoint: number) =>
 const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
 const openedByArea = Effect.gen(function*() {
-  const s = yield* Scene.make(Drawer, { open: false }, standIn)
-  s.expectMount(tracked(s)).expectMount(trackedArea(s))
+  const scene = yield* Scene.make(Drawer, { open: false }, standIn)
+  scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
     .mounted(
-      trackedArea(s),
-      sent("StartedAreaSwipe", { key: argsOf(trackedArea(s)).key })
+      trackedArea(scene),
+      sent("StartedAreaSwipe", { key: argsOf(trackedArea(scene)).key })
     )
     .emitted(opened)
     .props({ open: true })
-  return s.expectMount(tracked(s)).expectMount(trackedArea(s))
+  return scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
 })
 
 describe("Drawer", () => {
   it.effect("decides from a release's distance, speed, direction and reversal whether to dismiss or settle", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-        .mounted(tracked(s), sent("StartedSwipe"))
-      assert.strictEqual(s.get(popup).attrs?.["data-swiping"], "")
+      const scene = yield* Scene.make(Drawer, { open: true }, standIn)
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
+        .mounted(tracked(scene), sent("StartedSwipe"))
+      assert.strictEqual(scene.get(popup).attrs?.["data-swiping"], "")
       for (
         const settled of [
           release({ deltaY: 50, velocityY: 0.1, releaseVelocityY: 0.1 }),
@@ -109,17 +109,19 @@ describe("Drawer", () => {
           release({ direction: null, deltaY: -12, velocityY: -1 })
         ]
       ) {
-        s.mounted(tracked(s), settled)
-        assert.deepStrictEqual(s.current.emitted, [])
+        scene.mounted(tracked(scene), settled)
+        assert.deepStrictEqual(scene.current.emitted, [])
       }
-      s.mounted(tracked(s), release({ deltaY: 30, velocityY: 0.5 })).emitted(
-        swiped
-      )
-      s.mounted(tracked(s), sent("StartedSwipe"))
-      s.mounted(tracked(s), release({ deltaY: 150, velocityY: 0.3 })).emitted(
-        swiped
-      )
-      assert.isUndefined(s.get(popup).attrs?.["data-swiping"])
+      scene.mounted(tracked(scene), release({ deltaY: 30, velocityY: 0.5 }))
+        .emitted(
+          swiped
+        )
+      scene.mounted(tracked(scene), sent("StartedSwipe"))
+      scene.mounted(tracked(scene), release({ deltaY: 150, velocityY: 0.3 }))
+        .emitted(
+          swiped
+        )
+      assert.isUndefined(scene.get(popup).attrs?.["data-swiping"])
     }))
 
   it.effect("dismisses to the left, the right and up", () =>
@@ -130,19 +132,19 @@ describe("Drawer", () => {
         ["up", { deltaY: -150 }, { deltaY: -50 }]
       ] as const
       for (const [direction, long, short] of cases) {
-        const s = yield* Scene.make(Drawer, {
+        const scene = yield* Scene.make(Drawer, {
           open: true,
           swipeDirection: direction
         }, standIn)
         assert.strictEqual(
-          s.get(popup).attrs?.["data-swipe-direction"],
+          scene.get(popup).attrs?.["data-swipe-direction"],
           direction
         )
-        s.expectMount(tracked(s)).expectMount(trackedArea(s))
-          .mounted(tracked(s), release({ direction, ...short }))
-        assert.deepStrictEqual(s.current.emitted, [])
-        s.expectMount(tracked(s)).mounted(
-          tracked(s),
+        scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
+          .mounted(tracked(scene), release({ direction, ...short }))
+        assert.deepStrictEqual(scene.current.emitted, [])
+        scene.expectMount(tracked(scene)).mounted(
+          tracked(scene),
           release({ direction, ...long })
         ).emitted(swiped)
       }
@@ -157,30 +159,30 @@ describe("Drawer", () => {
         releaseVelocityY: -3,
         height: 800
       })
-      const s = yield* Scene.make(Drawer, {
+      const scene = yield* Scene.make(Drawer, {
         open: true,
         snapPoints: [0.25, 0.5, 1]
       }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s)).mounted(
-        tracked(s),
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene)).mounted(
+        tracked(scene),
         measured
       )
       assert.match(
-        s.get(popup).attrs?.style ?? "",
+        scene.get(popup).attrs?.style ?? "",
         /--drawer-height:800px;.*--drawer-snap-point-offset:600px;/
       )
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), flickUp)
+      scene.expectMount(tracked(scene))
+        .mounted(tracked(scene), flickUp)
         .emitted(snapped(1))
-        .expectMount(tracked(s))
+        .expectMount(tracked(scene))
         .mounted(
-          tracked(s),
+          tracked(scene),
           release({ direction: "up", deltaY: -250, height: 800 })
         )
         .emitted(snapped(0.5))
-        .expectMount(tracked(s))
+        .expectMount(tracked(scene))
         .mounted(
-          tracked(s),
+          tracked(scene),
           release({
             deltaY: 50,
             velocityY: 1,
@@ -194,12 +196,12 @@ describe("Drawer", () => {
           snapPoints: [0.25, 0.5, 1],
           snapToSequentialPoints: true
         })
-        .expectMount(tracked(s))
-        .mounted(tracked(s), flickUp)
+        .expectMount(tracked(scene))
+        .mounted(tracked(scene), flickUp)
         .emitted(snapped(0.5))
-        .expectMount(tracked(s))
+        .expectMount(tracked(scene))
         .mounted(
-          tracked(s),
+          tracked(scene),
           release({ direction: "up", deltaY: -590, height: 800 })
         )
         .emitted(snapped(1))
@@ -207,30 +209,39 @@ describe("Drawer", () => {
 
   it.effect("a refused dismiss puts the drawer back", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
+      const scene = yield* Scene.make(Drawer, { open: true }, standIn)
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
         .mounted(
-          tracked(s),
+          tracked(scene),
           release({ deltaY: 150, velocityY: 1, releaseVelocityY: 1 })
         )
         .emitted(swiped)
-      assert.isTrue(argsOf(tracked(s)).dismissed)
-      assert.notInclude(s.get(popup).attrs?.style, "--drawer-swipe-strength:1;")
-      s.props({ open: false })
-      assert.strictEqual(s.get(popup).attrs?.["data-swipe-dismiss"], "")
-      s.props({ open: true })
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("RefusedSwipe"))
-      assert.isFalse(argsOf(tracked(s)).dismissed)
-      assert.include(s.get(popup).attrs?.style, "--drawer-swipe-strength:1;")
-      s.props({ open: false })
-      assert.isUndefined(s.get(popup).attrs?.["data-swipe-dismiss"])
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
+      assert.isTrue(argsOf(tracked(scene)).dismissed)
+      assert.notInclude(
+        scene.get(popup).attrs?.style,
+        "--drawer-swipe-strength:1;"
+      )
+      scene.props({ open: false })
+      assert.strictEqual(scene.get(popup).attrs?.["data-swipe-dismiss"], "")
+      scene.props({ open: true })
+      scene.expectMount(tracked(scene)).mounted(
+        tracked(scene),
+        sent("RefusedSwipe")
+      )
+      assert.isFalse(argsOf(tracked(scene)).dismissed)
+      assert.include(
+        scene.get(popup).attrs?.style,
+        "--drawer-swipe-strength:1;"
+      )
+      scene.props({ open: false })
+      assert.isUndefined(scene.get(popup).attrs?.["data-swipe-dismiss"])
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
     }))
 
   it.effect("emits what its dialog emits, an open with the reason trigger-press", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
+      const scene = yield* Scene.make(Drawer, { open: true }, standIn)
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
         .childEmit(Dialog, { _tag: "RequestedOpen", triggerId: "menu" })
         .emitted({
           _tag: "RequestedOpen",
@@ -245,54 +256,55 @@ describe("Drawer", () => {
 
   it.effect("a nested drawer's report marks the popup and stops its swipes", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: true }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
+      const scene = yield* Scene.make(Drawer, { open: true }, standIn)
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
         .mounted(
-          tracked(s),
+          tracked(scene),
           sent("ChangedNested", { count: 2, swiping: true, height: 300 })
         )
-      assert.deepInclude(s.get(popup).attrs, {
+      assert.deepInclude(scene.get(popup).attrs, {
         "data-nested-drawer-open": "",
         "data-nested-drawer-swiping": ""
       })
-      assert.include(s.get(popup).attrs?.style, "--nested-drawers:2;")
+      assert.include(scene.get(popup).attrs?.style, "--nested-drawers:2;")
       assert.include(
-        s.get(popup).attrs?.style,
+        scene.get(popup).attrs?.style,
         "--drawer-frontmost-height:300px;"
       )
-      assert.isFalse(argsOf(tracked(s)).enabled)
-      s.parts((drawer) => {
+      assert.isFalse(argsOf(tracked(scene)).enabled)
+      scene.parts((drawer) => {
         assert.strictEqual(drawer.nestedDrawers, 2)
         assert.isTrue(drawer.nestedDrawerSwiping)
       })
-      s.expectMount(tracked(s))
+      scene.expectMount(tracked(scene))
     }))
 
   it.effect("the drawer's attributes win, and the consumer's style is kept", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, {
+      const scene = yield* Scene.make(Drawer, {
         open: true,
         swipeDirection: "left",
         snapPoints: [1]
       }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-      const attrs = s.get(popup).attrs
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
+      const attrs = scene.get(popup).attrs
       assert.deepInclude(attrs, { "data-swipe-direction": "left" })
       assert.isUndefined(attrs?.["data-swiping"])
       assert.isUndefined(attrs?.["data-nested-drawer-open"])
       assert.match(attrs?.style ?? "", /^color:red;--nested-drawers:0;/)
       assert.isUndefined(
-        s.get(Locator.attr("class", "backdrop")).attrs?.["data-swiping"]
+        scene.get(Locator.attr("class", "backdrop")).attrs?.["data-swiping"]
       )
       assert.strictEqual(
-        s.get(area).attrs?.style,
+        scene.get(area).attrs?.style,
         "z-index:1;touch-action:pan-y;pointer-events:none"
       )
       assert.strictEqual(
-        s.get(Locator.attr("class", "content")).attrs?.["data-drawer-content"],
+        scene.get(Locator.attr("class", "content")).attrs
+          ?.["data-drawer-content"],
         ""
       )
-      s.parts((drawer) => {
+      scene.parts((drawer) => {
         assert.strictEqual(drawer.swipeDirection, "left")
         assert.isTrue(drawer.expanded)
       })
@@ -300,24 +312,24 @@ describe("Drawer", () => {
 
   it.effect("a swipe on the area opens the drawer, and release distance or speed decides whether it stays open", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: false }, standIn)
-      s.expectMount(tracked(s)).expectMount(trackedArea(s))
-      assert.deepInclude(s.get(area).attrs, {
+      const scene = yield* Scene.make(Drawer, { open: false }, standIn)
+      scene.expectMount(tracked(scene)).expectMount(trackedArea(scene))
+      assert.deepInclude(scene.get(area).attrs, {
         "data-closed": "",
         "data-swipe-direction": "up"
       })
-      s.mounted(
-        trackedArea(s),
-        sent("StartedAreaSwipe", { key: argsOf(trackedArea(s)).key })
+      scene.mounted(
+        trackedArea(scene),
+        sent("StartedAreaSwipe", { key: argsOf(trackedArea(scene)).key })
       )
         .emitted(opened)
-      assert.deepInclude(s.get(area).attrs, { "data-swiping": "" })
-      assert.strictEqual(s.get(popup).attrs?.["data-swiping"], "")
-      s.props({ open: true }).expectMount(tracked(s)).expectMount(
-        trackedArea(s)
+      assert.deepInclude(scene.get(area).attrs, { "data-swiping": "" })
+      assert.strictEqual(scene.get(popup).attrs?.["data-swiping"], "")
+      scene.props({ open: true }).expectMount(tracked(scene)).expectMount(
+        trackedArea(scene)
       )
         .mounted(
-          trackedArea(s),
+          trackedArea(scene),
           sent("ReleasedAreaSwipe", {
             displacement: 100,
             velocity: 0.05,
@@ -349,7 +361,7 @@ describe("Drawer", () => {
 
   it.effect("a disabled area takes no pointer", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Drawer, { open: false }, {
+      const scene = yield* Scene.make(Drawer, { open: false }, {
         elements: Html,
         view: (drawer: Parts, h: H) =>
           h.div(
@@ -360,9 +372,9 @@ describe("Drawer", () => {
             })
           )
       })
-      s.expectMount(trackedArea(s))
-      assert.isTrue(argsOf(trackedArea(s)).disabled)
-      assert.deepInclude(s.get(area).attrs, {
+      scene.expectMount(trackedArea(scene))
+      assert.isTrue(argsOf(trackedArea(scene)).disabled)
+      assert.deepInclude(scene.get(area).attrs, {
         "data-disabled": "",
         "data-swipe-direction": "left",
         style: "touch-action:pan-y;pointer-events:none"

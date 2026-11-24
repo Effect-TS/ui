@@ -20,8 +20,8 @@ const submittingButton = HtmlLocator.role("button", { name: "Signing in..." })
 describe("LoginPage", () => {
   it.effect("validates fields on input and invalid submit, enabling submit once valid", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.expect(submitButton).toBeDisabled()
+      const scene = yield* HtmlScene.make(LoginPage, {})
+      scene.expect(submitButton).toBeDisabled()
         .type(emailField, "notanemail")
         .expect(Locator.text("Please enter a valid email")).toExist()
         .expect(submitButton).toBeDisabled()
@@ -38,8 +38,8 @@ describe("LoginPage", () => {
 
   it.effect("submitting locks the form, requests auth, and emits SignedIn on success", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.type(emailField, alice.email)
+      const scene = yield* HtmlScene.make(LoginPage, {})
+      scene.type(emailField, alice.email)
         .type(passwordField, "password")
         .submit(form)
         .expect(submittingButton).toBeDisabled()
@@ -60,8 +60,8 @@ describe("LoginPage", () => {
 
   it.effect("failed auth shows the error and leaves submit disabled until the password changes", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(LoginPage, {})
-      s.type(emailField, alice.email)
+      const scene = yield* HtmlScene.make(LoginPage, {})
+      scene.type(emailField, alice.email)
         .type(passwordField, "wrong")
         .submit(form)
         .resolve(

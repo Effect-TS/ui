@@ -65,8 +65,8 @@ const backdrop = Locator.attr("class", "backdrop")
 type TrackDialog = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 // The portal's mount is private, so a test reads it off the rendered element.
-const tracked = (s: Rendered): TrackDialog =>
-  (s.get(portal) as unknown as View.Element<unknown>).owned?.find((layer) =>
+const tracked = (scene: Rendered): TrackDialog =>
+  (scene.get(portal) as unknown as View.Element<unknown>).owned?.find((layer) =>
     layer.mount !== undefined
   )
     ?.mount as unknown as TrackDialog
@@ -76,10 +76,10 @@ const sent = (tag: string, fields: object = {}) =>
 
 // The plain values the parts carry now.
 const partsOf = (
-  s: { readonly parts: (f: (dialog: Parts) => void) => unknown }
+  scene: { readonly parts: (f: (dialog: Parts) => void) => unknown }
 ): Parts => {
   let parts: Parts | undefined
-  s.parts((dialog) => {
+  scene.parts((dialog) => {
     parts = dialog
   })
   return parts!
@@ -91,75 +91,78 @@ const dismissed = (reason: string) =>
 describe("Dialog", () => {
   it.effect("remembers the trigger that opened it, and only that one asks to close it", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: false }, standIn)
+      const scene = yield* Scene.make(Dialog, { open: false }, standIn)
       const other = Locator.text("Other", { exact: true })
-      assert.isUndefined(s.query(portal))
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.isUndefined(scene.query(portal))
+      assert.deepInclude(scene.get(trigger).attrs, {
         type: "button",
         "aria-haspopup": "dialog",
         "aria-expanded": "false",
         class: "open"
       })
-      assert.isUndefined(s.get(trigger).attrs?.["aria-controls"])
-      assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
-      assert.isString(s.get(trigger).attrs?.id)
-      assert.strictEqual(s.get(other).attrs?.id, "other")
-      s.click(trigger).emitted({ _tag: "RequestedOpen", triggerId: null })
-      assert.isNull(partsOf(s).openMethod)
-      s.props({ open: true })
-      s.expectMount(tracked(s))
-      assert.strictEqual(partsOf(s).openMethod, "mouse")
-      const id = s.get(portal).attrs?.id
+      assert.isUndefined(scene.get(trigger).attrs?.["aria-controls"])
+      assert.isUndefined(scene.get(trigger).attrs?.["data-popup-open"])
+      assert.isString(scene.get(trigger).attrs?.id)
+      assert.strictEqual(scene.get(other).attrs?.id, "other")
+      scene.click(trigger).emitted({ _tag: "RequestedOpen", triggerId: null })
+      assert.isNull(partsOf(scene).openMethod)
+      scene.props({ open: true })
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(partsOf(scene).openMethod, "mouse")
+      const id = scene.get(portal).attrs?.id
       assert.notStrictEqual(id, "mine")
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.deepInclude(scene.get(trigger).attrs, {
         "aria-expanded": "true",
         "aria-controls": id,
         "data-popup-open": ""
       })
-      assert.deepInclude(s.get(other).attrs, { "aria-expanded": "false" })
-      s.click(other).emitted({ _tag: "RequestedOpen", triggerId: "other" })
-      assert.deepInclude(s.get(other).attrs, {
+      assert.deepInclude(scene.get(other).attrs, { "aria-expanded": "false" })
+      scene.click(other).emitted({ _tag: "RequestedOpen", triggerId: "other" })
+      assert.deepInclude(scene.get(other).attrs, {
         "aria-expanded": "true",
         "aria-controls": id
       })
-      assert.strictEqual(partsOf(s).triggerId, "other")
-      assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "false")
+      assert.strictEqual(partsOf(scene).triggerId, "other")
+      assert.strictEqual(scene.get(trigger).attrs?.["aria-expanded"], "false")
       // Enter or Space on the trigger is a click with no pointer.
-      s.fire(other, "click", { button: 0, x: 0, y: 0, pointerType: "" })
+      scene.fire(other, "click", { button: 0, x: 0, y: 0, pointerType: "" })
         .emitted(dismissed("trigger-press"))
-      assert.strictEqual(partsOf(s).closeMethod, "keyboard")
-      s.props({ open: true, triggerId: s.get(trigger).attrs?.id ?? null })
-      s.expectMount(tracked(s))
-      assert.strictEqual(s.get(trigger).attrs?.["aria-expanded"], "true")
-      assert.strictEqual(s.get(other).attrs?.["aria-expanded"], "false")
-      s.props({ open: false })
-      assert.isNull(partsOf(s).openMethod)
+      assert.strictEqual(partsOf(scene).closeMethod, "keyboard")
+      scene.props({
+        open: true,
+        triggerId: scene.get(trigger).attrs?.id ?? null
+      })
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(scene.get(trigger).attrs?.["aria-expanded"], "true")
+      assert.strictEqual(scene.get(other).attrs?.["aria-expanded"], "false")
+      scene.props({ open: false })
+      assert.isNull(partsOf(scene).openMethod)
     }))
 
   it.effect("labels the portal with the drawn title and description, and draws a layer for a modal", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(
+      const scene = yield* Scene.make(
         Dialog,
         { open: true, openMethod: "touch" },
         standIn
       )
-      s.expectMount(tracked(s))
-      assert.strictEqual(partsOf(s).openMethod, "touch")
-      assert.deepInclude(s.get(portal).props, {
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(partsOf(scene).openMethod, "touch")
+      assert.deepInclude(scene.get(portal).props, {
         open: false,
         popoverOpen: false
       })
-      s.mounted(tracked(s), sent("ShowedPortal"))
-      const dialog = s.get(portal)
+      scene.mounted(tracked(scene), sent("ShowedPortal"))
+      const dialog = scene.get(portal)
       assert.deepInclude(dialog.props, { open: false, popoverOpen: true })
       assert.strictEqual(dialog.attrs?.popover, "manual")
       assert.isUndefined(dialog.attrs?.["aria-modal"])
       assert.strictEqual(dialog.attrs?.["aria-labelledby"], "heading")
-      assert.strictEqual(s.get(Locator.tag("h2")).attrs?.id, "heading")
+      assert.strictEqual(scene.get(Locator.tag("h2")).attrs?.id, "heading")
       // A token list keeps the consumer's tokens.
       assert.strictEqual(
         dialog.attrs?.["aria-describedby"],
-        "extra " + s.get(Locator.tag("p")).attrs?.id
+        "extra " + scene.get(Locator.tag("p")).attrs?.id
       )
       assert.match(
         dialog.attrs?.style ?? "",
@@ -173,25 +176,25 @@ describe("Dialog", () => {
         layer!.attrs.style ?? "",
         /^position:fixed;inset:0;user-select:none/
       )
-      assert.deepInclude(s.get(backdrop).attrs, {
+      assert.deepInclude(scene.get(backdrop).attrs, {
         role: "presentation",
         "data-open": "",
         "data-starting-style": "",
         style: "user-select:none;-webkit-user-select:none"
       })
-      assert.isUndefined(s.get(backdrop).attrs?.["data-closed"])
-      assert.isUndefined(s.get(backdrop).attrs?.["data-ending-style"])
-      assert.deepInclude(s.get(viewport).attrs, { role: "presentation" })
-      assert.isUndefined(s.get(viewport).attrs?.style)
-      assert.deepInclude(s.get(popup).attrs, {
+      assert.isUndefined(scene.get(backdrop).attrs?.["data-closed"])
+      assert.isUndefined(scene.get(backdrop).attrs?.["data-ending-style"])
+      assert.deepInclude(scene.get(viewport).attrs, { role: "presentation" })
+      assert.isUndefined(scene.get(viewport).attrs?.style)
+      assert.deepInclude(scene.get(popup).attrs, {
         tabindex: "-1",
         style: "--nested-dialogs:0"
       })
-      assert.isUndefined(s.get(viewport).attrs?.["data-nested"])
-      assert.strictEqual(s.get(close).attrs?.type, "button")
-      assert.strictEqual(s.get(Locator.tag("input")).attrs?.autofocus, "")
+      assert.isUndefined(scene.get(viewport).attrs?.["data-nested"])
+      assert.strictEqual(scene.get(close).attrs?.type, "button")
+      assert.strictEqual(scene.get(Locator.tag("input")).attrs?.autofocus, "")
       assert.strictEqual(
-        s.get(Locator.text("Next", { exact: true })).attrs
+        scene.get(Locator.text("Next", { exact: true })).attrs
           ?.["data-final-focus"],
         dialog.attrs?.id
       )
@@ -199,7 +202,7 @@ describe("Dialog", () => {
 
   it.effect("names no title or description that isn't drawn", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, {
+      const scene = yield* Scene.make(Dialog, { open: true }, {
         elements: Html,
         view: (dialog: Parts, h: H) =>
           h.div(
@@ -207,94 +210,114 @@ describe("Dialog", () => {
               ?.children(dialog.popup(h.div.class("popup")))
           )
       })
-      s.expectMount(tracked(s))
-      assert.strictEqual(s.get(portal).attrs?.["aria-labelledby"], "outside")
-      assert.isUndefined(s.get(portal).attrs?.["aria-describedby"])
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(
+        scene.get(portal).attrs?.["aria-labelledby"],
+        "outside"
+      )
+      assert.isUndefined(scene.get(portal).attrs?.["aria-describedby"])
     }))
 
   it.effect("reports close methods and ignores outside dismissal when disabled", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s))
-      s.mounted(tracked(s), sent("PressedEscape")).emitted(
+      const scene = yield* Scene.make(Dialog, { open: true }, standIn)
+      scene.expectMount(tracked(scene))
+      scene.mounted(tracked(scene), sent("PressedEscape")).emitted(
         dismissed("escape-key")
       )
-      s.fire(close, "click", { button: 0, x: 0, y: 0, pointerType: "touch" })
+      scene.fire(close, "click", {
+        button: 0,
+        x: 0,
+        y: 0,
+        pointerType: "touch"
+      })
         .emitted(dismissed("close-press"))
-      assert.strictEqual(partsOf(s).closeMethod, "touch")
-      s.mounted(tracked(s), sent("PressedOutside", { pointerType: "pen" }))
+      assert.strictEqual(partsOf(scene).closeMethod, "touch")
+      scene.mounted(
+        tracked(scene),
+        sent("PressedOutside", { pointerType: "pen" })
+      )
         .emitted(dismissed("outside-press"))
-      assert.strictEqual(partsOf(s).closeMethod, "pen")
+      assert.strictEqual(partsOf(scene).closeMethod, "pen")
       // With pointer dismissal off, neither a press outside nor focus leaving does.
-      s.props({ open: true, modal: false, disablePointerDismissal: true })
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), sent("PressedOutside", { pointerType: "mouse" }))
-        .mounted(tracked(s), sent("FocusedOutside"))
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.props({ open: true, modal: false, disablePointerDismissal: true })
+      scene.expectMount(tracked(scene))
+        .mounted(
+          tracked(scene),
+          sent("PressedOutside", { pointerType: "mouse" })
+        )
+        .mounted(tracked(scene), sent("FocusedOutside"))
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("reports transition state and waits for holdExit to be released before settling", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s))
-      assert.strictEqual(partsOf(s).transitionStatus, "starting")
-      s.mounted(tracked(s), sent("ShowedPortal")).mounted(
-        tracked(s),
+      const scene = yield* Scene.make(Dialog, { open: true }, standIn)
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(partsOf(scene).transitionStatus, "starting")
+      scene.mounted(tracked(scene), sent("ShowedPortal")).mounted(
+        tracked(scene),
         sent("RenderedFirstFrame")
       )
-      assert.isNull(partsOf(s).transitionStatus)
+      assert.isNull(partsOf(scene).transitionStatus)
       for (const part of [backdrop, viewport, popup]) {
-        assert.strictEqual(s.get(part).attrs?.["data-open"], "")
-        assert.isUndefined(s.get(part).attrs?.["data-starting-style"])
+        assert.strictEqual(scene.get(part).attrs?.["data-open"], "")
+        assert.isUndefined(scene.get(part).attrs?.["data-starting-style"])
       }
-      s.expectMount(tracked(s))
-        .mounted(tracked(s), sent("FinishedTransition", { open: true }))
+      scene.expectMount(tracked(scene))
+        .mounted(tracked(scene), sent("FinishedTransition", { open: true }))
         .emitted({ _tag: "Settled", open: true })
 
-      s.props({ open: false, holdExit: true })
-      s.expectMount(tracked(s))
-      assert.strictEqual(s.get(portal).props?.popoverOpen, true)
-      assert.strictEqual(partsOf(s).transitionStatus, "ending")
-      assert.isTrue(partsOf(s).mounted)
+      scene.props({ open: false, holdExit: true })
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(scene.get(portal).props?.popoverOpen, true)
+      assert.strictEqual(partsOf(scene).transitionStatus, "ending")
+      assert.isTrue(partsOf(scene).mounted)
       for (const part of [backdrop, viewport, popup]) {
-        assert.deepInclude(s.get(part).attrs, {
+        assert.deepInclude(scene.get(part).attrs, {
           "data-closed": "",
           "data-ending-style": ""
         })
-        assert.isUndefined(s.get(part).attrs?.["data-open"])
+        assert.isUndefined(scene.get(part).attrs?.["data-open"])
       }
-      const [layer] = (s.get(portal) as View.Element<unknown>)
+      const [layer] = (scene.get(portal) as View.Element<unknown>)
         .children as ReadonlyArray<View.Element<unknown>>
       assert.strictEqual(layer!.attrs.inert, "")
-      assert.match(s.get(backdrop).attrs?.style ?? "", /pointer-events:none$/)
-      assert.strictEqual(s.get(viewport).attrs?.style, "pointer-events:none")
+      assert.match(
+        scene.get(backdrop).attrs?.style ?? "",
+        /pointer-events:none$/
+      )
+      assert.strictEqual(
+        scene.get(viewport).attrs?.style,
+        "pointer-events:none"
+      )
       // Its animations ending doesn't end the exit.
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
+      assert.deepStrictEqual(scene.current.emitted, [])
       // Let go, the mount waits for them again, and then it ends.
-      s.props({ open: false, holdExit: false })
-      s.expectMount(tracked(s))
+      scene.props({ open: false, holdExit: false })
+      scene.expectMount(tracked(scene))
       // An opening animation that finishes late must not settle this exit.
-      s.mounted(tracked(s), sent("FinishedTransition", { open: true }))
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: true }))
+      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted({ _tag: "Settled", open: false })
-      assert.isUndefined(s.query(portal))
+      assert.isUndefined(scene.query(portal))
     }))
 
   it.effect("keepMounted leaves a hidden portal with an inert layer", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(
+      const scene = yield* Scene.make(
         Dialog,
         { open: false, keepMounted: true },
         standIn
       )
-      assert.deepInclude(s.get(portal).props, {
+      assert.deepInclude(scene.get(portal).props, {
         open: false,
         popoverOpen: false
       })
-      assert.deepInclude(s.get(popup).attrs, { "data-closed": "" })
-      const [layer, child] = (s.get(portal) as View.Element<unknown>)
+      assert.deepInclude(scene.get(popup).attrs, { "data-closed": "" })
+      const [layer, child] = (scene.get(portal) as View.Element<unknown>)
         .children as ReadonlyArray<View.Element<unknown>>
       assert.strictEqual(layer!.attrs.inert, "")
       assert.strictEqual(child!.attrs.class, "backdrop")
@@ -302,48 +325,55 @@ describe("Dialog", () => {
 
   it.effect("the other modes draw no layer and no aria-modal", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(
+      const scene = yield* Scene.make(
         Dialog,
         { open: true, modal: "trap-focus" },
         standIn
       )
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("ShowedPortal"))
-      assert.deepInclude(s.get(portal).attrs, { popover: "manual" })
-      assert.isUndefined(s.get(portal).attrs?.["aria-modal"])
-      assert.deepInclude(s.get(portal).props, {
+      scene.expectMount(tracked(scene)).mounted(
+        tracked(scene),
+        sent("ShowedPortal")
+      )
+      assert.deepInclude(scene.get(portal).attrs, { popover: "manual" })
+      assert.isUndefined(scene.get(portal).attrs?.["aria-modal"])
+      assert.deepInclude(scene.get(portal).props, {
         open: false,
         popoverOpen: true
       })
       assert.strictEqual(
-        ((s.get(portal) as View.Element<unknown>).children[0] as View.Element<
-          unknown
-        >).attrs.class,
+        ((scene.get(portal) as View.Element<unknown>)
+          .children[0] as View.Element<
+            unknown
+          >).attrs.class,
         "backdrop"
       )
-      s.props({ open: true, modal: false, initialFocus: false })
-      assert.isUndefined(s.get(Locator.tag("input")).attrs?.autofocus)
-      s.expectMount(tracked(s))
-      assert.strictEqual(s.get(portal).props?.popoverOpen, true)
+      scene.props({ open: true, modal: false, initialFocus: false })
+      assert.isUndefined(scene.get(Locator.tag("input")).attrs?.autofocus)
+      scene.expectMount(tracked(scene))
+      assert.strictEqual(scene.get(portal).props?.popoverOpen, true)
     }))
 
   it.effect("a nested dialog can force a backdrop, and a parent ignores Escape", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Dialog, { open: true }, standIn)
-      s.expectMount(tracked(s))
-      s.shared(Dialog, { open: true })
-      assert.isTrue(partsOf(s).nested)
-      assert.isUndefined(s.query(backdrop))
-      s.props({ open: true, nested: false })
-      assert.isFalse(partsOf(s).nested)
-      assert.isDefined(s.query(backdrop))
-      s.props({ open: true, forceRenderBackdrop: true })
-      assert.isTrue(partsOf(s).nested)
-      assert.isDefined(s.query(backdrop))
+      const scene = yield* Scene.make(Dialog, { open: true }, standIn)
+      scene.expectMount(tracked(scene))
+      scene.shared(Dialog, { open: true })
+      assert.isTrue(partsOf(scene).nested)
+      assert.isUndefined(scene.query(backdrop))
+      scene.props({ open: true, nested: false })
+      assert.isFalse(partsOf(scene).nested)
+      assert.isDefined(scene.query(backdrop))
+      scene.props({ open: true, forceRenderBackdrop: true })
+      assert.isTrue(partsOf(scene).nested)
+      assert.isDefined(scene.query(backdrop))
       // One dialog open inside this one, and one inside that.
-      s.collected([2, 0])
-      assert.strictEqual(partsOf(s).nestedDialogs, 2)
-      s.expectMount(tracked(s)).mounted(tracked(s), sent("PressedEscape"))
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.collected([2, 0])
+      assert.strictEqual(partsOf(scene).nestedDialogs, 2)
+      scene.expectMount(tracked(scene)).mounted(
+        tracked(scene),
+        sent("PressedEscape")
+      )
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 })
 

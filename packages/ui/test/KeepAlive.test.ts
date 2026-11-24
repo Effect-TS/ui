@@ -712,12 +712,12 @@ describe("keep-alive lifetimes", () => {
           )
       }
     )
-    const s = Scene.start(Page, {})
+    const scene = Scene.start(Page, {})
     assert.throws(
-      () => s.expectMount(Track()),
+      () => scene.expectMount(Track()),
       /no rendered mount matches Track/
     )
-    s.click(Locator.text("toggle")).expectMount(Track())
+    scene.click(Locator.text("toggle")).expectMount(Track())
   })
 })
 

@@ -60,18 +60,18 @@ const separator = Locator.attr("class", "separator")
 const item = (value: string) => Locator.attr("aria-label", value)
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const scene = (overrides: Partial<ToolbarProps> = {}) =>
+const makeScene = (overrides: Partial<ToolbarProps> = {}) =>
   HtmlScene.make(Toolbar, props(overrides), standIn)
-type Scene = Effect.Success<ReturnType<typeof scene>>
+type Scene = Effect.Success<ReturnType<typeof makeScene>>
 
 interface Moved {
   readonly to: string
   readonly leaving?: { readonly from: string; readonly caret: number }
 }
 
-const moved = (s: Scene): ReadonlyArray<Moved> =>
-  s.current.pending.map(({ command }) => {
-    s.resolve(command as never, Component.noop as never)
+const moved = (scene: Scene): ReadonlyArray<Moved> =>
+  scene.current.pending.map(({ command }) => {
+    scene.resolve(command as never, Component.noop as never)
     const { leaving, ref } = command.args as {
       readonly ref: { readonly key: string }
       readonly leaving?: {
@@ -88,90 +88,90 @@ const moved = (s: Scene): ReadonlyArray<Moved> =>
         leaving: { from: key(leaving.ref), caret: leaving.caret }
       }
   })
-const tabStops = (s: Scene) =>
-  values.filter((value) => s.get(item(value)).attrs?.tabindex === "0")
+const tabStops = (scene: Scene) =>
+  values.filter((value) => scene.get(item(value)).attrs?.tabindex === "0")
 
 describe("Toolbar", () => {
   it.effect("the parts carry the orientation and the disabled state of the toolbar, the group and the item", () =>
     Effect.gen(function*() {
-      const s = yield* scene()
-      assert.deepStrictEqual(s.get(root).attrs, {
+      const scene = yield* makeScene()
+      assert.deepStrictEqual(scene.get(root).attrs, {
         class: "toolbar",
         role: "toolbar",
         "aria-orientation": "horizontal",
         "data-orientation": "horizontal"
       })
-      assert.deepStrictEqual(s.get(group).attrs, {
+      assert.deepStrictEqual(scene.get(group).attrs, {
         class: "format",
         role: "group",
         "data-orientation": "horizontal"
       })
-      assert.deepStrictEqual(s.get(separator).attrs, {
+      assert.deepStrictEqual(scene.get(separator).attrs, {
         class: "separator",
         role: "separator",
         "aria-orientation": "vertical",
         "data-orientation": "vertical"
       })
-      assert.deepStrictEqual(s.get(item("bold")).attrs, {
+      assert.deepStrictEqual(scene.get(item("bold")).attrs, {
         "aria-label": "bold",
         "data-orientation": "horizontal",
         tabindex: "0",
         type: "button",
         "data-focusable": ""
       })
-      assert.deepStrictEqual(s.get(item("help")).attrs, {
+      assert.deepStrictEqual(scene.get(item("help")).attrs, {
         "aria-label": "help",
         href: "/help",
         "data-orientation": "horizontal",
         tabindex: "-1"
       })
-      assert.deepStrictEqual(s.get(item("search")).attrs, {
+      assert.deepStrictEqual(scene.get(item("search")).attrs, {
         "aria-label": "search",
         "data-orientation": "horizontal",
         tabindex: "-1",
         "data-focusable": ""
       })
 
-      s.props(
+      scene.props(
         props({
           groups: [{ value: "format", disabled: true }],
           orientation: "vertical"
         })
       )
-      assert.deepInclude(s.get(root).attrs, {
+      assert.deepInclude(scene.get(root).attrs, {
         "aria-orientation": "vertical",
         "data-orientation": "vertical"
       })
-      assert.deepInclude(s.get(group).attrs, {
+      assert.deepInclude(scene.get(group).attrs, {
         "data-orientation": "vertical",
         "data-disabled": ""
       })
-      assert.deepInclude(s.get(separator).attrs, {
+      assert.deepInclude(scene.get(separator).attrs, {
         "aria-orientation": "horizontal",
         "data-orientation": "horizontal"
       })
-      assert.deepInclude(s.get(item("italic")).attrs, {
+      assert.deepInclude(scene.get(item("italic")).attrs, {
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.isUndefined(s.get(item("italic")).attrs?.disabled)
-      assert.isUndefined(s.get(item("bold")).attrs?.["data-disabled"])
+      assert.isUndefined(scene.get(item("italic")).attrs?.disabled)
+      assert.isUndefined(scene.get(item("bold")).attrs?.["data-disabled"])
 
-      s.props(props({ disabled: true }))
-      assert.deepInclude(s.get(root).attrs, { "data-disabled": "" })
-      assert.deepInclude(s.get(group).attrs, { "data-disabled": "" })
-      assert.deepInclude(s.get(item("bold")).attrs, {
+      scene.props(props({ disabled: true }))
+      assert.deepInclude(scene.get(root).attrs, { "data-disabled": "" })
+      assert.deepInclude(scene.get(group).attrs, { "data-disabled": "" })
+      assert.deepInclude(scene.get(item("bold")).attrs, {
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.deepInclude(s.get(item("search")).attrs, {
+      assert.deepInclude(scene.get(item("search")).attrs, {
         "aria-disabled": "true",
         "data-disabled": "",
         readonly: ""
       })
-      assert.isUndefined(s.get(item("help")).attrs?.["data-disabled"])
+      assert.isUndefined(scene.get(item("help")).attrs?.["data-disabled"])
 
-      s.props(props({
+      scene.props(props({
         items: [
           { value: "bold", disabled: true, focusableWhenDisabled: false },
           { value: "italic", group: "format" },
@@ -180,22 +180,22 @@ describe("Toolbar", () => {
           { value: "search", disabled: true, focusableWhenDisabled: false }
         ]
       }))
-      assert.deepInclude(s.get(item("bold")).attrs, {
+      assert.deepInclude(scene.get(item("bold")).attrs, {
         disabled: "",
         "data-disabled": ""
       })
-      assert.isUndefined(s.get(item("bold")).attrs?.["data-focusable"])
-      assert.isUndefined(s.get(item("bold")).attrs?.["aria-disabled"])
-      assert.deepInclude(s.get(item("search")).attrs, {
+      assert.isUndefined(scene.get(item("bold")).attrs?.["data-focusable"])
+      assert.isUndefined(scene.get(item("bold")).attrs?.["aria-disabled"])
+      assert.deepInclude(scene.get(item("search")).attrs, {
         disabled: "",
         "data-disabled": ""
       })
-      assert.isUndefined(s.get(item("search")).attrs?.readonly)
+      assert.isUndefined(scene.get(item("search")).attrs?.readonly)
     }))
 
   it.effect("the tab stop is the first item that takes focus, follows focus, and falls back when its item leaves", () =>
     Effect.gen(function*() {
-      const s = yield* scene({
+      const scene = yield* makeScene({
         items: [
           { value: "bold", disabled: true, focusableWhenDisabled: false },
           { value: "italic", group: "format", disabled: true },
@@ -204,10 +204,10 @@ describe("Toolbar", () => {
           { value: "search" }
         ]
       })
-      assert.deepStrictEqual(tabStops(s), ["italic"])
-      s.focus(item("search"))
-      assert.deepStrictEqual(tabStops(s), ["search"])
-      s.props(props({
+      assert.deepStrictEqual(tabStops(scene), ["italic"])
+      scene.focus(item("search"))
+      assert.deepStrictEqual(tabStops(scene), ["search"])
+      scene.props(props({
         disabled: true,
         items: props().items.map((entry) =>
           entry.value === "help"
@@ -215,14 +215,14 @@ describe("Toolbar", () => {
             : { ...entry, focusableWhenDisabled: false }
         )
       }))
-      assert.deepStrictEqual(tabStops(s), ["help"])
-      s.props(props())
-      assert.deepStrictEqual(tabStops(s), ["search"])
+      assert.deepStrictEqual(tabStops(scene), ["help"])
+      scene.props(props())
+      assert.deepStrictEqual(tabStops(scene), ["search"])
     }))
 
   it.effect("the arrow keys of the orientation, Home and End move focus over the items that take focus", () =>
     Effect.gen(function*() {
-      const s = yield* scene({
+      const scene = yield* makeScene({
         items: [
           { value: "bold" },
           {
@@ -240,34 +240,37 @@ describe("Toolbar", () => {
         from: string,
         key: string,
         details?: Parameters<Scene["keydown"]>[2]
-      ) => moved(s.keydown(item(from), key, details))
+      ) => moved(scene.keydown(item(from), key, details))
 
       assert.deepStrictEqual(
-        moved(s.keydown(item("bold"), "ArrowRight").expectDefaultPrevented()),
+        moved(
+          scene.keydown(item("bold"), "ArrowRight").expectDefaultPrevented()
+        ),
         [{
           to: "underline"
         }]
       )
-      assert.deepStrictEqual(tabStops(s), ["underline"])
+      assert.deepStrictEqual(tabStops(scene), ["underline"])
       assert.deepStrictEqual(press("bold", "ArrowLeft"), [{ to: "search" }])
       assert.deepStrictEqual(press("underline", "End"), [{ to: "search" }])
       assert.deepStrictEqual(press("help", "Home"), [{ to: "bold" }])
-      s.keydown(item("bold"), "ArrowDown").expectIgnored()
+      scene.keydown(item("bold"), "ArrowDown").expectIgnored()
         .expectDefaultPrevented(false)
-      s.keydown(item("bold"), "ArrowRight", { ctrl: true }).expectIgnored()
+      scene.keydown(item("bold"), "ArrowRight", { ctrl: true }).expectIgnored()
         .expectDefaultPrevented(false)
-      s.keydown(item("help"), "ArrowRight", { shift: true }).expectIgnored()
+      scene.keydown(item("help"), "ArrowRight", { shift: true }).expectIgnored()
         .expectDefaultPrevented(false)
-      s.keydown(item("bold"), "Enter").expectIgnored().expectDefaultPrevented(
-        false
-      )
+      scene.keydown(item("bold"), "Enter").expectIgnored()
+        .expectDefaultPrevented(
+          false
+        )
 
-      s.props(props({ orientation: "vertical", loopFocus: false }))
+      scene.props(props({ orientation: "vertical", loopFocus: false }))
       assert.deepStrictEqual(press("bold", "ArrowDown"), [{ to: "italic" }])
       assert.deepStrictEqual(press("bold", "ArrowUp"), [])
-      s.keydown(item("bold"), "ArrowRight").expectIgnored()
+      scene.keydown(item("bold"), "ArrowRight").expectIgnored()
 
-      s.props(props()).shared(DirectionProvider, { direction: "rtl" })
+      scene.props(props()).shared(DirectionProvider, { direction: "rtl" })
       assert.deepStrictEqual(press("italic", "ArrowLeft"), [{
         to: "underline"
       }])
@@ -276,55 +279,58 @@ describe("Toolbar", () => {
 
   it.effect("in a text input the arrow keys leave only from the edge of the text, and the default is never cancelled", () =>
     Effect.gen(function*() {
-      const s = yield* scene()
+      const scene = yield* makeScene()
       const press = (
         key: string,
         start: number | null,
         end: number | null = start
       ) =>
         moved(
-          s.keydown(item("search"), key, {
+          scene.keydown(item("search"), key, {
             selectionStart: start,
             selectionEnd: end
           }).expectDefaultPrevented(false)
         )
 
       assert.deepStrictEqual(press("ArrowLeft", 0), [{ to: "help" }])
-      assert.deepStrictEqual(tabStops(s), ["help"])
-      s.keydown(item("search"), "ArrowLeft", {
+      assert.deepStrictEqual(tabStops(scene), ["help"])
+      scene.keydown(item("search"), "ArrowLeft", {
         selectionStart: 2,
         selectionEnd: 2
       }).expectDefaultPrevented(false)
-      assert.deepStrictEqual(moved(s), [])
+      assert.deepStrictEqual(moved(scene), [])
       assert.deepStrictEqual(press("ArrowRight", 3), [{
         to: "bold",
         leaving: { from: "search", caret: 3 }
       }])
-      assert.deepStrictEqual(tabStops(s), ["help"])
+      assert.deepStrictEqual(tabStops(scene), ["help"])
       assert.deepStrictEqual(press("ArrowRight", null), [{ to: "bold" }])
-      s.keydown(item("search"), "ArrowRight", {
+      scene.keydown(item("search"), "ArrowRight", {
         selectionStart: 0,
         selectionEnd: 3
       }).expectIgnored()
-      s.keydown(item("search"), "ArrowLeft", {
+      scene.keydown(item("search"), "ArrowLeft", {
         selectionStart: 0,
         selectionEnd: 0,
         shift: true
       }).expectIgnored()
-      s.keydown(item("search"), "Home", { selectionStart: 3, selectionEnd: 3 })
+      scene.keydown(item("search"), "Home", {
+        selectionStart: 3,
+        selectionEnd: 3
+      })
         .expectIgnored()
-      s.keydown(item("search"), "ArrowLeft", {
+      scene.keydown(item("search"), "ArrowLeft", {
         selectionStart: 0,
         selectionEnd: 0,
         composing: true
       }).expectIgnored()
 
-      s.props(props()).shared(DirectionProvider, { direction: "rtl" })
-      s.keydown(item("search"), "ArrowRight", {
+      scene.props(props()).shared(DirectionProvider, { direction: "rtl" })
+      scene.keydown(item("search"), "ArrowRight", {
         selectionStart: 2,
         selectionEnd: 2
       })
-      assert.deepStrictEqual(moved(s), [])
+      assert.deepStrictEqual(moved(scene), [])
       assert.deepStrictEqual(press("ArrowLeft", 2), [{
         to: "bold",
         leaving: { from: "search", caret: 2 }

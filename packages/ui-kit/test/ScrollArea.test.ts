@@ -19,10 +19,10 @@ const cornerLoc = Locator.attr("class", "corner")
 
 type Track = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const tracked = (s: Rendered): Track =>
-  (s.get(rootLoc) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const tracked = (scene: Rendered): Track =>
+  (scene.get(rootLoc) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Track
 const sent = (tag: string, fields: object = {}) =>
   ({ _tag: tag, ...fields }) as never
@@ -92,50 +92,59 @@ describe("ScrollArea", () => {
   it.effect("manages overflow, scrolling, hover, tabindex, visibility, and attribute precedence", () =>
     Effect.gen(function*() {
       let latest!: Parts
-      const s = yield* Scene.make(
+      const scene = yield* Scene.make(
         ScrollArea,
         {},
         makeStandIn((p) => (latest = p))
       )
-      s.expectMount(tracked(s))
+      scene.expectMount(tracked(scene))
 
-      assert.strictEqual(s.get(rootLoc).attrs?.role, "presentation")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-custom"], "kept")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-scrolling"], undefined)
+      assert.strictEqual(scene.get(rootLoc).attrs?.role, "presentation")
+      assert.strictEqual(scene.get(rootLoc).attrs?.["data-custom"], "kept")
       assert.strictEqual(
-        s.get(rootLoc).attrs?.["data-has-overflow-y"],
+        scene.get(rootLoc).attrs?.["data-scrolling"],
         undefined
       )
       assert.strictEqual(
-        s.get(rootLoc).attrs?.style,
+        scene.get(rootLoc).attrs?.["data-has-overflow-y"],
+        undefined
+      )
+      assert.strictEqual(
+        scene.get(rootLoc).attrs?.style,
         "color:red;position:relative"
       )
 
-      assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "-1")
+      assert.strictEqual(scene.get(viewportLoc).attrs?.tabindex, "-1")
       assert.strictEqual(
-        s.get(viewportLoc).attrs?.["data-overflow-y-end"],
+        scene.get(viewportLoc).attrs?.["data-overflow-y-end"],
         undefined
       )
       assert.include(
-        s.get(viewportLoc).attrs?.style ?? "",
+        scene.get(viewportLoc).attrs?.style ?? "",
         "height:100px;overflow:scroll;scrollbar-width:none"
       )
 
-      assert.strictEqual(s.get(contentLoc).attrs?.role, "presentation")
-      assert.strictEqual(s.get(contentLoc).attrs?.["data-scrolling"], undefined)
+      assert.strictEqual(scene.get(contentLoc).attrs?.role, "presentation")
       assert.strictEqual(
-        s.get(contentLoc).attrs?.style,
+        scene.get(contentLoc).attrs?.["data-scrolling"],
+        undefined
+      )
+      assert.strictEqual(
+        scene.get(contentLoc).attrs?.style,
         "min-width:fit-content"
       )
 
-      assert.strictEqual(s.query(barYLoc), undefined)
-      assert.strictEqual(s.query(cornerLoc), undefined)
-      assert.isDefined(s.query(barXLoc))
-      assert.include(s.get(thumbXLoc).attrs?.style ?? "", "visibility:hidden")
+      assert.strictEqual(scene.query(barYLoc), undefined)
+      assert.strictEqual(scene.query(cornerLoc), undefined)
+      assert.isDefined(scene.query(barXLoc))
+      assert.include(
+        scene.get(thumbXLoc).attrs?.style ?? "",
+        "visibility:hidden"
+      )
       assert.strictEqual(latest.cornerHidden, true)
 
-      s.mounted(
-        tracked(s),
+      scene.mounted(
+        tracked(scene),
         sent("MeasuredOverflow", {
           hasOverflowX: false,
           hasOverflowY: false,
@@ -147,15 +156,15 @@ describe("ScrollArea", () => {
       )
 
       assert.notInclude(
-        s.get(thumbXLoc).attrs?.style ?? "",
+        scene.get(thumbXLoc).attrs?.style ?? "",
         "visibility:hidden"
       )
-      assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "-1")
-      assert.strictEqual(s.query(barYLoc), undefined)
-      assert.strictEqual(s.query(cornerLoc), undefined)
+      assert.strictEqual(scene.get(viewportLoc).attrs?.tabindex, "-1")
+      assert.strictEqual(scene.query(barYLoc), undefined)
+      assert.strictEqual(scene.query(cornerLoc), undefined)
 
-      s.mounted(
-        tracked(s),
+      scene.mounted(
+        tracked(scene),
         sent("MeasuredOverflow", {
           hasOverflowX: true,
           hasOverflowY: true,
@@ -166,94 +175,130 @@ describe("ScrollArea", () => {
         })
       )
 
-      assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "0")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-has-overflow-x"], "")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-has-overflow-y"], "")
+      assert.strictEqual(scene.get(viewportLoc).attrs?.tabindex, "0")
+      assert.strictEqual(scene.get(rootLoc).attrs?.["data-has-overflow-x"], "")
+      assert.strictEqual(scene.get(rootLoc).attrs?.["data-has-overflow-y"], "")
       assert.strictEqual(
-        s.get(rootLoc).attrs?.["data-overflow-x-start"],
+        scene.get(rootLoc).attrs?.["data-overflow-x-start"],
         undefined
       )
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-overflow-x-end"], "")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-overflow-y-start"], "")
+      assert.strictEqual(scene.get(rootLoc).attrs?.["data-overflow-x-end"], "")
       assert.strictEqual(
-        s.get(rootLoc).attrs?.["data-overflow-y-end"],
+        scene.get(rootLoc).attrs?.["data-overflow-y-start"],
+        ""
+      )
+      assert.strictEqual(
+        scene.get(rootLoc).attrs?.["data-overflow-y-end"],
         undefined
       )
-      assert.strictEqual(s.get(contentLoc).attrs?.["data-has-overflow-y"], "")
+      assert.strictEqual(
+        scene.get(contentLoc).attrs?.["data-has-overflow-y"],
+        ""
+      )
 
-      assert.strictEqual(s.get(barYLoc).attrs?.["aria-hidden"], "true")
-      assert.strictEqual(s.get(barYLoc).attrs?.["data-orientation"], "vertical")
-      assert.strictEqual(s.get(barYLoc).attrs?.["data-hovering"], undefined)
-      assert.strictEqual(s.get(barYLoc).attrs?.["data-scrolling"], undefined)
+      assert.strictEqual(scene.get(barYLoc).attrs?.["aria-hidden"], "true")
+      assert.strictEqual(
+        scene.get(barYLoc).attrs?.["data-orientation"],
+        "vertical"
+      )
+      assert.strictEqual(scene.get(barYLoc).attrs?.["data-hovering"], undefined)
+      assert.strictEqual(
+        scene.get(barYLoc).attrs?.["data-scrolling"],
+        undefined
+      )
       assert.include(
-        s.get(barYLoc).attrs?.style ?? "",
+        scene.get(barYLoc).attrs?.style ?? "",
         "width:8px;position:absolute"
       )
 
       assert.strictEqual(
-        s.get(thumbYLoc).attrs?.["data-orientation"],
+        scene.get(thumbYLoc).attrs?.["data-orientation"],
         "vertical"
       )
-      assert.strictEqual(s.get(thumbYLoc).attrs?.["data-scrolling"], undefined)
+      assert.strictEqual(
+        scene.get(thumbYLoc).attrs?.["data-scrolling"],
+        undefined
+      )
       assert.notInclude(
-        s.get(thumbYLoc).attrs?.style ?? "",
+        scene.get(thumbYLoc).attrs?.style ?? "",
         "visibility:hidden"
       )
       assert.notInclude(
-        s.get(thumbXLoc).attrs?.style ?? "",
+        scene.get(thumbXLoc).attrs?.style ?? "",
         "visibility:hidden"
       )
 
       assert.strictEqual(
-        s.get(barXLoc).attrs?.["data-orientation"],
+        scene.get(barXLoc).attrs?.["data-orientation"],
         "horizontal"
       )
       assert.strictEqual(
-        s.get(thumbXLoc).attrs?.["data-orientation"],
+        scene.get(thumbXLoc).attrs?.["data-orientation"],
         "horizontal"
       )
-      assert.isString(s.get(barYLoc).attrs?.["data-scroll-area-scrollbar-y"])
-      assert.isUndefined(s.get(barYLoc).attrs?.["data-scroll-area-scrollbar-x"])
-      assert.isString(s.get(thumbYLoc).attrs?.["data-scroll-area-thumb-y"])
-      assert.isUndefined(s.get(thumbYLoc).attrs?.["data-scroll-area-thumb-x"])
-      assert.isString(s.get(barXLoc).attrs?.["data-scroll-area-scrollbar-x"])
-      assert.isUndefined(s.get(barXLoc).attrs?.["data-scroll-area-scrollbar-y"])
-      assert.isString(s.get(thumbXLoc).attrs?.["data-scroll-area-thumb-x"])
-      assert.isUndefined(s.get(thumbXLoc).attrs?.["data-scroll-area-thumb-y"])
-      assert.strictEqual(s.get(cornerLoc).attrs?.["aria-hidden"], "true")
+      assert.isString(
+        scene.get(barYLoc).attrs?.["data-scroll-area-scrollbar-y"]
+      )
+      assert.isUndefined(
+        scene.get(barYLoc).attrs?.["data-scroll-area-scrollbar-x"]
+      )
+      assert.isString(scene.get(thumbYLoc).attrs?.["data-scroll-area-thumb-y"])
+      assert.isUndefined(
+        scene.get(thumbYLoc).attrs?.["data-scroll-area-thumb-x"]
+      )
+      assert.isString(
+        scene.get(barXLoc).attrs?.["data-scroll-area-scrollbar-x"]
+      )
+      assert.isUndefined(
+        scene.get(barXLoc).attrs?.["data-scroll-area-scrollbar-y"]
+      )
+      assert.isString(scene.get(thumbXLoc).attrs?.["data-scroll-area-thumb-x"])
+      assert.isUndefined(
+        scene.get(thumbXLoc).attrs?.["data-scroll-area-thumb-y"]
+      )
+      assert.strictEqual(scene.get(cornerLoc).attrs?.["aria-hidden"], "true")
       assert.include(
-        s.get(cornerLoc).attrs?.style ?? "",
+        scene.get(cornerLoc).attrs?.style ?? "",
         "background:gray;position:absolute"
       )
       assert.strictEqual(latest.cornerHidden, false)
 
-      s.mounted(tracked(s), sent("EnteredPointer"))
-      assert.strictEqual(s.get(barYLoc).attrs?.["data-hovering"], "")
-      assert.strictEqual(s.get(barXLoc).attrs?.["data-hovering"], "")
+      scene.mounted(tracked(scene), sent("EnteredPointer"))
+      assert.strictEqual(scene.get(barYLoc).attrs?.["data-hovering"], "")
+      assert.strictEqual(scene.get(barXLoc).attrs?.["data-hovering"], "")
       assert.strictEqual(latest.hovering, true)
 
-      s.mounted(
-        tracked(s),
+      scene.mounted(
+        tracked(scene),
         sent("StartedScrolling", { orientation: "vertical" })
       )
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-scrolling"], "")
-      assert.strictEqual(s.get(viewportLoc).attrs?.["data-scrolling"], "")
-      assert.strictEqual(s.get(contentLoc).attrs?.["data-scrolling"], "")
-      assert.strictEqual(s.get(barYLoc).attrs?.["data-scrolling"], "")
-      assert.strictEqual(s.get(thumbYLoc).attrs?.["data-scrolling"], "")
-      assert.strictEqual(s.get(barXLoc).attrs?.["data-scrolling"], undefined)
-      assert.strictEqual(s.get(thumbXLoc).attrs?.["data-scrolling"], undefined)
+      assert.strictEqual(scene.get(rootLoc).attrs?.["data-scrolling"], "")
+      assert.strictEqual(scene.get(viewportLoc).attrs?.["data-scrolling"], "")
+      assert.strictEqual(scene.get(contentLoc).attrs?.["data-scrolling"], "")
+      assert.strictEqual(scene.get(barYLoc).attrs?.["data-scrolling"], "")
+      assert.strictEqual(scene.get(thumbYLoc).attrs?.["data-scrolling"], "")
+      assert.strictEqual(
+        scene.get(barXLoc).attrs?.["data-scrolling"],
+        undefined
+      )
+      assert.strictEqual(
+        scene.get(thumbXLoc).attrs?.["data-scrolling"],
+        undefined
+      )
       assert.strictEqual(latest.scrolling, true)
       assert.strictEqual(latest.scrollingY, true)
       assert.strictEqual(latest.scrollingX, false)
 
-      s.mounted(
-        tracked(s),
+      scene.mounted(
+        tracked(scene),
         sent("StoppedScrolling", { orientation: "vertical" })
       )
-      s.mounted(tracked(s), sent("LeftPointer"))
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-scrolling"], undefined)
-      assert.strictEqual(s.get(barYLoc).attrs?.["data-hovering"], undefined)
+      scene.mounted(tracked(scene), sent("LeftPointer"))
+      assert.strictEqual(
+        scene.get(rootLoc).attrs?.["data-scrolling"],
+        undefined
+      )
+      assert.strictEqual(scene.get(barYLoc).attrs?.["data-hovering"], undefined)
       assert.strictEqual(latest.scrolling, false)
       assert.strictEqual(latest.hovering, false)
     }))

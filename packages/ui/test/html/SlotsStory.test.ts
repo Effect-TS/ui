@@ -66,40 +66,40 @@ const Page = Component.define({
 describe("slots in a story", () => {
   it.effect("a parent's story shows its content, handles its events and finds its children", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Page, {})
-      s.click("bump")
+      const scene = yield* Scene.make(Page, {})
+      scene.click("bump")
         .childEmit(Note, "n", { _tag: "Saved", text: "hi" })
         .expect(Locator.tag("output")).toHaveText("hi")
       // The child's own view isn't run: only what the parent passed shows.
       assert.strictEqual(
-        Locator.textOf(s.view as Locator.Node),
+        Locator.textOf(scene.view as Locator.Node),
         "bumps 1bumphi"
       )
       assert.deepStrictEqual(
-        s.all(Locator.text("bump")).map((node) => node.tag),
+        scene.all(Locator.text("bump")).map((node) => node.tag),
         ["button"]
       )
       assert.deepStrictEqual(
-        Scene.children(s.view, Note).map((child) => child.key),
+        Scene.children(scene.view, Note).map((child) => child.key),
         ["n"]
       )
     }))
 
   it.effect("a slotted component's story shows what it was passed where the view places each slot", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Panel, {}, {
+      const scene = yield* Scene.make(Panel, {}, {
         slots: (h) => ({
           title: "hello",
           body: [h.em("the body"), Note(h, { key: "n" })]
         })
       })
-      assert.strictEqual(Locator.textOf(s.get(Locator.tag("h2"))), "hello")
+      assert.strictEqual(Locator.textOf(scene.get(Locator.tag("h2"))), "hello")
       assert.strictEqual(
-        Locator.textOf(s.get(Locator.tag("section"))),
+        Locator.textOf(scene.get(Locator.tag("section"))),
         "hellopanel's ownthe body"
       )
       assert.deepStrictEqual(
-        Scene.children(s.view, Note).map((child) => child.key),
+        Scene.children(scene.view, Note).map((child) => child.key),
         ["n"]
       )
     }))
@@ -156,8 +156,8 @@ describe("headless closures in slot content", () => {
               }
             })
         })
-      const s = yield* Scene.make(Parent, {})
-      s.childEmit(Note, "n", { _tag: "Saved", text: "hi" })
+      const scene = yield* Scene.make(Parent, {})
+      scene.childEmit(Note, "n", { _tag: "Saved", text: "hi" })
         .expect(Locator.tag("output")).toHaveText("hi")
     }))
 
@@ -174,11 +174,11 @@ describe("headless closures in slot content", () => {
         update: ($) => $.model,
         view: (h) => h.div(Note(h, { key: "N" }), h.slots.body)
       })
-      const s = yield* Scene.make(Receiver, {}, {
+      const scene = yield* Scene.make(Receiver, {}, {
         slots: (h) => ({
           body: Headless(h, { key: "ext", view: () => Note(h, { key: "N" }) })
         })
       })
-      assert.strictEqual(Scene.children(s.view, Note).length, 2)
+      assert.strictEqual(Scene.children(scene.view, Note).length, 2)
     }))
 })

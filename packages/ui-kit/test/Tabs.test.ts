@@ -118,49 +118,49 @@ const props = (extra: Partial<TabsProps> = {}): TabsProps => ({
 
 type Issued = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const mountOf = (s: Rendered, locator: Locator.Locator): Issued =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const mountOf = (scene: Rendered, locator: Locator.Locator): Issued =>
+  (scene.get(locator) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Issued
 const sent = (tag: string, fields: object = {}) =>
   ({ _tag: tag, ...fields }) as never
 
-const scene = (initial: TabsProps) =>
+const makeScene = (initial: TabsProps) =>
   HtmlScene.make(Tabs, initial, standIn).pipe(
-    Effect.map((s) => {
-      s.expectMount(mountOf(s, loc("list")))
-      return s.query(loc("indicator")) === undefined
-        ? s
-        : s.expectMount(mountOf(s, loc("indicator")))
+    Effect.map((scene) => {
+      scene.expectMount(mountOf(scene, loc("list")))
+      return scene.query(loc("indicator")) === undefined
+        ? scene
+        : scene.expectMount(mountOf(scene, loc("indicator")))
     })
   )
-type Scene = Effect.Success<ReturnType<typeof scene>>
+type Scene = Effect.Success<ReturnType<typeof makeScene>>
 
 const owns = (
-  s: Scene,
+  scene: Scene,
   locator: Locator.Locator,
   expected: Record<string, string | undefined>
 ) => {
-  const attrs = s.get(locator).attrs ?? {}
+  const attrs = scene.get(locator).attrs ?? {}
   for (const [name, value] of Object.entries(expected)) {
     assert.strictEqual(attrs[name], value, name)
   }
 }
-const focused = (s: Scene): ReadonlyArray<string> =>
-  s.current.pending.map(({ command }) => {
-    s.resolve(command as never, { found: true } as never)
+const focused = (scene: Scene): ReadonlyArray<string> =>
+  scene.current.pending.map(({ command }) => {
+    scene.resolve(command as never, { found: true } as never)
     return (command.args as { readonly ref: { readonly key: string } }).ref.key
       .replace(/^TabsTab\[(.*)\]$/, "$1")
   })
-const tabindexes = (s: Scene) =>
-  ["a", "b", "c", "d"].map((value) => s.get(tabLoc(value)).attrs?.tabindex)
+const tabindexes = (scene: Scene) =>
+  ["a", "b", "c", "d"].map((value) => scene.get(tabLoc(value)).attrs?.tabindex)
 const selected = (
   value: string,
   activationDirection: TabsEvents["activationDirection"]
 ) => TabsEvents.Selected({ value, activationDirection })
-const select = (s: Scene, next: TabsProps) => {
-  s.props(next)
+const select = (scene: Scene, next: TabsProps) => {
+  scene.props(next)
   for (
     const part of [
       panelLoc("a"),
@@ -169,11 +169,13 @@ const select = (s: Scene, next: TabsProps) => {
       loc("indicator")
     ]
   ) {
-    const mount = s.query(part) === undefined ? undefined : mountOf(s, part)
-    if (mount !== undefined) s.expectMount(mount)
+    const mount = scene.query(part) === undefined
+      ? undefined
+      : mountOf(scene, part)
+    if (mount !== undefined) scene.expectMount(mount)
   }
-  return s.subscription(
-    s.subscriptions.find((key) => key.startsWith("changedValue"))!,
+  return scene.subscription(
+    scene.subscriptions.find((key) => key.startsWith("changedValue"))!,
     sent("ChangedValue")
   )
 }
@@ -181,22 +183,22 @@ const select = (s: Scene, next: TabsProps) => {
 describe("Tabs", () => {
   it.effect("the parts carry the roles, ids, ARIA and state, over every value the consumer gave them", () =>
     Effect.gen(function*() {
-      const s = yield* scene(props())
-      const tabA = s.get(tabLoc("a")).attrs!
-      const panelA = s.get(panelLoc("a")).attrs!
+      const scene = yield* makeScene(props())
+      const tabA = scene.get(tabLoc("a")).attrs!
+      const panelA = scene.get(panelLoc("a")).attrs!
       const state = {
         "data-orientation": "horizontal",
         "data-activation-direction": "none"
       }
-      owns(s, loc("root"), { ...state, class: "root" })
-      owns(s, loc("list"), {
+      owns(scene, loc("root"), { ...state, class: "root" })
+      owns(scene, loc("list"), {
         ...state,
         role: "tablist",
         "aria-orientation": undefined
       })
       assert.notStrictEqual(tabA.id, "mine")
       assert.notStrictEqual(panelA.id, "mine")
-      owns(s, tabLoc("a"), {
+      owns(scene, tabLoc("a"), {
         ...state,
         role: "tab",
         type: "button",
@@ -208,7 +210,7 @@ describe("Tabs", () => {
         "data-active": "",
         "data-disabled": undefined
       })
-      owns(s, tabLoc("b"), {
+      owns(scene, tabLoc("b"), {
         "aria-selected": "false",
         "aria-controls": "elsewhere",
         "aria-disabled": "true",
@@ -217,13 +219,13 @@ describe("Tabs", () => {
         "data-active": undefined,
         "data-disabled": ""
       })
-      owns(s, tabLoc("c"), {
+      owns(scene, tabLoc("c"), {
         href: "#c",
         type: "text/html",
         "aria-disabled": undefined,
         "data-disabled": undefined
       })
-      owns(s, panelLoc("a"), {
+      owns(scene, panelLoc("a"), {
         ...state,
         role: "tabpanel",
         "aria-labelledby": "elsewhere " + tabA.id,
@@ -235,21 +237,26 @@ describe("Tabs", () => {
         "data-starting-style": undefined,
         "data-ending-style": undefined
       })
-      owns(s, loc("indicator"), { ...state, role: "presentation", hidden: "" })
-      s.expect(panelLoc("b")).toBeAbsent().expect(panelLoc("c")).toBeAbsent()
+      owns(scene, loc("indicator"), {
+        ...state,
+        role: "presentation",
+        hidden: ""
+      })
+      scene.expect(panelLoc("b")).toBeAbsent().expect(panelLoc("c"))
+        .toBeAbsent()
 
-      s.mounted(
-        mountOf(s, loc("indicator")),
+      scene.mounted(
+        mountOf(scene, loc("indicator")),
         sent("MeasuredActiveTab", { sized: true })
       )
-      owns(s, loc("indicator"), { hidden: undefined })
+      owns(scene, loc("indicator"), { hidden: undefined })
 
-      s.props(props({ orientation: "vertical", keepMounted: true }))
-      owns(s, loc("list"), {
+      scene.props(props({ orientation: "vertical", keepMounted: true }))
+      owns(scene, loc("list"), {
         "aria-orientation": "vertical",
         "data-orientation": "vertical"
       })
-      owns(s, panelLoc("b"), {
+      owns(scene, panelLoc("b"), {
         hidden: "",
         inert: "",
         "data-hidden": "",
@@ -257,19 +264,19 @@ describe("Tabs", () => {
         "data-index": "1"
       })
       for (const value of ["b", "c"]) {
-        owns(s, tabLoc(value), {
-          "aria-controls": "elsewhere " + s.get(panelLoc(value)).attrs?.id
+        owns(scene, tabLoc(value), {
+          "aria-controls": "elsewhere " + scene.get(panelLoc(value)).attrs?.id
         })
       }
-      owns(s, tabLoc("d"), { "aria-controls": "elsewhere" })
-      s.props(
+      owns(scene, tabLoc("d"), { "aria-controls": "elsewhere" })
+      scene.props(
         props({
           tabs: [all[0]!, all[1]!, { value: "c", keepMounted: false }, all[3]!],
           keepMounted: true
         })
       )
-      s.expect(panelLoc("b")).toExist().expect(panelLoc("c")).toBeAbsent()
-      owns(s, tabLoc("c"), { "aria-controls": "elsewhere" })
+      scene.expect(panelLoc("b")).toExist().expect(panelLoc("c")).toBeAbsent()
+      owns(scene, tabLoc("c"), { "aria-controls": "elsewhere" })
     }))
 
   it.effect("the tab stop follows the active tab while focus is elsewhere, and stays put for a disabled one", () =>
@@ -277,83 +284,91 @@ describe("Tabs", () => {
       const order = [{ value: "b", disabled: true }, { value: "a" }, {
         value: "c"
       }, { value: "d" }]
-      const none = yield* scene(props({ value: null, tabs: order }))
+      const none = yield* makeScene(props({ value: null, tabs: order }))
       assert.deepStrictEqual(tabindexes(none), ["0", "-1", "-1", "-1"])
       none.expect(loc("indicator")).toBeAbsent()
       assert.deepStrictEqual(
-        tabindexes(yield* scene(props({ value: "b", tabs: order }))),
+        tabindexes(yield* makeScene(props({ value: "b", tabs: order }))),
         ["0", "-1", "-1", "-1"]
       )
 
-      const s = yield* scene(props({ value: "c" }))
-      assert.deepStrictEqual(tabindexes(s), ["-1", "-1", "0", "-1"])
-      select(s, props({ value: "b" }))
-      assert.deepStrictEqual(s.current.emitted, [])
-      owns(s, tabLoc("b"), { "aria-selected": "true" })
-      assert.deepStrictEqual(tabindexes(s), ["-1", "-1", "0", "-1"])
-      select(s, props({ value: "a" }))
-      assert.deepStrictEqual(tabindexes(s), ["0", "-1", "-1", "-1"])
+      const scene = yield* makeScene(props({ value: "c" }))
+      assert.deepStrictEqual(tabindexes(scene), ["-1", "-1", "0", "-1"])
+      select(scene, props({ value: "b" }))
+      assert.deepStrictEqual(scene.current.emitted, [])
+      owns(scene, tabLoc("b"), { "aria-selected": "true" })
+      assert.deepStrictEqual(tabindexes(scene), ["-1", "-1", "0", "-1"])
+      select(scene, props({ value: "a" }))
+      assert.deepStrictEqual(tabindexes(scene), ["0", "-1", "-1", "-1"])
 
-      s.focus(tabLoc("d")).blur(tabLoc("d"))
-      assert.deepStrictEqual(tabindexes(s), ["-1", "-1", "-1", "0"])
-      s.focus(tabLoc("d"))
-      select(s, props({ value: "c" }))
-      assert.deepStrictEqual(tabindexes(s), ["-1", "-1", "-1", "0"])
+      scene.focus(tabLoc("d")).blur(tabLoc("d"))
+      assert.deepStrictEqual(tabindexes(scene), ["-1", "-1", "-1", "0"])
+      scene.focus(tabLoc("d"))
+      select(scene, props({ value: "c" }))
+      assert.deepStrictEqual(tabindexes(scene), ["-1", "-1", "-1", "0"])
     }))
 
   it.effect("the arrow keys, Home and End move focus and the roving tab, through disabled tabs", () =>
     Effect.gen(function*() {
-      const s = yield* scene(props())
-      s.focus(tabLoc("a"))
+      const scene = yield* makeScene(props())
+      scene.focus(tabLoc("a"))
       assert.deepStrictEqual(
-        focused(s.keydown(tabLoc("a"), "ArrowRight").expectDefaultPrevented()),
+        focused(
+          scene.keydown(tabLoc("a"), "ArrowRight").expectDefaultPrevented()
+        ),
         ["b"]
       )
-      s.focus(tabLoc("b"))
-      assert.deepStrictEqual(tabindexes(s), ["-1", "0", "-1", "-1"])
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("b"), "End")), ["d"])
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("d"), "ArrowRight")), [
-        "a"
-      ])
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("a"), "ArrowLeft")), [
+      scene.focus(tabLoc("b"))
+      assert.deepStrictEqual(tabindexes(scene), ["-1", "0", "-1", "-1"])
+      assert.deepStrictEqual(focused(scene.keydown(tabLoc("b"), "End")), ["d"])
+      assert.deepStrictEqual(
+        focused(scene.keydown(tabLoc("d"), "ArrowRight")),
+        [
+          "a"
+        ]
+      )
+      assert.deepStrictEqual(focused(scene.keydown(tabLoc("a"), "ArrowLeft")), [
         "d"
       ])
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("d"), "Home")), ["a"])
-      s.keydown(tabLoc("a"), "ArrowDown").expectIgnored()
+      assert.deepStrictEqual(focused(scene.keydown(tabLoc("d"), "Home")), ["a"])
+      scene.keydown(tabLoc("a"), "ArrowDown").expectIgnored()
         .expectDefaultPrevented(false)
-      s.keydown(tabLoc("a"), "ArrowRight", { alt: true }).expectIgnored()
-      s.blur(tabLoc("a"))
-      assert.deepStrictEqual(tabindexes(s), ["0", "-1", "-1", "-1"])
+      scene.keydown(tabLoc("a"), "ArrowRight", { alt: true }).expectIgnored()
+      scene.blur(tabLoc("a"))
+      assert.deepStrictEqual(tabindexes(scene), ["0", "-1", "-1", "-1"])
 
-      s.props(props({ loopFocus: false }))
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("a"), "ArrowLeft")), [])
-      s.props(props({ orientation: "vertical" }))
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("a"), "ArrowDown")), [
+      scene.props(props({ loopFocus: false }))
+      assert.deepStrictEqual(
+        focused(scene.keydown(tabLoc("a"), "ArrowLeft")),
+        []
+      )
+      scene.props(props({ orientation: "vertical" }))
+      assert.deepStrictEqual(focused(scene.keydown(tabLoc("a"), "ArrowDown")), [
         "b"
       ])
-      s.keydown(tabLoc("a"), "ArrowRight").expectIgnored()
-      s.props(props()).shared(DirectionProvider, { direction: "rtl" })
-      assert.deepStrictEqual(focused(s.keydown(tabLoc("a"), "ArrowLeft")), [
+      scene.keydown(tabLoc("a"), "ArrowRight").expectIgnored()
+      scene.props(props()).shared(DirectionProvider, { direction: "rtl" })
+      assert.deepStrictEqual(focused(scene.keydown(tabLoc("a"), "ArrowLeft")), [
         "b"
       ])
     }))
 
   it.effect("a click selects an enabled tab, and a disabled tab never activates", () =>
     Effect.gen(function*() {
-      const s = yield* scene(props())
-      s.click(tabLoc("c")).emitted(selected("c", "right"))
+      const scene = yield* makeScene(props())
+      scene.click(tabLoc("c")).emitted(selected("c", "right"))
         .expectDefaultPrevented(false)
-      s.click(tabLoc("a")).expectHandled()
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.click(tabLoc("b")).expectDefaultPrevented()
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.click(tabLoc("a")).expectHandled()
+      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.click(tabLoc("b")).expectDefaultPrevented()
+      assert.deepStrictEqual(scene.current.emitted, [])
 
-      const rtl = (yield* scene(props({ value: "c" }))).shared(
+      const rtl = (yield* makeScene(props({ value: "c" }))).shared(
         DirectionProvider,
         { direction: "rtl" }
       )
       rtl.click(tabLoc("a")).emitted(selected("a", "right"))
-      const vertical = yield* scene(
+      const vertical = yield* makeScene(
         props({ value: "c", orientation: "vertical" })
       )
       vertical.click(tabLoc("a")).emitted(selected("a", "up"))
@@ -361,36 +376,36 @@ describe("Tabs", () => {
 
   it.effect("a new value moves the activation direction and plays the panels' transitions", () =>
     Effect.gen(function*() {
-      const s = yield* scene(props())
-      select(s, props({ value: "c" }))
+      const scene = yield* makeScene(props())
+      select(scene, props({ value: "c" }))
       for (const part of ["root", "list", "tab-a", "indicator", "panel-c"]) {
         assert.strictEqual(
-          s.get(loc(part)).attrs?.["data-activation-direction"],
+          scene.get(loc(part)).attrs?.["data-activation-direction"],
           "right"
         )
       }
-      owns(s, panelLoc("c"), { "data-starting-style": "" })
-      owns(s, panelLoc("a"), {
+      owns(scene, panelLoc("c"), { "data-starting-style": "" })
+      owns(scene, panelLoc("a"), {
         "data-ending-style": "",
         inert: "",
         hidden: undefined
       })
-      owns(s, tabLoc("a"), {
-        "aria-controls": "elsewhere " + s.get(panelLoc("a")).attrs?.id
+      owns(scene, tabLoc("a"), {
+        "aria-controls": "elsewhere " + scene.get(panelLoc("a")).attrs?.id
       })
 
-      s.mounted(
-        mountOf(s, panelLoc("c")),
+      scene.mounted(
+        mountOf(scene, panelLoc("c")),
         sent("RenderedFirstFrame", { value: "c" })
       )
-      owns(s, panelLoc("c"), { "data-starting-style": undefined })
-      s.mounted(
-        mountOf(s, panelLoc("a")),
+      owns(scene, panelLoc("c"), { "data-starting-style": undefined })
+      scene.mounted(
+        mountOf(scene, panelLoc("a")),
         sent("FinishedTransition", { value: "a" })
       )
-      s.expect(panelLoc("a")).toBeAbsent()
-      owns(s, tabLoc("a"), { "aria-controls": "elsewhere" })
-      s.parts((tabs) =>
+      scene.expect(panelLoc("a")).toBeAbsent()
+      owns(scene, tabLoc("a"), { "aria-controls": "elsewhere" })
+      scene.parts((tabs) =>
         assert.deepStrictEqual([tabs.value, tabs.activationDirection], [
           "c",
           "right"

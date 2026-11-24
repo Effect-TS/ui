@@ -100,46 +100,46 @@ describe("headless components in a story", () => {
     "arrow keys skip a disabled row and wrap, and typeahead on the trigger reads the labels and starts over",
     () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Menu, { items }, standIn)
-        const active = () => Story.parts(Menu, s.current).active
+        const scene = yield* Scene.make(Menu, { items }, standIn)
+        const active = () => Story.parts(Menu, scene.current).active
         // Block is disabled, so typing its first letter moves nowhere.
-        s.fire(trigger, "keydown", { key: "b" })
+        scene.fire(trigger, "keydown", { key: "b" })
         assert.isNull(active())
-        s.fire(trigger, "keydown", { key: "c" }).fire(trigger, "keydown", {
+        scene.fire(trigger, "keydown", { key: "c" }).fire(trigger, "keydown", {
           key: "o"
         })
         assert.strictEqual(active(), "c")
         // No label starts with "coa", so typing starts over from "a".
-        s.fire(trigger, "keydown", { key: "a" })
+        scene.fire(trigger, "keydown", { key: "a" })
         assert.strictEqual(active(), "a")
         // Up from the first row wraps to the last, down wraps back, and from there skips Block.
-        s.fire(filter, "keydown", { key: "ArrowUp" })
+        scene.fire(filter, "keydown", { key: "ArrowUp" })
         assert.strictEqual(active(), "c")
-        s.fire(filter, "keydown", { key: "ArrowDown" })
+        scene.fire(filter, "keydown", { key: "ArrowDown" })
         assert.strictEqual(active(), "a")
-        s.fire(filter, "keydown", { key: "ArrowDown" })
+        scene.fire(filter, "keydown", { key: "ArrowDown" })
         assert.strictEqual(active(), "c")
-        s.fire(filter, "keydown", { key: "ArrowUp" })
+        scene.fire(filter, "keydown", { key: "ArrowUp" })
         assert.strictEqual(active(), "a")
         assert.strictEqual(
-          s.get(filter).attrs?.["aria-activedescendant"],
-          s.get(Locator.text("Archive")).attrs?.id
+          scene.get(filter).attrs?.["aria-activedescendant"],
+          scene.get(Locator.text("Archive")).attrs?.id
         )
-        s.fire(filter, "keydown", { key: "Enter" })
+        scene.fire(filter, "keydown", { key: "Enter" })
           .emitted({ _tag: "Picked", id: "a" })
       })
   )
 
   it.effect("an item that new props removed is no longer active, and Enter picks nothing", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Menu, { items }, standIn)
-      s.fire(filter, "keydown", { key: "ArrowUp" })
-      assert.strictEqual(Story.parts(Menu, s.current).active, "c")
-      s.props({ items: [items[0]!] })
-      assert.isNull(Story.parts(Menu, s.current).active)
-      assert.isUndefined(s.get(filter).attrs?.["aria-activedescendant"])
-      s.fire(filter, "keydown", { key: "Enter" })
-      assert.deepStrictEqual(s.current.emitted, [])
+      const scene = yield* Scene.make(Menu, { items }, standIn)
+      scene.fire(filter, "keydown", { key: "ArrowUp" })
+      assert.strictEqual(Story.parts(Menu, scene.current).active, "c")
+      scene.props({ items: [items[0]!] })
+      assert.isNull(Story.parts(Menu, scene.current).active)
+      assert.isUndefined(scene.get(filter).attrs?.["aria-activedescendant"])
+      scene.fire(filter, "keydown", { key: "Enter" })
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it("parts need no runtime, and an id outside a mount is under the component's own name", () => {
@@ -185,15 +185,15 @@ describe("headless components in a story", () => {
 
   it.effect("ids of one instance differ whenever the name or the key does", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Ids, {})
-      const ids = s.all(Locator.tag("span")).map((span) => span.attrs?.id)
+      const scene = yield* Scene.make(Ids, {})
+      const ids = scene.all(Locator.tag("span")).map((span) => span.attrs?.id)
       assert.strictEqual(new Set(ids).size, 3, ids.join(" "))
     }))
 
   it.effect("an author's story runs the component with a stand-in view, and reads its parts", () =>
     Effect.gen(function*() {
       // The stand-in view is written in place here, where its parameters need no annotation.
-      const s = yield* Scene.make(Menu, { items }, {
+      const scene = yield* Scene.make(Menu, { items }, {
         elements: Html,
         view: (menu, h) =>
           h.div(
@@ -206,32 +206,32 @@ describe("headless components in a story", () => {
             )
           )
       })
-      s.click("Actions")
+      scene.click("Actions")
       assert.strictEqual(
-        s.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+        scene.get(Locator.text("Actions")).attrs?.["aria-expanded"],
         "true"
       )
-      s.fire(filter, "input", { value: "co", checked: false })
-      const menu = Story.parts(Menu, s.current)
+      scene.fire(filter, "input", { value: "co", checked: false })
+      const menu = Story.parts(Menu, scene.current)
       assert.deepStrictEqual(menu.visible.map((item) => item.label), ["Copy"])
       assert.strictEqual(menu.active, "c")
-      assert.deepStrictEqual(labels(s), ["Copy"])
-      s.fire(filter, "keydown", { key: "Enter" })
-      assert.isTrue(s.defaultPrevented)
-      s.emitted({ _tag: "Picked", id: "c" })
-      assert.isFalse(Story.parts(Menu, s.current).open)
+      assert.deepStrictEqual(labels(scene), ["Copy"])
+      scene.fire(filter, "keydown", { key: "Enter" })
+      assert.isTrue(scene.defaultPrevented)
+      scene.emitted({ _tag: "Picked", id: "c" })
+      assert.isFalse(Story.parts(Menu, scene.current).open)
     }))
 
   it.effect("a consumer's story shows the child expanded, and runs only the consumer's layer", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Toolbar, {})
+      const scene = yield* Scene.make(Toolbar, {})
       // Expanded from the Menu's init Model.
       assert.strictEqual(
-        s.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+        scene.get(Locator.text("Actions")).attrs?.["aria-expanded"],
         "false"
       )
-      assert.deepStrictEqual(labels(s), ["Archive", "Block", "Copy"])
-      s.givenChild(Menu, "actions", {
+      assert.deepStrictEqual(labels(scene), ["Archive", "Block", "Copy"])
+      scene.givenChild(Menu, "actions", {
         open: true,
         query: "co",
         active: "c",
@@ -239,17 +239,17 @@ describe("headless components in a story", () => {
         focused: []
       })
       assert.strictEqual(
-        s.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+        scene.get(Locator.text("Actions")).attrs?.["aria-expanded"],
         "true"
       )
-      assert.deepStrictEqual(labels(s), ["Copy"])
+      assert.deepStrictEqual(labels(scene), ["Copy"])
       // The row has the Menu's layer and the Toolbar's: the story runs the Toolbar's.
-      s.click("Copy")
+      scene.click("Copy")
         .childEmit(Menu, "actions", { _tag: "Picked", id: "c" })
         .expect(Locator.tag("output")).toHaveText("Clicked c, Picked c")
       // Only the Menu handles a click on its trigger, and a story doesn't run the Menu's update.
       assert.throws(
-        () => s.click("Actions"),
+        () => scene.click("Actions"),
         /only \/Toolbar\/Menu\[actions\] handles "click"/
       )
     }))
@@ -266,11 +266,11 @@ describe("headless components in a story", () => {
           update: ($) => $.model,
           parts: (p) => ({ root: p.part((b) => b.attr("role", "button")) })
         })
-      const s = yield* Scene.make(Neutral, {}, {
+      const scene = yield* Scene.make(Neutral, {}, {
         elements: Html,
         view: (neutral, h) => neutral.root(h.button).children("neutral")
       })
-      assert.strictEqual(s.get(Locator.text("neutral")).tag, "button")
+      assert.strictEqual(scene.get(Locator.text("neutral")).tag, "button")
     }))
 
   it.effect("an author's story runs every part layer of one event, and each layer's own preventDefault", () =>
@@ -292,15 +292,15 @@ describe("headless components in a story", () => {
           ten: p.part("button", (b) => b.onClick("ten"))
         })
       })
-      const s = yield* Scene.make(Dual, {}, {
+      const scene = yield* Scene.make(Dual, {}, {
         elements: Html,
         view: (dual, h) =>
           dual.ten(dual.one(h.button)).onClick(() => undefined, {
             preventDefault: false
           }).children("both")
       })
-      s.click("both").parts((dual) => assert.strictEqual(dual.count, 11))
-      assert.isTrue(s.defaultPrevented)
+      scene.click("both").parts((dual) => assert.strictEqual(dual.count, 11))
+      assert.isTrue(scene.defaultPrevented)
     }))
 
   it.effect("a consumer's story cancels the default when a child's layer always does", () =>
@@ -341,10 +341,10 @@ describe("headless components in a story", () => {
             }
           )
       })
-      const s = yield* Scene.make(Page, {})
+      const scene = yield* Scene.make(Page, {})
       // Clicked is Page's only message.
-      s.click("go").expectHandled()
-      assert.isTrue(s.defaultPrevented)
+      scene.click("go").expectHandled()
+      assert.isTrue(scene.defaultPrevented)
     }))
 
   it.effect("an author's story runs its own layers around and inside a headless child's closure", () =>
@@ -374,7 +374,7 @@ describe("headless components in a story", () => {
           hundred: p.part("button", (b) => b.onClick("hundred"))
         })
       })
-      const s = yield* Scene.make(Outer, {}, {
+      const scene = yield* Scene.make(Outer, {}, {
         elements: Html,
         view: (outer, h) =>
           outer.ten(outer.one(h.div)).children(
@@ -385,11 +385,11 @@ describe("headless components in a story", () => {
             })
           )
       })
-      s.click("hit")
-      s.parts((outer) => assert.strictEqual(outer.count, 11))
-      assert.isTrue(s.defaultPrevented)
-      s.click("inside")
-      s.parts((outer) => assert.strictEqual(outer.count, 111))
+      scene.click("hit")
+      scene.parts((outer) => assert.strictEqual(outer.count, 11))
+      assert.isTrue(scene.defaultPrevented)
+      scene.click("inside")
+      scene.parts((outer) => assert.strictEqual(outer.count, 111))
     }))
 
   it.effect("an author's story drops on a part's drop target", () =>
@@ -414,12 +414,12 @@ describe("headless components in a story", () => {
             )
           })
         })
-      const s = yield* HtmlScene.make(Zone, {}, {
+      const scene = yield* HtmlScene.make(Zone, {}, {
         elements: Html,
         view: (zone, h) => zone.zone(h.div).children("zone")
       })
-      s.drop(Locator.text("zone"), { data: { "text/plain": "milk" } })
+      scene.drop(Locator.text("zone"), { data: { "text/plain": "milk" } })
         .parts((zone) => assert.strictEqual(zone.dropped, "milk"))
-      assert.isTrue(s.defaultPrevented)
+      assert.isTrue(scene.defaultPrevented)
     }))
 })

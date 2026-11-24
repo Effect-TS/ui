@@ -22,8 +22,8 @@ const status = HtmlLocator.role("status")
 describe("Scene", () => {
   it.effect("follows a flow: an interaction, a Command resolved, an event acknowledged, an ignored interaction", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Note, {})
-      s.fire(text, "input", { value: "milk", checked: false })
+      const scene = yield* Scene.make(Note, {})
+      scene.fire(text, "input", { value: "milk", checked: false })
         .click(save)
         .expect(Locator.text("saving")).toExist()
         .expectExact(SaveNote.make({ text: "milk" }))
@@ -37,24 +37,24 @@ describe("Scene", () => {
 
   it.effect("an interaction throws while a Command is pending, until keepPending names it", () =>
     Effect.gen(function*() {
-      const s = Scene.start(Note, {})
-      s.click(save)
+      const scene = Scene.start(Note, {})
+      scene.click(save)
       assert.throws(
-        () => s.click(saveAgain),
+        () => scene.click(saveAgain),
         /^Scene\.click: earlier work isn't settled or acknowledged:\n {2}- notes\/SaveNote\(\{"text":""\}\) \[running\] is pending: settle it with resolve or fail, or keep it with keepPending/
       )
-      s.keepPending(SaveNote).click(saveAgain).expectExact(
+      scene.keepPending(SaveNote).click(saveAgain).expectExact(
         SaveNote.make({ text: "" }),
         SaveNote.make({ text: "" })
       )
       assert.throws(
-        () => s.childEmit(Badge, "Badge", { _tag: "Opened", count: 1 }),
+        () => scene.childEmit(Badge, "Badge", { _tag: "Opened", count: 1 }),
         /^Scene\.childEmit: earlier work/
       )
       // Kept or not, the end of make checks it.
       const message = yield* defect(Effect.gen(function*() {
-        const s = yield* Scene.make(Note, {})
-        s.click(save).keepPending(SaveNote)
+        const scene = yield* Scene.make(Note, {})
+        scene.click(save).keepPending(SaveNote)
       }))
       assert.match(
         message,
@@ -64,28 +64,28 @@ describe("Scene", () => {
 
   it.effect("an ignored interaction is acknowledged with expectIgnored, before the next acting step and by the end", () =>
     Effect.gen(function*() {
-      const s = Scene.start(Note, {}).given((model) => ({
+      const scene = Scene.start(Note, {}).given((model) => ({
         ...model,
         saved: true
       }))
-      s.click(saveAgain)
+      scene.click(saveAgain)
       assert.throws(
-        () => s.expectHandled(),
+        () => scene.expectHandled(),
         /^Scene\.expectHandled: the last interaction produced no message/
       )
       assert.throws(
-        () => s.fire(text, "input", { value: "x", checked: false }),
+        () => scene.fire(text, "input", { value: "x", checked: false }),
         /the last interaction produced no message: acknowledge it with expectIgnored/
       )
-      s.expectIgnored().fire(text, "input", { value: "x", checked: false })
+      scene.expectIgnored().fire(text, "input", { value: "x", checked: false })
         .expectHandled()
       assert.throws(
-        () => s.expectIgnored(),
+        () => scene.expectIgnored(),
         /^Scene\.expectIgnored: the last interaction produced a message/
       )
       const message = yield* defect(Effect.gen(function*() {
-        const s = yield* Scene.make(Note, {})
-        s.given((model) => ({ ...model, saved: true })).click(saveAgain)
+        const scene = yield* Scene.make(Note, {})
+        scene.given((model) => ({ ...model, saved: true })).click(saveAgain)
       }))
       assert.match(
         message,
@@ -94,49 +94,51 @@ describe("Scene", () => {
     }))
 
   it("expect checks what a locator matches, and a failure lists the view's elements", () => {
-    const s = Scene.start(Note, {})
-    s.expect(save).toExist()
+    const scene = Scene.start(Note, {})
+    scene.expect(save).toExist()
       .expect(Locator.text("missing")).toBeAbsent()
       .expect(Locator.tag("button")).toHaveCount(2)
       .expect(save).toHaveText(/^save$/)
     assert.throws(
-      () => s.expect(Locator.text("missing")).toExist(),
+      () => scene.expect(Locator.text("missing")).toExist(),
       /^Scene\.expect\(text "missing"\)\.toExist\(\): nothing matches; elements:\n {2}<div>savesave again\n {2}<input aria-label="Text">/
     )
     assert.throws(
-      () => s.expect(Locator.tag("button")).toHaveText("save"),
+      () => scene.expect(Locator.tag("button")).toHaveText("save"),
       /toHaveText\("save"\): 2 elements match/
     )
     assert.throws(
-      () => s.expect(save).toHaveText("saving"),
+      () => scene.expect(save).toHaveText("saving"),
       /toHaveText\("saving"\): its text is "save"/
     )
     assert.throws(
-      () => s.expect(Locator.tag("button")).toHaveCount(1),
+      () => scene.expect(Locator.tag("button")).toHaveCount(1),
       /toHaveCount\(1\): 2 elements match/
     )
     assert.throws(
-      () => s.expect(save).toBeAbsent(),
+      () => scene.expect(save).toBeAbsent(),
       /toBeAbsent\(\): 1 elements match/
     )
   })
 
   it("fire throws when nothing handles the event, submit included", () => {
-    const s = Scene.start(Note, {})
+    const scene = Scene.start(Note, {})
     assert.throws(
-      () => s.fire(status, "submit"),
+      () => scene.fire(status, "submit"),
       /^Scene\.fire: nothing handles "submit" at role "status"/
     )
     assert.throws(
-      () => s.click(status),
+      () => scene.click(status),
       /^Scene\.click: nothing handles "click"/
     )
   })
 
   it.effect("childEmit is typed by the child, and finds only a child of that component", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Note, {})
-      s.childEmit(Badge, "Badge", { _tag: "Opened", count: 2 }).expect(status)
+      const scene = yield* Scene.make(Note, {})
+      scene.childEmit(Badge, "Badge", { _tag: "Opened", count: 2 }).expect(
+        status
+      )
         .toHaveText("opened 2")
       assert.throws(
         () =>
@@ -174,8 +176,8 @@ describe("Scene", () => {
               })
             )
         })
-      const s = yield* Scene.make(Page, {})
-      s.childEmit(Panel, "panel", { _tag: "Changed", to: "dark" }).expect(
+      const scene = yield* Scene.make(Page, {})
+      scene.childEmit(Panel, "panel", { _tag: "Changed", to: "dark" }).expect(
         Locator.tag("p")
       ).toHaveText("dark")
       assert.throws(
@@ -210,13 +212,15 @@ describe("Scene", () => {
               })
             )
         })
-      const s = yield* Scene.make(Page, {})
-      s.childEmit(Badge, { _tag: "Opened", count: 1 }).expect(Locator.tag("p"))
+      const scene = yield* Scene.make(Page, {})
+      scene.childEmit(Badge, { _tag: "Opened", count: 1 }).expect(
+        Locator.tag("p")
+      )
         .toHaveText("badge")
         .childFailure(Badge, Cause.fail("boom")).expect(Locator.tag("p"))
         .toHaveText("badge failed")
       assert.deepStrictEqual(
-        Scene.fallback(s.view, Badge, AsyncResult.initial()),
+        Scene.fallback(scene.view, Badge, AsyncResult.initial()),
         { _tag: "Text", text: "no badge" }
       )
       assert.throws(
@@ -266,8 +270,8 @@ describe("Scene", () => {
               )
           })
       })
-      const texts = (s: Scene.Steps.Any) =>
-        s.all(Locator.tag("p")).map((node) => Locator.textOf(node))
+      const texts = (scene: Scene.Steps.Any) =>
+        scene.all(Locator.tag("p")).map((node) => Locator.textOf(node))
       assert.deepStrictEqual(
         texts(Scene.start(Page, {}).givenChild(Disclosure, "outer", true)),
         ["open", "closed"]
@@ -355,8 +359,8 @@ describe("Scene", () => {
 
   it.effect("childFailure sends what onFailure maps, and does nothing without one", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Note, {})
-      s.childFailure(Badge, "Badge", Cause.fail("boom")).expect(status)
+      const scene = yield* Scene.make(Note, {})
+      scene.childFailure(Badge, "Badge", Cause.fail("boom")).expect(status)
         .toHaveText("")
     }))
 
@@ -398,48 +402,51 @@ describe("Scene", () => {
 
     it.effect("mounted ends the one mount matching a definition or its args, through the view's Mount.map", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Rows, { shown: true })
+        const scene = yield* Scene.make(Rows, { shown: true })
         assert.throws(
-          () => s.mounted(Measure, 40),
+          () => scene.mounted(Measure, 40),
           /^Scene\.mounted: 2 rendered mounts match Measure; mounts: Hello\(\{\}\), Measure\(\{"id":"a"\}\), Measure\(\{"id":"b"\}\)$/
         )
         assert.throws(
-          () => s.expectMount(Measure({ id: "c" })),
+          () => scene.expectMount(Measure({ id: "c" })),
           /^Scene\.expectMount: no rendered mount matches Measure\(\{"id":"c"\}\)/
         )
-        s.mounted(Measure({ id: "b" }), 40).mounted(Measure({ id: "a" }), 20)
+        scene.mounted(Measure({ id: "b" }), 40).mounted(
+          Measure({ id: "a" }),
+          20
+        )
           .mounted(Hello)
           .expect(log).toHaveText("b is 40, a is 20")
       }))
 
     it.effect("a new mount blocks a message step and the end of make until a step names it, and ends once", () =>
       Effect.gen(function*() {
-        const s = Scene.start(Rows, { shown: true })
+        const scene = Scene.start(Rows, { shown: true })
         assert.throws(
-          () => s.click(go),
+          () => scene.click(go),
           /^Scene\.click: earlier work isn't settled or acknowledged:\n {2}- the mount Hello\(\{\}\) on <ul> started/
         )
         const message = yield* defect(Effect.gen(function*() {
-          const s = yield* Scene.make(Rows, { shown: true })
-          s.mounted(Hello)
+          const scene = yield* Scene.make(Rows, { shown: true })
+          scene.mounted(Hello)
         }))
         assert.match(
           message,
           /^Scene\.make: the test ends with work not settled or acknowledged:\n {2}- the mount Measure\(\{"id":"a"\}\) on <li> started/
         )
-        s.mounted(Hello).expectMount(Measure({ id: "a" })).expectMount(
+        scene.mounted(Hello).expectMount(Measure({ id: "a" })).expectMount(
           Measure({ id: "b" })
         ).click(go)
         assert.throws(
-          () => s.mounted(Hello),
+          () => scene.mounted(Hello),
           /^Scene\.mounted: the mount Hello\(\{\}\) already ended/
         )
       }))
 
     it.effect("a step that removes a mount nothing named throws, and given makes the view's mounts new", () =>
       Effect.gen(function*() {
-        const ack = (s: Scene.Steps<typeof Rows>) =>
-          s.mounted(Hello).expectMount(Measure({ id: "a" })).expectMount(
+        const ack = (scene: Scene.Steps<typeof Rows>) =>
+          scene.mounted(Hello).expectMount(Measure({ id: "a" })).expectMount(
             Measure({ id: "b" })
           )
         assert.throws(
@@ -447,11 +454,11 @@ describe("Scene", () => {
           /^Scene\.props: the step removed a mount nothing acknowledged:\n {2}- Hello\(\{\}\) on <ul>/
         )
         // A patch keeps a mount running, acknowledged: removing it then is fine.
-        const s = yield* Scene.make(Rows, { shown: true })
-        ack(s).click(go).props({ shown: false })
+        const scene = yield* Scene.make(Rows, { shown: true })
+        ack(scene).click(go).props({ shown: false })
         const message = yield* defect(Effect.gen(function*() {
-          const s = yield* Scene.make(Rows, { shown: true })
-          ack(s).given(["x"])
+          const scene = yield* Scene.make(Rows, { shown: true })
+          ack(scene).given(["x"])
         }))
         assert.match(
           message,
@@ -487,11 +494,11 @@ describe("Scene", () => {
         }
         for (const Root of [rootOf(false), rootOf(true)]) {
           // The same key patches the child: its mount keeps running, acknowledged.
-          const s = yield* Scene.make(Root, { childKey: "a" })
-          s.expectMount(Hello()).props({ childKey: "a" })
+          const scene = yield* Scene.make(Root, { childKey: "a" })
+          scene.expectMount(Hello()).props({ childKey: "a" })
           const message = yield* defect(Effect.gen(function*() {
-            const s = yield* Scene.make(Root, { childKey: "a" })
-            s.expectMount(Hello()).props({ childKey: "b" })
+            const scene = yield* Scene.make(Root, { childKey: "a" })
+            scene.expectMount(Hello()).props({ childKey: "b" })
           }))
           assert.match(
             message,
@@ -519,15 +526,15 @@ describe("Scene", () => {
             view: (h) =>
               h.div.onMount(Connect({ token: Redacted.make("secret") }))
           })
-        const s = yield* Scene.make(Socket, {})
+        const scene = yield* Scene.make(Socket, {})
         const error = assert.throws(() =>
-          s.expectMount(Connect({ token: Redacted.make("other") }))
+          scene.expectMount(Connect({ token: Redacted.make("other") }))
         )
         assert.include(String(error), "no rendered mount matches Connect(")
         assert.notInclude(String(error), "secret")
         assert.notInclude(String(error), "other")
         // Two Redacted values aren't Equal, but the Schema's equivalence compares what they hold.
-        s.expectMount(Connect({ token: Redacted.make("secret") }))
+        scene.expectMount(Connect({ token: Redacted.make("secret") }))
       }))
 
     it.effect("only the scene's component's mounts count: a part's it owns and its slot content's, not a headless child's", () =>
@@ -617,24 +624,24 @@ describe("Scene", () => {
   })
 
   it("has no send, no Model and no query results", () => {
-    const s = Scene.start(Note, {})
-    assert.isUndefined((s as any).send)
-    assert.isUndefined((s as any).model)
-    assert.notProperty(s.current, "model")
-    assert.notProperty(s.current, "results")
-    assert.notProperty(s.current, "queries")
+    const scene = Scene.start(Note, {})
+    assert.isUndefined((scene as any).send)
+    assert.isUndefined((scene as any).model)
+    assert.notProperty(scene.current, "model")
+    assert.notProperty(scene.current, "results")
+    assert.notProperty(scene.current, "queries")
   })
 
   it.effect("lists the queries on the record from make, current and check", () =>
     Effect.gen(function*() {
       const names = (record: Scene.Scene<any, any, any, any>) =>
         record.queryInfo().map((info) => info.name)
-      const s = yield* Scene.make(Note, {})
-      assert.deepStrictEqual(names(s.current), ["author"])
-      assert.deepStrictEqual(s.queryInfo, s.current.queryInfo())
-      s.check((scene) => assert.deepStrictEqual(names(scene), ["author"]))
+      const scene = yield* Scene.make(Note, {})
+      assert.deepStrictEqual(names(scene.current), ["author"])
+      assert.deepStrictEqual(scene.queryInfo, scene.current.queryInfo())
+      scene.check((scene) => assert.deepStrictEqual(names(scene), ["author"]))
       // A scene's cursor has no query results either: they are a story's.
-      assert.isUndefined((s as any).results)
-      assert.isUndefined((s as any).queries)
+      assert.isUndefined((scene as any).results)
+      assert.isUndefined((scene as any).queries)
     }))
 })

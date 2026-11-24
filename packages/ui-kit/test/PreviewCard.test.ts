@@ -68,24 +68,26 @@ const top = {
 
 type Track = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const mountOn = (s: Rendered, locator: Locator.Locator): Track =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const mountOn = (scene: Rendered, locator: Locator.Locator): Track =>
+  (scene.get(locator) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Track
 const running = <
   S extends Rendered & { readonly expectMount: (mount: Track) => S }
->(s: S): S =>
-  s.expectMount(mountOn(s, portal)).expectMount(mountOn(s, positioner))
-    .expectMount(mountOn(s, viewport))
+>(scene: S): S =>
+  scene.expectMount(mountOn(scene, portal)).expectMount(
+    mountOn(scene, positioner)
+  )
+    .expectMount(mountOn(scene, viewport))
 const sent = (tag: string, fields: object = {}) =>
   ({ _tag: tag, ...fields }) as never
 
 const partsOf = (
-  s: { readonly parts: (f: (previewCard: Parts) => void) => unknown }
+  scene: { readonly parts: (f: (previewCard: Parts) => void) => unknown }
 ): Parts => {
   let parts: Parts | undefined
-  s.parts((previewCard) => {
+  scene.parts((previewCard) => {
     parts = previewCard
   })
   return parts!
@@ -96,29 +98,34 @@ const opened = (triggerId: string, reason: "trigger-hover" | "trigger-focus") =>
 const dismissed = (reason: string) =>
   ({ _tag: "RequestedClose", reason }) as PreviewCardEvents
 
-const scene = Effect.fnUntraced(function*(props: PreviewCardProps) {
-  const s = yield* HtmlScene.make(PreviewCard, props, standIn)
-  return s.expectMount(mountOn(s, typography)).expectMount(mountOn(s, kerning))
+const makeScene = Effect.fnUntraced(function*(props: PreviewCardProps) {
+  const scene = yield* HtmlScene.make(PreviewCard, props, standIn)
+  return scene.expectMount(mountOn(scene, typography)).expectMount(
+    mountOn(scene, kerning)
+  )
 })
 
 const hovered = Effect.fnUntraced(
   function*(props: Partial<PreviewCardProps> = {}) {
-    const s = yield* scene({ open: false, ...props })
-    s.fire(typography, "mouseenter", { x: 10, y: 5 })
-    s.resolve(s.current.pending[0]!.command, sent("CompletedWaitBeforeOpening"))
+    const scene = yield* makeScene({ open: false, ...props })
+    scene.fire(typography, "mouseenter", { x: 10, y: 5 })
+    scene.resolve(
+      scene.current.pending[0]!.command,
+      sent("CompletedWaitBeforeOpening")
+    )
       .emitted(opened("typography", "trigger-hover"))
-    running(s.props({ ...props, open: true, triggerId: "typography" }))
-    s.mounted(mountOn(s, portal), sent("ShowedPortal"))
-    return s
+    running(scene.props({ ...props, open: true, triggerId: "typography" }))
+    scene.mounted(mountOn(scene, portal), sent("ShowedPortal"))
+    return scene
   }
 )
 
 describe("PreviewCard", () => {
   it.effect("opens once the mouse rests on a link that announces nothing, with a popup that takes no Tab", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ open: false, sideOffset: 8 })
-      assert.isUndefined(s.query(portal))
-      const link = s.get(typography).attrs ?? {}
+      const scene = yield* makeScene({ open: false, sideOffset: 8 })
+      assert.isUndefined(scene.query(portal))
+      const link = scene.get(typography).attrs ?? {}
       assert.deepInclude(link, { id: "typography", href: "/typography" })
       for (
         const name of [
@@ -130,35 +137,38 @@ describe("PreviewCard", () => {
       ) {
         assert.isUndefined(link[name], name)
       }
-      assert.isString(s.get(kerning).attrs?.id)
+      assert.isString(scene.get(kerning).attrs?.id)
 
-      s.fire(typography, "mouseenter", { x: 10, y: 5 })
-      const [opening] = s.current.pending
+      scene.fire(typography, "mouseenter", { x: 10, y: 5 })
+      const [opening] = scene.current.pending
       assert.deepStrictEqual(opening?.command.args, { delay: 600 })
-      s.resolve(opening!.command, sent("CompletedWaitBeforeOpening")).emitted(
-        opened("typography", "trigger-hover")
+      scene.resolve(opening!.command, sent("CompletedWaitBeforeOpening"))
+        .emitted(
+          opened("typography", "trigger-hover")
+        )
+      running(
+        scene.props({ open: true, triggerId: "typography", sideOffset: 8 })
       )
-      running(s.props({ open: true, triggerId: "typography", sideOffset: 8 }))
 
-      const cardId = s.get(portal).attrs?.id
+      const cardId = scene.get(portal).attrs?.id
       assert.isString(cardId)
-      assert.isTrue(s.get(portal).props?.popoverOpen)
+      assert.isTrue(scene.get(portal).props?.popoverOpen)
       assert.match(
-        s.get(portal).attrs?.style ?? "",
+        scene.get(portal).attrs?.style ?? "",
         /^z-index:2;.*;position:absolute;inset:0 auto auto 0$/
       )
-      assert.deepInclude(s.get(typography).attrs, {
+      assert.deepInclude(scene.get(typography).attrs, {
         "data-popup-open": "",
         "data-preview-card-trigger": cardId
       })
-      assert.isUndefined(s.get(kerning).attrs?.["data-popup-open"])
-      assert.deepInclude(s.get(positioner).attrs, {
+      assert.isUndefined(scene.get(kerning).attrs?.["data-popup-open"])
+      assert.deepInclude(scene.get(positioner).attrs, {
         role: "presentation",
         "data-open": "",
         "data-side": "bottom",
         "data-align": "center"
       })
-      const card = s.get(popup).attrs ?? {}
+      const card = scene.get(popup).attrs ?? {}
       assert.deepInclude(card, {
         tabindex: "-1",
         "data-open": "",
@@ -166,26 +176,26 @@ describe("PreviewCard", () => {
       })
       assert.isUndefined(card.role)
       assert.isUndefined(card["data-instant"])
-      assert.deepInclude(s.get(backdrop).attrs, {
+      assert.deepInclude(scene.get(backdrop).attrs, {
         role: "presentation",
         "data-open": ""
       })
-      assert.include(s.get(backdrop).attrs?.style, "pointer-events:none")
+      assert.include(scene.get(backdrop).attrs?.style, "pointer-events:none")
 
-      s.mounted(
-        mountOn(s, positioner),
+      scene.mounted(
+        mountOn(scene, positioner),
         sent("ChangedPlacement", { placement: top })
       )
-      assert.deepInclude(s.get(popup).attrs, {
+      assert.deepInclude(scene.get(popup).attrs, {
         "data-side": "top",
         "data-align": "start"
       })
-      assert.deepInclude(s.get(arrow).attrs, {
+      assert.deepInclude(scene.get(arrow).attrs, {
         "aria-hidden": "true",
         "data-side": "top",
         "data-uncentered": ""
       })
-      const parts = partsOf(s)
+      const parts = partsOf(scene)
       assert.deepInclude(parts, {
         open: true,
         triggerId: "typography",
@@ -196,52 +206,54 @@ describe("PreviewCard", () => {
 
   it.effect("waits out the close delay once the pointer has left the link and the card, and coming back holds it", () =>
     Effect.gen(function*() {
-      const s = yield* hovered()
-      s.fire(typography, "mouseleave", { x: 10, y: 15 })
-      assert.deepStrictEqual(s.current.pending, [])
-      s.mounted(mountOn(s, positioner), sent("LeftHoverArea"))
-      const [closing] = s.current.pending
+      const scene = yield* hovered()
+      scene.fire(typography, "mouseleave", { x: 10, y: 15 })
+      assert.deepStrictEqual(scene.current.pending, [])
+      scene.mounted(mountOn(scene, positioner), sent("LeftHoverArea"))
+      const [closing] = scene.current.pending
       assert.strictEqual(closing?.command.name, "WaitBeforeClosing")
       assert.deepStrictEqual(closing?.command.args, { delay: 300 })
-      s.mounted(mountOn(s, positioner), sent("ReturnedToHoverArea"))
-      assert.deepStrictEqual(s.current.interrupted.map((c) => c.name), [
+      scene.mounted(mountOn(scene, positioner), sent("ReturnedToHoverArea"))
+      assert.deepStrictEqual(scene.current.interrupted.map((c) => c.name), [
         "WaitBeforeClosing"
       ])
-      s.mounted(mountOn(s, positioner), sent("LeftHoverArea"))
-      s.resolve(
-        s.current.pending[0]!.command,
+      scene.mounted(mountOn(scene, positioner), sent("LeftHoverArea"))
+      scene.resolve(
+        scene.current.pending[0]!.command,
         sent("CompletedWaitBeforeClosing")
       ).emitted(dismissed("trigger-hover"))
     }))
 
   it.effect("keyboard focus opens after the delay without a transition, and holds the card while it stays", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ open: false })
-      s.fire(typography, "focus", { focusVisible: true })
-      assert.deepStrictEqual(s.current.pending[0]?.command.args, { delay: 600 })
-      s.resolve(
-        s.current.pending[0]!.command,
+      const scene = yield* makeScene({ open: false })
+      scene.fire(typography, "focus", { focusVisible: true })
+      assert.deepStrictEqual(scene.current.pending[0]?.command.args, {
+        delay: 600
+      })
+      scene.resolve(
+        scene.current.pending[0]!.command,
         sent("CompletedWaitBeforeOpening")
       )
         .emitted(opened("typography", "trigger-focus"))
-      running(s.props({ open: true, triggerId: "typography" }))
+      running(scene.props({ open: true, triggerId: "typography" }))
       for (const part of [positioner, popup, viewport]) {
-        assert.strictEqual(s.get(part).attrs?.["data-instant"], "focus")
+        assert.strictEqual(scene.get(part).attrs?.["data-instant"], "focus")
       }
-      s.mounted(mountOn(s, positioner), sent("LeftHoverArea"))
-      assert.deepStrictEqual(s.current.pending, [])
-      s.fire(typography, "blur", { disabled: false })
-        .mounted(mountOn(s, positioner), sent("FocusedPopup"))
-        .mounted(mountOn(s, positioner), sent("LeftHoverArea"))
-      assert.deepStrictEqual(s.current.pending, [])
-      s.mounted(mountOn(s, positioner), sent("BlurredPopup"))
-        .mounted(mountOn(s, positioner), sent("FocusedOutside"))
+      scene.mounted(mountOn(scene, positioner), sent("LeftHoverArea"))
+      assert.deepStrictEqual(scene.current.pending, [])
+      scene.fire(typography, "blur", { disabled: false })
+        .mounted(mountOn(scene, positioner), sent("FocusedPopup"))
+        .mounted(mountOn(scene, positioner), sent("LeftHoverArea"))
+      assert.deepStrictEqual(scene.current.pending, [])
+      scene.mounted(mountOn(scene, positioner), sent("BlurredPopup"))
+        .mounted(mountOn(scene, positioner), sent("FocusedOutside"))
         .emitted(dismissed("trigger-focus"))
     }))
 
   it.effect("a touch during the hover delay cancels opening", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ open: false })
+      const scene = yield* makeScene({ open: false })
       const touch = {
         button: 0,
         x: 0,
@@ -252,26 +264,26 @@ describe("PreviewCard", () => {
         meta: false,
         pointerType: "touch"
       }
-      s.fire(typography, "mouseenter", { x: 1, y: 1 })
+      scene.fire(typography, "mouseenter", { x: 1, y: 1 })
         .fire(typography, "mousedown", touch)
-      assert.deepStrictEqual(s.current.pending, [])
-      assert.deepStrictEqual(s.current.emitted, [])
+      assert.deepStrictEqual(scene.current.pending, [])
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("a pointer given back by a layer that covered the link is no new hover", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ open: false })
-      s.fire(typography, "mouseenter", { x: 3, y: 4 })
+      const scene = yield* makeScene({ open: false })
+      scene.fire(typography, "mouseenter", { x: 3, y: 4 })
         .fire(typography, "mouseleave", { x: 3, y: 4 })
         .fire(typography, "mouseenter", { x: 3, y: 4 })
-      assert.deepStrictEqual(s.current.pending, [])
-      s.fire(typography, "mouseleave", { x: 3, y: 4 }).fire(
+      assert.deepStrictEqual(scene.current.pending, [])
+      scene.fire(typography, "mouseleave", { x: 3, y: 4 }).fire(
         typography,
         "mouseenter",
         { x: 5, y: 4 }
       )
-      s.resolve(
-        s.current.pending[0]!.command,
+      scene.resolve(
+        scene.current.pending[0]!.command,
         sent("CompletedWaitBeforeOpening")
       )
         .emitted(opened("typography", "trigger-hover"))
@@ -279,67 +291,78 @@ describe("PreviewCard", () => {
 
   it.effect("Escape asks to close and marks the exit as an instant dismiss", () =>
     Effect.gen(function*() {
-      const s = yield* hovered()
-      s.fireDocument("keydown", { key: "Escape" }).emitted(
+      const scene = yield* hovered()
+      scene.fireDocument("keydown", { key: "Escape" }).emitted(
         dismissed("escape-key")
       )
-      s.props({ open: false, triggerId: "typography" })
-      assert.deepInclude(s.get(positioner).attrs, {
+      scene.props({ open: false, triggerId: "typography" })
+      assert.deepInclude(scene.get(positioner).attrs, {
         "data-closed": "",
         "data-instant": "dismiss"
       })
-      assert.deepInclude(s.get(popup).attrs, {
+      assert.deepInclude(scene.get(popup).attrs, {
         "data-ending-style": "",
         "data-instant": "dismiss"
       })
-      assert.isFalse(partsOf(s).open)
-      assert.isTrue(partsOf(s).mounted)
+      assert.isFalse(partsOf(scene).open)
+      assert.isTrue(partsOf(scene).mounted)
     }))
 
   it.effect("another link moves an open card to it at once", () =>
     Effect.gen(function*() {
-      const s = yield* hovered()
-      const other = s.get(kerning).attrs?.id ?? ""
-      s.fire(typography, "mouseleave", { x: 10, y: 15 }).fire(
+      const scene = yield* hovered()
+      const other = scene.get(kerning).attrs?.id ?? ""
+      scene.fire(typography, "mouseleave", { x: 10, y: 15 }).fire(
         kerning,
         "mouseenter",
         { x: 50, y: 5 }
       )
         .emitted(opened(other, "trigger-hover"))
-      s.props({ open: true, triggerId: other })
-      assert.strictEqual(s.get(kerning).attrs?.["data-popup-open"], "")
-      assert.isUndefined(s.get(typography).attrs?.["data-popup-open"])
-      s.fire(kerning, "mouseleave", { x: 50, y: 15 }).mounted(
-        mountOn(s, positioner),
+      scene.props({ open: true, triggerId: other })
+      assert.strictEqual(scene.get(kerning).attrs?.["data-popup-open"], "")
+      assert.isUndefined(scene.get(typography).attrs?.["data-popup-open"])
+      scene.fire(kerning, "mouseleave", { x: 50, y: 15 }).mounted(
+        mountOn(scene, positioner),
         sent("LeftHoverArea")
       )
-      assert.deepStrictEqual(s.current.pending[0]?.command.args, { delay: 50 })
-      s.resolve(
-        s.current.pending[0]!.command,
+      assert.deepStrictEqual(scene.current.pending[0]?.command.args, {
+        delay: 50
+      })
+      scene.resolve(
+        scene.current.pending[0]!.command,
         sent("CompletedWaitBeforeClosing")
       ).emitted(dismissed("trigger-hover"))
     }))
 
   it.effect("shows the starting style for one frame, reports Settled, and stays drawn through its exit", () =>
     Effect.gen(function*() {
-      const s = yield* hovered({ keepMounted: true })
-      assert.strictEqual(partsOf(s).transitionStatus, "starting")
-      assert.strictEqual(s.get(popup).attrs?.["data-starting-style"], "")
-      s.mounted(mountOn(s, portal), sent("RenderedFirstFrame"))
-      assert.isUndefined(s.get(popup).attrs?.["data-starting-style"])
-      s.mounted(mountOn(s, portal), sent("FinishedTransition", { open: true }))
+      const scene = yield* hovered({ keepMounted: true })
+      assert.strictEqual(partsOf(scene).transitionStatus, "starting")
+      assert.strictEqual(scene.get(popup).attrs?.["data-starting-style"], "")
+      scene.mounted(mountOn(scene, portal), sent("RenderedFirstFrame"))
+      assert.isUndefined(scene.get(popup).attrs?.["data-starting-style"])
+      scene.mounted(
+        mountOn(scene, portal),
+        sent("FinishedTransition", { open: true })
+      )
         .emitted({ _tag: "Settled", open: true })
-      s.props({ open: false, keepMounted: true, holdExit: true })
-      assert.strictEqual(partsOf(s).transitionStatus, "ending")
-      s.mounted(mountOn(s, portal), sent("FinishedTransition", { open: false }))
-      assert.isTrue(s.get(portal).props?.popoverOpen)
-      s.props({ open: false, keepMounted: true })
-      s.mounted(mountOn(s, portal), sent("FinishedTransition", { open: false }))
+      scene.props({ open: false, keepMounted: true, holdExit: true })
+      assert.strictEqual(partsOf(scene).transitionStatus, "ending")
+      scene.mounted(
+        mountOn(scene, portal),
+        sent("FinishedTransition", { open: false })
+      )
+      assert.isTrue(scene.get(portal).props?.popoverOpen)
+      scene.props({ open: false, keepMounted: true })
+      scene.mounted(
+        mountOn(scene, portal),
+        sent("FinishedTransition", { open: false })
+      )
         .emitted({
           _tag: "Settled",
           open: false
         })
-      assert.isFalse(s.get(portal).props?.popoverOpen)
-      assert.strictEqual(s.get(popup).attrs?.["data-closed"], "")
+      assert.isFalse(scene.get(portal).props?.popoverOpen)
+      assert.strictEqual(scene.get(popup).attrs?.["data-closed"], "")
     }))
 })

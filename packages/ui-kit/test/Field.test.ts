@@ -43,47 +43,50 @@ const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) =>
 describe("Field", () => {
   it.effect("the label names the control, which points at the description and at the error while it shows", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(
+      const scene = yield* Scene.make(
         Field,
         { described: true, invalid: true },
         standIn
       )
-      const id = s.get(control).attrs?.id
+      const id = scene.get(control).attrs?.id
       assert.isString(id)
-      assert.strictEqual(s.get(label).attrs?.for, id)
-      const ids = [s.get(description).attrs?.id, s.get(error).attrs?.id]
+      assert.strictEqual(scene.get(label).attrs?.for, id)
+      const ids = [scene.get(description).attrs?.id, scene.get(error).attrs?.id]
       assert.strictEqual(new Set([id, ...ids]).size, 3)
       // Next to the consumer's own hint, which stays.
       assert.strictEqual(
-        s.get(control).attrs?.["aria-describedby"],
+        scene.get(control).attrs?.["aria-describedby"],
         `hint ${ids[0]} ${ids[1]}`
       )
-      assert.strictEqual(s.get(control).attrs?.["aria-invalid"], "true")
+      assert.strictEqual(scene.get(control).attrs?.["aria-invalid"], "true")
 
-      s.props({ described: true, invalid: false })
+      scene.props({ described: true, invalid: false })
         .expect(error).toBeAbsent()
       assert.strictEqual(
-        s.get(control).attrs?.["aria-describedby"],
+        scene.get(control).attrs?.["aria-describedby"],
         `hint ${ids[0]}`
       )
-      assert.isUndefined(s.get(control).attrs?.["aria-invalid"])
+      assert.isUndefined(scene.get(control).attrs?.["aria-invalid"])
     }))
 
   it.effect("re-enabling a field restores neither focus nor a visit until the user focuses and leaves it", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Field, { described: true }, standIn)
+      const scene = yield* Scene.make(Field, { described: true }, standIn)
       const state = () => [
-        s.get(control).attrs?.["data-focused"],
-        s.get(control).attrs?.["data-touched"]
+        scene.get(control).attrs?.["data-focused"],
+        scene.get(control).attrs?.["data-touched"]
       ]
-      s.fire(control, "focus").props({ described: true, disabled: true })
+      scene.fire(control, "focus").props({ described: true, disabled: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
-      s.subscription("lostFocus", { _tag: "BlurredControl", disabled: true })
+      scene.subscription("lostFocus", {
+        _tag: "BlurredControl",
+        disabled: true
+      })
         .props({ described: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
-      s.fire(control, "focus")
+      scene.fire(control, "focus")
       assert.deepStrictEqual(state(), ["", undefined])
-      s.fire(control, "blur")
+      scene.fire(control, "blur")
       assert.deepStrictEqual(state(), [undefined, ""])
     }))
 
@@ -115,7 +118,7 @@ describe("Field", () => {
   it.effect("focusWithin keeps focus while it moves inside, touches when it leaves, and ignores disabled blur", () =>
     Effect.gen(function*() {
       const wrapper = Locator.tag("section")
-      const s = yield* Scene.make(Field, { disabled: true }, {
+      const scene = yield* Scene.make(Field, { disabled: true }, {
         elements: Html,
         view: (field: Parts, h: H) =>
           field.root(h.div).children(
@@ -123,22 +126,22 @@ describe("Field", () => {
           )
       })
       const state = () => [
-        s.get(wrapper).attrs?.["data-focused"],
-        s.get(wrapper).attrs?.["data-touched"]
+        scene.get(wrapper).attrs?.["data-focused"],
+        scene.get(wrapper).attrs?.["data-touched"]
       ]
-      s.fire(wrapper, "focusin")
+      scene.fire(wrapper, "focusin")
       assert.deepStrictEqual(state(), [undefined, undefined])
-      s.fire(wrapper, "focusout", { within: false })
+      scene.fire(wrapper, "focusout", { within: false })
       assert.deepStrictEqual(state(), [undefined, undefined])
 
-      s.props({}).fire(wrapper, "focusin")
+      scene.props({}).fire(wrapper, "focusin")
       assert.deepStrictEqual(state(), ["", undefined])
-      s.fire(wrapper, "focusout", { within: true }).expectIgnored()
+      scene.fire(wrapper, "focusout", { within: true }).expectIgnored()
       assert.deepStrictEqual(state(), ["", undefined])
-      s.fire(wrapper, "focusout", { within: false, disabled: true })
+      scene.fire(wrapper, "focusout", { within: false, disabled: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
-      s.fire(wrapper, "focusin")
-      s.fire(wrapper, "focusout", { within: false })
+      scene.fire(wrapper, "focusin")
+      scene.fire(wrapper, "focusout", { within: false })
       assert.deepStrictEqual(state(), [undefined, ""])
     }))
 

@@ -44,14 +44,14 @@ const parts = (props: SliderProps) =>
 type TrackPointer = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 // The control's mount is private, so a test reads it off the rendered element.
-const tracked = (s: Rendered): TrackPointer =>
-  (s.get(control) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const tracked = (scene: Rendered): TrackPointer =>
+  (scene.get(control) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as TrackPointer
-const scene = (props: SliderProps) =>
+const makeScene = (props: SliderProps) =>
   HtmlScene.make(Slider, props, standIn).pipe(
-    Effect.map((s) => s.expectMount(tracked(s)))
+    Effect.map((scene) => scene.expectMount(tracked(scene)))
   )
 
 // What the mount's Stream reports.
@@ -70,14 +70,14 @@ const both = (
 
 // Nothing emitted since the last acknowledged event.
 const quiet = (
-  s: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
-) => assert.deepStrictEqual(s.current.emitted, [])
+  scene: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
+) => assert.deepStrictEqual(scene.current.emitted, [])
 
 describe("Slider", () => {
   it.effect("a thumb's input is a range input at the value, and the thumb and indicator get their positions", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 40, min: 0, max: 200, step: 5 })
-      assert.deepInclude(s.get(input()).attrs, {
+      const scene = yield* makeScene({ value: 40, min: 0, max: 200, step: 5 })
+      assert.deepInclude(scene.get(input()).attrs, {
         type: "range",
         min: "0",
         max: "200",
@@ -85,95 +85,109 @@ describe("Slider", () => {
         "aria-orientation": "horizontal",
         "aria-valuenow": "40"
       })
-      assert.strictEqual(s.get(input()).props?.value, "40")
-      assert.isUndefined(s.get(input()).attrs?.["aria-valuetext"])
+      assert.strictEqual(scene.get(input()).props?.value, "40")
+      assert.isUndefined(scene.get(input()).attrs?.["aria-valuetext"])
       assert.match(
-        s.get(input()).attrs?.style ?? "",
+        scene.get(input()).attrs?.style ?? "",
         /^position:absolute;width:100%;height:100%;.*clip:rect\(0,0,0,0\)/
       )
-      assert.deepInclude(s.get(thumb()).attrs, {
+      assert.deepInclude(scene.get(thumb()).attrs, {
         style: "--slider-thumb-position:20%",
         "data-orientation": "horizontal"
       })
       assert.strictEqual(
-        s.get(indicator).attrs?.style,
+        scene.get(indicator).attrs?.style,
         "--slider-indicator-start:0%;--slider-indicator-size:20%"
       )
-      assert.deepInclude(s.get(Locator.attr("class", "slider")).attrs, {
+      assert.deepInclude(scene.get(Locator.attr("class", "slider")).attrs, {
         role: "group",
         "data-orientation": "horizontal"
       })
-      assert.deepInclude(s.get(Locator.tag("output")).attrs, {
+      assert.deepInclude(scene.get(Locator.tag("output")).attrs, {
         "aria-live": "off"
       })
       // The input is inside the thumb.
-      assert.strictEqual(s.get(thumb()).children?.[0], s.get(input()))
-      s.props({ value: 40, orientation: "vertical" })
-      assert.strictEqual(s.get(input()).attrs?.["aria-orientation"], "vertical")
+      assert.strictEqual(scene.get(thumb()).children?.[0], scene.get(input()))
+      scene.props({ value: 40, orientation: "vertical" })
+      assert.strictEqual(
+        scene.get(input()).attrs?.["aria-orientation"],
+        "vertical"
+      )
       assert.match(
-        s.get(input()).attrs?.style ?? "",
+        scene.get(input()).attrs?.style ?? "",
         /writing-mode:vertical-lr$/
       )
-      assert.strictEqual(s.get(control).attrs?.["data-orientation"], "vertical")
+      assert.strictEqual(
+        scene.get(control).attrs?.["data-orientation"],
+        "vertical"
+      )
     }))
 
   it.effect("the keys move the focused thumb by a step or a large step, to the ends, and commit at once", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 40, largeStep: 20 })
-      s.keydown(input(), "ArrowRight").emitted(...both(41))
+      const scene = yield* makeScene({ value: 40, largeStep: 20 })
+      scene.keydown(input(), "ArrowRight").emitted(...both(41))
         .expectDefaultPrevented()
-      s.keydown(input(), "ArrowUp").emitted(...both(41))
-      s.keydown(input(), "ArrowLeft").emitted(...both(39))
-      s.keydown(input(), "ArrowDown").emitted(...both(39))
-      s.keydown(input(), "ArrowRight", { shift: true }).emitted(...both(60))
-      s.keydown(input(), "PageUp").emitted(...both(60))
-      s.keydown(input(), "PageDown").emitted(...both(20))
-      s.keydown(input(), "Home").emitted(...both(0))
-      s.keydown(input(), "End").emitted(...both(100))
+      scene.keydown(input(), "ArrowUp").emitted(...both(41))
+      scene.keydown(input(), "ArrowLeft").emitted(...both(39))
+      scene.keydown(input(), "ArrowDown").emitted(...both(39))
+      scene.keydown(input(), "ArrowRight", { shift: true }).emitted(...both(60))
+      scene.keydown(input(), "PageUp").emitted(...both(60))
+      scene.keydown(input(), "PageDown").emitted(...both(20))
+      scene.keydown(input(), "Home").emitted(...both(0))
+      scene.keydown(input(), "End").emitted(...both(100))
       // Other keys keep their default, so Tab moves focus.
-      s.keydown(input(), "Tab").expectIgnored().expectDefaultPrevented(false)
+      scene.keydown(input(), "Tab").expectIgnored().expectDefaultPrevented(
+        false
+      )
       // At the end, a key that would go past it reports nothing.
-      s.props({ value: 100 })
-      s.keydown(input(), "ArrowRight")
-      quiet(s)
+      scene.props({ value: 100 })
+      scene.keydown(input(), "ArrowRight")
+      quiet(scene)
     }))
 
   it.effect("the input's own change is reported and committed, kept within the range", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 40 })
-      s.type(input(), "55").emitted(...both(55))
-      s.type(input(), "")
-      quiet(s)
-      s.type(input(), "500").emitted(...both(100))
+      const scene = yield* makeScene({ value: 40 })
+      scene.type(input(), "55").emitted(...both(55))
+      scene.type(input(), "")
+      quiet(scene)
+      scene.type(input(), "500").emitted(...both(100))
     }))
 
   it.effect("a click on the thumb is quiet; dragging snaps to a step and commits only on release", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 0.3, max: 1, step: 0.1 })
-      s.keydown(input(), "ArrowRight").emitted(...both(0.4))
-      s.mounted(tracked(s), pressed(0, 0.3, true))
-      quiet(s)
-      s.mounted(tracked(s), releasedPointer)
-      quiet(s)
-      s.mounted(tracked(s), pressed(0, 0.3, true))
-      s.mounted(tracked(s), moved(0.71)).emitted({ _tag: "Moved", value: 0.7 })
-      s.parts((slider) => assert.isTrue(slider.dragging))
-      assert.strictEqual(s.get(thumb()).attrs?.["data-dragging"], "")
-      assert.strictEqual(s.get(control).attrs?.["data-dragging"], "")
-      s.props({ value: 0.7, max: 1, step: 0.1 })
-      s.mounted(tracked(s), moved(1.4)).emitted({ _tag: "Moved", value: 1 })
-      s.mounted(tracked(s), releasedPointer).emitted({
+      const scene = yield* makeScene({ value: 0.3, max: 1, step: 0.1 })
+      scene.keydown(input(), "ArrowRight").emitted(...both(0.4))
+      scene.mounted(tracked(scene), pressed(0, 0.3, true))
+      quiet(scene)
+      scene.mounted(tracked(scene), releasedPointer)
+      quiet(scene)
+      scene.mounted(tracked(scene), pressed(0, 0.3, true))
+      scene.mounted(tracked(scene), moved(0.71)).emitted({
+        _tag: "Moved",
+        value: 0.7
+      })
+      scene.parts((slider) => assert.isTrue(slider.dragging))
+      assert.strictEqual(scene.get(thumb()).attrs?.["data-dragging"], "")
+      assert.strictEqual(scene.get(control).attrs?.["data-dragging"], "")
+      scene.props({ value: 0.7, max: 1, step: 0.1 })
+      scene.mounted(tracked(scene), moved(1.4)).emitted({
+        _tag: "Moved",
+        value: 1
+      })
+      scene.mounted(tracked(scene), releasedPointer).emitted({
         _tag: "Committed",
         value: 1
       })
-      s.parts((slider) => assert.isFalse(slider.dragging))
-      assert.isUndefined(s.get(thumb()).attrs?.["data-dragging"])
+      scene.parts((slider) => assert.isFalse(slider.dragging))
+      assert.isUndefined(scene.get(thumb()).attrs?.["data-dragging"])
     }))
 
   it.effect("a disabled slider reports nothing and disables its inputs", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 40, disabled: true })
-      assert.strictEqual(s.get(input()).attrs?.disabled, "")
+      const scene = yield* makeScene({ value: 40, disabled: true })
+      assert.strictEqual(scene.get(input()).attrs?.disabled, "")
       for (
         const locator of [
           thumb(),
@@ -183,95 +197,109 @@ describe("Slider", () => {
           Locator.attr("class", "slider")
         ]
       ) {
-        assert.strictEqual(s.get(locator).attrs?.["data-disabled"], "")
+        assert.strictEqual(scene.get(locator).attrs?.["data-disabled"], "")
       }
-      s.keydown(input(), "ArrowRight")
-      quiet(s)
-      s.type(input(), "60")
-      quiet(s)
-      s.mounted(tracked(s), pressed(0, 0.8))
-      quiet(s)
-      s.parts((slider) => assert.isFalse(slider.dragging))
+      scene.keydown(input(), "ArrowRight")
+      quiet(scene)
+      scene.type(input(), "60")
+      quiet(scene)
+      scene.mounted(tracked(scene), pressed(0, 0.8))
+      quiet(scene)
+      scene.parts((slider) => assert.isFalse(slider.dragging))
     }))
 
   it.effect("a key lands on the step grid the native input shows, which also measures the gap between thumbs", () =>
     Effect.gen(function*() {
       // A large step off the grid goes to the nearest step, as the input
       // would show it.
-      const s = yield* scene({ value: 0, max: 12, step: 3, largeStep: 5 })
-      s.keydown(input(), "PageUp").emitted(...both(6))
+      const scene = yield* makeScene({
+        value: 0,
+        max: 12,
+        step: 3,
+        largeStep: 5
+      })
+      scene.keydown(input(), "PageUp").emitted(...both(6))
       // A max between two steps: the last step below it is the end.
-      s.props({ value: 0, max: 10, step: 3 })
-      s.keydown(input(), "End").emitted(...both(9))
-      s.mounted(tracked(s), pressed(0, 1)).emitted({ _tag: "Moved", value: 9 })
-      s.mounted(tracked(s), releasedPointer).emitted({
+      scene.props({ value: 0, max: 10, step: 3 })
+      scene.keydown(input(), "End").emitted(...both(9))
+      scene.mounted(tracked(scene), pressed(0, 1)).emitted({
+        _tag: "Moved",
+        value: 9
+      })
+      scene.mounted(tracked(scene), releasedPointer).emitted({
         _tag: "Committed",
         value: 9
       })
       // A value off the grid shows at the step the native input shows, which
       // also bounds its neighbour.
-      s.props({ value: [0, 5], max: 12, step: 3 })
-      s.parts((slider) => assert.deepStrictEqual(slider.values, [0, 6]))
-      assert.strictEqual(s.get(input(1)).attrs?.["aria-valuenow"], "6")
-      s.keydown(input(0), "End").emitted(...both([6, 6]))
+      scene.props({ value: [0, 5], max: 12, step: 3 })
+      scene.parts((slider) => assert.deepStrictEqual(slider.values, [0, 6]))
+      assert.strictEqual(scene.get(input(1)).attrs?.["aria-valuenow"], "6")
+      scene.keydown(input(0), "End").emitted(...both([6, 6]))
       // Decimal steps keep exactly the gap.
-      s.props({ value: [0.1, 0.3], step: 0.1, minStepsBetweenValues: 1 })
-      s.keydown(input(0), "End").emitted(...both([0.2, 0.3]))
-      s.keydown(input(1), "Home").emitted(...both([0.1, 0.2]))
+      scene.props({ value: [0.1, 0.3], step: 0.1, minStepsBetweenValues: 1 })
+      scene.keydown(input(0), "End").emitted(...both([0.2, 0.3]))
+      scene.keydown(input(1), "Home").emitted(...both([0.1, 0.2]))
     }))
 
   it.effect("a range has a thumb per value, labelled by its end, and a key cannot close the gap", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: [70, 20], minStepsBetweenValues: 5 })
+      const scene = yield* makeScene({
+        value: [70, 20],
+        minStepsBetweenValues: 5
+      })
       // The values are sorted.
-      s.parts((slider) => assert.deepStrictEqual(slider.values, [20, 70]))
+      scene.parts((slider) => assert.deepStrictEqual(slider.values, [20, 70]))
       assert.strictEqual(
-        s.get(input(0)).attrs?.["aria-valuetext"],
+        scene.get(input(0)).attrs?.["aria-valuetext"],
         "20 start range"
       )
       assert.strictEqual(
-        s.get(input(1)).attrs?.["aria-valuetext"],
+        scene.get(input(1)).attrs?.["aria-valuetext"],
         "70 end range"
       )
-      assert.strictEqual(s.get(input(1)).props?.value, "70")
+      assert.strictEqual(scene.get(input(1)).props?.value, "70")
       assert.strictEqual(
-        s.get(indicator).attrs?.style,
+        scene.get(indicator).attrs?.style,
         "--slider-indicator-start:20%;--slider-indicator-size:50%"
       )
-      s.keydown(input(0), "Home").emitted(...both([0, 70]))
+      scene.keydown(input(0), "Home").emitted(...both([0, 70]))
       // A key that brings the thumbs closer than the gap reports nothing.
-      s.props({ value: [65, 70], minStepsBetweenValues: 5 })
-      s.keydown(input(0), "ArrowRight")
-      quiet(s)
-      s.focus(input(0)).parts((slider) =>
+      scene.props({ value: [65, 70], minStepsBetweenValues: 5 })
+      scene.keydown(input(0), "ArrowRight")
+      quiet(scene)
+      scene.focus(input(0)).parts((slider) =>
         assert.strictEqual(slider.activeThumbIndex, 0)
       )
-      s.blur(input(0)).parts((slider) =>
+      scene.blur(input(0)).parts((slider) =>
         assert.strictEqual(slider.activeThumbIndex, -1)
       )
     }))
 
   it.effect("a track press drags the selected thumb and a pushed neighbour stays put on reversal", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: [20, 60], minStepsBetweenValues: 10 })
+      const scene = yield* makeScene({
+        value: [20, 60],
+        minStepsBetweenValues: 10
+      })
       // The control's mount picks the thumb; the press drags it there.
-      s.mounted(tracked(s), pressed(0, 0.3)).emitted({
+      scene.mounted(tracked(scene), pressed(0, 0.3)).emitted({
         _tag: "Moved",
         value: [30, 60]
       })
-      s.props({ value: [30, 60], minStepsBetweenValues: 10 })
-      s.mounted(tracked(s), moved(0.8)).emitted({
+      scene.props({ value: [30, 60], minStepsBetweenValues: 10 })
+      scene.mounted(tracked(scene), moved(0.8)).emitted({
         _tag: "Moved",
         value: [80, 90]
       })
-      s.props({ value: [80, 90], minStepsBetweenValues: 10 })
+      scene.props({ value: [80, 90], minStepsBetweenValues: 10 })
       // Dragged back, the pushed thumb stays where it was pushed.
-      s.mounted(tracked(s), moved(0.4)).emitted({
+      scene.mounted(tracked(scene), moved(0.4)).emitted({
         _tag: "Moved",
         value: [40, 90]
       })
-      s.props({ value: [40, 90], minStepsBetweenValues: 10 })
-      s.mounted(tracked(s), releasedPointer).emitted({
+      scene.props({ value: [40, 90], minStepsBetweenValues: 10 })
+      scene.mounted(tracked(scene), releasedPointer).emitted({
         _tag: "Committed",
         value: [40, 90]
       })
@@ -279,19 +307,19 @@ describe("Slider", () => {
 
   it.effect("with swap, a thumb dragged past the other trades places and the drag goes on with the other thumb", () =>
     Effect.gen(function*() {
-      const s = yield* scene({
+      const scene = yield* makeScene({
         value: [20, 60],
         thumbCollisionBehavior: "swap"
       })
-      s.mounted(tracked(s), pressed(0, 0.2, true))
-      quiet(s)
-      s.mounted(tracked(s), moved(0.8)).emitted({
+      scene.mounted(tracked(scene), pressed(0, 0.2, true))
+      quiet(scene)
+      scene.mounted(tracked(scene), moved(0.8)).emitted({
         _tag: "Moved",
         value: [60, 80]
       })
-      s.props({ value: [60, 80], thumbCollisionBehavior: "swap" })
+      scene.props({ value: [60, 80], thumbCollisionBehavior: "swap" })
       // The drag now moves the thumb at index 1.
-      s.mounted(tracked(s), moved(0.9)).emitted({
+      scene.mounted(tracked(scene), moved(0.9)).emitted({
         _tag: "Moved",
         value: [60, 90]
       })
@@ -299,12 +327,12 @@ describe("Slider", () => {
 
   it.effect("with none, a dragged thumb stops at the other", () =>
     Effect.gen(function*() {
-      const s = yield* scene({
+      const scene = yield* makeScene({
         value: [20, 60],
         thumbCollisionBehavior: "none"
       })
-      s.mounted(tracked(s), pressed(0, 0.2, true))
-      s.mounted(tracked(s), moved(0.8)).emitted({
+      scene.mounted(tracked(scene), pressed(0, 0.2, true))
+      scene.mounted(tracked(scene), moved(0.8)).emitted({
         _tag: "Moved",
         value: [60, 60]
       })

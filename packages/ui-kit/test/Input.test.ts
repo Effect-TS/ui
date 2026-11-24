@@ -36,13 +36,13 @@ const build = (input: InputElement<never>) => View.build(input, [])
 describe("Input", () => {
   it.effect("an edit reports the value the user left, and a disabled input reports nothing", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Profile, {})
-      s.fire(input, "input", { value: "Grace", checked: false })
-      assert.strictEqual(s.get(input).props?.value, "Grace")
+      const scene = yield* Scene.make(Profile, {})
+      scene.fire(input, "input", { value: "Grace", checked: false })
+      assert.strictEqual(scene.get(input).props?.value, "Grace")
 
-      s.props({ disabled: true })
+      scene.props({ disabled: true })
       assert.throws(
-        () => s.fire(input, "input", { value: "Linus", checked: false }),
+        () => scene.fire(input, "input", { value: "Linus", checked: false }),
         /nothing handles/i
       )
     }))

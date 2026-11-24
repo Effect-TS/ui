@@ -52,8 +52,8 @@ const Settings = Component.define({
 const root = Locator.attr("role", "switch")
 const thumb = Locator.tag("span")
 const rowClicks = (
-  s: { readonly get: (locator: Locator.Locator) => Locator.Node }
-) => s.get(Locator.tag("output")).children?.[0]?.text
+  scene: { readonly get: (locator: Locator.Locator) => Locator.Node }
+) => scene.get(Locator.tag("output")).children?.[0]?.text
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 // The root a consumer gets for these props and this button: the element the
@@ -74,46 +74,46 @@ const rootOf = (
 describe("Switch", () => {
   it.effect("a click asks for the other value, and the root and thumb show the value they were given", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Settings, {})
-      const attrs = s.get(root).attrs
+      const scene = yield* Scene.make(Settings, {})
+      const attrs = scene.get(root).attrs
       assert.strictEqual(attrs?.type, "button")
       assert.strictEqual(attrs?.["aria-checked"], "false")
       assert.strictEqual(attrs?.["data-unchecked"], "")
       assert.isUndefined(attrs?.["data-checked"])
-      assert.strictEqual(s.get(thumb).attrs?.class, "thumb")
-      assert.strictEqual(s.get(thumb).attrs?.["data-unchecked"], "")
-      s.fire(root, "click")
-      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "true")
-      assert.strictEqual(s.get(root).attrs?.["data-checked"], "")
-      assert.strictEqual(s.get(thumb).attrs?.["data-checked"], "")
-      assert.isUndefined(s.get(thumb).attrs?.["data-unchecked"])
-      s.fire(root, "click")
-      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
+      assert.strictEqual(scene.get(thumb).attrs?.class, "thumb")
+      assert.strictEqual(scene.get(thumb).attrs?.["data-unchecked"], "")
+      scene.fire(root, "click")
+      assert.strictEqual(scene.get(root).attrs?.["aria-checked"], "true")
+      assert.strictEqual(scene.get(root).attrs?.["data-checked"], "")
+      assert.strictEqual(scene.get(thumb).attrs?.["data-checked"], "")
+      assert.isUndefined(scene.get(thumb).attrs?.["data-unchecked"])
+      scene.fire(root, "click")
+      assert.strictEqual(scene.get(root).attrs?.["aria-checked"], "false")
       // The switch handled both clicks, so the row heard neither.
-      assert.strictEqual(rowClicks(s), "0")
+      assert.strictEqual(rowClicks(scene), "0")
     }))
 
   it.effect("a read-only switch leaves its click to the row around it, and only a disabled one leaves the tab order", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Settings, { disabled: true })
-      const disabled = s.get(root).attrs
+      const scene = yield* Scene.make(Settings, { disabled: true })
+      const disabled = scene.get(root).attrs
       assert.strictEqual(disabled?.disabled, "")
       assert.strictEqual(disabled?.["data-disabled"], "")
-      assert.strictEqual(s.get(thumb).attrs?.["data-disabled"], "")
-      s.props({ readOnly: true, required: true })
-      const attrs = s.get(root).attrs
+      assert.strictEqual(scene.get(thumb).attrs?.["data-disabled"], "")
+      scene.props({ readOnly: true, required: true })
+      const attrs = scene.get(root).attrs
       assert.isUndefined(attrs?.disabled)
       assert.strictEqual(attrs?.["aria-readonly"], "true")
       assert.strictEqual(attrs?.["data-readonly"], "")
       assert.strictEqual(attrs?.["aria-required"], "true")
       assert.strictEqual(attrs?.["data-required"], "")
-      const thumbAttrs = s.get(thumb).attrs
+      const thumbAttrs = scene.get(thumb).attrs
       assert.isUndefined(thumbAttrs?.["data-disabled"])
       assert.strictEqual(thumbAttrs?.["data-readonly"], "")
       assert.strictEqual(thumbAttrs?.["data-required"], "")
-      s.fire(root, "click")
-      assert.strictEqual(rowClicks(s), "1")
-      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
+      scene.fire(root, "click")
+      assert.strictEqual(rowClicks(scene), "1")
+      assert.strictEqual(scene.get(root).attrs?.["aria-checked"], "false")
     }))
 
   it("the root keeps the consumer's attributes, but the switch's own win, present or absent", () => {

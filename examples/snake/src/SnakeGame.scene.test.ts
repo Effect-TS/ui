@@ -23,8 +23,8 @@ const baseModel: SnakeGameModel = {
 describe("SnakeGame", () => {
   it.effect("initial view shows the heading, score, and start prompt", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given(baseModel)
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given(baseModel)
         .expect(HtmlLocator.role("heading", { name: "Snake Game" })).toExist()
         .expect(Locator.text("Score: 0")).toExist()
         .expect(Locator.text("High Score: 0")).toExist()
@@ -33,8 +33,8 @@ describe("SnakeGame", () => {
 
   it.effect("renders the keyboard instructions", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given(baseModel)
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given(baseModel)
         .expect(Locator.text("Use ARROW KEYS or WASD to move")).toExist()
         .expect(Locator.text("SPACE to pause/start")).toExist()
         .expect(Locator.text("R to restart")).toExist()
@@ -42,23 +42,23 @@ describe("SnakeGame", () => {
 
   it.effect("shows the paused prompt while the game is paused", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "Paused" })
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given({ ...baseModel, gameState: "Paused" })
         .expect(Locator.text("Paused - SPACE to continue")).toExist()
     }))
 
   it.effect("shows the game-over prompt at the end of a run", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "GameOver", points: 50 })
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given({ ...baseModel, gameState: "GameOver", points: 50 })
         .expect(Locator.text("Game Over - Press R to restart")).toExist()
         .expect(Locator.text("Score: 50")).toExist()
     }))
 
   it.effect("the current and high scores reflect the Model", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given({
         ...baseModel,
         gameState: "Playing",
         points: 120,
@@ -70,16 +70,20 @@ describe("SnakeGame", () => {
 
   it.effect("SPACE on the document starts the game and shows the playing prompt", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given(baseModel)
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given(baseModel)
         .fireDocument("keydown", { key: " " }).expectDefaultPrevented()
         .expect(Locator.text("Playing - SPACE to pause")).toExist()
     }))
 
   it.effect("an arrow key on the document steers and cancels its default", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "Playing", apple: { x: 10, y: 9 } })
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given({
+        ...baseModel,
+        gameState: "Playing",
+        apple: { x: 10, y: 9 }
+      })
         .fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
         .fireDocument("keydown", { key: "ArrowUp", repeat: true })
         .expectDefaultPrevented()
@@ -90,8 +94,8 @@ describe("SnakeGame", () => {
 
   it.effect("keys the game doesn't handle keep their default", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "Playing" })
+      const scene = yield* HtmlScene.make(SnakeGame, {})
+      scene.given({ ...baseModel, gameState: "Playing" })
         .fireDocument("keydown", { key: "Tab" }).expectIgnored()
         .fireDocument("keydown", { key: "R" }).expectIgnored()
         .fireDocument("keydown", { key: "r", ctrl: true }).expectIgnored()

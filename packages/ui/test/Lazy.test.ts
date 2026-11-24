@@ -483,8 +483,10 @@ describe("Component.lazy", () => {
 
   it("a Scene names the child by the lazy component", () => {
     const LazyPage = Component.lazy("LazyPage", () => later(Page))
-    const s = Scene.start(makeApp(LazyPage), {})
-    s.childPending(LazyPage).expect(Locator.tag("p")).toHaveText("app:loading")
+    const scene = Scene.start(makeApp(LazyPage), {})
+    scene.childPending(LazyPage).expect(Locator.tag("p")).toHaveText(
+      "app:loading"
+    )
       .childEmit(LazyPage, PageEvents.Saved({ title: "!" })).expect(
         Locator.tag("p")
       ).toHaveText("app!:loading")

@@ -453,13 +453,15 @@ describe("Validation", () => {
 
     it.effect("drops a stale answer and submits once the check passes", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(SignupPage, {})
+        const story = yield* Story.make(SignupPage, {})
         const username = () =>
-          Account.validate(s.model.form, { username: taken(s.queries.taken) })
+          Account.validate(story.model.form, {
+            username: taken(story.queries.taken)
+          })
             .fields.username
-        s.send(Message.UpdatedUsername({ value: "ada" }))
+        story.send(Message.UpdatedUsername({ value: "ada" }))
         assert.strictEqual(username()._tag, "Validating")
-        s.loaded("taken", true)
+        story.loaded("taken", true)
         assert.deepStrictEqual(username(), {
           _tag: "Invalid",
           value: "ada",
@@ -468,13 +470,13 @@ describe("Validation", () => {
           errors: ["That username is taken"]
         })
         // The answer for "ada" isn't shown for "grace".
-        s.send(Message.UpdatedUsername({ value: "grace" }))
+        story.send(Message.UpdatedUsername({ value: "grace" }))
         assert.strictEqual(username()._tag, "Validating")
         // A submit while the check is out issues nothing.
-        s.keepPending("taken").send(Message.ClickedSubmit())
-        s.loaded("taken", false)
+        story.keepPending("taken").send(Message.ClickedSubmit())
+        story.loaded("taken", false)
         assert.strictEqual(username()._tag, "Valid")
-        s.send(Message.ClickedSubmit())
+        story.send(Message.ClickedSubmit())
           .expectExact(CreateAccount.make({ username: "grace" }))
           .resolve(CreateAccount, Message.CreatedAccount())
       }))

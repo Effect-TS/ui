@@ -57,28 +57,28 @@ const parts = (props: RadioGroupProps) =>
 
 type Issued = Mount.Issued<unknown, never, never, unknown>
 const mountOf = (
-  s: { readonly get: (locator: Locator.Locator) => Locator.Node },
+  scene: { readonly get: (locator: Locator.Locator) => Locator.Node },
   locator: Locator.Locator
 ): Issued =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+  (scene.get(locator) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Issued
 
 const openScene = (props: RadioGroupProps = { value: "ssd", items }) =>
   HtmlScene.make(RadioGroup, props, standIn).pipe(
-    Effect.tap((s) =>
+    Effect.tap((scene) =>
       Effect.sync(() => {
-        s.expectMount(mountOf(s, root))
+        scene.expectMount(mountOf(scene, root))
         if (props.value !== null) {
-          s.expectMount(mountOf(s, indicator(props.value)))
+          scene.expectMount(mountOf(scene, indicator(props.value)))
         }
       })
     )
   )
 
 const expectFocus = (
-  s: {
+  scene: {
     readonly current: {
       readonly pending: ReadonlyArray<
         { readonly command: { readonly name: string; readonly args: unknown } }
@@ -88,8 +88,8 @@ const expectFocus = (
   },
   value: string
 ) => {
-  const targets = s.current.pending.map(({ command }) => {
-    s.resolve(command as never, { found: true } as never)
+  const targets = scene.current.pending.map(({ command }) => {
+    scene.resolve(command as never, { found: true } as never)
     return command.name + " " +
       (command.args as { readonly ref: { readonly key: string } }).ref.key
   })
@@ -101,47 +101,53 @@ const expectFocus = (
 describe("RadioGroup", () => {
   it.effect("clicking picks an unchecked enabled radio, ignores the checked one, and respects disabled and readOnly", () =>
     Effect.gen(function*() {
-      const s = yield* openScene()
-      assert.deepInclude(s.get(radio("ssd")).attrs, {
+      const scene = yield* openScene()
+      assert.deepInclude(scene.get(radio("ssd")).attrs, {
         "aria-checked": "true",
         "data-checked": "",
         tabindex: "0"
       })
-      assert.deepInclude(s.get(radio("nvme")).attrs, {
+      assert.deepInclude(scene.get(radio("nvme")).attrs, {
         "aria-checked": "false",
         "data-unchecked": "",
         tabindex: "-1"
       })
-      assert.deepInclude(s.get(radio("hdd")).attrs, {
+      assert.deepInclude(scene.get(radio("hdd")).attrs, {
         disabled: "",
         "data-disabled": ""
       })
-      assert.strictEqual(s.get(radio("tape")).attrs?.["data-readonly"], "")
+      assert.strictEqual(scene.get(radio("tape")).attrs?.["data-readonly"], "")
 
-      s.fire(radio("ssd"), "click")
-      s.fire(radio("hdd"), "click")
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.fire(radio("ssd"), "click")
+      scene.fire(radio("hdd"), "click")
+      assert.deepStrictEqual(scene.current.emitted, [])
 
-      s.fire(radio("nvme"), "focus")
-      assert.strictEqual(s.get(radio("nvme")).attrs?.tabindex, "0")
-      assert.strictEqual(s.get(radio("ssd")).attrs?.tabindex, "-1")
+      scene.fire(radio("nvme"), "focus")
+      assert.strictEqual(scene.get(radio("nvme")).attrs?.tabindex, "0")
+      assert.strictEqual(scene.get(radio("ssd")).attrs?.tabindex, "-1")
 
-      s.fire(radio("tape"), "click")
-      assert.deepStrictEqual(s.current.emitted, [])
-      assert.strictEqual(s.get(radio("tape")).attrs?.tabindex, "0")
+      scene.fire(radio("tape"), "click")
+      assert.deepStrictEqual(scene.current.emitted, [])
+      assert.strictEqual(scene.get(radio("tape")).attrs?.tabindex, "0")
 
-      s.fire(radio("nvme"), "click").emitted({ _tag: "Picked", value: "nvme" })
-      assert.strictEqual(s.get(radio("nvme")).attrs?.["aria-checked"], "false")
+      scene.fire(radio("nvme"), "click").emitted({
+        _tag: "Picked",
+        value: "nvme"
+      })
+      assert.strictEqual(
+        scene.get(radio("nvme")).attrs?.["aria-checked"],
+        "false"
+      )
 
-      s.props({
+      scene.props({
         value: "nvme",
         items,
         disabled: true,
         required: true,
         invalid: true
       })
-      s.expectMount(mountOf(s, indicator("nvme")))
-      assert.deepInclude(s.get(root).attrs, {
+      scene.expectMount(mountOf(scene, indicator("nvme")))
+      assert.deepInclude(scene.get(root).attrs, {
         role: "radiogroup",
         "aria-disabled": "true",
         "aria-required": "true",
@@ -149,40 +155,41 @@ describe("RadioGroup", () => {
         "data-disabled": "",
         "data-required": ""
       })
-      assert.deepInclude(s.get(radio("ssd")).attrs, {
+      assert.deepInclude(scene.get(radio("ssd")).attrs, {
         disabled: "",
         tabindex: "-1"
       })
-      s.fire(radio("ssd"), "click")
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.fire(radio("ssd"), "click")
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("arrow keys navigate wrapping around disabled items, pick nothing from or onto a read-only radio, follow RTL, and cancel Enter", () =>
     Effect.gen(function*() {
-      const s = yield* openScene()
+      const scene = yield* openScene()
 
-      s.fire(radio("ssd"), "keydown", { key: "ArrowDown" })
+      scene.fire(radio("ssd"), "keydown", { key: "ArrowDown" })
         .expectDefaultPrevented()
         .emitted({ _tag: "Picked", value: "nvme" })
-      expectFocus(s, "nvme")
+      expectFocus(scene, "nvme")
 
-      s.fire(radio("nvme"), "keydown", { key: "ArrowRight" })
+      scene.fire(radio("nvme"), "keydown", { key: "ArrowRight" })
         .expectDefaultPrevented()
-      expectFocus(s, "tape")
-      assert.deepStrictEqual(s.current.emitted, [])
-      assert.strictEqual(s.get(radio("tape")).attrs?.tabindex, "0")
+      expectFocus(scene, "tape")
+      assert.deepStrictEqual(scene.current.emitted, [])
+      assert.strictEqual(scene.get(radio("tape")).attrs?.tabindex, "0")
 
-      s.fire(radio("tape"), "keydown", { key: "ArrowDown" })
+      scene.fire(radio("tape"), "keydown", { key: "ArrowDown" })
         .expectDefaultPrevented()
-      expectFocus(s, "ssd")
-      assert.deepStrictEqual(s.current.emitted, [])
+      expectFocus(scene, "ssd")
+      assert.deepStrictEqual(scene.current.emitted, [])
 
-      s.fire(radio("ssd"), "keydown", { key: "ArrowUp" })
+      scene.fire(radio("ssd"), "keydown", { key: "ArrowUp" })
         .expectDefaultPrevented()
-      expectFocus(s, "tape")
+      expectFocus(scene, "tape")
 
-      s.fire(radio("ssd"), "keydown", { key: "Enter" }).expectDefaultPrevented()
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.fire(radio("ssd"), "keydown", { key: "Enter" })
+        .expectDefaultPrevented()
+      assert.deepStrictEqual(scene.current.emitted, [])
 
       for (
         const init of [{ key: " " }, { key: "Home" }, { key: "End" }, {
@@ -190,31 +197,31 @@ describe("RadioGroup", () => {
           ctrl: true
         }]
       ) {
-        s.fire(radio("ssd"), "keydown", init).expectIgnored()
+        scene.fire(radio("ssd"), "keydown", init).expectIgnored()
           .expectDefaultPrevented(false)
       }
 
-      s.props({ value: "ssd", items, readOnly: true })
-      s.fire(radio("ssd"), "keydown", { key: "ArrowDown" })
+      scene.props({ value: "ssd", items, readOnly: true })
+      scene.fire(radio("ssd"), "keydown", { key: "ArrowDown" })
         .expectDefaultPrevented()
-      expectFocus(s, "nvme")
-      assert.deepStrictEqual(s.current.emitted, [])
-      assert.strictEqual(s.get(radio("nvme")).attrs?.tabindex, "0")
+      expectFocus(scene, "nvme")
+      assert.deepStrictEqual(scene.current.emitted, [])
+      assert.strictEqual(scene.get(radio("nvme")).attrs?.tabindex, "0")
 
-      s.props({ value: "nvme", items })
-      s.expectMount(mountOf(s, indicator("nvme")))
-      s.fire(radio("tape"), "keydown", { key: "ArrowDown" })
+      scene.props({ value: "nvme", items })
+      scene.expectMount(mountOf(scene, indicator("nvme")))
+      scene.fire(radio("tape"), "keydown", { key: "ArrowDown" })
         .expectDefaultPrevented()
-      expectFocus(s, "ssd")
-      assert.deepStrictEqual(s.current.emitted, [])
+      expectFocus(scene, "ssd")
+      assert.deepStrictEqual(scene.current.emitted, [])
 
-      s.props({ value: "ssd", items })
-      s.expectMount(mountOf(s, indicator("ssd")))
-      s.shared(DirectionProvider, { direction: "rtl" })
-      s.fire(radio("ssd"), "keydown", { key: "ArrowLeft" })
+      scene.props({ value: "ssd", items })
+      scene.expectMount(mountOf(scene, indicator("ssd")))
+      scene.shared(DirectionProvider, { direction: "rtl" })
+      scene.fire(radio("ssd"), "keydown", { key: "ArrowLeft" })
         .expectDefaultPrevented()
         .emitted({ _tag: "Picked", value: "nvme" })
-      expectFocus(s, "nvme")
+      expectFocus(scene, "nvme")
     }))
 
   it("root renders a hidden input only for a named, enabled, picked item", () => {
@@ -374,11 +381,11 @@ describe("RadioGroup", () => {
           })
       })
 
-      const s = yield* Scene.make(FieldHost, {})
-      assert.deepInclude(s.get(root).attrs, {
+      const scene = yield* Scene.make(FieldHost, {})
+      assert.deepInclude(scene.get(root).attrs, {
         role: "radiogroup",
         "aria-invalid": "true"
       })
-      assert.isUndefined(s.get(radio("ssd")).attrs?.["aria-invalid"])
+      assert.isUndefined(scene.get(radio("ssd")).attrs?.["aria-invalid"])
     }))
 })

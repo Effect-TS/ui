@@ -313,8 +313,8 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
         "focus",
         "cancel 2 pen"
       ])
-      const s = yield* HtmlScene.make(Phases, {})
-      s.fireDocument("pointercancel", { button: 1 }).expect(
+      const scene = yield* HtmlScene.make(Phases, {})
+      scene.fireDocument("pointercancel", { button: 1 }).expect(
         Locator.tag("output")
       ).toHaveText("cancel 1 mouse")
     }).pipe(Effect.scoped))
@@ -375,8 +375,11 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["test", "empty"])
 
-      const s = yield* HtmlScene.make(Custom, {})
-      s.fireCustomEvent("submit", { detail: "scene", defaultPrevented: true })
+      const scene = yield* HtmlScene.make(Custom, {})
+      scene.fireCustomEvent("submit", {
+        detail: "scene",
+        defaultPrevented: true
+      })
         .expectDefaultPrevented()
         .fireCustomEvent("submit", { detail: undefined })
         .fireCustomEvent("submit", { detail: 0 }).expectIgnored()
@@ -387,8 +390,8 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
 describe("HtmlScene.fireDocument and fireWindow", () => {
   it.effect("deliver the same cancelled press to a bubble listener enabled during capture in both test tools", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Phases, {})
-      s.fireDocument("mousedown")
+      const scene = yield* HtmlScene.make(Phases, {})
+      scene.fireDocument("mousedown")
         .expectDefaultPrevented()
         .expect(Locator.tag("output")).toHaveText("capture,bubble true")
       const root = yield* TestHost.mount(Phases, {})
@@ -398,7 +401,7 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
       assert.deepStrictEqual(root.model(), ["capture", "bubble true"])
 
       // The capture listener is gone, so only the bubble one runs.
-      s.fireDocument("mousedown").expectDefaultPrevented(false)
+      scene.fireDocument("mousedown").expectDefaultPrevented(false)
         .fireWindow("focus")
         .expect(Locator.tag("output")).toHaveText(
           "capture,bubble true,bubble false,focus"
@@ -407,8 +410,8 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
 
   it.effect("run the handler of the current Model, and a listener that returns nothing is ignored", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Keys, {})
-      s.fireDocument("keydown", { key: "x" }).expectDefaultPrevented()
+      const scene = yield* HtmlScene.make(Keys, {})
+      scene.fireDocument("keydown", { key: "x" }).expectDefaultPrevented()
         .click(Locator.attr("id", "rename"))
         .fireDocument("keydown", { key: "y", defaultPrevented: true })
         .fireDocument("keydown", { key: "Escape" }).expectIgnored()
@@ -448,9 +451,9 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
 
   it.effect("throw when nothing listens, listing the active keys", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Keys, {})
+      const scene = yield* HtmlScene.make(Keys, {})
       assert.throws(
-        () => s.fireDocument("mouseup"),
+        () => scene.fireDocument("mouseup"),
         `HtmlScene.fireDocument: nothing listens for "mouseup" on the document; active keys: ["@effect/ui/html/document:\\"keydown\\""]`
       )
     }))

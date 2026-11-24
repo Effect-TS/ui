@@ -25,13 +25,13 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 describe("Avatar", () => {
   it.effect("the fallback waits for its delay, and then shows whenever the image isn't loaded", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Avatar, {
+      const scene = yield* Scene.make(Avatar, {
         src: "/ada.png",
         fallbackDelay: 600
       }, standIn)
-      assert.isUndefined(s.query(fallback))
-      s.subscription("fallbackDelay:600", { _tag: "ElapsedFallbackDelay" })
-      assert.isDefined(s.query(fallback))
+      assert.isUndefined(scene.query(fallback))
+      scene.subscription("fallbackDelay:600", { _tag: "ElapsedFallbackDelay" })
+      assert.isDefined(scene.query(fallback))
     }))
 
   it.effect("on TestHost, the fallback shows until the current source's load settles, even if an old load settles as the source changes", () =>

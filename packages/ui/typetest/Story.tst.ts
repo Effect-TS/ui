@@ -97,25 +97,26 @@ describe("Story", () => {
     expect(Story.make).type.not.toBeCallableWith(
       Counter,
       { initial: 0 },
-      (s: Story.Steps<typeof Counter>) => s.send(increment).send(increment)
+      (story: Story.Steps<typeof Counter>) =>
+        story.send(increment).send(increment)
     )
     expect(Effect.gen(function*() {
-      const s = yield* Story.make(Counter, { initial: 0 })
-      s.send(increment).send(increment)
-      s.send(increment)
+      const story = yield* Story.make(Counter, { initial: 0 })
+      story.send(increment).send(increment)
+      story.send(increment)
     })).type.toBe<Effect.Effect<void, never, Scope.Scope>>()
   })
 
   it("a shared step needs no explicit generics", () => {
-    const twice = (s: Story.Steps<typeof Counter>) =>
-      s.send(increment).send(increment)
+    const twice = (story: Story.Steps<typeof Counter>) =>
+      story.send(increment).send(increment)
     expect(counter.pipe(twice)).type.toBe<Story.Steps<typeof Counter>>()
     expect(todoItem.pipe).type.not.toBeCallableWith(twice)
   })
 
   it("a step over any component keeps the caller's type", () => {
-    const sendIncrement = <S extends Story.Steps.Any>(s: S): S =>
-      s.send(increment)
+    const sendIncrement = <S extends Story.Steps.Any>(story: S): S =>
+      story.send(increment)
     expect(sendIncrement(counter)).type.toBe<Story.Steps<typeof Counter>>()
     expect(counter.pipe(sendIncrement).current.model).type.toBe<
       { readonly count: number }
@@ -154,7 +155,7 @@ describe("Story", () => {
     >()
     expect(Story.start(Static, {}).given(1).model).type.toBe<number>()
     expect(steps.send).type.not.toBeCallableWith(CounterMessage.Increment())
-    const shared = <S extends Story.Steps.Any>(s: S): S => s
+    const shared = <S extends Story.Steps.Any>(story: S): S => story
     expect(shared(steps)).type.toBe<Story.Steps<typeof Static>>()
   })
 
