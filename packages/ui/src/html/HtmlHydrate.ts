@@ -16,10 +16,10 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import type * as Html from "./Html.ts"
+import { isRadio, radioGroup, SVG } from "./internal/dom.ts"
 import { attributeName } from "./internal/elements.ts"
 import * as markers from "./internal/markers.ts"
 
-const SVG = "http://www.w3.org/2000/svg"
 const ELEMENT = 1
 const COMMENT = 8
 
@@ -59,19 +59,6 @@ const changeOnBlur: ReadonlySet<string> = new Set([
   "password",
   "number"
 ])
-
-const isRadio = (node: Node): node is HTMLInputElement =>
-  (node as Element).localName === "input" &&
-  (node as HTMLInputElement).type === "radio"
-
-const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> =>
-  radio.name === ""
-    ? [radio]
-    : Array.from(
-      (radio.getRootNode() as Document).querySelectorAll<HTMLInputElement>(
-        `input[type="radio"]`
-      )
-    ).filter((other) => other.name === radio.name && other.form === radio.form)
 
 const userProp = (node: Node): string | undefined => {
   switch ((node as Element).localName) {

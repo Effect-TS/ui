@@ -83,13 +83,11 @@ const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   }
 }
 
-const never = () => false
-
 /** @internal */
 export const make = (
   document: Document,
   htmlHost: Context.Service.Shape<typeof Html.Host>,
-  held: () => boolean = never
+  held: () => boolean
 ) =>
   Effect.suspend(() => {
     const signal = signals(document)

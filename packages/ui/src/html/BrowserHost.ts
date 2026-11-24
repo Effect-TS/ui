@@ -134,7 +134,7 @@ import * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as Html from "./Html.ts"
 import * as HtmlScheduler from "./HtmlScheduler.ts"
-import * as browserHosts from "./internal/browserHosts.ts"
+import * as documentHead from "./internal/documentHead.ts"
 import * as documentServices from "./internal/documentServices.ts"
 import * as dom from "./internal/dom.ts"
 
@@ -192,12 +192,18 @@ const fired = (
 export const makeHost = (
   document: Document,
   options?: { readonly warn?: ((message: string) => void) | undefined }
-): Renderer.Host<globalThis.Node> & { readonly dispose: () => void } => {
+): Renderer.Host<globalThis.Node> & { readonly dispose: () => void } =>
+  build(document, options).host
+
+const build = (
+  document: Document,
+  options?: { readonly warn?: ((message: string) => void) | undefined }
+) => {
   // oxlint-disable-next-line no-console
   const warn = options?.warn ?? ((message: string) => console.warn(message))
   const mounted = new Map<globalThis.Element, ReturnType<typeof dom.makeHost>>()
   let held = 0
-  let sync: ReturnType<dom.HeadSync> | undefined
+  let sync: ReturnType<documentHead.HeadSync> | undefined
   let bare: ReturnType<typeof dom.makeHost> | undefined
   const direct = () => bare ??= dom.makeHost(document.documentElement, { warn })
   const host: Renderer.Host<globalThis.Node> & {
@@ -235,7 +241,8 @@ export const makeHost = (
     controlled: dom.controlled,
     runsMounts: true,
     commit: () => bare?.commit?.(),
-    head: (head) => (sync ??= dom.syncHead(document, warn)).sync(head as never),
+    head: (head) =>
+      (sync ??= documentHead.make(document, warn)).sync(head as never),
     dispose: () => {
       sync?.release()
       sync = undefined
@@ -243,39 +250,36 @@ export const makeHost = (
       bare = undefined
     }
   }
+  const raw = (container: unknown, options: Parameters<runtime.MakeDom>[1]) =>
+    dom.makeHost(container as globalThis.Element, { ...options, warn })
+  const make: runtime.MakeDom = (container, options) => {
+    const element = container as globalThis.Element
+    const made = raw(element, options)
+    mounted.set(element, made)
+    return {
+      ...made,
+      dispose: () => {
+        if (mounted.get(element) === made) mounted.delete(element)
+        made.dispose()
+      }
+    }
+  }
   domHost.doms.set(host, {
-    make: (container, options) => {
-      if ((container as globalThis.Node).nodeType === undefined) {
-        return undefined
-      }
-      const element = container as globalThis.Element
-      const made = dom.makeHost(element, {
-        head: options.head ? dom.syncHead : undefined,
-        warn,
-        step: options.step
-      })
-      mounted.set(element, made)
-      return {
-        ...made,
-        dispose: () => {
-          if (mounted.get(element) === made) mounted.delete(element)
-          made.dispose()
-        }
-      }
-    }
+    make: (container, options) =>
+      (container as globalThis.Node).nodeType === undefined
+        ? undefined
+        : make(container, options)
   })
-  browserHosts.holds.set(host, {
+  return {
+    host,
+    raw,
+    make,
     held: () => held > 0,
-    hold: (container) => {
-      held++
-      mounted.get(container)?.pause(true)
-    },
-    release: (container) => {
-      held--
-      mounted.get(container)?.pause(false)
+    hold: (container: globalThis.Element, on: boolean) => {
+      held += on ? 1 : -1
+      mounted.get(container)?.pause(on)
     }
-  })
-  return host
+  }
 }
 
 /**
@@ -359,14 +363,10 @@ export const layer = (options?: {
 }): Layer.Layer<Renderer.Renderer | Html.Host> =>
   Layer.effectContext(Effect.gen(function*() {
     const document = options?.document ?? globalThis.document
-    const host = makeHost(document)
+    const { host, held } = build(document)
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
     return Context.add(
-      yield* documentServices.make(
-        document,
-        htmlHost,
-        browserHosts.holds.get(host)!.held
-      ),
+      yield* documentServices.make(document, htmlHost, held),
       Renderer.Renderer,
       { host }
     )
@@ -552,16 +552,10 @@ export const mountRoot = (
   hydrate: hydrateRun.Hydrating | undefined
 ): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const host = makeHost(container.ownerDocument)
+    const { host, raw, make, held, hold } = build(container.ownerDocument)
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
-    const holds = browserHosts.holds.get(host)!
-    const domMake = domHost.doms.get(host)!.make
     const context = Context.add(
-      yield* documentServices.make(
-        container.ownerDocument,
-        htmlHost,
-        holds.held
-      ),
+      yield* documentServices.make(container.ownerDocument, htmlHost, held),
       Renderer.Renderer,
       { host }
     )
@@ -574,24 +568,12 @@ export const mountRoot = (
           defaultScheduler ??= HtmlScheduler.makeDefault()
         )
         : context
-    // oxlint-disable-next-line no-console
-    const warn = (message: string) => console.warn(message)
-    const makeDom: runtime.MakeDom = (target, domOptions) =>
-      domMake(target, domOptions)!
-    const makePaintDom: runtime.MakeDom = (target, domOptions) =>
-      painting(
-        dom.makeHost(target as globalThis.Element, {
-          head: domOptions.head ? dom.syncHead : undefined,
-          warn,
-          step: domOptions.step
-        })
-      )
     const root = yield* Effect.provideContext(
       runtime.mountDom(
         component,
         props,
         container,
-        makeDom,
+        make,
         [Html.name],
         hydrate === undefined ? options : { ...options, hydrate }
       ),
@@ -602,9 +584,9 @@ export const mountRoot = (
       root,
       container,
       Context.merge(outer, scheduled),
-      makePaintDom,
-      () => holds.hold(container),
-      () => holds.release(container)
+      (target, domOptions) => painting(raw(target, domOptions)),
+      () => hold(container, true),
+      () => hold(container, false)
     )
     const unregister = Context.get(outer, Controllables).register(controlled)
     yield* Effect.addFinalizer(() =>

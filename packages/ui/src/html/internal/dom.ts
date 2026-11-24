@@ -15,7 +15,8 @@ import {
 import { pointerTypeOf } from "./pointer.ts"
 import * as submit from "./submit.ts"
 
-const SVG = "http://www.w3.org/2000/svg"
+/** @internal */
+export const SVG = "http://www.w3.org/2000/svg"
 
 /** @internal */
 export const controlled: ReadonlySet<string> = new Set([
@@ -77,11 +78,13 @@ interface Showing {
   closed: boolean
 }
 
-const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
+/** @internal */
+export const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
   (node as globalThis.Element).localName === "input" &&
   (node as HTMLInputElement).type === "radio"
 
-const radioGroup = (
+/** @internal */
+export const radioGroup = (
   radio: HTMLInputElement
 ): ReadonlyArray<HTMLInputElement> => {
   if (radio.name === "") return [radio]
@@ -109,23 +112,16 @@ type Node = globalThis.Node & { $r?: Kernel.Rec }
 /** @internal */
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
-/** @internal */
-export type HeadSync = documentHead.HeadSync
-
-/** @internal */
-export const syncHead: HeadSync = documentHead.make
-
 interface HostOptions {
-  readonly head?: HeadSync | undefined
-  readonly viewTransitions?: boolean | undefined
-  readonly warn?: ((message: string) => void) | undefined
+  readonly head?: boolean | undefined
+  readonly warn: (message: string) => void
   readonly step?: ((f: () => boolean) => boolean) | undefined
 }
 
 /** @internal */
 export const makeHost = (
   container: globalThis.Element,
-  options?: HostOptions
+  options: HostOptions
 ): Kernel.Host<globalThis.Node> & {
   readonly dispose: () => void
   readonly pause: (on: boolean) => void
@@ -133,7 +129,6 @@ export const makeHost = (
   const document = container.ownerDocument
   const view = document.defaultView
   const listening = new Set<string>()
-  const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
   const composing = new WeakSet<globalThis.Node>()
   const forms = new WeakSet<EventTarget>()
   const edits = new WeakMap<globalThis.Node, Map<string, FieldState>>()
@@ -143,7 +138,7 @@ export const makeHost = (
     readonly event: Event
   } | undefined
   let scratch: CSSStyleDeclaration | undefined
-  const step = options?.step ?? ((f) => f())
+  const step = options.step ?? ((f) => f())
   const remember = (node: globalThis.Node, state: FieldState | undefined) => {
     if (state === undefined) return
     let states = edits.get(node)
@@ -285,7 +280,7 @@ export const makeHost = (
   }
 
   const restoreNode = (node: globalThis.Node) => {
-    const values = wanted.get(node)
+    const values = written.get(node)
     if (values === undefined) return
     for (const [name, value] of values) {
       if (name === "open" && isDialog(node)) {
@@ -516,7 +511,7 @@ export const makeHost = (
     const composed = (event as InputEvent).isComposing === true
     if (isDialog(target)) {
       if (name === "cancel") {
-        if (wanted.get(target)?.get("open") === "modal") event.preventDefault()
+        if (written.get(target)?.get("open") === "modal") event.preventDefault()
       } else if (name === "close") {
         const list = showings.get(target)
         const ended = list?.shift()
@@ -606,11 +601,9 @@ export const makeHost = (
     listen("submit")
   }
 
-  const sync = options?.head?.(
-    document,
-    // oxlint-disable-next-line no-console
-    options?.warn ?? ((message) => console.warn(message))
-  )
+  const sync = options.head
+    ? documentHead.make(document, options.warn)
+    : undefined
 
   const start = (update: () => void, types: ReadonlyArray<string>) => {
     if (
@@ -694,7 +687,7 @@ export const makeHost = (
     setProp(node, name, value) {
       const element = node as any
       if (controlled.has(name)) {
-        let values = wanted.get(node)
+        let values = written.get(node)
         const dialog = name === "open" && isDialog(node)
         const popover = name === "popoverOpen"
         if (value === undefined && !dialog && !popover) {
@@ -702,8 +695,7 @@ export const makeHost = (
           value = name === "value" ? "" : false
         } else {
           if (values === undefined) {
-            wanted.set(node, values = new Map())
-            written.set(node, values)
+            written.set(node, values = new Map())
           }
           for (const event of restoring) listen(event)
           listen("compositionstart")
@@ -793,7 +785,7 @@ export const makeHost = (
       }
       for (const element of manualPopovers) {
         if (!element.isConnected) manualPopovers.delete(element)
-        else if (wanted.get(element)?.get("popoverOpen") === true) {
+        else if (written.get(element)?.get("popoverOpen") === true) {
           popoversToShow.add(element)
         } else applyPopover(element, false)
       }
@@ -815,7 +807,7 @@ export const makeHost = (
         container.querySelectorAll<HTMLElement>("[popover]")
       ).filter((element) =>
         !manualPopovers.has(element) &&
-        wanted.get(element)?.get("popoverOpen") === true &&
+        written.get(element)?.get("popoverOpen") === true &&
         matches(element, ":popover-open")
       )
       for (const dialog of [...shown].reverse()) {
@@ -830,9 +822,7 @@ export const makeHost = (
       }
     },
     head: sync === undefined ? undefined : (head) => sync.sync(head as never),
-    transitions: options?.viewTransitions === false
-      ? undefined
-      : transitionRun.make(start),
+    transitions: transitionRun.make(start),
     dispose() {
       transition?.skipTransition()
       transition = undefined
