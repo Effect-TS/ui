@@ -1153,9 +1153,8 @@ const pairs = (
 const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
   const prev = old.v
   if (prev === view) {
-    const controlled = inst.tree.host.controlled
-    if (controlled !== undefined && view._tag === "Element") {
-      restore(controlled, inst.tree.host, old)
+    if (inst.tree.host.controlled !== undefined && view._tag === "Element") {
+      restore(inst.tree.host, old)
     }
     return old
   }
@@ -1227,22 +1226,16 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
 
 const refreshed = {}
 
-const restore = (
-  controlled: ReadonlySet<string>,
-  host: Host,
-  rec: Rec
-): void => {
+const restore = (host: Host, rec: Rec): void => {
   const kids = rec.kids
   if (kids !== undefined) {
     for (let index = 0; index < kids.length; index++) {
       const kid = kids[index]!
-      if (kid.v._tag === "Element") restore(controlled, host, kid)
+      if (kid.v._tag === "Element") restore(host, kid)
     }
   }
   const props = (rec.v as View.Element<any, any>).props
-  for (const name in props) {
-    if (controlled.has(name)) host.setProp(rec.node, name, props[name])
-  }
+  if (props !== View.noFields) patchProps(host, rec.node, props, props)
 }
 
 const sameAttrs = (
