@@ -1699,6 +1699,7 @@ export const mount = (
       tree.closed = true
       close(instance)
       unplace(host, container, instance.rendered!)
+      host.commit?.()
     }
   }
 }

@@ -116,7 +116,7 @@ export const pending: {
   },
   "Router.test.ts": {
     "Router.prefetch > records watches only while a check after a push is outstanding":
-      "differs: reads today's runtime's Instance (children, watched), which the kernel's has no equivalent of"
+      "internals: walks today's runtime's Instance fields (children, watched), which no public API exposes; the kernel keeps what a prefetch check watched on routeRun's views"
   },
   "html/HistoryRestore.test.ts": {
     "history restore of a page whose hydration hasn't settled > a push as a filtered late keep-alive waits writes what its restore keeps into the entry":
@@ -204,7 +204,7 @@ export const pending: {
   },
   "html/ViewTransition.test.ts": {
     "view transitions > a mid-flush route transition commits once across callback, freeze, and close":
-      "differs: with a route transition held mid-flush the kernel queues no flush task, and a root closed while it holds commits nothing, where today's runtime commits the held update"
+      "internals: asserts that today's runtime queues a flush task on the internal executor while a route transition holds; the kernel resumes from the transition's callback and queues none. The commits it counts match"
   },
   "html/StateCodec.test.ts": {
     "state codecs > ships a File in a Model and adopts a Model that decodes asynchronously":
