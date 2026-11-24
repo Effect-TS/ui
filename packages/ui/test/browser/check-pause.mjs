@@ -72,6 +72,15 @@ try {
     clicked.model
   )
 
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent("click")))
+  await page.waitForTimeout(100)
+  const dispatched = await scene(page)
+  expect(
+    dispatched.model.count === 1 && dispatched.model.heard === 2,
+    "a click dispatched on the document still reaches the live listener while paused",
+    dispatched.model
+  )
+
   await page.evaluate(() => globalThis.check.dialog(true))
   await page.waitForTimeout(100)
   const opened = await scene(page)
