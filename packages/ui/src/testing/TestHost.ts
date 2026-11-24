@@ -678,7 +678,7 @@ export interface Root<out Model, in Msg, out Events> {
   /**
    * The head the tree's last fold computed, in the root vocabulary's form,
    * whether or not the host applies it. Name the form to read it, such as
-   * `root.head<HtmlHead.HtmlHead>()` for a tree on `HtmlHead.vocabulary`.
+   * `root.head<HtmlHead.HtmlHead>()` for an `Html` root.
    */
   readonly head: <H = Head.Head>() => H
   /** The `frames` projection after each commit, without consecutive repeats. */
@@ -854,7 +854,7 @@ export const register = (
           entry._tag === "FetchStarted"
         ),
       entry: (read, args) => root.cache.inspect(Query.defOf(read), args) as any,
-      head: root.head as <H>() => H,
+      head: (() => runtime.headOf(root)) as <H>() => H,
       frames
     }
   })

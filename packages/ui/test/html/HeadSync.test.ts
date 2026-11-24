@@ -96,4 +96,67 @@ describe("BrowserHost head", {
     expect(document.body.className).toBe("dark")
     expect(warnings).toEqual([])
   })
+
+  it("returns the empty HtmlHead shape for an Html component without importing HtmlHead", async () => {
+    vi.resetModules()
+    const [
+      { Component, Head, Renderer },
+      Html,
+      { TestHost },
+      { Effect, Schema }
+    ] = await Promise.all([
+      import("@effect/ui"),
+      import("@effect/ui/html/Html"),
+      import("@effect/ui/testing"),
+      import("effect")
+    ])
+    const page = (name: string, title?: string) =>
+      Component.define({
+        name,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        head: title === undefined ? undefined : () => [Head.title(title)],
+        view: (h) => h.div(name)
+      })
+    const empty = {
+      title: undefined,
+      meta: [],
+      links: [],
+      jsonLd: [],
+      html: { lang: undefined, dir: undefined, class: [], data: {} },
+      body: { class: [], data: {} }
+    }
+    const prerendered = await Effect.runPromise(
+      Renderer.prerender(page("Plain"), {})
+    )
+    expect(prerendered.head).toEqual(empty)
+    const mounted = await Effect.runPromise(
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(page("Titled", "Ada"), {})
+        yield* TestHost.settle
+        return root.head<HtmlHeadModule.HtmlHead>()
+      }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
+    )
+    expect(mounted).toEqual({ ...empty, title: "Ada" })
+    const custom = Component.define({
+      name: "Custom",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: {
+        ...Html.vocabulary,
+        head: { merge: () => 42, title: () => undefined }
+      }
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.div("custom")
+    })
+    expect((await Effect.runPromise(Renderer.prerender(custom, {}))).head).toBe(
+      42
+    )
+  })
 })

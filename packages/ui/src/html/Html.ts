@@ -115,6 +115,7 @@ import type * as Component from "../Component.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
+import type * as HtmlHead from "./HtmlHead.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1584,8 +1585,7 @@ export type VoidTag = typeof voidTags[number]
  * The element names the vocabulary adds to `h`, bound to a component's
  * message type. Document-level tags (`html`, `head`, `body`, `title`, `meta`,
  * `link`, `base`, `script`, `style`) aren't here: the document head is managed
- * through a component's `head`, with `HtmlHead.vocabulary` for its HTML
- * entries.
+ * through a component's `head`, with `HtmlHead` for its HTML entries.
  *
  * @stability experimental
  * @category vocabulary
@@ -1617,6 +1617,8 @@ export type Tags<Msg> =
 export interface Elements extends View.Elements {
   readonly Tags: Tags<this["Msg"]>
   readonly Host: Host
+  readonly Head: HtmlHead.Entry
+  readonly HeadValue: HtmlHead.HtmlHead
 }
 
 /**

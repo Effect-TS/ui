@@ -18,6 +18,7 @@ import type * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as domHost from "./domHost.ts"
 import * as Executor from "./executor.ts"
+import * as heads from "./heads.ts"
 import type * as hydrateRun from "./hydrateRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
@@ -950,10 +951,21 @@ export const prerender = (
           options.static === true,
           options.sink ?? serialize.nodeSink(nodes)
         )
-        return { nodes, state, model: root.model(), head: root.head() }
+        return { nodes, state, model: root.model(), head: headOf(root) }
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))
+
+/** @internal */
+export const headOf = (root: Root): unknown => {
+  const elements = root.instance.component.elements()
+  const head = root.head()
+  return elements?.name === "html" &&
+      elements.head === undefined &&
+      (head as { readonly meta?: unknown }).meta === undefined
+    ? { ...heads.emptyHtml, ...(head as object) }
+    : head
+}
 
 const unmoved: Kernel.Transitions = {
   request: () => {},

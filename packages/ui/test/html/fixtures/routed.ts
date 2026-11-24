@@ -21,7 +21,7 @@ export const Home = Component.define({
   name: "Home",
   model: Schema.Struct({}),
   message: Schema.Never,
-  elements: HtmlHead.vocabulary
+  elements: Html
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -54,7 +54,7 @@ export const Person = Component.define({
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({ id: Schema.Number }),
   message: Schema.Never,
-  elements: HtmlHead.vocabulary,
+  elements: Html,
   queries: { bio: { query: GetBio, args: ({ props }) => ({ id: props.id }) } }
 }).make({
   init: ($) => ({ id: $.props.id }),
@@ -105,7 +105,7 @@ export const App = Component.define({
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({ route: AppRoute, blocked: Schema.Boolean }),
   message: Message,
-  elements: HtmlHead.vocabulary
+  elements: Html
 }).make({
   init: ($) => ({ route: $.props.route, blocked: false }),
   update: ($, message) =>

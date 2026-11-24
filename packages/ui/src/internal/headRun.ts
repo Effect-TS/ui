@@ -4,13 +4,19 @@ import type * as Component from "../Component.ts"
 import type * as Head from "../Head.ts"
 import type * as View from "../View.ts"
 import { skipsEmpty } from "./headFold.ts"
+import * as heads from "./heads.ts"
 import * as Kernel from "./kernel.ts"
 import { report } from "./queryCore.ts"
 
 const none: ReadonlyArray<never> = []
 
-const foldOf = (inst: Kernel.Instance): View.HeadFold | undefined =>
-  (inst.component as unknown as Component.Any).elements()?.head
+const foldOf = (inst: Kernel.Instance): View.HeadFold | undefined => {
+  const elements = (inst.component as unknown as Component.Any).elements()
+  return elements?.head ??
+    (heads.html !== undefined && elements?.name === "html"
+      ? heads.html
+      : undefined)
+}
 
 const placed = (rec: Kernel.Rec, out: Array<Kernel.Instance>): void => {
   const kids = rec.kids
@@ -28,20 +34,16 @@ const placed = (rec: Kernel.Rec, out: Array<Kernel.Instance>): void => {
 class Folding {
   readonly root: Kernel.Instance
   readonly neutral: View.HeadFold
-  readonly fold: View.HeadFold
-  readonly skip: boolean
   given: string | undefined = undefined
   constructor(root: Kernel.Instance, neutral: View.HeadFold) {
     this.root = root
     this.neutral = neutral
-    this.fold = foldOf(root) ?? neutral
-    this.skip = this.fold !== neutral && skipsEmpty(this.fold.merge)
   }
   run(): boolean {
     const tree = this.root.tree
     const failed: Array<Kernel.Instance | unknown> = []
-    let fold = this.fold
-    const skip = this.skip
+    let fold = foldOf(this.root) ?? this.neutral
+    const skip = fold !== this.neutral && skipsEmpty(fold.merge)
     const node = (inst: Kernel.Instance): Head.Tree<unknown> | undefined => {
       if (inst.closed || inst.failure !== undefined) {
         return skip

@@ -1123,9 +1123,8 @@ Known limits:
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta
-  tags with `HtmlHead`, on `HtmlHead.vocabulary`, which is `Html` with the
-  HTML head. The root adds a title template and `lang`, and the mount folds
-  them into one document head. This entry
+  tags with `HtmlHead`. The root adds a title template and `lang`, and the
+  mount folds them into one document head. This entry
   module mounts it with `BrowserRouter`. The routes are in
   `fixtures/routes.ts` and the root component is in `fixtures/App.ts`.
 - **[View transitions](./ai-docs/src/10_ui/32_view-transitions.ts)**:

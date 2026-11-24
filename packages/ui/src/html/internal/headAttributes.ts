@@ -1,5 +1,6 @@
 /** Shared attribute rules for head tags and document ownership markers. */
 import { attributeName } from "../../internal/attributeName.ts"
+import { emptyHtml } from "../../internal/heads.ts"
 import type * as HtmlHead from "../HtmlHead.ts"
 
 /** @internal */
@@ -43,11 +44,4 @@ export const attributes = (
 }
 
 /** The head with no entries. @internal */
-export const empty: HtmlHead.HtmlHead = {
-  title: undefined,
-  meta: [],
-  links: [],
-  jsonLd: [],
-  html: { lang: undefined, dir: undefined, class: [], data: {} },
-  body: { class: [], data: {} }
-}
+export const empty: HtmlHead.HtmlHead = emptyHtml

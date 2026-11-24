@@ -7,9 +7,9 @@
  * view, the runtime folds the entries of the placed tree, fallback content
  * included, into one value with the root vocabulary's merge, and a mount that
  * owns the document hands it to its host. A component on a host-neutral
- * vocabulary, `Html` included, may contribute only `title` and
- * `titleTemplate`. `HtmlHead.vocabulary` adds `meta`, `link`, JSON-LD and
- * the `<html>` and `<body>` attributes in `HtmlHead`.
+ * vocabulary may contribute only `title` and `titleTemplate`. The HTML
+ * vocabulary adds `meta`, `link`, JSON-LD and the `<html>` and `<body>`
+ * attributes in `HtmlHead`.
  *
  * **The fold**
  *
