@@ -168,7 +168,7 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 - **Services per Component:** Provide services to a Component and everything below it with `Component.provide`. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
 - **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The chunk loads the first time the Component is rendered, so it stays out of the initial bundle. In Foldkit 0.x, the routes of a single app couldn't be split.
 - **Recover from Component failures:** Show a fallback for a Component that fails while the rest of the app keeps running.
-- **Keep state while hidden:** Set `keepAlive: true` on a Component to keep its Model while it's hidden. Otherwise the Model is discarded when the Component stops being rendered.
+- **Keep state while hidden:** Write a child inside `h.keepAlive` and call it with the `s` it passes, and it keeps its Model while no view renders it. Otherwise the Model is discarded when the Component stops being rendered.
 - **Control overlapping Commands:** When a Command is issued again while still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
 - **Commands without result Messages:** Use `Command.asNoop` to run a Command when update doesn't need its result.
 
