@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { Component, Feature, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
+import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
 import { assert, describe, it } from "@effect/vitest"
 import {
@@ -185,6 +186,59 @@ const renderLate = Effect.fnUntraced(function*<A, E>(
   lateGate = Deferred.await(latch)
   return [rendered, Deferred.succeed(latch, undefined)] as const
 })
+
+const submitted = (form: Element): boolean =>
+  form.dispatchEvent(
+    new Event("submit", { bubbles: true, cancelable: true })
+  )
+
+const Search = Component.define({
+  name: "Search",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.form(h.input.attr("name", "q"))
+})
+
+const LateForm = Component.define({
+  name: "LateForm",
+  model: LateLabel,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => "late",
+  update: ($) => $.model,
+  view: (h) => h.form(h.input.attr("name", "q"))
+})
+
+const LateFormHolder = Component.define({
+  name: "LateFormHolder",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.div(LateForm(h, { key: "f" }))
+})
+
+let layerGate: Effect.Effect<void> = Effect.void
+const Gated = Component.provide(
+  Component.define({
+    name: "Gated",
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  }).make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) => h.form(h.input.attr("name", "q"))
+  }),
+  Layer.effectDiscard(Effect.suspend(() => layerGate))
+)
 
 describe("HtmlHydrate", () => {
   it.effect("reuses the server's nodes, starts from the shipped Model and handles events", () =>
@@ -603,6 +657,67 @@ describe("HtmlHydrate", () => {
         )
         yield* open
         yield* root.adopted
+      }).pipe(Effect.scoped))
+  })
+
+  describe("forms", () => {
+    it.effect("own an adopted form's submissions, as a built one's", () =>
+      Effect.gen(function*() {
+        const rendered = yield* HtmlServer.renderToHtml(Search, {})
+        const built = yield* container("")
+        yield* BrowserHost.mountEffect(Search, {}, built)
+        assert.isFalse(submitted(built.querySelector("form")!))
+        const app = yield* container(rendered.html)
+        const served = app.querySelector("form")!
+        yield* HtmlHydrate.hydrateEffect(Search, {}, app, rendered.state)
+        assert.strictEqual(app.querySelector("form"), served)
+        assert.isFalse(submitted(served))
+      }).pipe(Effect.scoped))
+
+    it.effect("leave an instance's form to submit natively while its Layer builds", () =>
+      Effect.gen(function*() {
+        const rendered = yield* HtmlServer.renderToHtml(Gated, {})
+        assert.notInclude(rendered.state["~deferred"] ?? [], "/Gated")
+        const latch = yield* Deferred.make<void>()
+        layerGate = Deferred.await(latch)
+        const app = yield* container(rendered.html)
+        const served = app.querySelector("form")!
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Gated,
+          {},
+          app,
+          rendered.state
+        )
+        yield* tick
+        assert.isTrue(submitted(served))
+        yield* Deferred.succeed(latch, undefined)
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("form"), served)
+        assert.isFalse(submitted(served))
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => layerGate = Effect.void)),
+        Effect.scoped
+      ))
+
+    it.effect("leave a held child's form to submit natively until it adopts", () =>
+      Effect.gen(function*() {
+        const [rendered, open] = yield* renderLate(
+          HtmlServer.renderToHtml(LateFormHolder, {})
+        )
+        const app = yield* container(rendered.html)
+        const served = app.querySelector("form")!
+        const root = yield* HtmlHydrate.hydrateEffect(
+          LateFormHolder,
+          {},
+          app,
+          rendered.state
+        )
+        yield* tick
+        assert.isTrue(submitted(served))
+        yield* open
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("form"), served)
+        assert.isFalse(submitted(served))
       }).pipe(Effect.scoped))
   })
 })

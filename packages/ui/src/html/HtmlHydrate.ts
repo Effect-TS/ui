@@ -477,8 +477,16 @@ const between = (
       ) return
       base.setProp(node, name, value)
     },
-    made(node) {
+    made(node, inst) {
       if (freshDepth > 0 && fresh.delete(node)) freshDepth--
+      else if ((node as Element).localName === "form") {
+        const env = inst.env
+        if (
+          inst.tree.served?.(inst) !== undefined && env.ctx === undefined &&
+          env.cause === undefined
+        ) env.waiting.push(() => base.form?.(node))
+        else base.form?.(node)
+      }
     },
     insert(into, node, before) {
       let index = stack.length

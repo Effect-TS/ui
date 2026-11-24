@@ -601,6 +601,11 @@ export const makeHost = (
     container.addEventListener(name, listener, true)
   }
 
+  const form = (node: globalThis.Node) => {
+    forms.add(node)
+    listen("submit")
+  }
+
   const sync = options?.head?.(
     document,
     // oxlint-disable-next-line no-console
@@ -635,12 +640,10 @@ export const makeHost = (
     createElement(tag) {
       if (svgTags.has(tag)) return document.createElementNS(SVG, tag)
       const element = document.createElement(tag)
-      if (tag.length === 4 && element.localName === "form") {
-        forms.add(element)
-        listen("submit")
-      }
+      if (tag.length === 4 && element.localName === "form") form(element)
       return element
     },
+    form,
     createText: (text) => document.createTextNode(text),
     setText(node, text) {
       ;(node as globalThis.Text).data = text

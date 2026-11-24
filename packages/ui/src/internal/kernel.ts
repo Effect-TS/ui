@@ -38,7 +38,8 @@ export interface Host<N = any> {
     ) => Readonly<Record<string, string>>)
     | undefined
   readonly setProp: (node: N, name: string, value: unknown) => void
-  readonly made?: ((node: N) => void) | undefined
+  readonly made?: ((node: N, inst: Instance) => void) | undefined
+  readonly form?: ((node: N) => void) | undefined
   readonly setEvents: (node: N, record: Rec, first: boolean) => void
   readonly insert: (parent: N, node: N, before: N | null) => void
   readonly remove: (parent: N, node: N) => void
@@ -1152,7 +1153,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
         }
       }
       if (view.props !== View.noFields) setProps(host, node, view.props)
-      host.made?.(node)
+      host.made?.(node, inst)
       const rec = new Rec(view, node, kids, inst)
       if (
         view.handlers !== View.noFields || view.eventOptions !== View.noFields
