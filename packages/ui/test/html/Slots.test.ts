@@ -109,6 +109,31 @@ describe("slots on the server", () => {
       )
     }).pipe(Effect.provide(TestHost.layer())))
 
+  it.effect("adopts a slotted child's shipped state instead of re-initializing it", () =>
+    Effect.gen(function*() {
+      where.server = true
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      const app = yield* container
+      app.innerHTML = rendered.html.replace("add 0", "add 4")
+      const button = app.querySelector("button")!
+      const label = button.firstChild
+
+      const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, {
+        ...rendered.state,
+        "/Page/Card[c]/[body]/Counter[n]": 4
+      })
+      yield* root.adopted
+      yield* tick
+      assert.strictEqual(app.querySelector("button"), button)
+      assert.strictEqual(button.firstChild, label)
+      assert.strictEqual(button.textContent, "add 4")
+      assert.notInclude(app.innerHTML, "<!--")
+      button.click()
+      yield* tick
+      assert.strictEqual(button.textContent, "add 5")
+      assert.strictEqual(app.querySelector("output")!.textContent, "added 5")
+    }).pipe(Effect.scoped))
+
   it.effect("builds content fresh when it doesn't match the server's, and adopts the rest", () =>
     Effect.gen(function*() {
       where.server = true

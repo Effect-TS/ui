@@ -59,7 +59,19 @@ const titleOnly: MakeSync = (document, warn) => {
 
 const shared = new WeakMap<Document, Sync & { hosts: number }>()
 
-/** @internal */
+/**
+ * Makes the `head` member of the browser host, and `release` for its `dispose`.
+ *
+ * **Details**
+ *
+ * Hosts on one document share one sync, made with the first host's `warn`,
+ * so the shell's values are captured once, before any host writes. When
+ * the last host on the document is released, the shell's values go back if
+ * any host wrote, and the next host captures the shell again. A server's
+ * head that no host synced stays as it is.
+ *
+ * @internal
+ */
 export const make: HeadSync = (document, warn) => {
   let entry = shared.get(document)
   if (entry === undefined) {

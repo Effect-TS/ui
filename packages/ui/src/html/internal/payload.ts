@@ -4,6 +4,13 @@ import { modifiers, pointerTypeOf } from "./pointer.ts"
 
 const HTML = "http://www.w3.org/1999/xhtml"
 
+/**
+ * The `pointerType` of a click-like event's payload. A click with `detail`
+ * 0, or a pointer event with an empty `pointerType`, came from no pointer:
+ * the keyboard, or a script. Otherwise the last `pointerdown` says which
+ * pointer it was, since a browser may report a tap's `click` as a mouse's,
+ * as WebKit does. Without one, the event's own type, and `"mouse"` last.
+ */
 const pressedWith = (
   name: string,
   event: Event,
@@ -26,6 +33,7 @@ const fieldsOf = (
   } catch {
     data = new FormData(form)
   }
+  // No prototype, so fields named `constructor` or `__proto__` are kept like any other.
   const fields: Record<string, string> = Object.create(null)
   const entries: Array<readonly [string, string]> = []
   data.forEach((value, name) => {
@@ -36,6 +44,7 @@ const fieldsOf = (
   return { fields, entries }
 }
 
+/** The payload of `input` and `change` from `source`, the control that changed. */
 const controlPayload = (
   source: globalThis.Element,
   event: Event | undefined
@@ -87,6 +96,7 @@ const selectionOf = (target: EventTarget | null) => {
   }
 }
 
+/** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
 const pastedText = (event: Event): string => {
   try {
     return (event as ClipboardEvent).clipboardData?.getData("text/plain") ?? ""
@@ -95,6 +105,14 @@ const pastedText = (event: Event): string => {
   }
 }
 
+/**
+ * Whether `target`, where focus came from or goes, is inside `element`.
+ * `null`, another window or nowhere, is not. An event a script made can name
+ * any event target, such as the window, and `contains` throws for one that
+ * isn't a node. Only the browser can tell: a node from another realm, such as
+ * an iframe's adopted into this document, fails `instanceof Node`, and an
+ * object can fake `nodeType`.
+ */
 const containsTarget = (
   element: globalThis.Element,
   target: EventTarget | null
@@ -129,6 +147,10 @@ const fieldOf = (
     ? target
     : element) as HTMLInputElement
 
+/**
+ * Builds the payload a handler gets: plain data, read from the event and the
+ * elements involved.
+ */
 export const payloadOf = (
   name: string,
   event: Event,
@@ -188,6 +210,8 @@ export const payloadOf = (
     }
     case "toggle": {
       const e = event as Partial<ToggleEvent>
+      // A popover's state is its own; a `details` or `dialog` reads `open`, with states derived where the
+      // browser has no `ToggleEvent`.
       const open = element.hasAttribute("popover")
         ? e.newState === "open"
         : (element as HTMLDetailsElement).open === true
@@ -212,6 +236,7 @@ export const payloadOf = (
     case "focus":
       return { focusVisible: isFocusVisible(target) }
     case "blur":
+      // A window listener's `blur` has no element that lost focus.
       return target === element ? { disabled: isDisabled(target) } : {}
     case "focusin":
       return {

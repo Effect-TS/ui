@@ -355,10 +355,9 @@ describe("HtmlHydrate", () => {
       )
       assert.notStrictEqual(html, rendered.html)
       const app = yield* container(html)
-      const server = {
-        items: [...app.querySelectorAll("li")],
-        all: [...app.querySelectorAll("*")]
-      }
+      const [itemA, itemB, itemC] = [...app.querySelectorAll("li")]
+      const bButton = itemB!.querySelector("button")!
+      const bEm = itemB!.querySelector("em")!
       yield* HtmlHydrate.hydrateEffect(List, {}, app, {
         ...rendered.state,
         "/List/Row[A]": 1,
@@ -371,17 +370,14 @@ describe("HtmlHydrate", () => {
       ])
       assert.strictEqual(comments(app), 0)
       const [a, b, c] = [...app.querySelectorAll("li")]
-      assert.strictEqual(a, server.items[0])
-      assert.strictEqual(b, server.items[1])
-      assert.strictEqual(c, server.items[2])
-      assert.strictEqual(
-        b!.firstElementChild,
-        server.items[1]!.firstElementChild
-      )
-      const was = server.all.find((node) =>
-        server.items[1]!.contains(node) && node.localName === "em"
-      )
-      assert.notStrictEqual(b!.querySelector("em"), was)
+      assert.strictEqual(a, itemA)
+      assert.strictEqual(b, itemB)
+      assert.strictEqual(c, itemC)
+      assert.strictEqual(b!.firstElementChild, bButton)
+      const nextEm = b!.querySelector("em")
+      assert.isNotNull(nextEm)
+      assert.notStrictEqual(nextEm, bEm)
+      assert.isFalse(bEm.isConnected)
       for (const button of app.querySelectorAll("button")) button.click()
       yield* tick
       assert.deepStrictEqual(texts(app, "span"), [
@@ -389,6 +385,43 @@ describe("HtmlHydrate", () => {
         "1 clicked",
         "4 clicked"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("replaces a stale element with text inside comment markers while keeping surrounding siblings", () =>
+    Effect.gen(function*() {
+      const Texty = Component.define({
+        name: "Texty",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.text("hello")
+      })
+      const Holder = Component.define({
+        name: "Holder",
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.div(h.b("before"), Texty(h, { key: "t" }), h.i("after"))
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Holder, {})
+      assert.include(rendered.html, "<!--[/Holder/Texty[t]-->hello<!--]/Holder/Texty[t]-->")
+      const html = rendered.html.replace("hello", "<s>stale</s>")
+      const app = yield* container(html)
+      const before = app.querySelector("b")!
+      const stale = app.querySelector("s")!
+      const after = app.querySelector("i")!
+      yield* HtmlHydrate.hydrateEffect(Holder, {}, app, rendered.state)
+      assert.strictEqual(app.innerHTML, "<div><b>before</b>hello<i>after</i></div>")
+      assert.strictEqual(comments(app), 0)
+      assert.strictEqual(app.querySelector("b"), before)
+      assert.strictEqual(app.querySelector("i"), after)
+      assert.isFalse(stale.isConnected)
     }).pipe(Effect.scoped))
 
   describe("children whose state decodes asynchronously", () => {

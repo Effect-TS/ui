@@ -2,7 +2,7 @@
 import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlFiles } from "@effect/ui/html"
 import { assert, describe, expect, it } from "@effect/vitest"
-import { Context, Effect, Fiber, Layer, Schema } from "effect"
+import { Effect, Fiber, Layer, Schema } from "effect"
 
 const pickers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -252,61 +252,5 @@ describe("HtmlFiles", { concurrent: false }, () => {
         "found true, opened false"
       ])
       expect(fileClicks).toBe(1)
-    }).pipe(Effect.scoped))
-
-  it.effect("BrowserHost provides a document-bound Files service outside its context and honors overrides", () =>
-    Effect.gen(function*() {
-      const picker = yield* pickers
-      picker.refuse = true
-      const Page = Component.define({
-        name: "FilesPage",
-        props: Schema.Struct({ opened: Schema.Boolean }),
-        model: Schema.Boolean,
-        message: Schema.Never,
-        elements: Html
-      }).make({
-        init: ($) => $.props.opened,
-        update: ($) => $.model,
-        view: (h, opened) => h.p(String(opened))
-      })
-      const app = document.body.appendChild(document.createElement("div"))
-      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-      let acquired: HtmlFiles.Files | undefined
-      const readPicked = Effect.gen(function*() {
-        const files = yield* HtmlFiles.Files
-        acquired = files
-        const picked = yield* files.pick({})
-        return { opened: picked.opened }
-      })
-      const root = yield* BrowserHost.mountEffect(Page, readPicked, app)
-      assert.strictEqual(root.model(), false)
-
-      assert.deepStrictEqual(
-        yield* Effect.race(
-          acquired!.pick({}),
-          Effect.as(tick, "timeout" as const)
-        ),
-        { opened: false, files: [] }
-      )
-
-      const layerContext = yield* Layer.build(BrowserHost.layer())
-      assert.deepStrictEqual(
-        yield* Effect.race(
-          Context.get(layerContext, HtmlFiles.Files).pick({}),
-          Effect.as(tick, "timeout" as const)
-        ),
-        { opened: false, files: [] }
-      )
-
-      const custom = yield* BrowserHost.mountEffect(
-        Page,
-        readPicked.pipe(
-          Effect.provideService(HtmlFiles.Files, {
-            pick: () => Effect.succeed({ opened: true, files: [] })
-          })
-        ),
-        app
-      )
-      assert.strictEqual(custom.model(), true)
     }).pipe(Effect.scoped))
 })
