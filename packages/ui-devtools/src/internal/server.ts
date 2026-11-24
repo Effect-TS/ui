@@ -8,10 +8,10 @@ import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
-import type * as Inspector from "../Inspector.ts"
 import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
+import * as Tools from "./tools.ts"
 
 export interface Options {
   readonly size: number
@@ -20,37 +20,15 @@ export interface Options {
   readonly timeout?: number | undefined
 }
 
-export interface RequestError {
-  readonly lost: boolean
-  readonly message: string
-}
-
-export interface Page {
+interface Page extends Tools.Page {
   readonly sessions: Set<string>
   paused: Control.Paused | null
-  readonly request: (
-    request: Control.Request
-  ) => Effect.Effect<Schema.Json, RequestError>
 }
 
-export type Arrival = "seen" | "skipped" | "evicted"
-
-export interface Meta {
+interface Meta {
   host: MessageLog.WireHost | undefined
   connected: boolean
   closed: number
-}
-
-export interface Server {
-  readonly options: Options
-  readonly inspector: Inspector.Inspector
-  readonly history: History.History
-  readonly meta: Map<string, Meta>
-  readonly session: (id: string) => Inspector.Session | undefined
-  readonly pageOf: (session: string) => Page | undefined
-  readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
-  readonly within: number
-  readonly arrival: (session: string, seq: number) => Arrival | undefined
 }
 
 const loopback = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
@@ -67,36 +45,9 @@ export const make = (options: Options) => {
   const history = History.make(options.size)
   const meta = new Map<string, Meta>()
   const pages = new Set<Page>()
-  const waiters = new Set<() => void>()
+  const { notify, until } = Tools.makeWaiters()
   let closed = 0
-
-  const notify = () => {
-    const all = Array.from(waiters)
-    waiters.clear()
-    for (const waiter of all) waiter()
-  }
-  const next: Effect.Effect<void> = Effect.callback<void>((resume) => {
-    const waiter = () => resume(Effect.void)
-    waiters.add(waiter)
-    return Effect.sync(() => waiters.delete(waiter))
-  })
-  const until = <A>(check: () => A | undefined): Effect.Effect<A> =>
-    Effect.suspend(() => {
-      const found = check()
-      return found !== undefined
-        ? Effect.succeed(found)
-        : Effect.andThen(next, until(check))
-    })
   const timeout = options.timeout ?? 10_000
-  const session = (id: string) =>
-    inspector.sessions().find((session) => session.id === id)
-  const arrival = (id: string, seq: number): Arrival | undefined => {
-    const s = session(id)
-    const entries = s?.entries() ?? []
-    if ((entries.at(-1)?.seq ?? -1) < seq) return undefined
-    if (s !== undefined && s.resolve(seq)._tag !== "Outside") return "seen"
-    return seq < (entries[0]?.seq ?? Infinity) ? "evicted" : "skipped"
-  }
 
   const prune = () => {
     const gone = Array.from(meta).filter(([, m]) => !m.connected).sort((
@@ -188,7 +139,7 @@ export const make = (options: Options) => {
     upgrade(Effect.fnUntraced(function*(socket) {
       const pending = new Map<
         number,
-        Deferred.Deferred<Schema.Json, RequestError>
+        Deferred.Deferred<Schema.Json, Tools.RequestError>
       >()
       let id = 0
       const writer = yield* socket.writer
@@ -199,7 +150,10 @@ export const make = (options: Options) => {
         request: (request) => {
           const at = ++id
           return Effect.gen(function*() {
-            const deferred = yield* Deferred.make<Schema.Json, RequestError>()
+            const deferred = yield* Deferred.make<
+              Schema.Json,
+              Tools.RequestError
+            >()
             pending.set(at, deferred)
             yield* writer.write(Control.encodeToPage({ id: at, request })).pipe(
               Effect.mapError(() => ({
@@ -259,17 +213,19 @@ export const make = (options: Options) => {
     }))
   )
 
-  const server: Server = {
+  const server: Tools.Backend = {
     options,
     inspector,
     history,
-    meta,
-    session,
+    meta: (session) => meta.get(session),
     pageOf: (session) =>
       Array.from(pages).reverse().find((page) => page.sessions.has(session)),
     until,
     within: Math.round(timeout * 0.8),
-    arrival
+    latest: (id) =>
+      inspector.sessions().find((session) => session.id === id)?.entries()
+        .at(-1)?.seq,
+    gap: "skipped"
   }
   return { server, routes: Layer.mergeAll(log, control) }
 }

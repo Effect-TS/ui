@@ -93,6 +93,22 @@ The read tools answer from the server's own copy of the log, so they keep workin
 
 The server listens on loopback only. `/mcp` refuses requests with an `Origin` header, and the WebSocket routes accept only loopback origins. There is no token, so any local user can connect, as they can to the Vite dev server.
 
+### WebMCP (experimental)
+
+When the browser exposes the [WebMCP](https://webmachinelearning.github.io/webmcp/) API (`document.modelContext`), `DevTools.layer()` also registers the same tools directly in the page, with no Node server, port or Vite plugin:
+
+```ts
+DevTools.layer()
+DevTools.layer({ webMcp: { dispatch: true } })
+DevTools.layer({ webMcp: false })
+```
+
+By default, `DevTools.layer()` registers the 12 read and control tools whenever `document.modelContext` exists. Pass `webMcp: { dispatch: true }` to also register `effect_ui_dispatch`, or `webMcp: false` to disable WebMCP registration.
+
+Tool names are prefixed with `effect_ui_` (`effect_ui_list_sessions`, `effect_ui_get_state`, etc.) and annotated with `debugging: true`, so agents driving Chrome with `chrome-devtools-mcp` (`--categoryExperimentalThirdParty`) discover them automatically. Tools are unregistered when the Layer closes, and read Wire frames only so `Schema.Redacted` values stay placeholders.
+
+Unlike the Node server, the in-page tools only see the current page load and answer from the overlay's inspector (so `exclude`d updates are not listed and Clear empties the timeline). Both can run at the same time and share the same pause.
+
 ## The core
 
 `Inspector` is the overlay's core, with no UI. It reads the log's Wire entries and answers the questions a devtools view asks: which entry a number stands for, what an entry was caused by and what it caused, which Command run an `update` issued and how that run ended, and what an instance has going.

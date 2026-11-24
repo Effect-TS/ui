@@ -50,8 +50,8 @@ import * as HttpRouter from "effect/http/HttpRouter"
 import type * as HttpServerError from "effect/http/HttpServerError"
 import * as Layer from "effect/Layer"
 import { createServer } from "node:http"
+import * as Mcp from "../internal/mcp.ts"
 import * as Server from "../internal/server.ts"
-import * as Tools from "../internal/tools.ts"
 
 /**
  * The port the server listens on unless told otherwise. It's fixed, so a
@@ -116,7 +116,7 @@ export const layer = (
       dispatch: options?.dispatch ?? false,
       keep: Math.max(0, options?.keep ?? 5)
     })
-    return HttpRouter.serve(Layer.mergeAll(routes, Tools.layer(server)), {
+    return HttpRouter.serve(Layer.mergeAll(routes, Mcp.layer(server)), {
       disableLogger: true,
       disableListenLog: true
     }).pipe(

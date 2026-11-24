@@ -2,9 +2,9 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { DevTools } from "@effect/ui-devtools"
+import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
-import * as Tools from "@effect/ui-devtools/internal/tools"
 import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
@@ -136,7 +136,7 @@ const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
     timeout
   })
   yield* Layer.build(
-    HttpRouter.serve(Layer.mergeAll(routes, Tools.layer(server)), {
+    HttpRouter.serve(Layer.mergeAll(routes, Mcp.layer(server)), {
       disableLogger: true,
       disableListenLog: true
     }).pipe(
