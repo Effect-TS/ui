@@ -958,10 +958,12 @@ export const prerender = (
 
 /** @internal */
 export const headOf = (root: Root): unknown => {
-  const head = root.head() as { readonly meta?: unknown }
-  return root.instance.component.elements()?.name === "html" &&
-      head.meta === undefined
-    ? { ...heads.emptyHtml, ...head }
+  const elements = root.instance.component.elements()
+  const head = root.head()
+  return elements?.name === "html" &&
+      elements.head === undefined &&
+      (head as { readonly meta?: unknown }).meta === undefined
+    ? { ...heads.emptyHtml, ...(head as object) }
     : head
 }
 

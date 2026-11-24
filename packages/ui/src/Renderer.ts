@@ -138,7 +138,8 @@ export interface HostEvents<Node> {
  * of each flush and after mounting, for hosts that apply changes in a batch.
  *
  * `head` receives the head the runtime folded, in the root vocabulary's form
- * (an `HtmlHead` for `Html`), after the commit of every flush that changed
+ * (an `HtmlHead` for `Html` when `HtmlHead` is imported, else a title-only
+ * `Head`), after the commit of every flush that changed
  * a view, once every instance has adopted. The host diffs it against what it
  * applied last. A mount with `head: false` never calls it. A host without a
  * document, such as a native one, leaves it out and the head is only

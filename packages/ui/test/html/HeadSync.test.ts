@@ -142,5 +142,21 @@ describe("BrowserHost head", {
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
     )
     expect(mounted).toEqual({ ...empty, title: "Ada" })
+    const custom = Component.define({
+      name: "Custom",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: {
+        ...Html.vocabulary,
+        head: { merge: () => 42, title: () => undefined }
+      }
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.div("custom")
+    })
+    expect((await Effect.runPromise(Renderer.prerender(custom, {}))).head).toBe(
+      42
+    )
   })
 })
