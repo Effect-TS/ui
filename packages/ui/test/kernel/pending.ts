@@ -68,25 +68,7 @@ export const pending: {
   "RenderTiming.test.ts": {},
   "Runtime.test.ts": {
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
-      "differs: a malformed `~query` reaches Problems only once a query runner is loaded; this tree loads none, where today's runtime always makes the cache and reports it",
-    "Runtime > Commands > switch interrupts the running run, and results come back as messages":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > run owners > a save ends with its instance: the running run is interrupted, the queued one never starts":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > provided Layers > Commands wait for a Layer that builds in the background":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > MessageLog > an instance logs Unmounted as it leaves the tree, and a Command's end once its fiber has exited":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > MessageLog > a run logs CommandStarted with its span, and its CommandInterrupted names what stopped it":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > MessageLog > a run that interrupts itself while its instance's close is held open logs self":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > MessageLog > a queued run's CommandStarted names the step that freed its group":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > MessageLog > a run whose result fails its instance names itself in Failed, which is its end":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason",
-    "Runtime > a keyed provide > an old selection is released only after the cleanup of a Command the key change interrupted, at unmount too":
-      "main moved: MessageLog Wire 1 (#168) logs CommandStarted and CommandInterrupted.reason"
+      "differs: a malformed `~query` reaches Problems only once a query runner is loaded; this tree loads none, where today's runtime always makes the cache and reports it"
   },
   "SlotStatus.test.ts": {},
   "Slots.test.ts": {

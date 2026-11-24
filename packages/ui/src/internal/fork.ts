@@ -15,12 +15,14 @@ const now = <A>(f: () => A): A => f()
 
 /**
  * How to run something later as what follows from the fact running now: as it is, for a tree that
- * records no log.
+ * records no log. `late`: from a step's first entry, if it has none yet.
  *
  * @internal
  */
-export const follow = (tree: Kernel.Tree): <A>(f: () => A) => A =>
-  tree.follow === undefined ? now : tree.follow()
+export const follow = (
+  tree: Kernel.Tree,
+  late?: boolean
+): <A>(f: () => A) => A => tree.follow === undefined ? now : tree.follow(late)
 
 /**
  * Forks `effect` on the Scheduler the mount's Executor gives, as a fiber the tree's close waits for. Unless

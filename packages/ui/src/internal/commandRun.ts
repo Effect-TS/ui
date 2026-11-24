@@ -47,8 +47,9 @@ interface Run {
   silent: boolean | undefined
   spanId: string | undefined
   traceId: string | undefined
-  /** What the `CommandInterrupted` of a run stopped with its fiber going follows from. */
+  /** What the `CommandInterrupted` of a run stopped with its fiber going follows from, and why. */
   cut: (<A>(f: () => A) => A) | undefined
+  reason: MessageLog.InterruptReason | undefined
   /** Its start waits for the next read of a keyed provide's keys: a change keeps it. */
   gated: boolean
   /** What the query cache knows of it, for a Command service once `Query` is loaded. */
@@ -74,6 +75,7 @@ class Runs implements Kernel.Runs {
   readonly inst: Kernel.Instance
   readonly cleanupFailed: CleanupFailed
   readonly list: Array<Run> = []
+  left: (<A>(f: () => A) => A) | undefined
   constructor(inst: Kernel.Instance, cleanupFailed: CleanupFailed) {
     this.inst = inst
     this.cleanupFailed = cleanupFailed
@@ -88,9 +90,10 @@ class Runs implements Kernel.Runs {
   close(): void {
     const inst = this.inst
     queryCore.loaded?.run.closing(inst)
+    this.left = follow(inst.tree)
     const waits = heldBy(inst)
     const stopAll = () => {
-      for (const run of this.list.slice()) this.stop(run)
+      for (const run of this.list.slice()) this.stop(run, "unmount")
     }
     if (waits.length === 0) stopAll()
     else {
@@ -118,7 +121,7 @@ class Runs implements Kernel.Runs {
     }
   }
   drop(run: Run): void {
-    if (run.held === undefined) return this.stop(run)
+    if (run.held === undefined) return this.stop(run, "layer")
     run.held = undefined
     this.remove(run)
     ended(this.inst, run)
@@ -143,7 +146,7 @@ class Runs implements Kernel.Runs {
       const next = schedule.next(entriesOf(this), entryOf(run))
       if (next === undefined) return
       if (this.inst.closed) {
-        this.stop(next.value)
+        this.stop(next.value, "unmount")
         continue
       }
       next.value.status = "running"
@@ -156,12 +159,15 @@ class Runs implements Kernel.Runs {
    * holds its group as `stopping` until the fiber exits. An awaiting run delivers at once, unless its
    * instance is gone.
    */
-  stop(run: Run, by: MessageLog.WaitEnded = "interrupt"): void {
+  stop(run: Run, reason: MessageLog.InterruptReason): void {
     if (run.done) return
     const inst = this.inst
     if (run.held !== undefined) {
       const closed = inst.closed || inst.tree.closed
-      endWait(run, closed ? "closed" : by)
+      endWait(
+        run,
+        closed ? "closed" : reason === "switch" ? reason : "interrupt"
+      )
       if (closed) {
         run.held = undefined
         this.remove(run)
@@ -174,12 +180,13 @@ class Runs implements Kernel.Runs {
       run.done = true
       run.status = "stopping"
       run.cut = follow(inst.tree)
+      run.reason = reason
       fiber.interruptUnsafe()
       return
     }
     this.remove(run)
     if (fiber === undefined) run.handle?.finish({ _tag: "Stopped" })
-    interrupted(inst, run)
+    interrupted(inst, run, reason)
     redraw(inst)
     this.promote(run)
   }
@@ -201,13 +208,13 @@ class Runs implements Kernel.Runs {
       // Its services are still building: it starts once they're there, and is stopped if they fail.
       if (env.cause === undefined) {
         env.waiting.push(() =>
-          env.cause === undefined ? this.start(run) : this.stop(run)
+          env.cause === undefined ? this.start(run) : this.stop(run, "layer")
         )
         return
       }
       // Issued after a handled failure: it runs against the services above.
       ctx = servicesOf(env)
-      if (ctx === undefined) return this.stop(run)
+      if (ctx === undefined) return this.stop(run, "layer")
     }
     const command = run.command
     const tree = inst.tree
@@ -236,6 +243,18 @@ class Runs implements Kernel.Runs {
         if (run.done || inst.closed) return Effect.interrupt
         run.spanId = span.spanId
         run.traceId = span.traceId
+        const log = tree.log
+        if (log !== undefined) {
+          begun(() =>
+            log(inst, {
+              _tag: "CommandStarted",
+              name: command.name,
+              issued: run.issued,
+              spanId: span.spanId,
+              traceId: span.traceId
+            })
+          )
+        }
         source = {
           _tag: "Command",
           name: command.name,
@@ -285,8 +304,10 @@ class Runs implements Kernel.Runs {
         )
       }
     )
+    let begun = now
     const go = (now?: boolean) => {
       if (run.done || inst.closed) return
+      begun = follow(tree, true)
       const fiber = fork(
         tree,
         Context.add(Context.add(ctx, Scope.Scope, scope), Refs, refsOf(inst)),
@@ -314,7 +335,7 @@ class Runs implements Kernel.Runs {
       // A stopped run sends nothing. A defect in its cleanup can't fail the run that replaced it: it's
       // reported.
       this.remove(run)
-      run.cut!(() => interrupted(inst, run))
+      run.cut!(() => interrupted(inst, run, run.reason!))
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) {
         const report = Context.get(
           inst.env.ctx ?? Context.empty(),
@@ -340,8 +361,11 @@ class Runs implements Kernel.Runs {
     if (inst.closed || stopped) {
       // It ended while its instance closes, before the close stopped it: its message is dropped.
       this.remove(run)
-      if (stopped) interrupted(inst, run)
-      else {
+      if (stopped) {
+        if (!inst.closed || run.spanId !== undefined) {
+          interrupted(inst, run, "self")
+        } else (this.left ?? now)(() => interrupted(inst, run, "unmount"))
+      } else {
         if (Exit.isFailure(exit)) {
           fork(
             inst.tree,
@@ -377,7 +401,8 @@ class Runs implements Kernel.Runs {
         exit.cause,
         undefined,
         undefined,
-        command.name
+        command.name,
+        run.issued
       )
       return
     }
@@ -403,7 +428,8 @@ class Runs implements Kernel.Runs {
         Cause.die(error),
         undefined,
         undefined,
-        command.name
+        command.name,
+        run.issued
       )
       return
     }
@@ -474,7 +500,7 @@ class Runs implements Kernel.Runs {
       )
       if (next === undefined) return
       if (this.inst.closed || this.inst.tree.closed) {
-        return this.stop(next.value)
+        return this.stop(next.value, "unmount")
       }
       this.deliver(next.value)
     }
@@ -560,7 +586,7 @@ export const issue = (
   const runs = (inst.runs ??= new Runs(inst, cleanupFailed)) as Runs
   const decision = schedule.schedule(entriesOf(runs), command)
   if (command._tag === "Interrupt") {
-    for (const entry of decision.interrupt) runs.stop(entry.value)
+    for (const entry of decision.interrupt) runs.stop(entry.value, "interrupt")
     return
   }
   let handle: Query.RunHandle | undefined
@@ -595,6 +621,7 @@ export const issue = (
     spanId: undefined,
     traceId: undefined,
     cut: undefined,
+    reason: undefined,
     gated: false,
     handle,
     waiting: false,
@@ -632,12 +659,19 @@ const ended = (inst: Kernel.Instance, run: Run): void => {
   })
 }
 
-const interrupted = (inst: Kernel.Instance, run: Run): void => {
+const interrupted = (
+  inst: Kernel.Instance,
+  run: Run,
+  reason: MessageLog.InterruptReason
+): void => {
   inst.tree.log?.(inst, {
     _tag: "CommandInterrupted",
     name: run.command.name,
     issued: run.issued,
     spanId: run.spanId,
-    traceId: run.traceId
+    traceId: run.traceId,
+    reason
   })
 }
+
+const now = <A>(f: () => A): A => f()

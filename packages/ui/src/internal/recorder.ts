@@ -25,6 +25,10 @@ export interface Recording {
   ) => void
 }
 
+interface Starting {
+  seq: number | undefined
+}
+
 const dispatched: MessageLog.Source = { _tag: "Dispatch" }
 
 /** @internal */
@@ -37,18 +41,19 @@ export const make = (
   const numbers = new WeakMap<Kernel.Instance, number>()
   const seqs = new WeakMap<Kernel.Instance, number>()
   const causes = new WeakMap<Kernel.Instance, number>()
-  const outer: Array<number | boolean | undefined> = []
+  const outer: Array<number | Starting | undefined> = []
   let born = 0
   let seq = 0
   let origin: number | undefined
   let depth = 0
-  let starting = false
+  let starting: Starting | undefined
   const number = (): number => {
     const next = ++seq
     const cause = origin
-    if (starting) {
-      starting = false
+    if (starting !== undefined) {
       origin = cause ?? next
+      starting.seq = origin
+      starting = undefined
     }
     return next
   }
@@ -60,7 +65,9 @@ export const make = (
     const was = origin
     const wasStarting = starting
     origin = cause
-    starting = start && cause === undefined
+    starting = start && cause === undefined && log.enabled
+      ? { seq: undefined }
+      : undefined
     depth++
     try {
       return f()
@@ -109,13 +116,13 @@ export const make = (
         outer.push(origin, starting)
         origin = causes.get(inst)
         causes.delete(inst)
-        starting = false
+        starting = undefined
         depth++
         return
       }
       case "Rendered": {
         depth--
-        starting = outer.pop() as boolean
+        starting = outer.pop() as Starting | undefined
         origin = outer.pop() as number | undefined
         return
       }
@@ -162,6 +169,7 @@ export const make = (
         break
       }
       case "Failed": {
+        if (draft.issued === undefined) delete entry.issued
         const update = draft.update as {
           readonly message: unknown
           readonly source: unknown
@@ -193,9 +201,13 @@ export const make = (
       )
       return under(next, f)
     },
-    follow: () => {
+    follow: (late) => {
       const from = origin
-      return from === undefined ? step : (f) => under(from, f)
+      const opening = late ? starting : undefined
+      return from === undefined && opening === undefined ? step : (f) => {
+        const cause = from ?? opening!.seq
+        return cause === undefined ? step(f) : under(cause, f)
+      }
     },
     tree: (draft) => {
       if (!log.enabled) return

@@ -259,9 +259,10 @@ export interface Tree {
   readonly schedule: (task: () => void) => void
   /**
    * Returns how to run something later as what follows from the fact running now, or, outside one, as a
-   * fact of its own: for what reaches the tree from a fiber. Without it, it runs as it is.
+   * fact of its own: for what reaches the tree from a fiber. Without it, it runs as it is. `late`: a step
+   * that has no entry yet follows from its first.
    */
-  readonly follow: (() => <A>(f: () => A) => A) | undefined
+  readonly follow: ((late?: boolean) => <A>(f: () => A) => A) | undefined
   /** The fibers the tree's close waits for, until they exit, once a feature has started one. */
   owned?: Set<Fiber.Fiber<unknown, unknown>> | undefined
   /** The provided Layer builds still pending, each with the flush it began in. */
@@ -514,7 +515,8 @@ export const fail = (
   cause: Cause.Cause<unknown>,
   update?: { readonly message: unknown; readonly source: unknown },
   from?: number,
-  name?: string
+  name?: string,
+  issued?: Issued
 ): void => {
   if (inst.closed) return
   const tree = inst.tree
@@ -526,7 +528,8 @@ export const fail = (
       in: where,
       name,
       cause,
-      update
+      update,
+      issued
     })
   }
   inst.failure = cause
