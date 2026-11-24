@@ -89,32 +89,13 @@ export const pending: {
   "html/HtmlFiles.test.ts": {},
   "KeepAlive.test.ts": {},
   "Shared.test.ts": {},
-  "html/KeepAlive.test.ts": {
-    "keep-alive children in a receiver that waits for its Layer > don't start when their author last wrote them out of a headless child's view, as the receiver resumes":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > that wait for their own Layer in the slot keep the server's Model when next placed in the aside":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it"
-  },
+  "html/KeepAlive.test.ts": {},
   "Router.test.ts": {
     "Router.prefetch > records watches only while a check after a push is outstanding":
       "internals: walks today's runtime's Instance fields (children, watched), which no public API exposes; the kernel keeps what a prefetch check watched on routeRun's views"
   },
-  "html/HistoryRestore.test.ts": {
-    "history restore of a page whose hydration hasn't settled > a push as a filtered late keep-alive waits writes what its restore keeps into the entry":
-      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
-    "history restore of a page whose hydration hasn't settled > Back restores the server's Model of a keep-alive child whose state still decodes after that Back":
-      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
-    "history restore of a page whose hydration hasn't settled > a keep-alive child with restore: false the server kept undrawn starts from the server's Model when first drawn":
-      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
-    "history restore of a page whose hydration hasn't settled > Back runs a keep-alive child the server kept undrawn from init when a push closed its author as its state decoded":
-      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported",
-    "history restore of a page whose hydration hasn't settled > a second Back runs a keep-alive child the server kept undrawn from init, after a push closed its author as it waited":
-      "hydration (step 7, unfinished): history snapshots and restores of instances a navigation reaches before hydration settles aren't ported"
-  },
-  "html/BrowserHost.test.ts": {
-    "BrowserHost > inline style > a hydration style mismatch replaces the server's style text":
-      "hydration (step 7, unfinished): a style mismatch keeps the server's style text, where today's replaces it (cause not investigated)"
-  },
+  "html/HistoryRestore.test.ts": {},
+  "html/BrowserHost.test.ts": {},
   "html/Composed.test.ts": {},
   "html/Forward.test.ts": {},
   "html/Slots.test.ts": {
@@ -131,18 +112,10 @@ export const pending: {
     "slot status after SSR > a slot the server rendered whose client Layer isn't ready reports that it awaits the client's Layer":
       "hydration (step 7, unfinished): a server-rendered receiver waiting for its client Layer reports Pending, where today's reports Awaiting"
   },
-  "html/HtmlServer.test.ts": {
-    "HtmlServer > a hydrated open dialog's close belongs to that showing, not to a modal shown since":
-      "modal dialogs and popovers on KernelDom (blocked seam)"
-  },
+  "html/HtmlServer.test.ts": {},
   "html/ViewTransition.test.ts": {
     "view transitions > a mid-flush route transition commits once across callback, freeze, and close":
       "internals: asserts that today's runtime queues a flush task on the internal executor while a route transition holds; the kernel resumes from the transition's callback and queues none. The commits it counts match"
   },
-  "html/StateCodec.test.ts": {
-    "state codecs > ships a File in a Model and adopts a Model that decodes asynchronously":
-      "hydration (step 7, unfinished): a root whose state decodes only asynchronously isn't held; `Options.hold` holds children, and holding the root means deferring `Kernel.mount` behind the root handle",
-    "state codecs > restores a state that encodes later from memory only, and one that decodes later once decoded":
-      "hydration (step 7, unfinished): history restore decodes saved state synchronously only (`routeRun.init`), so state that decodes later isn't restored"
-  }
+  "html/StateCodec.test.ts": {}
 }
