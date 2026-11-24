@@ -53,7 +53,7 @@ Much simpler!
 
 To render a child Component in Effect UI, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages, as a Foldkit 0.x parent did for a Submodel.
 
-What the parent does pass is props. A Component declares its props with a Schema, and the parent passes them when it calls the child. The child reads them in init, update and view, and when the parent passes different props, the child's view runs again. In Foldkit 0.x, `viewInputs` reached only a Submodel's view, and its update needed an extra argument to read the parent's data.
+What the parent does pass is props. A Component declares its props with a Schema, and the parent passes them when it calls the child. The child reads them in init, update and view, and when the parent passes different props, the child's view runs again.
 
 ::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter"}
 
