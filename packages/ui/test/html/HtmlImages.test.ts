@@ -3,7 +3,7 @@ import { Component } from "@effect/ui"
 import { BrowserHost, Html, HtmlImages } from "@effect/ui/html"
 import { TestImages } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Fiber, Layer, Schema } from "effect"
+import { Context, Effect, Fiber, Layer, Schema } from "effect"
 
 describe("HtmlImages.Images", () => {
   it.effect("BrowserHost's loads in its document, and an image without pixels is an error", () =>
@@ -71,5 +71,20 @@ describe("HtmlImages.Images", () => {
         app
       )
       assert.strictEqual(custom.model(), "error")
+    }).pipe(Effect.scoped))
+
+  it.effect("Images acquired from BrowserHost.layer keeps its document when run without that context", () =>
+    Effect.gen(function*() {
+      const context = yield* Layer.build(BrowserHost.layer())
+      const images = Context.get(context, HtmlImages.Images)
+      const result = yield* Effect.race(
+        images.load({ src: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" }),
+        Effect.promise(() =>
+          new Promise<"timeout">((resolve) =>
+            setTimeout(() => resolve("timeout"), 50)
+          )
+        )
+      )
+      assert.strictEqual(result, "loaded")
     }).pipe(Effect.scoped))
 })

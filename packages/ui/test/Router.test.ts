@@ -20,6 +20,7 @@ import {
   Fiber,
   type Layer,
   Option,
+  Scheduler,
   Schema,
   type Scope,
   Stream
@@ -1836,6 +1837,71 @@ describe("Router throttle", { concurrent: false }, () => {
           routes: Routes,
           history: Router.memoryHistory("/search")
         })
+      )
+    ))
+
+  it.effect("a new changes subscriber skips older queued publications and receives same-sequence href emissions", () =>
+    Effect.gen(function*() {
+      const router = yield* Router.Router
+      const scope = yield* Effect.scope
+      const firstReady = yield* Deferred.make<void>()
+      const secondStarted = yield* Deferred.make<void>()
+      const firstSeqs: Array<number> = []
+      const secondSeqs: Array<number> = []
+      let second: Fiber.Fiber<void> | undefined
+      const first = yield* router.changes.pipe(
+        Stream.take(5),
+        Stream.runForEach((location) =>
+          Effect.gen(function*() {
+            firstSeqs.push(location.seq)
+            if (location.seq === 0) yield* Deferred.succeed(firstReady, void 0)
+            if (location.seq === 1) {
+              yield* router.navigate("/search?q=b")
+              yield* router.navigate("/search?q=c")
+              second = yield* router.changes.pipe(
+                Stream.take(3),
+                Stream.runForEach((loc) =>
+                  Effect.gen(function*() {
+                    secondSeqs.push(loc.seq)
+                    if (secondSeqs.length === 1) {
+                      yield* Deferred.succeed(secondStarted, void 0)
+                    }
+                  })
+                ),
+                Effect.forkIn(scope, { startImmediately: true })
+              )
+            }
+          })
+        ),
+        Effect.forkIn(scope)
+      )
+      yield* Deferred.await(firstReady)
+      yield* Effect.promise(() =>
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            Effect.runSync(router.navigate("/search?q=a"))
+            resolve()
+          }, 0)
+        })
+      )
+      yield* Deferred.await(secondStarted)
+      yield* router.navigate("/search?q=d")
+      yield* router.navigate("/search?q=d")
+      yield* Fiber.join(first)
+      yield* Fiber.join(second!)
+      assert.deepStrictEqual(firstSeqs, [0, 1, 2, 3, 4])
+      assert.deepStrictEqual(secondSeqs, [3, 4, 4])
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Router.memory({
+          routes: Routes,
+          history: Router.memoryHistory("/search")
+        })
+      ),
+      Effect.provideService(
+        Scheduler.Scheduler,
+        new Scheduler.MixedScheduler("sync")
       )
     ))
 })

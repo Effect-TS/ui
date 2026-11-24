@@ -2,7 +2,7 @@
 import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlFiles } from "@effect/ui/html"
 import { assert, describe, expect, it } from "@effect/vitest"
-import { Effect, Fiber, Layer, Schema } from "effect"
+import { Context, Effect, Fiber, Layer, Schema } from "effect"
 
 const pickers = Effect.acquireRelease(
   Effect.sync(() => {
@@ -289,5 +289,18 @@ describe("HtmlFiles", { concurrent: false }, () => {
         app
       )
       assert.strictEqual(custom.model(), true)
+    }).pipe(Effect.scoped))
+
+  it.effect("Files acquired from BrowserHost.layer keeps its document when run without that context", () =>
+    Effect.gen(function*() {
+      const picker = yield* pickers
+      picker.refuse = true
+      const context = yield* Layer.build(BrowserHost.layer())
+      const files = Context.get(context, HtmlFiles.Files)
+      const result = yield* Effect.race(
+        files.pick({}),
+        Effect.as(tick, "timeout" as const)
+      )
+      assert.deepStrictEqual(result, { opened: false, files: [] })
     }).pipe(Effect.scoped))
 })

@@ -1604,16 +1604,21 @@ const build = (
     }
     const listeners = new Set<(location: Location) => void>()
     const wakes: Array<() => void> = []
-    const publishQueue: Array<Location> = []
+    const publishQueue: Array<{
+      readonly location: Location
+      readonly targets: ReadonlyArray<(location: Location) => void>
+    }> = []
     let publishing = false
     const publish = (next: Location) => {
-      publishQueue.push(next)
+      publishQueue.push({ location: next, targets: Array.from(listeners) })
       if (publishing) return
       publishing = true
       try {
         while (publishQueue.length > 0) {
-          const loc = publishQueue.shift()!
-          for (const listener of Array.from(listeners)) listener(loc)
+          const { location, targets } = publishQueue.shift()!
+          for (const listener of targets) {
+            if (listeners.has(listener)) listener(location)
+          }
           while (wakes.length > 0) {
             const batch = wakes.splice(0)
             for (const wake of batch) wake()
