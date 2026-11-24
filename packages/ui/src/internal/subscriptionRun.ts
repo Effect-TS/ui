@@ -9,7 +9,7 @@ import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
-import type * as Fiber from "effect/Fiber"
+import * as Fiber from "effect/Fiber"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as MessageLog from "../MessageLog.ts"
@@ -34,7 +34,7 @@ const runningOf = new WeakMap<Kernel.Instance, Map<string, Running>>()
 
 const stop = (running: Running): void => {
   running.detach?.()
-  running.fiber?.interruptUnsafe()
+  running.fiber?.interruptUnsafe(Fiber.getCurrent()?.id)
 }
 
 /**

@@ -127,6 +127,8 @@ class Running {
     if (this.cut !== undefined) return
     const tree = this.rec.inst.tree
     this.cut = follow(tree)
+    const closer = tree.closed ? Fiber.getCurrent() : undefined
+    if (closer !== undefined) this.fiber?.interruptUnsafe(closer.id)
     const close = Scope.close(this.scope, Exit.void)
     if (this.ctx === undefined) Effect.runSync(close)
     else fork(tree, this.ctx, close, true)
