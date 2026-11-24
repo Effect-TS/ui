@@ -395,16 +395,6 @@ export const pending: {
       "drag and drop on the kernel DOM host (unscheduled)",
     "BrowserHost > drag and drop > dragover is sent once per frame when the position changed, and a queued one is dropped":
       "drag and drop on the kernel DOM host (unscheduled)",
-    "BrowserHost > modal dialogs > a modal opens once it's in the document and closes from the Model, and its form is the app's":
-      "modal dialogs on the kernel DOM host (unscheduled)",
-    "BrowserHost > modal dialogs > Escape is the Model's: rejected stays open, a forced close reopens, accepted closes":
-      "modal dialogs on the kernel DOM host (unscheduled)",
-    "BrowserHost > modal dialogs > a modal removed while open is forgotten, and switching mode closes without telling the app":
-      "modal dialogs on the kernel DOM host (unscheduled)",
-    "BrowserHost > modal dialogs > nested modals open outer first, so the inner one is on top":
-      "modal dialogs on the kernel DOM host (unscheduled)",
-    "BrowserHost > modal dialogs > a shown dialog is closed before it's removed, latest shown first, without telling the app":
-      "modal dialogs on the kernel DOM host (unscheduled)",
     "BrowserHost > popovers > a manual popover is controlled: shown and hidden by the Model, and put back after other changes":
       "popovers on the kernel DOM host (unscheduled)",
     "BrowserHost > popovers > an auto popover is followed: a light dismiss is reported and never reverted":

@@ -4,9 +4,9 @@
  * event's typed payload. Controlled form properties are put back after an event the Model didn't follow,
  * keeping a focused field's selection. Updates that ask for a view transition run in one. The document head
  * follows the tree's folded head when the mount is given `head: KernelDom.syncHead`, so an app without a
- * head doesn't carry what writes one.
+ * head doesn't carry what writes one. Dialogs open, close and stay modal as `BrowserHost`'s do.
  *
- * Left out, each to arrive with what uses it: dialogs and popovers, drag and drop, and hydration.
+ * Left out, each to arrive with what uses it: popovers, drag and drop, and hydration.
  */
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
@@ -46,8 +46,28 @@ const restoring: ReadonlySet<string> = new Set([
   "change",
   "compositionend",
   "toggle",
+  "close",
   "reset"
 ])
+
+const isDialog = (node: globalThis.Node): node is HTMLDialogElement =>
+  (node as globalThis.Element).localName === "dialog"
+
+const matches = (element: globalThis.Element, selector: string): boolean => {
+  try {
+    return element.matches(selector)
+  } catch {
+    return false
+  }
+}
+
+const inOrder = <A extends globalThis.Node>(nodes: Array<A>): Array<A> =>
+  nodes.sort((a, b) => (a.compareDocumentPosition(b) & 4) !== 0 ? -1 : 1)
+
+interface Showing {
+  byHost: boolean
+  closed: boolean
+}
 
 const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
   (node as globalThis.Element).localName === "input" &&
@@ -181,11 +201,78 @@ export const makeHost = (
     element.scrollTop = scrollTop
   }
 
+  const keepingScroll = (show: () => void) => {
+    const focused = document.activeElement
+    const left = view?.scrollX ?? 0
+    const top = view?.scrollY ?? 0
+    show()
+    if (document.activeElement !== focused) {
+      view?.scrollTo?.({ left, top, behavior: "instant" })
+    }
+  }
+
+  const modals = new WeakSet<globalThis.Node>()
+  const showings = new WeakMap<globalThis.Node, Array<Showing>>()
+  const modalWanted = new Set<HTMLDialogElement>()
+  const shown = new Set<HTMLDialogElement>()
+  let modalPseudo: boolean | undefined
+  const showingsOf = (dialog: globalThis.Node) => {
+    let list = showings.get(dialog)
+    if (list === undefined) showings.set(dialog, list = [])
+    return list
+  }
+  const adoptShowing = (dialog: HTMLDialogElement) => {
+    if (!dialog.open) return
+    const list = showingsOf(dialog)
+    if (list.at(-1)?.closed !== false) list.push({ byHost: false, closed: false })
+    shown.add(dialog)
+  }
+  const closeDialog = (dialog: HTMLDialogElement, byHost: boolean) => {
+    if (!dialog.open) return
+    modals.delete(dialog)
+    adoptShowing(dialog)
+    shown.delete(dialog)
+    const current = showingsOf(dialog).at(-1)!
+    current.closed = true
+    current.byHost = byHost
+    dialog.close()
+  }
+  const closeShownIn = (node: globalThis.Node, self: boolean) => {
+    for (const dialog of [...shown].reverse()) {
+      if ((self || dialog !== node) && node.contains(dialog)) {
+        closeDialog(dialog, true)
+      }
+    }
+  }
+  const showDialog = (dialog: HTMLDialogElement, want: unknown) => {
+    adoptShowing(dialog)
+    const current = !dialog.open
+      ? false
+      : modals.has(dialog) &&
+          (modalPseudo !== true || matches(dialog, ":modal"))
+      ? "modal"
+      : true
+    if (current === want) return
+    if (want === false) return closeDialog(dialog, false)
+    if (current !== false) closeDialog(dialog, true)
+    if (want === "modal") {
+      keepingScroll(() => dialog.showModal())
+      modals.add(dialog)
+      modalPseudo ??= matches(dialog, ":modal")
+    } else dialog.show()
+    showingsOf(dialog).push({ byHost: false, closed: false })
+    shown.add(dialog)
+  }
+
   const restoreNode = (node: globalThis.Node) => {
     const values = wanted.get(node)
     if (values === undefined) return
     for (const [name, value] of values) {
-      if ((node as any)[name] !== value) writeControlled(node, name, value)
+      if (name === "open" && isDialog(node)) {
+        if (node.isConnected) showDialog(node, value)
+      } else if ((node as any)[name] !== value) {
+        writeControlled(node, name, value)
+      }
     }
   }
 
@@ -224,6 +311,16 @@ export const makeHost = (
     const path = event.composedPath() as Array<Node>
     const target = path[0] ?? event.target as Node
     const composed = (event as InputEvent).isComposing === true
+    if (isDialog(target)) {
+      if (name === "cancel") {
+        if (wanted.get(target)?.get("open") === "modal") event.preventDefault()
+      } else if (name === "close") {
+        const list = showings.get(target)
+        const ended = list?.shift()
+        if (ended !== undefined && (ended.byHost || list!.length > 0)) return
+        if (!target.open) modals.delete(target)
+      }
+    }
     if (name === "pointerdown") lastPointer = pointerTypeOf(event) || undefined
     else if (name === "beforeinput") {
       const state = composed || composing.has(target)
@@ -400,15 +497,28 @@ export const makeHost = (
       const element = node as any
       if (controlled.has(name)) {
         let values = wanted.get(node)
-        if (value === undefined) {
+        const dialog = name === "open" && isDialog(node)
+        if (value === undefined && !dialog) {
           values?.delete(name)
           value = name === "value" ? "" : false
         } else {
           if (values === undefined) wanted.set(node, values = new Map())
-          values.set(name, value)
           for (const event of restoring) listen(event)
           listen("compositionstart")
           listen("beforeinput")
+          if (dialog) {
+            value = value === "modal" ? value : value === true
+            values.set(name, value)
+            if (value === "modal") {
+              modalWanted.add(node)
+              listen("cancel")
+            } else {
+              modalWanted.delete(node)
+              showDialog(node, value)
+            }
+            return
+          }
+          values.set(name, value)
         }
         if (element[name] !== value) writeControlled(element, name, value)
         if (name === "value" && !composing.has(node)) edits.delete(node)
@@ -435,15 +545,26 @@ export const makeHost = (
       parent.insertBefore(node, before)
     },
     remove(parent, node) {
+      if (shown.size > 0) closeShownIn(node, true)
       parent.removeChild(node)
     },
     clear(parent) {
+      if (shown.size > 0) closeShownIn(parent, false)
       parent.textContent = ""
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,
     controlled,
     runsMounts: true,
+    commit() {
+      for (const dialog of shown) {
+        if (!dialog.open || !dialog.isConnected) shown.delete(dialog)
+      }
+      for (const dialog of inOrder([...modalWanted])) {
+        if (dialog.isConnected) showDialog(dialog, "modal")
+        else modalWanted.delete(dialog)
+      }
+    },
     head: sync === undefined ? undefined : (head) => sync.sync(head as never),
     transitions: options?.viewTransitions === false
       ? undefined
