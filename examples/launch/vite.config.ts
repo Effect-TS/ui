@@ -15,7 +15,10 @@ const resolved = `\0${id}`
 type Select = (source: string) => string
 
 const whole: Select = (source) =>
-  source.replace(/^(?:\/\/ @vitest[^\n]*\n|import [^]*?"\n|\n)+/, "")
+  source.replace(
+    /^(?:\/\/ (?:@vitest|oxlint)[^\n]*\n|import [^]*?"\n|\n)+/,
+    ""
+  )
     .trimEnd()
 
 const test = (title: string): Select => (source) => {
@@ -68,7 +71,14 @@ const sources: {
   play: [[
     "src/autocounter/Counter.play.test.ts",
     test("resets one second after the click")
-  ]]
+  ]],
+  partsFoldkit: [["src/parts/foldkit/Faq.ts", whole]],
+  partsEffect: [["src/parts/effect/Faq.ts", whole]],
+  partsOwn: [["src/parts/Disclosure.ts", whole], [
+    "src/parts/Details.ts",
+    whole
+  ]],
+  mount: [["src/main.ts", whole]]
 }
 
 const tokenize = async (

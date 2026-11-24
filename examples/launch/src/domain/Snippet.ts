@@ -25,6 +25,10 @@ export const Snippets = Schema.Struct({
   storyEffect: Files,
   sceneFoldkit: Files,
   sceneEffect: Files,
-  play: Files
+  play: Files,
+  partsFoldkit: Files,
+  partsEffect: Files,
+  partsOwn: Files,
+  mount: Files
 })
 export type Snippets = typeof Snippets.Type

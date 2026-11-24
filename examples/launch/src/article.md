@@ -16,12 +16,14 @@ Key changes:
 - [Improved performance](#change-improved-performance)
 - [Simpler Story and Scene tests](#change-simpler-story-and-scene-tests)
 - [Where state lives](#change-where-state-lives)
+- [Parts for headless Components](#change-parts-for-headless-components)
 
 Key additions:
 
 - [Built-in queries](#addition-built-in-queries)
 - [Shared state with Providers](#addition-shared-state-with-providers)
 - [Play tests](#addition-play-tests)
+- [Host-agnostic rendering](#addition-host-agnostic-rendering)
 
 ## Terms
 
@@ -103,6 +105,20 @@ A Component's Model holds the state it changes through update. It no longer has 
 
 You can still reconstruct a Component's Model from a log of its Messages. When you enable logging for your app, the runtime records each Message in order, along with the props, query results and Provider values its update read. It also records changes to props and query results, and when Commands start and end. Replaying the log reproduces the Model without running Commands, fetches or Subscriptions.
 
+## Change: Parts for headless Components
+
+The components in Foldkit UI were headless: each one managed behavior, keyboard handling and ARIA, and you wrote the markup. Your `toView` callback received bundles of attributes, and you spread each bundle onto the element it belonged to.
+
+In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, as in `collapsible.trigger(h.button)`, then add your own classes and children. TypeScript reports an error if you apply this trigger part to a `div`.
+
+::Compare{foldkit="partsFoldkit" foldkitTitle="Foldkit 0.x: spread the attribute bundles from toView" effect="partsEffect" effectTitle="Effect UI: apply each part to an element"}
+
+A headless Component defines `parts` instead of a view. It has its own Model, Messages and update, so it can keep state that in Foldkit 0.x lived in the parent's Model.
+
+:::Listing{code="partsOwn"}
+A headless Disclosure that keeps its own open state and a Component that draws it.
+:::
+
 ## Addition: Built-in queries
 
 In Foldkit 0.x, fetched data lived in the Model like any other state. Each resource needed a field in the Model, a Command to fetch it, a Message for the result and update branches for loading, success and failure.
@@ -135,6 +151,18 @@ One test can now cover a whole flow. It clicks a button, lets the real Command r
 
 ::Listing{code="play"}
 
+## Addition: Host-agnostic rendering
+
+In Foldkit 0.x, the runtime rendered a view by patching the browser DOM directly.
+
+In Effect UI, the core in `effect/ui` doesn't refer to HTML or the DOM. The runtime renders through a host that creates and updates nodes. A Layer provides the host, so you choose it where you mount the app. HTML elements and the browser host are in `effect/ui/html`, which is where the `Html` in a Component's `elements: Html` comes from.
+
+Play tests use a second host. They mount the same Components on a test host that builds plain objects, so the tests run without a browser or DOM. The host interface is public, so you can write your own host.
+
+:::Listing{code="mount"}
+This article's entry point. `BrowserHost.mount` selects the browser host.
+:::
+
 ## More changes
 
 - **Services per Component:** Provide services to a Component and everything below it with `Component.provide`. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
@@ -143,7 +171,6 @@ One test can now cover a whole flow. It clicks a button, lets the real Command r
 - **Keep state while hidden:** Set `keepAlive: true` on a Component to keep its Model while it's hidden. Otherwise the Model is discarded when the Component stops being rendered.
 - **Control overlapping Commands:** When a Command is issued again while still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
 - **Commands without result Messages:** Use `Command.asNoop` to run a Command when update doesn't need its result.
-- **Custom markup for headless Components:** A headless Component such as the UI kit's Dialog manages state and behavior and hands your view its parts. You apply each part to an element you write, as in `dialog.title(h.h2)`, so the markup and styling stay yours. Foldkit UI passed your `toView` callback bundles of attributes to spread onto your elements.
 
 ## What isn't changing: core values, features and guarantees
 
