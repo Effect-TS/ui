@@ -417,11 +417,10 @@ const between = (
         const normalized = attributeName(name, element.namespaceURI === SVG)
         if (normalized === undefined) return
         names.add(normalized)
-        if (
-          value === undefined
-            ? !element.hasAttribute(normalized)
-            : element.getAttribute(normalized) === value
-        ) return
+        const served = element.getAttribute(normalized)
+        if (value === undefined ? served === null : served === value) return
+        // The server's text is what the host replaces: a style mismatch keeps none of its properties.
+        return base.setAttr(node, name, value, served ?? undefined)
       }
       base.setAttr(node, name, value)
     },
@@ -431,7 +430,12 @@ const between = (
       if (edits.keeps(node, name, value)) {
         return keeping(node, name, value, () => base.setProp(node, name, value))
       }
-      if (names !== undefined && (node as any)[name] === value) return
+      // A controlled property goes to the host, which writes no value already there: it keeps what the
+      // view wants, and an adopted dialog's showing.
+      if (
+        names !== undefined && (node as any)[name] === value &&
+        base.controlled?.has(name) !== true
+      ) return
       base.setProp(node, name, value)
     },
     made(node) {
