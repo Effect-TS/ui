@@ -62,6 +62,15 @@ import * as internal from "./internal/layer.ts"
 export type Position = internal.Position
 
 /**
+ * Options for WebMCP tool registration in `layer`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type WebMcpOptions = internal.WebMcpOptions
+
+/**
  * Provides the `MessageLog` with a log that feeds the inspector overlay, and
  * mounts the overlay for as long as the Layer is built.
  *
@@ -112,6 +121,14 @@ export type Position = internal.Position
  * one can resume it. With `DevToolsVite.plugin`, the page carries the URL
  * and the plugin's `size`, so neither option is needed.
  *
+ * When the browser exposes WebMCP (`document.modelContext`), the Layer also
+ * registers the DevTools tools directly in the page under the `effect_ui_`
+ * prefix with `annotations.debugging: true`, and unregisters them when the
+ * Layer closes. The tools read Wire frames only, so `Schema.Redacted` values
+ * remain placeholders. `effect_ui_dispatch` is off by default and requires
+ * `webMcp: { dispatch: true }`. Pass `webMcp: false` to disable WebMCP
+ * registration.
+ *
  * Browser only: building the Layer needs `document`.
  *
  * @stability experimental
@@ -123,4 +140,5 @@ export const layer = (options?: {
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
   readonly server?: string | undefined
+  readonly webMcp?: boolean | WebMcpOptions | undefined
 }): Layer.Layer<never> => internal.make(options ?? {})

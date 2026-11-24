@@ -1,16 +1,51 @@
 import type * as MessageLog from "@effect/ui/MessageLog"
-import * as McpProtocol from "effect/ai/McpProtocol"
-import * as McpServer from "effect/ai/McpServer"
 import * as Tool from "effect/ai/Tool"
 import * as Toolkit from "effect/ai/Toolkit"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
 import * as Control from "./control.ts"
+import type * as History from "./history.ts"
 import { diff } from "./inspector.ts"
 import * as Read from "./read.ts"
-import type { Server } from "./server.ts"
+
+export interface BackendOptions {
+  readonly size: number
+  readonly dispatch: boolean
+}
+
+export interface RequestError {
+  readonly lost: boolean
+  readonly message: string
+}
+
+export interface Page {
+  readonly sessions: ReadonlySet<string>
+  readonly paused: Control.Paused | null
+  readonly request: (
+    request: Control.Request
+  ) => Effect.Effect<Schema.Json, RequestError>
+}
+
+export type Arrival = "seen" | "skipped" | "evicted" | "excluded"
+
+export interface Meta {
+  host: MessageLog.WireHost | undefined
+  connected: boolean
+  closed: number
+}
+
+export interface Backend {
+  readonly options: BackendOptions
+  readonly inspector: Inspector.Inspector
+  readonly history: History.History
+  readonly meta: ReadonlyMap<string, Meta>
+  readonly session: (id: string) => Inspector.Session | undefined
+  readonly pageOf: (session: string) => Page | undefined
+  readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
+  readonly within: number
+  readonly arrival: (session: string, seq: number) => Arrival | undefined
+}
 
 export class ToolError extends Schema.TaggedError<ToolError>()("ToolError", {
   message: Schema.String
@@ -249,11 +284,11 @@ export const Tools = Toolkit.make(
   Wait
 )
 
-const instructions =
+export const instructions =
   "Inspects a running Effect UI app in development. Start with list_sessions and list_instances. " +
   "list_entries and get_chain explain what happened and why; get_state and diff_state show state at any entry. " +
-  "show_entry paints the page at an entry, resume returns to the live page. dispatch sends messages when the " +
-  "server allows it, and wait lets the Commands they start finish."
+  "show_entry paints the page at an entry, resume returns to the live page. dispatch sends messages when " +
+  "enabled, and wait lets the Commands they start finish."
 
 const select = (
   value: unknown,
@@ -323,7 +358,7 @@ const isState = (entry: MessageLog.WireEntry | Inspector.Outside) =>
     ? entry
     : undefined
 
-export const layer = (server: Server) => {
+export const handlers = (server: Backend) => {
   const { history, inspector, meta, options } = server
 
   const sessionOf = (id: string | undefined) =>
@@ -709,7 +744,8 @@ export const layer = (server: Server) => {
           : "Entries " + seqs(unavailable.map((u) => u.seq)) + " were " +
             "logged by the page, but the server can't show them: a skipped " +
             "entry was dropped from the page's buffer before it was sent, " +
-            "and an evicted one is older than the entries the server keeps.",
+            "an evicted one is older than the entries kept, and an excluded " +
+            "one matched exclude.",
         reply.paused === null
           ? undefined
           : "The page is paused: resume to see the live page."
@@ -748,16 +784,5 @@ export const layer = (server: Server) => {
     )
   })
 
-  return McpServer.layerHttp({
-    name: "effect-ui-devtools",
-    version: "0.1.0",
-    instructions,
-    path: "/mcp",
-    protocols: [
-      McpProtocol.v2025_11_25,
-      McpProtocol.v2025_06_18,
-      McpProtocol.v2025_03_26
-    ],
-    registrations: McpServer.toolkit(Tools).pipe(Layer.provide(handlers))
-  }).pipe(Layer.orDie)
+  return handlers
 }

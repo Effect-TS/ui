@@ -8,50 +8,31 @@ import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
-import type * as Inspector from "../Inspector.ts"
 import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
+import type {
+  Arrival,
+  Backend,
+  BackendOptions,
+  Meta,
+  Page as BackendPage,
+  RequestError
+} from "./tools.ts"
 
-export interface Options {
-  readonly size: number
-  readonly dispatch: boolean
+export type { Arrival, Meta, RequestError }
+
+export interface Options extends BackendOptions {
   readonly keep: number
   readonly timeout?: number | undefined
 }
 
-export interface RequestError {
-  readonly lost: boolean
-  readonly message: string
-}
-
-export interface Page {
+export interface Page extends BackendPage {
   readonly sessions: Set<string>
   paused: Control.Paused | null
-  readonly request: (
-    request: Control.Request
-  ) => Effect.Effect<Schema.Json, RequestError>
 }
 
-export type Arrival = "seen" | "skipped" | "evicted"
-
-export interface Meta {
-  host: MessageLog.WireHost | undefined
-  connected: boolean
-  closed: number
-}
-
-export interface Server {
-  readonly options: Options
-  readonly inspector: Inspector.Inspector
-  readonly history: History.History
-  readonly meta: Map<string, Meta>
-  readonly session: (id: string) => Inspector.Session | undefined
-  readonly pageOf: (session: string) => Page | undefined
-  readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
-  readonly within: number
-  readonly arrival: (session: string, seq: number) => Arrival | undefined
-}
+export type Server = Backend
 
 const loopback = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
 
