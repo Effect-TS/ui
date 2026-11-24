@@ -17,6 +17,12 @@ export interface Options {
   readonly size: number
   readonly dispatch: boolean
   readonly keep: number
+  readonly timeout?: number | undefined
+}
+
+export interface RequestError {
+  readonly lost: boolean
+  readonly message: string
 }
 
 export interface Page {
@@ -25,8 +31,10 @@ export interface Page {
   size: number
   readonly request: (
     request: Control.Request
-  ) => Effect.Effect<Schema.Json, string>
+  ) => Effect.Effect<Schema.Json, RequestError>
 }
+
+export type Arrival = "seen" | "skipped" | "evicted" | "late"
 
 export interface Meta {
   host: MessageLog.WireHost | undefined
@@ -42,7 +50,8 @@ export interface Server {
   readonly pages: Set<Page>
   readonly pageOf: (session: string) => Page | undefined
   readonly next: Effect.Effect<void>
-  readonly arrived: (session: string, seq: number) => Effect.Effect<boolean>
+  readonly within: number
+  readonly arrived: (session: string, seq: number) => Effect.Effect<Arrival>
 }
 
 const loopback = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
@@ -72,18 +81,27 @@ export const make = (options: Options) => {
     waiters.add(waiter)
     return Effect.sync(() => waiters.delete(waiter))
   })
+  const timeout = options.timeout ?? 10_000
   const latest = (session: string) =>
     inspector.sessions().find((s) => s.id === session)?.entries().at(-1)?.seq ??
       -1
-  const arrived = (session: string, seq: number): Effect.Effect<boolean> =>
-    Effect.suspend(function loop(): Effect.Effect<boolean> {
-      return latest(session) >= seq
-        ? Effect.succeed(true)
+  const arrival = (session: string, seq: number): Arrival | undefined => {
+    if (latest(session) < seq) return undefined
+    const s = inspector.sessions().find((s) => s.id === session)
+    if (s === undefined) return "evicted"
+    if (s.resolve(seq)._tag !== "Outside") return "seen"
+    return seq < (s.entries()[0]?.seq ?? Infinity) ? "evicted" : "skipped"
+  }
+  const arrived = (session: string, seq: number): Effect.Effect<Arrival> =>
+    Effect.suspend(function loop(): Effect.Effect<Arrival> {
+      const found = arrival(session, seq)
+      return found !== undefined
+        ? Effect.succeed(found)
         : Effect.andThen(next, Effect.suspend(loop))
     }).pipe(
       Effect.timeoutOrElse({
         duration: "2 seconds",
-        orElse: () => Effect.succeed(false)
+        orElse: () => Effect.succeed("late" as const)
       })
     )
 
@@ -179,7 +197,10 @@ export const make = (options: Options) => {
     "GET",
     "/control",
     upgrade((socket) => {
-      const pending = new Map<number, Deferred.Deferred<Schema.Json, string>>()
+      const pending = new Map<
+        number,
+        Deferred.Deferred<Schema.Json, RequestError>
+      >()
       let id = 0
       let page: Page | undefined
       return Effect.gen(function*() {
@@ -192,18 +213,28 @@ export const make = (options: Options) => {
           request: (request) => {
             const at = ++id
             return Effect.gen(function*() {
-              const deferred = yield* Deferred.make<Schema.Json, string>()
+              const deferred = yield* Deferred.make<
+                Schema.Json,
+                RequestError
+              >()
               pending.set(at, deferred)
               yield* writer.write(
                 Control.encodeToPage({ _tag: "Request", id: at, request })
               ).pipe(
-                Effect.mapError(() => "the page's control connection is closed")
+                Effect.mapError(() => ({
+                  lost: false,
+                  message: "the page's control connection is closed"
+                }))
               )
               return yield* Deferred.await(deferred).pipe(
                 Effect.timeoutOrElse({
-                  duration: "10 seconds",
+                  duration: timeout,
                   orElse: () =>
-                    Effect.fail("the page did not answer within 10 seconds")
+                    Effect.fail({
+                      lost: true,
+                      message: "the page did not answer within " + timeout +
+                        "ms"
+                    })
                 })
               )
             }).pipe(Effect.ensuring(Effect.sync(() => pending.delete(at))))
@@ -233,7 +264,10 @@ export const make = (options: Options) => {
               if (deferred === undefined) return Effect.void
               return message.ok
                 ? Deferred.succeed(deferred, message.value)
-                : Deferred.fail(deferred, String(message.value))
+                : Deferred.fail(deferred, {
+                  lost: false,
+                  message: String(message.value)
+                })
             }, { discard: true }))
         )
       }).pipe(Effect.ensuring(Effect.suspend(() => {
@@ -241,7 +275,8 @@ export const make = (options: Options) => {
         notify()
         return Effect.forEach(
           pending.values(),
-          (deferred) => Deferred.fail(deferred, "the page closed"),
+          (deferred) =>
+            Deferred.fail(deferred, { lost: true, message: "the page closed" }),
           {
             discard: true
           }
@@ -259,6 +294,7 @@ export const make = (options: Options) => {
     pageOf: (session) =>
       Array.from(pages).reverse().find((page) => page.sessions.has(session)),
     next,
+    within: Math.round(timeout * 0.8),
     arrived
   }
   return { server, routes: Layer.mergeAll(log, control) }

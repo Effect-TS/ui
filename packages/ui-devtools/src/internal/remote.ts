@@ -151,11 +151,18 @@ export const connect = (
                   "Message " + index + " does not decode: " + reasonOf(error)
               )
           )
+          const deadline = Date.now() + request.within
           const outcomes: Array<Control.Outcome> = []
+          let expired = false
           for (const message of messages) {
+            const left = deadline - Date.now()
+            if (left <= 0) {
+              expired = true
+              break
+            }
             const outcome = yield* found.dispatch(message).pipe(
               Effect.timeoutOrElse({
-                duration: "5 seconds",
+                duration: Math.min(5_000, left),
                 orElse: () => Effect.succeed({ _tag: "Unknown" } as const)
               })
             )
@@ -165,6 +172,7 @@ export const connect = (
           const paused = controller.paused()
           return {
             outcomes,
+            expired,
             paused: paused?.session === request.session ? paused.seq : null
           }
         })

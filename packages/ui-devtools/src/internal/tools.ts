@@ -189,9 +189,10 @@ const Dispatch = Tool.make("dispatch", {
   description:
     "Sends messages to an instance, in order, as if the app had. Each runs update and its real Commands. " +
     "Messages are decoded with the component's message Schema first, and none is sent unless all decode. A " +
-    "redacted field needs a real value. Stops at the first message that does not update. An Unknown outcome " +
-    "means the page did not answer in time and the message may still be applied, so read before resending. " +
-    "Off unless the server was started with dispatch on. Use wait to let the Commands finish.",
+    "redacted field needs a real value. Stops at the first message that does not update, or when the batch " +
+    "runs out of time, and lists the messages it did not send. An Unknown outcome means the message was sent " +
+    "but did not finish in time and may still be applied, so read before resending it. Off unless the server " +
+    "was started with dispatch on. Use wait to let the Commands finish.",
   parameters: Schema.Struct({
     session: SessionParam,
     instance: Schema.Number,
@@ -359,7 +360,7 @@ export const layer = (server: Server) => {
       (page) =>
         Effect.mapError(
           page.request(request),
-          (message) => new ToolError({ message })
+          (error) => new ToolError({ message: error.message })
         )
     )
 
@@ -643,27 +644,64 @@ export const layer = (server: Server) => {
         )
       }
       const s = yield* sessionOf(session)
+      const page = yield* pageOf(s)
+      const before = s.entries().at(-1)?.seq
       const reply = Schema.decodeUnknownSync(Control.Dispatched)(
-        yield* ask(s, { _tag: "Dispatch", session: s.id, instance, messages })
+        yield* page.request({
+          _tag: "Dispatch",
+          session: s.id,
+          instance,
+          messages,
+          within: server.within
+        }).pipe(Effect.mapError((error) =>
+          new ToolError({
+            message: error.lost
+              ? "No reply: " + error.message + ". Any of the messages may " +
+                "have been applied, or none. Read the entries " +
+                (before === undefined ? "" : "after #" + before + " ") +
+                "before resending."
+              : error.message
+          })
+        ))
       )
       const unseen: Array<number> = []
+      const unavailable: Array<{ seq: number; reason: string }> = []
       for (const outcome of reply.outcomes) {
-        if (
-          (outcome._tag === "Updated" || outcome._tag === "Failed") &&
-          !(yield* server.arrived(s.id, outcome.seq))
-        ) {
-          unseen.push(outcome.seq)
+        if (outcome._tag !== "Updated" && outcome._tag !== "Failed") continue
+        const arrival = yield* server.arrived(s.id, outcome.seq)
+        if (arrival === "late") unseen.push(outcome.seq)
+        else if (arrival !== "seen") {
+          unavailable.push({ seq: outcome.seq, reason: arrival })
         }
       }
+      const sent = reply.outcomes.length
+      const notSent = Array.from(
+        { length: messages.length - sent },
+        (_, i) => sent + i
+      )
+      const seqs = (list: ReadonlyArray<number>) =>
+        list.map((seq) => "#" + seq).join(", ")
       const notes = [
         reply.outcomes.at(-1)?._tag === "Unknown"
-          ? "The page did not answer in time: the last message may still be applied. Read before resending."
+          ? "Message " + (sent - 1) + " was sent but did not finish in " +
+            "time, so it may still be applied. Read before resending it."
           : undefined,
+        notSent.length === 0
+          ? undefined
+          : "Messages " + notSent.join(", ") + " were not sent, " +
+            (reply.expired
+              ? "because the batch ran out of time."
+              : "because message " + (sent - 1) + " did not update."),
         unseen.length === 0
           ? undefined
-          : "Entries " + unseen.map((seq) => "#" + seq).join(", ") +
-            " were logged by the page but have not reached " +
-            "the server yet, so a read may not show them.",
+          : "Entries " + seqs(unseen) + " were logged by the page but have " +
+            "not reached the server yet, so a read may not show them.",
+        unavailable.length === 0
+          ? undefined
+          : "Entries " + seqs(unavailable.map((u) => u.seq)) + " were " +
+            "logged by the page, but the server can't show them: a skipped " +
+            "entry was dropped from the page's buffer before it was sent, " +
+            "and an evicted one is older than the entries the server keeps.",
         reply.paused === null
           ? undefined
           : "The page is paused: resume to see the live page."
@@ -674,8 +712,10 @@ export const layer = (server: Server) => {
           outcome._tag === "Updated"
         ).length,
         of: messages.length,
+        notSent: notSent.length === 0 ? undefined : notSent,
         paused: reply.paused,
         unseen: unseen.length === 0 ? undefined : unseen,
+        unavailable: unavailable.length === 0 ? undefined : unavailable,
         note: notes.length === 0 ? undefined : notes.join(" ")
       }))
     }),

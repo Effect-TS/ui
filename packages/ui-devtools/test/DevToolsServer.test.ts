@@ -1,10 +1,17 @@
 // @vitest-environment happy-dom
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { DevTools } from "@effect/ui-devtools"
+import * as Remote from "@effect/ui-devtools/internal/remote"
+import * as Server from "@effect/ui-devtools/internal/server"
+import * as Tools from "@effect/ui-devtools/internal/tools"
 import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
+import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer } from "effect"
-import { request } from "node:http"
+import { Effect, Layer, Schema, Stream } from "effect"
+import { HttpRouter } from "effect/http"
+import * as Socket from "effect/socket/Socket"
+import { createServer, request } from "node:http"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) =>
@@ -167,6 +174,74 @@ const until = (check: () => boolean) =>
       ? Effect.void
       : Effect.andThen(wait(10), Effect.suspend(loop))
   }).pipe(Effect.timeout("2 seconds"))
+
+const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
+  const { routes, server } = Server.make({
+    size: 100,
+    dispatch: true,
+    keep: 5,
+    timeout
+  })
+  yield* Layer.build(
+    HttpRouter.serve(Layer.mergeAll(routes, Tools.layer(server)), {
+      disableLogger: true,
+      disableListenLog: true
+    }).pipe(
+      Layer.provide(
+        NodeHttpServer.layer(createServer, { port, host: "127.0.0.1" })
+      )
+    )
+  )
+  const url = "http://127.0.0.1:" + port
+  return { url, agent: yield* Effect.promise(() => makeAgent(url)) }
+})
+
+const connectSocket = (url: string) =>
+  Effect.callback<WebSocket>((resume) => {
+    const socket = new WebSocket(url)
+    socket.addEventListener("open", () => resume(Effect.succeed(socket)))
+  })
+
+const at = { session: "s", at: 0, path: "/App", instance: 1, component: "App" }
+const propsAt = (seq: number) =>
+  JSON.stringify({ _tag: "PropsChanged", ...at, seq, props: { seq } })
+
+const fakePage = Effect.fnUntraced(function*(
+  url: string,
+  dispatch: (log: WebSocket, message: unknown) => Effect.Effect<
+    BrowserHost.Dispatched
+  >
+) {
+  const log = yield* connectSocket(url.replace("http", "ws") + "/log")
+  yield* Effect.addFinalizer(() => Effect.sync(() => log.close()))
+  log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
+  log.send(
+    JSON.stringify({ _tag: "SessionStarted", ...at, seq: 0, app: "App" })
+  )
+  log.send(propsAt(1))
+  const found = {
+    instance: 1,
+    path: "/App",
+    component: "App",
+    message: Schema.Struct({ _tag: Schema.Literal("Go"), n: Schema.Number }),
+    dispatch: (message: unknown) => dispatch(log, message)
+  }
+  const root = { instance: (n: number) => n === 1 ? found : undefined }
+  yield* Remote.connect(url.replace("http", "ws") + "/control", {
+    roots: new Map([["s", root as unknown as BrowserHost.Controllable]]),
+    size: 100,
+    paused: () => undefined,
+    paintable: () => false,
+    paint: () => Effect.succeed(undefined),
+    resume: Effect.void,
+    changes: Stream.never
+  }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
+  yield* wait(100)
+  return log
+})
+
+const go = (count: number) =>
+  Array.from({ length: count }, (_, n) => ({ _tag: "Go", n }))
 
 describe("DevToolsServer", { concurrent: false }, () => {
   it.live(
@@ -643,6 +718,113 @@ describe("DevToolsServer", { concurrent: false }, () => {
         )
         free.close()
       }),
+    30_000
+  )
+
+  it.live(
+    "returns the outcomes of a batch that ran out of time, and what it didn't send",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(47751, 1_000)
+        const applied: Array<number> = []
+        yield* fakePage(url, (log, message) =>
+          Effect.gen(function*() {
+            const n = (message as { n: number }).n
+            yield* Effect.sleep("300 millis")
+            applied.push(n)
+            log.send(propsAt(n + 2))
+            return { _tag: "Updated", seq: n + 2 } as const
+          }))
+        const sent = yield* ask(agent, "dispatch", {
+          session: "s",
+          instance: 1,
+          messages: go(5)
+        })
+        assert.deepStrictEqual(sent.outcomes, [
+          { _tag: "Updated", seq: 2 },
+          { _tag: "Updated", seq: 3 },
+          { _tag: "Unknown" }
+        ])
+        assert.strictEqual(sent.applied, 2)
+        assert.deepStrictEqual(sent.notSent, [3, 4])
+        assert.include(sent.note, "Message 2 was sent but did not finish")
+        assert.include(sent.note, "Messages 3, 4 were not sent")
+        assert.isUndefined(sent.unseen)
+        yield* wait(500)
+        assert.deepStrictEqual(applied, [0, 1])
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "tells the agent any message may have applied when the page's reply is lost",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(47752, 300)
+        const log = yield* connectSocket(url.replace("http", "ws") + "/log")
+        log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
+        log.send(
+          JSON.stringify({ _tag: "SessionStarted", ...at, seq: 0, app: "App" })
+        )
+        log.send(propsAt(1))
+        const control = yield* connectSocket(
+          url.replace("http", "ws") + "/control"
+        )
+        control.send(
+          JSON.stringify({
+            _tag: "State",
+            sessions: ["s"],
+            paused: null,
+            size: 100
+          })
+        )
+        yield* wait(100)
+        const message = yield* refused(agent, "dispatch", {
+          session: "s",
+          instance: 1,
+          messages: go(2)
+        })
+        assert.include(message, "did not answer within 300ms")
+        assert.include(
+          message,
+          "Any of the messages may have been applied, or none"
+        )
+        assert.include(message, "after #1")
+        log.close()
+        control.close()
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "reports a dispatched entry the server will never hold when a later frame arrives",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(47753, 1_000)
+        yield* fakePage(url, (log) =>
+          Effect.sync(() => {
+            log.send(propsAt(3))
+            return { _tag: "Updated", seq: 2 } as const
+          }))
+        const sent = yield* ask(agent, "dispatch", {
+          session: "s",
+          instance: 1,
+          messages: go(1)
+        })
+        assert.deepStrictEqual(sent.outcomes, [{ _tag: "Updated", seq: 2 }])
+        assert.deepStrictEqual(sent.unavailable, [{
+          seq: 2,
+          reason: "skipped"
+        }])
+        assert.isUndefined(sent.unseen)
+        assert.include(
+          sent.note,
+          "#2 were logged by the page, but the server can't show them"
+        )
+        yield* refused(agent, "get_entry", { session: "s", seq: 2 })
+        const shown = yield* ask(agent, "get_entry", { session: "s", seq: 3 })
+        assert.strictEqual(shown._tag, "PropsChanged")
+      }).pipe(Effect.scoped),
     30_000
   )
 })

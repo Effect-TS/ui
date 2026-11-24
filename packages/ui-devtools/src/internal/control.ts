@@ -11,7 +11,8 @@ export const Request = Schema.Union([
   Schema.TaggedStruct("Dispatch", {
     session: Schema.String,
     instance: Schema.Number,
-    messages: Schema.Array(Schema.Json)
+    messages: Schema.Array(Schema.Json),
+    within: Schema.Number
   })
 ])
 
@@ -59,6 +60,7 @@ export type Outcome = typeof Outcome.Type
 
 export const Dispatched = Schema.Struct({
   outcomes: Schema.Array(Outcome),
+  expired: Schema.Boolean,
   paused: Schema.NullOr(Schema.Number)
 })
 
