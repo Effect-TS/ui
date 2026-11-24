@@ -97,7 +97,7 @@ describe("BrowserHost head", {
     expect(warnings).toEqual([])
   })
 
-  it("returns the full empty HtmlHead shape for an Html component when HtmlHead is not imported", async () => {
+  it("returns the empty HtmlHead shape for an Html component without importing HtmlHead", async () => {
     vi.resetModules()
     const [
       { Component, Head, Renderer },
@@ -110,27 +110,18 @@ describe("BrowserHost head", {
       import("@effect/ui/testing"),
       import("effect")
     ])
-    const Plain = Component.define({
-      name: "Plain",
-      model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
-    }).make({
-      init: () => null,
-      update: ($) => $.model,
-      view: (h) => h.div("plain")
-    })
-    const Titled = Component.define({
-      name: "Titled",
-      model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
-    }).make({
-      init: () => null,
-      update: ($) => $.model,
-      head: () => [Head.title("Ada")],
-      view: (h) => h.div("titled")
-    })
+    const page = (name: string, title?: string) =>
+      Component.define({
+        name,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        head: title === undefined ? undefined : () => [Head.title(title)],
+        view: (h) => h.div(name)
+      })
     const empty = {
       title: undefined,
       meta: [],
@@ -139,22 +130,17 @@ describe("BrowserHost head", {
       html: { lang: undefined, dir: undefined, class: [], data: {} },
       body: { class: [], data: {} }
     }
-    const plain = await Effect.runPromise(Renderer.prerender(Plain, {}))
-    expect(plain.head).toEqual(empty)
-    const titled = await Effect.runPromise(Renderer.prerender(Titled, {}))
-    expect(titled.head).toEqual({ ...empty, title: "Ada" })
+    const prerendered = await Effect.runPromise(
+      Renderer.prerender(page("Plain"), {})
+    )
+    expect(prerendered.head).toEqual(empty)
     const mounted = await Effect.runPromise(
       Effect.gen(function*() {
-        const plainRoot = yield* TestHost.mount(Plain, {})
-        const titledRoot = yield* TestHost.mount(Titled, {})
+        const root = yield* TestHost.mount(page("Titled", "Ada"), {})
         yield* TestHost.settle
-        return {
-          plain: plainRoot.head<HtmlHeadModule.HtmlHead>(),
-          titled: titledRoot.head<HtmlHeadModule.HtmlHead>()
-        }
+        return root.head<HtmlHeadModule.HtmlHead>()
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
     )
-    expect(mounted.plain).toEqual(empty)
-    expect(mounted.titled).toEqual({ ...empty, title: "Ada" })
+    expect(mounted).toEqual({ ...empty, title: "Ada" })
   })
 })

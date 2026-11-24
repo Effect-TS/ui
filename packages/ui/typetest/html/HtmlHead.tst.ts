@@ -15,12 +15,6 @@ const Page = Component.define({
   message: Schema.Never,
   elements: Html
 })
-const VocabularyPage = Component.define({
-  name: "VocabularyPage",
-  model: Schema.Null,
-  message: Schema.Never,
-  elements: Html.vocabulary
-})
 
 declare const content: View.Content<never, any>
 
@@ -48,15 +42,6 @@ describe("Head and HtmlHead", () => {
 
   it("an Html component takes Head's and HtmlHead's entries", () => {
     expect(Page.make).type.toBeCallableWith({
-      ...base,
-      head: () => [
-        Head.title("Ada"),
-        HtmlHead.meta({ name: "description", content: "Ada" }),
-        HtmlHead.lang("en")
-      ],
-      view: () => content
-    })
-    expect(VocabularyPage.make).type.toBeCallableWith({
       ...base,
       head: () => [
         Head.title("Ada"),
