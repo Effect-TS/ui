@@ -11,7 +11,7 @@ const HTML = "http://www.w3.org/1999/xhtml"
  * pointer it was, since a browser may report a tap's `click` as a mouse's,
  * as WebKit does. Without one, the event's own type, and `"mouse"` last.
  */
-export const pressedWith = (
+const pressedWith = (
   name: string,
   event: Event,
   last: Html.PointerType | undefined
@@ -23,7 +23,7 @@ export const pressedWith = (
   return last ?? own ?? "mouse"
 }
 
-export const fieldsOf = (
+const fieldsOf = (
   form: HTMLFormElement,
   submitter: HTMLElement | null
 ) => {
@@ -66,7 +66,7 @@ const controlPayload = (
 
 const noFiles: ReadonlyArray<File> = []
 
-export const noSelection = { selectionStart: null, selectionEnd: null }
+const noSelection = { selectionStart: null, selectionEnd: null }
 
 export const isEditable = (target: EventTarget | null): boolean => {
   const element = target as HTMLElement | null
@@ -80,7 +80,7 @@ export const isEditable = (target: EventTarget | null): boolean => {
   return element?.isContentEditable === true
 }
 
-export const selectionOf = (target: EventTarget | null) => {
+const selectionOf = (target: EventTarget | null) => {
   const field = target as HTMLInputElement | null
   const tag = (field as globalThis.Element | null)?.localName
   if (tag !== "input" && tag !== "textarea") return noSelection
@@ -97,7 +97,7 @@ export const selectionOf = (target: EventTarget | null) => {
 }
 
 /** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
-export const pastedText = (event: Event): string => {
+const pastedText = (event: Event): string => {
   try {
     return (event as ClipboardEvent).clipboardData?.getData("text/plain") ?? ""
   } catch {
@@ -113,7 +113,7 @@ export const pastedText = (event: Event): string => {
  * an iframe's adopted into this document, fails `instanceof Node`, and an
  * object can fake `nodeType`.
  */
-export const containsTarget = (
+const containsTarget = (
   element: globalThis.Element,
   target: EventTarget | null
 ): boolean => {
@@ -128,7 +128,7 @@ export const isDisabled = (target: EventTarget | null): boolean =>
   typeof (target as globalThis.Element | null)?.matches === "function" &&
   (target as globalThis.Element).matches(":disabled")
 
-export const isFocusVisible = (target: EventTarget | null): boolean => {
+const isFocusVisible = (target: EventTarget | null): boolean => {
   if (typeof (target as globalThis.Element | null)?.matches !== "function") {
     return true
   }
@@ -139,7 +139,7 @@ export const isFocusVisible = (target: EventTarget | null): boolean => {
   }
 }
 
-export const fieldOf = (
+const fieldOf = (
   target: EventTarget | null,
   element: globalThis.Element
 ) =>
