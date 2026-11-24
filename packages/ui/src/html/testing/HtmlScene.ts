@@ -288,28 +288,16 @@ export declare namespace Steps {
   export type Any = Steps<AnyComponent, any>
 }
 
-const followOptional =
-  (root: Locator.Node, node: Locator.Node) =>
-  (state: engine.State<any, any, any, any>): Locator.Node | undefined =>
-    internal.followNode(
-      root as View.Node<any, any>,
-      node as View.Node<any, any>,
-      state.root as View.Node<any, any>
-    ) as Locator.Node | undefined
-
-const follow =
-  (root: Locator.Node, node: Locator.Node, description: string) =>
-  (
-    state: engine.State<any, any, any, any>
-  ): Locator.Node => {
-    const at = followOptional(root, node)(state)
-    if (at === undefined) {
-      throw new Error(
-        `HtmlScene.click: ${description} is no longer in the view`
-      )
-    }
-    return at
-  }
+const follow = (
+  root: Locator.Node,
+  node: Locator.Node,
+  state: engine.State<any, any, any, any>
+): Locator.Node | undefined =>
+  internal.followNode(
+    root as View.Node<any, any>,
+    node as View.Node<any, any>,
+    state.root as View.Node<any, any>
+  ) as Locator.Node | undefined
 
 class StepsImpl extends internal.SceneCursor {
   override click(target: string | Locator.Locator): this {
@@ -321,138 +309,86 @@ class StepsImpl extends internal.SceneCursor {
       "message",
       (state) => {
         const step = this.name("click")
-        const initial = engine.findOne(state, locator, step)
-        const initialRoot = state.root
-        const initialPath = engine.ancestry(state, initial) as ReadonlyArray<
-          Locator.Node
-        >
-        const press = defaults.planClickPress(
-          initial,
-          initialPath,
-          locator.description,
-          step
-        )
+        const description = locator.description
         let out = state
-        let reachedOwn = false
-        let childOnly:
-          | {
-            readonly state: engine.State<any, any, any, any>
-            readonly node: Locator.Node
-            readonly event: string
-            readonly description: string
-          }
-          | undefined
-        const runEvent = (
-          target: Locator.Node,
+        let reached = false
+        let childOnly: string | undefined
+        const send = (
+          node: Locator.Node,
           event: string,
-          payload: unknown,
-          description: string
+          payload: unknown = internal.pointer,
+          at = description
         ): boolean => {
-          const status = engine.handlesOwn(out, target, event)
-          if (status.kind === "none") return false
-          if (status.kind === "child") {
+          const fired = engine.tryFireNode(out, node, event, payload, step, at)
+          if (fired === undefined) return false
+          if ("error" in fired) {
             if (childOnly === undefined || event === "click") {
-              childOnly = { state: out, node: target, event, description }
+              childOnly = fired.error
             }
-            return status.alwaysPrevented
+          } else {
+            reached = true
+            handled ||= fired.handled
+            out = fired.story
           }
-          reachedOwn = true
-          const fired = engine.fireNode(
-            out,
-            target,
-            event,
-            payload,
-            step,
-            description
-          )
-          handled ||= fired.handled
-          out = fired.story
           return fired.prevented
         }
-
-        const followPress = followOptional(initialRoot, initial)
-        let pointerDownCancelled = false
-        for (const planned of press) {
-          if (planned.event === "mousedown" && pointerDownCancelled) continue
-          const target = followPress(out)
-          if (target === undefined) break
-          if (
-            planned.event !== "pointerdown" &&
-            defaults.isClickDisabled(
-              engine.ancestry(out, target) as ReadonlyArray<Locator.Node>
-            )
-          ) break
-          const cancelled = runEvent(
-            target,
-            planned.event,
-            planned.payload(out.root, (node) => node),
-            planned.description
-          )
-          if (planned.event === "pointerdown") pointerDownCancelled = cancelled
+        const pathOf = (node: Locator.Node) =>
+          engine.ancestry(out, node) as ReadonlyArray<Locator.Node>
+        const enabled = (
+          root: Locator.Node,
+          node: Locator.Node
+        ): Locator.Node | undefined => {
+          const now = follow(root, node, out)
+          return now === undefined || defaults.isClickDisabled(pathOf(now))
+            ? undefined
+            : now
         }
-
-        const releaseNode = followPress(out)
-        if (releaseNode !== undefined) {
-          const releaseRoot = out.root
-          const releasePath = engine.ancestry(
-            out,
-            releaseNode
-          ) as ReadonlyArray<Locator.Node>
-          if (!defaults.isClickDisabled(releasePath)) {
-            const release = defaults.planClickRelease(
-              releaseRoot,
-              releaseNode,
-              releasePath,
-              locator.description,
-              !pointerDownCancelled
-            )
-            let clickCancelled = false
-            for (const planned of release) {
-              if (planned.isDefault && clickCancelled) continue
-              const target = followOptional(releaseRoot, planned.node)(out)
-              if (target === undefined) {
-                if (!planned.isDefault) break
-                continue
-              }
-              if (
-                !planned.isDefault &&
-                defaults.isClickDisabled(
-                  engine.ancestry(out, target) as ReadonlyArray<Locator.Node>
+        const run = (): void => {
+          const found = engine.findOne(state, locator, step)
+          if (defaults.isClickDisabled(pathOf(found))) {
+            throw new Error(`${step}: ${description} is disabled`)
+          }
+          const skipMouse = send(found, "pointerdown")
+          if (!skipMouse) {
+            const held = enabled(state.root, found)
+            if (held === undefined) return
+            send(held, "mousedown")
+          }
+          const pressed = enabled(state.root, found)
+          if (pressed === undefined) return
+          const root = out.root
+          const plan = defaults.planClickDefaults(
+            root,
+            pressed,
+            pathOf(pressed),
+            description
+          )
+          if (!skipMouse) send(pressed, "mouseup")
+          const released = enabled(root, pressed)
+          if (released === undefined) return
+          prevented = send(released, "click")
+          if (prevented) return
+          for (const planned of plan) {
+            const now = follow(root, planned.node, out)
+            if (now === undefined) continue
+            const payload = planned.payload(out.root, (node, description) => {
+              const at = follow(root, node, out)
+              if (at === undefined) {
+                throw new Error(
+                  `${step}: ${description} is no longer in the view`
                 )
-              ) break
-              const cancelled = runEvent(
-                target,
-                planned.event,
-                planned.payload(
-                  out.root,
-                  (node, description) =>
-                    follow(releaseRoot, node, description)(out)
-                ),
-                planned.description
-              )
-              if (planned.event === "click") {
-                clickCancelled = cancelled
-                prevented ||= cancelled
-              } else if (planned.isDefault) {
-                prevented ||= cancelled
               }
+              return at
+            })
+            if (send(now, planned.event, payload, planned.description)) {
+              prevented = true
             }
           }
         }
-
-        if (!reachedOwn) {
-          if (childOnly !== undefined) {
-            engine.fireNode(
-              childOnly.state,
-              childOnly.node,
-              childOnly.event,
-              {},
-              step,
-              childOnly.description
-            )
-          }
+        run()
+        if (!reached) {
           throw new Error(
-            `${step}: nothing handles "click" at ${locator.description}`
+            childOnly ?? `${step}: nothing handles "click" at ${description}`
           )
         }
         return out

@@ -16,7 +16,6 @@ export interface PlannedEvent {
   readonly description: string
   readonly event: string
   readonly payload: () => unknown
-  readonly isDefault?: boolean | undefined
   readonly edit?: (() => ReadonlyArray<TestHost.TestElement>) | undefined
 }
 
@@ -115,15 +114,12 @@ export class PlayCursor {
     node: TestHost.TestNode,
     event: string,
     payload: () => unknown
-  ): {
-    readonly reached: boolean
-    readonly handled: boolean
-    readonly prevented: boolean
-  } {
+  ):
+    | { readonly handled: boolean; readonly prevented: boolean }
+    | undefined
+  {
     const target = this.handlerOn(node, event)
-    if (target === undefined) {
-      return { reached: false, handled: false, prevented: false }
-    }
+    if (target === undefined) return undefined
     const preventDefault = target.eventOptions[event]?.preventDefault
     let prevented = event === "submit" || preventDefault === "always"
     const handled = target.dispatch!(
@@ -136,7 +132,7 @@ export class PlayCursor {
         }
         : undefined
     )
-    return { reached: true, handled, prevented }
+    return { handled, prevented }
   }
 
   protected recordInteraction(step: string, handled: boolean): void {
@@ -162,17 +158,14 @@ export class PlayCursor {
     this.checkReady(name)
     let reached = false
     let handled = false
-    let cancelled = false
     const edited: Array<TestHost.TestElement> = []
     const events = plan()
-    for (const { edit, event, isDefault, node, payload } of events) {
-      if (isDefault === true && cancelled) continue
+    for (const { edit, event, node, payload } of events) {
       if (edit !== undefined) edited.push(...edit())
       const fired = this.dispatchEvent(node, event, payload)
-      if (!fired.reached) continue
+      if (fired === undefined) continue
       reached = true
       handled ||= fired.handled
-      if (isDefault !== true) cancelled ||= fired.prevented
     }
     if (!reached) {
       throw new Error(

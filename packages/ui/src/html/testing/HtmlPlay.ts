@@ -72,6 +72,7 @@ import * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import * as internal from "../../internal/play.ts"
+import * as scene from "../../internal/scene.ts"
 import { atSite, callSite } from "../../internal/steps.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Play from "../../testing/Play.ts"
@@ -177,38 +178,32 @@ class HtmlPlayCursor extends internal.PlayCursor {
   ): Effect.Effect<void, Play.StepError> {
     const locator = typeof target === "string" ? Locator.text(target) : target
     const site = callSite(this.click)
+    const name = this.name("click")
     return Effect.gen({ self: this }, function*() {
-      yield* this.settle
-      const name = this.name("click")
       let reached = false
       let handled = false
-      let pointerDownCancelled = false
-      const node = yield* Effect.sync(() =>
+      const send = (
+        node: TestHost.TestElement,
+        event: string,
+        payload: () => unknown = () => scene.pointer
+      ): boolean => {
+        const fired = this.dispatchEvent(node, event, payload)
+        if (fired === undefined) return false
+        reached = true
+        handled ||= fired.handled
+        return fired.prevented
+      }
+      yield* this.settle
+      const [node, skipMouse] = yield* Effect.sync(() =>
         atSite(site, () => {
           this.checkReady(name)
-          const found = this.findOne(locator, "click")
-          const container = this.root.container
-          const press = defaults.planClickPress(
-            found,
-            internal.ancestors(found),
-            locator.description,
-            name
-          )
-          for (const planned of press) {
-            if (planned.event === "mousedown" && pointerDownCancelled) continue
-            const fired = this.dispatchEvent(
-              planned.node as TestHost.TestElement,
-              planned.event,
-              () => planned.payload(container, (node) => node)
-            )
-            if (!fired.reached) continue
-            reached = true
-            handled ||= fired.handled
-            if (planned.event === "pointerdown") {
-              pointerDownCancelled = fired.prevented
-            }
+          const node = this.findOne(locator, "click")
+          if (defaults.isClickDisabled(internal.ancestors(node))) {
+            throw new Error(`${name}: ${locator.description} is disabled`)
           }
-          return found
+          const skipMouse = send(node, "pointerdown")
+          if (!skipMouse) send(node, "mousedown")
+          return [node, skipMouse] as const
         })
       )
       if (handled) yield* this.settle
@@ -218,39 +213,30 @@ class HtmlPlayCursor extends internal.PlayCursor {
           const container = this.root.container
           const path = internal.ancestors(node)
           if (path.includes(container) && !defaults.isClickDisabled(path)) {
-            const release = defaults.planClickRelease(
+            const plan = defaults.planClickDefaults(
               container,
               node,
               path,
-              locator.description,
-              !pointerDownCancelled
+              locator.description
             )
-            let clickCancelled = false
-            for (const planned of release) {
-              if (planned.isDefault && clickCancelled) continue
-              const element = planned.node as TestHost.TestElement
-              if (planned.checks !== undefined) {
-                for (const [other, checked] of planned.checks()) {
-                  const control = other as TestHost.TestElement
-                  control.props.checked = checked
-                  edited.push(control)
+            if (!skipMouse) send(node, "mouseup")
+            if (!send(node, "click")) {
+              for (const { checks, event, node, payload } of plan) {
+                const element = node as TestHost.TestElement
+                const sent = () => payload(container, (node) => node)
+                if (checks !== undefined) {
+                  for (const [other, checked] of checks()) {
+                    const control = other as TestHost.TestElement
+                    control.props.checked = checked
+                    edited.push(control)
+                  }
+                } else if (event === "toggle") {
+                  element.props.popoverOpen =
+                    (sent() as Html.PopoverTogglePayload).open
+                  edited.push(element)
                 }
-              } else if (planned.event === "toggle") {
-                element.props.popoverOpen = (planned.payload(
-                  container,
-                  (node) => node
-                ) as Html.PopoverTogglePayload).open
-                edited.push(element)
+                send(element, event, sent)
               }
-              const fired = this.dispatchEvent(
-                element,
-                planned.event,
-                () => planned.payload(container, (node) => node)
-              )
-              if (!fired.reached) continue
-              reached = true
-              handled ||= fired.handled
-              if (planned.event === "click") clickCancelled = fired.prevented
             }
           }
           if (!reached) {
