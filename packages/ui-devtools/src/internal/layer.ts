@@ -15,15 +15,6 @@ export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
 const sizeKey = "@effect/ui-devtools/size"
 const openKey = "@effect/ui-devtools/open"
 
-const isExcludedEntry = (entry: MessageLog.Entry, exclude: ReadonlySet<string>): boolean =>
-  exclude.size > 0 &&
-  entry._tag === "Update" &&
-  typeof entry.message === "object" &&
-  entry.message !== null &&
-  "_tag" in entry.message &&
-  typeof (entry.message as { readonly _tag?: unknown })._tag === "string" &&
-  exclude.has((entry.message as { readonly _tag: string })._tag)
-
 const corners: { readonly [P in Position]: string } = {
   TopLeft: "top:12px;left:12px",
   TopRight: "top:12px;right:12px",
@@ -54,27 +45,11 @@ export const make = (options: {
   Layer.effectContext(
     Effect.gen(function*() {
       const size = Math.max(1, options.size ?? 1_000)
-      const exclude = new Set(options.exclude)
-      const excludedSeqs = new Map<string, Set<number>>()
+      const isExcluded = InspectorInternal.matchTags(new Set(options.exclude))
+      const excluded = new Map<string, Set<number>>()
       const inspector = InspectorInternal.make({
         size,
-        isExcluded: exclude.size === 0
-          ? undefined
-          : (entry) => {
-            const seqs = excludedSeqs.get(entry.session)
-            if (seqs === undefined) return false
-            let hit = false
-            for (const seq of seqs) {
-              if (seq < entry.seq) seqs.delete(seq)
-              else if (seq === entry.seq) {
-                seqs.delete(seq)
-                hit = true
-                break
-              } else break
-            }
-            if (seqs.size === 0) excludedSeqs.delete(entry.session)
-            return hit
-          }
+        isExcluded: (entry) => excluded.get(entry.session)?.delete(entry.seq) === true
       })
       const history = History.make(size)
       const roots = new Map<string, BrowserHost.Pausable>()
@@ -83,20 +58,27 @@ export const make = (options: {
       const latest = new Map<string, number>()
       const changes = yield* PubSub.sliding<void>(1)
       const view = document.defaultView
-      const open = ((): boolean => {
+      const load = (key: string): unknown => {
         try {
-          return view?.localStorage.getItem(openKey) === "true"
+          return JSON.parse(view?.localStorage.getItem(key) ?? "null")
         } catch {
-          return false
+          return null
         }
-      })()
+      }
+      const save = (key: string, value: unknown) => {
+        try {
+          view?.localStorage.setItem(key, JSON.stringify(value))
+        } catch {
+          return
+        }
+      }
       const feed: Feed = {
         inspector,
         origin: (session) => origins.get(session),
         changes: Stream.fromPubSub(changes),
         paintable: (session, seq) => roots.has(session) && history.holds(session, seq),
         pausing: () => paused !== undefined,
-        open
+        open: load(openKey) === true
       }
       const resume: Effect.Effect<void> = Effect.suspend(() => {
         const root = paused
@@ -122,18 +104,12 @@ export const make = (options: {
         resume,
         clear: (sessionId) =>
           Effect.sync(() => {
-            if (paused !== undefined) return
+            const upTo = latest.get(sessionId)
+            if (paused !== undefined || upTo === undefined) return
             inspector.sessions().find((session) => session.id === sessionId)?.clear()
-            history.clear(sessionId, latest.get(sessionId))
+            history.clear(sessionId, upTo)
           }),
-        setOpen: (next) =>
-          Effect.sync(() => {
-            try {
-              view?.localStorage.setItem(openKey, String(next))
-            } catch {
-              return
-            }
-          })
+        setOpen: (open) => Effect.sync(() => save(openKey, open))
       })
       const pausables: BrowserHost.Pausables = {
         register: (root) => {
@@ -175,13 +151,7 @@ export const make = (options: {
         root.style.setProperty("--panel-w", Math.max(480, Math.round(width)) + "px")
         root.style.setProperty("--panel-h", Math.max(300, Math.round(height)) + "px")
       }
-      const saved = ((): unknown => {
-        try {
-          return JSON.parse(view?.localStorage.getItem(sizeKey) ?? "null")
-        } catch {
-          return null
-        }
-      })()
+      const saved = load(sizeKey)
       if (Array.isArray(saved) && typeof saved[0] === "number" && typeof saved[1] === "number") {
         resize(saved[0], saved[1])
       }
@@ -200,11 +170,7 @@ export const make = (options: {
         const end = () => {
           grip.removeEventListener("pointermove", move)
           const rect = panel.getBoundingClientRect()
-          try {
-            view?.localStorage.setItem(sizeKey, JSON.stringify([rect.width, rect.height]))
-          } catch {
-            return
-          }
+          save(sizeKey, [rect.width, rect.height])
         }
         grip.setPointerCapture(event.pointerId)
         grip.addEventListener("pointermove", move)
@@ -249,13 +215,13 @@ export const make = (options: {
         })
       )
       const record = (entry: MessageLog.Entry) => {
-        const excluded = isExcludedEntry(entry, exclude)
-        if (excluded) {
-          let seqs = excludedSeqs.get(entry.session)
-          if (seqs === undefined) excludedSeqs.set(entry.session, seqs = new Set())
+        const hide = isExcluded(entry)
+        if (hide) {
+          let seqs = excluded.get(entry.session)
+          if (seqs === undefined) excluded.set(entry.session, seqs = new Set())
           seqs.add(entry.seq)
         }
-        history.record(entry, excluded)
+        history.record(entry, hide)
       }
       const log = MessageLog.fanoutAll([{ enabled: true, record }, encoded])
       return Context.make(MessageLog.MessageLog, log).pipe(Context.add(BrowserHost.Pausables, pausables))

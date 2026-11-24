@@ -49,7 +49,7 @@ export const isRun = (entry: Entry | Inspector.Outside): entry is RunEntry =>
 export const issuedOf = (entry: Entry | Inspector.Outside): MessageLog.Issued | undefined =>
   isRun(entry) ? entry.issued : entry._tag === "Failed" ? entry.issued : undefined
 
-export const tagOf = (value: Schema.Json): string | undefined =>
+export const tagOf = (value: unknown): string | undefined =>
   Predicate.hasProperty(value, "_tag") && typeof value._tag === "string" ? value._tag : undefined
 
 export const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path

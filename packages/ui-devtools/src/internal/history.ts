@@ -9,7 +9,7 @@ type State = (path: string) => BrowserHost.Recorded | undefined
 
 export interface History {
   readonly record: (entry: MessageLog.Entry, excluded?: boolean) => void
-  readonly clear: (session: string, upTo?: number) => void
+  readonly clear: (session: string, upTo: number) => void
   readonly holds: (session: string, seq: number) => boolean
   readonly at: (session: string, seq: number) => State | undefined
 }
@@ -48,47 +48,32 @@ const makeSession = (size: number) => {
   const base = new Map<number, Held>()
   const entries: Array<MessageLog.Entry> = []
   const shown = new Set<number>()
-  const run = new Map<number, MessageLog.Entry>()
+  const coalesced = new Map<number, MessageLog.Update>()
+  const drop = () => {
+    const oldest = entries.shift()!
+    shown.delete(oldest.seq)
+    if (oldest._tag === "Update" && coalesced.get(oldest.instance) === oldest) coalesced.delete(oldest.instance)
+    apply(base, oldest)
+  }
   return {
     record: (entry: MessageLog.Entry, excluded = false) => {
       if (excluded && entry._tag === "Update") {
-        const replaced = run.get(entry.instance)
-        let merged: MessageLog.Entry = entry
-        if (replaced !== undefined) {
-          const at = entries.lastIndexOf(replaced)
-          if (at >= 0) entries.splice(at, 1)
-          if (entry.queries === undefined && (replaced as MessageLog.Update).queries !== undefined) {
-            merged = { ...entry, queries: (replaced as MessageLog.Update).queries }
-          }
-        }
+        const replaced = coalesced.get(entry.instance)
+        if (replaced !== undefined) entries.splice(entries.lastIndexOf(replaced), 1)
+        const merged = entry.queries === undefined && replaced?.queries !== undefined
+          ? { ...entry, queries: replaced.queries }
+          : entry
         entries.push(merged)
-        run.set(entry.instance, merged)
+        coalesced.set(entry.instance, merged)
         return
       }
-      run.clear()
+      coalesced.clear()
       entries.push(entry)
       shown.add(entry.seq)
-      while (shown.size > size && entries.length > 0) {
-        const oldest = entries.shift()!
-        shown.delete(oldest.seq)
-        if ("instance" in oldest && run.get(oldest.instance) === oldest) run.delete(oldest.instance)
-        apply(base, oldest)
-      }
+      while (shown.size > size) drop()
     },
-    clear: (upTo?: number) => {
-      if (upTo === undefined) {
-        for (const entry of entries) apply(base, entry)
-        entries.length = 0
-        shown.clear()
-        run.clear()
-        return
-      }
-      while (entries.length > 0 && entries[0]!.seq <= upTo) {
-        const oldest = entries.shift()!
-        shown.delete(oldest.seq)
-        if ("instance" in oldest && run.get(oldest.instance) === oldest) run.delete(oldest.instance)
-        apply(base, oldest)
-      }
+    clear: (upTo: number) => {
+      while (entries.length > 0 && entries[0]!.seq <= upTo) drop()
     },
     holds: (seq: number) => shown.has(seq),
     at: (seq: number): State => {

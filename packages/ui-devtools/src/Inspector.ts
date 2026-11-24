@@ -364,4 +364,4 @@ export const diff: (before: Schema.Json, after: Schema.Json) => ReadonlyArray<Ch
 export const make = (options?: {
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
-}): Inspector => internal.make({ size: options?.size, exclude: options?.exclude })
+}): Inspector => internal.make({ size: options?.size, isExcluded: internal.matchTags(new Set(options?.exclude)) })

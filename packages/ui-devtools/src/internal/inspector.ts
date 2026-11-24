@@ -1,6 +1,7 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import type * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
+import { tagOf } from "./read.ts"
 
 type Entry = MessageLog.WireEntry
 type InstanceEntry = Exclude<Entry, { readonly _tag: "SessionStarted" | "FetchStarted" }>
@@ -103,19 +104,16 @@ const push = <K, V>(map: Map<K, Array<V>>, key: K, value: V) => {
   else list.push(value)
 }
 
-const matchTags = (exclude: ReadonlySet<string>) => (entry: Entry): boolean =>
-  exclude.size > 0 &&
-  entry._tag === "Update" &&
-  typeof entry.message === "object" &&
-  entry.message !== null &&
-  "_tag" in entry.message &&
-  typeof (entry.message as { readonly _tag?: unknown })._tag === "string" &&
-  exclude.has((entry.message as { readonly _tag: string })._tag)
+export const matchTags = (tags: ReadonlySet<string>) => (entry: MessageLog.Entry | Entry): boolean => {
+  if (entry._tag !== "Update") return false
+  const tag = tagOf(entry.message)
+  return tag !== undefined && tags.has(tag)
+}
 
 const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boolean) => {
   const entries = new Map<number, Entry>()
   const hidden = new Set<number>()
-  const run = new Map<number, Entry>()
+  const coalesced = new Map<number, Entry>()
   const instances = new Map<number, InstanceState>()
   const runs = new Map<string, Mutable<Inspector.Record>>()
   const mounts = new Map<number, Mutable<Inspector.Record>>()
@@ -125,7 +123,6 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
   const ended = new Map<number, Array<Mutable<Inspector.Record>>>()
   let app: string | undefined
   let last = -Infinity
-  let shown = 0
 
   const link = (from: number, rel: Inspector.Link["rel"], seq: number, index?: number) => {
     push(back, from, index === undefined ? { rel, seq } : { rel, seq, index })
@@ -145,8 +142,8 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
 
   const end = (seq: number, issued: MessageLog.Issued, reason: Inspector.Reason) => {
     link(seq, "issued", issued.seq, issued.index)
-    const runRecord = runs.get(runKey(issued))
-    if (runRecord !== undefined && runRecord.end === undefined) close(runRecord, seq, reason)
+    const run = runs.get(runKey(issued))
+    if (run !== undefined && run.end === undefined) close(run, seq, reason)
   }
 
   const linkSource = (inst: InstanceState, from: number, source: Source) => {
@@ -190,22 +187,17 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
       case "Update": {
         if (inst.state !== undefined) {
           const before = entries.get(inst.state)
-          if (before !== undefined && "model" in before) {
-            previous.set(seq, { seq: inst.state, changed: compare(before.model, entry.model) })
-          } else if (inst.baseline !== undefined && inst.baseline.seq === inst.state) {
-            previous.set(seq, {
-              seq: inst.state,
-              changed: compare(inst.baseline.model, entry.model),
-              model: inst.baseline.model,
-              props: inst.baseline.props
-            })
-          } else {
-            previous.set(seq, { seq: inst.state })
-          }
+          previous.set(
+            seq,
+            before !== undefined && "model" in before
+              ? { seq: inst.state, changed: compare(before.model, entry.model) }
+              : inst.baseline?.seq === inst.state
+              ? { ...inst.baseline, changed: compare(inst.baseline.model, entry.model) }
+              : { seq: inst.state }
+          )
         }
         inst.state = seq
         inst.latest = { seq, model: entry.model, props: entry.props }
-        inst.baseline = undefined
         if (entry._tag === "Waiting") return
         if (entry._tag === "Mounted") inst.info.mounted = seq
         else linkSource(inst, seq, entry.source)
@@ -269,12 +261,12 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
       case "CommandStarted": {
         link(seq, "issued", entry.issued.seq, entry.issued.index)
         const key = runKey(entry.issued)
-        let runRecord = runs.get(key)
-        if (runRecord === undefined) {
-          runRecord = open(inst, { kind: "command", instance, name: entry.name, issued: entry.issued })
-          runs.set(key, runRecord)
+        let run = runs.get(key)
+        if (run === undefined) {
+          run = open(inst, { kind: "command", instance, name: entry.name, issued: entry.issued })
+          runs.set(key, run)
         }
-        runRecord.start = seq
+        run.start = seq
         return
       }
       case "CommandAwaiting":
@@ -289,9 +281,7 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
 
   const evict = (seq: number, entry: Entry) => {
     entries.delete(seq)
-    const wasHidden = hidden.delete(seq)
-    if (!wasHidden) shown--
-    if (wasHidden && "instance" in entry && run.get(entry.instance)?.seq === seq) run.delete(entry.instance)
+    hidden.delete(seq)
     previous.delete(seq)
     for (const named of back.get(seq) ?? []) {
       const kept = forward.get(named.seq)?.filter((naming) => naming.seq !== seq)
@@ -321,12 +311,8 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
       return app
     },
     entries: () => {
-      if (hidden.size === 0) return Array.from(entries.values())
-      const result: Array<Entry> = []
-      for (const entry of entries.values()) {
-        if (!hidden.has(entry.seq)) result.push(entry)
-      }
-      return result
+      const all = Array.from(entries.values())
+      return hidden.size === 0 ? all : all.filter((entry) => !hidden.has(entry.seq))
     },
     resolve: (seq) => entries.get(seq) ?? { _tag: "Outside", seq },
     instances: () => Array.from(instances.values(), (inst) => ({ ...inst.info })),
@@ -342,12 +328,9 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
     forward: (seq) => forward.get(seq)?.slice() ?? [],
     previous: (seq) => previous.get(seq),
     clear: () => {
-      for (const inst of instances.values()) {
-        if (inst.info.unmounted !== undefined || inst.latest === undefined) continue
-        inst.baseline = inst.latest
-      }
+      for (const inst of instances.values()) inst.baseline = inst.latest
       for (const [seq, entry] of Array.from(entries)) evict(seq, entry)
-      run.clear()
+      coalesced.clear()
     }
   }
 
@@ -357,54 +340,39 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
       if (entry.seq <= last) return
       last = entry.seq
       if (entry._tag === "Update" && isExcluded(entry)) {
-        const instId = entry.instance
-        const replaced = run.get(instId)
+        const replaced = coalesced.get(entry.instance)
         if (replaced !== undefined) {
-          const inst = instances.get(instId)
-          const prev = previous.get(replaced.seq)
-          if (inst !== undefined && inst.state === replaced.seq) {
-            inst.state = prev?.seq
-            inst.baseline = prev !== undefined && prev.model !== undefined && prev.props !== undefined
-              ? { seq: prev.seq, model: prev.model, props: prev.props }
-              : undefined
-          }
+          const inst = instances.get(entry.instance)
+          if (inst?.state === replaced.seq) inst.state = previous.get(replaced.seq)?.seq
           evict(replaced.seq, replaced)
         }
-        entries.set(entry.seq, entry)
         hidden.add(entry.seq)
-        run.set(instId, entry)
-      } else {
-        run.clear()
-        entries.set(entry.seq, entry)
-        shown++
-      }
+        coalesced.set(entry.instance, entry)
+      } else coalesced.clear()
+      entries.set(entry.seq, entry)
       if (entry.causedBy !== undefined) link(entry.seq, "causedBy", entry.causedBy)
       if (entry._tag === "SessionStarted") app = entry.app
       else if (entry._tag !== "FetchStarted") track(entry)
-      if (shown > size) {
-        for (const [seq, oldest] of entries) {
-          evict(seq, oldest)
-          if (shown <= size) break
-        }
+      for (const [seq, oldest] of entries) {
+        if (entries.size - hidden.size <= size) break
+        evict(seq, oldest)
       }
     }
   }
 }
 
-export const make = (options?: {
+export const make = (options: {
   readonly size?: number | undefined
-  readonly exclude?: ReadonlyArray<string> | undefined
-  readonly isExcluded?: ((entry: Entry) => boolean) | undefined
+  readonly isExcluded: (entry: Entry) => boolean
 }): Inspector.Inspector => {
-  const size = Math.max(1, options?.size ?? 1_000)
-  const isExcluded = options?.isExcluded ?? matchTags(new Set(options?.exclude))
+  const size = Math.max(1, options.size ?? 1_000)
   const sessions = new Map<string, ReturnType<typeof makeSession>>()
   return {
     ingest: (batch) => {
       for (const entry of batch) {
         let state = sessions.get(entry.session)
         if (state === undefined) {
-          state = makeSession(entry.session, size, isExcluded)
+          state = makeSession(entry.session, size, options.isExcluded)
           sessions.set(entry.session, state)
         }
         state.ingest(entry)

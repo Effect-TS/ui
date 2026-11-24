@@ -162,6 +162,7 @@ const filters: ReadonlyArray<readonly [Read.Filter, string]> = [
 ]
 
 const increment = (n: number) => n + 1
+const following = { pinned: true, reveal: null, pins: increment, pane: "timeline" } as const
 
 const ms = (value: number) => Math.round(value) + " ms"
 
@@ -732,7 +733,7 @@ const Details = (
   const resolved = previous === undefined ? undefined : session.resolve(previous.seq)
   const before = resolved !== undefined && resolved._tag !== "Outside" && "model" in resolved
     ? resolved
-    : previous?.model !== undefined
+    : previous?.model !== undefined && previous.props !== undefined
     ? { seq: previous.seq, model: previous.model, props: previous.props }
     : undefined
   const unavailable = previous !== undefined && before === undefined
@@ -743,13 +744,11 @@ const Details = (
   const name = "path" in entry ? Read.nameOf(entry.path) : "this instance"
   const Props = (): Children => {
     if (state === undefined) return []
-    const propChanges = before === undefined || before.props === undefined
-      ? []
-      : Inspector.diff(before.props, state.props)
+    const propChanges = before === undefined ? [] : Inspector.diff(before.props, state.props)
     return [
       h.h4.children(
         "Props",
-        before === undefined || before.props === undefined ? null : h.span.class("muted").children(
+        before === undefined ? null : h.span.class("muted").children(
           " · " + propsText[Read.statusOf(propChanges)],
           SeqLink(h, Read.refOf(session, before.seq))
         )
@@ -1015,9 +1014,7 @@ export const Overlay = Component.define({
         ...($.model.reveal === null ? {} : { reveal: null, pinned: $.model.atStart, pins: increment }),
         ...($.model.paused === null || $.props.feed.pausing() ? {} : { paused: null })
       }),
-    ClickedOpen: ($) =>
-      $.evolve({ open: true, pinned: true, atStart: true, reveal: null, pins: increment, pane: "timeline" })
-        .run(SaveOpen.make({ open: true })),
+    ClickedOpen: ($) => $.evolve({ open: true, atStart: true, ...following }).run(SaveOpen.make({ open: true })),
     ClickedClose: ($) => $.evolve({ open: false }).run(SaveOpen.make({ open: false })),
     ClickedEntry: ($, { seq }) =>
       $.evolve({ selected: seq, pane: "entry", ...($.model.pinned ? { pins: increment } : {}) })
@@ -1028,7 +1025,7 @@ export const Overlay = Component.define({
     ClickedInstance: ($, { instance }) => $.evolve({ instance: $.model.instance === instance ? null : instance }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
     ClickedFollowLatest: ($) => {
-      const next = $.evolve({ selected: null, pinned: true, reveal: null, pins: increment, pane: "timeline" })
+      const next = $.evolve({ selected: null, ...following })
       return $.model.paused === null ? next : next.evolve({ paused: null }).run(resumePage())
     },
     ClickedBack: ($) => $.evolve({ pane: "timeline" }),
@@ -1062,11 +1059,8 @@ export const Overlay = Component.define({
         revision: increment,
         selected: null,
         instance: hasInstance ? $.model.instance : null,
-        pinned: true,
         atStart: true,
-        reveal: null,
-        pins: increment,
-        pane: "timeline"
+        ...following
       })
     },
     Painted: ($, paused) => $.evolve({ paused })

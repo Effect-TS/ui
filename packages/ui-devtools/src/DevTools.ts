@@ -112,5 +112,4 @@ export const layer = (options?: {
   readonly position?: Position | undefined
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
-}): Layer.Layer<never> =>
-  internal.make({ position: options?.position, size: options?.size, exclude: options?.exclude })
+}): Layer.Layer<never> => internal.make(options ?? {})
