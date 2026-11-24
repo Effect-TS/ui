@@ -79,6 +79,15 @@ describe("Component.define", () => {
       >()
       return $.model
     })
+    expect<ReturnType<typeof save>>().type.toBe<
+      Component.Step<
+        Model,
+        Message,
+        typeof Events.Type,
+        Save,
+        { readonly user: Component.QueryOne<typeof GetUser> }
+      >
+    >()
   })
 
   it("narrows the message of a slice by tag", () => {
@@ -275,6 +284,136 @@ describe("Component.define", () => {
       init,
       update: record,
       parts: (_: unknown, model: Model) => ({ body: model.body })
+    })
+  })
+
+  it("extracts a record update with narrowed handlers and infers its requirements", () => {
+    const update = NoteDef.update({
+      Edited: ($, msg) => {
+        expect(msg).type.toBe<
+          { readonly _tag: "Edited"; readonly body: string }
+        >()
+        expect($.combine).type.not.toBeCallableWith(
+          touch as (
+            $: Parameters<typeof touch>[0],
+            msg: { readonly _tag: "Saved" }
+          ) => Model
+        )
+        return { ...$.model, body: msg.body }
+      },
+      SaveClicked: NoteDef.update(
+        "SaveClicked",
+        ($) => $.combine(touch, save)
+      ),
+      Saved: touch
+    })
+    const Note = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update,
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
+
+    const Combined = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: ($) => $.combine(update, audit),
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof Combined>>().type.toBe<
+      GetUser | Save | Audit
+    >()
+
+    // @ts-expect-error is missing the following properties
+    const narrow: typeof touch = NoteDef.update({
+      Edited: save,
+      SaveClicked: save,
+      Saved: save
+    })
+    void narrow
+  })
+
+  it("enforces exhaustiveness and rejects unknown keys on an extracted record update", () => {
+    expect(NoteDef.update).type.not.toBeCallableWith({
+      Edited: touch,
+      SaveClicked: touch
+    })
+
+    const u = touch
+    // @ts-expect-error 'Deleted' is not a tag of this component's message
+    NoteDef.update({ Edited: u, SaveClicked: u, Saved: u, Deleted: u })
+
+    const record = { ...shared, Edited: touch, SaveClicked: touch }
+    expect(NoteDef.update).type.not.toBeCallableWith(record)
+
+    expect(NoteDef.update).type.not.toBeCallableWith("Edited", {
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch
+    })
+  })
+
+  it("treats callables with handler properties as functions only", () => {
+    const callableWithHandlers = Object.assign(save, {
+      Edited: audit,
+      SaveClicked: touch,
+      Saved: touch
+    })
+    const Note = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: NoteDef.update(callableWithHandlers),
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
+
+    const invalidCallable = Object.assign(() => 123, {
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch
+    })
+    expect(NoteDef.update).type.not.toBeCallableWith(invalidCallable)
+  })
+
+  it("rejects record updates when a message union lacks finite known tags", () => {
+    const MixedDef = Html.component({
+      name: "Mixed",
+      model: Schema.Number,
+      message: Schema.Union([
+        Schema.Literal("Reset"),
+        Schema.Struct({ _tag: Schema.Literal("Inc") })
+      ])
+    })
+    MixedDef.update(($, msg) => (msg === "Reset" ? 0 : $.model + 1))
+    expect(MixedDef.update).type.not.toBeCallableWith({ Inc: () => 1 })
+
+    const WideTagDef = Html.component({
+      name: "WideTag",
+      model: Schema.Number,
+      message: Schema.Struct({ _tag: Schema.String })
+    })
+    WideTagDef.update(($) => $.model + 1)
+    expect(WideTagDef.update).type.not.toBeCallableWith({})
+
+    const TemplateTagDef = Html.component({
+      name: "TemplateTag",
+      model: Schema.Number,
+      message: Schema.Struct({
+        _tag: Schema.TemplateLiteral(["evt_", Schema.String])
+      })
+    })
+    TemplateTagDef.update(($) => $.model + 1)
+    expect(TemplateTagDef.update).type.not.toBeCallableWith({})
+
+    const UnionTagStructDef = Html.component({
+      name: "UnionTagStruct",
+      model: Schema.Number,
+      message: Schema.Struct({
+        _tag: Schema.Literals(["Inc", "Dec"])
+      })
+    })
+    UnionTagStructDef.make({
+      init: () => 0,
+      update: UnionTagStructDef.update({ Inc: () => 1, Dec: () => -1 }),
+      view: (h) => h.p()
     })
   })
 

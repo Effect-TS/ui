@@ -984,6 +984,13 @@ const makeUpdate = (
     "~self": self
   })
 
+const toUpdateFn = (
+  update: AnyUpdate | { readonly [tag: string]: AnyUpdate }
+): AnyUpdate =>
+  typeof update === "function"
+    ? update
+    : ($, msg) => update[(msg as { readonly _tag: string })._tag]($, msg)
+
 const initSet = (model: unknown) =>
   makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
 const makeInit = (props: unknown): Init<any, any, any, any> => ({
@@ -2415,6 +2422,18 @@ type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
     : UnknownTag<T>
 }
 
+// `{}` extends `Record<T, unknown>` only for open tags (`string`, template literals) that map to an index signature.
+type OpenTag<T extends string> = T extends unknown
+  ? {} extends Record<T, unknown> ? T : never
+  : never
+
+// `{ readonly [Symbol.hasInstance]?: never }` excludes callables with handler properties, which dispatch as functions.
+type DispatchedByTag<Msg> = [Msg] extends [{ readonly _tag: string }]
+  ? [OpenTag<TagOf<Msg>>] extends [never]
+    ? { readonly [Symbol.hasInstance]?: never }
+  : never
+  : never
+
 /**
  * What `define` returns: a component's name, Schemas, queries and
  * vocabulary. `update`, `view` and `fragment` written in pieces are typed
@@ -2422,11 +2441,13 @@ type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
  *
  * **Details**
  *
- * `update` with a tag returns a slice for that tag. Without one, it returns
- * an update function over the whole message type. Either fits the matching
- * key of a record `update`, and `$.combine` takes either where the message
- * fits. A record key that isn't a message tag is a type error.
- * `view` and `fragment` return the function they're given.
+ * `update` with a tag returns a slice for that tag. Without one, it takes a
+ * function over the whole message type, or a record with a handler for every
+ * `_tag` of a tagged message, and returns an update function over that type.
+ * A slice or an update function fits the matching key of a record `update`,
+ * and `$.combine` takes either where the message fits. A record key that
+ * isn't a message tag is a type error. `view` and `fragment` return the
+ * function they're given.
  *
  * `make` takes `init`, `update`, `view`, `subscriptions` and `head`,
  * and reads `R` off what they return.
@@ -2493,6 +2514,22 @@ export interface Definition<
   update<U extends Model | Step<Model, Msg, Events, any, L>>(
     update: ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
   ): ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
+  /**
+   * An update function over the whole message type, built from a record with a
+   * handler for every `_tag` of the message.
+   */
+  update<
+    UR extends {
+      readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
+    }
+  >(
+    update:
+      & UpdateRecord<Model, Msg, Events, Props, L, SR, UR>
+      & DispatchedByTag<Msg>
+  ): (
+    $: Update<Model, Msg, Events, Props, L, Msg, SR>,
+    msg: Msg
+  ) => UR[keyof UR]
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (
@@ -3195,7 +3232,8 @@ export interface Define<V extends View.Elements> {
  * function for every `_tag` of the message, which gets a `$` for that tag's
  * member and the member. The record has no default key, so a component that wants a
  * catch-all uses the function form. `Def.update(tag, f)` is a slice for one
- * tag, and `Def.update(f)` an update function over the whole message type.
+ * tag, and `Def.update(f)` or `Def.update(record)` an update function over the
+ * whole message type.
  * `$.combine` runs update functions one after another. `Def.view(f)` is a
  * view, and `Def.fragment(f)` a view fragment that takes `h` and any other
  * arguments, such as a row.
@@ -3453,7 +3491,7 @@ export const define = <
     restore: options.restore,
     // A slice is the function given, with `$` bound to the message it's called with.
     update: ((...args: ReadonlyArray<any>) => {
-      const update: AnyUpdate = args[args.length - 1]
+      const update = toUpdateFn(args[args.length - 1])
       return ($: Update<any, any, any, any>, msg: unknown) =>
         update(
           makeUpdate(
@@ -3536,11 +3574,7 @@ const finish = (
     results: Results | undefined
   ): any =>
     bound === undefined ? {} : bound.context(model, props, results).queries
-  const update = options.update
-  // A record dispatches on the message's `_tag`.
-  const updateFn: AnyUpdate = typeof update === "function"
-    ? update
-    : ($, msg) => update[(msg as { readonly _tag: string })._tag]($, msg)
+  const updateFn = toUpdateFn(options.update)
   const subscriptions = options.subscriptions
   const head = options.head
   const elements = definition.elements

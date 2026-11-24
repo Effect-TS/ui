@@ -40,6 +40,20 @@ const Counter = CounterDef.make({
   view: (h, model) => h.el("p", String(model.n))
 })
 
+const counterUpdate = CounterDef.update({
+  Step: ($) => $.combine(bump, bump),
+  Logged: ($, msg) => ({
+    ...$.model,
+    seen: [...$.model.seen, `logged ${msg.n}`]
+  })
+})
+
+const ExtractedCounter = CounterDef.make({
+  init: () => ({ n: 0, seen: [] }),
+  update: counterUpdate,
+  view: (h, model) => h.el("p", String(model.n))
+})
+
 // `$.combine` in a slice runs `bump` with the message the slice was given.
 const onLogged = CounterDef.update("Logged", ($) => $.combine(bump))
 
@@ -85,5 +99,22 @@ describe("Component.define", () => {
       assert.deepStrictEqual(story.model.seen, ["Logged"])
       story.emitted(Events.Stepped({ n: 1 }))
         .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
+    }))
+
+  it.effect("an extracted record update dispatches identically to an inline record", () =>
+    Effect.gen(function*() {
+      const inlineStory = yield* Story.make(Counter, { by: 2 })
+      const extractedStory = yield* Story.make(ExtractedCounter, { by: 2 })
+      for (const story of [inlineStory, extractedStory]) {
+        story.send(Message.Step())
+          .expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
+          .emitted(Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 }))
+          .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
+          .resolve(Log.make({ n: 4 }), Message.Logged({ n: 4 }))
+        assert.deepStrictEqual(story.model, {
+          n: 4,
+          seen: ["Step", "Step", "logged 2", "logged 4"]
+        })
+      }
     }))
 })
