@@ -1,8 +1,7 @@
 /**
  * The test files the kernel project runs against the new runtime, and the tests in them that need a
- * feature a later step ports, by `describe > test` name, each with that feature. `2b:` is the rest of
- * step 2. `differs:` is a test that counts what today's runtime does where the kernel does less, to
- * settle before step 9. The list shrinks with each step and goes away once the kernel replaces the
+ * feature a later step ports, by `describe > test` name, each with that feature. `differs:` is a test
+ * that counts what today's runtime does where the kernel does less, to settle before step 9. The list shrinks with each step and goes away once the kernel replaces the
  * runtime.
  */
 export const files: ReadonlyArray<string> = [
@@ -15,27 +14,21 @@ export const files: ReadonlyArray<string> = [
   "SlotStatus.test.ts",
   "RenderTiming.test.ts",
   "DuplicatePaths.test.ts",
-  "Runtime.test.ts"
+  "Runtime.test.ts",
+  "Command.test.ts",
+  "Subscription.test.ts",
+  "html/HtmlSubscription.test.ts",
+  "html/HtmlKeyboard.test.ts",
+  "html/Canvas.test.ts",
+  "html/HtmlFiles.test.ts"
 ]
 
 export const pending: {
   readonly [file: string]: { readonly [test: string]: string }
 } = {
   "Noop.test.ts": {
-    "Component.noop > a silent Effect Command sends nothing, and CommandEnded says so with the run's span":
-      "Commands (step 3)",
-    "Component.noop > CommandEnded of a run that sent a message has its span ids, the same as the Update's source":
-      "Commands (step 3)",
-    "Component.noop > asNoop silences a Command that has a message":
-      "Commands (step 3)",
-    "Component.noop > a Stream's silent elements send nothing and the Stream carries on":
-      "Commands (step 3)",
-    "Component.noop > a Stream whose every element is silent is silent, and an empty Stream isn't":
-      "Commands (step 3)",
-    "Component.noop > queue: silent and message-bearing runs of one definition keep issue order":
-      "Commands (step 3)",
     "Component.noop > a Service run ends with its instance, even with its Layer provided above, and maps nothing":
-      "Commands (step 3), Layers (step 4)"
+      "Layers (step 4)"
   },
   "Send.test.ts": {
     "$.send to an owner > delivers several sends in the order they were issued, each logged as a Send":
@@ -99,97 +92,55 @@ export const pending: {
     "Keyed selection repaired by the prune handler > the runtime never renders the selection outside the collection":
       "queries (step 5)",
     "Keyed history restore > a membership change and a push in one update save the pruned collection in the entry left":
-      "Commands (step 3), queries (step 5)",
+      "queries (step 5)",
     "Keyed history restore > drops each tuple taken under a patch and seeds the rest, stale":
-      "Subscriptions (step 3), Commands (step 3)"
+      "queries (step 5)"
   },
   "RenderTiming.test.ts": {
     "render timing > a query's onChange reads new props before the flush":
       "queries (step 5)",
     "render timing > a query fetches the args of every Model before the flush":
-      "Commands (step 3), queries (step 5)",
-    "causedBy > a message a Command resolves with names nothing, and an interrupted run names what cut it":
-      "2b: the full message log (causedBy), Commands (step 3)",
-    "TestHost.layer flush > first renders before the scheduler's other tasks, and last after them":
-      "Commands (step 3)",
-    "TestHost.layer flush > a seed gives the same order every time":
-      "Commands (step 3)",
-    "TestHost.layer flush > EFFECT_UI_TEST_FLUSH sets it when the option is unset":
-      "Commands (step 3)"
+      "queries (step 5)"
   },
   "Runtime.test.ts": {
     "Runtime > rejects a different shared owner with the same name at mount":
       "headless components and shared state (step 8)",
-    "Runtime > keyed list > adds, removes and reorders children, closing the Scopes of the removed ones":
-      "Commands (step 3)",
-    "Runtime > keyed list > closing the mount's Scope unmounts every instance":
-      "Commands (step 3)",
-    "Runtime > keyed list > a child made again at its path before the old one closes is still its parent's child":
-      "Commands (step 3)",
-    "Runtime > failures > a defect in a Command fails its instance":
-      "Commands (step 3)",
     "Runtime > a provided Layer factory and a fallback's child > a throwing factory fails only that child":
       "Layers (step 4)",
     "Runtime > a provided Layer factory and a fallback's child > with onFailure, a throwing factory becomes a message":
       "Layers (step 4)",
-    "Runtime > Commands > switch interrupts the running run, and results come back as messages":
-      "Commands (step 3)",
     "Runtime > Commands > a ref resolves within the issuing instance after the render is committed":
-      "Commands (step 3), refs and mounts (step 6)",
+      "refs and mounts (step 6)",
     "Runtime > run owners > a save ends with its instance: the running run is interrupted, the queued one never starts":
-      "Subscriptions (step 3), Commands (step 3), Layers (step 4)",
+      "Layers (step 4), queries (step 5)",
     "Runtime > run owners > a removed branch doesn't start a queued Stream Command while a sibling's cleanup holds its close":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > run owners > a Command issued just before its instance is removed doesn't begin while the instance's Layer cleans up":
-      "Commands (step 3), Layers (step 4)",
-    "Runtime > run owners > closing the root waits for a run that was already interrupted":
-      "Commands (step 3)",
-    "Runtime > run owners > closing the root waits for an unmounted instance's close that is still running":
-      "Commands (step 3)",
-    "Runtime > run owners > closing the root waits for the run of an unmounted instance to exit":
-      "Commands (step 3)",
-    "Runtime > run owners > closing the root waits for a run that ends with its instance":
-      "Commands (step 3)",
+      "Layers (step 4)",
     "Runtime > run owners > an instance's close waits for its run before its Layer is released":
       "Layers (step 4)",
     "Runtime > run owners > an instance's close waits for its run before its Layer is released, when its parent's Layer was late":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > run owners > switch runs, Stream Commands and Command.make Commands end with their instance":
-      "Commands (step 3), Layers (step 4)",
-    "Runtime > run owners > siblings close newest first, even when an older one subscribes after it mounts":
-      "Commands (step 3), Subscriptions (step 3)",
+      "Layers (step 4)",
     "Runtime > run owners > h.isRunning ends when an interrupted run's fiber exits, and the instance re-renders":
-      "Subscriptions (step 3), Commands (step 3), Layers (step 4)",
-    "Runtime > run owners > queue: an interrupted run holds h.isRunning and its group until its cleanup finishes":
-      "Commands (step 3)",
-    "Runtime > run owners > switch: an interrupted run holds h.isRunning and its group until its cleanup finishes":
-      "Commands (step 3)",
-    "Runtime > run owners > a defect in the cleanup of a run switch cut is reported as CleanupFailed, and the next run starts":
-      "Commands (step 3)",
+      "Layers (step 4), queries (step 5)",
     "Runtime > run owners > a run's Scope closes with the run's own exit, while its instance stays mounted":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > run owners > a write lands in its entry without a request, and changes never shows the patch":
-      "Subscriptions (step 3), Layers (step 4)",
+      "Layers (step 4), queries (step 5)",
     "Runtime > run owners > the query mount option sets how long an unwatched entry stays":
-      "Subscriptions (step 3), Layers (step 4)",
-    "Runtime > Subscriptions > are diffed by key, closing the old key before starting the new one":
-      "Subscriptions (step 3)",
-    "Runtime > Subscriptions > log the name and deps their key was built from, in memory and on the Wire":
-      "Subscriptions (step 3)",
-    "Runtime > Subscriptions > two entries with one key fail the instance":
-      "Subscriptions (step 3)",
-    "Runtime > Subscriptions > a Stream's message is dropped when rendering the ancestors first removes its key":
-      "Subscriptions (step 3)",
+      "Layers (step 4), queries (step 5)",
     "Runtime > provided Layers > Commands wait for a Layer that builds in the background":
       "Layers (step 4)",
     "Runtime > provided Layers > a Layer value is built once per Env and closed by its last user":
       "Layers (step 4)",
     "Runtime > provided Layers > onFailure turns a failed build into a message, and the component stays mounted":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > provided Layers > a memoised sub-Layer > is shared by every provide that resolves from the same Env, and closed by its last user":
       "Layers (step 4)",
     "Runtime > provided Layers > a memoised sub-Layer > is built again under an Env that provides different dependencies":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > provided Layers > a memoised sub-Layer > its first builder unmounting mid-build leaves every other user to mount normally":
       "Layers (step 4)",
     "Runtime > provided Layers > a memoised sub-Layer > a build whose users unmount while it waits to start again ends there, and isn't started":
@@ -198,10 +149,6 @@ export const pending: {
       "Layers (step 4)",
     "Runtime > features > a feature child shows its fallback until the Layer above it is ready":
       "Layers (step 4)",
-    "Runtime > features > stub records props and emits what the test sends":
-      "Subscriptions (step 3)",
-    "Runtime > MessageLog > an instance logs Unmounted as it leaves the tree, and a Command's end once its fiber has exited":
-      "Commands (step 3)",
     "Runtime > vocabularies > controlled properties are re-applied after every patch":
       "controlled properties (full DOM host, step 6)",
     "Runtime > vocabularies > onMount runs with the element's node on hosts that run mounts":
@@ -237,39 +184,37 @@ export const pending: {
     "Runtime > Renderer.mount whose owner a setup callback closes mounts nothing, and cleans up in order":
       "Layers (step 4), queries (step 5), server rendering and hydration (step 7)",
     "Runtime > a LayerMap shares one build per key between unrelated components":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > an update that leaves the key equal, though a new object, doesn't call layer or build anything":
       "Layers (step 4)",
     "Runtime > a keyed provide > a key change calls layer once, keeps the Model, and runs the flush's Commands against the new services":
       "Layers (step 4)",
     "Runtime > a keyed provide > a key change remounts descendants and interrupts the instance's in-flight Command":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > the old Layer is released once the new one is built, and the current one at unmount":
       "Layers (step 4)",
     "Runtime > a keyed provide > two instances on one LayerMap key share its build, and moving one leaves the other's service alive":
       "Layers (step 4)",
     "Runtime > a keyed provide > a failed reselection goes to onFailure, isn't retried for an unchanged key, and a later key builds again":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > after a handled failed selection, a new Command runs against the parent's services, and fails the instance if it needs a selected one":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > after a handled failed selection, a Subscription that uses only the parent's services waits too, and starts on the next selection":
-      "Subscriptions (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > a key change keeps the query cache: a query gets the old selection's entry unless the key is in its args":
       "Layers (step 4), queries (step 5)",
     "Runtime > a keyed provide > an old selection is released only after the cleanup of a Command the key change interrupted, at unmount too":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > cleanup still running from an earlier flush is waited for before a key change releases the services it may use":
-      "Subscriptions (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > a keyed provide > an unmount waits for the cleanup of a selection still building before the parent's services are released":
       "Layers (step 4)",
     "Runtime > a keyed provide > a keyed provide removed in the flush that changes its key, while its Layer cleans up, doesn't select again":
       "Layers (step 4)",
     "Runtime > a keyed provide > a keyed provide in a removed branch selects nothing and starts no Command while a sibling's cleanup holds the close":
-      "Commands (step 3), Layers (step 4)",
+      "Layers (step 4)",
     "Runtime > each provided Layer build is stamped with the flush it began in":
       "Layers (step 4)",
-    "Runtime > settle fails with the log's tail when work never stops":
-      "Commands (step 3)",
     "Runtime > prerenders the tree as nodes: an instance's elements and text in a Range under its path":
       "server rendering and hydration (step 7)"
   },
@@ -277,9 +222,7 @@ export const pending: {
     "slot status > a keyed slot shows fallback while rebuilding and replays an immediately ready selection after pending or failure":
       "Layers (step 4)",
     "slot status > Story.fromLog renders each slot against its provider before and after LayerReady":
-      "Layers (step 4)",
-    "slot status > h.isRunning counts a stopping run until its fiber exits, in the runtime and in Story.fromLog's view":
-      "Commands (step 3)"
+      "Layers (step 4)"
   },
   "Slots.test.ts": {
     "slots > content resolves services where the parent declared the child, not from the child's Layer":
@@ -287,10 +230,20 @@ export const pending: {
     "slots > content passed after the child mounted belongs to the parent too":
       "Layers (step 4)",
     "slots > a DOM ref in content resolves for the parent that wrote it":
-      "Commands (step 3), refs and mounts (step 6)",
+      "refs and mounts (step 6)",
     "placing a slot twice fails the receiver > once in a headless child's closure":
       "headless components and shared state (step 8)",
     "placing a slot twice fails the receiver > but not when it forwards the slot through a headless closure in a child's content":
       "headless components and shared state (step 8)"
+  },
+  "html/Canvas.test.ts": {
+    "Canvas > paints at the pixel ratio, repaints only a changed scene, and reports pointers in scene coordinates":
+      "refs and mounts (step 6)"
+  },
+  "html/HtmlFiles.test.ts": {
+    "HtmlFiles > HtmlCommand.showPicker opens a rendered input's picker, whose files arrive in its change":
+      "refs and mounts (step 6)",
+    "HtmlFiles > without showPicker, HtmlCommand.showPicker falls back to click only on an enabled file input and never submits a form":
+      "refs and mounts (step 6)"
   }
 }

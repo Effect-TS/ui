@@ -15,8 +15,10 @@ const nameOf = (task: RunnerTask): string => {
   return names.join(" > ")
 }
 
+const tests = path.join(import.meta.dirname, "..")
+
 const pendingIn = (file: RunnerTestFile) =>
-  pending[path.basename(file.filepath)] ?? {}
+  pending[path.relative(tests, file.filepath).split(path.sep).join("/")] ?? {}
 
 const testsOf = (suite: RunnerTestSuite): Array<string> =>
   suite.tasks.flatMap((task) =>
