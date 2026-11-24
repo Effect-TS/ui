@@ -285,6 +285,9 @@ importers:
       '@effect/ui-devtools':
         specifier: workspace:*
         version: link:../../packages/ui-devtools
+      '@effect/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.3.0

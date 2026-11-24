@@ -1,10 +1,11 @@
 import { Schema, Struct } from "effect"
+import { ScenarioName } from "../diagram/scenarios.ts"
 import { Snippets } from "./Snippet.ts"
 
 const Code = Schema.Literals(Struct.keys(Snippets.fields))
 
 export const Islands = {
-  Architecture: Schema.Struct({}),
+  Diagram: Schema.Struct({ scenario: ScenarioName }),
   Compare: Schema.Struct({
     foldkit: Code,
     foldkitTitle: Schema.String,

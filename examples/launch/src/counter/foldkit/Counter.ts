@@ -23,16 +23,20 @@ export const update = (
     ClickedIncrement: () => ({ model: { count: model.count + 1 } })
   })
 
-export const view = defineView<Model, Message>((model, h) =>
-  h.div([h.Class("counter")], [
-    h.button([
-      h.AriaLabel("Decrement"),
-      h.OnClick(Message.ClickedDecrement())
-    ], ["-"]),
-    h.output([h.Class("count")], [String(model.count)]),
-    h.button([
-      h.AriaLabel("Increment"),
-      h.OnClick(Message.ClickedIncrement())
-    ], ["+"])
-  ])
+export type ViewInputs = Readonly<{ label: string }>
+
+export const view = defineView<Model, Message, ViewInputs>(
+  (model, viewInputs, h) =>
+    h.div([h.Class("counter")], [
+      h.span([h.Class("label")], [viewInputs.label]),
+      h.button([
+        h.AriaLabel("Decrement"),
+        h.OnClick(Message.ClickedDecrement())
+      ], ["-"]),
+      h.output([h.Class("count")], [String(model.count)]),
+      h.button([
+        h.AriaLabel("Increment"),
+        h.OnClick(Message.ClickedIncrement())
+      ], ["+"])
+    ])
 )

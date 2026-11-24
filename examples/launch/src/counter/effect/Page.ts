@@ -27,6 +27,7 @@ export const Page = Component.define({
         .children(
           model.isCounterShown ? "Hide counter" : "Show counter"
         ),
-      model.isCounterShown && Counter(h, {})
+      model.isCounterShown &&
+        Counter(h, { props: { label: "Likes" } })
     )
 })

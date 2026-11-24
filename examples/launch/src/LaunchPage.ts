@@ -6,9 +6,9 @@ import { type Snippet, Snippets } from "#domain/Snippet"
 import { Component, Head, type View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
 import { Schema } from "effect"
-import { Architecture } from "./architecture/Architecture.ts"
 import source, { frontmatter } from "./article.md"
 import { Counter } from "./autocounter/Counter.ts"
+import { Diagram } from "./diagram/Diagram.ts"
 import { Nav } from "./nav/Nav.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
 
@@ -67,8 +67,8 @@ export const LaunchPage = Component.define({
             }
           },
           islands: Markdown.islandsFor(Islands, {
-            Architecture: (h, _attributes, _content, occurrence) =>
-              Architecture(h, { key: `architecture-${occurrence}` }),
+            Diagram: (h, { scenario }) =>
+              Diagram(h, { key: scenario, props: { scenario } }),
             Compare: (h, attributes, caption) =>
               h.figure.class("compare wide").children(
                 h.div.class("compare-columns").children(

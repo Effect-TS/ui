@@ -3,7 +3,7 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { TestClock } from "effect/testing"
-import { Architecture } from "./Architecture.ts"
+import { Diagram } from "./Diagram.ts"
 
 const classed = (name: string): Locator.Locator => ({
   description: `.${name}`,
@@ -15,40 +15,67 @@ const classed = (name: string): Locator.Locator => ({
 
 const panel = (name: string) => HtmlLocator.role("group", { name })
 const steps = (name: string) =>
-  Locator.inside(panel(name), classed("arch2-step"))
+  Locator.inside(panel(name), classed("diagram-step"))
 const current = (name: string) =>
   Locator.inside(panel(name), Locator.attr("aria-current", "step"))
 const announced = (name: string) =>
   Locator.inside(panel(name), Locator.attr("aria-live", "polite"))
 const active = (name: string) =>
-  Locator.inside(panel(name), classed("arch2-node-active"))
+  Locator.inside(panel(name), classed("diagram-node-active"))
 const activeName = (name: string) =>
-  Locator.inside(active(name), classed("arch2-name"))
+  Locator.inside(active(name), classed("diagram-name"))
+const send = HtmlLocator.role("button", { name: "Send Message" })
+
+interface Pointer<E> {
+  readonly click: (target: Locator.Locator) => Effect.Effect<void, E>
+  readonly fire: (
+    target: Locator.Locator,
+    event: string,
+    payload?: unknown
+  ) => Effect.Effect<void, E>
+}
+
+const pick = <E>(play: Pointer<E>, name: string) => {
+  const option = HtmlLocator.role("option", { name })
+  return play.fire(HtmlLocator.role("combobox"), "mousedown", {
+    button: 0,
+    pointerType: "mouse"
+  }).pipe(
+    Effect.andThen(play.fire(option, "mousedown")),
+    Effect.andThen(play.click(option))
+  )
+}
 
 it.layer(TestHost.layer(), { buildPerTest: true })(
-  "Architecture",
+  "Diagram",
   (it) => {
     it.effect("lists every step before a Message is sent", () =>
       Effect.gen(function*() {
-        const play = yield* HtmlPlay.make(Architecture, {})
+        const play = yield* HtmlPlay.make(Diagram, {
+          scenario: "messages"
+        })
         yield* play.expect(steps("Foldkit 0.x")).toHaveCount(8)
         yield* play.expect(steps("Effect UI")).toHaveCount(3)
         yield* play.expect(Locator.attr("aria-current", "step"))
           .toBeAbsent()
-        yield* play.expect(classed("arch2-node-active")).toBeAbsent()
+        yield* play.expect(classed("diagram-node-active"))
+          .toBeAbsent()
       }))
 
-    it.effect("lists fewer Foldkit 0.x steps for a sender nearer the root", () =>
+    it.effect("lists fewer Foldkit 0.x steps for a destination nearer the root", () =>
       Effect.gen(function*() {
-        const play = yield* HtmlPlay.make(Architecture, {})
-        yield* play.click(HtmlLocator.role("button", { name: "A" }))
+        const play = yield* HtmlPlay.make(Diagram, {
+          scenario: "messages"
+        })
+        yield* pick(play, "A")
         yield* play.expect(steps("Foldkit 0.x")).toHaveCount(5)
         yield* play.expect(steps("Effect UI")).toHaveCount(3)
-        yield* play.click(
-          HtmlLocator.role("button", { name: "Root" })
-        )
+        yield* pick(play, "Root")
         yield* play.expect(steps("Foldkit 0.x")).toHaveCount(3)
         yield* play.expect(steps("Effect UI")).toHaveCount(3)
+        yield* play.expect(Locator.attr("aria-current", "step"))
+          .toBeAbsent()
+        yield* play.click(send)
         yield* TestClock.adjust("1800 millis")
         yield* play.expect(announced("Foldkit 0.x")).toHaveText(
           "Step 3: The view runs from the root with the new Model."
@@ -58,10 +85,12 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
           .toBeAbsent()
       }))
 
-    it.effect("plays a Message from A1 on both sides and clears the steps after the last one", () =>
+    it.effect("plays a Message to A1 on both sides and clears the steps after the last one", () =>
       Effect.gen(function*() {
-        const play = yield* HtmlPlay.make(Architecture, {})
-        yield* play.click(HtmlLocator.role("button", { name: "A1" }))
+        const play = yield* HtmlPlay.make(Diagram, {
+          scenario: "messages"
+        })
+        yield* play.click(send)
         yield* play.expect(announced("Foldkit 0.x")).toHaveText(
           "Step 1: A1's view sends a Message."
         )
@@ -105,15 +134,19 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* TestClock.adjust("1 millis")
         yield* play.expect(Locator.attr("aria-current", "step"))
           .toBeAbsent()
-        yield* play.expect(classed("arch2-node-active")).toBeAbsent()
+        yield* play.expect(classed("diagram-node-active"))
+          .toBeAbsent()
         yield* play.expect(steps("Foldkit 0.x")).toHaveCount(8)
         yield* play.expect(steps("Effect UI")).toHaveCount(3)
       }))
 
     it.effect("selecting a step stops playback and sending another Message restarts it", () =>
       Effect.gen(function*() {
-        const play = yield* HtmlPlay.make(Architecture, {})
-        yield* play.click(HtmlLocator.role("button", { name: "A2" }))
+        const play = yield* HtmlPlay.make(Diagram, {
+          scenario: "messages"
+        })
+        yield* pick(play, "A2")
+        yield* play.click(send)
         yield* TestClock.adjust("900 millis")
         yield* play.click(
           Locator.inside(
@@ -139,9 +172,9 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
           "Step 2: The runtime delivers it to A2's update."
         )
 
-        yield* play.click(HtmlLocator.role("button", { name: "A1" }))
+        yield* play.click(send)
         yield* TestClock.adjust("500 millis")
-        yield* play.click(HtmlLocator.role("button", { name: "A2" }))
+        yield* play.click(send)
         yield* TestClock.adjust("899 millis")
         yield* play.expect(announced("Foldkit 0.x")).toHaveText(
           "Step 1: A2's view sends a Message."
@@ -152,6 +185,33 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         )
         yield* play.expect(announced("Effect UI")).toHaveText(
           "Step 2: The runtime delivers it to A2's update."
+        )
+      }))
+
+    it.effect("plays a change to the shared value from the picked reader", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(Diagram, {
+          scenario: "sharedState"
+        })
+        yield* pick(play, "A2")
+        yield* play.expect(steps("Foldkit 0.x")).toHaveCount(8)
+        yield* play.expect(steps("Effect UI")).toHaveCount(4)
+        yield* play.click(
+          HtmlLocator.role("button", {
+            name: "Change the shared value"
+          })
+        )
+        yield* TestClock.adjust("900 millis")
+        yield* play.expect(announced("Effect UI")).toHaveText(
+          "Step 2: A2's update sends a Message to the provider."
+        )
+        yield* play.expect(active("Effect UI")).toHaveCount(2)
+        yield* TestClock.adjust("2700 millis")
+        yield* play.expect(announced("Foldkit 0.x")).toHaveText(
+          "Step 5: A's update forwards the OutMessage to Root's update."
+        )
+        yield* play.expect(announced("Effect UI")).toHaveText(
+          "Step 4: A1 and A2 read the value, so their views run again."
         )
       }))
   }

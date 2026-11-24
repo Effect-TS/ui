@@ -10,6 +10,7 @@ const CounterMessage = UiSchema.TaggedEnum({
 export const Counter = Component.define({
   name: "Counter",
   scoped: false,
+  props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage,
   elements: Html
@@ -21,6 +22,7 @@ export const Counter = Component.define({
   },
   view: (h, model) =>
     h.div.class("counter").children(
+      h.span.class("label").children(h.props.label),
       h.button
         .attr("aria-label", "Decrement")
         .onClick(CounterMessage.ClickedDecrement())

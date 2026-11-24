@@ -52,6 +52,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
         slotId: "counter",
         model: model.counter,
         view: Counter.view,
+        viewInputs: { label: "Likes" },
         toParentMessage: (message) =>
           Message.GotCounterMessage({ message })
       })

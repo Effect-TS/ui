@@ -29,7 +29,10 @@ export const Counter = Component.define({
   // Required, with no default. When false, the Model is discarded
   // when the Component is no longer rendered. When true, the Model
   // is kept, so the Component is as the user left it when it's
-  // rendered again. Useful for a tab with a half-filled form.
+  // rendered again. Use true for anything the user should find as
+  // they left it after it goes out of view, such as a half-filled
+  // form in an inactive tab, a wizard step or a list row hidden by
+  // a filter.
   scoped: false,
   model: Schema.Struct({
     count: Schema.Number,

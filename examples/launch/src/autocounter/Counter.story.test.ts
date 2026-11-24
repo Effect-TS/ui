@@ -5,7 +5,7 @@ import { Counter, CounterMessage, DelayReset } from "./Counter.ts"
 
 const delayedReset = Effect.gen(function*() {
   const s = yield* Story.make(Counter, {})
-  s.send(CounterMessage.ClickedIncrement())
+  s.given({ count: 5, isAutoCounting: false })
   s.send(CounterMessage.ClickedResetAfterDelay()).expectExact(
     DelayReset
   )

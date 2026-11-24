@@ -1,7 +1,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 @import "./nav/nav.css";
-@import "./architecture/architecture.css";
+@import "./diagram/diagram.css";
 @import "./performance/chart.css";
 
 :root {
