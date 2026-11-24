@@ -1215,9 +1215,7 @@ export const Popover = Component.define({
               const element = options.element.attr("id", key)
               return triggerPart(
                 dialog.trigger(disabled ? element.disabled(true) : element),
-                key,
-                hoverOf(options),
-                disabled
+                [key, hoverOf(options), disabled]
               )
             }
           ),

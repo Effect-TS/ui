@@ -1774,7 +1774,7 @@ export const VirtualList = Component.define({
         itemPart,
         <B extends View.PartTarget<"div" | "li" | "tr">>(
           { element, index }: { readonly element: B; readonly index: number }
-        ): ItemOf<B> => itemPart(element, index) as ItemOf<B>
+        ): ItemOf<B> => itemPart(element, [index]) as ItemOf<B>
       )
     }
   }

@@ -1766,7 +1766,7 @@ export const DrawerProvider = Component.define({
     const indent = View.wrapPart(
       indentPart,
       <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> =>
-        indentPart(element, idOf(element) ?? p.id("indent"))
+        indentPart(element, [idOf(element) ?? p.id("indent")])
     )
     const indentBackground = p.part(
       "div",
@@ -2070,9 +2070,11 @@ export const Drawer = Component.define({
       }): ReturnType<B["attr"]> =>
         swipeAreaPart(
           options.element,
-          p.id("swipe-area", areas++),
-          options.swipeDirection ?? opposite[swipeDirection],
-          options.disabled === true
+          [
+            p.id("swipe-area", areas++),
+            options.swipeDirection ?? opposite[swipeDirection],
+            options.disabled === true
+          ]
         )
     )
 

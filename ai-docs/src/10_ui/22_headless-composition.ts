@@ -132,7 +132,8 @@ export const NoteTags = Component.define({
             tagPicker.tags.map((tag) =>
               h.li.key(tag.id).children([
                 tag.label,
-                tagPicker.remove(h.button, tag).children(["×"])
+                // A part's arguments after the builder go in one array.
+                tagPicker.remove(h.button, [tag]).children(["×"])
               ])
             )
           ),
@@ -145,7 +146,7 @@ export const NoteTags = Component.define({
                   h.li.key(option.id).class([
                     tagPicker.active === option.id && "active"
                   ]),
-                  option
+                  [option]
                 )
                   .children([option.label])
               )
@@ -173,7 +174,7 @@ export const pickedAndRemoved = Effect.gen(function*() {
     view: (tagPicker, h) =>
       h.div([
         tagPicker.tags.map((tag) =>
-          tagPicker.remove(h.button.key(tag.id), tag).children(["×"])
+          tagPicker.remove(h.button.key(tag.id), [tag]).children(["×"])
         ),
         tagPicker.status(h.div).children([tagPicker.announced])
       ])

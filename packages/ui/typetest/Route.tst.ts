@@ -372,6 +372,17 @@ describe("Router.prefetch", () => {
     )
   })
 
+  it("takes props only for a page that has them, and options only when a path has params", () => {
+    expect(Router.page).type.toBeCallableWith(HomePage)
+    expect(Router.page).type.toBeCallableWith(HomePage, {})
+    expect(Router.page).type.not.toBeCallableWith(PersonPage)
+    expect(Router.page).type.not.toBeCallableWith(PersonPage, undefined)
+    expect(Router.page).type.not.toBeCallableWith(PersonPage, { id: 1 }, {})
+    expect(Route.make).type.toBeCallableWith("/people")
+    expect(Route.make).type.toBeCallableWith("/people", undefined)
+    expect(Route.make).type.not.toBeCallableWith("/people/:id", undefined)
+  })
+
   it("rejects an erased member of a union of components", () => {
     const Selected = Math.random() > 0.5 ? PersonPage : HomePage
     expect(Router.page).type.toBeCallableWith(Selected, { id: 1 })

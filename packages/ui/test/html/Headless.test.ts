@@ -71,7 +71,7 @@ const Picker = Component.define({
               onEmit: (event) => PickerMessage.Picked({ id: event.id }),
               view: (menu) =>
                 h.ul.children(menu.visible.map((item) =>
-                  dialog.close(menu.item(h.li.key(item.id), item))
+                  dialog.close(menu.item(h.li.key(item.id), [item]))
                     .onClick(PickerMessage.Clicked({ id: item.id }))
                     .children([item.label])
                 ))
@@ -123,7 +123,7 @@ const Toolbar = Component.define({
             menu.visible.length === 0 && h.p(["No actions found."]),
             h.ul.children(
               menu.visible.map((item) =>
-                menu.item(h.li.key(item.id), item).children([item.label])
+                menu.item(h.li.key(item.id), [item]).children([item.label])
               )
             )
           ]),
@@ -214,7 +214,7 @@ const Page = Component.define({
             menu.popup(h.div).children([
               h.ul.children(
                 menu.visible.map((item) =>
-                  menu.item(h.li.key(item.id), item).children([item.label])
+                  menu.item(h.li.key(item.id), [item]).children([item.label])
                 )
               )
             ])
@@ -378,7 +378,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
                     menu.popup(h.div).children([
                       h.ul.children(
                         menu.visible.map((item) =>
-                          menu.item(h.li.key(item.id), item).children([
+                          menu.item(h.li.key(item.id), [item]).children([
                             item.label
                           ])
                         )

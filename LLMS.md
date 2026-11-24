@@ -45,7 +45,7 @@ A parent passes a child state through props, and a child answers through
 a wizard, stop rendering it or change its key, and it mounts fresh. A
 control that the parent lays out but that starts the child's own work is a
 part of a headless child. TagPicker's remove button is one: the consumer
-draws `tagPicker.remove(h.button, tag)`, and the click goes through
+draws `tagPicker.remove(h.button, [tag])`, and the click goes through
 TagPicker's `update` (see "Composing headless components"). NoteEditor
 draws its own view and has no parts, so the note page hears its `Saved` but
 can't start a save. See **Who owns the state** below.

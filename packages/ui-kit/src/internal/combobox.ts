@@ -1718,7 +1718,7 @@ export const make = <P, E>(
       chipRemovePart,
       <B extends View.PartTarget<"button">>(
         { element, value }: { readonly element: B; readonly value: string }
-      ) => chipRemovePart(element, value)
+      ) => chipRemovePart(element, [value])
     )
 
     const backdrop = p.part("div", (b) =>

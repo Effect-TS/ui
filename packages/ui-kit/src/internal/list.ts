@@ -27,9 +27,12 @@ export const keyed = <
       }
     >(
       element: B,
-      value: string,
-      ...rest: Rest
-    ): ReturnType<B["attr"]> => part(element.key(value), value, ...rest)
+      args: [value: string, ...Rest]
+    ): ReturnType<B["attr"]> =>
+      part(
+        element.key(args[0]),
+        args as View.PartArgs<[value: string, ...Rest]>
+      )
   )
 
 export const valued = <Tag extends string, R>(
@@ -39,7 +42,7 @@ export const valued = <Tag extends string, R>(
     part,
     <B extends Keyed<Tag>>(
       { element, value }: { readonly element: B; readonly value: string }
-    ): ReturnType<B["attr"]> => part(element.key(value), value)
+    ): ReturnType<B["attr"]> => part(element.key(value), [value])
   )
 
 export const grouped = <Tag extends string, R>(
@@ -49,7 +52,7 @@ export const grouped = <Tag extends string, R>(
     part,
     <B extends View.PartTarget<Tag>>(
       { element, group }: { readonly element: B; readonly group: string }
-    ): ReturnType<B["attr"]> => part(element, group)
+    ): ReturnType<B["attr"]> => part(element, [group])
   )
 
 export type Loop = "none" | "wrap" | "escape"

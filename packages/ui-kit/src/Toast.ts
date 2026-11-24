@@ -677,7 +677,7 @@ const withToast = <Tag extends string, R>(
     part,
     <B extends View.PartTarget<Tag>>(
       { element, toast }: { readonly element: B; readonly toast: ToastItem }
-    ): ReturnType<B["attr"]> => part(element, toast)
+    ): ReturnType<B["attr"]> => part(element, [toast])
   )
 
 /**
@@ -941,7 +941,7 @@ export const ToastProvider = Component.define({
         }
       >(
         { element, toast }: { readonly element: B; readonly toast: ToastItem }
-      ): ReturnType<B["attr"]> => rootPart(element.key(toast.id), toast)
+      ): ReturnType<B["attr"]> => rootPart(element.key(toast.id), [toast])
     )
     const contentPart = p.part(
       "div",

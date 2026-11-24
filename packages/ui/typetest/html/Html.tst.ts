@@ -695,9 +695,12 @@ describe("Html", () => {
     >()
   })
 
-  it("h.lazy takes the arguments its function declares", () => {
+  it("h.lazy takes the arguments its function declares as one array", () => {
     const row = (h: View.H<Msg>, label: string, selected: boolean) =>
       h.el("li", [selected && label])
+    const labels = (h: View.H<Msg>, ...all: Array<string>) =>
+      h.el("li", [all.join(" ")])
+    const empty = (h: View.H<Msg>) => h.el("li", [])
     Component.define({
       name: "Rows",
       model: Schema.Null,
@@ -707,12 +710,28 @@ describe("Html", () => {
       init: () => null,
       update: ($) => $.model,
       view: (h) => {
-        expect(h.lazy(row, "a", true)).type.toBe<View.Node<Msg, never>>()
-        // @ts-expect-error Expected 3 arguments, but got 4
-        h.lazy(row, "a", true, "extra")
-        // @ts-expect-error Expected 3 arguments, but got 2
-        h.lazy(row, "a")
-        return h.ul([h.lazy(row, "a", true)])
+        expect(h.lazy(row, ["a", true])).type.toBe<View.Node<Msg, never>>()
+        // @ts-expect-error Source has 3 element(s) but target allows only 2
+        h.lazy(row, ["a", true, "extra"])
+        // @ts-expect-error Source has 1 element(s) but target requires 2
+        h.lazy(row, ["a"])
+        // @ts-expect-error Expected 1-2 arguments, but got 3
+        h.lazy(row, "a", true)
+        // @ts-expect-error Target signature provides too few arguments
+        h.lazy(row)
+        expect(h.lazy(labels, ["a", "b"])).type.toBe<View.Node<Msg, never>>()
+        expect(h.lazy(labels, [])).type.toBe<View.Node<Msg, never>>()
+        expect(h.lazy(labels)).type.toBe<View.Node<Msg, never>>()
+        // @ts-expect-error Expected 1-2 arguments, but got 3
+        h.lazy(labels, "a", "b")
+        // @ts-expect-error Argument of type 'string' is not assignable to parameter of type 'string[]'
+        h.lazy(labels, "a")
+        // @ts-expect-error Type 'number' is not assignable to type 'string'
+        h.lazy(labels, ["a", 1])
+        expect(h.lazy(empty)).type.toBe<View.Node<Msg, never>>()
+        // @ts-expect-error Source has 1 element(s) but target allows only 0
+        h.lazy(empty, ["a"])
+        return h.ul([h.lazy(row, ["a", true]), h.lazy(labels, ["a", "b"])])
       }
     })
   })

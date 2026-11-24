@@ -43,6 +43,30 @@ declare const $init: Component.Init<{}, typeof Message.Type, never, {}>
 declare const $never: Component.Update<{}, never, never, {}>
 
 describe("Command", () => {
+  it("make takes the args struct, which can be left out when every field is optional", () => {
+    expect(Fx.make).type.toBeCallableWith()
+    expect(Fx.make).type.toBeCallableWith(undefined)
+    expect(Fx.make).type.toBeCallableWith({})
+    expect(Fx.make).type.not.toBeCallableWith({}, {})
+    expect(Save.make).type.toBeCallableWith({ id: "1", title: "a" })
+    expect(Save.make).type.not.toBeCallableWith()
+    expect(Save.make).type.not.toBeCallableWith(undefined)
+    expect(Save.make).type.not.toBeCallableWith({ id: "1", title: "a" }, {})
+  })
+
+  it("interrupt takes a group only for a Command with one", () => {
+    expect(Command.interrupt).type.toBeCallableWith(Save)
+    expect(Command.interrupt).type.toBeCallableWith(Save, { id: "1" })
+    expect(Command.interrupt).type.not.toBeCallableWith(Save, { id: 1 })
+    expect(Command.interrupt).type.not.toBeCallableWith(
+      Save,
+      { id: "1" },
+      { id: "2" }
+    )
+    expect(Command.interrupt).type.toBeCallableWith(Fx)
+    expect(Command.interrupt).type.not.toBeCallableWith(Fx, {})
+  })
+
   describe("Issued", () => {
     it("only exposes the work field of its kind", () => {
       expect(Fx.make().effect).type.toBe<Effect.Effect<string, never, never>>()

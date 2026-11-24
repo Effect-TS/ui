@@ -255,7 +255,7 @@ export const NavigationMenu = Component.define({
             readonly element: B
             readonly active?: boolean | undefined
           }
-        ): ReturnType<B["attr"]> => link(element, active === true)
+        ): ReturnType<B["attr"]> => link(element, [active === true])
       )
     }
   }

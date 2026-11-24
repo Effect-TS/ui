@@ -199,9 +199,7 @@ export class PlayCursor {
   }
   protected expectation(
     locator: Locator.Locator,
-    matchers: {
-      readonly [name: string]: (...args: Array<any>) => scene.Matcher
-    }
+    matchers: scene.Matchers
   ): object {
     return scene.makeExpectation(
       this.name("expect"),

@@ -1368,8 +1368,7 @@ export const PreviewCard = Component.define({
       }): ReturnType<B["attr"]> =>
         triggerPart(
           options.element,
-          idOf(options.element) ?? p.id("trigger", count++),
-          delaysOf(options)
+          [idOf(options.element) ?? p.id("trigger", count++), delaysOf(options)]
         )
     )
 

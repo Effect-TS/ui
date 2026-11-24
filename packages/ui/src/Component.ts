@@ -1578,15 +1578,17 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
   readonly props: Props
   isRunning<Args, G extends string>(
     command: Command.Definition<Args, any, boolean, any, G>,
-    ...group: Command.GroupArg<Args, G>
+    group?: Command.GroupArg<Args, G>
   ): boolean
   /** An id for an element of this instance, the same on the server and the client. */
   id(name: string, key?: string | number | undefined): string
   /**
    * A part for one tag, or for any of a list of tags. `decorate` gets an
    * empty builder of the tag the consumer used, bound to this component's
-   * message type, and any other arguments the consumer passes after its own
-   * builder.
+   * message type, then the elements of the array the consumer passes after
+   * its own builder, as its other arguments. A part whose `decorate` takes
+   * only the builder, or only optional arguments, can be applied without an
+   * array.
    *
    * **Details**
    *
@@ -3300,8 +3302,8 @@ export const define = <
       : undefined,
     restore: options.restore,
     // A slice is the function given, with `$` bound to the message it's called with.
-    update: ((...args: ReadonlyArray<any>) => {
-      const update: AnyUpdate = args[args.length - 1]
+    update: ((first: unknown, second?: AnyUpdate) => {
+      const update = (typeof first === "function" ? first : second) as AnyUpdate
       return ($: Update<any, any, any, any>, msg: unknown) =>
         update(
           makeUpdate(
@@ -3504,13 +3506,13 @@ const finish = (
                 ),
             id: (name: string, key?: string | number) =>
               View.idOf(owner.path, name, key),
-            part: (...args: ReadonlyArray<any>) =>
-              typeof args[0] === "function"
-                ? View.makePart(owner, undefined, args[0])
+            part: (tags: any, decorate?: any) =>
+              typeof tags === "function"
+                ? View.makePart(owner, undefined, tags)
                 : View.makePart(
                   owner,
-                  typeof args[0] === "string" ? [args[0]] : args[0],
-                  args[1]
+                  typeof tags === "string" ? [tags] : tags,
+                  decorate
                 ),
             child: (component: Headless.Any, options: child.ComposeOptions) =>
               child.compose(owner, component, options)
@@ -3814,11 +3816,6 @@ interface KeyedOptionsInfallible<Msg> {
   readonly local?: never
 }
 
-// The keyed form's options: `onFailure` is required when the Layer can fail.
-type KeyedRest<E, Msg> = [E] extends [never] ?
-  [options?: KeyedOptionsInfallible<Msg>]
-  : [options: ProvideKeyedOptions<E, Msg>]
-
 // The curried keyed form: `key`'s Model parameter, annotated by hand, must take the component's Model.
 type KeyTakes<C, M> = [Model<C>] extends [M] ? unknown
   : {
@@ -4061,12 +4058,17 @@ export const provide: {
     layer: (props: Props<C>) => L,
     options: ProvideOptions<AnyError<L>, ProvideMessage<C, M>>
   ): Provided<C, CommonSuccess<L>, AnyServices<L>>
-  // One overload whether or not the Layer can fail: a failed candidate would fix `onFailure`'s
-  // parameter type before the next one is tried.
+  // The form for a Layer that can fail goes first: a failed candidate fixes `onFailure`'s parameter
+  // type before the next one is tried, and it's the same in both forms only when the Layer can't fail.
   <C extends Any, K, L extends Layer.Layer<never, any, any>, M = never>(
     component: C & ErasedMessage<C, M>,
     keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
-    ...options: KeyedRest<AnyError<L>, ProvideMessage<C, M>>
+    options: ProvideKeyedOptions<AnyError<L>, ProvideMessage<C, M>>
+  ): Provided<C, CommonSuccess<L>, AnyServices<L>>
+  <C extends Any, K, L extends Layer.Layer<never, never, any>, M = never>(
+    component: C & ErasedMessage<C, M>,
+    keyed: ProvideKeyed<Props<C>, Model<C>, K, L>,
+    options?: KeyedOptionsInfallible<ProvideMessage<C, M>>
   ): Provided<C, CommonSuccess<L>, AnyServices<L>>
   // Options checked against the component's message as given. A component
   // defined inline isn't inferred yet when they are, so it takes the next
@@ -4089,7 +4091,7 @@ export const provide: {
     layer: L & RequiresOnFailure<L, O>,
     options?: O & ProvideRest<L, ProvideMessage<C, any>>[0]
   ): Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
-} = ((...args: Array<any>) => {
+} = ((first: any, second?: any, third?: any) => {
   const go = (
     component: Any,
     given: ProvideInput,
@@ -4141,10 +4143,10 @@ export const provide: {
     })
   }
   // A component is an object with the type id; a Layer, an array, a function or a keyed selection means the curried form.
-  const curried = !isComponent(args[0])
+  const curried = !isComponent(first)
   return curried
-    ? (component: Any) => go(component, args[0], args[1])
-    : go(args[0], args[1], args[2])
+    ? (component: Any) => go(component, first, second)
+    : go(first, second, third)
 }) as any
 
 /**

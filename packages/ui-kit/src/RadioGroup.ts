@@ -635,7 +635,7 @@ export const RadioGroup = Component.define({
         radioPart,
         <B extends KeyedButton>(
           { element, value }: { readonly element: B; readonly value: string }
-        ) => radioPart(element, value)
+        ) => radioPart(element, [value])
       ),
       indicator: View.wrapPart(
         indicatorPart,
@@ -646,7 +646,7 @@ export const RadioGroup = Component.define({
             readonly keepMounted?: boolean | undefined
           }
         ): ReturnType<B["attr"]> | undefined => {
-          const built = indicatorPart(element, value)
+          const built = indicatorPart(element, [value])
           const { checked, ending } = stateOf(value)
           return checked || ending || keepMounted === true ? built : undefined
         }

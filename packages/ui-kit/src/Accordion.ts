@@ -564,7 +564,7 @@ export const AccordionItem = Component.define({
           ): ReturnType<B["attr"]> =>
             triggerPart(
               collapsible.trigger(element),
-              idOf(element) ?? p.id("trigger")
+              [idOf(element) ?? p.id("trigger")]
             )
         ),
         panel: View.wrapPart(

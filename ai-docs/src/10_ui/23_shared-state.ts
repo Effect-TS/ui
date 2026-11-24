@@ -354,7 +354,8 @@ export const nestedMenu = Effect.gen(function*() {
     view: (menu, h) =>
       h.div([
         h.p.children([menu.nested ? "nested" : "outermost"]),
-        menu.item(h.button(["Copy"]), "copy")
+        // `item` takes the builder, then an array of its own arguments.
+        menu.item(h.button(["Copy"]), ["copy"])
       ])
   })
   menu.expect(Locator.text("outermost")).toExist()

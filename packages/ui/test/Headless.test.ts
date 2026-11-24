@@ -81,7 +81,7 @@ const Picker = Component.define({
               onEmit: (event) => PickerMessage.Picked({ id: event.id }),
               view: (menu) =>
                 h.ul.children(menu.visible.map((item) =>
-                  dialog.close(menu.item(h.li.key(item.id), item))
+                  dialog.close(menu.item(h.li.key(item.id), [item]))
                     .onClick(PickerMessage.Clicked({ id: item.id }))
                     .children([item.label])
                 ))

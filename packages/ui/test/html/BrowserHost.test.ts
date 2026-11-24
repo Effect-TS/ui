@@ -994,7 +994,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         h.div([
           h.p([String(model.ticks)]),
           h.ul(model.items.map((item) =>
-            h.lazy(row, item, item.id === model.selected)
+            h.lazy(row, [item, item.id === model.selected])
           ))
         ])
     })
@@ -1084,7 +1084,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             FrameDef.make({
               init: () => null,
               update: ($) => $.model,
-              view: (h) => h.lazy(frame, "Title")
+              view: (h) => h.lazy(frame, ["Title"])
             }),
             Layer.merge(
               Leaf.toLayer(LeafImpl),
@@ -1133,7 +1133,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.div([
               h.p([String(ticks)]),
               field(h, "built"),
-              h.lazy(field, "lazy"),
+              h.lazy(field, ["lazy"]),
               kept ??= View.toNode(field(h, "kept"))
             ])
         })
@@ -1163,13 +1163,47 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it("spreads its array into the function, and builds again when the array changes in place", () => {
+      const labels = ["a", "b"]
+      const joined: Array<string> = []
+      const label = (
+        h: Component.Helper<typeof ItemsDef>,
+        ...all: ReadonlyArray<string>
+      ) => {
+        joined.push(all.join(" "))
+        return h.li.children([all.join(" ")])
+      }
+      const Labels = ItemsDef.make({
+        init: () => ({ items: [], selected: 0, ticks: 0 }),
+        update: ($) => $.model,
+        view: (h) => h.ul([h.lazy(label, labels), h.lazy(label)])
+      })
+      const store: View.LazyStore = { lazy: undefined }
+      const model = { items: [], selected: 0, ticks: 0 }
+      const render = () =>
+        Labels.view(
+          model,
+          {},
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          store
+        )
+      render()
+      render()
+      labels[1] = "c"
+      render()
+      assert.deepStrictEqual(joined, ["a b", "", "a c"])
+    })
+
     it("builds again what a render that threw built", () => {
       let fails = true
       const Failing = ItemsDef.make({
         init: () => ({ items: [], selected: 0, ticks: 0 }),
         update: ($) => $.model,
         view: (h, model) => {
-          const node = h.lazy(row, model.items[0]!, false)
+          const node = h.lazy(row, [model.items[0]!, false])
           if (fails) throw new Error("boom")
           return node
         }

@@ -38,7 +38,7 @@ const Toolbar = Component.define({
               menu.input(h.input.attr("aria-label", "Filter actions")),
               menu.visible.length === 0 && h.p(["No actions found."]),
               h.ul.children(menu.visible.map((item) =>
-                menu.item(h.li.key(item.id), item)
+                menu.item(h.li.key(item.id), [item])
                   .onClick(ToolbarMessage.Clicked({ id: item.id }))
                   .children([item.label])
               ))
@@ -72,7 +72,7 @@ const standIn = {
       menu.popup(h.div).children([
         menu.input(h.input.attr("aria-label", "Filter actions")),
         h.ul.children(menu.visible.map((item) =>
-          menu.item(h.li.key(item.id), item).children([item.label])
+          menu.item(h.li.key(item.id), [item]).children([item.label])
         ))
       ])
     ])
@@ -201,7 +201,7 @@ describe("headless components in a story", () => {
             menu.popup(h.div).children([
               menu.input(h.input.attr("aria-label", "Filter actions")),
               h.ul.children(menu.visible.map((item) =>
-                menu.item(h.li.key(item.id), item).children([item.label])
+                menu.item(h.li.key(item.id), [item]).children([item.label])
               ))
             ])
           ])

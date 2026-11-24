@@ -1720,7 +1720,7 @@ export const NumberField = Component.define({
             readonly disabled?: boolean | undefined
           }
         ): ReturnType<B["attr"]> =>
-          stepperPart(element, direction, own === true)
+          stepperPart(element, [direction, own === true])
       )
     const scrubPart = p.part((
       b,
@@ -1778,7 +1778,7 @@ export const NumberField = Component.define({
           element: B
         ): ReturnType<B["attr"]> => {
           inputId = idOf(element) ?? p.id("input")
-          return inputPart(element, inputId)
+          return inputPart(element, [inputId])
         }
       ),
       decrement: stepper(-1),
@@ -1795,9 +1795,7 @@ export const NumberField = Component.define({
         ): ReturnType<B["attr"]> =>
           scrubPart(
             element,
-            direction === "vertical",
-            pixelSensitivity ?? 2,
-            teleportDistance
+            [direction === "vertical", pixelSensitivity ?? 2, teleportDistance]
           )
       ),
       scrubAreaCursor: View.wrapPart(

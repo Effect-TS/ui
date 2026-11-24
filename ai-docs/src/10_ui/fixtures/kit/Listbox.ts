@@ -230,8 +230,9 @@ export const Listbox = Component.define({
             { preventDefault: true }
           )),
       list: p.part("ul", (b) => b.id(p.id("list")).attr("role", "listbox")),
-      // A part takes arguments after the builder: the consumer passes the
-      // row it's drawing.
+      // A part takes arguments after the builder. `decorate` declares them
+      // as parameters, and the consumer passes them as one array, here the
+      // row it's drawing: `listbox.option(h.li, [option])`.
       option: p.part(
         "li",
         (b, option: ListboxOption) =>

@@ -210,7 +210,7 @@ const Main = MainDef.make({
       h.table.class(["table", "table-hover", "table-striped", "test-data"])
         .children([
           h.tbody.children(model.rows.map((item) =>
-            h.lazy(row, item, item.id === model.selected)
+            h.lazy(row, [item, item.id === model.selected])
           ))
         ]),
       h.span.class(["preloadicon", "glyphicon", "glyphicon-remove"]).attr(

@@ -1047,7 +1047,10 @@ export const Slider = Component.define({
           if (!Number.isInteger(at) || at < 0 || at >= s.values.length) {
             throw new Error("Slider: no value for the thumb at index " + at)
           }
-          return thumbPart(element, at, inputPart(input, at)) as ThumbOf<B, I>
+          return thumbPart(element, [at, inputPart(input, [at])]) as ThumbOf<
+            B,
+            I
+          >
         }
       )
     }

@@ -1212,7 +1212,7 @@ export const OTPField = Component.define({
                 length + " slots"
             )
           }
-          return slot(element, index)
+          return slot(element, [index])
         }
       )
     }

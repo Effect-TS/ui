@@ -1071,8 +1071,10 @@ const makeCopier = (
  *
  * `Tag` is the tag, or the union of tags, the part is declared for, and
  * `string` for a part that takes any element. `Args` is what the part takes
- * after the builder, and `R` what its mount requires, which joins the
- * headless component's requirements.
+ * after the builder, as one array, such as `menu.item(h.li, [item])`. The
+ * array can be left out when every element of `Args` is optional. `R` is
+ * what the part's mount requires, which joins the headless component's
+ * requirements.
  *
  * A part is tied to tag names, the same check the runtime makes: a part
  * declared for `"h2"` takes `h.h2` and rejects `h.h3`, although both
@@ -1088,12 +1090,27 @@ const makeCopier = (
  */
 export interface Part<
   in out Tag extends string,
-  in Args extends ReadonlyArray<any>,
+  Args extends ReadonlyArray<any>,
   out R = never
 > {
-  <B extends PartTarget<Tag>>(builder: B, ...args: Args): ReturnType<B["attr"]>
+  <B extends PartTarget<Tag>>(
+    builder: B,
+    args: PartArgs<Args>
+  ): ReturnType<B["attr"]>
   readonly "~R"?: (_: never) => R
 }
+
+/**
+ * The type of a part's array of arguments: it includes `void`, so the array
+ * can be left out, when the part's arguments are all optional.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type PartArgs<Args extends ReadonlyArray<any>> = [] extends Args
+  ? Args | void
+  : Args
 
 /**
  * What a part accepts: a builder whose declared tag is one of `Tag`, either
@@ -1174,7 +1191,7 @@ export const makePart = (
     ...args: ReadonlyArray<any>
   ) => ElementBuilder<any, any, any, any>
 ): Part<any, any, any> =>
-(target: PartTarget<any>, ...args: ReadonlyArray<any>): any => {
+(target: PartTarget<any>, args?: ReadonlyArray<any> | void): any => {
   const builder: unknown = target
   if (!(builder instanceof ElementBuilder)) {
     throw new Error(
@@ -1192,7 +1209,7 @@ export const makePart = (
     blankFields,
     { tag: builder.tag, removals: [] }
   )
-  const patch = decorate(blank, ...args)
+  const patch = decorate(blank, ...(args === undefined ? [] : args))
   if (!(patch instanceof ElementBuilder)) {
     throw new Error(owner.path + ": a part returns the builder it was given")
   }
@@ -2084,7 +2101,7 @@ export interface HelperBase<Msg, Props> {
    */
   isRunning<Args, G extends string>(
     command: Command.Definition<Args, any, boolean, any, G>,
-    ...group: Command.GroupArg<Args, G>
+    group?: Command.GroupArg<Args, G>
   ): boolean
   /**
    * An id for an element of this instance, derived from the instance's path:
@@ -2092,8 +2109,10 @@ export interface HelperBase<Msg, Props> {
    */
   id(name: string, key?: string | number | undefined): string
   /**
-   * The node `fn` builds from `args`, built again only when an argument
-   * changes. `fn` gets this helper first, then `args`.
+   * The node `fn` builds from the array `args`, built again only when an
+   * argument changes. `fn` gets this helper first, then the elements of
+   * `args` as its other arguments. Leave `args` out for an `fn` that takes
+   * only the helper.
    *
    * **Details**
    *
@@ -2122,13 +2141,17 @@ export interface HelperBase<Msg, Props> {
    *   h.tr.key(String(row.id)).class([selected && "danger"]).children([row.label])
    *
    * const rows = <M>(h: View.H<M>, rows: ReadonlyArray<Row>, selected: number) =>
-   *   h.tbody.children(rows.map((item) => h.lazy(row, item, item.id === selected)))
+   *   h.tbody.children(rows.map((item) => h.lazy(row, [item, item.id === selected])))
    * ```
    */
+  lazy<H, C extends Content<Msg, any>>(
+    this: H,
+    fn: (h: H) => C
+  ): Node<Msg, Requirements<C>>
   lazy<H, A extends ReadonlyArray<unknown>, C extends Content<Msg, any>>(
     this: H,
     fn: (h: H, ...args: A) => C,
-    ...args: A
+    args: A
   ): Node<Msg, Requirements<C>>
 }
 
@@ -2229,8 +2252,8 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
   }
   lazy(
     this: any,
-    fn: (h: any, ...args: Array<any>) => Content<Msg, any>,
-    ...args: Array<any>
+    fn: (h: any, ...args: ReadonlyArray<any>) => Content<Msg, any>,
+    args: ReadonlyArray<any> = []
   ): any {
     const store = this.store
     if (store === undefined) return toNode(fn(this, ...args))
@@ -2248,10 +2271,11 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     const node = toNode(fn(this, ...args))
     // A key an earlier call of this render took stays theirs.
     if (entry !== undefined && entry.round === round) return node
-    if (entry === undefined) lazies.entries.set(key, { fn, args, node, round })
-    else {
+    if (entry === undefined) {
+      lazies.entries.set(key, { fn, args: Array.from(args), node, round })
+    } else {
       entry.fn = fn
-      entry.args = args
+      entry.args = Array.from(args)
       entry.node = node
       entry.round = round
     }

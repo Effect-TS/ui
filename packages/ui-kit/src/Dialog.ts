@@ -1380,9 +1380,11 @@ export const Dialog = Component.define({
         const id = idOf(element)
         return triggerPart(
           element,
-          id,
-          id ?? p.id("trigger", triggers++),
-          attrOf(element, "disabled") !== undefined
+          [
+            id,
+            id ?? p.id("trigger", triggers++),
+            attrOf(element, "disabled") !== undefined
+          ]
         )
       }
     )
@@ -1499,7 +1501,7 @@ export const Dialog = Component.define({
         element: B
       ): ReturnType<B["attr"]> => {
         titleId = idOf(element) ?? p.id("title")
-        return titlePart(element, titleId)
+        return titlePart(element, [titleId])
       }
     )
     const descriptionPart = p.part(
@@ -1514,7 +1516,7 @@ export const Dialog = Component.define({
       descriptionPart,
       <B extends View.PartTarget<"p">>(element: B): ReturnType<B["attr"]> => {
         descriptionId = idOf(element) ?? p.id("description")
-        return descriptionPart(element, descriptionId)
+        return descriptionPart(element, [descriptionId])
       }
     )
     const close = p.part(

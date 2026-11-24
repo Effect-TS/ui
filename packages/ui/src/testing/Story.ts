@@ -396,9 +396,16 @@ export const parts = <Props, Events, Parts, R, Rcv>(
  */
 export const head: {
   <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
+    component:
+      & Component.Component<Name, Props, Model, Msg, Events, R, V, any>
+      & ({} extends Props ? unknown : never),
+    model: Model,
+    props?: Props
+  ): ReadonlyArray<View.HeadEntry<V>>
+  <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
     component: Component.Component<Name, Props, Model, Msg, Events, R, V, any>,
     model: Model,
-    ...props: {} extends Props ? [props?: Props] : [props: Props]
+    props: Props
   ): ReadonlyArray<View.HeadEntry<V>>
   <Props, Model, Msg, Events>(
     record: Shared.Record<Props, Model, Msg, Events>

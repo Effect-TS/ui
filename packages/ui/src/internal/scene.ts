@@ -52,6 +52,15 @@ export type Matcher = (
 ) => string | undefined
 
 /**
+ * Matchers by name, each making a `Matcher` from the one argument, if any, the test gave it.
+ *
+ * @internal
+ */
+export type Matchers = {
+  readonly [name: string]: (expected?: any) => Matcher
+}
+
+/**
  * One element, for the matchers that check a single one.
  *
  * @internal
@@ -93,7 +102,7 @@ const describeExpected = (expected: unknown): string =>
 export const makeExpectation = <A>(
   step: string,
   locator: Locator.Locator,
-  matchers: { readonly [name: string]: (...args: Array<any>) => Matcher },
+  matchers: Matchers,
   run: (
     check: (
       nodes: ReadonlyArray<Locator.Node>,
@@ -103,19 +112,21 @@ export const makeExpectation = <A>(
     method: Function
   ) => A
 ): object => {
-  const out: { [name: string]: (...args: Array<any>) => A } = {}
+  const out: { [name: string]: (expected?: unknown) => A } = {}
   for (const [name, make] of Object.entries(matchers)) {
-    const method = (...args: Array<any>): A =>
-      run((nodes, root, listed = root) => {
-        const failure = make(...args)(nodes, root)
+    const method = function(expected?: unknown): A {
+      const given = arguments.length === 0 ? "" : describeExpected(expected)
+      return run((nodes, root, listed = root) => {
+        const failure = make(expected)(nodes, root)
         if (failure !== undefined) {
           throw new Error(
-            `${step}(${locator.description}).${name}(${
-              args.map(describeExpected).join(", ")
-            }): ${failure}; ${engine.describeCandidates(listed)}`
+            `${step}(${locator.description}).${name}(${given}): ${failure}; ${
+              engine.describeCandidates(listed)
+            }`
           )
         }
       }, method)
+    }
     out[name] = method
   }
   return out
@@ -139,13 +150,16 @@ const withSlot = (
   return engine.update(state, { childStatus: statuses })
 }
 
-/** The arguments after a child step's component: an optional key, then the step's value. */
-type KeyAnd<A> = readonly [value: A] | readonly [key: string, value: A]
-
+/**
+ * The key and value of a child step, from how many arguments it got after the component: with one, the
+ * key was left out and that argument is the value.
+ */
 const keyAnd = <A>(
-  args: KeyAnd<A>
+  given: number,
+  first: unknown,
+  second: unknown
 ): readonly [key: string | undefined, value: A] =>
-  args.length === 1 ? [undefined, args[0]] : args
+  given === 1 ? [undefined, first as A] : [first as string, second as A]
 
 // ---------------------------------------------------------------------------
 // mounts
@@ -496,19 +510,20 @@ export class SceneCursor extends Cursor {
   fire(locator: Locator.Locator, event: string, payload: unknown = {}): this {
     return this.one("fire", locator, event, () => payload)
   }
-  childEmit(child: ChildTarget, ...args: KeyAnd<unknown>): this {
-    const [key, event] = keyAnd(args)
+  childEmit(child: ChildTarget, first: unknown, second?: unknown): this {
+    const [key, event] = keyAnd(arguments.length - 1, first, second)
     return this.act("childEmit", "message", (state) => {
       const found =
         findDeclared(state, child, key, this.name("childEmit")).child
       return engine.dispatch(state, found.onEmit(event))
     })
   }
-  childFailure(
-    child: ChildTarget,
-    ...args: KeyAnd<Cause.Cause<unknown>>
-  ): this {
-    const [key, cause] = keyAnd(args)
+  childFailure(child: ChildTarget, first: unknown, second?: unknown): this {
+    const [key, cause] = keyAnd<Cause.Cause<unknown>>(
+      arguments.length - 1,
+      first,
+      second
+    )
     return this.act("childFailure", "message", (state) => {
       const found = findDeclared(state, child, key, this.name("childFailure"))
       const failure: AsyncResult.Failure<never, unknown> = AsyncResult.failure(
@@ -532,8 +547,12 @@ export class SceneCursor extends Cursor {
       return withSlot(state, found, AsyncResult.initial(true))
     })
   }
-  givenChild(child: Component.Headless.Any, ...args: KeyAnd<unknown>): this {
-    const [key, model] = keyAnd(args)
+  givenChild(
+    child: Component.Headless.Any,
+    first: unknown,
+    second?: unknown
+  ): this {
+    const [key, model] = keyAnd(arguments.length - 1, first, second)
     const step = this.name("givenChild")
     // The Model is for the instance the step selected: the one at its path, as the runtime keys instances.
     const path = engine.findChild(this.state.view(), child, key, step).path
@@ -563,7 +582,7 @@ export class SceneCursor extends Cursor {
   }
   mounted(
     target: Mount.Definition.Any | Mount.Any,
-    ...result: ReadonlyArray<unknown>
+    result?: unknown
   ): this {
     const step = this.name("mounted")
     const live = findMount(this.state, target, step)
@@ -577,7 +596,7 @@ export class SceneCursor extends Cursor {
     // `findMount` matched `target`, so `result` is the Source of this mount. A mount that ends with
     // `Component.noop` takes no result, but `undefined` given is a result.
     const message = (live.mount.resolve as (result: unknown) => unknown)(
-      result.length === 0 ? noop : result[0]
+      arguments.length === 1 ? noop : result
     )
     return this.act(
       "mounted",
@@ -621,7 +640,7 @@ export class SceneCursor extends Cursor {
   /** An expectation over `locator`: one method per matcher, each returning the cursor. */
   protected expectation(
     locator: Locator.Locator,
-    matchers: { readonly [name: string]: (...args: Array<any>) => Matcher }
+    matchers: Matchers
   ): object {
     return makeExpectation(this.name("expect"), locator, matchers, (check) => {
       check(this.state.all(locator), this.state.root)

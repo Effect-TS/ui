@@ -1,4 +1,11 @@
-import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Mount,
+  type Query,
+  UiSchema,
+  type View
+} from "@effect/ui"
 import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
 import { Data, Effect, Schema, type Scope, Stream } from "effect"
@@ -30,6 +37,55 @@ describe("Story", () => {
     const scene = Scene.start(Counter, { initial: 0 })
     expect(scene).type.not.toHaveProperty("send")
     expect(scene.current).type.not.toHaveProperty("model")
+  })
+
+  it("head takes props only for a component that has them", () => {
+    const Plain = Component.define({
+      name: "Plain",
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.text("plain")
+    })
+    expect(Story.head).type.toBeCallableWith(Plain, null)
+    expect(Story.head).type.toBeCallableWith(Plain, null, {})
+    expect(Story.head).type.toBeCallableWith(Counter, { count: 0 }, {
+      initial: 0
+    })
+    expect(Story.head).type.not.toBeCallableWith(Counter, { count: 0 })
+    expect(Story.head).type.not.toBeCallableWith(
+      Counter,
+      { count: 0 },
+      undefined
+    )
+  })
+
+  it("a scene's mounted takes a result only for a mount that returns one", () => {
+    const scene = Scene.start(Counter, { initial: 0 })
+    const Width = Mount.make(
+      "Width",
+      { args: {} },
+      () => Effect.succeed(1)
+    )
+    const Maybe = Mount.make(
+      "Maybe",
+      { args: {} },
+      () => Effect.succeed<number | undefined>(undefined)
+    )
+    const Hello = Mount.make(
+      "Hello",
+      { args: {} },
+      () => Effect.succeed(Component.noop)
+    )
+    expect(scene.mounted).type.toBeCallableWith(Width, 1)
+    expect(scene.mounted).type.not.toBeCallableWith(Width)
+    expect(scene.mounted).type.not.toBeCallableWith(Width, "1")
+    expect(scene.mounted).type.toBeCallableWith(Maybe, undefined)
+    expect(scene.mounted).type.not.toBeCallableWith(Maybe)
+    expect(scene.mounted).type.toBeCallableWith(Hello)
+    expect(scene.mounted).type.not.toBeCallableWith(Hello, 1)
   })
 
   it("a scene's child steps take the component, then a key only when the child has one", () => {

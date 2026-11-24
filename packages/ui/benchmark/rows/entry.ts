@@ -149,7 +149,7 @@ const tables = (start: () => TableModel) => ({
       h.table.class(["table"]).children([
         h.tbody.children(
           model.rows.map((row) =>
-            h.lazy(lazyRow, row, row.id === model.selected)
+            h.lazy(lazyRow, [row, row.id === model.selected])
           )
         )
       ])

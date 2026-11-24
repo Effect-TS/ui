@@ -69,7 +69,58 @@ const Heading = Component.define({
   })
 })
 
+const Labels = Component.define({
+  name: "Labels",
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  parts: (p) => ({
+    labelled: p.part(
+      "li",
+      (b, ...labels: Array<string>) => b.attr("aria-label", labels.join(" "))
+    ),
+    tagged: p.part(
+      "li",
+      (b, tag?: string) => tag === undefined ? b : b.attr("data-tag", tag)
+    )
+  })
+})
+
 describe("headless components", () => {
+  it("a part takes the arguments after the builder as one array", () => {
+    Component.define({
+      name: "App",
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) =>
+        Labels(h, {
+          view: (labels) => {
+            expect(labels.labelled).type.toBeCallableWith(h.li, ["a", "b"])
+            expect(labels.labelled).type.toBeCallableWith(h.li, [])
+            expect(labels.labelled).type.toBeCallableWith(h.li)
+            expect(labels.labelled).type.not.toBeCallableWith(h.li, "a", "b")
+            expect(labels.labelled).type.not.toBeCallableWith(h.li, "a")
+            expect(labels.labelled).type.not.toBeCallableWith(h.li, ["a", 1])
+            expect(labels.tagged).type.toBeCallableWith(h.li)
+            expect(labels.tagged).type.toBeCallableWith(h.li, ["x"])
+            expect(labels.tagged).type.not.toBeCallableWith(h.li, "x")
+            expect(labels.tagged).type.not.toBeCallableWith(h.li, ["x", "y"])
+            return h.ul([
+              labels.labelled(h.li, ["a", "b"]),
+              labels.tagged(h.li)
+            ])
+          }
+        })
+    })
+  })
+
   it("the consumer calls parts with no annotations", () => {
     Component.define({
       name: "App",
@@ -110,7 +161,12 @@ describe("headless components", () => {
                 h.ul.children(menu.visible.map((item) => {
                   expect(item).type.toBe<Item>()
                   expect(menu.item).type.not.toBeCallableWith(h.li, item, item)
-                  return menu.item(h.li.key(item.id), item).onClick(
+                  expect(menu.item).type.not.toBeCallableWith(h.li, item)
+                  expect(menu.item).type.not.toBeCallableWith(h.li, [
+                    item,
+                    item
+                  ])
+                  return menu.item(h.li.key(item.id), [item]).onClick(
                     Msg.Clicked()
                   ).children([item.label])
                 }))
@@ -160,7 +216,7 @@ describe("headless components", () => {
               props: { label: "Confirm" },
               view: (dialog) =>
                 dialog.popup(h.dialog).children([
-                  dialog.close(menu.item(h.li, items[0]!)).children(["Close"])
+                  dialog.close(menu.item(h.li, [items[0]!])).children(["Close"])
                 ])
             })
           }
@@ -249,7 +305,7 @@ describe("headless components", () => {
           ),
           seen: View.wrapPart(seen, <B extends View.PartTarget<"div">>(
             { element, label }: { element: B; label: string }
-          ): ReturnType<B["attr"]> => seen(element, label))
+          ): ReturnType<B["attr"]> => seen(element, [label]))
         }
       }
     })

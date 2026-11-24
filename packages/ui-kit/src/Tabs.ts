@@ -1054,14 +1054,14 @@ export const Tabs = Component.define({
         tabPart,
         <B extends Keyed<"button" | "a">>(
           { element, value }: { readonly element: B; readonly value: string }
-        ): TabOf<B> => tabPart(element, value) as TabOf<B>
+        ): TabOf<B> => tabPart(element, [value]) as TabOf<B>
       ),
       panel: View.wrapPart(
         panelPart,
         <B extends Keyed<string>>(
           { element, value }: { readonly element: B; readonly value: string }
         ): ReturnType<B["attr"]> | undefined => {
-          const panel = panelPart(element, value)
+          const panel = panelPart(element, [value])
           if (
             !mounted(value) &&
             !(entryOf(value, "panel").tab.keepMounted ??

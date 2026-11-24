@@ -40,7 +40,7 @@ export interface Entry {
   readonly args: QueryFn
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
-  readonly onChange: ((...args: Array<any>) => unknown) | undefined
+  readonly onChange: ((result: any, changes?: any) => unknown) | undefined
 }
 
 /**

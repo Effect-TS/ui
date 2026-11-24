@@ -594,7 +594,7 @@ export const Collapsible = Component.define({
         element: B
       ): ReturnType<B["attr"]> | undefined => {
         panelId = idOf(element) ?? panelId
-        const out = panelPart(element, panelId)
+        const out = panelPart(element, [panelId])
         return mounted || hiddenUntilFound || props.keepMounted === true
           ? out
           : undefined

@@ -317,7 +317,7 @@ export declare namespace Union {
    */
   export type Constructors<Routes extends Record<string, Any>> = {
     readonly [K in keyof Routes & string]: (
-      ...args: Command.MakeArgs<WithoutTag<Cases<Routes>[K]["~type.make.in"]>>
+      args: Command.MakeArg<WithoutTag<Cases<Routes>[K]["~type.make.in"]>>
     ) => Cases<Routes>[K]["Type"]
   }
 
@@ -403,6 +403,11 @@ const parseTemplate = (path: string): ReadonlyArray<Segment> => {
   })
 }
 
+/** Passes for a path template without params, which takes no `params`. */
+type WithoutParams<Path extends string> = [PathParams<Path>] extends [never]
+  ? unknown
+  : never
+
 /** Fields that weren't given infer as their constraint, which means none. */
 type Declared<Fields extends Schema.Struct.Fields> = string extends keyof Fields
   ? {}
@@ -431,26 +436,39 @@ type Declared<Fields extends Schema.Struct.Fields> = string extends keyof Fields
  * @category constructors
  * @since 0.1.0
  */
-export const make = <
-  const Path extends string,
-  const Params extends Schema.Struct.Fields = {},
-  const Search extends Schema.Struct.Fields = {}
->(
-  path: Path,
-  ...[options]: [PathParams<Path>] extends [never] ? [options?: {
+export const make: {
+  <
+    const Path extends string,
+    const Params extends Schema.Struct.Fields = {},
+    const Search extends Schema.Struct.Fields = {}
+  >(
+    path: Path & WithoutParams<Path>,
+    options?: {
       readonly params?: Params | undefined
       readonly search?: Search | undefined
-    }]
-    : [
-      options: {
-        readonly params:
-          & Params
-          & { readonly [K in PathParams<Path>]: Schema.Constraint }
-        readonly search?: Search | undefined
-      }
-    ]
-): Route<Path, Declared<Params>, Declared<Search>> => {
-  const params = (options?.params ?? {}) as Declared<Params>
+    }
+  ): Route<Path, Declared<Params>, Declared<Search>>
+  <
+    const Path extends string,
+    const Params extends Schema.Struct.Fields = {},
+    const Search extends Schema.Struct.Fields = {}
+  >(
+    path: Path,
+    options: {
+      readonly params:
+        & Params
+        & { readonly [K in PathParams<Path>]: Schema.Constraint }
+      readonly search?: Search | undefined
+    }
+  ): Route<Path, Declared<Params>, Declared<Search>>
+} = (
+  path: string,
+  options?: {
+    readonly params?: Schema.Struct.Fields | undefined
+    readonly search?: Schema.Struct.Fields | undefined
+  }
+): Route<any, any, any> => {
+  const params = options?.params ?? {}
   for (const segment of parseTemplate(path)) {
     if (segment._tag === "Param" && !(segment.name in params)) {
       throw new Error(
@@ -462,7 +480,7 @@ export const make = <
     [TypeId]: TypeId,
     path,
     params,
-    search: (options?.search ?? {}) as Declared<Search>
+    search: options?.search ?? {}
   }
 }
 

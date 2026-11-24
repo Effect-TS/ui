@@ -287,6 +287,10 @@ describe("HtmlScene", () => {
         /toBeChecked\(\): it is unchecked/
       )
       assert.throws(
+        () => started.expect(HtmlLocator.label("Agree")).toBeChecked(undefined),
+        /toBeChecked\(undefined\): it is unchecked/
+      )
+      assert.throws(
         () => started.expect(HtmlLocator.label("Agree")).toBeDisabled(),
         /toBeDisabled\(\): it is enabled/
       )

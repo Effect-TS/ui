@@ -294,24 +294,25 @@ export abstract class Cursor {
         )
     )
   }
-  loaded(name: string, ...rest: Array<any>): this {
+  loaded(name: string, first: any, second?: any, third?: any): this {
     const step = this.name("loaded")
     if (engine.isKeyed(this.state, name)) {
-      const [args, value, options] = rest
       return this.act(
         "loaded",
         "acting",
         (state) =>
-          engine.loadKeyedStep(state, step, name, [{ args, value, ...options }])
+          engine.loadKeyedStep(state, step, name, [{
+            args: first,
+            value: second,
+            ...third
+          }])
       )
     }
-    const [value, options] = rest as [
-      unknown,
-      {
-        readonly waiting?: boolean | undefined
-        readonly patched?: boolean | undefined
-      } | undefined
-    ]
+    const value: unknown = first
+    const options: {
+      readonly waiting?: boolean | undefined
+      readonly patched?: boolean | undefined
+    } | undefined = second
     return this.act("loaded", "acting", (state) =>
       engine.settleStep(
         state,
@@ -353,25 +354,23 @@ export abstract class Cursor {
         )
     )
   }
-  loadFailed(name: string, ...rest: Array<any>): this {
+  loadFailed(name: string, first: any, second?: any, third?: any): this {
     const step = this.name("loadFailed")
     if (engine.isKeyed(this.state, name)) {
-      const [args, error, options] = rest
       return this.act(
         "loadFailed",
         "acting",
         (state) =>
           engine.loadKeyedStep(state, step, name, [{
-            args,
-            error,
-            waiting: options?.waiting
+            args: first,
+            error: second,
+            waiting: third?.waiting
           }])
       )
     }
-    const [error, options] = rest as [
-      unknown,
-      { readonly waiting?: boolean | undefined } | undefined
-    ]
+    const error: unknown = first
+    const options: { readonly waiting?: boolean | undefined } | undefined =
+      second
     return this.act("loadFailed", "acting", (state) =>
       engine.settleStep(
         state,

@@ -227,25 +227,26 @@ export type GroupField<In> =
   & string
 
 /**
- * The optional group argument of `Command.interrupt` and `h.isRunning`: the
- * `group` fields of the Command's args, or none for a Command without a
- * `group`.
+ * The type of the optional group argument of `Command.interrupt` and
+ * `h.isRunning`: the `group` fields of the Command's args, or `never` for a
+ * Command without a `group`, which takes none.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type GroupArg<Args, G extends string> = [G] extends [never] ? []
-  : [group?: Pick<Args, G & keyof Args>]
+export type GroupArg<Args, G extends string> = [G] extends [never] ? never
+  : Pick<Args, G & keyof Args>
 
 /**
- * The arguments of `make`: optional when every field of the args is.
+ * The type of `make`'s argument: it includes `void`, so the argument can be
+ * left out, when every field of the args is optional.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type MakeArgs<Args> = {} extends Args ? [args?: Args] : [args: Args]
+export type MakeArg<Args> = {} extends Args ? Args | void : Args
 
 /**
  * The options shared by `make` and `Service`.
@@ -728,7 +729,7 @@ export interface Factory<
 > extends Definition<Args, Msg, IsStream, never, G> {
   /** Issues the Command. */
   make(
-    ...args: MakeArgs<Args>
+    args: MakeArg<Args>
   ): IsStream extends true ? Issued<Msg, never, Msg, "Stream">
     : Issued<Msg, never, Msg, "Effect">
   readonly name: string
@@ -779,7 +780,7 @@ export interface Service<
    * `Command.match`.
    */
   make(
-    ...args: MakeArgs<Args>
+    args: MakeArg<Args>
   ): [Err] extends [never] ?
     (IsStream extends true ? Issued<A, Self, A, "Stream">
       : Issued<A, Self, A, "Effect">)
@@ -1657,11 +1658,11 @@ export const afterRefetch: {
  */
 export const interrupt = <Args, G extends string>(
   definition: Definition<Args, any, boolean, any, G>,
-  ...group: GroupArg<Args, G>
+  group?: GroupArg<Args, G>
 ): Interrupt => {
-  const source = group[0] === undefined
+  const source = group === undefined
     ? undefined
-    : definition["~group"](group[0])
+    : definition["~group"](group)
   return Object.assign(Object.create(Proto), {
     _tag: "Interrupt",
     name: nameOf(definition),

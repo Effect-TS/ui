@@ -166,7 +166,7 @@ export interface Factory<
   in Node = unknown,
   out R = never
 > extends Definition<Args, A, Node, R> {
-  (...args: Command.MakeArgs<Args>): Issued<A, R, Node, A>
+  (args: Command.MakeArg<Args>): Issued<A, R, Node, A>
 }
 
 /**

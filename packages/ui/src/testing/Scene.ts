@@ -88,15 +88,17 @@ import type * as Shared from "./Steps.ts"
 export type MountTarget = Mount.Definition.Any | Mount.Any
 
 /**
- * The result argument of the `mounted` step: the definition's own result,
- * and none for a mount that ends with `Component.noop`.
+ * The type of the `mounted` step's result argument: the definition's own
+ * result, and `never` for a mount that ends with `Component.noop`, which
+ * takes none.
  *
  * @stability experimental
  * @category utility types
  * @since 0.1.0
  */
-export type MountedResult<D> = [Mount.Result<D>] extends [Component.Noop] ? []
-  : [result: Mount.Result<D>]
+export type MountedResult<D> = [Mount.Result<D>] extends [Component.Noop]
+  ? never
+  : Mount.Result<D>
 
 /**
  * The state of one instance between steps, as a scene records it: what the
@@ -365,7 +367,15 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
    * the next message step and `make`'s end check until `mounted` or
    * `expectMount` names it, and a step that removes it before then throws.
    */
-  mounted<D extends MountTarget>(target: D, ...result: MountedResult<D>): this
+  mounted<D extends MountTarget>(target: D, result: MountedResult<D>): this
+  /**
+   * Ends the one mount matching `target`, one that ends with
+   * `Component.noop` and so takes no result, as `mounted` with a result
+   * does.
+   */
+  mounted<D extends MountTarget>(
+    target: D & ([MountedResult<D>] extends [never] ? unknown : never)
+  ): this
   /**
    * Asserts that exactly one mount is `mount`: the same definition, with the
    * args the view last rendered equal to its args. It acknowledges the mount
@@ -582,9 +592,17 @@ export const fallback: {
     | Component.Headless.Any
     | Component.Lazy.Any
     | Feature.Any,
-  ...args: ReadonlyArray<any>
+  first:
+    | string
+    | AsyncResult.Initial<never, unknown>
+    | AsyncResult.Failure<never, unknown>,
+  second?:
+    | AsyncResult.Initial<never, unknown>
+    | AsyncResult.Failure<never, unknown>
 ): View.Node<Msg, any> | undefined => {
-  const [key, result] = args.length === 1 ? [undefined, args[0]] : args
+  const [key, result] = typeof first === "string"
+    ? [first, second!]
+    : [undefined, first]
   const { child, scope } = engine.findChild(
     view,
     component,

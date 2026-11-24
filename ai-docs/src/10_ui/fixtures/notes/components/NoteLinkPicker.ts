@@ -99,7 +99,7 @@ export const NoteLinkPickerNoDeps = Component.define({
                         h.li.key(option.id).class([
                           listbox.active === option.id && "active"
                         ]),
-                        option
+                        [option]
                       )
                         .children([
                           h.strong([option.label]),

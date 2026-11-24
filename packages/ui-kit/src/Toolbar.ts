@@ -644,7 +644,7 @@ export const Toolbar = Component.define({
         groupPart,
         <B extends View.PartTarget<"div">>(
           { element, value }: { readonly element: B; readonly value: string }
-        ): ReturnType<B["attr"]> => groupPart(element, value)
+        ): ReturnType<B["attr"]> => groupPart(element, [value])
       ),
       button: valued(buttonPart),
       link: valued(linkPart),

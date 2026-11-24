@@ -1103,8 +1103,7 @@ export const ScrollArea = Component.define({
         ): ScrollbarOf<B, T> | undefined => {
           const built = scrollbarPart(
             element,
-            orientation,
-            thumbPart(thumb, orientation)
+            [orientation, thumbPart(thumb, [orientation])]
           ) as ScrollbarOf<B, T>
           return keepMounted ||
               (orientation === "vertical"

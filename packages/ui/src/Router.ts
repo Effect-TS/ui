@@ -867,15 +867,24 @@ interface ErasedPage {
  * @category subscriptions
  * @since 0.1.0
  */
-export const page = <C extends Component.Any>(
-  component: C & PageInput<C>,
-  ...props: {} extends Component.Props<C> ? [props?: Component.Props<C>]
-    : [props: Component.Props<C>]
-): Page<PageRequirements<C>> => ({
+export const page: {
+  <C extends Component.Any>(
+    component: C & PageInput<C> & PropsOptional<C>,
+    props?: Component.Props<C>
+  ): Page<PageRequirements<C>>
+  <C extends Component.Any>(
+    component: C & PageInput<C>,
+    props: Component.Props<C>
+  ): Page<PageRequirements<C>>
+} = (component: Component.Any, props?: unknown): Page<never> => ({
   [PageTypeId]: pageVariance,
   component,
-  props: props[0] ?? {}
+  props: props ?? {}
 })
+
+type PropsOptional<C extends Component.Any> = {} extends Component.Props<C>
+  ? unknown
+  : never
 
 const pageVariance = { _R: (_: never) => _ }
 

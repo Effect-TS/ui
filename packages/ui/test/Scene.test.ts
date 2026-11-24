@@ -229,6 +229,32 @@ describe("Scene", () => {
       )
     }))
 
+  it.effect("child steps given a key and an undefined value use the key", () =>
+    Effect.gen(function*() {
+      const Page = Component.define({
+        name: "Page",
+        model: Schema.String,
+        message: Schema.String,
+        elements: Html
+      })
+        .make({
+          init: () => "",
+          update: (_, message) => message,
+          view: (h, seen) =>
+            h.div([
+              h.p([seen]),
+              Badge(h, {
+                key: "b",
+                onEmit: (event) => event === undefined ? "undefined" : "event",
+                fallback: () => h.text("no badge")
+              })
+            ])
+        })
+      const s = yield* Scene.make(Page, {})
+      s.childEmit(Badge, "b", undefined as never).expect(Locator.tag("p"))
+        .toHaveText("undefined")
+    }))
+
   describe("children in headless closures", () => {
     const Toggled = UiSchema.TaggedEnum({ Toggled: {} })
     const Disclosure = Component.define({
@@ -410,6 +436,32 @@ describe("Scene", () => {
         s.mounted(Measure({ id: "b" }), 40).mounted(Measure({ id: "a" }), 20)
           .mounted(Hello)
           .expect(log).toHaveText("b is 40, a is 20")
+      }))
+
+    it.effect("mounted given undefined ends the mount with undefined as its result", () =>
+      Effect.gen(function*() {
+        const Maybe = Mount.make(
+          "Maybe",
+          { args: {} },
+          () => Effect.succeed<string | undefined>(undefined)
+        )
+        const Shown = Component.define({
+          name: "Shown",
+          model: Schema.String,
+          message: Schema.String,
+          elements: Html
+        }).make({
+          init: () => "",
+          update: (_, message) => message,
+          view: (h, seen) =>
+            h.p.onMount(
+              Maybe().pipe(Mount.map((result) => result ?? "undefined"))
+            ).children([seen])
+        })
+        const s = yield* Scene.make(Shown, {})
+        s.mounted(Maybe, undefined).expect(Locator.tag("p")).toHaveText(
+          "undefined"
+        )
       }))
 
     it.effect("a new mount blocks a message step and the end of make until a step names it, and ends once", () =>

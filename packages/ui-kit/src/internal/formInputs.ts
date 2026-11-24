@@ -105,7 +105,7 @@ export const formInputs = <Msg>(
   return [
     ...(field.form !== undefined || real ? [main(input())] : []),
     ...(field.multiple && field.name !== undefined
-      ? field.values.map((value) => each(input().key(value), value))
+      ? field.values.map((value) => each(input().key(value), [value]))
       : [])
   ]
 }

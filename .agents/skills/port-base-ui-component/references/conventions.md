@@ -317,7 +317,7 @@ model.advanced
   as `SwitchParts` does.
 
   `Listbox.ts` in `ai-docs` shows the core API, where a part takes the
-  builder and extra arguments positionally (`listbox.option(h.li, option)`).
+  builder and an array of extra arguments (`listbox.option(h.li, [option])`).
   ui-kit wraps `p.part` to take the options object, with `View.wrapPart`.
   A part with only the builder is the `p.part` itself.
 - **Stacking.** A part's result is a builder, so it is also another kit

@@ -3047,9 +3047,7 @@ export const Menu = Component.define({
         triggers++
         return triggerPart(
           options.element,
-          id ?? p.id("trigger", triggers - 1),
-          id,
-          options
+          [id ?? p.id("trigger", triggers - 1), id, options]
         )
       }
     )
@@ -3106,8 +3104,7 @@ export const Menu = Component.define({
         contextTriggers++
         return contextTriggerPart(
           element,
-          id ?? p.id("context", contextTriggers - 1),
-          id
+          [id ?? p.id("context", contextTriggers - 1), id]
         )
       }
     )
@@ -3382,7 +3379,11 @@ export const Menu = Component.define({
         })
 
     const closable = <Tag extends string, R>(
-      part: View.Part<Tag, [value: string, closeOnClick?: boolean], R>
+      part: View.Part<
+        Tag,
+        [value: string, closeOnClick?: boolean | undefined],
+        R
+      >
     ) => {
       const keyedPart = keyed(part)
       return View.wrapPart(
@@ -3393,7 +3394,7 @@ export const Menu = Component.define({
             readonly value: string
             readonly closeOnClick?: boolean | undefined
           }
-        ) => keyedPart(element, value, closeOnClick)
+        ) => keyedPart(element, [value, closeOnClick])
       )
     }
 
@@ -3449,7 +3450,7 @@ export const Menu = Component.define({
           readonly checked: boolean
           readonly closeOnClick?: boolean | undefined
         }
-      ) => checkboxItemPart(element, value, checked, closeOnClick)
+      ) => checkboxItemPart(element, [value, checked, closeOnClick])
     )
 
     const radioGroupPart = p.part("div", (b, value: string | null) => {
@@ -3463,7 +3464,7 @@ export const Menu = Component.define({
           readonly element: B
           readonly value: string | null
         }
-      ) => radioGroupPart(element, value)
+      ) => radioGroupPart(element, [value])
     )
 
     const radioItem = closable(
@@ -3504,7 +3505,7 @@ export const Menu = Component.define({
             readonly keepMounted?: boolean | undefined
           }
         ): ReturnType<B["attr"]> | undefined => {
-          const applied = part(element, value)
+          const applied = part(element, [value])
           return checks.get(itemOf(value).value) === true ||
               keepMounted === true
             ? applied
