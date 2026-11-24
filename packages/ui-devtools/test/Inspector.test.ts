@@ -376,6 +376,24 @@ describe("Inspector", () => {
       model: { x: 100, n: 2 },
       props: {}
     })
+
+    const quiet = Inspector.make({ size: 2 })
+    quiet.ingest([
+      mounted(1, 1, "/A", "A", { a: 0 }),
+      mounted(2, 2, "/B", "B", { b: 0 }),
+      update(3, 2, "/B", "B", "Clicked", { b: 1 })
+    ])
+    const quietSession = quiet.sessions()[0]
+    assert.deepStrictEqual(quietSession.resolve(1), { _tag: "Outside", seq: 1 })
+    quietSession.clear()
+    assert.deepStrictEqual(quietSession.resolve(1), { _tag: "Outside", seq: 1 })
+    quiet.ingest([update(4, 1, "/A", "A", "Clicked", { a: 1 })])
+    assert.deepStrictEqual(quietSession.previous(4), {
+      seq: 1,
+      changed: true,
+      model: { a: 0 },
+      props: {}
+    })
   })
 
   it("diffs nested values by key and by index", () => {

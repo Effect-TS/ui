@@ -8,20 +8,11 @@ interface Held extends BrowserHost.Recorded {
 type State = (path: string) => BrowserHost.Recorded | undefined
 
 export interface History {
-  readonly record: (entry: MessageLog.Entry) => void
+  readonly record: (entry: MessageLog.Entry, excluded?: boolean) => void
   readonly clear: (session: string, upTo?: number) => void
   readonly holds: (session: string, seq: number) => boolean
   readonly at: (session: string, seq: number) => State | undefined
 }
-
-const isExcluded = (entry: MessageLog.Entry, exclude: ReadonlySet<string>): boolean =>
-  exclude.size > 0 &&
-  entry._tag === "Update" &&
-  typeof entry.message === "object" &&
-  entry.message !== null &&
-  "_tag" in entry.message &&
-  typeof (entry.message as { readonly _tag?: unknown })._tag === "string" &&
-  exclude.has((entry.message as { readonly _tag: string })._tag)
 
 const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
   switch (entry._tag) {
@@ -53,62 +44,53 @@ const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
   }
 }
 
-const makeSession = (size: number, exclude: ReadonlySet<string>) => {
+const makeSession = (size: number) => {
   const base = new Map<number, Held>()
   const entries: Array<MessageLog.Entry> = []
-  const hidden = new Set<number>()
+  const shown = new Set<number>()
   const run = new Map<number, MessageLog.Entry>()
-  let shown = 0
-  let evicted = false
   return {
-    record: (entry: MessageLog.Entry) => {
-      if (isExcluded(entry, exclude)) {
-        const update = entry as MessageLog.Update
-        const replaced = run.get(update.instance)
+    record: (entry: MessageLog.Entry, excluded = false) => {
+      if (excluded && entry._tag === "Update") {
+        const replaced = run.get(entry.instance)
         let merged: MessageLog.Entry = entry
         if (replaced !== undefined) {
           const at = entries.lastIndexOf(replaced)
           if (at >= 0) entries.splice(at, 1)
-          hidden.delete(replaced.seq)
-          if (update.queries === undefined && (replaced as MessageLog.Update).queries !== undefined) {
-            merged = { ...update, queries: (replaced as MessageLog.Update).queries }
+          if (entry.queries === undefined && (replaced as MessageLog.Update).queries !== undefined) {
+            merged = { ...entry, queries: (replaced as MessageLog.Update).queries }
           }
         }
         entries.push(merged)
-        hidden.add(entry.seq)
-        run.set(update.instance, merged)
+        run.set(entry.instance, merged)
         return
       }
       run.clear()
       entries.push(entry)
-      shown++
-      while (shown > size && entries.length > 0) {
+      shown.add(entry.seq)
+      while (shown.size > size && entries.length > 0) {
         const oldest = entries.shift()!
-        if (!hidden.delete(oldest.seq)) shown--
+        shown.delete(oldest.seq)
         if ("instance" in oldest && run.get(oldest.instance) === oldest) run.delete(oldest.instance)
         apply(base, oldest)
-        evicted = true
       }
     },
     clear: (upTo?: number) => {
       if (upTo === undefined) {
         for (const entry of entries) apply(base, entry)
         entries.length = 0
-        hidden.clear()
+        shown.clear()
         run.clear()
-        shown = 0
-        evicted = true
         return
       }
       while (entries.length > 0 && entries[0]!.seq <= upTo) {
         const oldest = entries.shift()!
-        if (!hidden.delete(oldest.seq)) shown--
+        shown.delete(oldest.seq)
         if ("instance" in oldest && run.get(oldest.instance) === oldest) run.delete(oldest.instance)
         apply(base, oldest)
-        evicted = true
       }
     },
-    holds: (seq: number) => entries.length > 0 && (!evicted || seq >= entries[0]!.seq),
+    holds: (seq: number) => shown.has(seq),
     at: (seq: number): State => {
       const states = new Map(base)
       for (const entry of entries) {
@@ -125,13 +107,13 @@ const makeSession = (size: number, exclude: ReadonlySet<string>) => {
   }
 }
 
-export const make = (size: number, exclude: ReadonlySet<string> = new Set()): History => {
+export const make = (size: number): History => {
   const sessions = new Map<string, ReturnType<typeof makeSession>>()
   return {
-    record: (entry) => {
+    record: (entry, excluded) => {
       let session = sessions.get(entry.session)
-      if (session === undefined) sessions.set(entry.session, session = makeSession(size, exclude))
-      session.record(entry)
+      if (session === undefined) sessions.set(entry.session, session = makeSession(size))
+      session.record(entry, excluded)
     },
     clear: (session, upTo) => {
       sessions.get(session)?.clear(upTo)

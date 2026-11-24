@@ -287,6 +287,122 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isTrue(second)
     }))
 
+  it.live("aligns exclusion across encodeKeys, disables paint on excluded links, and keeps evicted baselines", () =>
+    Effect.gen(function*() {
+      const EncodedMessage = Schema.Union([
+        Schema.Struct({ _tag: Schema.Literal("Move") }).pipe(Schema.encodeKeys({ _tag: "kind" })),
+        Schema.Struct({ _tag: Schema.Literal("Commit") }).pipe(Schema.encodeKeys({ _tag: "kind" }))
+      ])
+      const Encoded = Component.define({
+        name: "Encoded",
+        scoped: false,
+        model: Schema.Struct({ x: Schema.Number, c: Schema.Number }),
+        message: EncodedMessage,
+        elements: Html
+      }).make({
+        init: () => ({ x: 0, c: 0 }),
+        update: {
+          Move: ($) => $.evolve({ x: $.model.x + 1 }),
+          Commit: ($) => $.evolve({ c: $.model.c + 1 })
+        },
+        view: (h, model) =>
+          h.div(
+            h.output.children(`${model.x}:${model.c}`),
+            h.button.onClick({ _tag: "Move" }).children("Move"),
+            h.button.onClick({ _tag: "Commit" }).children("Commit")
+          )
+      })
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        yield* Layer.build(DevTools.layer({ exclude: ["Move"] })).pipe(
+          Effect.flatMap((services) => BrowserHost.mountEffect(Encoded, {}, app).pipe(Effect.provide(services)))
+        )
+        yield* settle
+        const root = overlay()
+        yield* open(root)
+        const move = HtmlLocator.getByRole(app, "button", { name: "Move" })
+        const commit = HtmlLocator.getByRole(app, "button", { name: "Commit" })
+        yield* click(move)
+        yield* click(move)
+        assert.strictEqual(root.querySelectorAll(".row").length, 1)
+        yield* click(commit)
+        assert.strictEqual(root.querySelectorAll(".row").length, 2)
+        yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+        assert.strictEqual(app.nextElementSibling?.querySelector("output")?.textContent, "2:1")
+        yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+      }))
+      localStorage.clear()
+
+      const PairMoveMessage = UiSchema.TaggedEnum({ Move: {}, Commit: {} })
+      const Peer = Component.define({
+        name: "Peer",
+        scoped: false,
+        props: Schema.Struct({ label: Schema.String }),
+        model: Schema.Struct({ v: Schema.Number }),
+        message: PairMoveMessage,
+        elements: Html
+      }).make({
+        init: () => ({ v: 0 }),
+        update: {
+          Move: ($) => $.evolve({ v: $.model.v + 1 }),
+          Commit: ($) => $.evolve({ v: $.model.v + 10 })
+        },
+        view: (h, model) =>
+          h.div(
+            h.output.attr("data-peer", h.props.label).children(String(model.v)),
+            h.button.onClick(PairMoveMessage.Move()).children("Move " + h.props.label),
+            h.button.onClick(PairMoveMessage.Commit()).children("Commit " + h.props.label)
+          )
+      })
+      const Two = Component.define({
+        name: "Two",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.main(Peer(h, { key: "a", props: { label: "A" } }), Peer(h, { key: "b", props: { label: "B" } }))
+      })
+      yield* Effect.scoped(Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        yield* Layer.build(DevTools.layer({ size: 2, exclude: ["Move"] })).pipe(
+          Effect.flatMap((services) => BrowserHost.mountEffect(Two, {}, app).pipe(Effect.provide(services)))
+        )
+        yield* settle
+        const root = overlay()
+        yield* open(root)
+        const moveA = HtmlLocator.getByRole(app, "button", { name: "Move A" })
+        const moveB = HtmlLocator.getByRole(app, "button", { name: "Move B" })
+        const commitA = HtmlLocator.getByRole(app, "button", { name: "Commit A" })
+        const commitB = HtmlLocator.getByRole(app, "button", { name: "Commit B" })
+
+        yield* click(moveA)
+        yield* click(moveB)
+        yield* click(moveA)
+        yield* click(commitB)
+        const prevLink = root.querySelector(".pane.model .note button.ref")!
+        assert.isNotNull(prevLink)
+        yield* click(prevLink)
+        assert.strictEqual(headline(root), "Move")
+        const travel = HtmlLocator.getByRole(root, "button", { name: "Time travel" }) as HTMLButtonElement
+        assert.isTrue(travel.disabled)
+
+        yield* click(commitB)
+        yield* click(commitB)
+        yield* click(HtmlLocator.getByRole(root, "button", { name: "Clear" }))
+        yield* click(commitA)
+        const changed = root.querySelectorAll(".tree .tl[data-change=changed]")
+        assert.strictEqual(changed.length, 1)
+        assert.strictEqual(changed[0].querySelector(".k")?.textContent, "v")
+        assert.strictEqual(changed[0].querySelector("del")?.textContent, "2")
+        assert.strictEqual(changed[0].querySelector("ins")?.textContent, "12")
+      }))
+    }))
+
   it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>
     Effect.gen(function*() {
       const { app, root } = yield* mount("closed")

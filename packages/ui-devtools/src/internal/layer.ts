@@ -5,8 +5,8 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
 import * as Stream from "effect/Stream"
-import * as Inspector from "../Inspector.ts"
 import * as History from "./history.ts"
+import * as InspectorInternal from "./inspector.ts"
 import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
 import { styles } from "./styles.ts"
 
@@ -14,6 +14,15 @@ export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
 
 const sizeKey = "@effect/ui-devtools/size"
 const openKey = "@effect/ui-devtools/open"
+
+const isExcludedEntry = (entry: MessageLog.Entry, exclude: ReadonlySet<string>): boolean =>
+  exclude.size > 0 &&
+  entry._tag === "Update" &&
+  typeof entry.message === "object" &&
+  entry.message !== null &&
+  "_tag" in entry.message &&
+  typeof (entry.message as { readonly _tag?: unknown })._tag === "string" &&
+  exclude.has((entry.message as { readonly _tag: string })._tag)
 
 const corners: { readonly [P in Position]: string } = {
   TopLeft: "top:12px;left:12px",
@@ -46,8 +55,28 @@ export const make = (options: {
     Effect.gen(function*() {
       const size = Math.max(1, options.size ?? 1_000)
       const exclude = new Set(options.exclude)
-      const inspector = Inspector.make({ size, exclude: options.exclude })
-      const history = History.make(size, exclude)
+      const excludedSeqs = new Map<string, Set<number>>()
+      const inspector = InspectorInternal.make({
+        size,
+        isExcluded: exclude.size === 0
+          ? undefined
+          : (entry) => {
+            const seqs = excludedSeqs.get(entry.session)
+            if (seqs === undefined) return false
+            let hit = false
+            for (const seq of seqs) {
+              if (seq < entry.seq) seqs.delete(seq)
+              else if (seq === entry.seq) {
+                seqs.delete(seq)
+                hit = true
+                break
+              } else break
+            }
+            if (seqs.size === 0) excludedSeqs.delete(entry.session)
+            return hit
+          }
+      })
+      const history = History.make(size)
       const roots = new Map<string, BrowserHost.Pausable>()
       let paused: BrowserHost.Pausable | undefined
       const origins = new Map<string, number>()
@@ -219,7 +248,16 @@ export const make = (options: {
           return PubSub.publish(changes, undefined)
         })
       )
-      const log = MessageLog.fanoutAll([{ enabled: true, record: history.record }, encoded])
+      const record = (entry: MessageLog.Entry) => {
+        const excluded = isExcludedEntry(entry, exclude)
+        if (excluded) {
+          let seqs = excludedSeqs.get(entry.session)
+          if (seqs === undefined) excludedSeqs.set(entry.session, seqs = new Set())
+          seqs.add(entry.seq)
+        }
+        history.record(entry, excluded)
+      }
+      const log = MessageLog.fanoutAll([{ enabled: true, record }, encoded])
       return Context.make(MessageLog.MessageLog, log).pipe(Context.add(BrowserHost.Pausables, pausables))
     })
   )
