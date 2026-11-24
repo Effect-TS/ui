@@ -73,10 +73,9 @@ const messageSchema = (
     return Effect.succeed({ schema: member, definitions: document.definitions })
   })
 
-export const connect = (
-  url: string,
-  controller: Controller
-): Effect.Effect<void, never, Scope.Scope | Socket.WebSocketConstructor> => {
+export const makeHandler = (
+  controller: Pick<Controller, "roots" | "size" | "paused" | "paint" | "resume">
+): (request: Control.Request) => Effect.Effect<Json, string> => {
   const noRoot = (session: string) =>
     "Session " + session + " has no root on this page."
 
@@ -92,7 +91,7 @@ export const connect = (
         : Effect.succeed(found)
     })
 
-  const handle = (request: Control.Request): Effect.Effect<Json, string> => {
+  return (request: Control.Request): Effect.Effect<Json, string> => {
     switch (request._tag) {
       case "Show":
         return Effect.flatMap(
@@ -154,6 +153,13 @@ export const connect = (
         })
     }
   }
+}
+
+export const connect = (
+  url: string,
+  controller: Controller
+): Effect.Effect<void, never, Scope.Scope | Socket.WebSocketConstructor> => {
+  const handle = makeHandler(controller)
 
   const connection = Effect.gen(function*() {
     const socket = yield* Socket.makeWebSocket(url)

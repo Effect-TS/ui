@@ -50,11 +50,10 @@ const PickerMessage = UiSchema.TaggedEnum({
   Clicked: { id: Schema.String }
 })
 
-const Picker = Component.define({
+const Picker = Html.component({
   name: "Picker",
   model: Schema.Array(Schema.String),
-  message: PickerMessage,
-  elements: Html
+  message: PickerMessage
 }).make({
   init: () => [],
   update: ($, message) => [
@@ -98,12 +97,11 @@ const Picker = Component.define({
 
 const BellMessage = UiSchema.TaggedEnum({ Ring: {}, Break: {} })
 
-const Bell = Component.define({
+const Bell = Html.component({
   name: "Bell",
   model: Schema.Number,
   message: BellMessage,
-  events: Schema.Literal("rang"),
-  elements: Html
+  events: Schema.Literal("rang")
 }).make({
   init: () => 0,
   update: ($, message) =>
@@ -122,12 +120,11 @@ const Bell = Component.define({
 
 const BoardMessage = UiSchema.TaggedEnum({ Rang: {}, Failed: {} })
 
-const Board = Component.define({
+const Board = Html.component({
   name: "Board",
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Array(Schema.String),
-  message: BoardMessage,
-  elements: Html
+  message: BoardMessage
 }).make({
   init: () => [],
   update: ($, message) => [...$.model, message._tag],
@@ -228,11 +225,10 @@ const Waiting = Component.define({
 // Token lists: a part adds to the consumer's class and aria-describedby
 // ---------------------------------------------------------------------------
 
-const Field = Component.define({
+const Field = Html.component({
   name: "Field",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -246,11 +242,10 @@ const Field = Component.define({
   })
 })
 
-const Form = Component.define({
+const Form = Html.component({
   name: "Form",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -269,12 +264,11 @@ const Form = Component.define({
     )
 })
 
-const Shell = Component.define({
+const Shell = Html.component({
   name: "Shell",
   props: Schema.Struct({ fallbackThrows: Schema.Boolean }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -288,12 +282,11 @@ const Shell = Component.define({
 
 const ProbeMessage = UiSchema.TaggedEnum({ Read: {} })
 
-const Probe = Component.define({
+const Probe = Html.component({
   name: "Probe",
   props: Schema.Struct({ count: Schema.Number }),
   model: Schema.Array(Schema.Number),
-  message: ProbeMessage,
-  elements: Html
+  message: ProbeMessage
 }).make({
   init: (): ReadonlyArray<number> => [],
   update: ($) => [...$.model, $.props.count],
@@ -303,11 +296,10 @@ const Probe = Component.define({
     )
 })
 
-const Counted = Component.define({
+const Counted = Html.component({
   name: "Counted",
   model: Schema.Number,
-  message: Schema.Literal("bump"),
-  elements: Html
+  message: Schema.Literal("bump")
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,
@@ -399,12 +391,11 @@ describe("headless components", () => {
 
   it.effect("a part removes consumer attributes explicitly, without touching attributes it leaves alone", () =>
     provideHost(Effect.gen(function*() {
-      const Control = Component.define({
+      const Control = Html.component({
         name: "Control",
         props: Schema.Struct({ active: Schema.Boolean }),
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -418,11 +409,10 @@ describe("headless components", () => {
               .class("part"))
         })
       })
-      const Consumer = Component.define({
+      const Consumer = Html.component({
         name: "Consumer",
         model: Schema.Boolean,
-        message: Schema.Literal("toggle"),
-        elements: Html
+        message: Schema.Literal("toggle")
       }).make({
         init: () => false,
         update: ($) => !$.model,

@@ -15,11 +15,10 @@ const slow = Layer.effect(Slow, Effect.suspend(() => Effect.as(gate, "ready")))
 
 let inits = 0
 const form = (name: string, restore?: false | ((model: string) => string)) =>
-  Component.define({
+  Html.component({
     name,
     model: Schema.String,
     message: Schema.String,
-    elements: Html,
     restore
   }).make(
     {
@@ -37,11 +36,10 @@ const ExcludedSlowForm = form("ExcludedSlowForm", false).pipe(
 const FilteredSlowForm = form("FilteredSlowForm", () => "filtered").pipe(
   Component.provide(slow)
 )
-const SlowSide = Component.define({
+const SlowSide = Html.component({
   name: "SlowSide",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({ init: () => null, update: ($) => $.model, view: (h) => h.i("side") })
   .pipe(Component.provide(slow))
 
@@ -50,11 +48,10 @@ const secret = (
   name: string,
   restore: false | ((model: string) => string)
 ) =>
-  Component.define({
+  Html.component({
     name,
     model: Schema.String,
     message: Schema.Never,
-    elements: Html,
     restore
   }).make({
     init: () => serving ? "secret-token" : "client",
@@ -64,11 +61,10 @@ const secret = (
 const vault = (name: string, restore: false | ((model: string) => string)) => {
   const Plain = secret(`${name}Plain`, restore)
   const Kept = secret(`${name}Kept`, restore)
-  return Component.define({
+  return Html.component({
     name,
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,
@@ -85,11 +81,10 @@ const Late = Schema.String.pipe(Schema.decode({
   ),
   encode: SchemaGetter.passthrough()
 }))
-const LateForm = Component.define({
+const LateForm = Html.component({
   name: "LateForm",
   model: Late,
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => "client",
   update: (_, text) => text,
@@ -99,11 +94,10 @@ const keepAliveForm = (
   name: string,
   restore?: false | ((model: string) => string)
 ) =>
-  Component.define({
+  Html.component({
     name,
     model: Schema.String,
     message: Schema.String,
-    elements: Html,
     restore
   }).make({
     init: () => inits++ === 0 ? "server" : "client",
@@ -117,11 +111,10 @@ const FilteredKeepAliveForm = keepAliveForm(
   () => "filtered"
 )
 const holder = (child: typeof KeepAliveForm) =>
-  Component.define({
+  Html.component({
     name: "Holder",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,
@@ -138,11 +131,10 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
   staleTime: "30 seconds"
 }, Effect.succeed(() => Effect.succeed("billing"))) {}
 const draft = (restore?: false) =>
-  Component.define({
+  Html.component({
     name: "Draft",
     model: Schema.String,
     message: Schema.Never,
-    elements: Html,
     restore
   })
     .make({
@@ -152,11 +144,10 @@ const draft = (restore?: false) =>
     })
 const Draft = draft()
 const lateSettings = (child: typeof Draft) =>
-  Component.define({
+  Html.component({
     name: "LateSettings",
     model: Late,
     message: Schema.String,
-    elements: Html,
     queries: { tab: { query: GetTab, args: () => ({}) } }
   }).make({
     init: () => "",
@@ -175,11 +166,10 @@ const lateSettings = (child: typeof Draft) =>
 const LateSettings = lateSettings(Draft)
 const ExcludedLateSettings = lateSettings(draft(false))
 const lateKeepAlive = (name: string, restore?: (model: string) => string) =>
-  Component.define({
+  Html.component({
     name,
     model: Late,
     message: Schema.Never,
-    elements: Html,
     restore
   }).make({
     init: () => inits++ === 0 ? "server" : "client",
@@ -192,11 +182,10 @@ const FilteredLateKeepAlive = lateKeepAlive(
   () => "filtered"
 )
 const lateHolder = (child: typeof LateKeepAlive) =>
-  Component.define({
+  Html.component({
     name: "LateHolder",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,
@@ -204,74 +193,67 @@ const lateHolder = (child: typeof LateKeepAlive) =>
   })
 const LateHolder = lateHolder(LateKeepAlive)
 const FilteredLateHolder = lateHolder(FilteredLateKeepAlive)
-const Field = Component.define({
+const Field = Html.component({
   name: "Field",
   model: Schema.String,
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: () => "client",
   update: (_, text) => text,
   view: (h, text) => h.input.value(text).onInput(({ value }) => value)
 })
-const Group = Component.define({
+const Group = Html.component({
   name: "Group",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
     h.div(Form(h, { key: "c" }), h.keepAlive((s) => Field(s, { key: "e" })))
 })
-const LateCard = Component.define({
+const LateCard = Html.component({
   name: "LateCard",
   model: Late,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => "client",
   update: ($) => $.model,
   view: (h) =>
     h.div(h.keepAlive((s) => Field(s, { key: "p" })), Group(h, { key: "g" }))
 })
-const Card = Component.define({
+const Card = Html.component({
   name: "Card",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.div(LateCard(h, { key: "l" }))
 })
-const CardHolder = Component.define({
+const CardHolder = Html.component({
   name: "CardHolder",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.keepAlive((s) => h.div(Card(s, { key: "d" })))
 })
-const Outer = Component.define({
+const Outer = Html.component({
   name: "Outer",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
     update: ($) => $.model,
     view: (h) => h.keepAlive((s) => h.div(Draft(s, { key: "d" })))
   })
-const Nesting = Component.define({
+const Nesting = Html.component({
   name: "Nesting",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -311,12 +293,11 @@ const Msg = UiSchema.TaggedEnum({
   Went: {}
 })
 const appOf = (page: Page) =>
-  Component.define({
+  Html.component({
     name: "App",
     props: Schema.Struct({ route: Routes }),
     model: Routes,
-    message: Msg,
-    elements: Html
+    message: Msg
   }).make({
     init: ($) => $.props.route,
     update: ($, message) =>
@@ -389,12 +370,11 @@ const appOf = (page: Page) =>
   })
 
 const editor = (name: string) =>
-  Component.define({
+  Html.component({
     name,
     props: Schema.Struct({ open: Schema.Boolean }),
     model: Schema.NullOr(Schema.String),
-    message: Schema.NullOr(Schema.String),
-    elements: Html
+    message: Schema.NullOr(Schema.String)
   }).make({
     init: () => "subject",
     update: (_, subject) => subject,
@@ -408,12 +388,11 @@ const editor = (name: string) =>
   })
 const Editor = editor("Editor")
 const SlowEditor = editor("SlowEditor").pipe(Component.provide(slow))
-const SlowNesting = Component.define({
+const SlowNesting = Html.component({
   name: "SlowNesting",
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -430,12 +409,11 @@ const DeskMsg = UiSchema.TaggedEnum({
   Show: { editor: Shown }
 })
 const deskOf = (waits: boolean, nested: boolean) =>
-  Component.define({
+  Html.component({
     name: "Desk",
     props: Schema.Struct({ route: Routes }),
     model: Schema.Struct({ route: Routes, editor: Shown }),
-    message: DeskMsg,
-    elements: Html
+    message: DeskMsg
   }).make({
     init: ($) => ({ route: $.props.route, editor: "open" as const }),
     update: ($, message) =>
@@ -521,11 +499,10 @@ const sit = Effect.fnUntraced(
     }
   }
 )
-const Panel = Component.define({
+const Panel = Html.component({
   name: "Panel",
   model: Schema.Boolean,
-  message: Schema.Boolean,
-  elements: Html
+  message: Schema.Boolean
 }).make({
   init: () => true,
   update: (_, shown) => shown,

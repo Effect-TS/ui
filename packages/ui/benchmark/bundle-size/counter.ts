@@ -1,14 +1,13 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
 
 const Message = UiSchema.TaggedEnum({ Increment: {}, Decrement: {} })
 
-const Counter = Component.define({
+const Counter = Html.component({
   name: "Counter",
   model: Schema.Number,
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => 0,
   update: ($, message) =>

@@ -68,18 +68,17 @@
  * **Example** (Confirming that a draft is discarded)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { AlertDialog } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const EditorMessage = UiSchema.TaggedEnum({ RequestedOpenConfirm: {}, RequestedCloseConfirm: {}, ClickedDiscard: {} })
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Struct({ confirming: Schema.Boolean }),
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => ({ confirming: true }),
  *   update: {

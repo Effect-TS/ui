@@ -1,9 +1,9 @@
-import { Component } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { NoteActivity } from "./NoteActivity.ts"
 
 // One implementation of the feature. Its props must fit the contract.
-export const ActivityLog = Component.define({
+export const ActivityLog = Html.component({
   name: "ActivityLog",
   props: NoteActivity.props,
   model: Schema.Struct({}),

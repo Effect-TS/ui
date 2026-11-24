@@ -5,7 +5,7 @@
  * that reads another field, a username check run by a debounced query, and
  * an error from the server. A story and a scene read each field's state.
  */
-import { Command, Component, Query, UiSchema, Validation } from "@effect/ui"
+import { Command, Query, UiSchema, Validation } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Story } from "@effect/ui/testing"
@@ -179,15 +179,17 @@ export const validateSignup = (
 // The Model holds `SignupValidation.State`: the values as typed, which
 // fields were edited, whether a submit was tried and the server's errors.
 // It never holds an error the rules produce. Those are derived each time.
-export const SignupForm = Component.define({
+export const SignupForm = Html.component({
   name: "SignupForm",
+
   model: Schema.Struct({
     form: SignupValidation.State,
     submitting: Schema.Boolean
   }),
+
   message: SignupFormMessage,
   events: SignupFormEvents,
-  elements: Html,
+
   queries: {
     usernameTaken: {
       query: IsUsernameTaken,

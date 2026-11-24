@@ -1,5 +1,6 @@
 import { GetNote } from "#queries/GetNote"
 import { Component, Head, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Collapsible } from "../../kit/Collapsible.ts"
@@ -13,7 +14,7 @@ export const NotePageMessage = UiSchema.TaggedEnum({
   FailedEditor: {}
 })
 
-export const NotePageNoDeps = Component.define({
+export const NotePageNoDeps = Html.component({
   name: "NotePage",
   props: Schema.Struct({ id: Schema.String }),
   // The Model holds no copy of the note. The runtime keeps each query's

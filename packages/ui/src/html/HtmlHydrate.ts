@@ -739,13 +739,12 @@ export const hydrateEffect = <
  * ```ts
  * import { HtmlHydrate, Html } from "@effect/ui/html"
  * import { Effect, Layer, Schema } from "effect"
- * import { Component, Renderer } from "@effect/ui"
+ * import { Renderer } from "@effect/ui"
  *
- * const App = Component.define({
+ * const App = Html.component({
  *   name: "App",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,

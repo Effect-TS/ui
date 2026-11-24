@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { Toolbar } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -43,11 +43,10 @@ const props = {
 
 describe("Toolbar", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -86,11 +85,10 @@ describe("Toolbar", () => {
   })
 
   it("each part takes only its element, and the item parts a value", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

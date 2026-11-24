@@ -131,18 +131,16 @@
  * **Example** (A list of a thousand rows in a scroll container)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { VirtualList } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const rows = Array.from({ length: 1000 }, (_, i) => ({ id: "row-" + i, label: "Row " + i }))
  *
- * const Rows = Component.define({
+ * const Rows = Html.component({
  *   name: "Rows",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
@@ -170,7 +168,7 @@
  * @since 0.1.0
  */
 
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -1524,15 +1522,14 @@ type Div = Html.Element<
  * @category components
  * @since 0.1.0
  */
-export const VirtualList = Component.define({
+export const VirtualList = Html.component({
   name: "VirtualList",
   props: VirtualListProps,
   model: VirtualListModel,
   message: VirtualListMessage,
   events: VirtualListEvents,
   restore: (model) =>
-    UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false }),
-  elements: Html
+    UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false })
 }).make({
   init: ($) => ({
     position: null,

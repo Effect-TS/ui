@@ -4,9 +4,9 @@
  *
  * The core `h` has only `el` and `text`. A child component is declared by
  * calling it with `h`, and a feature by its `render`. An element vocabulary
- * such as the HTML one adds element names and its own element class,
- * registered once for the app by module augmentation of `Register` plus
- * `registerElements`, or set on one component with `elements`.
+ * such as the HTML one adds element names and its own element class, supplied
+ * through a vocabulary constructor such as `Html.component` or by passing
+ * `elements` to `Component.define`.
  *
  * An element is written as a chain: `h.el("form").on("submit", msg).children(...)`.
  * `children` returns the builder, so the chain goes on, and a second call
@@ -39,48 +39,6 @@ import type * as Feature from "./Feature.ts"
 import type * as Head from "./Head.ts"
 import type * as MountModule from "./Mount.ts"
 import type * as Renderer from "./Renderer.ts"
-
-/**
- * The view helper for reusable pure view functions, without a component
- * definition.
- *
- * **Details**
- *
- * A shared view function takes the message as a type parameter,
- * `<M>(h: View.H<M>, ...)`, whether or not it sends a message. `View.H<never>`
- * only accepts the `h` of a component with `message: Schema.Never`.
- *
- * Includes the app's registered vocabulary (for example, import
- * `@effect/ui/html/register` for HTML tags). Props remain `unknown` and
- * component-specific queries are not included. Use `Component.Helper<D>` instead
- * when a function needs a definition's props, queries or custom elements.
- *
- * **Example** (A reusable button)
- *
- * ```ts import.meta.vitest
- * import "@effect/ui/html/register"
- * import { Component, View } from "@effect/ui"
- * import { Schema } from "effect"
- *
- * const Button = <Msg>(h: View.H<Msg>, label: string, message: Msg) =>
- *   h.button.onClick(message).children(label)
- *
- * export const Counter = Component.define({
- *   name: "Counter",
- *   model: Schema.Number,
- *   message: Schema.Literal("ClickedIncrement")
- * }).make({
- *   init: () => 0,
- *   update: ($) => $.model + 1,
- *   view: (h, count) => Button(h, String(count), "ClickedIncrement")
- * })
- * ```
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type H<Msg> = WithTags<Msg, unknown, Registered>
 
 /**
  * A node of a view: an element, text, or a child component.
@@ -593,10 +551,10 @@ type EventTag<Events> = Events extends { readonly _tag: infer T extends string }
  * **Example** (A view helper that keeps its children's requirements)
  *
  * ```ts
- * import "@effect/ui/html/register"
  * import type { View } from "@effect/ui"
+ * import type { Html } from "@effect/ui/html"
  *
- * const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
+ * const Field = <M, C extends View.Children<M>>(h: Html.H<M>, options: {
  *   readonly label: string
  *   readonly children: C
  * }) => h.label.children(options.label, h.div.class("control").children(options.children))
@@ -1987,41 +1945,6 @@ export interface Vocabulary<out V extends Elements = Elements> {
 }
 
 /**
- * The app's registered vocabulary, declared once by module augmentation.
- *
- * **Example** (Registering an HTML vocabulary)
- *
- * ```ts
- * declare module "@effect/ui/View" {
- *   interface Register {
- *     readonly elements: MyElements
- *   }
- * }
- *
- * interface MyElements {
- *   readonly Msg: unknown
- *   readonly Tags: unknown
- *   readonly Host: unknown
- * }
- * ```
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface Register {}
-
-/**
- * The registered vocabulary, or `never` when nothing is registered.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type Registered = Register extends
-  { readonly elements: infer V extends Elements } ? V : never
-
-/**
  * The element names a vocabulary adds to `h`, bound to a component's message
  * type. Nothing when `V` is `never`.
  *
@@ -2046,34 +1969,6 @@ export type WithTags<Msg, Props, V> =
   & ("text" extends keyof Tags<V, Msg> ? HelperBase<Msg, Props>
     : Helper<Msg, Props>)
   & Tags<V, Msg>
-
-let registered: Vocabulary<any> | undefined
-
-/**
- * Installs the app's vocabulary at runtime: the other half of `Register`.
- *
- * **Details**
- *
- * It's read when a view runs, not when a component is made, so module order
- * doesn't matter as long as it runs before the first render. For the HTML
- * vocabulary, importing `@effect/ui/html/register` does both halves.
- *
- * @stability experimental
- * @category vocabularies
- * @since 0.1.0
- */
-export const registerElements = (elements: Vocabulary<any>): void => {
-  registered = elements
-}
-
-/**
- * The vocabulary installed with `registerElements`, if any.
- *
- * @stability experimental
- * @category vocabularies
- * @since 0.1.0
- */
-export const registeredElements = (): Vocabulary<any> | undefined => registered
 
 /**
  * The view helper, `h` in `view`: bound to the component's message type and
@@ -2158,15 +2053,14 @@ export interface HelperBase<Msg, Props> {
    * **Example** (Rows built again only when they change)
    *
    * ```ts
-   * import "@effect/ui/html/register"
-   * import type { View } from "@effect/ui"
+   * import type { Html } from "@effect/ui/html"
    *
    * type Row = { readonly id: number; readonly label: string }
    *
-   * const row = <M>(h: View.H<M>, row: Row, selected: boolean) =>
+   * const row = <M>(h: Html.H<M>, row: Row, selected: boolean) =>
    *   h.tr.key(String(row.id)).class(selected && "danger").children(row.label)
    *
-   * const rows = <M>(h: View.H<M>, rows: ReadonlyArray<Row>, selected: number) =>
+   * const rows = <M>(h: Html.H<M>, rows: ReadonlyArray<Row>, selected: number) =>
    *   h.tbody.children(rows.map((item) => h.lazy(row, item, item.id === selected)))
    * ```
    */

@@ -1,4 +1,4 @@
-import { Component, type View } from "@effect/ui"
+import type { Component, View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
 import { Context, type Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -57,16 +57,15 @@ describe("Markdown.islandsFor", () => {
 
   it("requires a view for every definition", () => {
     expect(Markdown.islandsFor).type.not.toBeCallableWith(definitions, {
-      Note: (h: Markdown.H<never>) => h.hr
+      Note: (h: Html.H<never>) => h.hr
     })
   })
 
   it("passes the services on to the component that renders the document", () => {
-    const Post = Component.define({
+    const Post = Html.component({
       name: "Post",
       model: Schema.Struct({}),
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     }).make({
       init: () => ({}),
       update: ($) => $.model,

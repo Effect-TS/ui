@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 
@@ -37,15 +37,14 @@ const app = {
   name: "App",
   props: AppProps,
   model: Schema.Array(Row),
-  message: AppMessage,
-  elements: Html
+  message: AppMessage
 } as const
 
 // Every variant renders the same row:
 // li.row[data-done] > button[aria-expanded][aria-controls] + span + div#panel[hidden]
 
 /** Rows as plain elements of the list's own view. */
-const Plain = Component.define(app).make({
+const Plain = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -68,12 +67,11 @@ const Plain = Component.define(app).make({
 })
 
 /** A normal child per row: it owns the markup, and skips when its props are the same. */
-const NormalRow = Component.define({
+const NormalRow = Html.component({
   name: "Row",
   props: Schema.Struct({ row: Row }),
   model: Schema.Boolean,
-  message: Flip,
-  elements: Html
+  message: Flip
 }).make({
   init: () => false,
   update: ($) => !$.model,
@@ -91,7 +89,7 @@ const NormalRow = Component.define({
         )
       )
 })
-const Normal = Component.define(app).make({
+const Normal = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -101,11 +99,10 @@ const Normal = Component.define(app).make({
 })
 
 /** The same disclosure, headless: the list's closure owns the markup. */
-const Disclosure = Component.define({
+const Disclosure = Html.component({
   name: "Disclosure",
   model: Schema.Boolean,
-  message: Flip,
-  elements: Html
+  message: Flip
 }).make({
   init: () => false,
   update: ($) => !$.model,
@@ -125,7 +122,7 @@ const Disclosure = Component.define({
     )
   })
 })
-const Headless = Component.define(app).make({
+const Headless = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -144,12 +141,11 @@ const Headless = Component.define(app).make({
 })
 
 /** The proposal's advice: a normal row component around the headless child, so the skip happens above the closure. */
-const WrappedRow = Component.define({
+const WrappedRow = Html.component({
   name: "Row",
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -165,7 +161,7 @@ const WrappedRow = Component.define({
           )
     })
 })
-const Wrapped = Component.define(app).make({
+const Wrapped = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -183,7 +179,7 @@ const ProviderMessage = UiSchema.TaggedEnum({
   Touch: {},
   Open: { id: Schema.String }
 })
-const Provider = Component.define({
+const Provider = Html.component({
   name: "Provider",
   model: Schema.Struct({
     open: Schema.NullOr(Schema.String),
@@ -193,8 +189,7 @@ const Provider = Component.define({
   shares: {
     value: (model) => ({ open: model.open }),
     receives: ["Touch", "Open"]
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({ open: null, touches: 0 }),
   update: ($, message) =>
@@ -206,11 +201,10 @@ const Provider = Component.define({
 })
 
 /** Sends to the Provider from inside its closure: a normal component with no props, so it's skipped. */
-const Poker = Component.define({
+const Poker = Html.component({
   name: "Poker",
   model: Schema.Null,
-  message: ProviderMessage,
-  elements: Html
+  message: ProviderMessage
 })
   .make({
     init: () => null,
@@ -225,7 +219,7 @@ const Poker = Component.define({
       )
   })
 
-const AppDef = Component.define(app)
+const AppDef = Html.component(app)
 type H = Component.Helper<typeof AppDef>
 
 /** What every owner variant puts around its rows: the Provider, its state, and the Poker. */
@@ -242,7 +236,7 @@ const underProvider = <RV>(h: H, rows: () => View.Content<AppMessage, RV>) =>
   })
 
 /** headless rows written straight into the Provider's closure: every Provider update re-renders each. */
-const OwnerHeadless = Component.define(app).make({
+const OwnerHeadless = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -262,7 +256,7 @@ const OwnerHeadless = Component.define(app).make({
 })
 
 /** A normal row component per row in the closure: each is skipped on equal props. */
-const OwnerWrapped = Component.define(app).make({
+const OwnerWrapped = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -276,12 +270,11 @@ const OwnerWrapped = Component.define(app).make({
 })
 
 /** The guidance: one normal component directly under the Provider, holding the headless rows. */
-const Body = Component.define({
+const Body = Html.component({
   name: "Body",
   props: Schema.Struct({ rows: Schema.Array(Row) }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -299,7 +292,7 @@ const Body = Component.define({
       })
     ))
 })
-const OwnerBoundary = Component.define(app).make({
+const OwnerBoundary = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>
@@ -307,13 +300,12 @@ const OwnerBoundary = Component.define(app).make({
 })
 
 /** Wrapped rows that each read the Provider: every row re-renders when what it shares changes. */
-const ReaderRow = Component.define({
+const ReaderRow = Html.component({
   name: "Row",
   props: Schema.Struct({ row: Row }),
   model: Schema.Null,
   message: Schema.Never,
-  reads: { provider: Provider },
-  elements: Html
+  reads: { provider: Provider }
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -333,7 +325,7 @@ const ReaderRow = Component.define({
         )
     })
 })
-const OwnerReaders = Component.define(app).make({
+const OwnerReaders = Html.component(app).make({
   init,
   update,
   view: (h, rows) =>

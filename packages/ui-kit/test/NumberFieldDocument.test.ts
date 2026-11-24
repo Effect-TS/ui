@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { NumberField, type NumberFieldProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -30,11 +30,10 @@ const mount = Effect.fnUntraced(function*(
   }: Parent = {}
 ) {
   const log: Array<string> = []
-  const Amount = Component.define({
+  const Amount = Html.component({
     name: "Amount",
     model: Schema.Struct({ value: Value, committed: Schema.Boolean }),
-    message: Message,
-    elements: Html
+    message: Message
   }).make({
     init: () => ({ value, committed: false }),
     update: {

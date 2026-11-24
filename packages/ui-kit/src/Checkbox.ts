@@ -82,18 +82,17 @@
  * **Example** (A labelled checkbox whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Checkbox } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const SignupMessage = UiSchema.TaggedEnum({ ToggledTerms: { checked: Schema.Boolean } })
  *
- * const Signup = Component.define({
+ * const Signup = Html.component({
  *   name: "Signup",
  *   model: Schema.Struct({ terms: Schema.Boolean }),
- *   message: SignupMessage,
- *   elements: Html
+ *   message: SignupMessage
  * }).make({
  *   init: () => ({ terms: false }),
  *   update: {
@@ -119,7 +118,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
@@ -336,7 +335,7 @@ const state = <B extends Attributed<B>>(
  * @category components
  * @since 0.1.0
  */
-export const Checkbox = Component.define({
+export const Checkbox = Html.component({
   name: "Checkbox",
   props: CheckboxProps,
   model: Schema.Struct({}),
@@ -355,8 +354,7 @@ export const Checkbox = Component.define({
           }
           : null
     }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({}),
   update: {

@@ -111,11 +111,10 @@ describe("BrowserHost head", {
       import("effect")
     ])
     const page = (name: string, title?: string) =>
-      Component.define({
+      Html.component({
         name,
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,

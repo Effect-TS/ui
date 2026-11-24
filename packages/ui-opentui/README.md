@@ -9,12 +9,11 @@ OpenTUI vocabulary, terminal host, global Subscriptions, imperative Commands, an
 
 ## Modules
 
-- `OpenTui`: element vocabulary (`box`, `scrollbox`, `text`, `span`, `b`, `i`, `u`, `a`, `br`, `input`, `textarea`, `select`), plain-data event payloads, `OpenTui.Host`, and `OpenTui.ref`
+- `OpenTui`: `OpenTui.component`, `OpenTui.H`, element vocabulary (`box`, `scrollbox`, `text`, `span`, `b`, `i`, `u`, `a`, `br`, `input`, `textarea`, `select`), plain-data event payloads, `OpenTui.Host`, and `OpenTui.ref`
 - `OpenTuiHost`: `makeHost`, `layer`, `layerFromRenderer`, `mount`, `mountEffect`, and `run`
 - `OpenTuiSubscription`: global `onKeyPress`, `onKeyRelease`, `shortcuts`, `onPaste`, and `onResize`
 - `OpenTuiKeyboard`: pure shortcut table matcher over `OpenTui.KeyPayload`
 - `OpenTuiCommand`: ref commands (`focus`, `blur`, `scrollTo`, `scrollBy`, `measure`) and `quit`
-- `@effect/ui-opentui/register`: side-effect import to register `OpenTui` globally on `h`
 - `@effect/ui-opentui/testing`: `TestOpenTuiEvents` (FFI-free `TestHost` fakes) and `OpenTuiTest` (native frame-rendering harness over `@opentui/core/testing`)
 
 ## Example

@@ -1,5 +1,6 @@
-import { Component, Head, UiSchema } from "@effect/ui"
+import { Head, UiSchema } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Array, Schema } from "effect"
 import { Counter } from "./Counter.ts"
 
@@ -13,7 +14,7 @@ export const CountersMessage = UiSchema.TaggedEnum({
   ClickedRemoveCounter: { id: Schema.Number }
 })
 
-export const Counters = Component.define({
+export const Counters = Html.component({
   name: "Counters",
   model: CountersModel,
   message: CountersMessage

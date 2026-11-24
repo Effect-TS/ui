@@ -8,7 +8,7 @@
 // "Guaranteed" in a comment means the types or the runtime hold it whatever
 // you write. "Convention" means this file's choice, which the API doesn't
 // enforce.
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -25,14 +25,15 @@ export const ConfirmDialogEvents = UiSchema.TaggedEnum({
   Confirmed: {}
 })
 
-export const ConfirmDialog = Component.define({
+export const ConfirmDialog = Html.component({
   name: "ConfirmDialog",
   props: Schema.Struct({ open: Schema.Boolean }),
+
   // Convention: no copy of `open` in the Model, so the prop is the one source.
   model: Schema.Null,
+
   message: ConfirmDialogMessage,
-  events: ConfirmDialogEvents,
-  elements: Html
+  events: ConfirmDialogEvents
 }).make({
   init: () => null,
   update: ($, message) =>
@@ -64,11 +65,10 @@ const PageMessage = UiSchema.TaggedEnum({
   ConfirmedDelete: {}
 })
 
-export const Page = Component.define({
+export const Page = Html.component({
   name: "Page",
   model: Schema.Struct({ confirming: Schema.Boolean, deleted: Schema.Boolean }),
-  message: PageMessage,
-  elements: Html
+  message: PageMessage
 }).make({
   init: () => ({ confirming: false, deleted: false }),
   update: ($, message) =>
@@ -104,16 +104,18 @@ const WizardMessage = UiSchema.TaggedEnum({
 })
 export const WizardEvents = UiSchema.TaggedEnum({ Finished: {}, Cancelled: {} })
 
-export const Wizard = Component.define({
+export const Wizard = Html.component({
   name: "Wizard",
+
   // `steps` is the caller's to decide, so it is a prop.
   props: Schema.Struct({ steps: Schema.Number }),
+
   // Convention: no `step` prop, because nobody outside decides it. The
   // parent hears the outcome through `events`.
   model: Schema.Struct({ step: Schema.Number }),
+
   message: WizardMessage,
-  events: WizardEvents,
-  elements: Html
+  events: WizardEvents
 }).make({
   // Guaranteed: a child that unmounts loses its Model, so each mount starts
   // the workflow over.
@@ -146,11 +148,10 @@ const HostMessage = UiSchema.TaggedEnum({
   CancelledImport: {}
 })
 
-export const Host = Component.define({
+export const Host = Html.component({
   name: "Host",
   model: Schema.Struct({ importing: Schema.Boolean, imported: Schema.Number }),
-  message: HostMessage,
-  elements: Html
+  message: HostMessage
 }).make({
   init: () => ({ importing: false, imported: 0 }),
   update: ($, message) =>
@@ -189,16 +190,17 @@ const ModalProviderMessage = UiSchema.TaggedEnum({
 // The provider is the one writer of `open`. Descendants read it without
 // owning it. `restore: false` starts it from `init` after Back or a reload,
 // so the modal starts closed.
-export const ModalProvider = Component.define({
+export const ModalProvider = Html.component({
   name: "ModalProvider",
   model: Schema.Struct({ open: Schema.Boolean }),
   message: ModalProviderMessage,
+
   shares: {
     value: (model) => ({ open: model.open }),
     receives: ["RequestedOpen", "RequestedClose"]
   },
-  restore: false,
-  elements: Html
+
+  restore: false
 }).make({
   init: () => ({ open: false }),
   update: (_, message) =>
@@ -216,11 +218,10 @@ const OpenButtonMessage = UiSchema.TaggedEnum({ ClickedOpen: {} })
 // Guaranteed: a sender needs no `reads` entry. The send puts the owner in
 // this component's requirements, which only the owner's `view` closure
 // removes.
-export const OpenButton = Component.define({
+export const OpenButton = Html.component({
   name: "OpenButton",
   model: Schema.Null,
-  message: OpenButtonMessage,
-  elements: Html
+  message: OpenButtonMessage
 }).make({
   init: () => null,
   update: ($, message) =>
@@ -240,12 +241,11 @@ const ModalHostMessage = UiSchema.TaggedEnum({
 
 // Convention: the reader is the dialog's parent, so the dialog still has one
 // source for `open`, its prop, and knows nothing about the provider.
-export const ModalHost = Component.define({
+export const ModalHost = Html.component({
   name: "ModalHost",
   model: Schema.Null,
   message: ModalHostMessage,
-  reads: { provider: ModalProvider },
-  elements: Html
+  reads: { provider: ModalProvider }
 }).make({
   init: () => null,
   update: ($, message) => {
@@ -266,11 +266,10 @@ export const ModalHost = Component.define({
     })
 })
 
-export const Shell = Component.define({
+export const Shell = Html.component({
   name: "Shell",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -285,12 +284,11 @@ export const Shell = Component.define({
 // The prop is read in `init` only and the Model owns the value from then on.
 // Name the prop `initial*` to make that handoff clear.
 const CounterMessage = UiSchema.TaggedEnum({ ClickedIncrement: {} })
-export const Counter = Component.define({
+export const Counter = Html.component({
   name: "Counter",
   props: Schema.Struct({ initialCount: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
-  message: CounterMessage,
-  elements: Html
+  message: CounterMessage
 }).make({
   init: ($) => ({ count: $.props.initialCount }),
   update: ($, message) =>
@@ -311,12 +309,11 @@ export const Counter = Component.define({
 // that the dialog's own buttons set: two sources for one value, and no type
 // or diagnostic objects.
 const DualMessage = UiSchema.TaggedEnum({ ClickedOpen: {}, ClickedClose: {} })
-export const Dual = Component.define({
+export const Dual = Html.component({
   name: "Dual",
   props: Schema.Struct({ open: Schema.Boolean }),
   model: Schema.Struct({ open: Schema.Boolean }),
-  message: DualMessage,
-  elements: Html
+  message: DualMessage
 }).make({
   init: ($) => ({ open: $.props.open }),
   update: (_, message) =>
@@ -340,11 +337,10 @@ export const Dual = Component.define({
 // The dialog's events now land on `Around`, over the owner. Guaranteed: a
 // send reaches only an owner above the sender, so `Around` can't ask the
 // provider to close, and the dialog stays open.
-export const Around = Component.define({
+export const Around = Html.component({
   name: "Around",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,

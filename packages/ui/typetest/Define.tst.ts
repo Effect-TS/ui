@@ -1,5 +1,4 @@
-import type { View } from "@effect/ui"
-import { Command, Component, Query, UiSchema } from "@effect/ui"
+import { Command, type Component, Query, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
@@ -41,13 +40,12 @@ class Audit extends Command.Service<Audit>()(
 const Model = Schema.Struct({ body: Schema.String, edits: Schema.Number })
 type Model = typeof Model.Type
 
-const NoteDef = Component.define({
+const NoteDef = Html.component({
   name: "Note",
   props: Schema.Struct({ id: Schema.String }),
   model: Model,
   message: Message,
   events: Events,
-  elements: Html,
   queries: { user: { query: GetUser, args: ({ props }) => ({ id: props.id }) } }
 })
 
@@ -58,8 +56,7 @@ const touch = NoteDef.update(($) => ({ ...$.model, edits: $.model.edits + 1 }))
 const shared = { Saved: touch, Deleted: touch }
 
 describe("Component.define", () => {
-  it("H supports pure views without a registered vocabulary", () => {
-    expect<View.H<Message>>().type.toBe<View.Helper<Message, unknown>>()
+  it("View.HelperBase and View.WithTags support pure views", () => {
     expect<View.WithTags<Message, unknown, Html.Elements>>().type.toBe<
       View.Helper<Message, unknown> & View.Tags<Html.Elements, Message>
     >()
@@ -67,7 +64,8 @@ describe("Component.define", () => {
       (text: string) => View.Text
     >()
     expect<View.HelperBase<Message, unknown>>().type.not.toHaveProperty("text")
-    const Row = <Msg>(h: View.H<Msg>, label: string) => h.el("li", label)
+    const Row = <Msg>(h: View.HelperBase<Msg, unknown>, label: string) =>
+      h.el("li", label)
     NoteDef.view((h, model) => h.ul(Row(h, model.body)))
   })
 

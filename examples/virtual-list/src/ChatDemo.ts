@@ -30,11 +30,10 @@ const ChatModel = Schema.Struct({
   loading: Schema.Boolean
 })
 
-const ChatDemoNoDeps = Component.define({
+const ChatDemoNoDeps = Html.component({
   name: "ChatDemo",
   model: ChatModel,
-  message: ChatMessage,
-  elements: Html
+  message: ChatMessage
 }).make({
   init: () => ({ start: total - page, sent: 0, loading: false }),
   update: {

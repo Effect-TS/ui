@@ -1,5 +1,5 @@
-import { Command, Component, Head, UiSchema } from "@effect/ui"
-import { HtmlFiles } from "@effect/ui/html"
+import { Command, Head, UiSchema } from "@effect/ui"
+import { Html, HtmlFiles } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 
 const HEAD_LINES = 10
@@ -46,7 +46,7 @@ export const ReadFile = Command.make(
 const BUTTON_CLASS =
   "px-4 py-2 rounded-md font-medium transition cursor-pointer"
 
-const FilePreviewDef = Component.define({
+const FilePreviewDef = Html.component({
   name: "FilePreview",
   model: Preview,
   message: PreviewMessage

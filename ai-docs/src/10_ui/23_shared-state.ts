@@ -7,7 +7,7 @@
  * provider mounted. Then an optional owner, the reports readers give it, a
  * reader's `onChange`, and a component that reads and sends to its own kind.
  */
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
@@ -28,20 +28,23 @@ const TooltipProviderMessage = UiSchema.TaggedEnum({
 // An owner restores from history like any other component. `restore: false`
 // starts this one from `init` after Back or a reload, so it doesn't reopen a
 // tooltip nobody is focused on.
-export const TooltipProvider = Component.define({
+export const TooltipProvider = Html.component({
   name: "TooltipProvider",
+
   // Every prop optional, so a scene of a reader has a default value.
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
+
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: TooltipProviderMessage,
+
   // `receives` lists what `$.send(TooltipProvider, message)` takes. They are
   // facts, named like any other message.
   shares: {
     value: (model) => ({ open: model.open }),
     receives: ["FocusedTooltip", "BlurredTooltip"]
   },
-  restore: false,
-  elements: Html
+
+  restore: false
 }).make({
   init: () => ({ open: null }),
   update: ($, message) =>
@@ -65,13 +68,12 @@ const TooltipMessage = UiSchema.TaggedEnum({
 // to it, puts `Component.Shared<"TooltipProvider">` in the component's
 // requirements, which the provider's `view` closure removes. Each `Update` in
 // the log records what `$.reads` held, so a replay reads the same value.
-export const Tooltip = Component.define({
+export const Tooltip = Html.component({
   name: "Tooltip",
   props: Schema.Struct({ label: Schema.String, tip: Schema.String }),
   model: Schema.Null,
   message: TooltipMessage,
-  reads: { provider: TooltipProvider },
-  elements: Html
+  reads: { provider: TooltipProvider }
 }).make({
   init: () => null,
   // `$.reads.provider` is the provider's value as this update runs: a blur
@@ -113,12 +115,12 @@ export const Tooltip = Component.define({
 // and `shares` small. 1,000 reading rows took about 13 ms per change, and the
 // cost grows faster than the count above that: 4,000 took about 90 ms. A
 // change to the Model that leaves the shared value equal re-renders no reader.
-export const Toolbar = Component.define({
+export const Toolbar = Html.component({
   name: "Toolbar",
   model: Schema.Null,
+
   // No messages, and no no-op variant to stand in for them.
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -173,10 +175,11 @@ const PanelGroupMessage = UiSchema.TaggedEnum({
 // from `onChange([])`. So two panels that swap in one render send nothing,
 // and a panel that unmounts takes its report with it. The message is an
 // `Update` with source `Collected`.
-export const PanelGroup = Component.define({
+export const PanelGroup = Html.component({
   name: "PanelGroup",
   model: Schema.Struct({ anyOpen: Schema.Boolean }),
   message: PanelGroupMessage,
+
   shares: {
     value: (model) => ({ anyOpen: model.anyOpen }),
     schema: Schema.Struct({ anyOpen: Schema.Boolean }),
@@ -185,8 +188,7 @@ export const PanelGroup = Component.define({
       onChange: (collected) =>
         PanelGroupMessage.ChangedOpen({ open: collected.includes(true) })
     }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({ anyOpen: false }),
   update: (_, { open }) => ({ anyOpen: open }),
@@ -223,11 +225,12 @@ const PanelMessage = UiSchema.TaggedEnum({
 // its own can loop. The owner counts its `collects.onChange` messages and
 // its rounds of the readers' `onChange`, and fails past 100 in one flush, so
 // its `fallback` shows.
-export const Panel = Component.define({
+export const Panel = Html.component({
   name: "Panel",
   props: Schema.Struct({ title: Schema.String }),
   model: Schema.Struct({ open: Schema.Boolean, groupOpened: Schema.Number }),
   message: PanelMessage,
+
   reads: {
     group: {
       owner: PanelGroup,
@@ -235,8 +238,7 @@ export const Panel = Component.define({
       report: (model) => model.open,
       onChange: (value) => PanelMessage.ChangedGroup({ anyOpen: value.anyOpen })
     }
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({ open: false, groupOpened: 0 }),
   update: ($, message) =>
@@ -295,13 +297,16 @@ const MenuEvents = UiSchema.TaggedEnum({ Picked: { item: Schema.String } })
 // name itself yet. The outermost menu has none above it, so the entry is
 // `optional: true`. `shares` comes first, so `report` is typed by `collects`.
 // `receives` lists the messages a menu takes from the one nested in it.
-export const Menu = Component.define({
+export const Menu = Html.component({
   name: "Menu",
   props: Schema.Struct({ open: Schema.Boolean }),
+
   // How many menus below this one are open.
   model: Schema.Number,
+
   message: MenuMessage,
   events: MenuEvents,
+
   shares: {
     value: (_, props) => ({ open: props.open }),
     receives: ["PickedItem"],
@@ -313,14 +318,14 @@ export const Menu = Component.define({
         })
     }
   },
+
   reads: {
     parent: {
       owner: "self",
       optional: true,
       report: (below, props) => (props.open ? below + 1 : 0)
     }
-  },
-  elements: Html
+  }
 }).make({
   init: () => 0,
   update: ($, message) =>

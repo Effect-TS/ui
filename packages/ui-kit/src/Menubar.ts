@@ -74,7 +74,7 @@
  * **Example** (A File and an Edit menu, with the open one in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Menu, Menubar } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -90,11 +90,10 @@
  *   PickedAction: { value: Schema.String }
  * })
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => ({ open: null }),
  *   update: {
@@ -143,7 +142,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as Effect from "effect/Effect"
@@ -318,7 +316,7 @@ const TrackMenubar = Mount.makeStream(
  * @category components
  * @since 0.1.0
  */
-export const Menubar = Component.define({
+export const Menubar = Html.component({
   name: "Menubar",
   props: MenubarProps,
   model: MenubarModel,
@@ -338,8 +336,7 @@ export const Menubar = Component.define({
       onChange: (menus) => MenubarMessage.ChangedMenus({ menus })
     }
   },
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     menus: [],

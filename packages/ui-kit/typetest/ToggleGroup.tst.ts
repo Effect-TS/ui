@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { ToggleGroup } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -30,11 +30,10 @@ const props = {
 
 describe("ToggleGroup", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -64,11 +63,10 @@ describe("ToggleGroup", () => {
   })
 
   it("root takes only a div, item only a button with a value, and onEmit only the consumer's message", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

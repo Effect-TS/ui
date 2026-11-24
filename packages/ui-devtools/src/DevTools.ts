@@ -23,16 +23,14 @@
  * **Example** (Adding the overlay in development)
  *
  * ```ts
- * import { Component } from "@effect/ui"
  * import { BrowserHost, Html } from "@effect/ui/html"
  * import { DevTools } from "@effect/ui-devtools"
  * import { Effect, Layer, Schema } from "effect"
  *
- * const App = Component.define({
+ * const App = Html.component({
  *   name: "App",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: (model) => model,
@@ -60,6 +58,15 @@ import * as internal from "./internal/layer.ts"
  * @since 0.1.0
  */
 export type Position = internal.Position
+
+/**
+ * Options for WebMCP tool registration in `layer`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type WebMcpOptions = internal.WebMcpOptions
 
 /**
  * Provides the `MessageLog` with a log that feeds the inspector overlay, and
@@ -112,6 +119,14 @@ export type Position = internal.Position
  * one can resume it. With `DevToolsVite.plugin`, the page carries the URL
  * and the plugin's `size`, so neither option is needed.
  *
+ * When the browser exposes WebMCP (`document.modelContext`), the Layer also
+ * registers the DevTools tools directly in the page under the `effect_ui_`
+ * prefix with `annotations.debugging: true`, and unregisters them when the
+ * Layer closes. The tools read Wire frames only, so `Schema.Redacted` values
+ * remain placeholders. `effect_ui_dispatch` is off by default and requires
+ * `webMcp: { dispatch: true }`. Pass `webMcp: false` to disable WebMCP
+ * registration.
+ *
  * Browser only: building the Layer needs `document`.
  *
  * @stability experimental
@@ -123,4 +138,5 @@ export const layer = (options?: {
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
   readonly server?: string | undefined
+  readonly webMcp?: boolean | WebMcpOptions | undefined
 }): Layer.Layer<never> => internal.make(options ?? {})

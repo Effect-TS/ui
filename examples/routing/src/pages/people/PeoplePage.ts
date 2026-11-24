@@ -2,6 +2,7 @@ import type { Person } from "#domain/Person"
 import { SearchPeople } from "#queries/SearchPeople"
 import { Command, Component, Router, UiSchema } from "@effect/ui"
 import { Button, Input } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { AppRoute } from "../../routes.ts"
@@ -29,7 +30,7 @@ export const PeoplePageEvents = UiSchema.TaggedEnum({
   ChangedSearchInput: { value: Schema.String }
 })
 
-const PeoplePageDef = Component.define({
+const PeoplePageDef = Html.component({
   name: "PeoplePage",
   props: Schema.Struct({
     route: PeopleRoute,

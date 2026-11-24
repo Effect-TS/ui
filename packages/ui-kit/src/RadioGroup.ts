@@ -60,7 +60,7 @@
  * **Example** (A labelled radio group whose value lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { RadioGroup } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -72,11 +72,10 @@
  *
  * const PickerMessage = UiSchema.TaggedEnum({ PickedStorage: { value: Schema.String } })
  *
- * const Picker = Component.define({
+ * const Picker = Html.component({
  *   name: "Picker",
  *   model: Schema.Struct({ storage: Schema.NullOr(Schema.String) }),
- *   message: PickerMessage,
- *   elements: Html
+ *   message: PickerMessage
  * }).make({
  *   init: () => ({ storage: "ssd" }),
  *   update: {
@@ -109,7 +108,6 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
@@ -431,7 +429,7 @@ type KeyedButton = View.PartTarget<"button"> & {
  * @category components
  * @since 0.1.0
  */
-export const RadioGroup = Component.define({
+export const RadioGroup = Html.component({
   name: "RadioGroup",
   props: RadioGroupProps,
   model: RadioGroupModel,
@@ -440,8 +438,7 @@ export const RadioGroup = Component.define({
   reads: {
     provider: { owner: DirectionProvider, optional: true }
   },
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: ({ props }) => ({
     highlighted: null,

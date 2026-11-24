@@ -2521,27 +2521,24 @@ describe("keep-alive children written into closed slots", () => {
 
   it.effect("keeps a child whose headless writer is replaced by another that writes it", () =>
     provideHost(Effect.gen(function*() {
-      const Row = Component.define({
+      const Row = Html.component({
         name: "Row",
         model: Schema.Number,
-        message: Schema.Literal("inc"),
-        elements: Html
+        message: Schema.Literal("inc")
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
         view: (h, count) => h.button.onClick("inc").children("count:" + count)
       })
-      const Writer = Component.define({
+      const Writer = Html.component({
         name: "Writer",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
-      const Switch = Component.define({
+      const Switch = Html.component({
         name: "Switch",
         model: Schema.Literals(["a", "b"]),
-        message: Schema.Literal("flip"),
-        elements: Html
+        message: Schema.Literal("flip")
       }).make({
         init: () => "a" as const,
         update: ($) => $.model === "a" ? "b" : "a",
@@ -2550,11 +2547,10 @@ describe("keep-alive children written into closed slots", () => {
           flip: p.part("button", (b) => b.onClick("flip"))
         })
       })
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,

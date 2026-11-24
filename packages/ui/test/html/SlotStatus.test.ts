@@ -12,11 +12,10 @@ import { describe } from "vitest"
 class Editor extends Feature.Service<Editor>()("SlotStatus/HtmlEditor", {
   props: Schema.Struct({})
 }) {}
-const EditorView = Component.define({
+const EditorView = Html.component({
   name: "EditorView",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 })
   .make({
     init: () => null,
@@ -28,11 +27,10 @@ const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
   AsyncResult.isFailure(result) ? Cause.pretty(result.cause) : "loading"
 
 const Message = UiSchema.TaggedEnum({ Failed: {} })
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   model: Schema.String,
-  message: Message,
-  elements: Html
+  message: Message
 })
   .make({
     init: () => "fine",

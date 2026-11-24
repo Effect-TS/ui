@@ -1,15 +1,14 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 const ShellMessage = UiSchema.TaggedEnum({ ClickedJump: {}, ClickedAppend: {} })
 
-export const ShellDemo = Component.define({
+export const ShellDemo = Html.component({
   name: "ShellDemo",
   model: Schema.Struct({ count: Schema.Number, jump: Schema.Number }),
-  message: ShellMessage,
-  elements: Html
+  message: ShellMessage
 }).make({
   init: () => ({ count: 10_000, jump: 0 }),
   update: {

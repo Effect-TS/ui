@@ -74,12 +74,12 @@ the components that already follow it.
   mount. Its JSDoc says which handler and mount slots it reserves, and in
   which states, and its props type is exported as `<Name>TriggerProps`,
   not left inline.
-- A **headless component** (`Component.define(...).make({ parts })`) is
+- A **headless component** (`Html.component(...).make({ parts })`) is
   for a component that keeps interaction state, generates an id, runs a
   Command, a mount or a Subscription (focus, a timer, measuring), or
   shares state with the components inside it. The consumer draws every
   element with its own builders.
-- A **component with slots** (`Component.define({ slots })`, finished with
+- A **component with slots** (`Html.component({ slots })`, finished with
   `view`) only fits when the kit must draw the structure itself and the
   consumer only supplies content. It can't take the consumer's builder:
   a slot is an opaque outlet, so the component can neither decorate nor
@@ -224,8 +224,8 @@ Checkbox(h, {
   click without sending a message. A component keeps core's `onEmit`.
 - Type `h` by what the function needs from it: the tags it draws
   (`{ readonly button: ... }`), or `View.Helper<Msg, unknown>` when it
-  only needs the message type. Not `View.H`, which needs the app to
-  register a vocabulary and is for an app's own view functions.
+  only needs the message type. Not `Html.H`, which is for an app's own
+  HTML view functions.
 
 ## Identity
 

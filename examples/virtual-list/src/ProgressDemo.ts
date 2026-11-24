@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListEvents } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema, Struct } from "effect"
@@ -21,11 +21,10 @@ const ProgressModel = Schema.Struct({
   stops: Schema.Number
 })
 
-export const ProgressDemo = Component.define({
+export const ProgressDemo = Html.component({
   name: "ProgressDemo",
   model: ProgressModel,
-  message: ProgressMessage,
-  elements: Html
+  message: ProgressMessage
 }).make({
   init: () => ({
     track: true,

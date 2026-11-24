@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { BrowserHost, Canvas, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -28,14 +28,13 @@ const Message = UiSchema.TaggedEnum({
   Bumped: {}
 })
 
-const Dots = Component.define({
+const Dots = Html.component({
   name: "Dots",
   model: Schema.Struct({
     dots: Schema.Array(Canvas.Point),
     bumps: Schema.Number
   }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ dots: [], bumps: 0 }),
   update: {

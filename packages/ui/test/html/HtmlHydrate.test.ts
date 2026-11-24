@@ -41,12 +41,11 @@ const comments = (node: Node): number => {
 const Bumped = UiSchema.TaggedEnum({ Bumped: {} })
 
 const RowMessage = UiSchema.TaggedEnum({ Clicked: {} })
-const Row = Component.define({
+const Row = Html.component({
   name: "Row",
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Number,
-  message: RowMessage,
-  elements: Html
+  message: RowMessage
 }).make({
   init: () => 0,
   update: ($) => $.model + 1,
@@ -58,11 +57,10 @@ const Row = Component.define({
     )
 })
 
-const List = Component.define({
+const List = Html.component({
   name: "List",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -101,22 +99,20 @@ const LateLabel = Schema.String.pipe(Schema.decode({
   encode: SchemaGetter.passthrough()
 }))
 
-const Late = Component.define({
+const Late = Html.component({
   name: "Late",
   model: LateLabel,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => "late",
   update: ($) => $.model,
   view: (h) => serving ? h.p.class("server").children("extra") : h.p()
 })
 
-const LateHolder = Component.define({
+const LateHolder = Html.component({
   name: "LateHolder",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -145,33 +141,30 @@ const submitted = (form: Element): boolean =>
     new Event("submit", { bubbles: true, cancelable: true })
   )
 
-const Search = Component.define({
+const Search = Html.component({
   name: "Search",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.form(h.input.attr("name", "q"))
 })
 
-const LateForm = Component.define({
+const LateForm = Html.component({
   name: "LateForm",
   model: LateLabel,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => "late",
   update: ($) => $.model,
   view: (h) => h.form(h.input.attr("name", "q"))
 })
 
-const LateFormHolder = Component.define({
+const LateFormHolder = Html.component({
   name: "LateFormHolder",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -180,11 +173,10 @@ const LateFormHolder = Component.define({
 
 let layerGate: Effect.Effect<void> = Effect.void
 const Gated = Component.provide(
-  Component.define({
+  Html.component({
     name: "Gated",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,
@@ -196,11 +188,10 @@ const Gated = Component.provide(
 describe("HtmlHydrate", () => {
   it.effect("adopts the fallback the server showed for a child that failed to start", () =>
     Effect.gen(function*() {
-      const Boom = Component.define({
+      const Boom = Html.component({
         name: "Boom",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       })
         .make({
           init: () => {
@@ -209,11 +200,10 @@ describe("HtmlHydrate", () => {
           update: ($) => $.model,
           view: (h) => h.p("never")
         })
-      const Holder = Component.define({
+      const Holder = Html.component({
         name: "Holder",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -242,11 +232,10 @@ describe("HtmlHydrate", () => {
         props: Schema.Struct({}),
         events: Schema.Never
       }) {}
-      const PanelLive = Component.define({
+      const PanelLive = Html.component({
         name: "PanelLive",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -254,11 +243,10 @@ describe("HtmlHydrate", () => {
       })
       const gate = yield* Deferred.make<void>()
       const Shell = Component.provide(
-        Component.define({
+        Html.component({
           name: "Shell",
           model: Schema.Number,
-          message: Bumped,
-          elements: Html
+          message: Bumped
         }).make({
           init: () => 0,
           update: ($) => $.model + 1,
@@ -307,14 +295,13 @@ describe("HtmlHydrate", () => {
 
   it.effect("decodes the shipped Model through the component's Schema", () =>
     Effect.gen(function*() {
-      const Picked = Component.define({
+      const Picked = Html.component({
         name: "Picked",
         model: Schema.Struct({
           pick: Schema.Option(Schema.String),
           at: Schema.Date
         }),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({ pick: Option.some("server"), at: new Date(0) }),
         update: ($) => $.model,
@@ -389,35 +376,39 @@ describe("HtmlHydrate", () => {
 
   it.effect("replaces a stale element with text inside comment markers while keeping surrounding siblings", () =>
     Effect.gen(function*() {
-      const Texty = Component.define({
+      const Texty = Html.component({
         name: "Texty",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => h.text("hello")
       })
-      const Holder = Component.define({
+      const Holder = Html.component({
         name: "Holder",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => h.div(h.b("before"), Texty(h, { key: "t" }), h.i("after"))
       })
       const rendered = yield* HtmlServer.renderToHtml(Holder, {})
-      assert.include(rendered.html, "<!--[/Holder/Texty[t]-->hello<!--]/Holder/Texty[t]-->")
+      assert.include(
+        rendered.html,
+        "<!--[/Holder/Texty[t]-->hello<!--]/Holder/Texty[t]-->"
+      )
       const html = rendered.html.replace("hello", "<s>stale</s>")
       const app = yield* container(html)
       const before = app.querySelector("b")!
       const stale = app.querySelector("s")!
       const after = app.querySelector("i")!
       yield* HtmlHydrate.hydrateEffect(Holder, {}, app, rendered.state)
-      assert.strictEqual(app.innerHTML, "<div><b>before</b>hello<i>after</i></div>")
+      assert.strictEqual(
+        app.innerHTML,
+        "<div><b>before</b>hello<i>after</i></div>"
+      )
       assert.strictEqual(comments(app), 0)
       assert.strictEqual(app.querySelector("b"), before)
       assert.strictEqual(app.querySelector("i"), after)

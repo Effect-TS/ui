@@ -1,5 +1,6 @@
 import { Session } from "#domain/Session"
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { DashboardPage } from "./pages/dashboard/DashboardPage.ts"
 import { NotFound } from "./pages/NotFound.ts"
@@ -10,7 +11,7 @@ export const LoggedInMessage = UiSchema.TaggedEnum({ ClickedSignOut: {} })
 
 export const LoggedInEvents = UiSchema.TaggedEnum({ SignedOut: {} })
 
-const LoggedInDef = Component.define({
+const LoggedInDef = Html.component({
   name: "LoggedIn",
   props: Schema.Struct({ route: LoggedInRoute, session: Session }),
   model: Schema.Null,

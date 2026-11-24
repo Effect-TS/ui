@@ -1,6 +1,6 @@
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 
-export const NotFound = <M>(h: View.H<M>, options: {
+export const NotFound = <M>(h: Html.H<M>, options: {
   readonly path: string
   readonly backHref: string
   readonly backText: string

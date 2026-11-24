@@ -10,7 +10,7 @@
  * **Example** (Two frames in a whole-app test)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlSubscription } from "@effect/ui/html"
  * import { TestAnimationFrames } from "@effect/ui/html/testing"
  * import { TestHost } from "@effect/ui/testing"
@@ -18,11 +18,10 @@
  *
  * const Message = UiSchema.TaggedEnum({ TickedFrame: { delta: Schema.Number } })
  *
- * const Clock = Component.define({
+ * const Clock = Html.component({
  *   name: "Clock",
  *   model: Schema.Number,
- *   message: Message,
- *   elements: Html
+ *   message: Message
  * }).make({
  *   init: () => 0,
  *   update: { TickedFrame: ($, { delta }) => $.model + delta },

@@ -1,6 +1,7 @@
 import { type NoteResults, NoteSort } from "#domain/Note"
 import { SearchNotes } from "#queries/SearchNotes"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Layer, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Notes } from "../../notes/services/Notes.ts"
@@ -20,7 +21,7 @@ export const SearchPageMessage = UiSchema.TaggedEnum({
   ClickedPage: { page: Schema.Number }
 })
 
-export const SearchPageNoDeps = Component.define({
+export const SearchPageNoDeps = Html.component({
   name: "SearchPage",
   // The page takes its whole route as props. The URL is the only copy of
   // the text, the order and the page number. The Model holds no draft of

@@ -7,7 +7,7 @@
  * consumer draws both from one closure. Then a scene of the picker that runs
  * the Listbox's events through the picker's `update`.
  */
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Locator, Scene } from "@effect/ui/testing"
@@ -29,18 +29,20 @@ export const TagPickerEvents = UiSchema.TaggedEnum({
   Updated: { tags: Schema.Array(Schema.String) }
 })
 
-export const TagPicker = Component.define({
+export const TagPicker = Html.component({
   name: "TagPicker",
+
   props: Schema.Struct({
     options: Schema.Array(ListboxOption),
     tags: Schema.Array(Schema.String)
   }),
+
   // What the status region last announced, so a screen reader hears what a
   // pick or a removal did.
   model: Schema.Struct({ announced: Schema.String }),
+
   message: TagPickerMessage,
-  events: TagPickerEvents,
-  elements: Html
+  events: TagPickerEvents
 }).make({
   init: () => ({ announced: "" }),
   update: ($, message) => {
@@ -111,11 +113,10 @@ const options: ReadonlyArray<ListboxOption> = [
   { id: "ideas", label: "Ideas" }
 ]
 
-export const NoteTags = Component.define({
+export const NoteTags = Html.component({
   name: "NoteTags",
   model: Schema.Struct({ tags: Schema.Array(Schema.String) }),
-  message: NoteTagsMessage,
-  elements: Html
+  message: NoteTagsMessage
 }).make({
   init: () => ({ tags: [] }),
   update: (_, { tags }) => ({ tags }),

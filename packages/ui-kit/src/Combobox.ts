@@ -157,7 +157,7 @@
  * **Example** (A fruit picker in a field, with the open state, the value and the text in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Combobox, Field } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -175,11 +175,10 @@
  *   RequestedInputValueFruit: { text: Schema.String }
  * })
  *
- * const Picker = Component.define({
+ * const Picker = Html.component({
  *   name: "Picker",
  *   model: Schema.Struct({ open: Schema.Boolean, fruit: Schema.NullOr(Schema.String), text: Schema.String }),
- *   message: PickerMessage,
- *   elements: Html
+ *   message: PickerMessage
  * }).make({
  *   init: () => ({ open: false, fruit: "banana", text: "Banana" }),
  *   update: {
@@ -245,7 +244,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
@@ -729,14 +727,13 @@ const engine = Engine.make(
  * @category components
  * @since 0.1.0
  */
-export const Combobox = Component.define({
+export const Combobox = Html.component({
   name: "Combobox",
   props: ComboboxProps,
   model: Engine.Model,
   message: Engine.Message,
   events: ComboboxEvents,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: Engine.init,
   update: engine.update,

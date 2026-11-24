@@ -73,16 +73,14 @@
  * **Example** (A vertical scroll area with a custom scrollbar)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { ScrollArea } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Panel = Component.define({
+ * const Panel = Html.component({
  *   name: "Panel",
  *   model: Schema.Struct({}),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({}),
  *   update: ($) => $.model,
@@ -112,7 +110,6 @@
  * @since 0.1.0
  */
 
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -963,13 +960,12 @@ const overflowData = <B extends Attributed<B>>(
  * @category components
  * @since 0.1.0
  */
-export const ScrollArea = Component.define({
+export const ScrollArea = Html.component({
   name: "ScrollArea",
   props: ScrollAreaProps,
   model: ScrollAreaModel,
   message: ScrollAreaMessage,
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     measured: false,

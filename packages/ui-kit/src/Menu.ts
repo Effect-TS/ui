@@ -151,7 +151,7 @@
  * **Example** (An edit menu with a checkbox item and a submenu, with the open states in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Menu } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -171,11 +171,10 @@
  *   PickedAction: { value: Schema.String, checked: Schema.optional(Schema.Boolean) }
  * })
  *
- * const Editor = Component.define({
+ * const Editor = Html.component({
  *   name: "Editor",
  *   model: Schema.Struct({ open: Schema.Boolean, share: Schema.Boolean, wrap: Schema.Boolean }),
- *   message: EditorMessage,
- *   elements: Html
+ *   message: EditorMessage
  * }).make({
  *   init: () => ({ open: false, share: false, wrap: true }),
  *   update: {
@@ -245,7 +244,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -2483,7 +2482,7 @@ export const menuFilter = (
  * @category components
  * @since 0.1.0
  */
-export const Menu = Component.define({
+export const Menu = Html.component({
   name: "Menu",
   props: MenuProps,
   model: MenuModel,
@@ -2523,8 +2522,7 @@ export const Menu = Component.define({
     },
     toolbar: { owner: Toolbar, optional: true }
   },
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     mounted: false,

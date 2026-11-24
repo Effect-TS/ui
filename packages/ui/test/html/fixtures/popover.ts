@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 
@@ -142,7 +142,7 @@ export const MenuMessage = UiSchema.TaggedEnum({
 })
 
 /** A menu popover. With `follow`, its Model follows the browser's toggles. */
-export const Menu = Component.define({
+export const Menu = Html.component({
   name: "Menu",
   props: Schema.Struct({
     mode: Mode,
@@ -156,8 +156,7 @@ export const Menu = Component.define({
     shown: Schema.Boolean,
     log: Schema.Array(Schema.String)
   }),
-  message: MenuMessage,
-  elements: Html
+  message: MenuMessage
 }).make({
   init: ($) => ({ ...$.props, shown: true, log: [] }),
   update: ($, message) =>
@@ -183,11 +182,10 @@ export const Menu = Component.define({
 })
 
 /** A modal dialog holding an auto popover, both open from the start. */
-export const ModalMenu = Component.define({
+export const ModalMenu = Html.component({
   name: "ModalMenu",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -200,12 +198,11 @@ export const ModalMenu = Component.define({
       )
 })
 
-const Popup = Component.define({
+const Popup = Html.component({
   name: "Popup",
   props: Schema.Struct({ label: Schema.String, mode: Mode }),
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -218,12 +215,11 @@ const Popup = Component.define({
  * Two keyed rows, A and B, each holding a child with a popover of `mode`, open. Reversing them moves a
  * row's subtree, and the children, whose props don't change, don't render again.
  */
-export const Rows = Component.define({
+export const Rows = Html.component({
   name: "Rows",
   props: Schema.Struct({ mode: Mode }),
   model: Schema.Boolean,
-  message: Schema.Boolean,
-  elements: Html
+  message: Schema.Boolean
 }).make({
   init: () => false,
   update: (_, reversed) => reversed,

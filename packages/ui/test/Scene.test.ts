@@ -157,11 +157,10 @@ describe("Scene", () => {
         props: Schema.Struct({}),
         events: Changed
       }) {}
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.String,
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       })
         .make({
           init: () => "",
@@ -192,11 +191,10 @@ describe("Scene", () => {
 
   it.effect("child steps find a child without a key by its component", () =>
     Effect.gen(function*() {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.String,
-        message: Schema.String,
-        elements: Html
+        message: Schema.String
       })
         .make({
           init: () => "",
@@ -235,11 +233,10 @@ describe("Scene", () => {
 
   describe("children in headless closures", () => {
     const Toggled = UiSchema.TaggedEnum({ Toggled: {} })
-    const Disclosure = Component.define({
+    const Disclosure = Html.component({
       name: "Disclosure",
       model: Schema.Boolean,
-      message: Toggled,
-      elements: Html
+      message: Toggled
     })
       .make({
         init: () => false,
@@ -249,11 +246,10 @@ describe("Scene", () => {
     const state = (open: boolean) => (open ? "open" : "closed")
 
     it("givenChild sets the Model of the child it selects, and no other at another path", () => {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -283,11 +279,10 @@ describe("Scene", () => {
     })
 
     it("Scene.fallback checks a child's paths in the view that declared it", () => {
-      const Page = Component.define({
+      const Page = Html.component({
         name: "Page",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -304,11 +299,10 @@ describe("Scene", () => {
         { _tag: "Text", text: "no note" }
       )
       // The root of a closure is declared by the closure, not by the view beside it.
-      const Root = Component.define({
+      const Root = Html.component({
         name: "Root",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => null,
         update: ($) => $.model,
@@ -375,12 +369,11 @@ describe("Scene", () => {
       { args: {} },
       () => Effect.succeed(Component.noop)
     )
-    const Rows = Component.define({
+    const Rows = Html.component({
       name: "Rows",
       props: Schema.Struct({ shown: Schema.Boolean }),
       model: Schema.Array(Schema.String),
-      message: Schema.String,
-      elements: Html
+      message: Schema.String
     }).make({
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
@@ -476,12 +469,11 @@ describe("Scene", () => {
           .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
         const rootOf = (cache: boolean) => {
           let cached: View.Node<never> | undefined
-          return Component.define({
+          return Html.component({
             name: "Root",
             props: Schema.Struct({ childKey: Schema.String }),
             model: Schema.Null,
-            message: Schema.Never,
-            elements: Html
+            message: Schema.Never
           }).make({
             init: () => null,
             update: ($) => $.model,
@@ -514,11 +506,10 @@ describe("Scene", () => {
           { args: { token: Schema.Redacted(Schema.String) } },
           () => Effect.succeed(Component.noop)
         )
-        const Socket = Component.define({
+        const Socket = Html.component({
           name: "Socket",
           model: Schema.Null,
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         })
           .make({
             init: () => null,
@@ -544,11 +535,10 @@ describe("Scene", () => {
           { args: {} },
           (node: HTMLElement) => Effect.sync(() => node.clientWidth)
         )
-        const Anchor = Component.define({
+        const Anchor = Html.component({
           name: "Anchor",
           model: Schema.Number,
-          message: Schema.Number,
-          elements: Html
+          message: Schema.Number
         })
           .make({
             init: () => 0,
@@ -574,22 +564,20 @@ describe("Scene", () => {
           }
         )
         anchor.mounted(Place, 21).expect(Locator.tag("p")).toHaveText("42")
-        const Frame = Component.define({
+        const Frame = Html.component({
           name: "Frame",
           model: Schema.Null,
           message: Schema.Never,
-          elements: Html,
           slots: ["body"]
         }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.section(h.slots.body)
         })
-        const Page = Component.define({
+        const Page = Html.component({
           name: "Page",
           model: Schema.String,
-          message: Schema.String,
-          elements: Html
+          message: Schema.String
         })
           .make({
             init: () => "",

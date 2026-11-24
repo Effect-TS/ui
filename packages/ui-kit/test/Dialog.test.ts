@@ -1,5 +1,4 @@
-import type { Mount } from "@effect/ui"
-import { Component, UiSchema, View } from "@effect/ui"
+import { type Component, type Mount, UiSchema, View } from "@effect/ui"
 import {
   Dialog,
   type DialogEvents,
@@ -379,11 +378,10 @@ describe("Dialog", () => {
 
 // Two dialogs, one in the other's popup, open from the start.
 const NestedMessage = UiSchema.TaggedEnum({ RequestedCloseInner: {} })
-const Nested = Component.define({
+const Nested = Html.component({
   name: "Nested",
   model: Schema.Struct({ inner: Schema.Boolean }),
-  message: NestedMessage,
-  elements: Html
+  message: NestedMessage
 }).make({
   init: () => ({ inner: true }),
   update: {

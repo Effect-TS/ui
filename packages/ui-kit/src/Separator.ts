@@ -25,16 +25,14 @@
  * **Example** (A row of links with a vertical separator)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Separator } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const Nav = Component.define({
+ * const Nav = Html.component({
  *   name: "Nav",
  *   model: Schema.Null,
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => null,
  *   update: ($) => $.model,

@@ -1,13 +1,13 @@
 import { EntryList, filesUrl } from "#components/EntryList"
 import { FileTreeEntry, findEntry, formatFileSize } from "#domain/FileTree"
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 import { type Array, Option } from "effect"
 import { AppRoute } from "../../routes.ts"
 
 const filesIndexUrl = AppRoute.print(AppRoute.FilesIndex())
 
 export const FilesPage = <M>(
-  h: View.H<M>,
+  h: Html.H<M>,
   path: Array.NonEmptyReadonlyArray<string>
 ) =>
   h.div.children(

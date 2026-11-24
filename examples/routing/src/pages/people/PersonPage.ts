@@ -1,18 +1,18 @@
 import { findPerson } from "#domain/Person"
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 import { Option } from "effect"
 import { AppRoute } from "../../routes.ts"
 
 const peopleUrl = AppRoute.print(AppRoute.People())
 
-const Detail = <M>(h: View.H<M>, label: string, value: string) =>
+const Detail = <M>(h: Html.H<M>, label: string, value: string) =>
   h.div.children(
     h.h2.class("text-sm font-medium text-gray-500 uppercase tracking-wide")
       .children(label),
     h.p.class("text-lg text-gray-900 mt-1").children(value)
   )
 
-export const PersonPage = <M>(h: View.H<M>, personId: number) =>
+export const PersonPage = <M>(h: Html.H<M>, personId: number) =>
   Option.match(findPerson(personId), {
     onNone: () =>
       h.div.children(

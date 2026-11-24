@@ -8,16 +8,14 @@ import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
 import { build, version as vite } from "vite"
 
-const { values: { app: only, base, development, json, vocabulary } } =
-  parseArgs({
-    options: {
-      app: { type: "string", multiple: true },
-      development: { type: "boolean", default: false },
-      vocabulary: { type: "boolean", default: false },
-      base: { type: "string" },
-      json: { type: "string" }
-    }
-  })
+const { values: { app: only, base, development, json } } = parseArgs({
+  options: {
+    app: { type: "string", multiple: true },
+    development: { type: "boolean", default: false },
+    base: { type: "string" },
+    json: { type: "string" }
+  }
+})
 process.env.NODE_ENV = development ? "development" : "production"
 const repo = path.resolve(import.meta.dirname, "../../../..")
 const ui = path.join(repo, "packages/ui")
@@ -201,27 +199,13 @@ const benchmark = (file) => path.join(import.meta.dirname, file)
 const apps = [
   {
     name: "counter",
-    variant: vocabulary ? "Html.vocabulary" : "",
+    variant: "",
     check: checkCounter,
     prepare: (root) => {
-      const source = fs.readFileSync(
-        benchmark("counter.ts"),
-        "utf8"
-      )
-      const binding = "elements: Html"
-      if (vocabulary) {
-        assert.equal(
-          source.split(binding).length,
-          2,
-          "expected exactly one vocabulary binding"
-        )
-      }
       const input = path.join(root, "counter.ts")
-      fs.writeFileSync(
-        input,
-        vocabulary
-          ? source.replace(binding, "elements: Html.vocabulary")
-          : source
+      fs.copyFileSync(
+        benchmark("counter.ts"),
+        input
       )
       return { root, input }
     }

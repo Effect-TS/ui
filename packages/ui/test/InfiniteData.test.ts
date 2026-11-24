@@ -57,12 +57,11 @@ const makeApp = () => {
     More: {},
     Refresh: {}
   })
-  const Chat = Component.define({
+  const Chat = Html.component({
     name: "Chat",
     props: Schema.Struct({ room: Schema.String }),
     model: Schema.Struct({}),
     message: ChatMessage,
-    elements: Html,
     queries: {
       messages: {
         query: ListMessages,
@@ -202,11 +201,10 @@ describe("Infinite queries", () => {
       )
     ) {}
     const CodesMessage = UiSchema.TaggedEnum({ More: {}, Look: {} })
-    const Codes = Component.define({
+    const Codes = Html.component({
       name: "Codes",
       model: Schema.String,
       message: CodesMessage,
-      elements: Html,
       queries: { codes: { query: ListCodes, args: () => ({}) } }
     }).make({
       init: () => "",
@@ -509,12 +507,11 @@ describe("Infinite queries", () => {
       Go: {},
       Navigated: {}
     })
-    const Shell = Component.define({
+    const Shell = Html.component({
       name: "Shell",
       props: Schema.Struct({ route: ShellRoute }),
       model: ShellRoute,
-      message: ShellMessage,
-      elements: Html
+      message: ShellMessage
     }).make({
       init: ($) => $.props.route,
       update: ($, message) =>

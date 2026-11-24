@@ -33,13 +33,12 @@ const Plain = Component.define({
 
 const TipMessage = UiSchema.TaggedEnum({ Enter: { id: Schema.String } })
 
-const Tip = Component.define({
+const Tip = Html.component({
   name: "Tip",
   props: Schema.Struct({ id: Schema.String }),
   model: Schema.Null,
   message: TipMessage,
-  reads: { provider: TipsProvider },
-  elements: Html
+  reads: { provider: TipsProvider }
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -77,11 +76,10 @@ describe("shared state", () => {
   })
 
   it("removes the requirement in the owner's closure only, and never with provide", () => {
-    const def = Component.define({
+    const def = Html.component({
       name: "Host",
       model: Schema.Null,
-      message: TipMessage,
-      elements: Html
+      message: TipMessage
     })
     const Inside = def.make({
       init: () => null,

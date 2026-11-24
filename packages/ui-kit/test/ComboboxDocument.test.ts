@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Combobox, Dialog, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
@@ -98,7 +98,7 @@ const Message = UiSchema.TaggedEnum({
   RequestedCloseDialog: { reason: Schema.String }
 })
 
-const Page = Component.define({
+const Page = Html.component({
   name: "Page",
   props: Config,
   model: Schema.Struct({
@@ -107,8 +107,7 @@ const Page = Component.define({
     inputValue: Schema.String,
     log: Schema.Array(Schema.String)
   }),
-  message: Message,
-  elements: Html
+  message: Message
 }).make({
   init: () => ({ open: false, value: [], inputValue: "", log: [] }),
   update: {

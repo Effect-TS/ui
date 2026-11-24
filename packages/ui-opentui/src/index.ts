@@ -6,7 +6,7 @@
  * @since 0.1.0
  */
 
-// @barrel(!(register).ts): Auto-generated exports. Do not edit manually.
+// @barrel: Auto-generated exports. Do not edit manually.
 
 /**
  * @stability experimental

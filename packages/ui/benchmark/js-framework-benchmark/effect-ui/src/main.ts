@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Effect, Layer, Schema } from "effect"
 
@@ -148,11 +148,10 @@ const update = (
 
 // VIEW
 
-const MainDef = Component.define({
+const MainDef = Html.component({
   name: "Main",
   model: Model,
-  message: Message,
-  elements: Html
+  message: Message
 })
 type H = Component.Helper<typeof MainDef>
 

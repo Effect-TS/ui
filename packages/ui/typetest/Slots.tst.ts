@@ -11,11 +11,10 @@ class Store extends Context.Service<Store, { readonly draft: string }>()(
 ) {}
 
 const PanelMsg = UiSchema.TaggedEnum({ Toggle: {} })
-const PanelDef = Component.define({
+const PanelDef = Html.component({
   name: "Panel",
   model: Schema.Boolean,
   message: PanelMsg,
-  elements: Html,
   slots: ["body", "footer"]
 })
 const Panel = PanelDef.make({
@@ -24,11 +23,10 @@ const Panel = PanelDef.make({
   view: (h, open) => h.section(open && h.slots.body, h.footer(h.slots.footer))
 })
 
-const Plain = Component.define({
+const Plain = Html.component({
   name: "Plain",
   model: Schema.Null,
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => null,
   update: ($) => $.model,
@@ -212,11 +210,10 @@ describe("slots", () => {
   })
 
   it("rejects slots on headless and feature calls, from a variable too", () => {
-    const Headless = Component.define({
+    const Headless = Html.component({
       name: "Headless",
       model: Schema.Null,
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     })
       .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
     class Badge extends Feature.Service<Badge>()("typetest/slots/Badge", {

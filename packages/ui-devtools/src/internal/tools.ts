@@ -1,16 +1,62 @@
 import type * as MessageLog from "@effect/ui/MessageLog"
-import * as McpProtocol from "effect/ai/McpProtocol"
-import * as McpServer from "effect/ai/McpServer"
 import * as Tool from "effect/ai/Tool"
 import * as Toolkit from "effect/ai/Toolkit"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
 import * as Control from "./control.ts"
+import type * as History from "./history.ts"
 import { diff } from "./inspector.ts"
 import * as Read from "./read.ts"
-import type { Server } from "./server.ts"
+
+export interface RequestError {
+  readonly lost: boolean
+  readonly message: string
+}
+
+export interface Page {
+  readonly paused: Control.Paused | null
+  readonly request: (
+    request: Control.Request
+  ) => Effect.Effect<Schema.Json, RequestError>
+}
+
+export interface Backend {
+  readonly options: { readonly size: number; readonly dispatch: boolean }
+  readonly inspector: Inspector.Inspector
+  readonly history: History.History
+  readonly meta: (session: string) => {
+    readonly host: MessageLog.WireHost | undefined
+    readonly connected: boolean
+  } | undefined
+  readonly pageOf: (session: string) => Page | undefined
+  readonly until: <A>(check: () => A | undefined) => Effect.Effect<A>
+  readonly within: number
+  readonly latest: (session: string) => number | undefined
+  readonly gap: "skipped" | "excluded"
+}
+
+export const makeWaiters = () => {
+  const waiters = new Set<() => void>()
+  const next: Effect.Effect<void> = Effect.callback<void>((resume) => {
+    const waiter = () => resume(Effect.void)
+    waiters.add(waiter)
+    return Effect.sync(() => waiters.delete(waiter))
+  })
+  const until = <A>(check: () => A | undefined): Effect.Effect<A> =>
+    Effect.suspend(() => {
+      const found = check()
+      return found !== undefined
+        ? Effect.succeed(found)
+        : Effect.andThen(next, until(check))
+    })
+  const notify = () => {
+    const all = Array.from(waiters)
+    waiters.clear()
+    for (const waiter of all) waiter()
+  }
+  return { notify, until }
+}
 
 export class ToolError extends Schema.TaggedError<ToolError>()("ToolError", {
   message: Schema.String
@@ -249,11 +295,11 @@ export const Tools = Toolkit.make(
   Wait
 )
 
-const instructions =
+export const instructions =
   "Inspects a running Effect UI app in development. Start with list_sessions and list_instances. " +
   "list_entries and get_chain explain what happened and why; get_state and diff_state show state at any entry. " +
-  "show_entry paints the page at an entry, resume returns to the live page. dispatch sends messages when the " +
-  "server allows it, and wait lets the Commands they start finish."
+  "show_entry paints the page at an entry, resume returns to the live page. dispatch sends messages when " +
+  "enabled, and wait lets the Commands they start finish."
 
 const select = (
   value: unknown,
@@ -323,20 +369,20 @@ const isState = (entry: MessageLog.WireEntry | Inspector.Outside) =>
     ? entry
     : undefined
 
-export const layer = (server: Server) => {
-  const { history, inspector, meta, options } = server
+export const handlers = (server: Backend) => {
+  const { history, inspector, options } = server
 
   const sessionOf = (id: string | undefined) =>
     Effect.suspend(() => {
       if (id !== undefined) {
-        const found = server.session(id)
+        const found = inspector.sessions().find((session) => session.id === id)
         return found === undefined
           ? fail("No session " + id + ". Call list_sessions.")
           : Effect.succeed(found)
       }
       const sessions = inspector.sessions()
       const newest = [...sessions].reverse().find((session) =>
-        meta.get(session.id)?.connected
+        server.meta(session.id)?.connected
       ) ?? sessions.at(-1)
       return newest === undefined
         ? fail(
@@ -353,6 +399,13 @@ export const layer = (server: Server) => {
           " can't be controlled: it is server rendered, or its tab was closed or reloaded."
       )
       : Effect.succeed(page)
+  }
+
+  const arrival = (session: Inspector.Session, seq: number) => {
+    if ((server.latest(session.id) ?? -1) < seq) return undefined
+    if (session.resolve(seq)._tag !== "Outside") return "seen"
+    const first = session.entries()[0]?.seq
+    return first !== undefined && seq < first ? "evicted" : server.gap
   }
 
   const ask = (session: Inspector.Session, request: Control.Request) =>
@@ -461,7 +514,7 @@ export const layer = (server: Server) => {
         ok(
           inspector.sessions().map((session) => {
             const entries = session.entries()
-            const info = meta.get(session.id)
+            const info = server.meta(session.id)
             const page = server.pageOf(session.id)
             return omitNull({
               session: session.id,
@@ -668,16 +721,16 @@ export const layer = (server: Server) => {
       )
       if (logged.length > 0) {
         const newest = Math.max(...logged)
-        yield* server.until(() => server.arrival(s.id, newest)).pipe(
+        yield* server.until(() => arrival(s, newest)).pipe(
           Effect.timeoutOption("2 seconds")
         )
       }
       const unseen: Array<number> = []
       const unavailable: Array<{ seq: number; reason: string }> = []
       for (const seq of logged) {
-        const arrival = server.arrival(s.id, seq)
-        if (arrival === undefined) unseen.push(seq)
-        else if (arrival !== "seen") unavailable.push({ seq, reason: arrival })
+        const reason = arrival(s, seq)
+        if (reason === undefined) unseen.push(seq)
+        else if (reason !== "seen") unavailable.push({ seq, reason })
       }
       const sent = reply.outcomes.length
       const last = reply.outcomes.at(-1)
@@ -709,7 +762,8 @@ export const layer = (server: Server) => {
           : "Entries " + seqs(unavailable.map((u) => u.seq)) + " were " +
             "logged by the page, but the server can't show them: a skipped " +
             "entry was dropped from the page's buffer before it was sent, " +
-            "and an evicted one is older than the entries the server keeps.",
+            "an evicted one is older than the entries kept, and an excluded " +
+            "one matched exclude.",
         reply.paused === null
           ? undefined
           : "The page is paused: resume to see the live page."
@@ -748,16 +802,5 @@ export const layer = (server: Server) => {
     )
   })
 
-  return McpServer.layerHttp({
-    name: "effect-ui-devtools",
-    version: "0.1.0",
-    instructions,
-    path: "/mcp",
-    protocols: [
-      McpProtocol.v2025_11_25,
-      McpProtocol.v2025_06_18,
-      McpProtocol.v2025_03_26
-    ],
-    registrations: McpServer.toolkit(Tools).pipe(Layer.provide(handlers))
-  }).pipe(Layer.orDie)
+  return handlers
 }

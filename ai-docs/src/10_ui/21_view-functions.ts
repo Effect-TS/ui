@@ -7,17 +7,16 @@
  * For a nested hole, take an options object with a generic children field,
  * or return the inner builder with `forward`.
  */
-import { Component, type View } from "@effect/ui"
+import type { View } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-// View.H uses the app's registered vocabulary, not one definition.
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 
-const Card = <M>(h: View.H<M>) => h.section.class("card")
+// Html.H types a reusable pure HTML view helper without tying it to one definition.
+const Card = <M>(h: Html.H<M>) => h.section.class("card")
 
 // Keep C inferred: View.Input<M> rejects children needing services, while
 // annotating children as View.Children<M> erases their requirements.
-const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
+const Field = <M, C extends View.Children<M>>(h: Html.H<M>, options: {
   readonly label: string
   readonly children: C
 }) =>
@@ -28,14 +27,14 @@ const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
 
 // A nested hole can stay a builder: `forward` says what goes around it when
 // it is built, so the caller's chain and children land on the control.
-const Framed = <M>(h: View.H<M>) =>
+const Framed = <M>(h: Html.H<M>) =>
   h.div.class("control").forward((control) =>
     h.div.class("frame").children(control)
   )
 
 // Arrays are accepted directly. Do not spread options.children. The result
 // retains the union of the children's requirements for the enclosing component.
-export const Form = Component.define({
+export const Form = Html.component({
   name: "Form",
   model: Schema.String,
   message: Schema.String

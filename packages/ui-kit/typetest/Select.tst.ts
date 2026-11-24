@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema } from "@effect/ui"
 import {
   Field,
   Select,
@@ -42,11 +42,10 @@ describe("Select", () => {
   })
 
   it("each part returns the builder it was given, and the parts that can hide return undefined too", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -90,11 +89,10 @@ describe("Select", () => {
   })
 
   it("the trigger takes only a button, and an item needs its value", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -115,11 +113,10 @@ describe("Select", () => {
   })
 
   it("draws its trigger with a field's member, inside the field's focusWithin", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -141,11 +138,10 @@ describe("Select", () => {
   })
 
   it("requires open and items", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

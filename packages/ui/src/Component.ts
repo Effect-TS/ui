@@ -679,7 +679,7 @@ export interface Step<
    * **Example** (Animating a layout switch)
    *
    * ```ts
-   * import { Component, UiSchema } from "@effect/ui"
+   * import { UiSchema } from "@effect/ui"
    * import { Html } from "@effect/ui/html"
    * import { Schema } from "effect"
    *
@@ -689,11 +689,10 @@ export interface Step<
    *   TypedFilter: { value: Schema.String }
    * })
    *
-   * export const Gallery = Component.define({
+   * export const Gallery = Html.component({
    *   name: "Gallery",
    *   model: Schema.Struct({ layout: Layout, filter: Schema.String }),
-   *   message: Message,
-   *   elements: Html
+   *   message: Message
    * }).make({
    *   init: () => ({ layout: "grid" as const, filter: "" }),
    *   update: {
@@ -1121,8 +1120,8 @@ export declare namespace Mountable {
         queries?: Results | undefined
       ) => ReadonlyArray<unknown>)
       | undefined
-    /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
-    readonly elements: () => View.Vocabulary<any> | undefined
+    /** The component's vocabulary, if one was supplied. */
+    readonly elements: View.Vocabulary<any> | undefined
     /**
      * Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services.
      * `keys` is what `layerKeys` read, one value per keyed provide, and empty without one.
@@ -1477,7 +1476,7 @@ export interface Headless<
       queries?: Results | undefined
     ) => ReadonlyArray<unknown>)
     | undefined
-  readonly elements: () => View.Vocabulary<any> | undefined
+  readonly elements: View.Vocabulary<any> | undefined
   readonly "~queries": unknown
 }
 
@@ -1633,14 +1632,14 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    * **Example** (A drawer built on a dialog)
    *
    * ```ts
-   * import "@effect/ui/html/register"
-   * import { Component, UiSchema } from "@effect/ui"
+   * import { UiSchema } from "@effect/ui"
+   * import { Html } from "@effect/ui/html"
    * import { Schema } from "effect"
    *
    * const DialogMessage = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
    * const DialogEvents = UiSchema.TaggedEnum({ Dismissed: {} })
    *
-   * const Dialog = Component.define({
+   * const Dialog = Html.component({
    *   name: "Dialog",
    *   model: Schema.Boolean,
    *   message: DialogMessage,
@@ -1661,7 +1660,7 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *
    * const DrawerMessage = UiSchema.TaggedEnum({ DismissedDialog: {} })
    *
-   * const Drawer = Component.define({
+   * const Drawer = Html.component({
    *   name: "Drawer",
    *   model: Schema.Number,
    *   message: DrawerMessage
@@ -2890,6 +2889,235 @@ export interface Alive<out Model, out Props, out Queries>
 type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
 
 /**
+ * Options accepted by `Component.define` (minus `elements`) and by
+ * vocabulary-bound component constructors typed with {@link Define}.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface DefineOptions<
+  Name extends string,
+  Model,
+  Msg,
+  Props,
+  Events,
+  S,
+  M,
+  L,
+  Tags extends TagOf<Msg>,
+  Sl extends string,
+  SR extends SharedReads,
+  SV,
+  Rp,
+  SO extends { readonly [name: string]: Headless.Any | "self" }
+> {
+  readonly name: Name
+  readonly props?: Schema.Codec<Props, any> | undefined
+  readonly model: Schema.Codec<Model, any>
+  readonly message: Schema.Codec<Msg, any>
+  readonly events?: Schema.Codec<Events, any> | undefined
+  /** The queries the component shows, by name. */
+  readonly queries?:
+    | (
+      & {
+        readonly [K in keyof S]: {
+          readonly query?: S[K] & OneQuery<M[K & keyof M]>
+          readonly args: (
+            $: Current<
+              Model,
+              Props,
+              {
+                readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<
+                  NoInfer<L>[P]
+                >
+              }
+            >
+          ) => ArgsFor<S[K], M[K & keyof M]>
+          readonly debounce?: Duration.Input | undefined
+          readonly onChange?:
+            | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
+            | undefined
+        }
+      }
+      & {
+        readonly [K in keyof M]: {
+          readonly queryMany?: M[K] & ManyQuery<M[K]>
+        }
+      }
+    )
+    | undefined
+  /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
+  readonly slots?: ReadonlyArray<Sl> | undefined
+  /**
+   * The owners whose shared state the component reads, by the name `h.reads`, `p.reads` and `$.reads` use:
+   * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
+   * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
+   * component tells an owner whose `shares` has `collects`, from its Model, props and `id`.
+   * `onChange` is its message when the value changes, delivered once per owner round before the next render, with the latest value.
+   * One `onChange` per owner: `define` throws for an owner listed twice with one each.
+   * `owner: "self"` reads the nearest instance of this component above, and is `optional: true`;
+   * write `shares` before `reads`, so `report` and `onChange` are typed by it.
+   */
+  readonly reads?:
+    | (
+      & SR
+      & {
+        readonly [K in keyof SO]: SharedEntry<
+          SR[K & keyof SR],
+          SO[K],
+          Model,
+          Props,
+          NoInfer<Msg>,
+          NoInfer<SV>,
+          NoInfer<Rp>
+        >
+      }
+      & NoInfer<OwnersOnly<SO>>
+    )
+    | undefined
+  /**
+   * Makes a headless component an owner: what it shares with the components below it, and what
+   * it collects from them. A function is short for `{ value }`. Every owner update re-runs the owner's
+   * closure, so put normal components directly under it, and every reader re-renders when the
+   * value changes, so keep it small. `schema` encodes the value in a reader's `Update` on the
+   * Wire. Without it the value is sent best effort, as `MessageLog.structural` encodes it.
+   */
+  readonly shares?:
+    | ((model: Model, props: Props) => SV)
+    | {
+      /** What the readers below read, from the owner's Model and props. */
+      readonly value: (model: Model, props: Props) => SV
+      /** The Schema of the value. */
+      readonly schema?: Schema.Codec<SV, any> | undefined
+      /**
+       * The tags of `message` the components below may send the owner with `$.send(Owner, message)`.
+       * None by default.
+       */
+      readonly receives?: ReadonlyArray<Tags> | undefined
+    }
+    | {
+      readonly value: (model: Model, props: Props) => SV
+      readonly schema?: Schema.Codec<SV, any> | undefined
+      readonly receives?: ReadonlyArray<Tags> | undefined
+      /** What the owner collects from the readers below it. */
+      readonly collects: {
+        /** The Schema of what each reader below reports with `report`. */
+        readonly schema: Schema.Codec<Rp, any>
+        /**
+         * The message for the current reports, one per reader, in no promised order. It's
+         * dispatched once a render pass has nothing left to render, when it differs from the last
+         * one, which starts as `onChange([])`.
+         */
+        readonly onChange: (
+          collected: ReadonlyArray<NoInfer<Rp>>
+        ) => NoInfer<Msg>
+      }
+    }
+    | undefined
+  /**
+   * What Back, forward and a reload bring back of the component. Left out, the Router saves the
+   * instance's Model and query results when it leaves a history entry, and an instance mounted for
+   * that entry again starts from them. `false` saves nothing, so the instance starts from `init`,
+   * even from an entry an older build saved it in; the components below it are saved and restored
+   * as usual. A function returns the Model to save from the current Model and props. It runs
+   * when the Router saves, not on Back, so a field it clears is never written to `history.state`.
+   * One that throws leaves the instance out, with a warning logged once per component.
+   *
+   * Leave out what depends on a Command an `update` started, such as a timer or a request, and
+   * what only the DOM knew, such as hover, focus or a measurement: restore replays `init`'s
+   * Commands only. Hydration doesn't read it: the server sends the whole Model.
+   */
+  readonly restore?:
+    | false
+    | ((model: Model, props: Props) => NoInfer<Model>)
+    | undefined
+}
+
+type QueryEntries<S, M> = {
+  readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ?
+    QueryMany<M[K & keyof M]>
+    : S[K] extends Query.Query.Any ? QueryOne<S[K]>
+    : never
+}
+
+type Defined<
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  V extends View.Elements,
+  L,
+  Tags,
+  Sl extends string,
+  SR,
+  SV,
+  Rp
+> = Definition<
+  Name,
+  Props,
+  Model,
+  Msg,
+  Events,
+  V,
+  L,
+  Tagged<Msg, Tags>,
+  Sl,
+  ResolveSelf<
+    Listed<SR>,
+    SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
+  >,
+  SV,
+  Rp
+>
+
+/**
+ * The call signature of a vocabulary-bound component constructor such as
+ * `Html.component` or `OpenTui.component`, supplying vocabulary `V`
+ * automatically to `Component.define`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Define<V extends View.Elements> {
+  <
+    const Name extends string,
+    Model,
+    Msg,
+    Props = {},
+    Events = never,
+    S = {},
+    M = {},
+    L = QueryEntries<S, M>,
+    const Tags extends TagOf<Msg> = never,
+    const Sl extends string = never,
+    SR extends SharedReads = SharedReads,
+    SV = never,
+    Rp = never,
+    SO extends { readonly [name: string]: Headless.Any | "self" } = {}
+  >(
+    options: DefineOptions<
+      Name,
+      Model,
+      Msg,
+      Props,
+      Events,
+      S,
+      M,
+      L,
+      Tags,
+      Sl,
+      SR,
+      SV,
+      Rp,
+      SO
+    >
+  ): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp>
+}
+
+/**
  * Defines a component, in two steps. `define` takes the name, the Schemas,
  * `queries` and `elements`, and `make` on the definition it returns takes
  * `init`, `update`, `view`, `subscriptions` and `head`.
@@ -2907,8 +3135,8 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  *
  * `init` and `update` get `$` first, a step holding the current Model and
  * props, and `update` the message after it. `view` gets `h` first, bound to
- * the component's message type and carrying the props, with the registered
- * vocabulary's element names mixed in, and the Model after it. A view that
+ * the component's message type and carrying the props, with the component's
+ * element vocabulary mixed in, and the Model after it. A view that
  * reads only props takes `h` alone. The whole return type of `init`, `update`
  * and `view` is inferred and `R` is read off it, so `R` covers every branch,
  * including conditional views. Framework services such as `Scope` are never
@@ -2922,8 +3150,10 @@ type QueryResults<L> = { readonly [K in keyof L]: QueryResultOf<L[K]> }
  * `props` and `events` are optional. `subscriptions`, `head` and a query's
  * `args` each get one object: `{ model, props, queries }`. `subscriptions`
  * returns keyed Streams run while their key is listed, and falsy entries are
- * skipped. Two entries with one key fail the instance. `elements` overrides
- * the registered vocabulary for this component.
+ * skipped. Two entries with one key fail the instance. `elements` supplies
+ * an element vocabulary for this component; without it, `h` is host-neutral
+ * (`el` and `text`). For HTML or OpenTUI components, prefer `Html.component`
+ * or `OpenTui.component`.
  *
  * `queries` declares the queries the component shows, by name. Each entry is
  * `{ query: Q, args }` for one query, a list of pages when `Q` is a
@@ -3153,13 +3383,8 @@ export const define = <
   S = {},
   M = {},
   // The queries as `QueryOne` and `QueryMany` entries, by name. Nothing infers it, so it's always this default.
-  L = {
-    readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ?
-      QueryMany<M[K & keyof M]>
-      : S[K] extends Query.Query.Any ? QueryOne<S[K]>
-      : never
-  },
-  V extends View.Elements = View.Registered,
+  L = QueryEntries<S, M>,
+  V extends View.Elements = never,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
   // What `reads` lists, as written. It defaults to its constraint, which stands for no `reads`: a `{}` default
@@ -3170,148 +3395,29 @@ export const define = <
   // The owner of each entry of `reads`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {}
 >(
-  options: {
-    readonly name: Name
-    readonly props?: Schema.Codec<Props, any> | undefined
-    readonly model: Schema.Codec<Model, any>
-    readonly message: Schema.Codec<Msg, any>
-    readonly events?: Schema.Codec<Events, any> | undefined
-    /** The queries the component shows, by name. */
-    readonly queries?:
-      | (
-        & {
-          readonly [K in keyof S]: {
-            readonly query?: S[K] & OneQuery<M[K & keyof M]>
-            readonly args: (
-              $: Current<
-                Model,
-                Props,
-                {
-                  readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<
-                    NoInfer<L>[P]
-                  >
-                }
-              >
-            ) => ArgsFor<S[K], M[K & keyof M]>
-            readonly debounce?: Duration.Input | undefined
-            readonly onChange?:
-              | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
-              | undefined
-          }
-        }
-        & {
-          readonly [K in keyof M]: {
-            readonly queryMany?: M[K] & ManyQuery<M[K]>
-          }
-        }
-      )
-      | undefined
-    readonly elements?: View.Vocabulary<V> | undefined
-    /** The names of the slots a parent may fill, each placed in `view` with `h.slots.<name>`. None by default. */
-    readonly slots?: ReadonlyArray<Sl> | undefined
-    /**
-     * The owners whose shared state the component reads, by the name `h.reads`, `p.reads` and `$.reads` use:
-     * each an owner, or `{ owner, optional, report, onChange }`. With `optional`, the read is
-     * `undefined` when no owner is above, and a send to it is dropped. `report` is what this
-     * component tells an owner whose `shares` has `collects`, from its Model, props and `id`.
-     * `onChange` is its message when the value changes, delivered once per owner round before the next render, with the latest value.
-     * One `onChange` per owner: `define` throws for an owner listed twice with one each.
-     * `owner: "self"` reads the nearest instance of this component above, and is `optional: true`;
-     * write `shares` before `reads`, so `report` and `onChange` are typed by it.
-     */
-    readonly reads?:
-      | (
-        & SR
-        & {
-          readonly [K in keyof SO]: SharedEntry<
-            SR[K & keyof SR],
-            SO[K],
-            Model,
-            Props,
-            NoInfer<Msg>,
-            NoInfer<SV>,
-            NoInfer<Rp>
-          >
-        }
-        & NoInfer<OwnersOnly<SO>>
-      )
-      | undefined
-    /**
-     * Makes a headless component an owner: what it shares with the components below it, and what
-     * it collects from them. A function is short for `{ value }`. Every owner update re-runs the owner's
-     * closure, so put normal components directly under it, and every reader re-renders when the
-     * value changes, so keep it small. `schema` encodes the value in a reader's `Update` on the
-     * Wire. Without it the value is sent best effort, as `MessageLog.structural` encodes it.
-     */
-    readonly shares?:
-      | ((model: Model, props: Props) => SV)
-      | {
-        /** What the readers below read, from the owner's Model and props. */
-        readonly value: (model: Model, props: Props) => SV
-        /** The Schema of the value. */
-        readonly schema?: Schema.Codec<SV, any> | undefined
-        /**
-         * The tags of `message` the components below may send the owner with `$.send(Owner, message)`.
-         * None by default.
-         */
-        readonly receives?: ReadonlyArray<Tags> | undefined
-      }
-      | {
-        readonly value: (model: Model, props: Props) => SV
-        readonly schema?: Schema.Codec<SV, any> | undefined
-        readonly receives?: ReadonlyArray<Tags> | undefined
-        /** What the owner collects from the readers below it. */
-        readonly collects: {
-          /** The Schema of what each reader below reports with `report`. */
-          readonly schema: Schema.Codec<Rp, any>
-          /**
-           * The message for the current reports, one per reader, in no promised order. It's
-           * dispatched once a render pass has nothing left to render, when it differs from the last
-           * one, which starts as `onChange([])`.
-           */
-          readonly onChange: (
-            collected: ReadonlyArray<NoInfer<Rp>>
-          ) => NoInfer<Msg>
-        }
-      }
-      | undefined
-    /**
-     * What Back, forward and a reload bring back of the component. Left out, the Router saves the
-     * instance's Model and query results when it leaves a history entry, and an instance mounted for
-     * that entry again starts from them. `false` saves nothing, so the instance starts from `init`,
-     * even from an entry an older build saved it in; the components below it are saved and restored
-     * as usual. A function returns the Model to save from the current Model and props. It runs
-     * when the Router saves, not on Back, so a field it clears is never written to `history.state`.
-     * One that throws leaves the instance out, with a warning logged once per component.
-     *
-     * Leave out what depends on a Command an `update` started, such as a timer or a request, and
-     * what only the DOM knew, such as hover, focus or a measurement: restore replays `init`'s
-     * Commands only. Hydration doesn't read it: the server sends the whole Model.
-     */
-    readonly restore?:
-      | false
-      | ((model: Model, props: Props) => NoInfer<Model>)
-      | undefined
-  }
-): Definition<
-  Name,
-  Props,
-  Model,
-  Msg,
-  Events,
-  V,
-  L,
-  Tagged<Msg, Tags>,
-  Sl,
-  ResolveSelf<
-    Listed<SR>,
-    SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
-  >,
-  SV,
-  Rp
-> => {
+  options:
+    & DefineOptions<
+      Name,
+      Model,
+      Msg,
+      Props,
+      Events,
+      S,
+      M,
+      L,
+      Tags,
+      Sl,
+      SR,
+      SV,
+      Rp,
+      SO
+    >
+    & {
+      readonly elements?: View.Vocabulary<V> | undefined
+    }
+): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp> => {
   const shares = options.shares
-  const definition: Definition<
+  const definition: Defined<
     Name,
     Props,
     Model,
@@ -3319,12 +3425,9 @@ export const define = <
     Events,
     V,
     L,
-    Tagged<Msg, Tags>,
+    Tags,
     Sl,
-    ResolveSelf<
-      Listed<SR>,
-      SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
-    >,
+    SR,
     SV,
     Rp
   > = {
@@ -3506,7 +3609,7 @@ const finish = (
         ) => {
           const h: any = View.makeHelper(
             props,
-            elements ?? View.registeredElements(),
+            elements,
             running,
             path ?? ("/" + definition.name),
             lazy
@@ -3588,7 +3691,7 @@ const finish = (
         ? undefined
         : (model: unknown, props: unknown, results?: Results) =>
           head({ model, props, queries: open(model, props, results) }),
-      elements: () => elements ?? View.registeredElements(),
+      elements,
       layer: undefined,
       layerKeys: undefined,
       layerFailure: undefined,

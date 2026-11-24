@@ -838,12 +838,11 @@ describe("Story", () => {
 
     const TeamMessage = UiSchema.TaggedEnum({ UserChanged: {}, Bump: {} })
     const renders: Array<string> = []
-    const Team = Component.define({
+    const Team = Html.component({
       name: "Team",
       props: Schema.Struct({ id: Schema.String }),
       model: Schema.Struct({ changes: Schema.Number }),
       message: TeamMessage,
-      elements: Html,
       queries: {
         // Declared before the query it depends on, so the order of the record doesn't matter.
         friend: {
@@ -961,12 +960,11 @@ describe("Story", () => {
     it.effect("given prunes a keyed query with no onChange message, and a later step's prune still sends it", () =>
       Effect.gen(function*() {
         const Message = UiSchema.TaggedEnum({ FriendsChanged: {} })
-        const Pals = Component.define({
+        const Pals = Html.component({
           name: "Pals",
           props: Schema.Struct({ id: Schema.String }),
           model: Schema.Struct({ changes: Schema.Number }),
           message: Message,
-          elements: Html,
           queries: {
             user: {
               query: users.GetUser,
@@ -1016,12 +1014,11 @@ describe("Story", () => {
     it.effect("given keeps a keyed result its query returns again once the given results settle", () =>
       Effect.gen(function*() {
         const Message = UiSchema.TaggedEnum({ FriendsChanged: {} })
-        const Circle = Component.define({
+        const Circle = Html.component({
           name: "Circle",
           props: Schema.Struct({}),
           model: Schema.Struct({ id: Schema.String, changes: Schema.Number }),
           message: Message,
-          elements: Html,
           queries: {
             // Declared before the query it reads, so a first pass sees the old user at the new Model's args.
             friends: {
@@ -1091,7 +1088,7 @@ describe("Story", () => {
         }),
         shares: { value: () => null, receives: ["Take"] }
       }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
-      const App = Component.define({
+      const App = Html.component({
         name: "SecretOutputs",
         model: Schema.Null,
         message: Schema.Struct({
@@ -1099,7 +1096,6 @@ describe("Story", () => {
           at: Schema.Number
         }),
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),
-        elements: Html,
         reads: { receiver: Receiver }
       }).make({
         init: () => null,

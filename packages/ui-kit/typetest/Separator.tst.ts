@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { UiSchema, type View } from "@effect/ui"
 import { Separator, type SeparatorElement } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -12,11 +12,10 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Separator", () => {
   it("returns a div of the caller's message type, whose chained children keep their requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

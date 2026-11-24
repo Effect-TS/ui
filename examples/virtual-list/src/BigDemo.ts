@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -8,11 +8,10 @@ const BigMessage = UiSchema.TaggedEnum({
   ClickedJump: { index: Schema.Number }
 })
 
-export const BigDemo = Component.define({
+export const BigDemo = Html.component({
   name: "BigDemo",
   model: Schema.Struct({ index: Schema.Number, jump: Schema.Number }),
-  message: BigMessage,
-  elements: Html
+  message: BigMessage
 }).make({
   init: () => ({ index: 0, jump: 0 }),
   update: {

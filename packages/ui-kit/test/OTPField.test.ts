@@ -1,5 +1,4 @@
-import type { Mount } from "@effect/ui"
-import { Component, View } from "@effect/ui"
+import { type Component, type Mount, View } from "@effect/ui"
 import {
   DirectionProvider,
   OTPField,
@@ -638,11 +637,10 @@ describe("OTPField", () => {
   it.effect("server-rendered page state and non-input markup do not leak the verification code", () =>
     Effect.gen(function*() {
       const secret = "847291"
-      const Page = Component.define({
+      const Page = Html.component({
         name: "VerifyPage",
         model: Schema.Struct({}),
-        message: Schema.Never,
-        elements: Html
+        message: Schema.Never
       }).make({
         init: () => ({}),
         update: ($) => $.model,

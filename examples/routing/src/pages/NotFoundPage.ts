@@ -1,7 +1,7 @@
-import type { View } from "@effect/ui"
+import type { Html } from "@effect/ui/html"
 import { AppRoute } from "../routes.ts"
 
-export const NotFoundPage = <M>(h: View.H<M>, path: string) =>
+export const NotFoundPage = <M>(h: Html.H<M>, path: string) =>
   h.div.children(
     h.h1.class("text-4xl font-bold text-red-600 mb-6").children(
       "404 - Page Not Found"

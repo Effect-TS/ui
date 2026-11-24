@@ -1,4 +1,4 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { type Component, UiSchema, type View } from "@effect/ui"
 import { Field, Fieldset, type FieldsetProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
@@ -21,11 +21,10 @@ type Element<K extends keyof HTMLElementTagNameMap, R = never> = Html.Element<
 
 describe("Fieldset", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,
@@ -54,11 +53,10 @@ describe("Fieldset", () => {
   })
 
   it("the root takes only a fieldset", () => {
-    Component.define({
+    Html.component({
       name: "App",
       model: Schema.Null,
-      message: Msg,
-      elements: Html
+      message: Msg
     }).make({
       init: () => null,
       update: ($) => $.model,

@@ -72,18 +72,17 @@
  * **Example** (A sign-up form whose email field is invalid)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Field, Form } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const SignupMessage = UiSchema.TaggedEnum({ SubmittedForm: {} })
  *
- * const Signup = Component.define({
+ * const Signup = Html.component({
  *   name: "Signup",
  *   model: Schema.Struct({ submitted: Schema.Boolean }),
- *   message: SignupMessage,
- *   elements: Html
+ *   message: SignupMessage
  * }).make({
  *   init: () => ({ submitted: true }),
  *   update: {
@@ -215,12 +214,11 @@ const FocusInvalid = Command.make(
  * @category components
  * @since 0.1.0
  */
-export const Form = Component.define({
+export const Form = Html.component({
   name: "Form",
   model: Schema.Struct({}),
   message: FormMessage,
-  events: FormEvents,
-  elements: Html
+  events: FormEvents
 }).make({
   init: () => ({}),
   update: ($, { entries, fields }) =>

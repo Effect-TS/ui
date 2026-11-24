@@ -1105,11 +1105,10 @@ describe("a component that reads its own kind", () => {
     }).pipe(Effect.scoped))
 
   const MenuMessage = UiSchema.TaggedEnum({ Pick: {}, Picked: {} })
-  const Menu = Component.define({
+  const Menu = Html.component({
     name: "Menu",
     model: Schema.Number,
     message: MenuMessage,
-    elements: Html,
     shares: { value: (picked) => picked, receives: ["Picked"] },
     reads: { parent: { owner: "self", optional: true } }
   }).make({
@@ -1124,11 +1123,10 @@ describe("a component that reads its own kind", () => {
       item: p.part("button", (b) => b.onClick(MenuMessage.Pick()))
     })
   })
-  const Menus = Component.define({
+  const Menus = Html.component({
     name: "Menus",
     model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
+    message: Schema.Never
   }).make({
     init: () => null,
     update: ($) => $.model,

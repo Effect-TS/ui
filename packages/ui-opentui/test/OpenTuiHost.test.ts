@@ -17,11 +17,10 @@ describe("OpenTuiHost", () => {
         UpdatedName: { value: Schema.String }
       })
 
-      const Counter = Component.define({
+      const Counter = OpenTui.component({
         name: "Counter",
         model: Schema.Struct({ count: Schema.Number, name: Schema.String }),
-        message: Message,
-        elements: OpenTui
+        message: Message
       }).make({
         init: () => ({ count: 0, name: "" }),
         update: {
@@ -84,15 +83,14 @@ describe("OpenTuiHost", () => {
         ToggledBlock: {}
       })
 
-      const App = Component.define({
+      const App = OpenTui.component({
         name: "ShortcutPreventDefault",
         model: Schema.Struct({
           value: Schema.String,
           shortcuts: Schema.Array(Schema.String),
           blockX: Schema.Boolean
         }),
-        message: Message,
-        elements: OpenTui
+        message: Message
       }).make({
         init: () => ({ value: "", shortcuts: [], blockX: true }),
         update: {
@@ -147,7 +145,7 @@ describe("OpenTuiHost", () => {
         BumpedTick: {}
       })
 
-      const Form = Component.define({
+      const Form = OpenTui.component({
         name: "ControlledForm",
         model: Schema.Struct({
           digits: Schema.String,
@@ -157,8 +155,7 @@ describe("OpenTuiHost", () => {
           focusTarget: Target,
           tick: Schema.Number
         }),
-        message: Message,
-        elements: OpenTui
+        message: Message
       }).make({
         init: () => ({
           digits: "12",
@@ -246,7 +243,7 @@ describe("OpenTuiHost", () => {
         RequestedQuit: {}
       })
 
-      const App = Component.define({
+      const App = OpenTui.component({
         name: "FocusAndCommands",
         model: Schema.Struct({
           active: Schema.Literals(["first", "second"]),
@@ -255,8 +252,7 @@ describe("OpenTuiHost", () => {
           measuredWidth: Schema.Number,
           scrolled: Schema.Boolean
         }),
-        message: Message,
-        elements: OpenTui
+        message: Message
       }).make({
         init: () => ({
           active: "first" as const,
@@ -342,11 +338,10 @@ describe("OpenTuiHost", () => {
       }
 
       const TabMsg = UiSchema.TaggedEnum({ Incremented: {} })
-      const Tab = Component.define({
+      const Tab = OpenTui.component({
         name: "Tab",
         model: Schema.Number,
-        message: TabMsg,
-        elements: OpenTui
+        message: TabMsg
       }).make({
         init: () => 0,
         update: { Incremented: ($) => $.model + 1 },
@@ -376,11 +371,10 @@ describe("OpenTuiHost", () => {
           return Deferred.await(gate).pipe(Effect.andThen(Effect.die("boom")))
         }
       )
-      const Fragile = Component.define({
+      const Fragile = OpenTui.component({
         name: "Fragile",
         model: Schema.Null,
-        message: Schema.Never,
-        elements: OpenTui
+        message: Schema.Never
       }).make({
         init: ($) => $.set(null).run(Boom.make()),
         update: ($) => $.model,
@@ -416,12 +410,11 @@ describe("OpenTuiHost", () => {
         keepFragile: Schema.Boolean
       })
 
-      const Owner = Component.define({
+      const Owner = OpenTui.component({
         name: "Owner",
         props: OwnerProps,
         model: Schema.Void,
-        message: Schema.Never,
-        elements: OpenTui
+        message: Schema.Never
       }).make({
         init: () => undefined,
         update: () => undefined,
@@ -475,7 +468,7 @@ describe("OpenTuiHost", () => {
         }
       })
 
-      const Root = Component.define({
+      const Root = OpenTui.component({
         name: "Root",
         model: Schema.Struct({
           mounted: Schema.Boolean,
@@ -486,8 +479,7 @@ describe("OpenTuiHost", () => {
           showFragile: Schema.Boolean,
           keepFragile: Schema.Boolean
         }),
-        message: RootMsg,
-        elements: OpenTui
+        message: RootMsg
       }).make({
         init: () => ({
           mounted: true,
@@ -661,14 +653,13 @@ describe("OpenTuiHost", () => {
         ToggledBorder: {}
       })
 
-      const App = Component.define({
+      const App = OpenTui.component({
         name: "PropagationAndStyleReset",
         model: Schema.Struct({
           outerClicks: Schema.Number,
           bordered: Schema.Boolean
         }),
-        message: Message,
-        elements: OpenTui
+        message: Message
       }).make({
         init: () => ({ outerClicks: 0, bordered: true }),
         update: {
@@ -705,11 +696,10 @@ describe("OpenTuiHost", () => {
         }
       }
 
-      const App = Component.define({
+      const App = OpenTui.component({
         name: "CustomEl",
         model: Schema.Void,
-        message: Schema.Never,
-        elements: OpenTui
+        message: Schema.Never
       }).make({
         init: () => undefined,
         update: () => undefined,

@@ -1,4 +1,4 @@
-import { Component, UiSchema, View } from "@effect/ui"
+import { UiSchema, View } from "@effect/ui"
 import { Toggle, type ToggleElement, Tooltip } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -12,11 +12,10 @@ const ToolbarMessage = UiSchema.TaggedEnum({
 
 // The toggle stacked on a tooltip trigger: the tooltip's part has its own
 // handler layer, so both hear the click.
-const Toolbar = Component.define({
+const Toolbar = Html.component({
   name: "Toolbar",
   model: Schema.Struct({ bold: Schema.Boolean, open: Schema.Boolean }),
-  message: ToolbarMessage,
-  elements: Html
+  message: ToolbarMessage
 }).make({
   init: () => ({ bold: false, open: true }),
   update: {

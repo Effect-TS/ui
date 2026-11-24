@@ -1,4 +1,4 @@
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, UiSchema } from "@effect/ui"
 import { Html, HtmlServer, Markdown, MarkdownParser } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -90,11 +90,10 @@ const render = (
   config?: Markdown.ViewConfig<never>
 ) =>
   HtmlServer.renderToHtml(
-    Component.define({
+    Html.component({
       name: "Doc",
       model: Schema.Struct({}),
-      message: Schema.Never,
-      elements: Html
+      message: Schema.Never
     })
       .make({
         init: () => ({}),
@@ -279,11 +278,10 @@ it.layer(TestHost.layer())("view", (it) => {
     Effect.gen(function*() {
       const document = parseMarkdown(lines("# Title", "", "Prose."))
       const html = yield* HtmlServer.renderToHtml(
-        Component.define({
+        Html.component({
           name: "Blocks",
           model: Schema.Struct({}),
-          message: Schema.Never,
-          elements: Html
+          message: Schema.Never
         }).make({
           init: () => ({}),
           update: ($) => $.model,
@@ -302,12 +300,11 @@ it.layer(TestHost.layer())("view", (it) => {
 
 const CounterMessage = UiSchema.TaggedEnum({ Incremented: {} })
 
-const Counter = Component.define({
+const Counter = Html.component({
   name: "Counter",
   props: Schema.Struct({ step: Schema.Number }),
   model: Schema.Struct({ count: Schema.Number }),
-  message: CounterMessage,
-  elements: Html
+  message: CounterMessage
 }).make({
   init: () => ({ count: 0 }),
   update: { Incremented: ($) => ({ count: $.model.count + $.props.step }) },
@@ -347,11 +344,10 @@ const post = parseMarkdown(
 
 const PostMessage = UiSchema.TaggedEnum({ ClickedRefresh: {} })
 
-const Post = Component.define({
+const Post = Html.component({
   name: "Post",
   model: Schema.Struct({ renders: Schema.Number }),
-  message: PostMessage,
-  elements: Html
+  message: PostMessage
 }).make({
   init: () => ({ renders: 0 }),
   update: { ClickedRefresh: ($) => ({ renders: $.model.renders + 1 }) },
@@ -400,12 +396,11 @@ class Greet extends Command.Service<Greet>()(
   })
 ) {}
 
-const Greeting = Component.define({
+const Greeting = Html.component({
   name: "Greeting",
   props: Schema.Struct({ name: Schema.String }),
   model: Schema.String,
-  message: Schema.String,
-  elements: Html
+  message: Schema.String
 }).make({
   init: ($) => $.set("...").run(Greet.make({ name: $.props.name })),
   update: (_$, message) => message,
@@ -419,11 +414,10 @@ const greetingPost = parseMarkdown(
   { islands: greetingAttributes }
 )
 
-const GreetingPost = Component.define({
+const GreetingPost = Html.component({
   name: "GreetingPost",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,

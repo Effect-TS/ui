@@ -81,18 +81,17 @@
  * **Example** (Three tabs, one of them disabled)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Tabs } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const SettingsMessage = UiSchema.TaggedEnum({ SelectedTab: { value: Schema.String } })
  *
- * const Settings = Component.define({
+ * const Settings = Html.component({
  *   name: "Settings",
  *   model: Schema.Struct({ tab: Schema.String }),
- *   message: SettingsMessage,
- *   elements: Html
+ *   message: SettingsMessage
  * }).make({
  *   init: () => ({ tab: "overview" }),
  *   update: {
@@ -130,7 +129,7 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Component from "@effect/ui/Component"
+import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
@@ -842,7 +841,7 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  * @category components
  * @since 0.1.0
  */
-export const Tabs = Component.define({
+export const Tabs = Html.component({
   name: "Tabs",
   props: TabsProps,
   model: TabsModel,
@@ -851,8 +850,7 @@ export const Tabs = Component.define({
   reads: {
     provider: { owner: DirectionProvider, optional: true }
   },
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: ({ props }) => ({
     highlighted: enabledIn(props.tabs, props.value) ? props.value : null,

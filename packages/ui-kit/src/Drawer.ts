@@ -103,18 +103,17 @@
  * **Example** (A bottom sheet whose open state lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Drawer } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const PageMessage = UiSchema.TaggedEnum({ RequestedOpenFilters: {}, RequestedCloseFilters: {} })
  *
- * const Page = Component.define({
+ * const Page = Html.component({
  *   name: "Page",
  *   model: Schema.Struct({ open: Schema.Boolean }),
- *   message: PageMessage,
- *   elements: Html
+ *   message: PageMessage
  * }).make({
  *   init: () => ({ open: true }),
  *   update: {
@@ -157,7 +156,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -1724,7 +1722,7 @@ const ReportIndent = Mount.makeStream(
  * @category components
  * @since 0.1.0
  */
-export const DrawerProvider = Component.define({
+export const DrawerProvider = Html.component({
   name: "DrawerProvider",
   props: DrawerProviderProps,
   model: DrawerProviderModel,
@@ -1739,8 +1737,7 @@ export const DrawerProvider = Component.define({
         })
     }
   },
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({ active: false, indent: null }),
   update: {
@@ -1809,7 +1806,7 @@ const dialogPropsOf = Struct.omit([
  * @category components
  * @since 0.1.0
  */
-export const Drawer = Component.define({
+export const Drawer = Html.component({
   name: "Drawer",
   props: DrawerProps,
   model: DrawerModel,
@@ -1846,8 +1843,7 @@ export const Drawer = Component.define({
       report: (_, props) => props.open
     }
   },
-  restore: false,
-  elements: Html
+  restore: false
 }).make({
   init: () => ({
     swiping: false,

@@ -55,18 +55,16 @@
  * **Example** (A menu whose current link follows the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { NavigationMenu } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
  * const pages = [{ path: "/", label: "Home" }, { path: "/docs", label: "Docs" }]
  *
- * const Header = Component.define({
+ * const Header = Html.component({
  *   name: "Header",
  *   model: Schema.Struct({ path: Schema.String }),
- *   message: Schema.Never,
- *   elements: Html
+ *   message: Schema.Never
  * }).make({
  *   init: () => ({ path: "/docs" }),
  *   update: ($) => $.model,
@@ -97,7 +95,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as View from "@effect/ui/View"
@@ -217,12 +214,11 @@ const TrackArrowKeys = Mount.makeStream(
  * @category components
  * @since 0.1.0
  */
-export const NavigationMenu = Component.define({
+export const NavigationMenu = Html.component({
   name: "NavigationMenu",
   props: NavigationMenuProps,
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,

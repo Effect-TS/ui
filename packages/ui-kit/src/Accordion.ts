@@ -64,7 +64,7 @@
  * **Example** (A FAQ whose open question lives in the consumer's Model)
  *
  * ```ts import.meta.vitest
- * import { Component, UiSchema } from "@effect/ui"
+ * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
  * import { Accordion, AccordionItem } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
@@ -76,11 +76,10 @@
  *
  * const FaqMessage = UiSchema.TaggedEnum({ ToggledQuestions: { open: Schema.Array(Schema.String) } })
  *
- * const Faq = Component.define({
+ * const Faq = Html.component({
  *   name: "Faq",
  *   model: Schema.Struct({ open: Schema.Array(Schema.String) }),
- *   message: FaqMessage,
- *   elements: Html
+ *   message: FaqMessage
  * }).make({
  *   init: () => ({ open: ["shipping"] }),
  *   update: {
@@ -119,7 +118,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -297,7 +295,7 @@ const numbered = <N extends View.Node<any, any>>(node: N): N => {
  * @category components
  * @since 0.1.0
  */
-export const Accordion = Component.define({
+export const Accordion = Html.component({
   name: "Accordion",
   props: AccordionProps,
   model: Schema.Struct({}),
@@ -307,8 +305,7 @@ export const Accordion = Component.define({
     value: (_model, props) => resolved(props),
     schema: AccordionShared,
     receives: ["ToggledItem"]
-  },
-  elements: Html
+  }
 }).make({
   init: () => ({}),
   update: {
@@ -452,14 +449,13 @@ const headings = ["h1", "h2", "h3", "h4", "h5", "h6"] as const
  * @category components
  * @since 0.1.0
  */
-export const AccordionItem = Component.define({
+export const AccordionItem = Html.component({
   name: "AccordionItem",
   props: AccordionItemProps,
   model: Schema.Struct({}),
   message: AccordionItemMessage,
   events: AccordionItemEvents,
-  reads: { accordion: Accordion },
-  elements: Html
+  reads: { accordion: Accordion }
 }).make({
   init: () => ({}),
   update: {

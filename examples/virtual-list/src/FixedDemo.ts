@@ -1,15 +1,14 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList, VirtualListScrollTarget } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 const FixedMessage = UiSchema.TaggedEnum({ ClickedLast: {} })
 
-export const FixedDemo = Component.define({
+export const FixedDemo = Html.component({
   name: "FixedDemo",
   model: Schema.Struct({ jump: Schema.Number }),
-  message: FixedMessage,
-  elements: Html
+  message: FixedMessage
 }).make({
   init: () => ({ jump: 0 }),
   update: { ClickedLast: ($) => ({ jump: $.model.jump + 1 }) },

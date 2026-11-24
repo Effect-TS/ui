@@ -3,7 +3,7 @@
  * characters, a keyed list of rows with a controlled checkbox each, and a
  * button that clears the done ones.
  */
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
@@ -30,13 +30,12 @@ export const TodoItemEvents = UiSchema.TaggedEnum({
   Deleted: { id: Schema.String }
 })
 
-export const TodoItem = Component.define({
+export const TodoItem = Html.component({
   name: "TodoItem",
   props: Schema.Struct({ todo: Todo }),
   model: Schema.Struct({}),
   message: TodoItemMessage,
-  events: TodoItemEvents,
-  elements: Html
+  events: TodoItemEvents
 }).make({
   init: () => ({}),
   update: ($, message) =>
@@ -77,11 +76,10 @@ export const TodoAppModel = Schema.Struct({
 })
 export type TodoAppModel = typeof TodoAppModel.Type
 
-export const TodoApp = Component.define({
+export const TodoApp = Html.component({
   name: "TodoApp",
   model: TodoAppModel,
-  message: TodoAppMessage,
-  elements: Html
+  message: TodoAppMessage
 }).make({
   init: (): TodoAppModel => ({ draft: "", nextId: 1, todos: [] }),
   update: ($, message): TodoAppModel =>

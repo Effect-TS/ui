@@ -280,11 +280,10 @@ export interface Options<In extends ArgsInput, G extends string> {
  *
  * **Details**
  *
- * Host packages widen this interface by module augmentation, the same way an
- * app registers its element vocabulary. The runtime provides these services
- * when a Command runs, so they're removed from `R`. The core lists `Scope`,
- * `Renderer.Refs` and the query cache, and host packages add their host
- * marker.
+ * Host packages widen this interface by module augmentation. The runtime
+ * provides these services when a Command runs, so they're removed from `R`.
+ * The core lists `Scope`, `Renderer.Refs` and the query cache, and host
+ * packages add their host marker.
  *
  * **Example** (Registering a host's framework service)
  *
