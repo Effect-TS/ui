@@ -6,25 +6,25 @@ import { Counter, CounterMessage, DelayReset } from "./Counter.ts"
 describe("Counter", () => {
   it.effect("resets after the delay", () =>
     Effect.gen(function*() {
-      // {} is Counter's props. Each step on s runs when it is called,
-      // and s.model is the Model after the last one.
-      const s = yield* Story.make(Counter, {})
-      s.given({ count: 5, isAutoCounting: false })
-      s.send(CounterMessage.ClickedResetAfterDelay())
+      // {} is Counter's props. Each step on story runs when it is
+      // called, and story.model is the Model after the last one.
+      const story = yield* Story.make(Counter, {})
+      story.given({ count: 5, isAutoCounting: false })
+      story.send(CounterMessage.ClickedResetAfterDelay())
         .expectExact(DelayReset)
-      s.resolve(DelayReset, CounterMessage.CompletedDelayReset())
-      assert.strictEqual(s.model.count, 0)
+      story.resolve(DelayReset, CounterMessage.CompletedDelayReset())
+      assert.strictEqual(story.model.count, 0)
     }))
 
   it.effect("counts each tick while auto-counting", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Counter, {})
-      assert.deepStrictEqual(s.subscriptions, [])
-      s.send(CounterMessage.ClickedToggleAutoCount())
-      assert.deepStrictEqual(s.subscriptions, ["tick"])
-      s.subscription("tick", CounterMessage.Ticked())
-      assert.strictEqual(s.model.count, 1)
-      s.send(CounterMessage.ClickedToggleAutoCount())
-      assert.deepStrictEqual(s.subscriptions, [])
+      const story = yield* Story.make(Counter, {})
+      assert.deepStrictEqual(story.subscriptions, [])
+      story.send(CounterMessage.ClickedToggleAutoCount())
+      assert.deepStrictEqual(story.subscriptions, ["tick"])
+      story.subscription("tick", CounterMessage.Ticked())
+      assert.strictEqual(story.model.count, 1)
+      story.send(CounterMessage.ClickedToggleAutoCount())
+      assert.deepStrictEqual(story.subscriptions, [])
     }))
 })

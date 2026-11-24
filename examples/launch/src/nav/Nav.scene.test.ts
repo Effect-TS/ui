@@ -32,8 +32,8 @@ const queries = HtmlLocator.role("link", {
 describe("Nav", () => {
   it.effect("lists every section in order", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, { sections })
-      s.expect(
+      const scene = yield* HtmlScene.make(Nav, { sections })
+      scene.expect(
         HtmlLocator.role("navigation", { name: "On this page" })
       ).toExist()
         .expect(HtmlLocator.role("link")).toHaveCount(sections.length)
@@ -44,8 +44,8 @@ describe("Nav", () => {
 
   it.effect("opens and closes from the bar", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, { sections })
-      s.expect(closed).toHaveText("On this page")
+      const scene = yield* HtmlScene.make(Nav, { sections })
+      scene.expect(closed).toHaveText("On this page")
         .click(closed)
         .expect(opened).toExist()
         .click(opened)
@@ -54,16 +54,16 @@ describe("Nav", () => {
 
   it.effect("closes when a section is chosen", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, { sections })
-      s.click(closed)
+      const scene = yield* HtmlScene.make(Nav, { sections })
+      scene.click(closed)
         .click(queries)
         .expect(closed).toExist()
     }))
 
   it.effect("closes on Escape and returns focus to the bar", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, { sections })
-      s.click(closed)
+      const scene = yield* HtmlScene.make(Nav, { sections })
+      scene.click(closed)
         .fireDocument("keydown", { key: "Enter" }).expectIgnored()
         .fireDocument("keydown", { key: "Escape" })
         .resolve(HtmlCommand.Focus, { found: true })
@@ -72,8 +72,8 @@ describe("Nav", () => {
 
   it.effect("marks the current section and names it in the bar", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Nav, { sections })
-      s.expect(current).toBeAbsent()
+      const scene = yield* HtmlScene.make(Nav, { sections })
+      scene.expect(current).toBeAbsent()
         .subscription(
           section,
           NavMessage.ChangedSection({ current: "queries" })

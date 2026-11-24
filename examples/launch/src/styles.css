@@ -59,6 +59,7 @@
   --icon-copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E");
   --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E");
   --icon-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E");
+  --icon-reset: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E");
   --icon-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7 4.5v15a1 1 0 0 0 1.5.86l13-7.5a1 1 0 0 0 0-1.72l-13-7.5A1 1 0 0 0 7 4.5Z'/%3E%3C/svg%3E");
   --icon-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Crect x='5' y='5' width='14' height='14' rx='2'/%3E%3C/svg%3E");
 }
@@ -115,6 +116,58 @@
 
   .article-section {
     @apply border-t border-border pt-7;
+  }
+
+  /* A range input laid over a row of cells. Only its thumb shows: a
+     cursor that stands on the dividers between the cells. */
+  .scrubber-input {
+    appearance: none;
+    margin: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+
+    &:focus-visible {
+      outline-color: var(--color-accent);
+    }
+
+    &::-webkit-slider-runnable-track {
+      height: 100%;
+      background: transparent;
+    }
+
+    &::-moz-range-track {
+      height: 100%;
+      background: transparent;
+    }
+
+    &::-webkit-slider-thumb {
+      appearance: none;
+      width: 6px;
+      height: 100%;
+      border: 0;
+      border-radius: 3px;
+      background: var(--color-foreground);
+      box-shadow: 0 0 0 2px var(--color-background);
+      cursor: grab;
+    }
+
+    &::-moz-range-thumb {
+      width: 6px;
+      height: 100%;
+      border: 0;
+      border-radius: 3px;
+      background: var(--color-foreground);
+      box-shadow: 0 0 0 2px var(--color-background);
+      cursor: grab;
+    }
+
+    &:active::-webkit-slider-thumb {
+      cursor: grabbing;
+    }
+
+    &:active::-moz-range-thumb {
+      cursor: grabbing;
+    }
   }
 
   .code-window {
@@ -180,6 +233,7 @@
   }
 
   .counter-increment,
+  .counter-reset,
   .counter-start,
   .counter-stop {
     &::before {
@@ -187,10 +241,18 @@
       @apply size-3.5 flex-none bg-current;
       mask: var(--counter-icon) center / contain no-repeat;
     }
+  }
 
+  .counter-increment,
+  .counter-start,
+  .counter-stop {
     &:hover {
       opacity: 0.85;
     }
+  }
+
+  .counter-reset {
+    --counter-icon: var(--icon-reset);
   }
 
   .counter-increment {
@@ -281,6 +343,17 @@
     }
   }
 
+  /* Everything that can be pressed or dragged shows a pointer. */
+  a[href],
+  button:not(:disabled, [aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  input[type="range"]:not(:disabled),
+  select:not(:disabled),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
   :focus-visible {
     outline: 2px solid var(--color-foreground);
     outline-offset: 2px;
@@ -291,10 +364,11 @@
    a link draws itself as the packet goes. With reduced motion the
    packet stays hidden and the link is drawn at once. */
 @layer components {
+  /* Where a dot is once it has travelled, and where it is drawn when
+     motion is reduced. */
   .diagram-packet {
     offset-rotate: 0deg;
     offset-distance: 100%;
-    opacity: 0;
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -306,47 +380,12 @@
       stroke-dasharray: 1;
       animation: diagram-draw var(--diagram-travel, 850ms) ease-in-out both;
     }
-
-    /* Hidden while the travelling dot is on its way, then moves up from
-       where that dot stopped, the middle of the node, to the top edge. */
-    .diagram-rest {
-      animation:
-        diagram-arrive 1ms linear var(--diagram-travel, 850ms) both,
-        diagram-rise 220ms var(--ease-out-expo) var(--diagram-travel, 850ms) both;
-    }
   }
 }
 
-/* The dot stays opaque for the whole trip, so it never looks as if it
-   sinks into the node it arrives at. Once it's there, the dot at rest
-   on that node takes over. */
 @keyframes diagram-travel {
-  0% {
+  from {
     offset-distance: 0%;
-    opacity: 1;
-  }
-  99% {
-    offset-distance: 100%;
-    opacity: 1;
-  }
-  100% {
-    offset-distance: 100%;
-    opacity: 0;
-  }
-}
-
-@keyframes diagram-arrive {
-  from {
-    visibility: hidden;
-  }
-  to {
-    visibility: visible;
-  }
-}
-
-@keyframes diagram-rise {
-  from {
-    top: 50%;
   }
 }
 

@@ -216,7 +216,7 @@ export const LaunchPage = Component.define({
                             "[&>div]:items-center",
                             "@min-[312px]:[&>div]:grid-cols-[repeat(2,minmax(0,1fr))]",
                             "@min-[560px]:[&>div]:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,3fr))]",
-                            "[&_output]:text-start",
+                            "[&_output]:text-center",
                             "[&_output]:text-[2rem]/[normal]",
                             "[&_output]:font-features-[normal]",
                             "[&_button]:font-features-[normal]",

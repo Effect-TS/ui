@@ -34,8 +34,8 @@ const output = Locator.text("String(model.count)")
 describe("CodeWindow", () => {
   it.effect("starts with each fold collapsed to a row that counts its lines", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(CodeWindow, { snippet })
-      s.expect(collapsed).toHaveCount(2)
+      const scene = yield* HtmlScene.make(CodeWindow, { snippet })
+      scene.expect(collapsed).toHaveCount(2)
         .expect(expanded).toBeAbsent()
         .expect(init).toHaveText("1 line")
         .expect(view).toHaveText("3 lines")
@@ -47,8 +47,8 @@ describe("CodeWindow", () => {
 
   it.effect("expands the fold that is clicked and collapses it again", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(CodeWindow, { snippet })
-      s.click(view)
+      const scene = yield* HtmlScene.make(CodeWindow, { snippet })
+      scene.click(view)
         .expect(expanded).toHaveAccessibleName("view body, 3 lines")
         .expect(output).toExist()
         .expect(count).toBeAbsent()

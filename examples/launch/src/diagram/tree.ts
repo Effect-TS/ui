@@ -11,40 +11,44 @@ import {
   type Step
 } from "./scenarios.ts"
 
-// The tree is drawn in a 320 by 230 box: SVG for the links and the
+// The tree is drawn in a 320 by 246 box: SVG for the links and the
 // packets that travel along them, HTML for the nodes, placed by
 // percentage so both scale together.
 export const width = 320
-export const height = 230
+export const height = 246
 
+// Where each node's top edge is centred. A node hangs below this
+// point, so a link meets it here whatever the node's height, and a
+// dot resting here sits on the node's edge, clear of its label.
 const at: Readonly<
   Record<Name, { readonly x: number; readonly y: number }>
 > = {
-  Root: { x: 160, y: 30 },
-  A: { x: 160, y: 115 },
-  A1: { x: 80, y: 200 },
-  A2: { x: 240, y: 200 }
+  Root: { x: 160, y: 8 },
+  A: { x: 160, y: 93 },
+  A1: { x: 80, y: 178 },
+  A2: { x: 240, y: 178 }
 }
 
 // Each link one way. Root to A1 or A2 skips A: only a Provider talks
-// to a Component that far down.
+// to a Component that far down. Those two leave through Root's sides
+// and curve round A.
 const links: ReadonlyArray<
   readonly [from: Name, to: Name, d: string, back: string]
 > = [
-  ["Root", "A", "M160 30 V115", "M160 115 V30"],
-  ["A", "A1", "M160 115 V157 H80 V200", "M80 200 V157 H160 V115"],
-  ["A", "A2", "M160 115 V157 H240 V200", "M240 200 V157 H160 V115"],
+  ["Root", "A", "M160 8 V93", "M160 93 V8"],
+  ["A", "A1", "M160 93 V168 H80 V178", "M80 178 V168 H160 V93"],
+  ["A", "A2", "M160 93 V168 H240 V178", "M240 178 V168 H160 V93"],
   [
     "Root",
     "A1",
-    "M160 30 C46 34 28 140 80 200",
-    "M80 200 C28 140 46 34 160 30"
+    "M160 8 C50 40 20 120 80 178",
+    "M80 178 C20 120 50 40 160 8"
   ],
   [
     "Root",
     "A2",
-    "M160 30 C274 34 292 140 240 200",
-    "M240 200 C292 140 274 34 160 30"
+    "M160 8 C270 40 300 120 240 178",
+    "M240 178 C300 120 270 40 160 8"
   ]
 ]
 
@@ -134,9 +138,22 @@ const Link = <M>(
     "stroke-linejoin": "round"
   })
 
-// One dot per packet, travelling the track's path once. When it
-// arrives, the dot at rest on that node takes over from it. The key
-// restarts it whenever the step changes.
+const dotClass = (carries: Carries) =>
+  // Foreground, not accent, so the dot shows over a node that is
+  // filled with the accent colour.
+  carries === "value"
+    ? "fill-background stroke-foreground"
+    : carries === "render"
+    ? "fill-foreground/70"
+    : "fill-foreground"
+
+const dotAttrs = (carries: Carries) => ({
+  r: carries === "render" ? "4.5" : "6",
+  "stroke-width": carries === "value" ? "2.5" : undefined
+})
+
+// One dot per packet, travelling the track's path once and staying
+// where it ends. The key restarts it whenever the step changes.
 const Packet = <M>(
   h: View.H<M>,
   track: ReadonlyArray<Move>,
@@ -144,18 +161,8 @@ const Packet = <M>(
 ) => {
   const carries = track[0]?.carries ?? "message"
   return svg(h, "circle").key(key).attrs({
-    r: carries === "render" ? "4.5" : "6",
-    class: Html.classNames(
-      "diagram-packet",
-      // Foreground, not accent, so the dot shows over a node that is
-      // filled with the accent colour.
-      carries === "value"
-        ? "fill-background stroke-foreground"
-        : carries === "render"
-        ? "fill-foreground/70"
-        : "fill-foreground"
-    ),
-    "stroke-width": carries === "value" ? "2.5" : undefined,
+    ...dotAttrs(carries),
+    class: Html.classNames("diagram-packet", dotClass(carries)),
     style: `offset-path: path("${trackPath(track)}")`
   })
 }
@@ -181,7 +188,7 @@ export interface TreeOptions<M> {
 }
 
 const nodeClass = [
-  "absolute flex -translate-1/2 flex-col items-center",
+  "absolute flex -translate-x-1/2 flex-col items-center",
   "rounded-md border border-border-strong bg-background px-1",
   "text-center text-foreground",
   "data-[plain]:border-dashed",
@@ -199,7 +206,7 @@ const nodeClass = [
 const buttonClass = [
   "cursor-pointer [box-shadow:0_1px_2px_var(--color-ring)]",
   "not-disabled:border-b-2 hover:border-muted-foreground",
-  "active:translate-y-[calc(-50%+1px)]",
+  "active:translate-y-px",
   "focus-visible:outline-accent disabled:cursor-default",
   "disabled:opacity-45"
 ].join(" ")
@@ -234,32 +241,22 @@ const restsOf = (
     : [{ name: sender, carries: "message" }]
 }
 
-// A dot at rest sits on the top edge of its node, clear of the label,
-// and is sized in the tree's own units like the dots that travel.
-const Resting = <M>(
-  h: View.H<M>,
-  rest: Rest,
-  arrives: boolean,
-  key: string
-) =>
-  h.span.key(arrives ? `${key}-rest` : "rest").class(
-    "absolute top-0 left-1/2 z-2 -translate-1/2 rounded-full",
-    rest.carries === "render" ? "size-[2.8cqw]" : "size-[3.75cqw]",
-    rest.carries === "value"
-      ? "border-[0.78cqw] border-foreground bg-background"
-      : rest.carries === "render"
-      ? "bg-foreground/70"
-      : "bg-foreground",
-    arrives && "diagram-rest"
-  ).attr("aria-hidden", "true")
+// A dot at rest, where the packet that brought it stopped.
+const Resting = <M>(h: View.H<M>, rest: Rest, index: number) =>
+  svg(h, "circle").key(`rest-${index}`).attrs({
+    ...dotAttrs(rest.carries),
+    cx: String(at[rest.name].x),
+    cy: String(at[rest.name].y),
+    class: dotClass(rest.carries)
+  })
 
 // The tree of one side: Root, A under it, A1 and A2 under A.
 export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
   const { side, step, key, compact = false, still = false } = options
   const rests = restsOf(step, options.past)
-  // The dots arrive at the end of a step that moves them. Otherwise
-  // they are already there.
-  const arrives = !still && (step?.moves.length ?? 0) > 0
+  // A step that moves the dots draws them as packets, which stop
+  // where the dots then rest. Any other step draws them at rest.
+  const travels = !still && (step?.moves.length ?? 0) > 0
   const past = still && step ? [...options.past, step] : options.past
   const moving = still ? undefined : step
   const size = compact
@@ -268,24 +265,27 @@ export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
   const showDirect = side.steps("A1").concat(side.steps("A2"))
     .some((s) => s.moves.some(isDirect))
   return h.div.class(
-    "@container/tree relative mx-auto aspect-[320/230] w-full",
+    "@container/tree relative mx-auto aspect-[320/246] w-full",
     "max-w-[400px]"
   ).children(
     svg(h, "svg").attrs({
       viewBox: `0 0 ${width} ${height}`,
-      class: "absolute inset-0 size-full overflow-visible",
+      // Nothing is drawn above Root's top edge, where a link that
+      // starts there would otherwise show as a sliver.
+      class:
+        "absolute inset-0 size-full [clip-path:inset(3.6%_0_0_0)]",
       "aria-hidden": "true"
     }).children(
       Link(
         h,
-        "M160 30 V115 M160 115 V157 H80 V200 M160 157 H240 V200",
+        "M160 8 V93 M160 93 V168 H80 V178 M160 168 H240 V178",
         "stroke-border-strong",
         "edges"
       ).attr("stroke-width", "1.5"),
       showDirect &&
         Link(
           h,
-          "M160 30 C46 34 28 140 80 200 M160 30 C274 34 292 140 240 200",
+          "M160 8 C50 40 20 120 80 178 M160 8 C270 40 300 120 240 178",
           "stroke-border-strong",
           "direct"
         ).attrs({ "stroke-width": "1.5", "stroke-dasharray": "4 4" }),
@@ -294,7 +294,9 @@ export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
           Link(
             h,
             path(move),
-            Html.classNames(strokeOf[move.carries], "opacity-40"),
+            // As strong as the link being drawn. A link that dimmed the
+            // moment its step ended read as a flash.
+            strokeOf[move.carries],
             `past-${i}-${j}`
           ).attr("stroke-width", "2.5")
         )
@@ -316,9 +318,7 @@ export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
         ? shown.replace(" runs", "")
         : shown
       const message = options.press?.(name)
-      const rest = rests.find((candidate) => candidate.name === name)
       const content = [
-        rest && Resting(h, rest, arrives, key),
         h.span.class(
           "font-mono font-semibold font-features-[normal]",
           compact
@@ -366,9 +366,11 @@ export const Tree = <M>(h: View.H<M>, options: TreeOptions<M>) => {
         "pointer-events-none absolute inset-0 z-1 size-full overflow-visible",
       "aria-hidden": "true"
     }).children(
-      ...tracks(moving?.moves ?? []).map((track, i) =>
-        Packet(h, track, `${key}-packet-${i}`)
-      )
+      ...(travels
+        ? tracks(moving?.moves ?? []).map((track, i) =>
+          Packet(h, track, `${key}-packet-${i}`)
+        )
+        : rests.map((rest, i) => Resting(h, rest, i)))
     )
   )
 }

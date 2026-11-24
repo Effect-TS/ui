@@ -1,4 +1,5 @@
 import { srOnly, wide } from "#components/Classes"
+import { Scrubber } from "#components/Scrubber"
 import { Component, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -166,45 +167,36 @@ const describe = (
   } of ${turn.steps.length}: ${turn.steps[index]!.text}`
 }
 
-// The slider has a stop before the first step and one after the last,
-// so each side's label sits under the stops of its own steps.
+// A cell per step of each side and a last cell for the end, with
+// each side's name under its own cells.
 const Timeline = (
   h: View.H<Msg>,
   turns: ReadonlyArray<Turn>,
   time: number,
   end: number
 ) =>
-  h.div.class("flex flex-col gap-1").children(
-    h.input.class(
-      "w-full accent-accent focus-visible:outline-accent"
-    ).attrs({
-      type: "range",
-      min: "0",
-      max: String(end + 1),
-      step: "1",
-      "aria-label": "Step",
-      "aria-valuetext": describe(turns, time, end)
-    }).value(String(time + 1)).onInput(({ value }) =>
-      DiagramMessage.Scrubbed({ value })
-    ),
+  h.div.class("flex flex-col gap-1.5").children(
+    Scrubber(h, {
+      label: "Step",
+      valueText: describe(turns, time, end),
+      value: time + 1,
+      cells: end + 1,
+      onInput: (value) => DiagramMessage.Scrubbed({ value })
+    }),
     h.div.class(
       "flex font-mono text-[0.6875rem] text-muted-foreground",
       "font-features-[normal]"
     ).attr("aria-hidden", "true").children(
-      h.span.style({ flex: "0.5" }),
       ...turns.map((turn) =>
         h.span.key(turn.side.id).style({
           flex: String(turn.steps.length)
         }).class(
-          "truncate border-t-2 border-border-strong pt-1 text-center",
-          "not-last:me-1",
-          isPlayingAt(turn, time) &&
-            "border-accent font-semibold text-accent",
-          "motion-safe:transition-[border-color,color]",
-          "motion-safe:duration-300"
+          "truncate text-center",
+          isPlayingAt(turn, time) && "font-semibold text-accent",
+          "motion-safe:transition-[color] motion-safe:duration-300"
         ).children(turn.side.title)
       ),
-      h.span.style({ flex: "0.5" })
+      h.span.style({ flex: "1" })
     )
   )
 

@@ -56,7 +56,7 @@ const view = CounterDef.view((h, model) =>
     Button(h, {
       props: { disabled: h.isRunning(DelayReset) },
       onPress: CounterMessage.ClickedResetAfterDelay()
-    }).class("counter-button").children(
+    }).class("counter-button counter-reset").children(
       h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
     ),
     Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })

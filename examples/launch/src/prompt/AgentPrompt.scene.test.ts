@@ -11,11 +11,11 @@ import {
 describe("AgentPrompt", () => {
   it.effect("copies the prompt it shows", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(AgentPrompt, {
+      const scene = yield* HtmlScene.make(AgentPrompt, {
         title: "TL;DR agent prompt",
         prompt: "Read https://example.com/article.md"
       })
-      s.click(HtmlLocator.role("button", { name: "Copy prompt" }))
+      scene.click(HtmlLocator.role("button", { name: "Copy prompt" }))
         .expectExact(
           CopyPrompt.make({
             text: "Read https://example.com/article.md"

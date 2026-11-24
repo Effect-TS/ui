@@ -54,7 +54,7 @@ Much simpler!
 
 To render a child Component in Effect UI, a parent calls it in its view. The parent doesn't store the child's state or forward its Messages, as a Foldkit 0.x parent did for a Submodel.
 
-What the parent does pass is props. A Component declares its props with a Schema, and the parent passes them when it calls the child. The child reads them in init, update and view, and when the parent passes different props, the child's view runs again.
+What the parent does pass is props. A Component declares its props with a Schema, and the parent passes them when it calls the child. The child reads them in init, update and view, and when the parent passes different props, the child's view runs again. When the props are the same, the child's view doesn't run, even though its parent's did.
 
 ::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter"}
 
@@ -82,16 +82,17 @@ A Provider that shares a cart's count, and the Components inside it that read an
 
 ### Built-in queries
 
-In Foldkit 0.x, fetched data lived in the Model like any other state. Each resource needed a field in the Model, a Command to fetch it, a Message for the result and update branches for loading, success and failure.
+In Foldkit 0.x, fetched data lived in the Model. The experimental `Query` handled loading, success and failure, but it was a Submodel: the parent stored it, forwarded its Messages and decided when to load or refresh.
 
-Foldkit 0.x's experimental `Query` packaged that loop, but it was still a Submodel: the parent stored its Model, wrapped its Messages and decided when to load or refresh. As the Foldkit 0.x docs put it, Query did not "react to rendering, expire data after a duration, poll, or refresh related resources on its own".
+In Effect UI, you define a query once, and a Component lists the queries it needs. The runtime does the rest:
 
-Because the Model was also the cache, two parts of the app that showed the same data needed a shared ancestor to hold it. When a Command changed data on the server, the code that made the change had to refresh each affected Query by hand.
-
-In Effect UI, you define a query once: its arguments, its result, how long the result stays fresh and how to fetch it. The fetcher is built once, when the query's Layer is built, so it can use services such as an API client. A Component lists the queries it needs and derives each query's arguments from its Model and props. The runtime fetches the data when the Component is rendered and again when the arguments change, and the `debounce` option delays that fetch until the arguments stop changing. The view reads each result as an `AsyncResult` and renders its states: no result yet, failure and success.
+- **Fetching:** It fetches when the Component is rendered and again when the query's arguments change. The `debounce` option waits until they stop changing.
+- **Caching:** Results live in the runtime's cache, not in a Model, so Components that list the same query share one fetch.
+- **Freshness:** `staleTime` sets how long a result counts as fresh. A stale result stays on screen while the runtime refetches it.
+- **States:** The view reads each result as an `AsyncResult`: no result yet, failure or success.
 
 :::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
-Both search the same posts as you type and wait 300 ms after the last keystroke before they fetch. Foldkit 0.x needed a version counter in the Model and a `DelaySearch` Command for the wait. In Effect UI, the wait is the `debounce` option. Only the Effect UI version refetches a result that is more than a minute old.
+Both search the same posts as you type, 300 ms after the last keystroke. In Foldkit 0.x, the wait was a version counter in the Model and a `DelaySearch` Command. In Effect UI, it is the `debounce` option, and only this version refetches a result older than a minute.
 :::
 
 ### Where state lives

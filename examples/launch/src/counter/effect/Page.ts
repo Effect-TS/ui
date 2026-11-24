@@ -28,7 +28,7 @@ export const Page = Component.define({
         ),
       // Calling a Component in the view renders it as a child. The
       // runtime holds its Model until the view stops rendering it.
-      // Two Counters here would each take a key, as with slotId.
+      // To render two Counters here, give each one a key.
       model.isCounterShown &&
         Counter(h, { props: { label: "Likes" } })
     )

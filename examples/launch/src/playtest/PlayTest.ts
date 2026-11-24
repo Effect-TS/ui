@@ -1,4 +1,5 @@
 import { caption, srOnly } from "#components/Classes"
+import { Scrubber } from "#components/Scrubber"
 import { Snippet } from "#domain/Snippet"
 import {
   Command,
@@ -159,27 +160,19 @@ const Controls = (
     ).children(
       model.isPlaying ? "Pause" : isAtEnd ? "Replay" : "Play"
     ),
-    h.input.class(
-      "min-w-0 flex-1 accent-accent focus-visible:outline-accent"
-    ).attrs({
-      type: "range",
-      min: "0",
-      max: String(sources.length),
-      step: "1",
-      "aria-label": "Line of the test",
-      "aria-valuetext": model.position === null
-        ? "Not started"
-        : `Line ${shown} of ${sources.length}: ${
-          sources[model.position]
-        }`
-    }).disabled(!isLoaded).value(String(shown)).onInput(({ value }) =>
-      PlayTestMessage.Scrubbed({ value })
-    ),
-    h.span.class(
-      mono,
-      "flex-none text-xs text-muted-foreground tabular-nums"
-    ).attr("aria-hidden", "true").children(
-      `${shown} / ${sources.length}`
+    h.div.class("min-w-0 flex-1").children(
+      Scrubber(h, {
+        label: "Line of the test",
+        valueText: model.position === null
+          ? "Not started"
+          : `Line ${shown} of ${sources.length}: ${
+            sources[model.position]
+          }`,
+        value: shown,
+        cells: sources.length,
+        disabled: !isLoaded,
+        onInput: (value) => PlayTestMessage.Scrubbed({ value })
+      })
     )
   )
 }

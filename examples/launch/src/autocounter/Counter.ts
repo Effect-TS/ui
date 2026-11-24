@@ -84,7 +84,7 @@ export const Counter = Component.define({
         // tracks that, so the Model doesn't need a flag for it.
         props: { disabled: h.isRunning(DelayReset) },
         onPress: CounterMessage.ClickedResetAfterDelay()
-      }).class("counter-button").children(
+      }).class("counter-button counter-reset").children(
         h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
       ),
       Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })
