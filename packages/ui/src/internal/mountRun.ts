@@ -35,7 +35,6 @@ class Running {
         return
       }
       ctx = servicesOf(env)
-      if (ctx === undefined) return
     }
     if (this.cut !== undefined || inst.closed) return
     const tree = inst.tree

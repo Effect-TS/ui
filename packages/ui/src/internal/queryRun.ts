@@ -74,9 +74,7 @@ const rootOf = (inst: Kernel.Instance): Root => {
   let root = roots.get(tree)
   if (root === undefined) {
     const made: Root = root = {
-      cache: cacheIn(
-        servicesOf(inst.env) ?? (Context.empty() as Context.Context<any>)
-      ),
+      cache: cacheIn(servicesOf(inst.env)),
       hold: undefined
     }
     roots.set(tree, made)
@@ -190,8 +188,7 @@ const against = (
     })
     return
   }
-  const ctx = servicesOf(env)
-  if (ctx !== undefined) go(ctx)
+  go(servicesOf(env))
 }
 
 /** @internal */
@@ -395,7 +392,7 @@ const watch = (
     const resume = follow(inst.tree)
     running.debounce = fork(
       inst.tree,
-      servicesOf(inst.env) ?? (Context.empty() as Context.Context<any>),
+      servicesOf(inst.env),
       Effect.andThen(
         Effect.sleep(Duration.millis(marker.debounce)),
         Effect.sync(() =>

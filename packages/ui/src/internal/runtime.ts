@@ -113,8 +113,6 @@ export const eventOwners = (
   return out
 }
 
-const dispatched = { _tag: "Dispatch" } as const
-
 const noCommands: ReadonlyArray<unknown> = []
 
 const unchanged: Dispatched = { _tag: "Ignored", reason: "unchanged" }
@@ -198,8 +196,15 @@ const bridge = (
     : transitionRun.make(host.viewTransition)
 })
 
+const reportTo =
+  (ctx: Context.Context<never>): Kernel.Tree["report"] =>
+  (path, where, cause) => {
+    Effect.runForkWith(ctx)(
+      Effect.logError(`${path} failed in ${where}`, cause)
+    )
+  }
+
 interface Server {
-  readonly host: Renderer.Host<any>
   readonly fetches: boolean
   readonly hooks: typeof serverHooks
   readonly idle: typeof idleOf
@@ -210,13 +215,7 @@ const serverHooks = (
   record: Kernel.Recorder,
   deferred: Set<Kernel.Instance>
 ): Kernel.Server => {
-  const problems = Context.get(ctx, queryCore.Problems)
-  const report = (problem: unknown) => {
-    try {
-      problems(problem as never)
-    } catch {
-    }
-  }
+  const report = (problem: unknown) => queryCore.report(ctx, problem)
   return {
     drop: (inst, name, issued) => {
       if (issued !== undefined) {
@@ -494,6 +493,7 @@ const start = (
   const emitted: Array<unknown> = []
   let flushes = 0
   let inFlush = true
+  const since = () => inFlush ? flushes : flushes + 1
   const recording = messageLog.recorder === undefined
     ? messageLog.silent
     : messageLog.recorder(logService, clock, session, component.definition.name)
@@ -547,7 +547,7 @@ const start = (
     dispatching = inst
     outcome = undefined
     try {
-      recording.step(() => Kernel.send(inst, message, dispatched))
+      recording.step(() => Kernel.send(inst, message))
     } finally {
       dispatching = undefined
     }
@@ -570,7 +570,7 @@ const start = (
     container,
     context: ctx,
     flush: () => flushes,
-    flushing: () => inFlush,
+    since,
     buildsPendingSince: building,
     hydrated: () =>
       kernelRoot !== undefined &&
@@ -676,11 +676,7 @@ const start = (
           })
         },
         follow: recording.follow,
-        report: (path, where, cause) => {
-          Effect.runForkWith(ctx)(
-            Effect.logError(`${path} failed in ${where}`, cause)
-          )
-        },
+        report: reportTo(ctx),
         fallback: fallback === undefined ?
           undefined :
           (cause) =>
@@ -702,7 +698,7 @@ const start = (
     routing.attach(instance)
     routing.flushed()
   }
-  tree.flush = () => inFlush ? flushes : flushes + 1
+  tree.flush = since
   const head = () =>
     tree.head?.value ??
       component.elements()?.head?.merge({ entries: [], children: [] }) ??
@@ -713,8 +709,7 @@ const start = (
     instance: instance as unknown as Instance,
     emitted,
     model: () => instance.failure === undefined ? instance.model : undefined,
-    send: (message: unknown) =>
-      recording.step(() => mounted.send(message, dispatched)),
+    send: (message: unknown) => recording.step(() => mounted.send(message)),
     find: (born: number) =>
       findIn(instance, born, recording.numberOf) as Instance | undefined,
     dispatch: (inst: Instance, message: unknown) =>
@@ -925,7 +920,7 @@ export const prerender = (
               dom: undefined
             })
           },
-          { host, fetches: started, hooks: serverHooks, idle: idleOf }
+          { fetches: started, hooks: serverHooks, idle: idleOf }
         )
         yield* Scope.addFinalizer(scope, made.close)
         const root = made.root
@@ -965,8 +960,6 @@ const unmoved: Kernel.Transitions = {
   settle: () => {}
 }
 
-const noFacts = <A>(f: () => A): A => f()
-
 const paintCore = (
   component: Component.Any,
   rootProps: unknown,
@@ -986,7 +979,11 @@ const paintCore = (
     const executor = Context.get(ctx, Executor.CurrentExecutor)
     const fellBack: Array<string> = []
     let broke: { readonly error: unknown } | undefined
-    const { base, dom } = hostOf(ctx).make(container, false, noFacts)
+    const { base, dom } = hostOf(ctx).make(
+      container,
+      false,
+      messageLog.silent.step
+    )
     const close = () => {
       painted.close()
       dom?.dispose()
@@ -1025,11 +1022,7 @@ const paintCore = (
           }
         },
         schedule: (task) => executor.schedule(task),
-        report: (path, where, cause) => {
-          Effect.runForkWith(ctx)(
-            Effect.logError(`${path} failed in ${where}`, cause)
-          )
-        }
+        report: reportTo(ctx)
       }
     )
     if (broke !== undefined) {

@@ -5,7 +5,8 @@ import * as Scheduler from "effect/Scheduler"
 import { CurrentExecutor } from "./executor.ts"
 import type * as Kernel from "./kernel.ts"
 
-const now = <A>(f: () => A): A => f()
+/** @internal */
+export const now = <A>(f: () => A): A => f()
 
 /** @internal */
 export const follow = (
@@ -49,9 +50,7 @@ export const owned = <A, E>(
 }
 
 /** @internal */
-export const servicesOf = (
-  env: Kernel.Env | undefined
-): Context.Context<any> | undefined => {
-  while (env !== undefined && env.ctx === undefined) env = env.parent
-  return env?.ctx
+export const servicesOf = (env: Kernel.Env): Context.Context<any> => {
+  while (env.ctx === undefined) env = env.parent!
+  return env.ctx
 }

@@ -5,7 +5,7 @@ import type * as Head from "../Head.ts"
 import type * as View from "../View.ts"
 import { skipsEmpty } from "./headFold.ts"
 import * as Kernel from "./kernel.ts"
-import { Problems } from "./queryCore.ts"
+import { report } from "./queryCore.ts"
 
 const none: ReadonlyArray<never> = []
 
@@ -93,13 +93,8 @@ class Folding {
     }
     const title = fold.title(value)
     tree.head = { value, title }
-    const report = Context.get(this.root.env.ctx ?? Context.empty(), Problems)
-    for (const conflict of conflicts) {
-      try {
-        report(conflict as never)
-      } catch {
-      }
-    }
+    const ctx = this.root.env.ctx ?? Context.empty()
+    for (const conflict of conflicts) report(ctx, conflict)
     const give = tree.host.head
     if (give !== undefined) {
       const signature = JSON.stringify(value)

@@ -210,8 +210,6 @@ interface Retired {
   readonly waits: Array<Fiber.Fiber<unknown, unknown>>
 }
 
-const dispatched = { _tag: "Dispatch" } as const
-
 const offServer = new WeakSet<Kernel.Env>()
 
 const provides = new WeakMap<Kernel.Instance, Provide>()
@@ -236,8 +234,7 @@ class Provide {
     this.inst = inst
     this.component = inst.component as unknown as Component.Any
     this.parent = inst.env
-    this.context = servicesOf(inst.env) ??
-      (Context.empty() as Context.Context<any>)
+    this.context = servicesOf(inst.env)
   }
   log(draft: Draft): void {
     this.inst.tree.log?.(this.inst, draft)
@@ -318,7 +315,7 @@ class Provide {
     if (own.cause === undefined) settle(own, undefined, cause)
     tree.schedule(() => {
       if (inst.env === own) {
-        inst.fire(handle, AsyncResult.failure(cause), dispatched, "onFailure")
+        inst.fire(handle, AsyncResult.failure(cause), undefined, "onFailure")
       }
     })
   }

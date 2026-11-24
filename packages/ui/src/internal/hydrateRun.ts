@@ -1,11 +1,10 @@
-import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
-import * as Result from "effect/Result"
 import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
+import { runCodec } from "./codecRun.ts"
 import * as Kernel from "./kernel.ts"
 import { segmentOf } from "./paths.ts"
 import { boundOf, type Cache } from "./queryCore.ts"
@@ -66,21 +65,10 @@ const use = (target: Kernel.Host, from: Kernel.Host): void => {
 const decode = (
   component: Kernel.Runnable,
   encoded: unknown
-): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> => {
-  const exit = Effect.runSyncExit(
-    stateCodecOf(component as unknown as Component.Any).decode(encoded)
-  )
-  if (Exit.isFailure(exit)) {
-    const defect = Cause.findDefect(exit.cause)
-    if (Result.isSuccess(defect) && Cause.isAsyncFiberError(defect.success)) {
-      return defect.success.fiber as Fiber.Fiber<Decoded, unknown>
-    }
-  }
-  return exit
-}
+): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> =>
+  runCodec(stateCodecOf(component as unknown as Component.Any).decode(encoded))
 
-/** @internal */
-export const decodeRoot = (
+const decodeRoot = (
   component: Kernel.Runnable,
   state: Renderer.State,
   path: string
@@ -401,8 +389,7 @@ export const make = (
 
 type Draft = Parameters<Kernel.Recorder>[1]
 
-/** @internal */
-export class Waits {
+class Waits {
   readonly waiting = new Map<Kernel.Instance, Draft>()
   readonly held = new Map<
     Kernel.Instance,
@@ -522,7 +509,6 @@ export class Waits {
 
 /** @internal */
 export interface Session {
-  readonly static: boolean
   readonly hasQuery: boolean
   readonly record: (
     inst: Kernel.Instance,
@@ -612,7 +598,6 @@ export const hydrating = (
       input.heldFor
     )
     return {
-      static: fromStatic,
       hasQuery: state["~query"] !== undefined,
       record: (inst, draft) => {
         const next = waits.step(inst, draft, hydration)

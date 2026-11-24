@@ -209,6 +209,17 @@ export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> =
     defaultValue: () => (problem) => console.warn(problem.message)
   })
 
+/** @internal */
+export const report = (
+  ctx: Context.Context<never>,
+  problem: unknown
+): void => {
+  try {
+    Context.get(ctx, Problems)(problem as never)
+  } catch {
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Keys
 // -----------------------------------------------------------------------------

@@ -2076,7 +2076,7 @@ const build = (
           pending.since === undefined && root !== undefined
         ) {
           // Delivered inside a flush, the root renders it in that flush; otherwise in the next.
-          pending.since = root.flushing() ? root.flush() : root.flush() + 1
+          pending.since = root.since()
         }
       },
       listen: (f) => {

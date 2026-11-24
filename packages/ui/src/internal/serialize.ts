@@ -1,19 +1,17 @@
-import * as Cause from "effect/Cause"
 import type * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as Fiber from "effect/Fiber"
-import * as Option from "effect/Option"
-import * as Result from "effect/Result"
-import * as SchemaIssue from "effect/SchemaIssue"
+import type * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
+import { runCodec, warnOnce, warnUnencoded } from "./codecRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import type * as Kernel from "./kernel.ts"
 import { segment, slotSegment } from "./paths.ts"
 import type * as services from "./services.ts"
-import { encodePage, redactedIssue, stateCodecOf } from "./stateCodec.ts"
+import { encodePage, stateCodecOf } from "./stateCodec.ts"
 
 interface Page {
   readonly state: unknown
@@ -62,19 +60,6 @@ const statusOf = (env: Kernel.Env): Status =>
     : env.cause !== undefined
     ? "Failed"
     : "Pending"
-
-const runCodec = <A, E>(
-  effect: Effect.Effect<A, E>
-): Exit.Exit<A, E> | Fiber.Fiber<A, E> => {
-  const exit = Effect.runSyncExit(effect)
-  if (Exit.isFailure(exit)) {
-    const defect = Cause.findDefect(exit.cause)
-    if (Result.isSuccess(defect) && Cause.isAsyncFiberError(defect.success)) {
-      return defect.success.fiber as Fiber.Fiber<A, E>
-    }
-  }
-  return exit
-}
 
 const noKids: ReadonlyArray<Snap> = []
 
@@ -189,25 +174,6 @@ const encodedOf = (
   return encoded.pollUnsafe() as Encoded | undefined
 }
 
-const warned = new WeakMap<object, Set<string>>()
-const formatIssue = SchemaIssue.makeFormatterDefault()
-
-const warnOnce = (
-  kind: string,
-  inst: Kernel.Instance,
-  ctx: Context.Context<any>,
-  message: () => string
-): void => {
-  const component = inst.component as unknown as Component.Any
-  let kinds = warned.get(component)
-  if (kinds === undefined) warned.set(component, kinds = new Set())
-  if (kinds.has(kind)) return
-  kinds.add(kind)
-  Effect.runForkWith(ctx)(
-    Effect.logWarning(`${component.definition.name}: ${message()}`)
-  )
-}
-
 const warnRedacted = (inst: Kernel.Instance, ctx: Context.Context<any>) =>
   warnOnce(
     "redacted",
@@ -217,27 +183,6 @@ const warnRedacted = (inst: Kernel.Instance, ctx: Context.Context<any>) =>
       "its state holds a Schema.Redacted, so the server sends no state for it and the client builds it and " +
       "everything under it fresh, without hydration. Keep the secret in a leaf component or in a service."
   )
-
-const warnUnencoded = (
-  inst: Kernel.Instance,
-  ctx: Context.Context<any>,
-  cause: Cause.Cause<SchemaIssue.Issue>
-) => {
-  const error = Cause.findErrorOption(cause)
-  if (Option.isSome(error) && error.value === redactedIssue) return
-  warnOnce(
-    "unencoded",
-    inst,
-    ctx,
-    () =>
-      "its state doesn't encode as JSON, so the server sends no state for it and the client builds it and " +
-      "everything under it fresh, without hydration, and history doesn't restore it. " +
-      Option.match(error, {
-        onNone: () => Cause.pretty(cause),
-        onSome: formatIssue
-      })
-  )
-}
 
 const ignore = () => {}
 const mute: services.ServerSink = {

@@ -87,13 +87,10 @@ export const sync = (inst: Kernel.Instance): void => {
     byKey.set(subscription.key, subscription)
   }
   if (server !== undefined) return checkOnServer(inst, server, byKey)
-  const ctx = servicesOf(inst.env)
-  if (ctx !== undefined) {
-    Context.get(ctx, services.CurrentRoot)()?.declare?.(
-      inst as never,
-      declaration
-    )
-  }
+  Context.get(servicesOf(inst.env), services.CurrentRoot)()?.declare?.(
+    inst as never,
+    declaration
+  )
   let subscriptions = runningOf.get(inst)
   if (subscriptions === undefined) {
     if (byKey.size === 0) return

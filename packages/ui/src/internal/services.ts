@@ -39,8 +39,8 @@ export interface RootHandle {
   readonly container: unknown
   /** The current flush: 0 for the first render, then one more per flush. */
   readonly flush: () => number
-  /** Whether a flush is running, so what it delivers now renders in `flush()` and not the next one. */
-  readonly flushing: () => boolean
+  /** The flush that renders what is delivered now: the running one, or else the next. */
+  readonly since: () => number
   readonly snapshot: (out: Record<string, unknown>) => void
   /**
    * The Router navigated. It closes the cache's fetch-free window after hydration, if adoption

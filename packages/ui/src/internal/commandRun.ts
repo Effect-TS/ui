@@ -12,7 +12,7 @@ import type * as MessageLog from "../MessageLog.ts"
 import type * as Query from "../Query.ts"
 import { going, heldBy, hold } from "./closing.ts"
 import { defer, routed } from "./due.ts"
-import { follow, fork, servicesOf } from "./fork.ts"
+import { follow, fork, now, servicesOf } from "./fork.ts"
 import * as Kernel from "./kernel.ts"
 import { isNoop } from "./noop.ts"
 import * as queryCore from "./queryCore.ts"
@@ -181,7 +181,6 @@ class Runs implements Kernel.Runs {
         return
       }
       ctx = servicesOf(env)
-      if (ctx === undefined) return this.stop(run, "layer")
     }
     const command = run.command
     const tree = inst.tree
@@ -297,16 +296,10 @@ class Runs implements Kernel.Runs {
       this.remove(run)
       run.cut!(() => interrupted(inst, run, run.reason!))
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) {
-        const report = Context.get(
+        queryCore.report(
           inst.env.ctx ?? Context.empty(),
-          queryCore.Problems
+          this.cleanupFailed(inst.path, command.name, exit.cause)
         )
-        try {
-          report(
-            this.cleanupFailed(inst.path, command.name, exit.cause) as never
-          )
-        } catch {
-        }
       }
       redraw(inst)
       this.promote(run)
@@ -615,5 +608,3 @@ const interrupted = (
     reason
   })
 }
-
-const now = <A>(f: () => A): A => f()
