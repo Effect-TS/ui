@@ -10,8 +10,10 @@ import { report } from "./queryCore.ts"
 
 const none: ReadonlyArray<never> = []
 
-const foldOf = (inst: Kernel.Instance): View.HeadFold | undefined =>
-  heads.foldOf((inst.component as unknown as Component.Any).elements())
+const foldOf = (inst: Kernel.Instance): View.HeadFold | undefined => {
+  const elements = (inst.component as unknown as Component.Any).elements()
+  return elements?.head ?? (elements && heads.fold?.(elements))
+}
 
 const placed = (rec: Kernel.Rec, out: Array<Kernel.Instance>): void => {
   const kids = rec.kids

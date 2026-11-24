@@ -700,16 +700,10 @@ const start = (
     routing.flushed()
   }
   tree.flush = since
-  const head = () => {
-    const elements = component.elements()
-    const value = tree.head?.value ??
-      heads.foldOf(elements)?.merge({ entries: [], children: [] }) ??
+  const head = () =>
+    tree.head?.value ??
+      component.elements()?.head?.merge({ entries: [], children: [] }) ??
       noHead
-    const fallback = elements && heads.defaults[elements.name]
-    return fallback === undefined
-      ? value
-      : { ...fallback, ...(value as object) }
-  }
   const root = {
     path: instance.path,
     session,
@@ -957,7 +951,12 @@ export const prerender = (
           options.static === true,
           options.sink ?? serialize.nodeSink(nodes)
         )
-        return { nodes, state, model: root.model(), head: root.head() }
+        return {
+          nodes,
+          state,
+          model: root.model(),
+          head: heads.fallback(component.elements(), root.head())
+        }
       }),
       (scope, exit) => Scope.close(scope, exit)
     ))

@@ -64,6 +64,7 @@ import * as Feature from "../Feature.ts"
 import type * as Head from "../Head.ts"
 import * as controlled from "../internal/controlled.ts"
 import * as Executor from "../internal/executor.ts"
+import * as heads from "../internal/heads.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as MessageLog from "../MessageLog.ts"
@@ -854,7 +855,11 @@ export const register = (
           entry._tag === "FetchStarted"
         ),
       entry: (read, args) => root.cache.inspect(Query.defOf(read), args) as any,
-      head: root.head as <H>() => H,
+      head: (() =>
+        heads.fallback(
+          root.instance.component.elements(),
+          root.head()
+        )) as <H>() => H,
       frames
     }
   })

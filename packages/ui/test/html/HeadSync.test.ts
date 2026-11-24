@@ -97,14 +97,19 @@ describe("BrowserHost head", {
     expect(warnings).toEqual([])
   })
 
-  it("prerenders an Html component with the full empty HtmlHead shape when HtmlHead is not imported", async () => {
+  it("returns the full empty HtmlHead shape for an Html component when HtmlHead is not imported", async () => {
     vi.resetModules()
-    const [{ Component, Head, Renderer }, Html, { Effect, Schema }] =
-      await Promise.all([
-        import("@effect/ui"),
-        import("@effect/ui/html/Html"),
-        import("effect")
-      ])
+    const [
+      { Component, Head, Renderer },
+      Html,
+      { TestHost },
+      { Effect, Schema }
+    ] = await Promise.all([
+      import("@effect/ui"),
+      import("@effect/ui/html/Html"),
+      import("@effect/ui/testing"),
+      import("effect")
+    ])
     const Plain = Component.define({
       name: "Plain",
       model: Schema.Null,
@@ -138,5 +143,18 @@ describe("BrowserHost head", {
     expect(plain.head).toEqual(empty)
     const titled = await Effect.runPromise(Renderer.prerender(Titled, {}))
     expect(titled.head).toEqual({ ...empty, title: "Ada" })
+    const mounted = await Effect.runPromise(
+      Effect.gen(function*() {
+        const plainRoot = yield* TestHost.mount(Plain, {})
+        const titledRoot = yield* TestHost.mount(Titled, {})
+        yield* TestHost.settle
+        return {
+          plain: plainRoot.head<HtmlHeadModule.HtmlHead>(),
+          titled: titledRoot.head<HtmlHeadModule.HtmlHead>()
+        }
+      }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
+    )
+    expect(mounted.plain).toEqual(empty)
+    expect(mounted.titled).toEqual({ ...empty, title: "Ada" })
   })
 })

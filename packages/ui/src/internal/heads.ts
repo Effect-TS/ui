@@ -9,18 +9,33 @@ export const load = (start: (inst: Kernel.Instance) => void): void => {
   loaded = start
 }
 
-const folds: Record<string, View.HeadFold> = Object.create(null)
+/** @internal */
+export let fold:
+  | ((elements: View.Vocabulary<any>) => View.HeadFold | undefined)
+  | undefined
 
 /** @internal */
-export const defaults: Record<string, object> = Object.create(null)
-
-/** @internal */
-export const register = (name: string, fold: View.HeadFold): void => {
-  folds[name] = fold
+export const register = (name: string, headFold: View.HeadFold): void => {
+  const prev = fold
+  fold = (elements) => (elements.name === name ? headFold : prev?.(elements))
 }
 
 /** @internal */
-export const foldOf = (
-  elements: View.Vocabulary<any> | undefined
-): View.HeadFold | undefined =>
-  elements && (elements.head ?? folds[elements.name])
+export const emptyHtml = {
+  title: undefined,
+  meta: [],
+  links: [],
+  jsonLd: [],
+  html: { lang: undefined, dir: undefined, class: [], data: {} },
+  body: { class: [], data: {} }
+}
+
+/** @internal */
+export const fallback = (
+  elements: View.Vocabulary<any> | undefined,
+  value: unknown
+): unknown =>
+  elements?.name === "html" &&
+    (value as { readonly meta?: unknown }).meta === undefined
+    ? { ...emptyHtml, ...(value as object) }
+    : value

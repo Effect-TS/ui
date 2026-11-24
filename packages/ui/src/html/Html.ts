@@ -112,12 +112,10 @@
  */
 import * as Context from "effect/Context"
 import type * as Component from "../Component.ts"
-import * as heads from "../internal/heads.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import type * as HtmlHead from "./HtmlHead.ts"
-import * as headAttributes from "./internal/headAttributes.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1697,8 +1695,6 @@ export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
  * @since 0.1.0
  */
 export const vocabulary: View.Vocabulary<Elements> = { name, tags }
-
-heads.defaults[name] = headAttributes.empty
 
 // ---------------------------------------------------------------------------
 // refs
