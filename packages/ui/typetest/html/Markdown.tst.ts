@@ -57,7 +57,7 @@ describe("Markdown.islandsFor", () => {
 
   it("requires a view for every definition", () => {
     expect(Markdown.islandsFor).type.not.toBeCallableWith(definitions, {
-      Note: (h: Markdown.H<never>) => h.hr
+      Note: (h: Html.H<never>) => h.hr
     })
   })
 

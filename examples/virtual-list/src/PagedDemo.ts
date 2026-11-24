@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -7,11 +7,10 @@ const Total = Schema.Literals(["known", "unknown", "none"])
 
 const PagedMessage = UiSchema.TaggedEnum({ PickedTotal: { total: Total } })
 
-export const PagedDemo = Component.define({
+export const PagedDemo = Html.component({
   name: "PagedDemo",
   model: Schema.Struct({ total: Total }),
-  message: PagedMessage,
-  elements: Html
+  message: PagedMessage
 }).make({
   init: () => ({ total: "known" as const }),
   update: { PickedTotal: ($, { total }) => $.evolve({ total }) },

@@ -81,8 +81,53 @@ interface Native extends View.Elements {
 }
 
 describe("Html", () => {
-  it("registers nothing: only `@effect/ui/html/register` does", () => {
-    expect<View.Registered>().type.toBe<never>()
+  it("Html.component supplies the HTML vocabulary and Html.H types reusable pure HTML views", () => {
+    const Button = <M>(h: Html.H<M>, message: M) => {
+      expect(h.props).type.toBe<unknown>()
+      expect(h.button).type.toBe<Html.Tags<M>["button"]>()
+      return h.button.onClick(message).children("Save")
+    }
+    const Card = <M>(h: Html.H<M>) => h.section.class("card")
+    const Field = <M, C extends View.Children<M>>(h: Html.H<M>, options: {
+      readonly label: string
+      readonly children: C
+    }) =>
+      h.label.children(
+        options.label,
+        h.div.class("control").children(options.children)
+      )
+    const SaveButton = Html.component({
+      name: "SaveButton",
+      props: Schema.Struct({ id: Schema.String }),
+      model: Schema.Number,
+      message: Schema.Literal("Save")
+    }).make({
+      init: () => 0,
+      update: ($) => $.model,
+      view: (h) => {
+        expect(Button<"Save">).type.not.toBeCallableWith(h, "Delete")
+        const clock = {} as View.Node<"Save", Clock>
+        const logger = {} as View.Node<"Save", Logger>
+        return Card(h).children(
+          Button(h, "Save"),
+          Field(h, { label: h.props.id, children: [clock, logger] })
+        )
+      }
+    })
+    expect<Component.Requirements<typeof SaveButton>>().type.toBe<
+      Clock | Logger
+    >()
+    expect(SaveButton).type.toBe<
+      Component.Component<
+        "SaveButton",
+        { readonly id: string },
+        number,
+        "Save",
+        never,
+        Clock | Logger,
+        Html.Elements
+      >
+    >()
   })
 
   it("the module is a vocabulary", () => {

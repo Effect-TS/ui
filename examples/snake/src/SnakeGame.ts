@@ -2,8 +2,8 @@ import * as Apple from "#domain/apple"
 import * as Direction from "#domain/direction"
 import * as Position from "#domain/position"
 import * as Snake from "#domain/snake"
-import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
-import { HtmlSubscription } from "@effect/ui/html"
+import { Command, Head, Subscription, UiSchema } from "@effect/ui"
+import { Html, HtmlSubscription } from "@effect/ui/html"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
 
@@ -95,7 +95,7 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
   GameOver: "Game Over - Press R to restart"
 }
 
-export const SnakeGame = Component.define({
+export const SnakeGame = Html.component({
   name: "SnakeGame",
   model: SnakeGameModel,
   message: SnakeGameMessage

@@ -29,10 +29,7 @@
     "terminal",
     "effect"
   ],
-  "sideEffects": [
-    "./src/register.ts",
-    "./dist/register.js"
-  ],
+  "sideEffects": [],
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",

@@ -1,5 +1,6 @@
-import { Component, Head, UiSchema } from "@effect/ui"
+import { Head, UiSchema } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
 export const CounterModel = Schema.Struct({
@@ -15,7 +16,7 @@ export const CounterMessage = UiSchema.TaggedEnum({
 const BUTTON_CLASS =
   "bg-black text-white hover:bg-gray-700 px-4 py-2 transition"
 
-export const Counter = Component.define({
+export const Counter = Html.component({
   name: "Counter",
   model: CounterModel,
   message: CounterMessage

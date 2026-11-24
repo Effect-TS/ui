@@ -1,4 +1,4 @@
-import { Command, Component, Head, Subscription, UiSchema } from "@effect/ui"
+import { Command, Head, Subscription, UiSchema } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
@@ -109,11 +109,10 @@ const cellGlyph = (cell: Position.Position, model: SnakeGameModel) => {
   return GLYPH.empty
 }
 
-export const SnakeGame = Component.define({
+export const SnakeGame = OpenTui.component({
   name: "SnakeGameTui",
   model: SnakeGameModel,
-  message: SnakeGameMessage,
-  elements: OpenTui
+  message: SnakeGameMessage
 }).make({
   init: ($) =>
     $.set({ ...NEW_GAME, apple: { x: 15, y: 15 }, highScore: 0 })

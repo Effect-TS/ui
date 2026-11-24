@@ -8,8 +8,6 @@ import { Router } from "@effect/ui"
 import { BrowserRouter, HtmlHydrate } from "@effect/ui/html"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
-// oxlint-disable-next-line no-unassigned-import
-import "@effect/ui/html/register"
 import { App } from "./fixtures/App.ts"
 import { AppRoute } from "./fixtures/routes.ts"
 

@@ -1,6 +1,7 @@
 import { addSearchToHistory } from "#domain/SearchHistory"
 import { Component, Head, Router, UiSchema } from "@effect/ui"
 import { NavigationMenu } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
 import { Array, Schema, String } from "effect"
 import { FilesIndexPage } from "./pages/files/FilesIndexPage.ts"
 import { FilesPage } from "./pages/files/FilesPage.ts"
@@ -39,7 +40,7 @@ export const AppMessage = UiSchema.TaggedEnum({
   ChangedSearchInput: { value: Schema.String }
 })
 
-const AppDef = Component.define({
+const AppDef = Html.component({
   name: "App",
   props: Schema.Struct({ route: AppRoute }),
   model: Schema.Struct({

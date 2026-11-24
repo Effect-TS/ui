@@ -27,10 +27,7 @@
     "framework",
     "effect"
   ],
-  "sideEffects": [
-    "./src/html/register.ts",
-    "./dist/html/register.js"
-  ],
+  "sideEffects": [],
   "imports": {
     "#dev": {
       "production": "./src/internal/devOff.ts",

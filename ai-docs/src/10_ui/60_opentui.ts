@@ -6,7 +6,7 @@
  * commands, and both FFI-free and frame-rendered tests.
  */
 import { NodeRuntime } from "@effect/platform-node"
-import { Component, Head, UiSchema } from "@effect/ui"
+import { Head, UiSchema } from "@effect/ui"
 import {
   OpenTui,
   OpenTuiCommand,
@@ -36,16 +36,15 @@ const TaskModel = Schema.Struct({
   focus: Schema.Literals(["input", "list"])
 })
 
-// Set `elements: OpenTui` per component (or import `@effect/ui-opentui/register`
-// once at your entrypoint) to put OpenTUI tags on `h`. Layout containers like
-// `h.box` and `h.scrollbox` reject raw strings at compile time and runtime so
-// every piece of text explicitly lives inside `h.text(...)` or an inline
-// modifier (`h.span`, `h.b`, `h.i`, `h.u`, `h.a`).
-export const TaskBoard = Component.define({
+// `OpenTui.component` supplies the OpenTUI vocabulary automatically, putting
+// OpenTUI tags on `h`. Layout containers like `h.box` and `h.scrollbox` reject
+// raw strings at compile time and runtime so every piece of text explicitly
+// lives inside `h.text(...)` or an inline modifier (`h.span`, `h.b`, `h.i`,
+// `h.u`, `h.a`).
+export const TaskBoard = OpenTui.component({
   name: "TaskBoard",
   model: TaskModel,
-  message: TaskMessage,
-  elements: OpenTui
+  message: TaskMessage
 }).make({
   init: () => ({
     draft: "",

@@ -5,7 +5,7 @@
  * a mount that attaches a third-party editor and reports each change, and a
  * scene that names both by their definitions.
  */
-import { Component, Mount, UiSchema } from "@effect/ui"
+import { Mount, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
 import { Effect, Queue, Schema, Stream } from "effect"
@@ -73,11 +73,10 @@ const SnippetMessage = UiSchema.TaggedEnum({
 // definition stops the running one and starts the new one. A result goes
 // through the `Mount.map` of the latest render, so what the map reads is
 // current.
-export const Snippet = Component.define({
+export const Snippet = Html.component({
   name: "Snippet",
   model: Schema.Struct({ text: Schema.String, width: Schema.Number }),
-  message: SnippetMessage,
-  elements: Html
+  message: SnippetMessage
 }).make({
   init: () => ({ text: "", width: 0 }),
   update: ($, message) =>

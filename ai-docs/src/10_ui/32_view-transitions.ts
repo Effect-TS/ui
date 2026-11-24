@@ -31,12 +31,11 @@ export const NoteBoardMessage = UiSchema.TaggedEnum({
 // does; typing in the filter commits at once, so the field never lags behind
 // the keyboard. Any component can ask, not only the root: the board owns its
 // layout and animates it itself.
-export const NoteBoardNoDeps = Component.define({
+export const NoteBoardNoDeps = Html.component({
   name: "NoteBoard",
   model: Schema.Struct({ layout: Layout, filter: Schema.String }),
   message: NoteBoardMessage,
-  queries: { notes: { query: ListNotes, args: () => ({}) } },
-  elements: Html
+  queries: { notes: { query: ListNotes, args: () => ({}) } }
 }).make({
   init: () => ({ layout: "grid" as const, filter: "" }),
   update: {
@@ -105,12 +104,11 @@ const TransitionAppMessage = UiSchema.TaggedEnum({
 // arrive here as `ChangedRoute`, so one handler animates every navigation.
 // A `Router.push` delivers the new route within the flush its `update`
 // caused, and that flush still animates.
-export const TransitionApp = Component.define({
+export const TransitionApp = Html.component({
   name: "TransitionApp",
   props: Schema.Struct({ route: AppRoute }),
   model: AppRoute,
-  message: TransitionAppMessage,
-  elements: Html
+  message: TransitionAppMessage
 }).make({
   init: ($) => $.props.route,
   update: ($, { route: next }) =>

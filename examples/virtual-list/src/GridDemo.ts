@@ -1,14 +1,12 @@
-import { Component } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { textOf } from "./shared.ts"
 
-export const GridDemo = Component.define({
+export const GridDemo = Html.component({
   name: "GridDemo",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,

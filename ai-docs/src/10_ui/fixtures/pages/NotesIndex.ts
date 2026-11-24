@@ -1,6 +1,6 @@
 import { ListNotes } from "#queries/ListNotes"
 import { Component, Head, UiSchema, UiStruct } from "@effect/ui"
-import { HtmlHead } from "@effect/ui/html"
+import { Html, HtmlHead } from "@effect/ui/html"
 import { Layer, Match, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Notes } from "../notes/services/Notes.ts"
@@ -20,7 +20,7 @@ export const NotesIndexMessage = UiSchema.TaggedEnum({
 // such as text or files, from landing on its targets.
 const NoteType = "application/x-note"
 
-export const NotesIndexNoDeps = Component.define({
+export const NotesIndexNoDeps = Html.component({
   name: "NotesIndex",
   // The Model holds only what the user did here. The notes live in the
   // `notes` query's result, which the runtime keeps beside the Model.

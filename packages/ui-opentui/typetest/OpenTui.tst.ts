@@ -66,5 +66,34 @@ describe("OpenTui vocabulary types", () => {
     expect<H["text"]>().type.toBe<OpenTui.Tags<never>["text"]>()
     expect<H>().type.toBeAssignableTo<View.HelperBase<never, {}>>()
     expect<H>().type.not.toBeAssignableTo<View.Helper<never, {}>>()
+    expect<OpenTui.H<never>["text"]>().type.toBe<OpenTui.Tags<never>["text"]>()
+    expect<OpenTui.H<never>>().type.toBeAssignableTo<
+      View.HelperBase<never, unknown>
+    >()
+  })
+
+  it("OpenTui.component supplies the OpenTUI vocabulary and OpenTui.H types reusable pure views", () => {
+    const Badge = <M>(h: OpenTui.H<M>, label: string) =>
+      h.text(label).style({ fg: "#00ff00" })
+    const Panel = OpenTui.component({
+      name: "Panel",
+      model: Schema.String,
+      message: Schema.Literal("Pressed")
+    }).make({
+      init: () => "ready",
+      update: ($) => $.model,
+      view: (h, label) => h.box.children(Badge(h, label))
+    })
+    expect(Panel).type.toBe<
+      Component.Component<
+        "Panel",
+        {},
+        string,
+        "Pressed",
+        never,
+        never,
+        OpenTui.Elements
+      >
+    >()
   })
 })

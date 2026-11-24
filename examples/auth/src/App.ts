@@ -1,5 +1,6 @@
 import { Session } from "#domain/Session"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Console, Effect, Option, Schema } from "effect"
 import { SessionStore } from "./auth/services/SessionStore.ts"
 import { LoggedIn } from "./LoggedIn.ts"
@@ -90,7 +91,7 @@ export const LogError = Command.make(
 const redirectTo = (route: AppRoute) =>
   Router.replace(AppRoute, route).pipe(Command.asNoop)
 
-export const AppNoDeps = Component.define({
+export const AppNoDeps = Html.component({
   name: "App",
   props: AppProps,
   model: AppModel,

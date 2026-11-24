@@ -12,13 +12,11 @@
  * **Example** (Rendering a compiled post)
  *
  * ```ts
- * import "@effect/ui/html/register"
- * import type { View } from "@effect/ui"
- * import { Markdown, MarkdownParser } from "@effect/ui/html"
+ * import { type Html, Markdown, MarkdownParser } from "@effect/ui/html"
  *
  * const post = MarkdownParser.parseMarkdown("# Hello\n\nRead the [changelog](/changelog).")
  *
- * const Post = <Msg>(h: View.H<Msg>) =>
+ * const Post = <Msg>(h: Html.H<Msg>) =>
  *   Markdown.view(h, post, {
  *     views: {
  *       Link: (h, link, content) => h.a.attr("href", link.url).class("underline").children(content)
@@ -572,16 +570,6 @@ export type IslandDefinition = Schema.Struct<Schema.Struct.Fields> & {
 export type IslandDefinitions = Readonly<Record<string, IslandDefinition>>
 
 /**
- * The `h` a Markdown view receives: the caller's, so overrides can use
- * `h.id`, `h.lazy` and child components.
- *
- * @stability experimental
- * @category views
- * @since 0.1.0
- */
-export type H<Msg> = View.Helper<Msg, unknown> & Html.Tags<Msg>
-
-/**
  * Rendered inline content, to pass to `children`.
  *
  * @stability experimental
@@ -602,80 +590,83 @@ export type InlineContent<Msg, R = never> = ReadonlyArray<
  * @since 0.1.0
  */
 export interface Views<Msg, R = never> {
-  readonly Text: (h: H<Msg>, text: Text) => View.Content<Msg, R> | string
+  readonly Text: (h: Html.H<Msg>, text: Text) => View.Content<Msg, R> | string
   readonly InlineCode: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     inlineCode: InlineCode
   ) => View.Content<Msg, R>
-  readonly HardBreak: (h: H<Msg>, hardBreak: HardBreak) => View.Content<Msg, R>
+  readonly HardBreak: (
+    h: Html.H<Msg>,
+    hardBreak: HardBreak
+  ) => View.Content<Msg, R>
   readonly Emphasis: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     emphasis: Emphasis,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
   readonly Strong: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     strong: Strong,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
   readonly Strikethrough: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     strikethrough: Strikethrough,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
   readonly Link: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     link: Link,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
-  readonly Image: (h: H<Msg>, image: Image) => View.Content<Msg, R>
+  readonly Image: (h: Html.H<Msg>, image: Image) => View.Content<Msg, R>
   readonly Heading: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     heading: Heading,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
   readonly Paragraph: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     paragraph: Paragraph,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
   readonly CodeBlock: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     codeBlock: CodeBlock,
     occurrenceIndex: number
   ) => View.Content<Msg, R>
   readonly List: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     list: List,
     items: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
   readonly ListItem: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     listItem: ListItem,
     blocks: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
   readonly Blockquote: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     blockquote: Blockquote,
     blocks: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
   readonly ThematicBreak: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     thematicBreak: ThematicBreak
   ) => View.Content<Msg, R>
   readonly Table: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     table: Table,
     headerRow: View.Content<Msg, R>,
     bodyRows: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
   readonly TableRow: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     tableRow: TableRow,
     cells: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
   readonly TableCell: (
-    h: H<Msg>,
+    h: Html.H<Msg>,
     tableCell: TableCell,
     content: InlineContent<Msg, R>,
     alignment: Alignment,
@@ -708,7 +699,7 @@ export type DefaultViews = {
  * @since 0.1.0
  */
 export type IslandView<Msg, R = never> = (
-  h: H<Msg>,
+  h: Html.H<Msg>,
   attributes: Readonly<Record<string, string>>,
   content: ReadonlyArray<View.Content<Msg, R>>,
   occurrenceIndex: number
@@ -837,7 +828,7 @@ export const islandsFor = <
   Msg,
   const ViewsByName extends {
     readonly [Name in keyof Definitions]: (
-      h: H<Msg>,
+      h: Html.H<Msg>,
       attributes: Definitions[Name]["Type"],
       content: ReadonlyArray<View.Content<Msg>>,
       occurrenceIndex: number
@@ -852,7 +843,7 @@ export const islandsFor = <
   for (const name of Object.keys(definitions)) {
     const decode = Schema.decodeUnknownExit(definitions[name])
     const render = views[name] as unknown as (
-      h: H<Msg>,
+      h: Html.H<Msg>,
       attributes: unknown,
       content: ReadonlyArray<View.Content<Msg, R>>,
       occurrenceIndex: number
@@ -882,7 +873,7 @@ export const islandsFor = <
  * @since 0.1.0
  */
 export const viewBlocks = <Msg, R = never>(
-  h: H<Msg>,
+  h: Html.H<Msg>,
   document: Document,
   config: ViewConfig<Msg, R> = {}
 ): Array<View.Content<Msg, R>> => {
@@ -987,7 +978,7 @@ export const viewBlocks = <Msg, R = never>(
  * @since 0.1.0
  */
 export const view = <Msg, R = never>(
-  h: H<Msg>,
+  h: Html.H<Msg>,
   document: Document,
   config?: ViewConfig<Msg, R>
 ): Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div"> =>

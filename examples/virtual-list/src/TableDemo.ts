@@ -1,4 +1,3 @@
-import { Component } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -6,11 +5,10 @@ import { textOf } from "./shared.ts"
 
 const statuses = ["Paid", "Pending", "Refunded"]
 
-export const TableDemo = Component.define({
+export const TableDemo = Html.component({
   name: "TableDemo",
   model: Schema.Struct({}),
-  message: Schema.Never,
-  elements: Html
+  message: Schema.Never
 }).make({
   init: () => ({}),
   update: ($) => $.model,

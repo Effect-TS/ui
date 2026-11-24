@@ -1,4 +1,5 @@
 import { Command, Component, Head, UiSchema, UiStruct } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { Duration, Effect, Schema } from "effect"
 
 export const UploadStatus = Schema.Literals(["Uploading", "Done", "Cancelled"])
@@ -77,7 +78,7 @@ const BADGE_CLASS: Record<UploadStatus, string> = {
 const ACTION_BUTTON_CLASS =
   "px-3 py-1 text-sm font-medium rounded-md border transition"
 
-const UploadsDef = Component.define({
+const UploadsDef = Html.component({
   name: "Uploads",
   model: UploadsModel,
   message: UploadsMessage

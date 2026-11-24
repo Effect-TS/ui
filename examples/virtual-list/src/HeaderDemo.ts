@@ -1,4 +1,4 @@
-import { Component, UiSchema } from "@effect/ui"
+import { UiSchema } from "@effect/ui"
 import { VirtualList } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -8,11 +8,10 @@ const HeaderMessage = UiSchema.TaggedEnum({
   ToggledScroller: {}
 })
 
-export const HeaderDemo = Component.define({
+export const HeaderDemo = Html.component({
   name: "HeaderDemo",
   model: Schema.Struct({ tall: Schema.Boolean, scroller: Schema.Boolean }),
-  message: HeaderMessage,
-  elements: Html
+  message: HeaderMessage
 }).make({
   init: () => ({ tall: false, scroller: false }),
   update: {
