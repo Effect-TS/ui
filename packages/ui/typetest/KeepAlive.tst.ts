@@ -120,6 +120,12 @@ describe("keepAlive", () => {
         view: (h) => h.el("p")
       })
     ).type.toBeAssignableTo<Component.Any>()
+    // @ts-expect-error is not assignable to type '{ readonly keepAlive: true; }'
+    const kept: { readonly keepAlive: true } = Component.define({
+      name: "Kept",
+      ...options
+    })
+    void kept
   })
 
   it("writes keep-alive children inside h.keepAlive, and returns what the content returns", () => {

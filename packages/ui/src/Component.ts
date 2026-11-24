@@ -3190,7 +3190,8 @@ export const define = <
   Rp = never,
   // The owner of each entry of `shared`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
-  // Left out, `keepAlive` infers nothing, so it's `false`.
+  // Left out, `keepAlive` infers nothing, so it's `false`. The return type is `NoInfer`, so an annotation such as
+  // `{ keepAlive: true }` on the result can't make it `true`.
   Sc extends boolean = false
 >(
   options: {
@@ -3340,7 +3341,7 @@ export const define = <
   >,
   SV,
   Rp,
-  Sc
+  NoInfer<Sc>
 > => {
   const shares = options.shares
   const definition: Definition<
