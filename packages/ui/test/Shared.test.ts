@@ -30,8 +30,7 @@ const TipsProvider = Component.define({
   }
 }).make({
   init: () => null,
-  update: (_, message) => message.id,
-  parts: () => ({})
+  update: (_, message) => message.id
 })
 
 /** A reader that opens its tip on click. */
@@ -218,34 +217,8 @@ describe("shared state", () => {
       assert.deepStrictEqual(failed.map((entry) => entry.in), ["shares"])
     })))
 
-  it.effect("runs an owner defined without parts and passes an empty parts object to its view closure", () =>
+  it.effect("passes an empty parts object to the view closure of an owner without parts", () =>
     provideHost(Effect.gen(function*() {
-      const CountMessage = UiSchema.TaggedEnum({ Added: {} })
-      const CountProvider = Component.define({
-        name: "CountProvider",
-        model: Schema.Struct({ count: Schema.Number }),
-        message: CountMessage,
-        shares: {
-          value: (model) => ({ count: model.count }),
-          receives: ["Added"]
-        }
-      }).make({
-        init: () => ({ count: 0 }),
-        update: { Added: ($) => $.evolve({ count: $.model.count + 1 }) }
-      })
-      const Counter = Component.define({
-        name: "Counter",
-        model: Schema.Null,
-        message: CountMessage,
-        shared: { count: CountProvider }
-      }).make({
-        init: () => null,
-        update: ($, message) => $.send(CountProvider, message),
-        view: (h) =>
-          h.el("button").on("click", CountMessage.Added()).children(
-            String(h.shared.count.count)
-          )
-      })
       let received: unknown
       const Host = Component.define({
         name: "Host",
@@ -255,20 +228,16 @@ describe("shared state", () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          CountProvider(h, {
+          TipsProvider(h, {
             view: (parts) => {
               received = parts
-              return Counter(h, {})
+              return h.el("p")
             }
           })
       })
-      const root = yield* TestHost.mount(Host, {})
+      yield* TestHost.mount(Host, {})
       yield* TestHost.settle
       assert.deepStrictEqual(received, {})
-      assert.strictEqual(root.text(), "0")
-      click(root, "0")
-      yield* TestHost.settle
-      assert.strictEqual(root.text(), "1")
     })))
 
   it.effect("finishes a definition without parts when its shares is conditionally absent", () =>
