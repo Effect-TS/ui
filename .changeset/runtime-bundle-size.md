@@ -6,6 +6,6 @@ Smaller bundles: a mount carries only the features an app uses. Hydration, the H
 
 | App             |    Before |     After |
 | --------------- | --------: | --------: |
-| counter         |  83,231 B |  58,721 B |
-| features        |  84,058 B |  62,014 B |
-| routing example | 127,154 B | 119,460 B |
+| counter         |  83,231 B |  58,714 B |
+| features        |  84,058 B |  62,011 B |
+| routing example | 127,154 B | 119,455 B |
