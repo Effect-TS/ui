@@ -249,12 +249,12 @@ describe("reports", () => {
 describe("collected", () => {
   it("takes the owner's reports in a scene of the owner", () => {
     Effect.gen(function*() {
-      const s = yield* Scene.make(Provider, {}, {
+      const scene = yield* Scene.make(Provider, {}, {
         elements: Html,
         view: (_, h) => h.div
       })
-      expect(s.collected).type.toBeCallableWith([true, false])
-      expect(s.collected).type.not.toBeCallableWith(["open"])
+      expect(scene.collected).type.toBeCallableWith([true, false])
+      expect(scene.collected).type.not.toBeCallableWith(["open"])
     })
   })
 })

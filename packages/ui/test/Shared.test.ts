@@ -222,27 +222,27 @@ describe("shared state", () => {
 describe("shared state in a Scene", () => {
   it.effect("gives a reader the default of an owner whose props are optional, and keeps its sends in sent", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Tip, { id: "a" })
-      s.click("a:closed")
+      const scene = yield* Scene.make(Tip, { id: "a" })
+      scene.click("a:closed")
       assert.deepStrictEqual(
-        s.current.sent.map((
+        scene.current.sent.map((
           send
         ) => [send.owner.definition.name, send.message]),
         [
           ["TipsProvider", { _tag: "Enter", id: "a" }]
         ]
       )
-      s.sent(TipsProvider, { _tag: "Enter", id: "a" })
+      scene.sent(TipsProvider, { _tag: "Enter", id: "a" })
       // The scene never runs the owner's update.
-      assert.strictEqual(Locator.textOf(s.root), "a:closed")
+      assert.strictEqual(Locator.textOf(scene.root), "a:closed")
     }))
 
   it.effect("reads the expanded Model of an owner in the scene's own view", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(App, {})
-      s.givenChild(TipsProvider, "tips", "a")
+      const scene = yield* Scene.make(App, {})
+      scene.givenChild(TipsProvider, "tips", "a")
       // Trigger is expanded; Tip is a normal child, so a slot with no text.
-      assert.strictEqual(Locator.textOf(s.root), "a")
+      assert.strictEqual(Locator.textOf(scene.root), "a")
     }))
 
   // A scene with no steps keeps the view it expanded, where the owner placing the slot is already gone.
@@ -263,7 +263,7 @@ describe("shared state in a Scene", () => {
             view: () => h.slots.body
           })
       })
-      const s = yield* Scene.make(Frame, {}, {
+      const scene = yield* Scene.make(Frame, {}, {
         slots: (h) => ({
           body: Trigger(h, {
             key: "t",
@@ -271,7 +271,7 @@ describe("shared state in a Scene", () => {
           })
         })
       })
-      assert.strictEqual(Locator.textOf(s.root), "placed")
+      assert.strictEqual(Locator.textOf(scene.root), "placed")
     }))
 
   it("gives the parts of a headless reader the shared value, from an owner declared with p.child too", () => {
@@ -340,8 +340,8 @@ describe("shared state in a Scene", () => {
           "3"
         )
         const message = yield* defect(Effect.gen(function*() {
-          const s = yield* Scene.make(Sum, {})
-          s.shared(AProvider, 1)
+          const scene = yield* Scene.make(Sum, {})
+          scene.shared(AProvider, 1)
         }))
         assert.match(message, /\.shared\(BProvider, value\)/)
       })
@@ -909,41 +909,41 @@ describe("optional owners, reports and onChange in a Story", () => {
 
   it.effect("an optional owner is absent until given: no report, and a send to it is dropped", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(OptionalReader, {})
-      assert.strictEqual(Locator.textOf(s.root), "alone")
-      s.click("alone")
-      assert.deepStrictEqual(s.current.sent, [])
-      assert.deepStrictEqual(s.current.reports, {})
+      const scene = yield* Scene.make(OptionalReader, {})
+      assert.strictEqual(Locator.textOf(scene.root), "alone")
+      scene.click("alone")
+      assert.deepStrictEqual(scene.current.sent, [])
+      assert.deepStrictEqual(scene.current.reports, {})
     }))
 
   it.effect("a shared step sends onChange when it changes a value the story had, and not for the first one", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(OptionalReader, {})
+      const story = yield* Story.make(OptionalReader, {})
       // The first value of an optional owner: the reader mounted with it, so nothing is sent.
-      s.shared(Group, { on: true, bumps: 0 })
-      assert.strictEqual(s.model, false)
-      assert.deepStrictEqual(s.current.reports, { group: false })
-      s.shared(Group, { on: true, bumps: 1 })
-      assert.strictEqual(s.model, true)
+      story.shared(Group, { on: true, bumps: 0 })
+      assert.strictEqual(story.model, false)
+      assert.deepStrictEqual(story.current.reports, { group: false })
+      story.shared(Group, { on: true, bumps: 1 })
+      assert.strictEqual(story.model, true)
       // An equal value sends nothing.
-      s.send(ReaderMessage.ChangedGroup({ on: false, bumps: 1 }))
-      s.shared(Group, { on: true, bumps: 1 })
-      assert.strictEqual(s.model, false)
+      story.send(ReaderMessage.ChangedGroup({ on: false, bumps: 1 }))
+      story.shared(Group, { on: true, bumps: 1 })
+      assert.strictEqual(story.model, false)
       // `given` supplies a value without sending.
-      s.given(false, {}, [[Group, { on: true, bumps: 2 }]])
-      assert.strictEqual(s.model, false)
+      story.given(false, {}, [[Group, { on: true, bumps: 2 }]])
+      assert.strictEqual(story.model, false)
     }))
 
   it.effect("collected sends the owner's collects.onChange message when it differs from the last", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Group, {}, {
+      const scene = yield* Scene.make(Group, {}, {
         view: (group, h) => h.el("p", group.on ? "on" : "off")
       })
       // The same message as for no reports.
-      s.collected([false, false])
-      assert.strictEqual(Locator.textOf(s.root), "off")
-      s.collected([false, true])
-      assert.strictEqual(Locator.textOf(s.root), "on")
+      scene.collected([false, false])
+      assert.strictEqual(Locator.textOf(scene.root), "off")
+      scene.collected([false, true])
+      assert.strictEqual(Locator.textOf(scene.root), "on")
     }))
 })
 

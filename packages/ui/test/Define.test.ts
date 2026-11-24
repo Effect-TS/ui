@@ -54,10 +54,10 @@ const ByHand = CounterDef.make({
 describe("Component.define", () => {
   it.effect("$.combine folds the Model and keeps every Command and event in call order", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Counter, { by: 2 })
-      s.send(Message.Step())
-      assert.deepStrictEqual(s.model, { n: 4, seen: ["Step", "Step"] })
-      s.expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
+      const story = yield* Story.make(Counter, { by: 2 })
+      story.send(Message.Step())
+      assert.deepStrictEqual(story.model, { n: 4, seen: ["Step", "Step"] })
+      story.expectExact(Log.make({ n: 2 }), Log.make({ n: 4 }))
         .emitted(Events.Stepped({ n: 2 }), Events.Stepped({ n: 4 }))
         .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
         .resolve(Log.make({ n: 4 }), Message.Logged({ n: 4 }))
@@ -65,12 +65,12 @@ describe("Component.define", () => {
 
   it.effect("a record update dispatches by _tag", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Counter, { by: 1 })
-      s.send(Message.Step())
+      const story = yield* Story.make(Counter, { by: 1 })
+      story.send(Message.Step())
         .emitted(Events.Stepped({ n: 1 }), Events.Stepped({ n: 2 }))
         .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
         .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
-      assert.deepStrictEqual(s.model.seen, [
+      assert.deepStrictEqual(story.model.seen, [
         "Step",
         "Step",
         "logged 1",
@@ -80,10 +80,10 @@ describe("Component.define", () => {
 
   it.effect("a slice called by hand binds $ to the message it is given", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(ByHand, { by: 1 })
-      s.send(Message.Step())
-      assert.deepStrictEqual(s.model.seen, ["Logged"])
-      s.emitted(Events.Stepped({ n: 1 }))
+      const story = yield* Story.make(ByHand, { by: 1 })
+      story.send(Message.Step())
+      assert.deepStrictEqual(story.model.seen, ["Logged"])
+      story.emitted(Events.Stepped({ n: 1 }))
         .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
     }))
 })

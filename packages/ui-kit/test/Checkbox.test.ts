@@ -30,67 +30,67 @@ const parts = (props: CheckboxProps) =>
 describe("Checkbox", () => {
   it.effect("a click asks for the other value, and the root and indicator show the value they were given", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Checkbox, { checked: false }, standIn)
-      s.fire(root, "click")
+      const scene = yield* Scene.make(Checkbox, { checked: false }, standIn)
+      scene.fire(root, "click")
         .emitted({ _tag: "Toggled", checked: true })
       // Nothing changes until the consumer passes the new value back.
-      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "false")
-      s.props({ checked: true })
-      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "true")
-      assert.strictEqual(s.get(root).attrs?.["data-checked"], "")
-      assert.strictEqual(s.get(indicator).attrs?.["data-checked"], "")
-      assert.isUndefined(s.get(indicator).attrs?.["data-unchecked"])
-      s.fire(root, "click")
+      assert.strictEqual(scene.get(root).attrs?.["aria-checked"], "false")
+      scene.props({ checked: true })
+      assert.strictEqual(scene.get(root).attrs?.["aria-checked"], "true")
+      assert.strictEqual(scene.get(root).attrs?.["data-checked"], "")
+      assert.strictEqual(scene.get(indicator).attrs?.["data-checked"], "")
+      assert.isUndefined(scene.get(indicator).attrs?.["data-unchecked"])
+      scene.fire(root, "click")
         .emitted({ _tag: "Toggled", checked: false })
     }))
 
   it.effect("an indeterminate checkbox is mixed, neither checked nor unchecked, and a click asks for the other value", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Checkbox, {
+      const scene = yield* Scene.make(Checkbox, {
         checked: true,
         indeterminate: true
       }, standIn)
-      assert.strictEqual(s.get(root).attrs?.["aria-checked"], "mixed")
-      assert.isUndefined(s.get(root).attrs?.["data-checked"])
-      const attrs = s.get(indicator).attrs
+      assert.strictEqual(scene.get(root).attrs?.["aria-checked"], "mixed")
+      assert.isUndefined(scene.get(root).attrs?.["data-checked"])
+      const attrs = scene.get(indicator).attrs
       assert.strictEqual(attrs?.["data-indeterminate"], "")
       assert.isUndefined(attrs?.["data-checked"])
       assert.isUndefined(attrs?.["data-unchecked"])
-      s.fire(root, "click")
+      scene.fire(root, "click")
         .emitted({ _tag: "Toggled", checked: false })
     }))
 
   it.effect("a disabled or read-only checkbox ignores clicks, and only a disabled one leaves the tab order", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(
+      const scene = yield* Scene.make(
         Checkbox,
         { checked: false, disabled: true },
         standIn
       )
-      assert.strictEqual(s.get(indicator).attrs?.["data-disabled"], "")
-      s.fire(root, "click")
+      assert.strictEqual(scene.get(indicator).attrs?.["data-disabled"], "")
+      scene.fire(root, "click")
         .props({ checked: false, readOnly: true, required: true })
-      const attrs = s.get(root).attrs
+      const attrs = scene.get(root).attrs
       assert.isUndefined(attrs?.disabled)
       assert.strictEqual(attrs?.["aria-readonly"], "true")
       assert.strictEqual(attrs?.["data-readonly"], "")
       assert.strictEqual(attrs?.["aria-required"], "true")
       assert.strictEqual(attrs?.["data-required"], "")
-      const indicatorAttrs = s.get(indicator).attrs
+      const indicatorAttrs = scene.get(indicator).attrs
       assert.isUndefined(indicatorAttrs?.["data-disabled"])
       assert.strictEqual(indicatorAttrs?.["data-readonly"], "")
       assert.strictEqual(indicatorAttrs?.["data-required"], "")
-      s.fire(root, "click")
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.fire(root, "click")
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("Enter is cancelled, so it doesn't toggle the button, and other keys are left alone", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Checkbox, { checked: false }, standIn)
-      s.fire(root, "keydown", { key: "Enter" })
+      const scene = yield* Scene.make(Checkbox, { checked: false }, standIn)
+      scene.fire(root, "keydown", { key: "Enter" })
         .expectDefaultPrevented()
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.fire(root, "keydown", { key: " " })
+      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.fire(root, "keydown", { key: " " })
         .expectIgnored()
         .expectDefaultPrevented(false)
     }))

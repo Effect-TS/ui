@@ -46,52 +46,55 @@ const shared = (value: Partial<Shared> = {}): Shared => ({
 const itemScene = (props: AccordionItemProps, value: Partial<Shared> = {}) =>
   Effect.map(
     Scene.make(AccordionItem, props, standIn),
-    (s) => s.shared(Accordion, shared(value))
+    (scene) => scene.shared(Accordion, shared(value))
   )
 
 describe("Accordion", () => {
   it.effect("opens from the accordion's value, names its panel by its trigger, and forwards Settled", () =>
     Effect.gen(function*() {
-      const s = yield* itemScene({ value: "a", index: 2 })
-      assert.isUndefined(s.query(panel))
-      assert.deepInclude(s.get(trigger).attrs, {
+      const scene = yield* itemScene({ value: "a", index: 2 })
+      assert.isUndefined(scene.query(panel))
+      assert.deepInclude(scene.get(trigger).attrs, {
         type: "button",
         "aria-expanded": "false",
         "data-index": "2"
       })
-      assert.deepInclude(s.get(itemRoot).attrs, {
+      assert.deepInclude(scene.get(itemRoot).attrs, {
         "data-closed": "",
         "data-index": "2"
       })
-      assert.deepInclude(s.get(header).attrs, {
+      assert.deepInclude(scene.get(header).attrs, {
         "data-closed": "",
         "data-orientation": "vertical"
       })
 
-      s.shared(Accordion, shared({ value: ["a"], orientation: "horizontal" }))
-      const triggerId = s.get(trigger).attrs?.id
-      const panelId = s.get(panel).attrs?.id
+      scene.shared(
+        Accordion,
+        shared({ value: ["a"], orientation: "horizontal" })
+      )
+      const triggerId = scene.get(trigger).attrs?.id
+      const panelId = scene.get(panel).attrs?.id
       assert.isString(triggerId)
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.deepInclude(scene.get(trigger).attrs, {
         "aria-expanded": "true",
         "aria-controls": panelId,
         "data-panel-open": "",
         "data-orientation": "horizontal"
       })
-      assert.deepInclude(s.get(panel).attrs, {
+      assert.deepInclude(scene.get(panel).attrs, {
         role: "region",
         "aria-labelledby": triggerId,
         "data-open": "",
         "data-index": "2",
         "data-orientation": "horizontal"
       })
-      assert.deepInclude(s.get(header).attrs, { "data-open": "" })
+      assert.deepInclude(scene.get(header).attrs, { "data-open": "" })
       assert.match(
-        s.get(panel).attrs?.style ?? "",
+        scene.get(panel).attrs?.style ?? "",
         /--accordion-panel-height:var\(--collapsible-panel-height\);--accordion-panel-width:var\(--collapsible-panel-width\)/
       )
 
-      s.childEmit(Collapsible, { _tag: "Settled", open: true }).emitted({
+      scene.childEmit(Collapsible, { _tag: "Settled", open: true }).emitted({
         _tag: "Settled",
         open: true
       })
@@ -145,8 +148,8 @@ describe("Accordion", () => {
 
   it.effect("the root names the panel by its rendered trigger regardless of build order, and leaves it unlabelled without one", () =>
     Effect.gen(function*() {
-      const s = yield* itemScene({ value: "a" }, { value: ["a"] })
-      s.parts((item) => {
+      const scene = yield* itemScene({ value: "a" }, { value: ["a"] })
+      scene.parts((item) => {
         const body = h.section.children(
           item.panel(
             h.div.attr("id", "panel-a").forward((panel) =>
@@ -175,12 +178,12 @@ describe("Accordion", () => {
         )
         assert.strictEqual(triggerAttrs["aria-controls"], "panel-a")
       })
-      s.parts((item) => {
+      scene.parts((item) => {
         assert.isUndefined(
           View.build(item.panel(h.div)!, []).attrs["aria-labelledby"]
         )
       })
-      s.parts((item) => {
+      scene.parts((item) => {
         item.trigger(h.button.attr("id", "unused"))
         const node = View.build(
           item.root(h.div).children(item.panel(h.div.class("panel"))),
@@ -228,8 +231,8 @@ describe("Accordion", () => {
         /a part for <div> was given <span>/
       )
 
-      const s = yield* itemScene({ value: "a" }, { value: ["a"] })
-      s.parts((item) => {
+      const scene = yield* itemScene({ value: "a" }, { value: ["a"] })
+      scene.parts((item) => {
         const stale = {
           "data-open": "x",
           "data-closed": "x",

@@ -175,10 +175,10 @@ const typed = (value: string, inputType = "insertText", composing = false) => ({
 
 type Tracked = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const trackedOn = (locator: Locator.Locator) => (s: Rendered): Tracked =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const trackedOn = (locator: Locator.Locator) => (scene: Rendered): Tracked =>
+  (scene.get(locator) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Tracked
 const tracked = trackedOn(positioner)
 const chipsTracked = trackedOn(Locator.attr("class", "chips"))
@@ -186,10 +186,10 @@ const sent = (tag: string, fields: object = {}) =>
   ({ _tag: tag, ...fields }) as never
 
 const partsOf = (
-  s: { readonly parts: (f: (combobox: Parts) => void) => unknown }
+  scene: { readonly parts: (f: (combobox: Parts) => void) => unknown }
 ): Parts => {
   let parts: Parts | undefined
-  s.parts((combobox) => {
+  scene.parts((combobox) => {
     parts = combobox
   })
   return parts!
@@ -212,28 +212,28 @@ const highlighted = (
 ) => ({ _tag: "Highlighted", value, index, reason }) as ComboboxEvents
 const settled = (open: boolean) => ({ _tag: "Settled", open }) as ComboboxEvents
 const values = (
-  s: { readonly parts: (f: (combobox: Parts) => void) => unknown }
-) => partsOf(s).items.map((item) => item.value)
+  scene: { readonly parts: (f: (combobox: Parts) => void) => unknown }
+) => partsOf(scene).items.map((item) => item.value)
 
 const base: ComboboxProps = { open: false, inputValue: "", items: fruits }
 
 const shown = Effect.fnUntraced(
   function*(props: ComboboxProps, view: typeof standIn = standIn) {
-    const s = yield* HtmlScene.make(Combobox, props, view)
-    s.mounted(tracked(s), sent("ShowedPopup"))
-    return s
+    const scene = yield* HtmlScene.make(Combobox, props, view)
+    scene.mounted(tracked(scene), sent("ShowedPopup"))
+    return scene
   }
 )
 
 describe("Combobox", () => {
   it.effect("draws combobox semantics, hidden form input and clear button", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(
+      const scene = yield* HtmlScene.make(
         Combobox,
         { ...base, name: "fruit", value: "banana", inputValue: "Banana" },
         standIn
       )
-      assert.deepInclude(s.get(input).attrs, {
+      assert.deepInclude(scene.get(input).attrs, {
         role: "combobox",
         "aria-expanded": "false",
         "aria-haspopup": "listbox",
@@ -241,51 +241,54 @@ describe("Combobox", () => {
         autocomplete: "off",
         value: "Banana"
       })
-      assert.isUndefined(s.get(input).attrs?.["aria-controls"])
-      assert.deepInclude(s.get(group).attrs, { role: "group" })
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.isUndefined(scene.get(input).attrs?.["aria-controls"])
+      assert.deepInclude(scene.get(group).attrs, { role: "group" })
+      assert.deepInclude(scene.get(trigger).attrs, {
         type: "button",
         tabindex: "-1",
         "aria-expanded": "false"
       })
-      assert.deepInclude(s.get(list).attrs, { role: "listbox", tabindex: "-1" })
-      assert.deepInclude(s.get(item("banana")).attrs, {
+      assert.deepInclude(scene.get(list).attrs, {
+        role: "listbox",
+        tabindex: "-1"
+      })
+      assert.deepInclude(scene.get(item("banana")).attrs, {
         role: "option",
         "aria-selected": "true",
         "data-selected": ""
       })
-      assert.deepInclude(s.get(item("cherry")).attrs, {
+      assert.deepInclude(scene.get(item("cherry")).attrs, {
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.deepInclude(s.get(Locator.attr("name", "fruit")).attrs, {
+      assert.deepInclude(scene.get(Locator.attr("name", "fruit")).attrs, {
         value: "banana",
         "aria-hidden": "true"
       })
-      assert.deepInclude(s.get(Locator.attr("class", "status")).attrs, {
+      assert.deepInclude(scene.get(Locator.attr("class", "status")).attrs, {
         role: "status",
         "aria-live": "polite"
       })
-      assert.strictEqual(Locator.textOf(s.get(empty)), "")
-      assert.deepInclude(s.get(clearButton).attrs, {
+      assert.strictEqual(Locator.textOf(scene.get(empty)), "")
+      assert.deepInclude(scene.get(clearButton).attrs, {
         type: "button",
         tabindex: "-1",
         "data-visible": ""
       })
-      s.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored()
+      scene.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored()
         .expectDefaultPrevented()
-      s.fire(clearButton, "click", pointer("mouse")).emitted(
+      scene.fire(clearButton, "click", pointer("mouse")).emitted(
         edited("", "clear-press"),
         picked(null, "clear-press")
       )
-      s.resolve(HtmlCommand.Focus, { found: true })
-      s.props({ ...base, name: "fruit" })
-      assert.isUndefined(s.query(clearButton))
+      scene.resolve(HtmlCommand.Focus, { found: true })
+      scene.props({ ...base, name: "fruit" })
+      assert.isUndefined(scene.query(clearButton))
     }))
 
   it.effect("keeps the name, form and required a consumer puts on the input", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, base, {
+      const scene = yield* HtmlScene.make(Combobox, base, {
         elements: Html,
         view: (combobox: Parts, h: H) =>
           combobox.input(
@@ -296,7 +299,7 @@ describe("Combobox", () => {
             })
           )
       })
-      assert.deepInclude(s.get(input).attrs, {
+      assert.deepInclude(scene.get(input).attrs, {
         name: "query",
         form: "search",
         required: ""
@@ -305,35 +308,37 @@ describe("Combobox", () => {
 
   it.effect("typing opens and filters; autofill reports without opening; composition waits for compositionend", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "input", typed("Apple", "insertReplacementText")).emitted(
-        edited("Apple")
-      )
-      s.fire(input, "input", typed("ba", "")).emitted(edited("ba"))
-      s.fire(input, "input", typed("ap")).emitted(
+      const scene = yield* HtmlScene.make(Combobox, base, standIn)
+      scene.fire(input, "input", typed("Apple", "insertReplacementText"))
+        .emitted(edited("Apple"))
+      scene.fire(input, "input", typed("ba", "")).emitted(edited("ba"))
+      scene.fire(input, "input", typed("ap")).emitted(
         edited("ap"),
         opened("input-change")
       )
-      s.props({ ...base, open: true, inputValue: "ap" }).mounted(
-        tracked(s),
+      scene.props({ ...base, open: true, inputValue: "ap" }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
-      assert.deepStrictEqual(values(s), ["apple", "apricot", "grape"])
-      assert.isNull(partsOf(s).highlighted)
-      assert.deepInclude(s.get(input).attrs, {
+      assert.deepStrictEqual(values(scene), ["apple", "apricot", "grape"])
+      assert.isNull(partsOf(scene).highlighted)
+      assert.deepInclude(scene.get(input).attrs, {
         "aria-expanded": "true",
-        "aria-controls": s.get(list).attrs?.id
+        "aria-controls": scene.get(list).attrs?.id
       })
-      s.fire(input, "input", typed("zz")).emitted(edited("zz"))
-      s.props({ ...base, open: true, inputValue: "zz" })
-      assert.isTrue(partsOf(s).listEmpty)
-      assert.strictEqual(Locator.textOf(s.get(empty)), "No fruit found")
-      assert.deepInclude(s.get(positioner).attrs, { "data-empty": "" })
-      s.props(base)
-      s.fire(input, "input", typed("り", "insertCompositionText", true))
+      scene.fire(input, "input", typed("zz")).emitted(edited("zz"))
+      scene.props({ ...base, open: true, inputValue: "zz" })
+      assert.isTrue(partsOf(scene).listEmpty)
+      assert.strictEqual(Locator.textOf(scene.get(empty)), "No fruit found")
+      assert.deepInclude(scene.get(positioner).attrs, { "data-empty": "" })
+      scene.props(base)
+      scene.fire(input, "input", typed("り", "insertCompositionText", true))
         .emitted(opened("input-change"))
-      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(input, "compositionend", { value: "りんご" }).emitted(
+      scene.props({ ...base, open: true }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      scene.fire(input, "compositionend", { value: "りんご" }).emitted(
         edited("りんご")
       )
     }))
@@ -341,243 +346,283 @@ describe("Combobox", () => {
   it.effect("filters by mode, limit, filteredItems and drops empty groups", () =>
     Effect.gen(function*() {
       const open = { ...base, open: true, inputValue: "a" }
-      const s = yield* shown(open)
-      assert.deepStrictEqual(values(s), ["apple", "apricot", "banana", "grape"])
-      s.props({ ...open, filter: "startsWith" })
-      assert.deepStrictEqual(values(s), ["apple", "apricot"])
-      s.props({ ...open, filter: "endsWith", inputValue: "e" })
-      assert.deepStrictEqual(values(s), ["apple", "grape"])
-      s.props({ ...open, filter: "none" })
-      assert.strictEqual(values(s).length, 5)
-      s.props({ ...open, limit: 2 })
-      assert.deepStrictEqual(values(s), ["apple", "apricot"])
-      s.props({
+      const scene = yield* shown(open)
+      assert.deepStrictEqual(values(scene), [
+        "apple",
+        "apricot",
+        "banana",
+        "grape"
+      ])
+      scene.props({ ...open, filter: "startsWith" })
+      assert.deepStrictEqual(values(scene), ["apple", "apricot"])
+      scene.props({ ...open, filter: "endsWith", inputValue: "e" })
+      assert.deepStrictEqual(values(scene), ["apple", "grape"])
+      scene.props({ ...open, filter: "none" })
+      assert.strictEqual(values(scene).length, 5)
+      scene.props({ ...open, limit: 2 })
+      assert.deepStrictEqual(values(scene), ["apple", "apricot"])
+      scene.props({
         ...open,
         value: "grape",
         filteredItems: [{ value: "grape", label: "Filtered Grape" }]
       })
-      assert.deepStrictEqual(values(s), ["grape"])
-      assert.strictEqual(partsOf(s).selectedItems[0]?.label, "Grape")
+      assert.deepStrictEqual(values(scene), ["grape"])
+      assert.strictEqual(partsOf(scene).selectedItems[0]?.label, "Grape")
       const grouped = [
         { value: "apple", label: "Apple", group: "fruit" },
         { value: "kale", label: "Kale", group: "vegetable" },
         { value: "leek", label: "Leek", group: "vegetable" }
       ]
-      s.props({ ...base, items: grouped, inputValue: "ka", open: true })
+      scene.props({ ...base, items: grouped, inputValue: "ka", open: true })
       assert.deepStrictEqual(
-        partsOf(s).groups.map((g) => [g.key, g.items.map((i) => i.value)]),
+        partsOf(scene).groups.map((g) => [g.key, g.items.map((i) => i.value)]),
         [["vegetable", ["kale"]]]
       )
     }))
 
   it.effect("pointer opens from input, group or trigger, hovers items, and picks on release", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "mousedown", pointer("mouse")).emitted(
+      const scene = yield* HtmlScene.make(Combobox, base, standIn)
+      scene.fire(input, "mousedown", pointer("mouse")).emitted(
         opened("input-press")
       ).expectDefaultPrevented(false)
-      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
-      s.fire(item("banana"), "mouseenter").emitted(
+      scene.props({ ...base, open: true }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      scene.fire(input, "mousedown", pointer("mouse")).expectIgnored()
+      scene.fire(item("banana"), "mouseenter").emitted(
         highlighted("banana", 2, "pointer")
       )
-      s.fire(item("banana"), "mouseleave").emitted(
+      scene.fire(item("banana"), "mouseleave").emitted(
         highlighted(null, -1, "pointer")
       )
-      s.fire(item("grape"), "mouseenter").emitted(
+      scene.fire(item("grape"), "mouseenter").emitted(
         highlighted("grape", 4, "pointer")
       )
-      s.fire(item("grape"), "mouseup", pointer("mouse")).emitted(
+      scene.fire(item("grape"), "mouseup", pointer("mouse")).emitted(
         picked("grape"),
         edited("Grape", "item-press"),
         dismissed("item-press")
       )
-      s.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      scene.fire(item("cherry"), "click", pointer("mouse")).expectIgnored()
+      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
         dismissed("trigger-press")
       ).expectDefaultPrevented()
-      s.resolve(HtmlCommand.Focus, { found: true })
-      s.props(base)
-      s.fire(group, "mousedown", pointer("mouse")).emitted(
+      scene.resolve(HtmlCommand.Focus, { found: true })
+      scene.props(base)
+      scene.fire(group, "mousedown", pointer("mouse")).emitted(
         opened("input-press"),
         highlighted(null, -1, "none")
       )
         .expectDefaultPrevented()
-      s.resolve(HtmlCommand.Focus, { found: true })
-      s.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
-      s.fire(trigger, "click", pointer("touch")).emitted(
+      scene.resolve(HtmlCommand.Focus, { found: true })
+      scene.fire(trigger, "mousedown", pointer("touch")).expectIgnored()
+      scene.fire(trigger, "click", pointer("touch")).emitted(
         opened("trigger-press")
       )
-      s.props({ ...base, open: true, highlightItemOnHover: false })
-      assert.strictEqual(partsOf(s).openMethod, "touch")
-      s.fire(item("banana"), "mouseenter").expectIgnored()
-      s.props({ ...base, open: false, openOnInputClick: false })
-      s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
+      scene.props({ ...base, open: true, highlightItemOnHover: false })
+      assert.strictEqual(partsOf(scene).openMethod, "touch")
+      scene.fire(item("banana"), "mouseenter").expectIgnored()
+      scene.props({ ...base, open: false, openOnInputClick: false })
+      scene.fire(input, "mousedown", pointer("mouse")).expectIgnored()
     }))
 
   it.effect("keyboard opens on the selected or end item, loops or clamps, and skips modified keys", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      const scene = yield* HtmlScene.make(Combobox, base, standIn)
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         opened("list-navigation"),
         highlighted("apple", 0)
       )
         .expectDefaultPrevented()
-      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepInclude(s.get(item("apple")).attrs, { "data-highlighted": "" })
-      s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
-      s.props(base)
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ ...base, open: true }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      assert.deepInclude(scene.get(item("apple")).attrs, {
+        "data-highlighted": ""
+      })
+      scene.fire(input, "keydown", key("Escape")).emitted(
+        dismissed("escape-key")
+      )
+      scene.props(base)
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           highlighted(null, -1, "none"),
           settled(false)
         )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(
+      scene.fire(input, "keydown", key("ArrowUp")).emitted(
         opened("list-navigation"),
         highlighted("grape", 4)
       )
-      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted(null, -1))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.props({ ...base, open: true }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
+        highlighted(null, -1)
+      )
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("apple", 0)
       )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted(null, -1))
-      s.props({ ...base, open: true, loopFocus: false })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.fire(input, "keydown", key("ArrowUp")).emitted(
+        highlighted(null, -1)
+      )
+      scene.props({ ...base, open: true, loopFocus: false })
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("apple", 0)
       )
-      s.fire(input, "keydown", key("ArrowUp")).expectDefaultPrevented()
-      assert.strictEqual(partsOf(s).highlighted, "apple")
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.fire(input, "keydown", key("ArrowUp")).expectDefaultPrevented()
+      assert.strictEqual(partsOf(scene).highlighted, "apple")
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("apricot", 1)
       )
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("banana", 2)
       )
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("cherry", 3)
       )
-      s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
-      s.fire(input, "keydown", key("Home")).expectIgnored()
-      s.fire(input, "keydown", key("ArrowDown", { shift: true }))
+      scene.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
+      scene.fire(input, "keydown", key("Home")).expectIgnored()
+      scene.fire(input, "keydown", key("ArrowDown", { shift: true }))
         .expectIgnored()
-      s.fire(input, "keydown", key("Escape")).emitted(dismissed("escape-key"))
-      s.props({ ...base, value: "banana", inputValue: "Banana" })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.fire(input, "keydown", key("Escape")).emitted(
+        dismissed("escape-key")
+      )
+      scene.props({ ...base, value: "banana", inputValue: "Banana" })
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           highlighted(null, -1, "none"),
           settled(false)
         )
-      s.fire(input, "keydown", key("ArrowUp")).emitted(
+      scene.fire(input, "keydown", key("ArrowUp")).emitted(
         opened("list-navigation"),
         highlighted("banana", 2)
       )
-      s.props({ ...base, value: "banana", inputValue: "Banana", open: true })
-        .mounted(tracked(s), sent("ShowedPopup"))
-      assert.strictEqual(values(s).length, 5)
+      scene.props({
+        ...base,
+        value: "banana",
+        inputValue: "Banana",
+        open: true
+      })
+        .mounted(tracked(scene), sent("ShowedPopup"))
+      assert.strictEqual(values(scene).length, 5)
     }))
 
   it.effect("autoHighlight, Enter, Space and Escape pick, dismiss or clear", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, {
+      const scene = yield* HtmlScene.make(Combobox, {
         ...base,
         autoHighlight: true
       }, standIn)
-      s.fire(input, "input", typed("an")).emitted(
+      scene.fire(input, "input", typed("an")).emitted(
         edited("an"),
         opened("input-change")
       )
-      s.props({ ...base, autoHighlight: true, open: true, inputValue: "an" })
-        .mounted(tracked(s), sent("ShowedPopup"))
+      scene.props({
+        ...base,
+        autoHighlight: true,
+        open: true,
+        inputValue: "an"
+      })
+        .mounted(tracked(scene), sent("ShowedPopup"))
       assert.strictEqual(
-        s.get(input).attrs?.["aria-activedescendant"],
-        s.get(item("banana")).attrs?.id
+        scene.get(input).attrs?.["aria-activedescendant"],
+        scene.get(item("banana")).attrs?.id
       )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      scene.fire(input, "keydown", key("Enter")).emitted(
         picked("banana"),
         edited("Banana", "item-press"),
         dismissed("item-press")
       ).expectDefaultPrevented()
-      s.props(base)
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props(base)
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           highlighted(null, -1, "none"),
           settled(false)
         )
-      s.props({ ...base, open: true }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(input, "keydown", key("Enter")).expectIgnored()
-      s.fire(input, "keyup", key("Enter")).emitted(dismissed("none"))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.props({ ...base, open: true }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      scene.fire(input, "keydown", key("Enter")).expectIgnored()
+      scene.fire(input, "keyup", key("Enter")).emitted(dismissed("none"))
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("apple", 0)
       )
-      s.fire(input, "keyup", key("Enter")).expectIgnored()
-      s.fire(input, "keydown", key(" ")).emitted(
+      scene.fire(input, "keyup", key("Enter")).expectIgnored()
+      scene.fire(input, "keydown", key(" ")).emitted(
         picked("apple"),
         edited("Apple", "item-press"),
         dismissed("item-press")
       ).expectDefaultPrevented()
-      s.props({ ...base, open: true, inputValue: "a" })
-      s.fire(input, "keydown", key(" ")).expectIgnored()
-      s.props({ ...base, value: "banana", inputValue: "Banana" })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ ...base, open: true, inputValue: "a" })
+      scene.fire(input, "keydown", key(" ")).expectIgnored()
+      scene.props({ ...base, value: "banana", inputValue: "Banana" })
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           highlighted(null, -1, "none"),
           settled(false)
         )
-      s.fire(input, "keydown", key("Escape")).emitted(
+      scene.fire(input, "keydown", key("Escape")).emitted(
         edited("", "escape-key"),
         picked(null, "escape-key")
       )
         .expectDefaultPrevented()
-      s.props(base)
-      s.fire(input, "keydown", key("Escape")).expectIgnored()
-      s.props({
+      scene.props(base)
+      scene.fire(input, "keydown", key("Escape")).expectIgnored()
+      scene.props({
         ...base,
         value: "banana",
         inputValue: "Banana",
         readOnly: true
       })
-      s.fire(input, "keydown", key("Escape")).expectIgnored()
+      scene.fire(input, "keydown", key("Escape")).expectIgnored()
     }))
 
   it.effect("freezes the filter during exit, restores the selected label on dismiss, and deselects when cleared", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, base, standIn)
-      s.fire(input, "input", typed("ap")).emitted(
+      const scene = yield* HtmlScene.make(Combobox, base, standIn)
+      scene.fire(input, "input", typed("ap")).emitted(
         edited("ap"),
         opened("input-change")
       )
-      s.props({ ...base, open: true, inputValue: "ap" }).mounted(
-        tracked(s),
+      scene.props({ ...base, open: true, inputValue: "ap" }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
-      s.fire(item("apricot"), "click", pointer("mouse")).emitted(
+      scene.fire(item("apricot"), "click", pointer("mouse")).emitted(
         picked("apricot"),
         edited("Apricot", "item-press"),
         dismissed("item-press")
       )
-      s.props({ ...base, value: "apricot", inputValue: "Apricot" })
-      assert.deepStrictEqual(values(s), ["apple", "apricot", "grape"])
-      assert.strictEqual(partsOf(s).transitionStatus, "ending")
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ ...base, value: "apricot", inputValue: "Apricot" })
+      assert.deepStrictEqual(values(scene), ["apple", "apricot", "grape"])
+      assert.strictEqual(partsOf(scene).transitionStatus, "ending")
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(settled(false))
-      assert.strictEqual(values(s).length, 5)
-      s.fire(input, "input", typed("gr")).emitted(
+      assert.strictEqual(values(scene).length, 5)
+      scene.fire(input, "input", typed("gr")).emitted(
         edited("gr"),
         opened("input-change")
       )
-      s.props({ ...base, value: "apricot", open: true, inputValue: "gr" })
-        .mounted(tracked(s), sent("ShowedPopup"))
-      s.mounted(tracked(s), sent("PressedOutside", { pointerType: "mouse" }))
+      scene.props({ ...base, value: "apricot", open: true, inputValue: "gr" })
+        .mounted(tracked(scene), sent("ShowedPopup"))
+      scene.mounted(
+        tracked(scene),
+        sent("PressedOutside", { pointerType: "mouse" })
+      )
         .emitted(dismissed("outside-press"))
-      s.props({ ...base, value: "apricot", inputValue: "gr" })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ ...base, value: "apricot", inputValue: "gr" })
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           edited("Apricot", "none"),
           settled(false)
         )
-      s.props({ ...base, value: "apricot", inputValue: "Apricot" })
-      s.fire(input, "input", typed("")).emitted(
+      scene.props({ ...base, value: "apricot", inputValue: "Apricot" })
+      scene.fire(input, "input", typed("")).emitted(
         edited(""),
         picked(null, "input-clear")
       )
@@ -592,53 +637,62 @@ describe("Combobox", () => {
         value: ["apple"],
         name: "fruit"
       }
-      const s = yield* shown(props, chipsStandIn)
-      s.expectMount(chipsTracked(s))
-      assert.deepInclude(s.get(list).attrs, { "aria-multiselectable": "true" })
-      assert.deepInclude(s.get(Locator.attr("class", "chips")).attrs, {
+      const scene = yield* shown(props, chipsStandIn)
+      scene.expectMount(chipsTracked(scene))
+      assert.deepInclude(scene.get(list).attrs, {
+        "aria-multiselectable": "true"
+      })
+      assert.deepInclude(scene.get(Locator.attr("class", "chips")).attrs, {
         role: "toolbar"
       })
-      assert.strictEqual(s.all(Locator.attr("name", "fruit")).length, 1)
-      s.fire(item("grape"), "click", pointer("mouse")).emitted(
+      assert.strictEqual(scene.all(Locator.attr("name", "fruit")).length, 1)
+      scene.fire(item("grape"), "click", pointer("mouse")).emitted(
         picked(["apple", "grape"])
       )
-      s.props({ ...props, value: ["apple", "grape"] })
-      s.fire(item("apple"), "click", pointer("mouse")).emitted(
+      scene.props({ ...props, value: ["apple", "grape"] })
+      scene.fire(item("apple"), "click", pointer("mouse")).emitted(
         picked(["grape"])
       )
-      s.fire(input, "input", typed("ban")).emitted(edited("ban"))
-      s.props({ ...props, value: ["grape"], inputValue: "ban" })
-      s.fire(item("banana"), "click", pointer("mouse")).emitted(
+      scene.fire(input, "input", typed("ban")).emitted(edited("ban"))
+      scene.props({ ...props, value: ["grape"], inputValue: "ban" })
+      scene.fire(item("banana"), "click", pointer("mouse")).emitted(
         picked(["grape", "banana"]),
         edited("", "input-clear"),
         dismissed("item-press")
       )
-      s.props({ ...base, multiple: true, value: ["apple", "grape"] })
-      assert.deepInclude(s.get(item("chip-apple")).attrs, { tabindex: "-1" })
-      s.fire(input, "keydown", key("Backspace")).emitted(
+      scene.props({ ...base, multiple: true, value: ["apple", "grape"] })
+      assert.deepInclude(scene.get(item("chip-apple")).attrs, {
+        tabindex: "-1"
+      })
+      scene.fire(input, "keydown", key("Backspace")).emitted(
         picked(["apple"], "none")
       )
-      s.fire(
+      scene.fire(
         input,
         "keydown",
         key("ArrowLeft", { selectionStart: 0, selectionEnd: 0 })
       ).expectDefaultPrevented()
-      s.resolve(HtmlCommand.Focus, { found: true })
-      s.fire(
+      scene.resolve(HtmlCommand.Focus, { found: true })
+      scene.fire(
         input,
         "keydown",
         key("ArrowLeft", { selectionStart: 1, selectionEnd: 1 })
       ).expectIgnored()
-      s.fire(item("remove-apple"), "mousedown", pointer("mouse"))
+      scene.fire(item("remove-apple"), "mousedown", pointer("mouse"))
         .expectIgnored().expectDefaultPrevented()
-      s.fire(item("remove-apple"), "click", pointer("mouse")).emitted(
+      scene.fire(item("remove-apple"), "click", pointer("mouse")).emitted(
         picked(["grape"], "chip-remove-press")
       )
-      s.resolve(HtmlCommand.Focus, { found: true })
-      s.props({ ...base, multiple: true, value: ["apple"], inputValue: "a" })
-      s.fire(input, "keydown", key("Backspace")).expectIgnored()
-      s.props({ ...base, multiple: true, value: ["apple"], readOnly: true })
-      s.fire(input, "keydown", key("Backspace")).expectIgnored()
+      scene.resolve(HtmlCommand.Focus, { found: true })
+      scene.props({
+        ...base,
+        multiple: true,
+        value: ["apple"],
+        inputValue: "a"
+      })
+      scene.fire(input, "keydown", key("Backspace")).expectIgnored()
+      scene.props({ ...base, multiple: true, value: ["apple"], readOnly: true })
+      scene.fire(input, "keydown", key("Backspace")).expectIgnored()
     }))
 
   it.effect("inputInPopup makes the trigger the combobox, supports typeahead, and cancels an outside release", () =>
@@ -649,60 +703,59 @@ describe("Combobox", () => {
         placeholder: "Pick a fruit",
         name: "fruit"
       }
-      const s = yield* HtmlScene.make(Combobox, props, inPopupStandIn)
-      assert.deepInclude(s.get(trigger).attrs, {
+      const scene = yield* HtmlScene.make(Combobox, props, inPopupStandIn)
+      assert.deepInclude(scene.get(trigger).attrs, {
         role: "combobox",
         "aria-haspopup": "dialog",
         "aria-expanded": "false",
-        "aria-labelledby": s.get(Locator.attr("class", "label")).attrs?.id
+        "aria-labelledby": scene.get(Locator.attr("class", "label")).attrs?.id
       })
-      assert.isUndefined(s.get(trigger).attrs?.tabindex)
+      assert.isUndefined(scene.get(trigger).attrs?.tabindex)
       assert.strictEqual(
-        Locator.textOf(s.get(Locator.attr("class", "value"))),
+        Locator.textOf(scene.get(Locator.attr("class", "value"))),
         "Pick a fruit"
       )
-      assert.deepInclude(s.get(popup).attrs, { role: "dialog" })
-      s.fire(trigger, "keydown", key("g")).emitted(picked("grape", "none"))
-      s.resolve(
-        s.current.pending[0]!.command,
+      assert.deepInclude(scene.get(popup).attrs, { role: "dialog" })
+      scene.fire(trigger, "keydown", key("g")).emitted(picked("grape", "none"))
+      scene.resolve(
+        scene.current.pending[0]!.command,
         sent("CompletedWaitBeforeResetTyping")
       )
-      s.props({ ...props, value: "grape" })
+      scene.props({ ...props, value: "grape" })
       assert.strictEqual(
-        Locator.textOf(s.get(Locator.attr("class", "value"))),
+        Locator.textOf(scene.get(Locator.attr("class", "value"))),
         "Grape"
       )
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
         opened("trigger-press"),
         highlighted("grape", 4, "none")
       )
         .expectDefaultPrevented(false)
-      s.props({ ...props, value: "grape", open: true }).mounted(
-        tracked(s),
+      scene.props({ ...props, value: "grape", open: true }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
       assert.strictEqual(
-        s.get(trigger).attrs?.["aria-controls"],
-        s.get(popup).attrs?.id
+        scene.get(trigger).attrs?.["aria-controls"],
+        scene.get(popup).attrs?.id
       )
-      s.mounted(tracked(s), sent("ReleasedPointer", { outside: true })).emitted(
-        dismissed("cancel-open")
-      )
-      s.fire(input, "input", typed("ba")).emitted(
+      scene.mounted(tracked(scene), sent("ReleasedPointer", { outside: true }))
+        .emitted(dismissed("cancel-open"))
+      scene.fire(input, "input", typed("ba")).emitted(
         edited("ba"),
         highlighted(null, -1, "none")
       )
-      s.props({ ...props, value: "grape", open: true, inputValue: "ba" })
-      assert.deepStrictEqual(values(s), ["banana"])
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.props({ ...props, value: "grape", open: true, inputValue: "ba" })
+      assert.deepStrictEqual(values(scene), ["banana"])
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("banana", 0)
       )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      scene.fire(input, "keydown", key("Enter")).emitted(
         picked("banana"),
         dismissed("item-press")
       )
-      s.props({ ...props, value: "banana", inputValue: "ba" })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ ...props, value: "banana", inputValue: "ba" })
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           highlighted(null, -1, "none"),
           edited("", "input-clear"),
@@ -718,95 +771,112 @@ describe("Combobox", () => {
         row: Math.floor(index / 3)
       }))
       const props = { ...base, items: grid, grid: true, open: true }
-      const s = yield* HtmlScene.make(Combobox, props, gridStandIn)
-      assert.deepInclude(s.get(input).attrs, { "aria-haspopup": "grid" })
-      assert.deepInclude(s.get(list).attrs, { role: "grid" })
-      assert.strictEqual(s.all(Locator.attr("class", "row")).length, 3)
-      assert.deepInclude(s.all(Locator.attr("class", "row"))[0]!.attrs, {
+      const scene = yield* HtmlScene.make(Combobox, props, gridStandIn)
+      assert.deepInclude(scene.get(input).attrs, { "aria-haspopup": "grid" })
+      assert.deepInclude(scene.get(list).attrs, { role: "grid" })
+      assert.strictEqual(scene.all(Locator.attr("class", "row")).length, 3)
+      assert.deepInclude(scene.all(Locator.attr("class", "row"))[0]!.attrs, {
         role: "row"
       })
-      assert.deepInclude(s.get(item("e0")).attrs, { role: "gridcell" })
-      s.fire(input, "keydown", key("ArrowRight")).expectIgnored()
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("e0", 0))
-      s.fire(input, "keydown", key("ArrowRight")).emitted(highlighted("e1", 1))
-      s.fire(input, "keydown", key("ArrowRight")).emitted(highlighted("e2", 2))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("e5", 5))
-      s.fire(input, "keydown", key("ArrowDown")).emitted(highlighted("e6", 6))
-      s.fire(input, "keydown", key("ArrowUp")).emitted(highlighted("e3", 3))
-      s.props({ ...props, dir: "rtl" })
-      s.fire(input, "keydown", key("ArrowLeft")).emitted(highlighted("e4", 4))
+      assert.deepInclude(scene.get(item("e0")).attrs, { role: "gridcell" })
+      scene.fire(input, "keydown", key("ArrowRight")).expectIgnored()
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
+        highlighted("e0", 0)
+      )
+      scene.fire(input, "keydown", key("ArrowRight")).emitted(
+        highlighted("e1", 1)
+      )
+      scene.fire(input, "keydown", key("ArrowRight")).emitted(
+        highlighted("e2", 2)
+      )
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
+        highlighted("e5", 5)
+      )
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
+        highlighted("e6", 6)
+      )
+      scene.fire(input, "keydown", key("ArrowUp")).emitted(highlighted("e3", 3))
+      scene.props({ ...props, dir: "rtl" })
+      scene.fire(input, "keydown", key("ArrowLeft")).emitted(
+        highlighted("e4", 4)
+      )
     }))
 
   it.effect("inline stays expanded, navigates while closed, restores highlight on focus, and clears on Escape keyup", () =>
     Effect.gen(function*() {
       const props = { ...base, inline: true }
-      const s = yield* HtmlScene.make(Combobox, props, gridStandIn)
-      s.expectMount(trackedOn(list)(s))
-      assert.deepInclude(s.get(input).attrs, {
+      const scene = yield* HtmlScene.make(Combobox, props, gridStandIn)
+      scene.expectMount(trackedOn(list)(scene))
+      assert.deepInclude(scene.get(input).attrs, {
         "aria-expanded": "true",
-        "aria-controls": s.get(list).attrs?.id
+        "aria-controls": scene.get(list).attrs?.id
       })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("apple", 0)
       )
-      s.fire(input, "keydown", key("Enter")).emitted(
+      scene.fire(input, "keydown", key("Enter")).emitted(
         picked("apple"),
         edited("Apple", "item-press")
       )
-      s.fire(input, "focusout", { within: false, disabled: false }).emitted(
+      scene.fire(input, "focusout", { within: false, disabled: false }).emitted(
         highlighted(null, -1, "none")
       )
-      s.fire(input, "focusin", { within: false }).emitted(
+      scene.fire(input, "focusin", { within: false }).emitted(
         highlighted("apple", 0, "none")
       )
-      s.props({ ...props, inputValue: "Apple", value: "apple" })
-      s.fire(input, "keydown", key("Escape")).expectIgnored()
-      s.fire(input, "keyup", key("Escape")).emitted(
+      scene.props({ ...props, inputValue: "Apple", value: "apple" })
+      scene.fire(input, "keydown", key("Escape")).expectIgnored()
+      scene.fire(input, "keyup", key("Escape")).emitted(
         edited("", "escape-key"),
         picked(null, "escape-key")
       )
-      s.props({ ...props, inputValue: "Apple", value: "apple", disabled: true })
-      s.fire(input, "keyup", key("Escape"))
-      assert.deepStrictEqual(s.current.emitted, [])
+      scene.props({
+        ...props,
+        inputValue: "Apple",
+        value: "apple",
+        disabled: true
+      })
+      scene.fire(input, "keyup", key("Escape"))
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("disabled ignores input, and readOnly browses without picking", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(
+      const scene = yield* HtmlScene.make(
         Combobox,
         { ...base, disabled: true },
         standIn
       )
-      assert.deepInclude(s.get(input).attrs, { "data-disabled": "" })
-      s.fire(input, "mousedown", pointer("mouse")).expectIgnored()
-      s.fire(input, "keydown", key("ArrowDown")).expectIgnored()
-      s.props({ ...base, readOnly: true })
-      assert.deepInclude(s.get(input).attrs, {
+      assert.deepInclude(scene.get(input).attrs, { "data-disabled": "" })
+      scene.fire(input, "mousedown", pointer("mouse")).expectIgnored()
+      scene.fire(input, "keydown", key("ArrowDown")).expectIgnored()
+      scene.props({ ...base, readOnly: true })
+      assert.deepInclude(scene.get(input).attrs, {
         readonly: "",
         "aria-readonly": "true",
         "aria-autocomplete": "none"
       })
-      s.fire(input, "keydown", key("ArrowDown")).emitted(
+      scene.fire(input, "keydown", key("ArrowDown")).emitted(
         opened("list-navigation"),
         highlighted("apple", 0)
       )
-      s.props({ ...base, readOnly: true, open: true }).mounted(
-        tracked(s),
+      scene.props({ ...base, readOnly: true, open: true }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
-      s.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
-      s.fire(item("apple"), "click", pointer("mouse")).expectHandled()
-      s.props({ ...base, name: "fruit" })
-      s.fire(Locator.attr("name", "fruit"), "change", {
+      scene.fire(input, "keydown", key("Enter")).expectDefaultPrevented()
+      scene.fire(item("apple"), "click", pointer("mouse")).expectHandled()
+      scene.props({ ...base, name: "fruit" })
+      scene.fire(Locator.attr("name", "fruit"), "change", {
         value: "Cherry",
         checked: false
       })
-      assert.deepStrictEqual(s.current.emitted, [])
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("clears consumer aria-disabled on native controls, keeps custom value content, and validates hidden part tags", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Combobox, {
+      const scene = yield* HtmlScene.make(Combobox, {
         ...base,
         multiple: true,
         value: ["apple"],
@@ -841,7 +911,7 @@ describe("Combobox", () => {
           )
       })
       assert.strictEqual(
-        Locator.textOf(s.get(Locator.attr("class", "custom-value"))),
+        Locator.textOf(scene.get(Locator.attr("class", "custom-value"))),
         "Chosen"
       )
       const controls = [
@@ -851,10 +921,10 @@ describe("Combobox", () => {
         Locator.attr("class", "chip-remove")
       ]
       for (const loc of controls) {
-        assert.strictEqual(s.get(loc).attrs?.disabled, "")
-        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+        assert.strictEqual(scene.get(loc).attrs?.disabled, "")
+        assert.isUndefined(scene.get(loc).attrs?.["aria-disabled"])
       }
-      s.props({
+      scene.props({
         ...base,
         multiple: true,
         value: ["apple"],
@@ -862,10 +932,10 @@ describe("Combobox", () => {
         disabled: false
       })
       for (const loc of controls) {
-        assert.isUndefined(s.get(loc).attrs?.disabled)
-        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+        assert.isUndefined(scene.get(loc).attrs?.disabled)
+        assert.isUndefined(scene.get(loc).attrs?.["aria-disabled"])
       }
-      s.expectMount(chipsTracked(s))
+      scene.expectMount(chipsTracked(scene))
       const hiddenTagCases: ReadonlyArray<
         (combobox: Parts, h: H) => View.Content<never>
       > = [

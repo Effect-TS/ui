@@ -207,15 +207,15 @@ describe("Component.noop", () => {
 
   it.effect("a story resolves a run with Component.noop, or with a result its mapper turns into it, and sends nothing", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Recorder, {})
-      s.send(Message.Fire({ command: "Quiet" }))
+      const story = yield* Story.make(Recorder, {})
+      story.send(Message.Fire({ command: "Quiet" }))
         .resolve(Quiet, Component.noop)
-      assert.deepStrictEqual(s.model, ["Fire"])
+      assert.deepStrictEqual(story.model, ["Fire"])
       // `resolve` takes the definition's own result, which `asNoop` maps to `Component.noop`.
-      s.send(Message.Fire({ command: "LoudAsNoop" }))
+      story.send(Message.Fire({ command: "LoudAsNoop" }))
         .resolve(Loud, got(0))
-      assert.deepStrictEqual(s.model, ["Fire", "Fire"])
-      s.expectNone()
+      assert.deepStrictEqual(story.model, ["Fire", "Fire"])
+      story.expectNone()
     }))
 
   it.effect("a component whose Message is Schema.Never runs a silent Command", () =>
@@ -230,8 +230,8 @@ describe("Component.noop", () => {
           update: ($) => $.model,
           view: (h, model) => h.el("p", String(model))
         })
-      const s = yield* Story.make(Silent, {})
-      s.resolve(Quiet, Component.noop).expectNone()
+      const story = yield* Story.make(Silent, {})
+      story.resolve(Quiet, Component.noop).expectNone()
     }))
 
   it.effect("a Service run ends with its instance, even with its Layer provided above, and maps nothing", () =>

@@ -54,18 +54,18 @@ type Tracked = Mount.Issued<unknown, never, never, unknown> & {
   readonly args: Record<string, unknown>
 }
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const tracked = (s: Rendered, locator: Locator.Locator): Tracked =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const tracked = (scene: Rendered, locator: Locator.Locator): Tracked =>
+  (scene.get(locator) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as Tracked
-const scene = (props: NumberFieldProps, view: typeof standIn = standIn) =>
+const makeScene = (props: NumberFieldProps, view: typeof standIn = standIn) =>
   HtmlScene.make(NumberField, props, view).pipe(
-    Effect.map((s) =>
-      s.expectMount(tracked(s, input))
-        .expectMount(tracked(s, decrement))
-        .expectMount(tracked(s, increment))
-        .expectMount(tracked(s, scrub))
+    Effect.map((scene) =>
+      scene.expectMount(tracked(scene, input))
+        .expectMount(tracked(scene, decrement))
+        .expectMount(tracked(scene, increment))
+        .expectMount(tracked(scene, scrub))
     )
   )
 
@@ -83,14 +83,14 @@ const keyed = (
   committed(value, "keyboard")
 ]
 const quiet = (
-  s: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
-) => assert.deepStrictEqual(s.current.emitted, [])
-const text = (s: Rendered) => s.get(input).props?.value
+  scene: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
+) => assert.deepStrictEqual(scene.current.emitted, [])
+const text = (scene: Rendered) => scene.get(input).props?.value
 
 describe("NumberField", () => {
   it.effect("renders default anatomy, hidden form input, and consumer attribute precedence", () =>
     Effect.gen(function*() {
-      const s = yield* scene({
+      const scene = yield* makeScene({
         value: 1234.5,
         locale: "en-US",
         name: "amount",
@@ -98,9 +98,9 @@ describe("NumberField", () => {
         min: 0,
         max: 5000
       })
-      const id = s.get(input).attrs?.id
+      const id = scene.get(input).attrs?.id
       assert.isString(id)
-      assert.deepInclude(s.get(input).attrs, {
+      assert.deepInclude(scene.get(input).attrs, {
         type: "text",
         inputmode: "numeric",
         autocomplete: "off",
@@ -109,10 +109,10 @@ describe("NumberField", () => {
         "aria-roledescription": "Number field",
         form: "order"
       })
-      assert.isUndefined(s.get(input).attrs?.name)
-      assert.strictEqual(text(s), "1,234.5")
-      assert.strictEqual(s.get(group).attrs?.role, "group")
-      assert.deepInclude(s.get(scrub).attrs, {
+      assert.isUndefined(scene.get(input).attrs?.name)
+      assert.strictEqual(text(scene), "1,234.5")
+      assert.strictEqual(scene.get(group).attrs?.role, "group")
+      assert.deepInclude(scene.get(scrub).attrs, {
         role: "presentation",
         style: "touch-action:none;user-select:none;-webkit-user-select:none"
       })
@@ -122,7 +122,7 @@ describe("NumberField", () => {
           "Increase"
         ]] as const
       ) {
-        assert.deepInclude(s.get(button).attrs, {
+        assert.deepInclude(scene.get(button).attrs, {
           type: "button",
           tabindex: "-1",
           "aria-label": label,
@@ -130,10 +130,10 @@ describe("NumberField", () => {
           style: "user-select:none;-webkit-user-select:none"
         })
       }
-      assert.strictEqual(s.query(cursor), undefined)
-      const children = s.get(root).children ?? []
-      assert.strictEqual(children[children.length - 1], s.get(formInput))
-      assert.deepInclude(s.get(formInput).attrs, {
+      assert.strictEqual(scene.query(cursor), undefined)
+      const children = scene.get(root).children ?? []
+      assert.strictEqual(children[children.length - 1], scene.get(formInput))
+      assert.deepInclude(scene.get(formInput).attrs, {
         type: "number",
         name: "amount",
         form: "order",
@@ -144,16 +144,16 @@ describe("NumberField", () => {
         "aria-hidden": "true",
         tabindex: "-1"
       })
-      assert.strictEqual(s.get(formInput).props?.value, "1234.5")
-      s.props({ value: null, step: "any", required: true })
-      assert.deepInclude(s.get(formInput).attrs, {
+      assert.strictEqual(scene.get(formInput).props?.value, "1234.5")
+      scene.props({ value: null, step: "any", required: true })
+      assert.deepInclude(scene.get(formInput).attrs, {
         step: "any",
         value: "",
         required: ""
       })
-      assert.isUndefined(s.get(formInput).attrs?.min)
+      assert.isUndefined(scene.get(formInput).attrs?.min)
 
-      const custom = yield* scene({ value: 5, max: 5, disabled: true }, {
+      const custom = yield* makeScene({ value: 5, max: 5, disabled: true }, {
         elements: Html,
         view: (numberField, h) =>
           numberField.root(
@@ -235,41 +235,46 @@ describe("NumberField", () => {
 
   it.effect("propagates state attributes, bound disabled states, part state, and element guards", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 5, min: 0, max: 5, required: true })
+      const scene = yield* makeScene({
+        value: 5,
+        min: 0,
+        max: 5,
+        required: true
+      })
       const all = [root, group, input, decrement, increment, scrub]
       for (const part of all) {
-        assert.strictEqual(s.get(part).attrs?.["data-required"], "")
+        assert.strictEqual(scene.get(part).attrs?.["data-required"], "")
       }
-      assert.deepInclude(s.get(increment).attrs, {
+      assert.deepInclude(scene.get(increment).attrs, {
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.isUndefined(s.get(decrement).attrs?.["aria-disabled"])
+      assert.isUndefined(scene.get(decrement).attrs?.["aria-disabled"])
 
-      s.props({ value: 0, min: 0, max: 5 })
-      assert.deepInclude(s.get(decrement).attrs, {
+      scene.props({ value: 0, min: 0, max: 5 })
+      assert.deepInclude(scene.get(decrement).attrs, {
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.isUndefined(s.get(increment).attrs?.["aria-disabled"])
+      assert.isUndefined(scene.get(increment).attrs?.["aria-disabled"])
 
-      s.props({ value: 2, min: 0, max: 5, readOnly: true })
+      scene.props({ value: 2, min: 0, max: 5, readOnly: true })
       for (const part of all) {
-        assert.strictEqual(s.get(part).attrs?.["data-readonly"], "")
+        assert.strictEqual(scene.get(part).attrs?.["data-readonly"], "")
       }
-      assert.strictEqual(s.get(input).attrs?.readonly, "")
+      assert.strictEqual(scene.get(input).attrs?.readonly, "")
       for (const button of [decrement, increment]) {
-        assert.strictEqual(s.get(button).attrs?.["aria-disabled"], "true")
+        assert.strictEqual(scene.get(button).attrs?.["aria-disabled"], "true")
       }
 
-      s.props({ value: 2, disabled: true })
+      scene.props({ value: 2, disabled: true })
       for (const part of all) {
-        assert.strictEqual(s.get(part).attrs?.["data-disabled"], "")
+        assert.strictEqual(scene.get(part).attrs?.["data-disabled"], "")
       }
-      assert.strictEqual(s.get(input).attrs?.disabled, "")
-      assert.strictEqual(s.get(formInput).attrs?.disabled, "")
+      assert.strictEqual(scene.get(input).attrs?.disabled, "")
+      assert.strictEqual(scene.get(formInput).attrs?.disabled, "")
 
-      const own = yield* scene({ value: 2 }, {
+      const own = yield* makeScene({ value: 2 }, {
         elements: Html,
         view: (numberField, h) =>
           numberField.root(h.div.class("root")).children(
@@ -316,29 +321,33 @@ describe("NumberField", () => {
 
   it.effect("steps with keyboard modifiers, bounds, empty start, floating-point precision, and snapOnStep", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 5, locale: "en-US" })
-      s.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
+      const scene = yield* makeScene({ value: 5, locale: "en-US" })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
         .expectDefaultPrevented()
-      s.keydown(input, "ArrowDown").emitted(...keyed(4, -1))
+      scene.keydown(input, "ArrowDown").emitted(...keyed(4, -1))
         .expectDefaultPrevented()
-      s.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(15, 1))
-      s.keydown(input, "ArrowDown", { alt: true }).emitted(...keyed(4.9, -1))
+      scene.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(15, 1))
+      scene.keydown(input, "ArrowDown", { alt: true }).emitted(
+        ...keyed(4.9, -1)
+      )
 
-      s.props({ value: 5, step: 0.25, smallStep: 0.01, largeStep: 100 })
-      s.keydown(input, "ArrowUp").emitted(...keyed(5.25, 1))
-      s.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(105, 1))
-      s.keydown(input, "ArrowDown", { alt: true }).emitted(...keyed(4.99, -1))
+      scene.props({ value: 5, step: 0.25, smallStep: 0.01, largeStep: 100 })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(5.25, 1))
+      scene.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(105, 1))
+      scene.keydown(input, "ArrowDown", { alt: true }).emitted(
+        ...keyed(4.99, -1)
+      )
 
-      s.props({ value: 5, step: "any" })
-      s.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
+      scene.props({ value: 5, step: "any" })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(6, 1))
 
-      s.props({ value: 9, min: 0, max: 10 })
-      s.keydown(input, "Home").emitted(...keyed(0)).expectDefaultPrevented()
-      s.keydown(input, "End").emitted(...keyed(10)).expectDefaultPrevented()
-      s.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(10, 1))
-      s.keydown(input, "ArrowUp", { ctrl: true }).expectIgnored()
+      scene.props({ value: 9, min: 0, max: 10 })
+      scene.keydown(input, "Home").emitted(...keyed(0)).expectDefaultPrevented()
+      scene.keydown(input, "End").emitted(...keyed(10)).expectDefaultPrevented()
+      scene.keydown(input, "ArrowUp", { shift: true }).emitted(...keyed(10, 1))
+      scene.keydown(input, "ArrowUp", { ctrl: true }).expectIgnored()
         .expectDefaultPrevented(false)
-      s.fire(input, "keydown", {
+      scene.fire(input, "keydown", {
         key: "ArrowUp",
         shift: false,
         ctrl: false,
@@ -347,70 +356,72 @@ describe("NumberField", () => {
         composing: true
       })
         .expectIgnored()
-      s.keydown(input, "PageUp").expectIgnored().expectDefaultPrevented(false)
-      s.props({ value: 10, min: 0, max: 10 })
-      s.keydown(input, "ArrowUp").expectHandled()
-      quiet(s)
-      s.props({ value: 5, max: 10 })
-      s.keydown(input, "Home").expectIgnored().expectDefaultPrevented(false)
+      scene.keydown(input, "PageUp").expectIgnored().expectDefaultPrevented(
+        false
+      )
+      scene.props({ value: 10, min: 0, max: 10 })
+      scene.keydown(input, "ArrowUp").expectHandled()
+      quiet(scene)
+      scene.props({ value: 5, max: 10 })
+      scene.keydown(input, "Home").expectIgnored().expectDefaultPrevented(false)
 
-      s.props({ value: null })
-      assert.strictEqual(text(s), "")
-      s.keydown(input, "ArrowUp").emitted(...keyed(0))
-      s.props({ value: null, min: 5 })
-      s.keydown(input, "ArrowDown").emitted(...keyed(5))
+      scene.props({ value: null })
+      assert.strictEqual(text(scene), "")
+      scene.keydown(input, "ArrowUp").emitted(...keyed(0))
+      scene.props({ value: null, min: 5 })
+      scene.keydown(input, "ArrowDown").emitted(...keyed(5))
 
-      s.props({ value: 0.1, step: 0.2 })
-      s.keydown(input, "ArrowUp").emitted(...keyed(0.3, 1))
-      s.props({ value: 3, step: 5, min: 2, snapOnStep: true })
-      s.keydown(input, "ArrowUp").emitted(...keyed(7, 1))
-      s.props({ value: 1.26, smallStep: 0.5, snapOnStep: true })
-      s.keydown(input, "ArrowUp", { alt: true }).emitted(...keyed(2, 1))
-      s.props({ value: 5, step: 5, max: 8, snapOnStep: true })
-      s.keydown(input, "ArrowUp").emitted(...keyed(8, 1))
+      scene.props({ value: 0.1, step: 0.2 })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(0.3, 1))
+      scene.props({ value: 3, step: 5, min: 2, snapOnStep: true })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(7, 1))
+      scene.props({ value: 1.26, smallStep: 0.5, snapOnStep: true })
+      scene.keydown(input, "ArrowUp", { alt: true }).emitted(...keyed(2, 1))
+      scene.props({ value: 5, step: 5, max: 8, snapOnStep: true })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(8, 1))
     }))
 
   it.effect("handles typing, clearing, invalid input, range clamping, rounding, and blur commit", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 5, locale: "en-US" })
-      s.blur(input)
-      quiet(s)
-      s.type(input, "1,234.50").emitted(updated(1234.5, "input-change"))
-      assert.strictEqual(text(s), "1,234.50")
-      s.props({ value: 1234.5, locale: "en-US" })
-      assert.strictEqual(text(s), "1,234.50")
-      s.blur(input).emitted(committed(1234.5, "input-blur"))
-      assert.strictEqual(text(s), "1,234.5")
-      s.blur(input)
-      quiet(s)
+      const scene = yield* makeScene({ value: 5, locale: "en-US" })
+      scene.blur(input)
+      quiet(scene)
+      scene.type(input, "1,234.50").emitted(updated(1234.5, "input-change"))
+      assert.strictEqual(text(scene), "1,234.50")
+      scene.props({ value: 1234.5, locale: "en-US" })
+      assert.strictEqual(text(scene), "1,234.50")
+      scene.blur(input).emitted(committed(1234.5, "input-blur"))
+      assert.strictEqual(text(scene), "1,234.5")
+      scene.blur(input)
+      quiet(scene)
 
-      s.type(input, "1234.5").emitted(updated(1234.5, "input-change"))
-      s.type(input, "").emitted(updated(null, "input-clear"))
-      s.props({ value: null, locale: "en-US" })
-      s.blur(input).emitted(committed(null, "input-clear"))
+      scene.type(input, "1234.5").emitted(updated(1234.5, "input-change"))
+      scene.type(input, "").emitted(updated(null, "input-clear"))
+      scene.props({ value: null, locale: "en-US" })
+      scene.blur(input).emitted(committed(null, "input-clear"))
 
-      s.props({ value: 5, locale: "en-US" })
-      s.type(input, "12a").expectHandled()
-      quiet(s)
-      s.type(input, "$12")
-      quiet(s)
-      s.type(input, "-").expectHandled()
-      s.blur(input).expectHandled()
-      quiet(s)
-      assert.strictEqual(text(s), "5")
+      scene.props({ value: 5, locale: "en-US" })
+      scene.type(input, "12a").expectHandled()
+      quiet(scene)
+      scene.type(input, "$12")
+      quiet(scene)
+      scene.type(input, "-").expectHandled()
+      scene.blur(input).expectHandled()
+      quiet(scene)
+      assert.strictEqual(text(scene), "5")
 
-      s.type(input, "20").emitted(updated(20, "input-change"))
-      s.keydown(input, "ArrowDown").emitted(...keyed(19, -1))
-      assert.strictEqual(text(s), "5")
+      scene.type(input, "20").emitted(updated(20, "input-change"))
+      scene.keydown(input, "ArrowDown").emitted(...keyed(19, -1))
+      assert.strictEqual(text(scene), "5")
 
-      s.props({ value: 5, min: 0, max: 10 })
-      s.type(input, "50").emitted(updated(10, "input-change"))
-      s.props({ value: 5, min: 0, max: 10, allowOutOfRange: true })
-      s.type(input, "50").emitted(updated(50, "input-change"))
-      s.props({ value: 50, min: 0, max: 10, allowOutOfRange: true })
-      s.keydown(input, "ArrowUp").emitted(...keyed(10, 1))
+      scene.props({ value: 5, min: 0, max: 10 })
+      scene.type(input, "50").emitted(updated(10, "input-change"))
+      scene.props({ value: 5, min: 0, max: 10, allowOutOfRange: true })
+      scene.type(input, "50").emitted(updated(50, "input-change"))
+      scene.props({ value: 50, min: 0, max: 10, allowOutOfRange: true })
+      scene.keydown(input, "ArrowUp").emitted(...keyed(10, 1))
 
-      const rounded = yield* scene({
+      const rounded = yield* makeScene({
         value: 1,
         locale: "en-US",
         format: { maximumFractionDigits: 2 }
@@ -438,19 +449,19 @@ describe("NumberField", () => {
 
   it.effect("formats and parses locales, non-Latin numbering systems, and percent, currency, and unit styles", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 1234.5, locale: "de-DE" })
-      assert.strictEqual(text(s), "1.234,5")
-      s.type(input, "2.345,75").emitted(updated(2345.75, "input-change"))
-      s.props({ value: 1234.5, locale: "fr-FR" })
-      s.blur(input).emitted(updated(2345.75, "input-blur"))
-      assert.match(text(s) as string, /^1\s234,5$/)
-      s.type(input, "9 876,5").emitted(updated(9876.5, "input-change"))
-      s.props({ value: 1234.5, locale: "de-CH" })
-      s.type(input, "1'234.25").emitted(updated(1234.25, "input-change"))
-      s.props({ value: 1234.5, locale: "en-IN" })
-      s.type(input, "12,34,567").emitted(updated(1234567, "input-change"))
+      const scene = yield* makeScene({ value: 1234.5, locale: "de-DE" })
+      assert.strictEqual(text(scene), "1.234,5")
+      scene.type(input, "2.345,75").emitted(updated(2345.75, "input-change"))
+      scene.props({ value: 1234.5, locale: "fr-FR" })
+      scene.blur(input).emitted(updated(2345.75, "input-blur"))
+      assert.match(text(scene) as string, /^1\s234,5$/)
+      scene.type(input, "9 876,5").emitted(updated(9876.5, "input-change"))
+      scene.props({ value: 1234.5, locale: "de-CH" })
+      scene.type(input, "1'234.25").emitted(updated(1234.25, "input-change"))
+      scene.props({ value: 1234.5, locale: "en-IN" })
+      scene.type(input, "12,34,567").emitted(updated(1234567, "input-change"))
 
-      const ar = yield* scene({ value: 1234.5, locale: "ar-EG" })
+      const ar = yield* makeScene({ value: 1234.5, locale: "ar-EG" })
       assert.strictEqual(text(ar), "١٬٢٣٤٫٥")
       ar.type(input, "٢٬٣٤٥٫٧٥").emitted(updated(2345.75, "input-change"))
       ar.type(input, "۱۲۳").emitted(updated(123, "input-change"))
@@ -458,7 +469,7 @@ describe("NumberField", () => {
       ar.type(input, "一二三").emitted(updated(123, "input-change"))
       ar.type(input, "−4").emitted(updated(-4, "input-change"))
 
-      const pct = yield* scene({
+      const pct = yield* makeScene({
         value: 0.5,
         locale: "en-US",
         format: { style: "percent" }
@@ -475,7 +486,7 @@ describe("NumberField", () => {
       assert.strictEqual(text(pct), "50%")
       pct.type(input, "25%").emitted(updated(25, "input-change"))
 
-      const eur = yield* scene({
+      const eur = yield* makeScene({
         value: 1234.5,
         locale: "de-DE",
         format: { style: "currency", currency: "EUR" }
@@ -483,7 +494,7 @@ describe("NumberField", () => {
       assert.match(text(eur) as string, /^1\.234,50\s€$/)
       eur.type(input, "99,90 €").emitted(updated(99.9, "input-change"))
 
-      const speed = yield* scene({
+      const speed = yield* makeScene({
         value: 12,
         locale: "en-US",
         format: { style: "unit", unit: "kilometer-per-hour" }
@@ -491,7 +502,7 @@ describe("NumberField", () => {
       assert.strictEqual(text(speed), "12 km/h")
       speed.type(input, "80 km/h").emitted(updated(80, "input-change"))
 
-      const debt = yield* scene({
+      const debt = yield* makeScene({
         value: -12,
         locale: "en-US",
         format: {
@@ -507,28 +518,28 @@ describe("NumberField", () => {
   it.effect("ignores input when disabled or read-only", () =>
     Effect.gen(function*() {
       for (const lock of [{ disabled: true }, { readOnly: true }]) {
-        const s = yield* scene({ value: 5, ...lock })
-        s.keydown(input, "ArrowUp").expectIgnored()
-        s.fire(input, "input", { value: "9" }).expectHandled()
-        s.fire(formInput, "change", { value: "9" })
-        s.fire(input, "blur", {})
-        quiet(s)
-        assert.strictEqual(text(s), "5")
+        const scene = yield* makeScene({ value: 5, ...lock })
+        scene.keydown(input, "ArrowUp").expectIgnored()
+        scene.fire(input, "input", { value: "9" }).expectHandled()
+        scene.fire(formInput, "change", { value: "9" })
+        scene.fire(input, "blur", {})
+        quiet(scene)
+        assert.strictEqual(text(scene), "5")
       }
     }))
 
   it.effect("handles hidden form input autofill and iOS inputmode", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: 5, max: 10 })
-      s.change(formInput, "7.5").emitted(updated(7.5, "none"))
-      s.change(formInput, "70").emitted(updated(10, "none"))
-      s.change(formInput, "").emitted(updated(null, "none"))
-      s.change(formInput, "5")
-      quiet(s)
-      s.props({ value: 5, min: 0 })
-      s.mounted(tracked(s, input), { _tag: "DetectedIOS" } as never)
-      assert.strictEqual(s.get(input).attrs?.inputmode, "decimal")
-      s.props({ value: 5, min: -1 })
-      assert.strictEqual(s.get(input).attrs?.inputmode, "text")
+      const scene = yield* makeScene({ value: 5, max: 10 })
+      scene.change(formInput, "7.5").emitted(updated(7.5, "none"))
+      scene.change(formInput, "70").emitted(updated(10, "none"))
+      scene.change(formInput, "").emitted(updated(null, "none"))
+      scene.change(formInput, "5")
+      quiet(scene)
+      scene.props({ value: 5, min: 0 })
+      scene.mounted(tracked(scene, input), { _tag: "DetectedIOS" } as never)
+      assert.strictEqual(scene.get(input).attrs?.inputmode, "decimal")
+      scene.props({ value: 5, min: -1 })
+      assert.strictEqual(scene.get(input).attrs?.inputmode, "text")
     }))
 })

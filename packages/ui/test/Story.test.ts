@@ -63,27 +63,27 @@ describe("Story", () => {
         model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
       view: (h, model) => h.text(String(model))
     })
-    const s = Story.start(Ticker, {})
-    s.send((model) => ({ _tag: "Set", value: model + 1 }))
-    assert.strictEqual(s.model, 2)
-    s.send((model) => ({ _tag: "Set", value: model * 3 }))
-    assert.strictEqual(s.model, 6)
-    assert.deepStrictEqual(s.subscriptions, ["tick"])
+    const story = Story.start(Ticker, {})
+    story.send((model) => ({ _tag: "Set", value: model + 1 }))
+    assert.strictEqual(story.model, 2)
+    story.send((model) => ({ _tag: "Set", value: model * 3 }))
+    assert.strictEqual(story.model, 6)
+    assert.deepStrictEqual(story.subscriptions, ["tick"])
     assert.throws(
-      () => s.subscription("missing", { _tag: "Stop" }),
+      () => story.subscription("missing", { _tag: "Stop" }),
       /Story.subscription.*missing.*active keys:.*tick/
     )
     assert.throws(
-      () => s.subscription("~query/users", { _tag: "Stop" }),
+      () => story.subscription("~query/users", { _tag: "Stop" }),
       /Story.subscription.*query watch.*active keys:.*tick/
     )
-    s.subscription("tick", { _tag: "Stop" })
-    assert.strictEqual(s.model, 0)
+    story.subscription("tick", { _tag: "Stop" })
+    assert.strictEqual(story.model, 0)
     assert.throws(
-      () => s.subscription("tick", { _tag: "Set", value: 10 }),
+      () => story.subscription("tick", { _tag: "Set", value: 10 }),
       /active keys: \[\]/
     )
-    assert.strictEqual(s.model, 0)
+    assert.strictEqual(story.model, 0)
   })
 
   it("reports two Subscriptions that share a key, as the runtime does", () => {
@@ -100,13 +100,13 @@ describe("Story", () => {
       ],
       view: (h) => h.text("twice")
     })
-    const s = Story.start(Twice, {})
+    const story = Story.start(Twice, {})
     assert.throws(
-      () => s.subscriptions,
+      () => story.subscriptions,
       "/Twice: two Subscriptions share the key room:\"42\""
     )
     assert.throws(
-      () => s.subscription("room:\"42\"", null),
+      () => story.subscription("room:\"42\"", null),
       "/Twice: two Subscriptions share the key room:\"42\""
     )
   })
@@ -129,36 +129,37 @@ describe("Story", () => {
   describe("Counter", () => {
     it.effect("counts by clicking", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Counter, { initial: 1 })
-        s.click("+")
+        const scene = yield* Scene.make(Counter, { initial: 1 })
+        scene.click("+")
           .click("+")
           .click("-")
           .expect(Locator.tag("span")).toHaveText("2")
-        assert.strictEqual(View.textOf(s.view), "-2+")
+        assert.strictEqual(View.textOf(scene.view), "-2+")
       }))
 
     it.effect("given starts from any Model, and a function of the cursor is a shared setup", () =>
       Effect.gen(function*() {
-        const twice = (s: Scene.Steps<typeof Counter>) =>
-          s.click("+").click("+")
-        const s = yield* Scene.make(Counter, { initial: 1 })
-        s.given({ count: 10 }).pipe(twice)
-        assert.strictEqual(Locator.textOf(s.get(Locator.tag("span"))), "12")
+        const twice = (scene: Scene.Steps<typeof Counter>) =>
+          scene.click("+").click("+")
+        const scene = yield* Scene.make(Counter, { initial: 1 })
+        scene.given({ count: 10 }).pipe(twice)
+        assert.strictEqual(Locator.textOf(scene.get(Locator.tag("span"))), "12")
       }))
 
     it.effect("steps run as separate statements on one cursor", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Counter, { initial: 0 })
-        s.click("+")
-        s.click("+")
-        assert.strictEqual(Locator.textOf(s.get(Locator.tag("span"))), "2")
+        const scene = yield* Scene.make(Counter, { initial: 0 })
+        scene.click("+")
+        scene.click("+")
+        assert.strictEqual(Locator.textOf(scene.get(Locator.tag("span"))), "2")
       }))
 
     it.effect("a step shared by any component keeps the caller's type", () =>
       Effect.gen(function*() {
-        const clickPlus = <S extends Scene.Steps.Any>(s: S): S => s.click("+")
-        const s = yield* Scene.make(Counter, { initial: 0 })
-        s.pipe(clickPlus).expect(Locator.tag("span")).toHaveText("1")
+        const clickPlus = <S extends Scene.Steps.Any>(scene: S): S =>
+          scene.click("+")
+        const scene = yield* Scene.make(Counter, { initial: 0 })
+        scene.pipe(clickPlus).expect(Locator.tag("span")).toHaveText("1")
       }))
 
     it("the record answers locator queries over the view", () => {
@@ -211,15 +212,15 @@ describe("Story", () => {
 
     it.effect("fire sends the payload to the element the locator matches", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Form, {})
-        s.fire(Locator.testId("name"), "input", { value: "Ada" })
+        const scene = yield* Scene.make(Form, {})
+        scene.fire(Locator.testId("name"), "input", { value: "Ada" })
           .expect(Locator.testId("value")).toHaveText("Ada")
       }))
 
     it.effect("click bubbles from the matched element to the nearest ancestor that handles it", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Form, {})
-        s.click(Locator.text("Save", { exact: true }))
+        const scene = yield* Scene.make(Form, {})
+        scene.click(Locator.text("Save", { exact: true }))
           .click(Locator.tag("span"))
           .expect(Locator.testId("presses")).toHaveText("2")
       }))
@@ -277,64 +278,68 @@ describe("Story", () => {
               h.el("output", String(sent))
             )
         })
-        const keyDown = (key: string) => (s: Scene.Steps<typeof Composer>) =>
-          s.fire(Locator.tag("textarea"), "keydown", { key })
-        const s = yield* Scene.make(Composer, {})
-        s.pipe(keyDown("Enter"))
+        const keyDown =
+          (key: string) => (scene: Scene.Steps<typeof Composer>) =>
+            scene.fire(Locator.tag("textarea"), "keydown", { key })
+        const scene = yield* Scene.make(Composer, {})
+        scene.pipe(keyDown("Enter"))
           // Checks read the record without making a new one.
           .expect(Locator.tag("output")).toHaveText("1")
-        assert.isTrue(s.defaultPrevented)
-        s.props({})
-        assert.isFalse(s.defaultPrevented)
-        s.pipe(keyDown("Enter"))
+        assert.isTrue(scene.defaultPrevented)
+        scene.props({})
+        assert.isFalse(scene.defaultPrevented)
+        scene.pipe(keyDown("Enter"))
           .pipe(keyDown("a"))
           .expectIgnored()
-        assert.isFalse(s.defaultPrevented)
+        assert.isFalse(scene.defaultPrevented)
         // A form's submission is always cancelled, whatever its handler returns.
-        s.fire(Locator.text("Ignored"), "submit").expectIgnored()
-        assert.isTrue(s.defaultPrevented)
+        scene.fire(Locator.text("Ignored"), "submit").expectIgnored()
+        assert.isTrue(scene.defaultPrevented)
         // A form with no submit handler is like any element nothing handles the event for.
         assert.throws(
-          () => s.fire(Locator.text("Unhandled"), "submit"),
+          () => scene.fire(Locator.text("Unhandled"), "submit"),
           /Scene\.fire: nothing handles "submit"/
         )
-        s.expect(Locator.tag("output")).toHaveText("2")
+        scene.expect(Locator.tag("output")).toHaveText("2")
         // "always" cancels whatever the handler returns.
-        s.fire(Locator.text("Menu"), "contextmenu").expectIgnored()
-        assert.isTrue(s.defaultPrevented)
+        scene.fire(Locator.text("Menu"), "contextmenu").expectIgnored()
+        assert.isTrue(scene.defaultPrevented)
       }))
   })
 
   describe("TodoItem", () => {
     it.effect("reports a toggle to its parent instead of changing the todo", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(TodoItem, { todo })
-        s.click("[ ]")
+        const scene = yield* Scene.make(TodoItem, { todo })
+        scene.click("[ ]")
           .emitted(TodoItemEvents.Toggled({ done: true }))
       }))
 
     it.effect("a props change re-renders without reaching update", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(TodoItem, { todo })
-        s.props({ todo: { ...todo, done: true } })
-        assert.include(View.textOf(s.view), "[x]")
-        s.expect(Locator.text("save", { exact: true })).toExist()
+        const scene = yield* Scene.make(TodoItem, { todo })
+        scene.props({ todo: { ...todo, done: true } })
+        assert.include(View.textOf(scene.view), "[x]")
+        scene.expect(Locator.text("save", { exact: true })).toExist()
       }))
 
     it.effect("a Command stays pending as data until the test resolves it", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(TodoItem, { todo })
-        s.click("save")
+        const scene = yield* Scene.make(TodoItem, { todo })
+        scene.click("save")
           .expect(Locator.text("saving")).toExist()
           .expectExact(SaveTodo.make(todo))
           .expectHas(SaveTodo)
         assert.deepStrictEqual(
-          s.pending.map((
+          scene.pending.map((
             entry
           ) => [entry.command.name, entry.command.args, entry.status]),
           [["todos/SaveTodo", todo, "running"]]
         )
-        s.resolve(SaveTodo, TodoItemMessage.SaveFailed({ reason: "disk full" }))
+        scene.resolve(
+          SaveTodo,
+          TodoItemMessage.SaveFailed({ reason: "disk full" })
+        )
           .expect(Locator.text("save", { exact: true })).toExist()
           .expectNone()
       }))
@@ -342,8 +347,8 @@ describe("Story", () => {
     it.effect("fails when a Command is still pending at the end", () =>
       Effect.gen(function*() {
         const message = yield* defect(Effect.gen(function*() {
-          const s = yield* Story.make(TodoItem, { todo })
-          s.send(TodoItemMessage.Save())
+          const story = yield* Story.make(TodoItem, { todo })
+          story.send(TodoItemMessage.Save())
         }))
         assert.match(
           message,
@@ -352,10 +357,10 @@ describe("Story", () => {
       }))
 
     it("resolving by instance matches the arguments", () => {
-      const s = Scene.start(TodoItem, { todo })
+      const scene = Scene.start(TodoItem, { todo })
       assert.throws(
         () =>
-          s.click("save")
+          scene.click("save")
             .resolve(
               SaveTodo.make({ ...todo, id: "other" }),
               TodoItemMessage.Saved()
@@ -409,33 +414,33 @@ describe("Story", () => {
 
     it.effect("fail sends the typed failure through Command.match", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Editor, {})
-        s.click("save")
+        const scene = yield* Scene.make(Editor, {})
+        scene.click("save")
           .fail(Save, new SaveFailed({ reason: "disk full" }))
-        assert.include(View.textOf(s.view), "failed: disk full")
+        assert.include(View.textOf(scene.view), "failed: disk full")
       }))
 
     it("fail throws for a Command with no typed failure", () => {
-      const s = Scene.start(TodoItem, { todo })
+      const scene = Scene.start(TodoItem, { todo })
       assert.throws(
-        () => s.click("save").fail(SaveTodo as any, new Error("no")),
+        () => scene.click("save").fail(SaveTodo as any, new Error("no")),
         /has no typed failure mapped by Command\.match/
       )
     })
 
     it.effect("h.isRunning is derived from the pending Commands", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Editor, {})
-        assert.include(View.textOf(s.view), "idle")
-        s.click("save")
-        assert.include(View.textOf(s.view), "saving")
-        s.resolve(Save, undefined)
-        assert.include(View.textOf(s.view), "saved")
-        s.click("save")
+        const scene = yield* Scene.make(Editor, {})
+        assert.include(View.textOf(scene.view), "idle")
+        scene.click("save")
+        assert.include(View.textOf(scene.view), "saving")
+        scene.resolve(Save, undefined)
+        assert.include(View.textOf(scene.view), "saved")
+        scene.click("save")
           .keepPending(Save)
           .click("stop")
-        assert.include(View.textOf(s.view), "saved")
-        s.expectNone()
+        assert.include(View.textOf(scene.view), "saved")
+        scene.expectNone()
       }))
   })
 
@@ -450,10 +455,10 @@ describe("Story", () => {
 
     it.effect("reacts to what a child emits", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(TodoList, { initial: todos })
-        s.childEmit(TodoItem, "t2", TodoItemEvents.Toggled({ done: true }))
+        const scene = yield* Scene.make(TodoList, { initial: todos })
+        scene.childEmit(TodoItem, "t2", TodoItemEvents.Toggled({ done: true }))
         assert.deepStrictEqual(
-          Scene.children(s.view, TodoItem).map((child) =>
+          Scene.children(scene.view, TodoItem).map((child) =>
             (child.props as { readonly todo: typeof todo }).todo.done
           ),
           [false, true]
@@ -465,11 +470,11 @@ describe("Story", () => {
         const failure = AsyncResult.failure<never, unknown>(
           Cause.die(new Error("boom"))
         )
-        const s = yield* Scene.make(TodoList, { initial: todos })
-        s.childFailure(TodoItem, "t1", failure.cause)
-        const fallback = Scene.fallback(s.view, TodoItem, "t1", failure)
+        const scene = yield* Scene.make(TodoList, { initial: todos })
+        scene.childFailure(TodoItem, "t1", failure.cause)
+        const fallback = Scene.fallback(scene.view, TodoItem, "t1", failure)
         assert.strictEqual(View.textOf(fallback!), "buy milk failed")
-        s.expect(Locator.text("rows failed: t1")).toExist()
+        scene.expect(Locator.text("rows failed: t1")).toExist()
         const story = Story.start(TodoList, { initial: todos }).layerFailed(
           failure
         )
@@ -482,51 +487,57 @@ describe("Story", () => {
         () => Layer.effect(SaveTodo, Effect.fail("offline" as const)),
         { onFailure: () => TodoListMessage.RowFailed({ id: "layer" }) }
       )
-      const s = Story.start(Provided, { initial: todos }).layerFailed(
+      const story = Story.start(Provided, { initial: todos }).layerFailed(
         AsyncResult.failure(Cause.fail("offline"))
       )
-      assert.deepStrictEqual(s.model.failed, ["layer"])
+      assert.deepStrictEqual(story.model.failed, ["layer"])
     })
   })
 
   describe("Command modes", () => {
     it.effect("switch interrupts the earlier run, and the result arrives once", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(SearchBox, {})
-        s.send(SearchMessage.Query({ text: "a" }))
+        const story = yield* Story.make(SearchBox, {})
+        story.send(SearchMessage.Query({ text: "a" }))
           .send(SearchMessage.Query({ text: "ab" }))
-        assert.deepStrictEqual(s.interrupted.map((command) => command.args), [{
-          text: "a"
-        }])
-        s.expectExact(Search.make({ text: "ab" }))
+        assert.deepStrictEqual(
+          story.interrupted.map((command) => command.args),
+          [{
+            text: "a"
+          }]
+        )
+        story.expectExact(Search.make({ text: "ab" }))
           .resolve(Search, SearchMessage.Results({ items: ["ab"] }))
-        assert.deepStrictEqual(s.model.items, ["ab"])
+        assert.deepStrictEqual(story.model.items, ["ab"])
       }))
 
     it.effect("a stream Command takes next and end, and an interrupt stops it", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(SearchBox, {})
-        s.send(SearchMessage.Start())
-        s.next(Upload, SearchMessage.Progress({ percent: 50 }))
-        assert.strictEqual(s.model.percent, 50)
-        assert.deepStrictEqual(s.subscriptions, ["tick", "query:\"\""])
-        s.expectHas(Upload)
+        const story = yield* Story.make(SearchBox, {})
+        story.send(SearchMessage.Start())
+        story.next(Upload, SearchMessage.Progress({ percent: 50 }))
+        assert.strictEqual(story.model.percent, 50)
+        assert.deepStrictEqual(story.subscriptions, ["tick", "query:\"\""])
+        story.expectHas(Upload)
           .send(SearchMessage.Cancel())
-        assert.deepStrictEqual(s.interrupted.map((command) => command.name), [
-          "Upload"
-        ])
-        s.expectNone()
+        assert.deepStrictEqual(
+          story.interrupted.map((command) => command.name),
+          [
+            "Upload"
+          ]
+        )
+        story.expectNone()
           .send(SearchMessage.Start())
           .end(Upload)
           .expectNone()
       }))
 
     it("next and end reject a Command that isn't a stream", () => {
-      const s = Story.start(SearchBox, {}).send(
+      const story = Story.start(SearchBox, {}).send(
         SearchMessage.Query({ text: "a" })
       )
       assert.throws(
-        () => s.next(Search as any, SearchMessage.Tick()),
+        () => story.next(Search as any, SearchMessage.Tick()),
         /not a stream Command/
       )
     })
@@ -563,11 +574,11 @@ describe("Story", () => {
 
     it.effect("resolves with the Command's own message type and replays the mapping", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(Avatar, {})
-        s.send(Message.Upload())
+        const story = yield* Story.make(Avatar, {})
+        story.send(Message.Upload())
           .expectExact(UploadFile.make({ name: "me.png" }))
           .resolve(UploadFile, "https://cdn/me.png")
-        assert.strictEqual(s.model.url, "https://cdn/me.png")
+        assert.strictEqual(story.model.url, "https://cdn/me.png")
       }))
 
     it.effect("a mapped Command as the target still takes the definition's own result", () =>
@@ -575,10 +586,10 @@ describe("Story", () => {
         const mapped = UploadFile.make({ name: "me.png" }).pipe(
           Command.map((url) => Message.Uploaded({ url }))
         )
-        const s = yield* Story.make(Avatar, {})
-        s.send(Message.Upload())
+        const story = yield* Story.make(Avatar, {})
+        story.send(Message.Upload())
           .resolve(mapped, "https://cdn/me.png")
-        assert.strictEqual(s.model.url, "https://cdn/me.png")
+        assert.strictEqual(story.model.url, "https://cdn/me.png")
       }))
   })
 
@@ -612,11 +623,11 @@ describe("Story", () => {
 
     it.effect("a navigation Command stays pending until resolved, like any other", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(Nav, {})
-        s.send(Message.Go())
-        assert.strictEqual(s.model.outcome, "")
-        s.resolve(Router.Push, "navigated")
-        assert.strictEqual(s.model.outcome, "navigated")
+        const story = yield* Story.make(Nav, {})
+        story.send(Message.Go())
+        assert.strictEqual(story.model.outcome, "")
+        story.resolve(Router.Push, "navigated")
+        assert.strictEqual(story.model.outcome, "navigated")
       }))
 
     it.effect("a search patch is named by its class, issued with the patch, and resolves with its own outcome", () =>
@@ -654,11 +665,11 @@ describe("Story", () => {
           view: (h, model) => h.el("p", model.outcome)
         })
         const route = Routes.Search()
-        const s = yield* Story.make(Box, { route })
-        s.send(BoxMessage.Typed({ value: "ada" }))
+        const story = yield* Story.make(Box, { route })
+        story.send(BoxMessage.Typed({ value: "ada" }))
           .expectExact(Router.patchSearch(Routes, route, { q: "ada" }))
           .resolve(Router.PatchSearch, "stale")
-        assert.strictEqual(s.model.outcome, "stale")
+        assert.strictEqual(story.model.outcome, "stale")
       }))
   })
 
@@ -680,14 +691,14 @@ describe("Story", () => {
     it.effect("fail the step that changed the Model, even when no step queries the view", () =>
       Effect.gen(function*() {
         yield* Scene.make(Broken, {})
-        const s = Scene.start(Broken, {})
-        assert.throws(() => s.click("bump"), /view broke at 1/)
+        const scene = Scene.start(Broken, {})
+        assert.throws(() => scene.click("bump"), /view broke at 1/)
       }))
 
     it.effect("fail initialisation when init's Model can't be rendered", () =>
       Effect.gen(function*() {
-        const s = Scene.start(Broken, {})
-        assert.throws(() => s.given({ n: 5 }), /view broke at 5/)
+        const scene = Scene.start(Broken, {})
+        assert.throws(() => scene.given({ n: 5 }), /view broke at 5/)
         const AlwaysBroken = Component.define({
           name: "AlwaysBroken",
           model: Schema.Struct({}),
@@ -709,15 +720,15 @@ describe("Story", () => {
       Effect.gen(function*() {
         const names = (record: Story.Story<any, any, any, any>) =>
           record.queryInfo().map((info) => info.name)
-        const s = yield* Story.make(Note, { author: "1" })
-        assert.deepStrictEqual(names(s.current), ["author"])
-        assert.deepStrictEqual(s.queryInfo, s.current.queryInfo())
-        s.loaded("author", { id: "1", name: "Ann", email: "", likes: 0 })
+        const story = yield* Story.make(Note, { author: "1" })
+        assert.deepStrictEqual(names(story.current), ["author"])
+        assert.deepStrictEqual(story.queryInfo, story.current.queryInfo())
+        story.loaded("author", { id: "1", name: "Ann", email: "", likes: 0 })
           .check((story) => assert.deepStrictEqual(names(story), ["author"]))
         // The record make's cursor ends with, as the callback form returned it.
-        assert.deepStrictEqual(names(s.current), ["author"])
-        assert.strictEqual(s.current.queries().author._tag, "Success")
-        assert.strictEqual(s.queries.author._tag, "Success")
+        assert.deepStrictEqual(names(story.current), ["author"])
+        assert.strictEqual(story.current.queries().author._tag, "Success")
+        assert.strictEqual(story.queries.author._tag, "Success")
       }))
 
     const text = (scene: { readonly root: Locator.Node }) =>
@@ -735,25 +746,25 @@ describe("Story", () => {
 
     it.effect("loaded writes the query's result, at the query's current args", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(users.ListPage, {})
-        assert.include(text(s), "Loading users…")
-        assert.deepStrictEqual(s.queryInfo, [{
+        const scene = yield* Scene.make(users.ListPage, {})
+        assert.include(text(scene), "Loading users…")
+        assert.deepStrictEqual(scene.queryInfo, [{
           name: "users",
           query: "users/ListUsers",
           args: { page: 0 }
         }])
-        s.loaded("users", page(0, ["Ann", "Bea"]))
-        assert.include(text(s), "AnnBea")
+        scene.loaded("users", page(0, ["Ann", "Bea"]))
+        assert.include(text(scene), "AnnBea")
         // The next page: h.previous keeps the page the result holds until it is loaded.
-        s.click("Next")
-        assert.deepStrictEqual(s.queryInfo.map((query) => query.args), [{
+        scene.click("Next")
+        assert.deepStrictEqual(scene.queryInfo.map((query) => query.args), [{
           page: 1
         }])
-        assert.include(text(s), "AnnBea")
-        assert.include(text(s), "Loading page 2…")
-        s.loaded("users", page(1, ["Cy"]))
-        assert.include(text(s), "Cy")
-        assert.notInclude(text(s), "Loading page")
+        assert.include(text(scene), "AnnBea")
+        assert.include(text(scene), "Loading page 2…")
+        scene.loaded("users", page(1, ["Cy"]))
+        assert.include(text(scene), "Cy")
+        assert.notInclude(text(scene), "Loading page")
       }))
 
     it.effect("loadFailed keeps the query's Success at the current args as previousSuccess, and waiting shows", () =>
@@ -788,14 +799,14 @@ describe("Story", () => {
 
     it.effect("given takes an updater and keeps the results, and loaded throws for a name that isn't a query", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(users.RenameForm, { id: "1" })
-        s.given((model) => ({ ...model, draft: Option.some("Zed") }))
+        const story = yield* Story.make(users.RenameForm, { id: "1" })
+        story.given((model) => ({ ...model, draft: Option.some("Zed") }))
           .loaded("user", { id: "1", name: "Ann", email: "", likes: 0 })
-        assert.strictEqual(s.model.draft._tag, "Some")
-        s.given((model) => ({ ...model, draft: Option.none() }))
-        assert.strictEqual(s.model.draft._tag, "None")
-        assert.strictEqual(s.queries.user._tag, "Success")
-        assert.deepStrictEqual(s.subscriptions, [])
+        assert.strictEqual(story.model.draft._tag, "Some")
+        story.given((model) => ({ ...model, draft: Option.none() }))
+        assert.strictEqual(story.model.draft._tag, "None")
+        assert.strictEqual(story.queries.user._tag, "Success")
+        assert.deepStrictEqual(story.subscriptions, [])
         assert.throws(
           () =>
             Story.start(users.RenameForm, { id: "1" }).loaded(
@@ -931,19 +942,19 @@ describe("Story", () => {
 
     it.effect("given replaces loaded results in any key order, against the new results, not the ones held before", () =>
       Effect.gen(function*() {
-        const s = yield* Scene.make(Team, { id: "1" })
-        s.given({ changes: 0 }, {
+        const scene = yield* Scene.make(Team, { id: "1" })
+        scene.given({ changes: 0 }, {
           user: user("1", "Ann", "2"),
           friend: user("2", "Bea")
         })
-        assert.strictEqual(text(s), "Ann Bea ?+? ? 0")
+        assert.strictEqual(text(scene), "Ann Bea ?+? ? 0")
         // The friend is named first, while the held user still points at "2".
-        s.given({ changes: 0 }, {
+        scene.given({ changes: 0 }, {
           friend: user("3", "Cy"),
           user: user("1", "Ann", "3")
         })
-        assert.strictEqual(text(s), "Ann Cy ?+? ? 0")
-        s.keepPending("others")
+        assert.strictEqual(text(scene), "Ann Cy ?+? ? 0")
+        scene.keepPending("others")
           .keepPending("list")
       }))
 
@@ -982,21 +993,24 @@ describe("Story", () => {
               } ${model.changes}`
             )
         })
-        const s = yield* Scene.make(Pals, { id: "1" })
-        s.given({ changes: 0 }, {
+        const scene = yield* Scene.make(Pals, { id: "1" })
+        scene.given({ changes: 0 }, {
           user: user("1", "Ann", "2"),
           friends: [{ args: { id: "2" }, value: user("2", "Bea") }]
         })
-        assert.strictEqual(text(s), "1 0")
+        assert.strictEqual(text(scene), "1 0")
         // The friend id moves to "3": the held "2" is pruned, silently.
-        s.given({ changes: 0 }, { user: user("1", "Ann", "3") })
-        assert.strictEqual(text(s), "0 0")
-        s.loadedMany("friends", [{ args: { id: "3" }, value: user("3", "Cy") }])
-        assert.strictEqual(text(s), "1 1")
+        scene.given({ changes: 0 }, { user: user("1", "Ann", "3") })
+        assert.strictEqual(text(scene), "0 0")
+        scene.loadedMany("friends", [{
+          args: { id: "3" },
+          value: user("3", "Cy")
+        }])
+        assert.strictEqual(text(scene), "1 1")
         // An ordinary step's prune sends onChange.
-        s.loaded("user", user("1", "Ann", "4"))
-        assert.strictEqual(text(s), "0 2")
-        s.keepPending("friends")
+        scene.loaded("user", user("1", "Ann", "4"))
+        assert.strictEqual(text(scene), "0 2")
+        scene.keepPending("friends")
       }))
 
     it.effect("given keeps a keyed result its query returns again once the given results settle", () =>
@@ -1040,26 +1054,28 @@ describe("Story", () => {
               } ${model.changes}`
             )
         })
-        const s = yield* Scene.make(Circle, {})
-        s.given({ id: "1", changes: 0 }, {
+        const scene = yield* Scene.make(Circle, {})
+        scene.given({ id: "1", changes: 0 }, {
           user: user("1", "Ann", "shared"),
           friends: [{ args: { id: "shared" }, value: user("shared", "Sam") }]
         })
-        assert.strictEqual(text(s), "Sam 0")
+        assert.strictEqual(text(scene), "Sam 0")
         // The new user points at the same friend: the held result stays.
-        s.given({ id: "2", changes: 0 }, { user: user("2", "Bob", "shared") })
-        assert.strictEqual(text(s), "Sam 0")
+        scene.given({ id: "2", changes: 0 }, {
+          user: user("2", "Bob", "shared")
+        })
+        assert.strictEqual(text(scene), "Sam 0")
         // A friend the new user doesn't point at is still dropped, silently.
-        s.given({ id: "3", changes: 0 }, { user: user("3", "Cy", "other") })
-        assert.strictEqual(text(s), "? 0")
-        s.keepPending("friends")
+        scene.given({ id: "3", changes: 0 }, { user: user("3", "Cy", "other") })
+        assert.strictEqual(text(scene), "? 0")
+        scene.keepPending("friends")
       }))
 
     it.effect("given with no loaded results works on a component without queries", () =>
       Effect.gen(function*() {
-        const s = yield* Story.make(Counter, { initial: 0 })
-        s.given({ count: 3 }, {})
-        assert.strictEqual(s.model.count, 3)
+        const story = yield* Story.make(Counter, { initial: 0 })
+        story.given({ count: 3 }, {})
+        assert.strictEqual(story.model.count, 3)
       }))
   })
 
@@ -1111,20 +1127,20 @@ describe("Story", () => {
           it.effect(`${kind}, ${Number.isNaN(at) ? "falling back when it fails to encode" : "encoded"}`, () =>
             Effect.gen(function*() {
               const message = { kind, at }
-              const s = Story.start(App, {}).send(message)
+              const story = Story.start(App, {}).send(message)
               const messages = [
                 yield* defect(Effect.gen(function*() {
                   const story = yield* Story.make(App, {})
                   story.send(message)
                 })),
-                errorOf(() => s.send(message)),
+                errorOf(() => story.send(message)),
                 errorOf(() =>
                   kind === "emit"
-                    ? s.emitted({
+                    ? story.emitted({
                       token: Redacted.make("synthetic-other-secret"),
                       at
                     })
-                    : s.sent(Receiver, {
+                    : story.sent(Receiver, {
                       _tag: "Take",
                       token: Redacted.make("synthetic-other-secret"),
                       at
@@ -1155,16 +1171,16 @@ describe("Story", () => {
 
     it.effect("a message step waits for a plain Command, and switch, queue and stream Commands don't block it", () =>
       Effect.gen(function*() {
-        const s = Story.start(Note, {})
+        const story = Story.start(Note, {})
           .send(NoteMessage.Find({ text: "a" }))
           .send(NoteMessage.Sync())
           .send(NoteMessage.Follow())
           .send(NoteMessage.Save())
         assert.throws(
-          () => s.send(edit),
+          () => story.send(edit),
           /^Story\.send: earlier work isn't settled or acknowledged:\n {2}- notes\/SaveNote\(\{"text":""\}\) \[running\] is pending/
         )
-        s.keepPending(SaveNoteCommand).send(edit)
+        story.keepPending(SaveNoteCommand).send(edit)
         // Exempt or kept, the end of make checks it.
         const message = yield* defect(Effect.gen(function*() {
           const story = yield* Story.make(Note, {})
@@ -1196,15 +1212,15 @@ describe("Story", () => {
 
     it.effect("emitted takes the value it acknowledges, and an acting step waits for it", () =>
       Effect.gen(function*() {
-        const s = Story.start(Note, {}).send(NoteMessage.Save())
+        const story = Story.start(Note, {}).send(NoteMessage.Save())
           .resolve(SaveNoteCommand, NoteMessage.Saved())
-        assert.throws(() => s.send(edit), /was emitted/)
+        assert.throws(() => story.send(edit), /was emitted/)
         assert.throws(
-          () => s.emitted(NoteEvents.Saved({ text: "other" })),
+          () => story.emitted(NoteEvents.Saved({ text: "other" })),
           /^Story\.emitted: /
         )
-        s.emitted(saved)
-        assert.lengthOf(s.current.emitted, 0)
+        story.emitted(saved)
+        assert.lengthOf(story.current.emitted, 0)
         const message = yield* defect(Effect.gen(function*() {
           const story = yield* Story.make(Note, {})
           story.send(NoteMessage.Save()).resolve(
@@ -1217,8 +1233,8 @@ describe("Story", () => {
 
     it.effect("given replaces what init produced, and throws after an acting step rather than discard work", () =>
       Effect.gen(function*() {
-        const s = Story.start(Note, {}).send(NoteMessage.Save())
-        assert.throws(() => s.given((model) => model), /^Story\.given: /)
+        const story = Story.start(Note, {}).send(NoteMessage.Save())
+        assert.throws(() => story.given((model) => model), /^Story\.given: /)
         const kept = yield* Story.make(Note, {})
         kept.given((model) => ({ ...model, text: "kept" }))
         assert.strictEqual(kept.model.text, "kept")

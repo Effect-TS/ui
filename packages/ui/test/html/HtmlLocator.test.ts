@@ -87,23 +87,23 @@ describe("HtmlLocator", () => {
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })
         const keep = HtmlLocator.role("button", { name: "Keep" })
-        const s = yield* Scene.make(Confirm, {
+        const scene = yield* Scene.make(Confirm, {
           state: "closed",
           acceptEscape: false
         })
-        expect(s.query(dialog)).toBeUndefined()
-        expect(s.query(keep)).toBeUndefined()
+        expect(scene.query(dialog)).toBeUndefined()
+        expect(scene.query(keep)).toBeUndefined()
         expect(
           HtmlLocator.dialogState(
-            s.get(HtmlLocator.role("dialog", { hidden: true }))
+            scene.get(HtmlLocator.role("dialog", { hidden: true }))
           )
         ).toBe("closed")
-        s.click("Ask")
-        expect(HtmlLocator.dialogState(s.get(dialog))).toBe("modal")
-        expect(s.query(keep)).toBeDefined()
+        scene.click("Ask")
+        expect(HtmlLocator.dialogState(scene.get(dialog))).toBe("modal")
+        expect(scene.query(keep)).toBeDefined()
         // Escape is rejected by `update`, so the dialog stays modal.
-        s.fire(dialog, "cancel")
-        expect(HtmlLocator.dialogState(s.get(dialog))).toBe("modal")
+        scene.fire(dialog, "cancel")
+        expect(HtmlLocator.dialogState(scene.get(dialog))).toBe("modal")
         const open = yield* TestHost.mount(Confirm, {
           state: "open" as const,
           acceptEscape: false
@@ -154,28 +154,28 @@ describe("HtmlLocator", () => {
       Effect.gen(function*() {
         const menu = HtmlLocator.role("menu", { name: "Menu" })
         const rename = HtmlLocator.role("button", { name: "Rename" })
-        const s = yield* Scene.make(Menu, {
+        const scene = yield* Scene.make(Menu, {
           mode: "auto",
           open: false,
           follow: true
         })
-        expect(s.query(menu)).toBeUndefined()
-        expect(s.query(rename)).toBeUndefined()
+        expect(scene.query(menu)).toBeUndefined()
+        expect(scene.query(rename)).toBeUndefined()
         expect(
           HtmlLocator.popoverState(
-            s.get(HtmlLocator.role("menu", { hidden: true }))
+            scene.get(HtmlLocator.role("menu", { hidden: true }))
           )
         ).toBe("closed")
         // A parent opening it, as `Set` would: nothing in the view sends that.
-        s.given((model) => ({ ...model, open: true }))
-        expect(HtmlLocator.popoverState(s.get(menu))).toBe("open")
+        scene.given((model) => ({ ...model, open: true }))
+        expect(HtmlLocator.popoverState(scene.get(menu))).toBe("open")
         // A light dismiss, as the browser host reports it; the Model follows.
-        s.fire(menu, "toggle", {
+        scene.fire(menu, "toggle", {
           open: false,
           newState: "closed",
           oldState: "open"
         })
-        expect(s.query(menu)).toBeUndefined()
+        expect(scene.query(menu)).toBeUndefined()
         const root = yield* TestHost.mount(Menu, {
           mode: "manual" as const,
           open: true,

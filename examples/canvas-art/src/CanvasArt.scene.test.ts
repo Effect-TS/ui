@@ -39,8 +39,8 @@ const press = {
 describe("CanvasArt", () => {
   it.effect("spawns a ball on canvas press, advances it on frame, pauses, and clears", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(CanvasArt, {})
-      s.expectMount(paint([]))
+      const scene = yield* HtmlScene.make(CanvasArt, {})
+      scene.expectMount(paint([]))
         .expect(HtmlLocator.role("heading", { name: "Canvas Art" })).toExist()
         .expect(Locator.text("Click the canvas to spawn a ball.")).toExist()
         .expect(HtmlLocator.role("button", { name: "Pause" })).toExist()

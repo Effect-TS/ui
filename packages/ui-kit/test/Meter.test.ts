@@ -48,39 +48,39 @@ const built = (element: View.ElementBuilder<never, never, any, any>) =>
 describe("Meter", () => {
   it.effect("the root reports the value and points at the label, and the value and indicator follow the props", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Meter, { value: 40 }, standIn)
-      const attrs = s.get(root).attrs
+      const scene = yield* Scene.make(Meter, { value: 40 }, standIn)
+      const attrs = scene.get(root).attrs
       assert.strictEqual(attrs?.["aria-valuemin"], "0")
       assert.strictEqual(attrs?.["aria-valuemax"], "100")
       assert.strictEqual(attrs?.["aria-valuenow"], "40")
       assert.strictEqual(attrs?.["aria-valuetext"], "40%")
-      assert.strictEqual(s.get(label).attrs?.role, "presentation")
-      const labelId = s.get(label).attrs?.id
+      assert.strictEqual(scene.get(label).attrs?.role, "presentation")
+      const labelId = scene.get(label).attrs?.id
       assert.isString(labelId)
       assert.notStrictEqual(labelId, "custom-label")
       assert.strictEqual(attrs?.["aria-labelledby"], `heading ${labelId}`)
       // NVDA needs visually hidden content after the consumer's children to read the label.
-      const helper = s.get(root).children?.at(-1)
+      const helper = scene.get(root).children?.at(-1)
       assert(helper)
       assert.strictEqual(helper.attrs?.role, "presentation")
       assert.match(helper.attrs?.style ?? "", /clip:rect\(0,0,0,0\)/)
       assert.isUndefined(helper.attrs?.["aria-hidden"])
       assert.strictEqual(Locator.textOf(helper), "x")
-      assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
-      assert.strictEqual(Locator.textOf(s.get(value)), "40%")
+      assert.strictEqual(scene.get(value).attrs?.["aria-hidden"], "true")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "40%")
 
       const custom = built(parts({ value: 40 }).value(h.span).children("four"))
       assert.deepStrictEqual(custom.children, [{ _tag: "Text", text: "four" }])
 
-      s.props({ value: 150, min: 50, max: 250, valueText: "150 units" })
-      const next = s.get(root).attrs
+      scene.props({ value: 150, min: 50, max: 250, valueText: "150 units" })
+      const next = scene.get(root).attrs
       assert.strictEqual(next?.["aria-valuemin"], "50")
       assert.strictEqual(next?.["aria-valuemax"], "250")
       assert.strictEqual(next?.["aria-valuenow"], "150")
       assert.strictEqual(next?.["aria-valuetext"], "150 units")
-      assert.strictEqual(Locator.textOf(s.get(value)), "150 units")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "150 units")
       assert.strictEqual(
-        s.get(indicator).attrs?.style,
+        scene.get(indicator).attrs?.style,
         "background:red;width:1px;inset-inline-start:0;height:inherit;width:50%"
       )
     }))

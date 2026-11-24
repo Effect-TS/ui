@@ -39,45 +39,48 @@ const Card = Component.define({
 })
 
 const button = Locator.tag("button")
-const clicked = (s: { get: (l: Locator.Locator) => Locator.Node }) =>
-  s.get(Locator.tag("output")).children?.[0]?.text
+const clicked = (scene: { get: (l: Locator.Locator) => Locator.Node }) =>
+  scene.get(Locator.tag("output")).children?.[0]?.text
 const h = View.makeHelper<typeof CardMessage.Type, {}, Html.Elements>({}, Html)
 
 describe("Button", () => {
   it.effect("onPress sends without cancelling a reset, no onPress lets the click through, and a focusable disabled button cancels it", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Card, {
+      const scene = yield* Scene.make(Card, {
         press: true,
         button: { type: "reset" }
       })
-      s.fire(button, "click")
-      assert.strictEqual(clicked(s), "save")
-      assert.isFalse(s.defaultPrevented)
+      scene.fire(button, "click")
+      assert.strictEqual(clicked(scene), "save")
+      assert.isFalse(scene.defaultPrevented)
 
-      s.props({ press: false, button: { type: "reset" } }).fire(button, "click")
-      assert.strictEqual(clicked(s), "card")
-      assert.isFalse(s.defaultPrevented)
+      scene.props({ press: false, button: { type: "reset" } }).fire(
+        button,
+        "click"
+      )
+      assert.strictEqual(clicked(scene), "card")
+      assert.isFalse(scene.defaultPrevented)
 
-      s.props({ press: true, button: { type: "reset", disabled: true } })
-      assert.deepStrictEqual(s.get(button).attrs, {
+      scene.props({ press: true, button: { type: "reset", disabled: true } })
+      assert.deepStrictEqual(scene.get(button).attrs, {
         type: "reset",
         disabled: "",
         "data-disabled": ""
       })
 
-      s.props({
+      scene.props({
         press: true,
         button: { type: "reset", disabled: true, focusableWhenDisabled: true }
       })
         .fire(button, "click")
         .expectIgnored()
-      assert.deepStrictEqual(s.get(button).attrs, {
+      assert.deepStrictEqual(scene.get(button).attrs, {
         type: "reset",
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.isTrue(s.defaultPrevented)
-      assert.strictEqual(clicked(s), "card")
+      assert.isTrue(scene.defaultPrevented)
+      assert.strictEqual(clicked(scene), "card")
     }))
 
   it("the caller chains a class, attributes and children, the button's own win, and a click handler clashing with onPress throws", () => {

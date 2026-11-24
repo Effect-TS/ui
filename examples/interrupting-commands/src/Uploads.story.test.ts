@@ -38,9 +38,9 @@ const statuses = (model: UploadsModel) =>
 describe("Uploads", () => {
   it.effect("starting an upload appends an Uploading entry and runs UploadFile", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
-      assert.deepStrictEqual(s.model.uploads, [
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
+      assert.deepStrictEqual(story.model.uploads, [
         {
           id: 0,
           fileName: firstFile.name,
@@ -48,97 +48,97 @@ describe("Uploads", () => {
           status: "Uploading"
         }
       ])
-      assert.strictEqual(s.model.uploadId, 1)
-      s.expectExact(firstUploadCommand).resolve(
+      assert.strictEqual(story.model.uploadId, 1)
+      story.expectExact(firstUploadCommand).resolve(
         firstUploadCommand,
         completedFirst
       )
-      assert.deepStrictEqual(statuses(s.model), ["Done"])
+      assert.deepStrictEqual(statuses(story.model), ["Done"])
     }))
 
   it.effect("cancelling an upload interrupts it and marks it Cancelled", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
         .send(clickedCancelFirstUpload)
-      assert.deepStrictEqual(s.interrupted.map((command) => command.args), [
+      assert.deepStrictEqual(story.interrupted.map((command) => command.args), [
         firstUploadCommand.args
       ])
-      s.expectNone()
-      assert.deepStrictEqual(statuses(s.model), ["Cancelled"])
+      story.expectNone()
+      assert.deepStrictEqual(statuses(story.model), ["Cancelled"])
     }))
 
   it.effect("cancelling a finished upload changes nothing and interrupts nothing", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
         .resolve(firstUploadCommand, completedFirst)
         .send(clickedCancelFirstUpload)
-      assert.deepStrictEqual(s.interrupted, [])
-      s.expectNone()
-      assert.deepStrictEqual(statuses(s.model), ["Done"])
+      assert.deepStrictEqual(story.interrupted, [])
+      story.expectNone()
+      assert.deepStrictEqual(statuses(story.model), ["Done"])
     }))
 
   it.effect("cancelling one upload leaves the other running", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
         .send(clickedStartUpload)
         .send(clickedCancelFirstUpload)
-      assert.deepStrictEqual(s.interrupted.map((command) => command.args), [
+      assert.deepStrictEqual(story.interrupted.map((command) => command.args), [
         firstUploadCommand.args
       ])
-      s.expectExact(secondUploadCommand).resolve(
+      story.expectExact(secondUploadCommand).resolve(
         secondUploadCommand,
         completedSecond
       )
-      assert.deepStrictEqual(statuses(s.model), ["Cancelled", "Done"])
+      assert.deepStrictEqual(statuses(story.model), ["Cancelled", "Done"])
     }))
 
   it.effect("a new upload can start right after another is cancelled", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
         .send(clickedCancelFirstUpload)
         .send(clickedStartUpload)
-      assert.deepStrictEqual(s.interrupted.map((command) => command.args), [
+      assert.deepStrictEqual(story.interrupted.map((command) => command.args), [
         firstUploadCommand.args
       ])
-      s.expectExact(secondUploadCommand).resolve(
+      story.expectExact(secondUploadCommand).resolve(
         secondUploadCommand,
         completedSecond
       )
-      assert.deepStrictEqual(statuses(s.model), ["Cancelled", "Done"])
+      assert.deepStrictEqual(statuses(story.model), ["Cancelled", "Done"])
     }))
 
   it.effect("restarting a cancelled upload reuses its id and file", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
         .send(clickedCancelFirstUpload)
         .send(UploadsMessage.ClickedRestartUpload({ uploadId: 0 }))
-      assert.deepStrictEqual(statuses(s.model), ["Uploading"])
-      s.expectExact(firstUploadCommand).resolve(
+      assert.deepStrictEqual(statuses(story.model), ["Uploading"])
+      story.expectExact(firstUploadCommand).resolve(
         firstUploadCommand,
         completedFirst
       )
-      assert.deepStrictEqual(statuses(s.model), ["Done"])
+      assert.deepStrictEqual(statuses(story.model), ["Done"])
     }))
 
   it.effect("cancel all interrupts every running upload and only those", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(Uploads, {})
-      s.send(clickedStartUpload)
+      const story = yield* Story.make(Uploads, {})
+      story.send(clickedStartUpload)
         .send(clickedStartUpload)
         .send(clickedStartUpload)
         .resolve(secondUploadCommand, completedSecond)
         .send(UploadsMessage.ClickedCancelAllUploads())
-      assert.deepStrictEqual(s.interrupted.map((command) => command.args), [
+      assert.deepStrictEqual(story.interrupted.map((command) => command.args), [
         firstUploadCommand.args,
         thirdUploadCommand.args
       ])
-      s.expectNone()
-      assert.deepStrictEqual(statuses(s.model), [
+      story.expectNone()
+      assert.deepStrictEqual(statuses(story.model), [
         "Cancelled",
         "Done",
         "Cancelled"

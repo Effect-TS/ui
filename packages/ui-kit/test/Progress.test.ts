@@ -73,11 +73,11 @@ const everyPart = [root, label, value, track, indicator]
 describe("Progress", () => {
   it.effect("the label names the bar, and every part reports the value as it moves to complete and to unknown", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Progress, { value: 1, max: 3 }, standIn)
-      const id = s.get(label).attrs?.id
+      const scene = yield* Scene.make(Progress, { value: 1, max: 3 }, standIn)
+      const id = scene.get(label).attrs?.id
       assert.isString(id)
       assert.notStrictEqual(id, "custom-label")
-      assert.deepInclude(s.get(root).attrs, {
+      assert.deepInclude(scene.get(root).attrs, {
         "aria-valuemin": "0",
         "aria-valuemax": "3",
         "aria-valuenow": "1",
@@ -85,45 +85,49 @@ describe("Progress", () => {
         // Next to the consumer's own, which stays.
         "aria-labelledby": `heading ${id}`
       })
-      assert.strictEqual(s.get(label).attrs?.role, "presentation")
-      assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
-      assert.strictEqual(Locator.textOf(s.get(value)), "33%")
+      assert.strictEqual(scene.get(label).attrs?.role, "presentation")
+      assert.strictEqual(scene.get(value).attrs?.["aria-hidden"], "true")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "33%")
       for (const part of everyPart) {
-        expectState(s.get(part).attrs, "data-progressing")
+        expectState(scene.get(part).attrs, "data-progressing")
       }
 
-      s.props({ value: 1, valueText: "One file uploaded" })
+      scene.props({ value: 1, valueText: "One file uploaded" })
       assert.strictEqual(
-        s.get(root).attrs?.["aria-valuetext"],
+        scene.get(root).attrs?.["aria-valuetext"],
         "One file uploaded"
       )
-      assert.strictEqual(Locator.textOf(s.get(value)), "One file uploaded")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "One file uploaded")
 
       // Above the range: clamped to it, and complete.
-      s.props({ value: 150, max: undefined, valueText: "All files uploaded" })
-      assert.strictEqual(s.get(root).attrs?.["aria-valuenow"], "100")
+      scene.props({
+        value: 150,
+        max: undefined,
+        valueText: "All files uploaded"
+      })
+      assert.strictEqual(scene.get(root).attrs?.["aria-valuenow"], "100")
       assert.strictEqual(
-        s.get(root).attrs?.["aria-valuetext"],
+        scene.get(root).attrs?.["aria-valuetext"],
         "All files uploaded"
       )
-      assert.strictEqual(Locator.textOf(s.get(value)), "All files uploaded")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "All files uploaded")
       for (const part of everyPart) {
-        expectState(s.get(part).attrs, "data-complete")
+        expectState(scene.get(part).attrs, "data-complete")
       }
 
-      s.props({ value: null, valueText: undefined })
-      const attrs = s.get(root).attrs
-      assert.isUndefined(s.get(indicator).attrs?.style)
+      scene.props({ value: null, valueText: undefined })
+      const attrs = scene.get(root).attrs
+      assert.isUndefined(scene.get(indicator).attrs?.style)
       assert.isUndefined(attrs?.["aria-valuenow"])
       assert.strictEqual(attrs?.["aria-valuetext"], "indeterminate progress")
-      assert.strictEqual(Locator.textOf(s.get(value)), "")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "")
       for (const part of everyPart) {
-        expectState(s.get(part).attrs, "data-indeterminate")
+        expectState(scene.get(part).attrs, "data-indeterminate")
       }
 
-      s.props({ value: null, valueText: "Preparing" })
-      assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "Preparing")
-      assert.strictEqual(Locator.textOf(s.get(value)), "Preparing")
+      scene.props({ value: null, valueText: "Preparing" })
+      assert.strictEqual(scene.get(root).attrs?.["aria-valuetext"], "Preparing")
+      assert.strictEqual(Locator.textOf(scene.get(value)), "Preparing")
     }))
 
   it("custom value children remain visible before the root's hidden label helper", () => {

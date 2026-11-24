@@ -282,7 +282,7 @@ describe("p.child on the server", () => {
 
 describe("p.child in a Scene", () => {
   it("a scene of the composed component runs its owned children's events through its update", () => {
-    const s = Scene.start(Combo, { items }, {
+    const scene = Scene.start(Combo, { items }, {
       elements: Html,
       view: (combo, h) =>
         h.div(
@@ -290,7 +290,7 @@ describe("p.child in a Scene", () => {
           combo.badge(h.output).children(combo.log.join(", "))
         )
     })
-    s.childEmit(Menu, "menu", { _tag: "Picked", id: "a" })
+    scene.childEmit(Menu, "menu", { _tag: "Picked", id: "a" })
       .emitted(ComboEvents.Picked({ id: "a" }))
       .childEmit(WrappedDialog, { _tag: "Closed" })
       .givenChild(Dialog, { open: true })
@@ -298,27 +298,28 @@ describe("p.child in a Scene", () => {
         assert.deepStrictEqual(combo.log, ["picked a", "closed"])
         assert.isTrue(combo.dialog.open)
       })
-    assert.isTrue(Story.parts(Combo, s.current).dialog.open)
+    assert.isTrue(Story.parts(Combo, scene.current).dialog.open)
     assert.isFalse(
       Story.parts(Combo, { model: [], props: { items } }).dialog.open
     )
   })
 
   it("a scene of a consumer refuses to run an owned child's events, and gives its Model only when it can tell which", () => {
-    const s = Scene.start(App, {})
+    const scene = Scene.start(App, {})
     assert.throws(
-      () => s.childEmit(Dialog, { _tag: "Closed" }),
+      () => scene.childEmit(Dialog, { _tag: "Closed" }),
       /^Scene\.childEmit: \/App\/Combo\[combo\]\/WrappedDialog\[\]\/Dialog\[\] is declared with p\.child by \/App\/Combo\[combo\]\/WrappedDialog\[\], whose update takes its events\. A scene doesn't run a child's update/
     )
     assert.throws(
-      () => s.childFailure(Dialog, Cause.fail("x")),
+      () => scene.childFailure(Dialog, Cause.fail("x")),
       /^Scene\.childFailure: .* is declared with p\.child/
     )
     assert.throws(
-      () => s.childPending(Dialog),
+      () => scene.childPending(Dialog),
       /^Scene\.childPending: .* is declared with p\.child/
     )
-    s.givenChild(Dialog, { open: true }).expect(Locator.tag("dialog")).toExist()
+    scene.givenChild(Dialog, { open: true }).expect(Locator.tag("dialog"))
+      .toExist()
 
     const Twice = Component.define({
       name: "Twice",

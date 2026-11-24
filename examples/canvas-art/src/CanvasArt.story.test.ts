@@ -15,8 +15,8 @@ const frames = "@effect/ui/html/animationFrame"
 describe("CanvasArt", () => {
   it.effect("a click generates a ball where it landed", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(CanvasArt, {})
-      s.given(empty)
+      const story = yield* Story.make(CanvasArt, {})
+      story.given(empty)
         .send(CanvasArtMessage.ClickedCanvas({ x: 150, y: 200 }))
         .expectExact(GenerateBall.make({ x: 150, y: 200 }))
         .resolve(GenerateBall, {
@@ -36,38 +36,41 @@ describe("CanvasArt", () => {
           radius: 8,
           color: "#fff"
         })
-      assert.deepStrictEqual(s.model.balls.map(({ id, x }) => [id, x]), [[
+      assert.deepStrictEqual(story.model.balls.map(({ id, x }) => [id, x]), [[
         0,
         150
       ], [1, 1]])
-      assert.strictEqual(s.model.nextId, 2)
+      assert.strictEqual(story.model.nextId, 2)
     }))
 
   it.effect("a frame moves each ball, bounces it off an edge, and clamps long deltas", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(CanvasArt, {})
-      s.given({
+      const story = yield* Story.make(CanvasArt, {})
+      story.given({
         ...empty,
         balls: [
           { id: 0, x: 100, y: 100, vx: 50, vy: 50, radius: 10, color: "#fff" },
           { id: 1, x: 589, y: 200, vx: 100, vy: 0, radius: 10, color: "#fff" }
         ]
       }).subscription(frames, CanvasArtMessage.TickedFrame({ delta: 20 }))
-      assert.deepStrictEqual(s.model.balls.map(({ vx, x, y }) => [x, y, vx]), [[
-        101,
-        101,
-        50
-      ], [590, 200, -100]])
-      s.subscription(frames, CanvasArtMessage.TickedFrame({ delta: 5000 }))
-      assert.deepStrictEqual(s.model.balls.map(({ x }) => x), [103.5, 585])
+      assert.deepStrictEqual(
+        story.model.balls.map(({ vx, x, y }) => [x, y, vx]),
+        [[
+          101,
+          101,
+          50
+        ], [590, 200, -100]]
+      )
+      story.subscription(frames, CanvasArtMessage.TickedFrame({ delta: 5000 }))
+      assert.deepStrictEqual(story.model.balls.map(({ x }) => x), [103.5, 585])
     }))
 
   it.effect("frames come only while it runs", () =>
     Effect.gen(function*() {
-      const s = yield* Story.make(CanvasArt, {})
-      s.given(empty)
-      assert.deepStrictEqual(s.subscriptions, [frames])
-      s.send(CanvasArtMessage.ClickedTogglePlay())
-      assert.deepStrictEqual(s.subscriptions, [])
+      const story = yield* Story.make(CanvasArt, {})
+      story.given(empty)
+      assert.deepStrictEqual(story.subscriptions, [frames])
+      story.send(CanvasArtMessage.ClickedTogglePlay())
+      assert.deepStrictEqual(story.subscriptions, [])
     }))
 })

@@ -552,12 +552,12 @@ describe("Html", () => {
       Measure().pipe(Mount.map(() => Msg.Mounted()))
     )
     // A scene's step takes the definition's own result, and none for a mount that ends with noop.
-    const s = Scene.start(Chart, {})
-    expect(s.mounted).type.toBeCallableWith(Measure, 300)
-    expect(s.mounted).type.not.toBeCallableWith(Measure, "wide")
-    expect(s.mounted).type.not.toBeCallableWith(Measure)
-    expect(s.mounted).type.toBeCallableWith(Hello)
-    expect(s.mounted).type.toBeCallableWith(DrawChart({ points: [] }))
+    const scene = Scene.start(Chart, {})
+    expect(scene.mounted).type.toBeCallableWith(Measure, 300)
+    expect(scene.mounted).type.not.toBeCallableWith(Measure, "wide")
+    expect(scene.mounted).type.not.toBeCallableWith(Measure)
+    expect(scene.mounted).type.toBeCallableWith(Hello)
+    expect(scene.mounted).type.toBeCallableWith(DrawChart({ points: [] }))
   })
 
   it("onMount ends with a message or Component.noop, never with void or undefined", () => {

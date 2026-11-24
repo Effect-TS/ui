@@ -24,9 +24,9 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 type TrackPanel = Mount.Issued<unknown, never, never, unknown>
 const tracked = (
-  s: { readonly get: (locator: Locator.Locator) => Locator.Node }
+  scene: { readonly get: (locator: Locator.Locator) => Locator.Node }
 ): TrackPanel =>
-  (s.get(panel) as unknown as View.Element<unknown>).owned?.find((layer) =>
+  (scene.get(panel) as unknown as View.Element<unknown>).owned?.find((layer) =>
     layer.mount !== undefined
   )
     ?.mount as unknown as TrackPanel
@@ -47,32 +47,32 @@ const parts = (props: CollapsibleProps) =>
 describe("Collapsible", () => {
   it.effect("toggles on press, links aria-controls, ignores disabled, and honors keepMounted and hiddenUntilFound", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Collapsible, { open: false }, standIn)
-      assert.isUndefined(s.query(panel))
-      assert.deepInclude(s.get(trigger).attrs, {
+      const scene = yield* Scene.make(Collapsible, { open: false }, standIn)
+      assert.isUndefined(scene.query(panel))
+      assert.deepInclude(scene.get(trigger).attrs, {
         type: "button",
         "aria-expanded": "false"
       })
-      assert.isUndefined(s.get(trigger).attrs?.["aria-controls"])
-      assert.deepInclude(s.get(root).attrs, { "data-closed": "" })
+      assert.isUndefined(scene.get(trigger).attrs?.["aria-controls"])
+      assert.deepInclude(scene.get(root).attrs, { "data-closed": "" })
 
-      s.click(trigger).emitted({
+      scene.click(trigger).emitted({
         _tag: "Toggled",
         open: true,
         reason: "trigger-press"
       })
-      assert.isUndefined(s.query(panel))
+      assert.isUndefined(scene.query(panel))
 
-      s.props({ open: true })
-      s.expectMount(tracked(s))
-      const id = s.get(panel).attrs?.id
+      scene.props({ open: true })
+      scene.expectMount(tracked(scene))
+      const id = scene.get(panel).attrs?.id
       assert.isString(id)
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.deepInclude(scene.get(trigger).attrs, {
         "aria-expanded": "true",
         "aria-controls": id,
         "data-panel-open": ""
       })
-      s.click(trigger).emitted({
+      scene.click(trigger).emitted({
         _tag: "Toggled",
         open: false,
         reason: "trigger-press"

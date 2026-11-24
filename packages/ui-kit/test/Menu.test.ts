@@ -151,19 +151,19 @@ const key = (key: string, extra: object = {}) => ({
 
 type TrackMenu = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const tracked = (s: Rendered): TrackMenu =>
-  (s.get(positioner) as unknown as View.Element<unknown>).owned?.find((layer) =>
-    layer.mount !== undefined
-  )
+const tracked = (scene: Rendered): TrackMenu =>
+  (scene.get(positioner) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
     ?.mount as unknown as TrackMenu
 const sent = (tag: string, fields: object = {}) =>
   ({ _tag: tag, ...fields }) as never
 
 const partsOf = (
-  s: { readonly parts: (f: (menu: Parts) => void) => unknown }
+  scene: { readonly parts: (f: (menu: Parts) => void) => unknown }
 ): Parts => {
   let parts: Parts | undefined
-  s.parts((menu) => {
+  scene.parts((menu) => {
     parts = menu
   })
   return parts!
@@ -190,12 +190,12 @@ const elapse = Effect.fnUntraced(
   function*<
     S extends Pending & { readonly resolve: (command: any, result: any) => S }
   >(
-    s: S,
+    scene: S,
     name: string,
     millis: number
   ) {
     const command =
-      s.current.pending.find((run) => run.command.name === name)!.command
+      scene.current.pending.find((run) => run.command.name === name)!.command
     const fiber = yield* Effect.forkChild(
       command.effect as Effect.Effect<unknown>
     )
@@ -204,24 +204,24 @@ const elapse = Effect.fnUntraced(
       assert.isUndefined(fiber.pollUnsafe())
     }
     yield* TestClock.adjust(`${Math.min(millis, 1)} millis`)
-    return s.resolve(command, yield* Fiber.join(fiber))
+    return scene.resolve(command, yield* Fiber.join(fiber))
   }
 )
 
 const open = Effect.fnUntraced(function*(props: Partial<MenuProps> = {}) {
-  const s = yield* HtmlScene.make(
+  const scene = yield* HtmlScene.make(
     Menu,
     { open: false, items, ...props },
     standIn
   )
-  s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+  scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
     opened("trigger-press")
   )
-  s.props({ open: true, items, ...props }).mounted(
-    tracked(s),
+  scene.props({ open: true, items, ...props }).mounted(
+    tracked(scene),
     sent("ShowedPopup")
   )
-  return s
+  return scene
 })
 
 const PageRoute = Route.union({
@@ -304,21 +304,21 @@ describe("Menu", () => {
 
   it.effect("draws a closed menu button, and a mouse press opens it with its parts and ARIA semantics", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
-      assert.deepInclude(s.get(trigger).attrs, {
+      const scene = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
+      assert.deepInclude(scene.get(trigger).attrs, {
         id: "edit",
         type: "button",
         "aria-haspopup": "menu",
         "aria-expanded": "false"
       })
-      assert.isUndefined(s.get(trigger).attrs?.["aria-controls"])
-      assert.isUndefined(s.get(trigger).attrs?.["data-popup-open"])
-      assert.deepInclude(s.get(positioner).attrs, {
+      assert.isUndefined(scene.get(trigger).attrs?.["aria-controls"])
+      assert.isUndefined(scene.get(trigger).attrs?.["data-popup-open"])
+      assert.deepInclude(scene.get(positioner).attrs, {
         role: "presentation",
         "data-closed": ""
       })
-      assert.isFalse(s.get(positioner).props?.popoverOpen)
-      assert.deepInclude(partsOf(s), {
+      assert.isFalse(scene.get(positioner).props?.popoverOpen)
+      assert.deepInclude(partsOf(scene), {
         open: false,
         mounted: false,
         transitionStatus: null,
@@ -332,84 +332,88 @@ describe("Menu", () => {
         nothingMatches: false
       })
 
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
         opened("trigger-press")
       )
-      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      const popupId = s.get(popup).attrs?.id
+      scene.props({ open: true, items }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      const popupId = scene.get(popup).attrs?.id
       assert.isString(popupId)
-      assert.isTrue(s.get(positioner).props?.popoverOpen)
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.isTrue(scene.get(positioner).props?.popoverOpen)
+      assert.deepInclude(scene.get(trigger).attrs, {
         "aria-expanded": "true",
         "aria-controls": popupId,
         "data-popup-open": "",
         "data-pressed": ""
       })
-      assert.deepInclude(s.get(positioner).attrs, {
+      assert.deepInclude(scene.get(positioner).attrs, {
         "data-open": "",
         "data-side": "bottom",
         "data-align": "center"
       })
-      assert.deepInclude(s.get(popup).attrs, {
+      assert.deepInclude(scene.get(popup).attrs, {
         role: "menu",
         tabindex: "-1",
         "aria-labelledby": "edit",
         "data-open": "",
         "data-side": "bottom"
       })
-      assert.isUndefined(s.get(popup).attrs?.["aria-orientation"])
-      assert.deepInclude(s.get(item("copy")).attrs, {
+      assert.isUndefined(scene.get(popup).attrs?.["aria-orientation"])
+      assert.deepInclude(scene.get(item("copy")).attrs, {
         role: "menuitem",
         tabindex: "-1"
       })
-      assert.isUndefined(s.get(item("copy")).attrs?.["aria-disabled"])
-      assert.isUndefined(s.get(item("copy")).attrs?.["data-highlighted"])
-      assert.deepInclude(s.get(item("undo")).attrs, {
+      assert.isUndefined(scene.get(item("copy")).attrs?.["aria-disabled"])
+      assert.isUndefined(scene.get(item("copy")).attrs?.["data-highlighted"])
+      assert.deepInclude(scene.get(item("undo")).attrs, {
         role: "menuitem",
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      assert.deepInclude(s.get(item("wrap")).attrs, {
+      assert.deepInclude(scene.get(item("wrap")).attrs, {
         role: "menuitemcheckbox",
         "aria-checked": "true",
         "data-checked": ""
       })
-      assert.isUndefined(s.get(item("wrap")).attrs?.["data-unchecked"])
-      assert.deepInclude(s.get(Locator.attr("class", "tick")).attrs, {
+      assert.isUndefined(scene.get(item("wrap")).attrs?.["data-unchecked"])
+      assert.deepInclude(scene.get(Locator.attr("class", "tick")).attrs, {
         "aria-hidden": "true",
         "data-checked": ""
       })
-      assert.deepInclude(s.get(item("small")).attrs, {
+      assert.deepInclude(scene.get(item("small")).attrs, {
         role: "menuitemradio",
         "aria-checked": "true",
         "data-checked": ""
       })
-      assert.deepInclude(s.get(item("large")).attrs, {
+      assert.deepInclude(scene.get(item("large")).attrs, {
         role: "menuitemradio",
         "aria-checked": "false",
         "data-unchecked": ""
       })
-      assert.isUndefined(s.get(item("large")).attrs?.["data-checked"])
-      assert.deepInclude(s.get(Locator.attr("class", "sizes")).attrs, {
+      assert.isUndefined(scene.get(item("large")).attrs?.["data-checked"])
+      assert.deepInclude(scene.get(Locator.attr("class", "sizes")).attrs, {
         role: "group"
       })
-      assert.deepInclude(s.get(item("docs")), { tag: "a" })
-      assert.deepInclude(s.get(item("docs")).attrs, {
+      assert.deepInclude(scene.get(item("docs")), { tag: "a" })
+      assert.deepInclude(scene.get(item("docs")).attrs, {
         role: "menuitem",
         href: "/docs"
       })
-      assert.deepInclude(s.get(Locator.attr("class", "group")).attrs, {
+      assert.deepInclude(scene.get(Locator.attr("class", "group")).attrs, {
         role: "group",
-        "aria-labelledby": s.get(Locator.attr("class", "group-label")).attrs?.id
+        "aria-labelledby": scene.get(Locator.attr("class", "group-label")).attrs
+          ?.id
       })
-      assert.deepInclude(s.get(Locator.attr("class", "separator")).attrs, {
+      assert.deepInclude(scene.get(Locator.attr("class", "separator")).attrs, {
         role: "separator"
       })
-      assert.deepInclude(s.get(Locator.attr("class", "arrow")).attrs, {
+      assert.deepInclude(scene.get(Locator.attr("class", "arrow")).attrs, {
         "aria-hidden": "true",
         "data-side": "bottom"
       })
-      assert.deepInclude(partsOf(s), {
+      assert.deepInclude(partsOf(scene), {
         open: true,
         mounted: true,
         openMethod: "mouse",
@@ -419,20 +423,19 @@ describe("Menu", () => {
 
   it.effect("reports its transitions, placement and viewport moves, and settles after the exit animation", () =>
     Effect.gen(function*() {
-      const s = yield* open()
-      assert.strictEqual(partsOf(s).transitionStatus, "starting")
-      assert.deepInclude(s.get(popup).attrs, {
+      const scene = yield* open()
+      assert.strictEqual(partsOf(scene).transitionStatus, "starting")
+      assert.deepInclude(scene.get(popup).attrs, {
         "data-open": "",
         "data-starting-style": ""
       })
-      s.mounted(tracked(s), sent("RenderedFirstFrame"))
-      assert.isNull(partsOf(s).transitionStatus)
-      assert.isUndefined(s.get(popup).attrs?.["data-starting-style"])
-      s.mounted(tracked(s), sent("FinishedTransition", { open: true })).emitted(
-        { _tag: "Settled", open: true }
-      )
-      s.mounted(
-        tracked(s),
+      scene.mounted(tracked(scene), sent("RenderedFirstFrame"))
+      assert.isNull(partsOf(scene).transitionStatus)
+      assert.isUndefined(scene.get(popup).attrs?.["data-starting-style"])
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: true }))
+        .emitted({ _tag: "Settled", open: true })
+      scene.mounted(
+        tracked(scene),
         sent("ChangedPlacement", {
           placement: {
             side: "top",
@@ -442,94 +445,113 @@ describe("Menu", () => {
           }
         })
       )
-      assert.deepInclude(partsOf(s), { side: "top", align: "end" })
-      assert.deepInclude(s.get(popup).attrs, {
+      assert.deepInclude(partsOf(scene), { side: "top", align: "end" })
+      assert.deepInclude(scene.get(popup).attrs, {
         "data-side": "top",
         "data-align": "end"
       })
-      s.mounted(tracked(s), sent("MovedViewport", { direction: "right down" }))
-      assert.deepInclude(partsOf(s), {
+      scene.mounted(
+        tracked(scene),
+        sent("MovedViewport", { direction: "right down" })
+      )
+      assert.deepInclude(partsOf(scene), {
         transitioning: true,
         activationDirection: "right down"
       })
-      s.mounted(tracked(s), sent("SettledViewport"))
-      assert.isFalse(partsOf(s).transitioning)
-      s.props({ open: false, items })
-      assert.strictEqual(partsOf(s).transitionStatus, "ending")
-      assert.deepInclude(s.get(positioner).attrs, {
+      scene.mounted(tracked(scene), sent("SettledViewport"))
+      assert.isFalse(partsOf(scene).transitioning)
+      scene.props({ open: false, items })
+      assert.strictEqual(partsOf(scene).transitionStatus, "ending")
+      assert.deepInclude(scene.get(positioner).attrs, {
         "data-ending-style": "",
         "data-closed": ""
       })
-      assert.isTrue(s.get(positioner).props?.popoverOpen)
-      assert.deepInclude(partsOf(s), {
+      assert.isTrue(scene.get(positioner).props?.popoverOpen)
+      assert.deepInclude(partsOf(scene), {
         open: false,
         mounted: true,
         openMethod: null
       })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted({ _tag: "Settled", open: false })
-      assert.isFalse(s.get(positioner).props?.popoverOpen)
-      assert.isFalse(partsOf(s).mounted)
+      assert.isFalse(scene.get(positioner).props?.popoverOpen)
+      assert.isFalse(partsOf(scene).mounted)
     }))
 
   it.effect("keyboard on the closed trigger opens it on the first or last enabled item, and marks click-open and Escape instant", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
-      s.fire(trigger, "keydown", key("Enter")).expectIgnored()
-      s.fire(trigger, "click", pointer("mouse")).expectIgnored()
-      s.fire(trigger, "click", pointer("")).emitted(
+      const scene = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
+      scene.fire(trigger, "keydown", key("Enter")).expectIgnored()
+      scene.fire(trigger, "click", pointer("mouse")).expectIgnored()
+      scene.fire(trigger, "click", pointer("")).emitted(
         highlighted("copy", "none"),
         opened("trigger-press")
       )
-      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepInclude(partsOf(s), {
+      scene.props({ open: true, items }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      assert.deepInclude(partsOf(scene), {
         highlighted: "copy",
         openMethod: "keyboard"
       })
-      assert.deepInclude(s.get(item("copy")).attrs, {
+      assert.deepInclude(scene.get(item("copy")).attrs, {
         tabindex: "0",
         "data-highlighted": ""
       })
-      assert.deepInclude(s.get(positioner).attrs, { "data-instant": "click" })
-      assert.deepInclude(s.get(popup).attrs, { "data-instant": "click" })
-      s.fire(popup, "keydown", key("Escape")).expectDefaultPrevented().emitted(
-        dismissed("escape-key")
-      )
-      s.props({ open: false, items })
-      assert.deepInclude(s.get(positioner).attrs, { "data-instant": "dismiss" })
-      assert.deepInclude(s.get(popup).attrs, { "data-instant": "dismiss" })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      assert.deepInclude(scene.get(positioner).attrs, {
+        "data-instant": "click"
+      })
+      assert.deepInclude(scene.get(popup).attrs, { "data-instant": "click" })
+      scene.fire(popup, "keydown", key("Escape")).expectDefaultPrevented()
+        .emitted(dismissed("escape-key"))
+      scene.props({ open: false, items })
+      assert.deepInclude(scene.get(positioner).attrs, {
+        "data-instant": "dismiss"
+      })
+      assert.deepInclude(scene.get(popup).attrs, { "data-instant": "dismiss" })
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           { _tag: "Settled", open: false },
           highlighted(null, "none")
         )
-      s.fire(trigger, "keydown", key("ArrowDown"))
+      scene.fire(trigger, "keydown", key("ArrowDown"))
         .expectDefaultPrevented()
         .emitted(highlighted("copy", "none"), opened("list-navigation"))
-      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      s.fire(popup, "keydown", key("Escape")).emitted(dismissed("escape-key"))
-      s.props({ open: false, items })
-      s.mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ open: true, items }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      scene.fire(popup, "keydown", key("Escape")).emitted(
+        dismissed("escape-key")
+      )
+      scene.props({ open: false, items })
+      scene.mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted(
           { _tag: "Settled", open: false },
           highlighted(null, "none")
         )
-      s.fire(trigger, "keydown", key("ArrowUp")).emitted(
+      scene.fire(trigger, "keydown", key("ArrowUp")).emitted(
         highlighted("docs", "none"),
         opened("list-navigation")
       )
-      s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.strictEqual(partsOf(s).highlighted, "docs")
+      scene.props({ open: true, items }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      assert.strictEqual(partsOf(scene).highlighted, "docs")
     }))
 
   it.effect("arrow keys, Home and End move the highlight, wrap unless loopFocus is false, and follow orientation", () =>
     Effect.gen(function*() {
-      const s = yield* open()
+      const scene = yield* open()
       const step = (k: string, expected: string) => {
-        const before = partsOf(s).highlighted
-        s.fire(popup, "keydown", key(k)).expectDefaultPrevented()
-        if (before !== expected) s.emitted(highlighted(expected, "keyboard"))
-        assert.strictEqual(partsOf(s).highlighted, expected)
+        const before = partsOf(scene).highlighted
+        scene.fire(popup, "keydown", key(k)).expectDefaultPrevented()
+        if (before !== expected) {
+          scene.emitted(highlighted(expected, "keyboard"))
+        }
+        assert.strictEqual(partsOf(scene).highlighted, expected)
       }
       step("ArrowDown", "undo")
       step("ArrowUp", "delete")
@@ -537,61 +559,65 @@ describe("Menu", () => {
       step("End", "delete")
       step("Home", "undo")
       step("ArrowDown", "copy")
-      s.props({ open: true, items, loopFocus: false })
+      scene.props({ open: true, items, loopFocus: false })
       step("ArrowUp", "undo")
       step("ArrowUp", "undo")
       step("End", "delete")
       step("ArrowDown", "delete")
-      s.props({ open: true, items, orientation: "horizontal" })
-      assert.deepInclude(s.get(popup).attrs, {
+      scene.props({ open: true, items, orientation: "horizontal" })
+      assert.deepInclude(scene.get(popup).attrs, {
         role: "menu",
         "aria-orientation": "horizontal"
       })
       step("ArrowRight", "undo")
       step("ArrowRight", "copy")
-      s.fire(popup, "keydown", key("ArrowDown"))
+      scene.fire(popup, "keydown", key("ArrowDown"))
       step("ArrowLeft", "undo")
     }))
 
   it.effect("the pointer highlights the item it's over, unless highlightItemOnHover is false", () =>
     Effect.gen(function*() {
-      const s = yield* open()
-      s.fire(item("paste"), "mouseenter").emitted(
+      const scene = yield* open()
+      scene.fire(item("paste"), "mouseenter").emitted(
         highlighted("paste", "pointer")
       )
-      assert.deepInclude(s.get(item("paste")).attrs, {
+      assert.deepInclude(scene.get(item("paste")).attrs, {
         tabindex: "0",
         "data-highlighted": ""
       })
-      s.fire(item("paste"), "mouseleave").emitted(highlighted(null, "pointer"))
-      s.props({ open: true, items, highlightItemOnHover: false })
-      s.fire(item("paste"), "mouseenter").expectIgnored()
-      assert.isNull(partsOf(s).highlighted)
+      scene.fire(item("paste"), "mouseleave").emitted(
+        highlighted(null, "pointer")
+      )
+      scene.props({ open: true, items, highlightItemOnHover: false })
+      scene.fire(item("paste"), "mouseenter").expectIgnored()
+      assert.isNull(partsOf(scene).highlighted)
     }))
 
   it.effect("picking an item reports it, a checkbox's new state and a radio's, and closes unless told not to", () =>
     Effect.gen(function*() {
-      const s = yield* open()
-      s.fire(item("cut"), "mouseenter").emitted(highlighted("cut", "pointer"))
-      s.fire(item("cut"), "click", pointer("mouse")).emitted(picked("cut"))
-      s.fire(item("minimap"), "click", pointer("mouse")).emitted(
+      const scene = yield* open()
+      scene.fire(item("cut"), "mouseenter").emitted(
+        highlighted("cut", "pointer")
+      )
+      scene.fire(item("cut"), "click", pointer("mouse")).emitted(picked("cut"))
+      scene.fire(item("minimap"), "click", pointer("mouse")).emitted(
         highlighted("minimap", "none"),
         picked("minimap", true)
       )
-      s.fire(item("large"), "click", pointer("mouse")).emitted(
+      scene.fire(item("large"), "click", pointer("mouse")).emitted(
         highlighted("large", "none"),
         picked("large", true)
       )
-      s.fire(item("docs"), "click", pointer("mouse"))
+      scene.fire(item("docs"), "click", pointer("mouse"))
         .expectDefaultPrevented(false)
         .emitted(highlighted("docs", "none"), picked("docs"))
-      s.fire(item("undo"), "click", pointer("mouse"))
-      s.fire(item("wrap"), "click", pointer("mouse")).emitted(
+      scene.fire(item("undo"), "click", pointer("mouse"))
+      scene.fire(item("wrap"), "click", pointer("mouse")).emitted(
         picked("wrap", false),
         dismissed("item-press")
       )
-      s.props({ open: true, items })
-      s.fire(item("copy"), "keydown", key("Enter")).emitted(
+      scene.props({ open: true, items })
+      scene.fire(item("copy"), "keydown", key("Enter")).emitted(
         picked("copy"),
         dismissed("item-press")
       )
@@ -599,142 +625,145 @@ describe("Menu", () => {
 
   it.effect("disabled ignores presses on the trigger, the items and the filter, and a link doesn't navigate", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Menu, {
+      const scene = yield* HtmlScene.make(Menu, {
         open: false,
         items,
         disabled: true
       }, standIn)
-      assert.deepInclude(s.get(trigger).attrs, {
+      assert.deepInclude(scene.get(trigger).attrs, {
         disabled: "",
         "data-disabled": ""
       })
-      s.fire(trigger, "mousedown", pointer("mouse"))
-      s.fire(trigger, "keydown", key("ArrowDown"))
-      s.props({ open: true, items, disabled: true }).mounted(
-        tracked(s),
+      scene.fire(trigger, "mousedown", pointer("mouse"))
+      scene.fire(trigger, "keydown", key("ArrowDown"))
+      scene.props({ open: true, items, disabled: true }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
-      assert.deepInclude(s.get(item("copy")).attrs, {
+      assert.deepInclude(scene.get(item("copy")).attrs, {
         "aria-disabled": "true",
         "data-disabled": ""
       })
-      s.fire(item("copy"), "click", pointer("mouse"))
-      s.fire(item("docs"), "click", pointer("mouse")).expectDefaultPrevented()
-      s.props({ open: true, items, disabled: true, query: "co" })
-      s.fire(input, "input", { value: "c", checked: false }).expectNone()
-      s.fire(clear, "click", pointer("mouse")).expectNone()
+      scene.fire(item("copy"), "click", pointer("mouse"))
+      scene.fire(item("docs"), "click", pointer("mouse"))
+        .expectDefaultPrevented()
+      scene.props({ open: true, items, disabled: true, query: "co" })
+      scene.fire(input, "input", { value: "c", checked: false }).expectNone()
+      scene.fire(clear, "click", pointer("mouse")).expectNone()
     }))
 
   it.effect("typing moves to the next item starting with the typed text, skipping disabled ones, until it resets", () =>
     Effect.gen(function*() {
-      const s = yield* open()
+      const scene = yield* open()
       const type = (k: string, expected: string) => {
-        const before = partsOf(s).highlighted
-        s.fire(popup, "keydown", key(k))
-        if (before !== expected) s.emitted(highlighted(expected, "keyboard"))
-        assert.strictEqual(partsOf(s).highlighted, expected)
+        const before = partsOf(scene).highlighted
+        scene.fire(popup, "keydown", key(k))
+        if (before !== expected) {
+          scene.emitted(highlighted(expected, "keyboard"))
+        }
+        assert.strictEqual(partsOf(scene).highlighted, expected)
       }
       type("c", "copy")
       type("c", "cut")
       type("c", "copy")
-      yield* elapse(s, "WaitBeforeResetTyping", 500)
+      yield* elapse(scene, "WaitBeforeResetTyping", 500)
       type("d", "docs")
       type("d", "docs")
-      yield* elapse(s, "WaitBeforeResetTyping", 500)
+      yield* elapse(scene, "WaitBeforeResetTyping", 500)
       type("c", "copy")
       type("u", "cut")
-      yield* elapse(s, "WaitBeforeResetTyping", 500)
+      yield* elapse(scene, "WaitBeforeResetTyping", 500)
       type("c", "copy")
-      yield* elapse(s, "WaitBeforeResetTyping", 500)
+      yield* elapse(scene, "WaitBeforeResetTyping", 500)
     }))
 
   it.effect("openOnHover opens after the delay, cancels on leave, and sticks until the stick window expires", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Menu, {
+      const scene = yield* HtmlScene.make(Menu, {
         open: false,
         items,
         openOnHover: true,
         delay: 200
       }, standIn)
-      s.fire(trigger, "mouseenter")
+      scene.fire(trigger, "mouseenter")
       assert.deepStrictEqual(
-        s.current.pending.map(({ command }) => command.args),
+        scene.current.pending.map(({ command }) => command.args),
         [{ delay: 200 }]
       )
-      s.fire(trigger, "mouseleave").expectNone()
-      s.fire(trigger, "mouseenter")
-      yield* elapse(s, "WaitBeforeHoverOpen", 200)
-      s.emitted(opened("trigger-hover"))
-      s.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(
-        tracked(s),
+      scene.fire(trigger, "mouseleave").expectNone()
+      scene.fire(trigger, "mouseenter")
+      yield* elapse(scene, "WaitBeforeHoverOpen", 200)
+      scene.emitted(opened("trigger-hover"))
+      scene.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
-      assert.deepInclude(partsOf(s), {
+      assert.deepInclude(partsOf(scene), {
         open: true,
         openMethod: "mouse",
         highlighted: null
       })
-      s.fire(trigger, "mousedown", pointer("mouse"))
-      assert.isTrue(partsOf(s).open)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      scene.fire(trigger, "mousedown", pointer("mouse"))
+      assert.isTrue(partsOf(scene).open)
+      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
         dismissed("trigger-press")
       )
-      s.props({ open: false, items, openOnHover: true, delay: 200 })
-        .mounted(tracked(s), sent("FinishedTransition", { open: false }))
+      scene.props({ open: false, items, openOnHover: true, delay: 200 })
+        .mounted(tracked(scene), sent("FinishedTransition", { open: false }))
         .emitted({ _tag: "Settled", open: false })
-      s.fire(trigger, "mouseenter")
-      yield* elapse(s, "WaitBeforeHoverOpen", 200)
-      s.emitted(opened("trigger-hover"))
-      s.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(
-        tracked(s),
+      scene.fire(trigger, "mouseenter")
+      yield* elapse(scene, "WaitBeforeHoverOpen", 200)
+      scene.emitted(opened("trigger-hover"))
+      scene.props({ open: true, items, openOnHover: true, delay: 200 }).mounted(
+        tracked(scene),
         sent("ShowedPopup")
       )
-      yield* elapse(s, "WaitBeforeStickExpires", 500)
-      s.fire(trigger, "mousedown", pointer("mouse")).emitted(
+      yield* elapse(scene, "WaitBeforeStickExpires", 500)
+      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
         dismissed("trigger-press")
       )
     }))
 
   it.effect("with a query, an input filters the items, empty and clear show only when they apply, and menuFilter respects options", () =>
     Effect.gen(function*() {
-      const s = yield* open({ query: "", autoHighlight: true })
-      const listId = s.get(Locator.attr("class", "list")).attrs?.id
-      assert.deepInclude(s.get(popup).attrs, { role: "presentation" })
-      assert.deepInclude(s.get(Locator.attr("class", "list")).attrs, {
+      const scene = yield* open({ query: "", autoHighlight: true })
+      const listId = scene.get(Locator.attr("class", "list")).attrs?.id
+      assert.deepInclude(scene.get(popup).attrs, { role: "presentation" })
+      assert.deepInclude(scene.get(Locator.attr("class", "list")).attrs, {
         role: "menu",
         "aria-labelledby": "edit"
       })
-      assert.deepInclude(s.get(input).attrs, {
+      assert.deepInclude(scene.get(input).attrs, {
         role: "searchbox",
         type: "text",
         "aria-controls": listId,
         value: ""
       })
-      assert.isUndefined(s.get(input).attrs?.["aria-activedescendant"])
-      assert.isUndefined(s.query(clear))
-      assert.isUndefined(s.query(empty))
-      s.fire(input, "input", { value: "co", checked: false }).emitted(
+      assert.isUndefined(scene.get(input).attrs?.["aria-activedescendant"])
+      assert.isUndefined(scene.query(clear))
+      assert.isUndefined(scene.query(empty))
+      scene.fire(input, "input", { value: "co", checked: false }).emitted(
         highlighted("copy", "none"),
         { _tag: "RequestedQuery", query: "co", reason: "input-change" }
       )
-      s.props({ open: true, items, query: "co", autoHighlight: true })
+      scene.props({ open: true, items, query: "co", autoHighlight: true })
       assert.strictEqual(
-        s.get(input).attrs?.["aria-activedescendant"],
-        s.get(item("copy")).attrs?.id
+        scene.get(input).attrs?.["aria-activedescendant"],
+        scene.get(item("copy")).attrs?.id
       )
-      assert.isUndefined(s.get(item("copy")).attrs?.hidden)
-      assert.deepInclude(s.get(item("cut")).attrs, { hidden: "" })
-      assert.isUndefined(s.query(empty))
-      assert.isFalse(partsOf(s).nothingMatches)
-      s.click(clear).emitted(highlighted(null, "none"), {
+      assert.isUndefined(scene.get(item("copy")).attrs?.hidden)
+      assert.deepInclude(scene.get(item("cut")).attrs, { hidden: "" })
+      assert.isUndefined(scene.query(empty))
+      assert.isFalse(partsOf(scene).nothingMatches)
+      scene.click(clear).emitted(highlighted(null, "none"), {
         _tag: "RequestedQuery",
         query: "",
         reason: "clear-press"
       })
-      s.props({ open: true, items, query: "zzz", autoHighlight: true })
-      assert.isTrue(partsOf(s).nothingMatches)
-      assert.deepInclude(s.get(empty).attrs, { role: "status" })
-      assert.deepInclude(s.get(Locator.attr("class", "group")).attrs, {
+      scene.props({ open: true, items, query: "zzz", autoHighlight: true })
+      assert.isTrue(partsOf(scene).nothingMatches)
+      assert.deepInclude(scene.get(empty).attrs, { role: "status" })
+      assert.deepInclude(scene.get(Locator.attr("class", "group")).attrs, {
         hidden: ""
       })
 
@@ -751,13 +780,13 @@ describe("Menu", () => {
           return true
         }
       }
-      const s = yield* HtmlScene.make(Menu, { open: false, items }, {
+      const scene = yield* HtmlScene.make(Menu, { open: false, items }, {
         elements: Html,
         view: (menu, h) =>
           menu.trigger(new Off(h.button.class("trigger"))).children("Edit")
       })
-      assert.strictEqual(s.get(trigger).attrs?.disabled, "")
-      assert.strictEqual(s.get(trigger).attrs?.["data-disabled"], "")
+      assert.strictEqual(scene.get(trigger).attrs?.disabled, "")
+      assert.strictEqual(scene.get(trigger).attrs?.["data-disabled"], "")
     }))
 
   it.effect("clears consumer aria-disabled and group hidden, and validates hidden part tags", () =>
@@ -778,7 +807,7 @@ describe("Menu", () => {
       assert.isUndefined(triggerView(false).attrs.disabled)
       assert.isUndefined(triggerView(false).attrs["aria-disabled"])
 
-      const s = yield* HtmlScene.make(Menu, {
+      const scene = yield* HtmlScene.make(Menu, {
         open: true,
         items,
         query: "co",
@@ -802,19 +831,21 @@ describe("Menu", () => {
           )
       })
       for (const loc of [trigger, input, clear]) {
-        assert.strictEqual(s.get(loc).attrs?.disabled, "")
-        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+        assert.strictEqual(scene.get(loc).attrs?.disabled, "")
+        assert.isUndefined(scene.get(loc).attrs?.["aria-disabled"])
       }
-      assert.isUndefined(s.get(Locator.attr("class", "group")).attrs?.hidden)
+      assert.isUndefined(
+        scene.get(Locator.attr("class", "group")).attrs?.hidden
+      )
 
-      s.props({ open: true, items, query: "co", disabled: false })
+      scene.props({ open: true, items, query: "co", disabled: false })
       for (const loc of [trigger, input, clear]) {
-        assert.isUndefined(s.get(loc).attrs?.disabled)
-        assert.isUndefined(s.get(loc).attrs?.["aria-disabled"])
+        assert.isUndefined(scene.get(loc).attrs?.disabled)
+        assert.isUndefined(scene.get(loc).attrs?.["aria-disabled"])
       }
-      s.props({ open: true, items, query: "zzz", disabled: false })
+      scene.props({ open: true, items, query: "zzz", disabled: false })
       assert.strictEqual(
-        s.get(Locator.attr("class", "group")).attrs?.hidden,
+        scene.get(Locator.attr("class", "group")).attrs?.hidden,
         ""
       )
 

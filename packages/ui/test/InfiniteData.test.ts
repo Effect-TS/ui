@@ -386,17 +386,17 @@ describe("Infinite queries", () => {
         messages: [{ id: "m" + index, text: "r" + index }],
         next
       })
-      const s = yield* Story.make(app.Chat, { room: "r" })
-      s.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
+      const story = yield* Story.make(app.Chat, { room: "r" })
+      story.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
         .send(app.ChatMessage.More())
-      assert.deepStrictEqual(s.loadingMore, ["messages"])
+      assert.deepStrictEqual(story.loadingMore, ["messages"])
       // Still walking: the load more waits on.
-      s.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
-      assert.deepStrictEqual(s.loadingMore, ["messages"])
-      s.loadFailed("messages", "nope")
-      assert.deepStrictEqual(s.loadingMore, [])
-      s.send(app.ChatMessage.Refresh())
-      const result = s.queries.messages
+      story.loaded("messages", [pageAt(0, 1), pageAt(1, 2)], { waiting: true })
+      assert.deepStrictEqual(story.loadingMore, ["messages"])
+      story.loadFailed("messages", "nope")
+      assert.deepStrictEqual(story.loadingMore, [])
+      story.send(app.ChatMessage.Refresh())
+      const result = story.queries.messages
       assert.strictEqual(result._tag, "Failure")
       if (result._tag === "Failure") {
         assert.isTrue(result.waiting)
@@ -432,9 +432,9 @@ describe("Infinite queries", () => {
         .expect(Locator.text("r0,r1 /2 Available", { exact: true })).toExist()
         .given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
         .expect(Locator.text("r0,r1 /2 End", { exact: true })).toExist()
-      const s = yield* Story.make(app.Chat, { room: "r" })
-      s.given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
-      const messages = s.queries.messages
+      const story = yield* Story.make(app.Chat, { room: "r" })
+      story.given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
+      const messages = story.queries.messages
       assert.deepStrictEqual(
         AsyncResult.isSuccess(messages) ? messages.value.more : undefined,
         { _tag: "End" }
@@ -448,8 +448,9 @@ describe("Infinite queries", () => {
         messages: [{ id: "m" + index, text: "r" + index }],
         next
       })
-      const shows = (text: string) => <S extends Scene.Steps.Any>(s: S): S =>
-        s.expect(Locator.text(text, { exact: true })).toExist()
+      const shows =
+        (text: string) => <S extends Scene.Steps.Any>(scene: S): S =>
+          scene.expect(Locator.text(text, { exact: true })).toExist()
       const scene = yield* Scene.make(app.Chat, { room: "r" })
       scene.loaded("messages", [pageAt(0, 1)])
         .pipe(shows("r0 /1 Available"))
@@ -465,15 +466,15 @@ describe("Infinite queries", () => {
         .click(Locator.testId("refresh"))
         .pipe(shows("r0 /1 Available"))
       // The same steps in a story, which reads the query's pages.
-      const s = yield* Story.make(app.Chat, { room: "r" })
-      s.loaded("messages", [pageAt(0, 1)])
+      const story = yield* Story.make(app.Chat, { room: "r" })
+      story.loaded("messages", [pageAt(0, 1)])
         .send(app.ChatMessage.More())
-      assert.deepStrictEqual(s.loadingMore, ["messages"])
-      s.loadedMore("messages", pageAt(1, 2))
+      assert.deepStrictEqual(story.loadingMore, ["messages"])
+      story.loadedMore("messages", pageAt(1, 2))
         .send(app.ChatMessage.More())
         .loadMoreFailed("messages", "nope")
         .send(app.ChatMessage.Refresh())
-      const messages = s.queries.messages
+      const messages = story.queries.messages
       assert.deepStrictEqual(
         AsyncResult.isSuccess(messages)
           ? [messages.value.pages, messages.value.more]

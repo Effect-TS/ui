@@ -331,7 +331,7 @@ const top = {
 
 const opened = (props: TooltipProps) =>
   HtmlScene.make(Tooltip, props, standIn).pipe(
-    Effect.map((s) => s.mounted(Positioning.TrackPosition, top))
+    Effect.map((scene) => scene.mounted(Positioning.TrackPosition, top))
   )
 
 // The message a wait would have produced: the Command's own result.
@@ -342,32 +342,32 @@ const completed = (
 describe("Tooltip", () => {
   it.effect("hover opens after the delay and stays open across the offset until the pointer leaves", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
-      s.fire(trigger, "mouseenter")
-      const [opening] = s.current.pending
+      const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
+      scene.fire(trigger, "mouseenter")
+      const [opening] = scene.current.pending
       assert.deepStrictEqual(opening?.command.args, { delay: 600 })
-      s.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
+      scene.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
         .emitted({ _tag: "RequestedOpen" })
-      assert.isFalse(s.get(positioner).props?.popoverOpen)
-      s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(
+      assert.isFalse(scene.get(positioner).props?.popoverOpen)
+      scene.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(
         Positioning.TrackPosition,
         top
       )
 
-      assert.isTrue(s.get(positioner).props?.popoverOpen)
+      assert.isTrue(scene.get(positioner).props?.popoverOpen)
       // Each part draws the children it was given.
-      assert.strictEqual(Locator.textOf(s.get(positioner)), "Bold")
+      assert.strictEqual(Locator.textOf(scene.get(positioner)), "Bold")
 
-      s.fire(trigger, "mouseleave")
+      scene.fire(trigger, "mouseleave")
       // The gap is the positioner's padding, so the pointer reaches it as it
       // leaves the trigger, before the wait ends, and the tooltip stays open.
-      s.fire(positioner, "mouseenter")
-      assert.deepStrictEqual(s.current.interrupted.map((c) => c.name), [
+      scene.fire(positioner, "mouseenter")
+      assert.deepStrictEqual(scene.current.interrupted.map((c) => c.name), [
         "WaitBeforeClosing"
       ])
-      s.fire(positioner, "mouseleave")
-      s.resolve(
-        s.current.pending[0]!.command,
+      scene.fire(positioner, "mouseleave")
+      scene.resolve(
+        scene.current.pending[0]!.command,
         completed("CompletedWaitBeforeClosing")
       )
         .emitted({ _tag: "RequestedClose" })
@@ -375,10 +375,10 @@ describe("Tooltip", () => {
 
   it.effect("listens on the document only while it shows", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
-      assert.deepStrictEqual(s.subscriptions, [])
-      s.props({ open: true }).mounted(Positioning.TrackPosition, top)
-      assert.deepStrictEqual(s.subscriptions, [
+      const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
+      assert.deepStrictEqual(scene.subscriptions, [])
+      scene.props({ open: true }).mounted(Positioning.TrackPosition, top)
+      assert.deepStrictEqual(scene.subscriptions, [
         `@effect/ui/html/document:"keydown"`,
         `@effect/ui/html/document:"mousedown","capture"`
       ])
@@ -386,8 +386,8 @@ describe("Tooltip", () => {
 
   it.effect("document Escape skips another key, a composition, modified Escape and an Escape already handled", () =>
     Effect.gen(function*() {
-      const s = yield* opened({ open: true })
-      s.fireDocument("keydown", { key: "a" }).expectIgnored()
+      const scene = yield* opened({ open: true })
+      scene.fireDocument("keydown", { key: "a" }).expectIgnored()
         .expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "Escape", composing: true })
         .expectIgnored()
@@ -399,19 +399,19 @@ describe("Tooltip", () => {
         .expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "Escape", defaultPrevented: true })
         .expectIgnored()
-      assert.deepStrictEqual(s.current.emitted, [])
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("focus from a press neither opens the tooltip nor holds it open", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
-      s.fire(trigger, "mousedown")
+      const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
+      scene.fire(trigger, "mousedown")
         .fire(trigger, "focus")
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.props({ open: true }).mounted(Positioning.TrackPosition, top)
+      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.props({ open: true }).mounted(Positioning.TrackPosition, top)
         .fire(trigger, "mouseleave")
-      s.resolve(
-        s.current.pending[0]!.command,
+      scene.resolve(
+        scene.current.pending[0]!.command,
         completed("CompletedWaitBeforeClosing")
       )
         .emitted({ _tag: "RequestedClose" })
@@ -419,68 +419,71 @@ describe("Tooltip", () => {
 
   it.effect("activation dismisses on click rather than mousedown unless closeOnClick is false", () =>
     Effect.gen(function*() {
-      const s = yield* opened({ open: true })
-      s.fire(trigger, "click")
+      const scene = yield* opened({ open: true })
+      scene.fire(trigger, "click")
         .emitted({ _tag: "RequestedClose" })
-      s.fire(trigger, "mousedown")
-      assert.deepStrictEqual(s.current.emitted, [])
-      s.props({ open: true, closeOnClick: false })
+      scene.fire(trigger, "mousedown")
+      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.props({ open: true, closeOnClick: false })
         .fire(trigger, "click")
-      assert.deepStrictEqual(s.current.emitted, [])
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("a press outside closes the tooltip at once, while focus or the close delay holds it open", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(
+      const scene = yield* HtmlScene.make(
         Tooltip,
         { open: false, closeDelay: 300 },
         standIn
       )
-      s.fire(trigger, "focus")
+      scene.fire(trigger, "focus")
         .emitted({ _tag: "RequestedOpen" })
         .props({ open: true, closeDelay: 300 })
         .mounted(Positioning.TrackPosition, top)
       // A press with the pointer on the trigger or the positioner is inside.
-      s.fire(positioner, "mouseenter")
+      scene.fire(positioner, "mouseenter")
         .fireDocument("mousedown")
         .expectDefaultPrevented(false)
-      assert.deepStrictEqual(s.current.emitted, [])
+      assert.deepStrictEqual(scene.current.emitted, [])
       // Keyboard focus holds the tooltip open after the pointer leaves, and
       // a press elsewhere that leaves focus on the trigger still closes it.
-      s.fire(positioner, "mouseleave")
-      assert.deepStrictEqual(s.current.pending, [])
-      s.fireDocument("mousedown")
+      scene.fire(positioner, "mouseleave")
+      assert.deepStrictEqual(scene.current.pending, [])
+      scene.fireDocument("mousedown")
         .emitted({ _tag: "RequestedClose" })
 
       // Without focus, the close delay holds it open, and a press ends the wait.
-      s.fire(trigger, "mouseenter")
+      scene.fire(trigger, "mouseenter")
         .fire(trigger, "blur")
         .fire(trigger, "mouseleave")
-      assert.deepStrictEqual(s.current.pending.map((run) => run.command.args), [
-        { delay: 300 }
-      ])
-      s.fireDocument("mousedown")
+      assert.deepStrictEqual(
+        scene.current.pending.map((run) => run.command.args),
+        [
+          { delay: 300 }
+        ]
+      )
+      scene.fireDocument("mousedown")
         .emitted({ _tag: "RequestedClose" })
-      assert.deepStrictEqual(s.current.pending, [])
+      assert.deepStrictEqual(scene.current.pending, [])
     }))
 
   it.effect("a disabled tooltip never shows and emits nothing", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(
+      const scene = yield* HtmlScene.make(
         Tooltip,
         { open: true, disabled: true },
         standIn
       )
-      assert.isFalse(s.get(positioner).props?.popoverOpen)
-      assert.isUndefined(s.get(trigger).attrs?.disabled)
-      s.fire(trigger, "mouseenter")
+      assert.isFalse(scene.get(positioner).props?.popoverOpen)
+      assert.isUndefined(scene.get(trigger).attrs?.disabled)
+      scene.fire(trigger, "mouseenter")
         .fire(trigger, "focus")
         .fire(trigger, "mousedown")
         .fire(trigger, "click")
       // It doesn't listen on the document either.
-      assert.deepStrictEqual(s.subscriptions, [])
-      assert.deepStrictEqual(s.current.pending, [])
-      assert.deepStrictEqual(s.current.emitted, [])
+      assert.deepStrictEqual(scene.subscriptions, [])
+      assert.deepStrictEqual(scene.current.pending, [])
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it("parts clear stale state and add their styles after the consumer's", () => {
@@ -513,28 +516,31 @@ describe("Tooltip", () => {
 
   it.effect("the placement the positioner reports reaches every part", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(
+      const scene = yield* HtmlScene.make(
         Tooltip,
         { open: false, side: "bottom" },
         standIn
       )
       const popup = Locator.attr("class", "popup")
       const arrow = Locator.attr("aria-hidden", "true")
-      s.props({ open: true, side: "bottom" })
-      assert.strictEqual(s.get(popup).attrs?.["data-side"], "bottom")
-      s.mounted(Positioning.TrackPosition, {
+      scene.props({ open: true, side: "bottom" })
+      assert.strictEqual(scene.get(popup).attrs?.["data-side"], "bottom")
+      scene.mounted(Positioning.TrackPosition, {
         side: "left",
         align: "end",
         anchorHidden: true,
         arrowUncentered: true
       })
       for (const part of [positioner, popup, arrow]) {
-        assert.strictEqual(s.get(part).attrs?.["data-side"], "left")
-        assert.strictEqual(s.get(part).attrs?.["data-align"], "end")
+        assert.strictEqual(scene.get(part).attrs?.["data-side"], "left")
+        assert.strictEqual(scene.get(part).attrs?.["data-align"], "end")
       }
-      assert.strictEqual(s.get(positioner).attrs?.["data-anchor-hidden"], "")
-      assert.strictEqual(s.get(arrow).attrs?.["data-uncentered"], "")
-      assert.include(s.get(arrow).attrs?.style, "top:var(")
+      assert.strictEqual(
+        scene.get(positioner).attrs?.["data-anchor-hidden"],
+        ""
+      )
+      assert.strictEqual(scene.get(arrow).attrs?.["data-uncentered"], "")
+      assert.include(scene.get(arrow).attrs?.style, "top:var(")
     }))
 
   it.effect("one click on a trigger stacked under a styled Button reaches both the Button and the tooltip", () =>

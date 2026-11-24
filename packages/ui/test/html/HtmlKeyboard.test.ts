@@ -92,8 +92,8 @@ describe("HtmlKeyboard.shortcuts", () => {
           )
         ]
       })
-      const s = yield* HtmlScene.make(Panel, {})
-      s.keydown(Locator.text("Row"), "j").expectDefaultPrevented()
+      const scene = yield* HtmlScene.make(Panel, {})
+      scene.keydown(Locator.text("Row"), "j").expectDefaultPrevented()
         .keydown(Locator.text("Row"), "x").expectIgnored()
         .expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "?", editable: true }).expectIgnored()

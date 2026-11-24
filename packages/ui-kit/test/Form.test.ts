@@ -23,10 +23,10 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 describe("Form", () => {
   it.effect("a submit reports the form's fields and entries", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Form, {}, standIn)
+      const scene = yield* Scene.make(Form, {}, standIn)
       const settle = () => {
-        for (const { command } of s.current.pending) {
-          s.resolve(command, Component.noop as never)
+        for (const { command } of scene.current.pending) {
+          scene.resolve(command, Component.noop as never)
         }
       }
       const submission = {
@@ -34,7 +34,7 @@ describe("Form", () => {
         entries: [["email", "ada@example.com"]] as const
       }
 
-      s.fire(root, "submit", submission).emitted({
+      scene.fire(root, "submit", submission).emitted({
         _tag: "Submitted",
         ...submission
       })
