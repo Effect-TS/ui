@@ -1245,12 +1245,26 @@ const restore = (
   }
 }
 
+const sameAttrs = (
+  before: Readonly<Record<string, string>>,
+  attrs: Readonly<Record<string, string>>
+): boolean => {
+  let count = 0
+  for (const name in before) {
+    if (before[name] !== attrs[name]) return false
+    count++
+  }
+  for (const _ in attrs) count--
+  return count === 0
+}
+
 const patchAttrs = (
   host: Host,
   node: unknown,
   before: Readonly<Record<string, string>>,
   attrs: Readonly<Record<string, string>>
 ): void => {
+  if (sameAttrs(before, attrs)) return
   if (host.normalizeAttrs !== undefined) {
     before = host.normalizeAttrs(node, before)
     attrs = host.normalizeAttrs(node, attrs)
